@@ -14,8 +14,8 @@
 #include <time.h>
 
 const char *PROGRAM_VERSION	= "1.1.1";
-const char *PROGRAM_URL		= "https://code.google.com/p/pg-rman/";
-const char *PROGRAM_EMAIL	= "https://code.google.com/p/pg-rman/issues/list";
+const char *PROGRAM_URL		= "http://code.google.com/p/pg-rman/";
+const char *PROGRAM_EMAIL	= "http://code.google.com/p/pg-rman/issues/list";
 
 /* path configuration */
 char *backup_path;
