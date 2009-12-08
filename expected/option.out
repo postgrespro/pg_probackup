@@ -1,0 +1,80 @@
+\! sh sql/option.sh
+pg_rman manage backup/recovery of PostgreSQL database.
+
+Usage:
+  pg_rman OPTION init
+  pg_rman OPTION backup
+  pg_rman OPTION restore
+  pg_rman OPTION show [DATE]
+  pg_rman OPTION show timeline [DATE]
+  pg_rman OPTION validate [DATE]
+  pg_rman OPTION delete DATE
+
+Common Options:
+  -D, --pgdata=PATH         location of the database storage area
+  -A, --arclog-path=PATH    location of archive WAL storage area
+  -S, --srvlog-path=PATH    location of server log storage area
+  -B, --backup-path=PATH    location of the backup storage area
+  -c, --check               show what would have been done
+
+Backup options:
+  -b, --backup-mode=MODE    full, incremental, or archive
+  -s, --with-serverlog      also backup server log files
+  -Z, --compress-data       compress data backup with zlib
+  -C, --smooth-checkpoint   do smooth checkpoint before backup
+  --keep-data-generations=N keep GENERATION of full data backup
+  --keep-data-days=DAY      keep enough data backup to recover to DAY days age
+  --keep-arclog-files=NUM   keep NUM of archived WAL
+  --keep-arclog-days=DAY    keep archived WAL modified in DAY days
+  --keep-srvlog-files=NUM   keep NUM of serverlogs
+  --keep-srvlog-days=DAY    keep serverlog modified in DAY days
+
+Restore options:
+  --recovery-target-time    time stamp up to which recovery will proceed
+  --recovery-target-xid     transaction ID up to which recovery will proceed
+  --recovery-target-inclusive whether we stop just after the recovery target
+  --recovery-target-timeline  recovering into a particular timeline
+
+Catalog options:
+  -a, --show-all            show deleted backup too
+
+Connection options:
+  -d, --dbname=DBNAME       database to connect
+  -h, --host=HOSTNAME       database server host or socket directory
+  -p, --port=PORT           database server port
+  -U, --username=USERNAME   user name to connect as
+  -w, --no-password         never prompt for password
+  -W, --password            force password prompt
+
+Generic options:
+  -q, --quiet               don't write any messages
+  --debug                   debug mode
+  --help                    show this help, then exit
+  --version                 output version information, then exit
+
+Read the website for details. <http://rman.projects.postgresql.org/>
+Report bugs to <rman-general@lists.pgfoundry.org>.
+pg_rman 1.1.0
+ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
+ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)
+ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
+ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
+ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
+ERROR: invalid backup-mode "bad"
+ERROR: required delete range option not specified: delete DATE
+INFO: validate: 2009-05-31 17:05:53
+INFO: validate: 2009-06-01 17:05:53
+WARNING: CRC of backup file "PG_VERSION" must be 0 but FEF71BC1
+WARNING: backup 2009-06-01 17:05:53 is corrupted
+WARNING: syntax error in " = INFINITE".
+ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)
+ERROR: invalid backup-mode ""
+ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
+ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
+ERROR: invalid backup-mode "B"
+ERROR: option -Z, --compress-data should be a boolean: 'FOO'
+ERROR: option --keep-arclog-files should be a 32bit signed integer: 'YES'
+ERROR: invalid option "TIMELINEID"
+ERROR: invalid option "BACKUP_TARGETS"
+ERROR: invalid backup-mode "F''\F"
+ERROR: invalid backup-mode "ENV_PATH"

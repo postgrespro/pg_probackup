@@ -1,0 +1,40 @@
+\! sh sql/backup_restore.sh
+Line style is ascii.
+CREATE TABLESPACE
+CREATE DATABASE
+# of deleted backups
+0
+full database backup
+CHECKPOINT
+incremental database backup
+CHECKPOINT
+CHECKPOINT
+archived WAL and serverlog backup
+stop DB during running pgbench
+diff files in BACKUP_PATH/backup/pg_xlog
+# of files in BACKUP_PATH/backup/srvlog
+1
+diff files in BACKUP_PATH/backup/pg_xlog
+# of files in BACKUP_PATH/backup/srvlog
+2
+full database backup after recovery
+CHECKPOINT
+# of files in BACKUP_PATH/backup/pg_xlog
+0
+# of files in BACKUP_PATH/backup/srvlog
+2
+# of symbolic links in ARCLOG_PATH
+0
+# of files in BACKUP_PATH/timeline_history
+2
+# of recovery target option in recovery.conf
+3
+# of deleted backups (show all)
+4
+# of deleted backups
+0
+delete backup
+# of deleted backups
+4
+# of deleted backups
+9
