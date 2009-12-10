@@ -736,7 +736,7 @@ readTimeLineHistory(TimeLineID targetTLI)
 	 */
 	while (fd && fgets(fline, sizeof(fline), fd) != NULL)
 	{
-		/* skip leading whitespace and check for # comment */
+		/* skip leading whitespaces and check for # comment */
 		char	   *ptr;
 		char	   *endptr;
 

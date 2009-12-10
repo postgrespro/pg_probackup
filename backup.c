@@ -125,7 +125,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 			prev_files = dir_read_file_list(pgdata, prev_file_txt);
 
 			/*
-			 * we back up only a page updated later than LSN of preview backup.
+			 * Do backup only pages having larger LSN than previous backup.
 			 */
 			lsn = &prev_backup->start_lsn;
 			elog(LOG, _("backup only the page that there was of the update from LSN(%X/%08X).\n"),
@@ -186,7 +186,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 		fclose(fp);
 	}
 
-	/* print sumarry of size of backup mode files */
+	/* print summary of size of backup mode files */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
@@ -295,7 +295,7 @@ do_backup_arclog(parray *backup_list)
 		fclose(fp);
 	}
 
-	/* print sumarry of size of backup files */
+	/* print summary of size of backup files */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
@@ -400,7 +400,7 @@ do_backup_srvlog(parray *backup_list)
 		fclose(fp);
 	}
 
-	/* print sumarry of size of backup mode files */
+	/* print summary of size of backup mode files */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
@@ -468,7 +468,7 @@ do_backup(bool smooth_checkpoint,
 	/* setup cleanup callback function */
 	in_backup = true;
 
-	/* show configuration acutally used */
+	/* show configuration actually used */
 	if (verbose)
 	{
 		printf(_("========================================\n"));
@@ -1075,7 +1075,7 @@ delete_online_wal_backup(void)
 }
 
 /*
- * Remove symbolic links point ardchived WAL in backup catalog.
+ * Remove symbolic links point archived WAL in backup catalog.
  */
 static void
 delete_arclog_link(void)

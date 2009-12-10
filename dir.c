@@ -26,7 +26,7 @@ const char *pgdata_exclude[] =
 	"pgsql_tmp",
 	NULL,			/* arclog_path will be set later */
 	NULL,			/* srvlog_path will be set later */
-	NULL,			/* centinel */
+	NULL,			/* sentinel */
 };
 
 static pgFile *pgFileNew(const char *path, bool omit_symlink);
@@ -246,8 +246,8 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 	/* chase symbolic link chain and find regular file or directory */
 	while (S_ISLNK(file->mode))
 	{
-		ssize_t len;
-		char linked[MAXPGPATH];
+		ssize_t	len;
+		char	linked[MAXPGPATH];
 
 		len = readlink(file->path, linked, sizeof(linked));
 		if (len == -1)
@@ -261,9 +261,9 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 		/* make absolute path to read linked file */
 		if (linked[0] != '/')
 		{
-			char dname[MAXPGPATH];
-			char *dnamep;
-			char absolute[MAXPGPATH];
+			char	dname[MAXPGPATH];
+			char   *dnamep;
+			char	absolute[MAXPGPATH];
 
 			strncpy(dname, file->path, lengthof(dname));
 			dnamep = dirname(dname);
@@ -273,7 +273,7 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 		else
 			file = pgFileNew(file->linked, omit_symlink);
 
-		/* linked file is not found, stop chasing link chain */
+		/* linked file is not found, stop following link chain */
 		if (file == NULL)
 			return;
 
@@ -301,7 +301,7 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 			dirname++;
 
 		/*
-		 * If the item in the exclude list starts with '/', compare to th
+		 * If the item in the exclude list starts with '/', compare to the
 		 * absolute path of the directory. Otherwise compare to the directory
 		 * name portion.
 		 */
@@ -362,7 +362,7 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 		}
 		closedir(dir);
 
-		break;	/* psuedo loop */
+		break;	/* pseudo loop */
 	}
 
 	parray_qsort(files, pgFileComparePath);
@@ -416,7 +416,8 @@ dir_print_file_list(FILE *out, const parray *files, const char *root)
 	}
 
 	/* print each file in the list */
-	for (i = 0; i < parray_num(files); i++) {
+	for (i = 0; i < parray_num(files); i++)
+	{
 		pgFile *file = (pgFile *)parray_get(files, i);
 		char *path = file->path;
 		char type;

@@ -182,7 +182,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 		{
 			char ini_path[MAXPGPATH];
 
-			/* skip not-directry and hidden directories */
+			/* skip not-directory and hidden directories */
 			if (!IsDir(date_path, date_dir, time_ent) || time_ent->d_name[0] == '.')
 				continue;
 
@@ -530,7 +530,7 @@ pgBackupFree(void *backup)
 	free(backup);
 }
 
-/* Compare two pgBackup with their ID (start time) in ascending order */
+/* Compare two pgBackup with their IDs (start time) in ascending order */
 int
 pgBackupCompareId(const void *l, const void *r)
 {
@@ -545,7 +545,7 @@ pgBackupCompareId(const void *l, const void *r)
 		return 0;
 }
 
-/* Compare two pgBackup with their ID in descending order */
+/* Compare two pgBackup with their IDs in descending order */
 int
 pgBackupCompareIdDesc(const void *l, const void *r)
 {
