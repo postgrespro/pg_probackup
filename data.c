@@ -236,7 +236,11 @@ parse_page(const DataPage *page, int server_version,
 			v80->pd_special <= BLCKSZ &&
 			v80->pd_special == MAXALIGN(v80->pd_special) &&
 			!XLogRecPtrIsInvalid(*lsn = v80->pd_lsn))
+		{
+			*offset = v80->pd_lower;
+			*length = v80->pd_upper - v80->pd_lower;
 			return true;
+		}
 	}
 	else
 	{
@@ -251,7 +255,11 @@ parse_page(const DataPage *page, int server_version,
 			v83->pd_special <= BLCKSZ &&
 			v83->pd_special == MAXALIGN(v83->pd_special) &&
 			!XLogRecPtrIsInvalid(*lsn = v83->pd_lsn))
+		{
+			*offset = v83->pd_lower;
+			*length = v83->pd_upper - v83->pd_lower;
 			return true;
+		}
 	}
 
 	return false;
