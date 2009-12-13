@@ -52,9 +52,9 @@ Generic options:
   --help                    show this help, then exit
   --version                 output version information, then exit
 
-Read the website for details. <http://rman.projects.postgresql.org/>
-Report bugs to <rman-general@lists.pgfoundry.org>.
-pg_rman 1.1.0
+Read the website for details. <http://code.google.com/p/pg-rman/>
+Report bugs to <http://code.google.com/p/pg-rman/issues/list>.
+pg_rman 1.1.2
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
 ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)
 ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)

@@ -152,10 +152,54 @@ doInflate(z_stream *zp, size_t in_size, size_t out_size,void *inbuf,
 }
 #endif
 
+#define PG_PAGE_LAYOUT_VERSION_v80		2	/* 8.0 */
+#define PG_PAGE_LAYOUT_VERSION_v81		3	/* 8.1 - 8.2 */
+#define PG_PAGE_LAYOUT_VERSION_v83		4	/* 8.3 - */
+
+/* 80000 <= PG_VERSION_NUM < 80300 */
+typedef struct PageHeaderData_v80
+{
+	XLogRecPtr		pd_lsn;
+	TimeLineID		pd_tli;
+	LocationIndex	pd_lower;
+	LocationIndex	pd_upper;
+	LocationIndex	pd_special;
+	uint16			pd_pagesize_version;
+	ItemIdData		pd_linp[1];
+} PageHeaderData_v80;
+
+#define PageGetPageSize_v80(page) \
+	((Size) ((page)->pd_pagesize_version & (uint16) 0xFF00))
+#define PageGetPageLayoutVersion_v80(page) \
+	((page)->pd_pagesize_version & 0x00FF)
+#define SizeOfPageHeaderData_v80	(offsetof(PageHeaderData_v80, pd_linp))
+
+/* 80300 <= PG_VERSION_NUM */
+typedef struct PageHeaderData_v83
+{
+	XLogRecPtr		pd_lsn;
+	uint16			pd_tli;
+	uint16			pd_flags;
+	LocationIndex	pd_lower;
+	LocationIndex	pd_upper;
+	LocationIndex	pd_special;
+	uint16			pd_pagesize_version;
+	TransactionId	pd_prune_xid;
+	ItemIdData		pd_linp[1];
+} PageHeaderData_v83;
+
+#define PageGetPageSize_v83(page) \
+	((Size) ((page)->pd_pagesize_version & (uint16) 0xFF00))
+#define PageGetPageLayoutVersion_v83(page) \
+	((page)->pd_pagesize_version & 0x00FF)
+#define SizeOfPageHeaderData_v83	(offsetof(PageHeaderData_v83, pd_linp))
+#define PD_VALID_FLAG_BITS_v83		0x0007
+
 typedef union DataPage
 {
-	PageHeaderData	header;
-	char			data[BLCKSZ];
+	PageHeaderData_v80	v80;	/* 8.0 - 8.2 */
+	PageHeaderData_v83	v83;	/* 8.3 - */
+	char				data[BLCKSZ];
 } DataPage;
 
 typedef struct BackupPageHeader
@@ -166,32 +210,51 @@ typedef struct BackupPageHeader
 } BackupPageHeader;
 
 static bool
-is_valid_header(const PageHeader page)
+parse_page(const DataPage *page, int server_version,
+		   XLogRecPtr *lsn, uint16 *offset, uint16 *length)
 {
-	const char *pagebytes;
-	int			i;
+	uint16		page_layout_version;
+
+	/* Determine page layout version */
+	if (server_version < 80100)
+		page_layout_version = PG_PAGE_LAYOUT_VERSION_v80;
+	else if (server_version < 80300)
+		page_layout_version = PG_PAGE_LAYOUT_VERSION_v81;
+	else
+		page_layout_version = PG_PAGE_LAYOUT_VERSION_v83;
 
 	/* Check normal case */
-	if (PageGetPageSize(page) == BLCKSZ &&
-		PageGetPageLayoutVersion(page) == PG_PAGE_LAYOUT_VERSION &&
-#if PG_VERSION_NUM >= 80300
-		(page->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
-#endif
-		page->pd_lower >= SizeOfPageHeaderData &&
-		page->pd_lower <= page->pd_upper &&
-		page->pd_upper <= page->pd_special &&
-		page->pd_special <= BLCKSZ &&
-		page->pd_special == MAXALIGN(page->pd_special))
-		return true;
-
-	/* Check all-zeroes case */
-	pagebytes = (char *) page;
-	for (i = 0; i < BLCKSZ; i++)
+	if (server_version < 80300)
 	{
-		if (pagebytes[i] != 0)
-			return false;
+		const PageHeaderData_v80 *v80 = &page->v80;
+
+		if (PageGetPageSize_v80(v80) == BLCKSZ &&
+			PageGetPageLayoutVersion_v80(v80) == page_layout_version &&
+			v80->pd_lower >= SizeOfPageHeaderData_v80 &&
+			v80->pd_lower <= v80->pd_upper &&
+			v80->pd_upper <= v80->pd_special &&
+			v80->pd_special <= BLCKSZ &&
+			v80->pd_special == MAXALIGN(v80->pd_special) &&
+			!XLogRecPtrIsInvalid(*lsn = v80->pd_lsn))
+			return true;
 	}
-	return true;
+	else
+	{
+		const PageHeaderData_v83 *v83 = &page->v83;
+
+		if (PageGetPageSize_v83(v83) == BLCKSZ &&
+			PageGetPageLayoutVersion_v83(v83) == page_layout_version &&
+			(v83->pd_flags & ~PD_VALID_FLAG_BITS_v83) == 0 &&
+			v83->pd_lower >= SizeOfPageHeaderData_v83 &&
+			v83->pd_lower <= v83->pd_upper &&
+			v83->pd_upper <= v83->pd_special &&
+			v83->pd_special <= BLCKSZ &&
+			v83->pd_special == MAXALIGN(v83->pd_special) &&
+			!XLogRecPtrIsInvalid(*lsn = v83->pd_lsn))
+			return true;
+	}
+
+	return false;
 }
 
 /*
@@ -213,6 +276,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	size_t				read_len;
 	int					errno_tmp;
 	pg_crc32			crc;
+	int					server_version;
 #ifdef HAVE_LIBZ
 	z_stream			z;
 	char				outbuf[zlibOutSize];
@@ -268,11 +332,15 @@ backup_data_file(const char *from_root, const char *to_root,
 	}
 #endif
 
+	/* confirm server version */
+	server_version = get_server_version();
+
 	/* read each page and write the page excluding hole */
 	for (blknum = 0;
 		 (read_len = fread(&page, 1, sizeof(page), in)) == sizeof(page);
 		 ++blknum)
 	{
+		XLogRecPtr	page_lsn;
 		int		upper_offset;
 		int		upper_length;
 
@@ -282,8 +350,8 @@ backup_data_file(const char *from_root, const char *to_root,
 		 * If a invalid data page was found, fallback to simple copy to ensure
 		 * all pages in the file don't have BackupPageHeader.
 		 */
-		if (!is_valid_header(&page.header) ||
-				!XLogRecPtrIsInvalid(PageGetLSN(&page.header)))
+		if (!parse_page(&page, server_version, &page_lsn,
+						&header.hole_offset, &header.hole_length))
 		{
 			elog(LOG, "%s fall back to simple copy", file->path);
 			fclose(in);
@@ -297,12 +365,8 @@ backup_data_file(const char *from_root, const char *to_root,
 		file->read_size += read_len;
 
 		/* if the page has not been modified since last backup, skip it */
-		if (lsn && !XLogRecPtrIsInvalid(PageGetLSN(&page.header)) &&
-				XLByteLT(PageGetLSN(&page.header), *lsn))
+		if (lsn && !XLogRecPtrIsInvalid(page_lsn) && XLByteLT(page_lsn, *lsn))
 			continue;
-
-		header.hole_offset = page.header.pd_lower;
-		header.hole_length = page.header.pd_upper - page.header.pd_lower;
 
 		upper_offset = header.hole_offset + header.hole_length;
 		upper_length = BLCKSZ - upper_offset;

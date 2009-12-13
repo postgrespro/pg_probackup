@@ -179,6 +179,7 @@ extern int do_backup(bool smooth_checkpoint,
 					 int keep_data_generations,
 					 int keep_data_days);
 extern BackupMode parse_backup_mode(const char *value, int elevel);
+extern int get_server_version(void);
 
 /* in restore.c */
 extern int do_restore(const char *target_time,

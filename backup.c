@@ -33,7 +33,6 @@ static void backup_files(const char *from_root, const char *to_root,
 static parray *do_backup_database(parray *backup_list, bool smooth_checkpoint);
 static parray *do_backup_arclog(parray *backup_list);
 static parray *do_backup_srvlog(parray *backup_list);
-static void confirm_compatibility(void);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
@@ -463,7 +462,7 @@ do_backup(bool smooth_checkpoint,
 #endif
 
 	/* confirm data block size and xlog block size are compatible */
-	confirm_compatibility();
+	(void) get_server_version();
 
 	/* setup cleanup callback function */
 	in_backup = true;
@@ -585,27 +584,38 @@ do_backup(bool smooth_checkpoint,
 }
 
 /*
- * Is the server compatible with this program?
+ * get server version and confirm block sizes.
  */
-static void
-confirm_compatibility(void)
+int
+get_server_version(void)
 {
-	int			server_version;
+	static int	server_version = 0;
+	bool		my_conn;
 
-	reconnect();
+	/* return cached server version */
+	if (server_version > 0)
+		return server_version;
+
+	my_conn = (connection == NULL);
+
+	if (my_conn)
+		reconnect();
 
 	/* confirm server version */
 	server_version = PQserverVersion(connection);
-	if (server_version / 100 != PG_VERSION_NUM / 100)
+	if (server_version < 80000)
 		elog(ERROR_PG_INCOMPATIBLE,
-			_("version mismatch. server is %d and %s is %d."),
-			server_version, PROGRAM_NAME, PG_VERSION_NUM);
+			_("server version is %d, but must be 8.0 or higher."),
+			server_version);
 
 	/* confirm block_size (BLCKSZ) and wal_block_size (XLOG_BLCKSZ) */
 	confirm_block_size("block_size", BLCKSZ);
 	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
 
-	disconnect();
+	if (my_conn)
+		disconnect();
+
+	return server_version;
 }
 
 static void
@@ -637,11 +647,13 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 {
 	PGresult	   *res;
 	const char	   *params[2];
+	int				server_version;
 
 	params[0] = label;
 
 	reconnect();
-	if (PQserverVersion(connection) >= 80400)
+	server_version = get_server_version();
+	if (server_version >= 80400)
 	{
 		params[1] = smooth ? "false" : "true";
 		res = execute("SELECT * from pg_xlogfile_name_offset(pg_start_backup($1, $2))", 2, params);
@@ -649,7 +661,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	else
 	{
 		/* v8.3 always uses smooth checkpoint */
-		if (!smooth && PQserverVersion(connection) >= 80300)
+		if (!smooth && server_version >= 80300)
 			command("CHECKPOINT", 0, NULL);
 		res = execute("SELECT * from pg_xlogfile_name_offset(pg_start_backup($1))", 1, params);
 	}

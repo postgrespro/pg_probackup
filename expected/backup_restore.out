@@ -1,5 +1,4 @@
 \! sh sql/backup_restore.sh
-Line style is ascii.
 CREATE TABLESPACE
 CREATE DATABASE
 # of deleted backups
