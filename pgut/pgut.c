@@ -1080,7 +1080,7 @@ pgut_wait(int num, PGconn *connections[], struct timeval *timeout)
 		for (i = 0; i < num; i++)
 		{
 			int	sock;
-			
+
 			if (connections[i] == NULL)
 				continue;
 			sock = PQsocket(connections[i]);

@@ -14,79 +14,6 @@
 
 #include <winioctl.h>
 
-int
-uname(struct utsname *buf)
-{
-	OSVERSIONINFO	os = { sizeof(OSVERSIONINFO) };
-	SYSTEM_INFO		sys = { { sizeof(SYSTEM_INFO) } };
-	DWORD			bufsize;
-
-	GetVersionEx(&os);
-	GetSystemInfo(&sys);
-
-	/* sysname */
-	strcpy(buf->sysname, "Windows");
-
-	/* nodename */
-	bufsize = lengthof(buf->nodename);
-	GetComputerName(buf->nodename, &bufsize);
-
-	/* release: major.minor */
-	snprintf(buf->release, lengthof(buf->release), "%ld.%ld",
-		os.dwMajorVersion, os.dwMinorVersion);
-
-	/* version */
-	strcpy(buf->sysname, os.szCSDVersion);
-
-	/* machine */
-	switch (sys.wProcessorArchitecture)
-	{
-	case PROCESSOR_ARCHITECTURE_INTEL:
-		strcpy(buf->machine, "x86");
-		break;
-	case PROCESSOR_ARCHITECTURE_IA64:
-		strcpy(buf->machine, "IA64");
-		break;
-	case PROCESSOR_ARCHITECTURE_AMD64:
-		strcpy(buf->machine, "x86_64");
-		break;
-	case PROCESSOR_ARCHITECTURE_IA32_ON_WIN64:
-		strcpy(buf->machine, "x86_on_win64");
-		break;
-	default:
-		strcpy(buf->machine, "unknown");
-		break;
-	}
-
-	return 0;
-}
-
-#define NTFS_BLOCK_SIZE		512
-
-int
-statfs(const char *path, struct statfs *buf)
-{
-	ULARGE_INTEGER	availBytes;
-	ULARGE_INTEGER	totalBytes;
-	ULARGE_INTEGER	freeBytes;
-
-	if (!GetDiskFreeSpaceEx(path, &availBytes, &totalBytes, &freeBytes))
-	{
-		_dosmaperr(GetLastError());
-		return -1;
-	}
-
-	memset(buf, 0, sizeof(struct statfs));
-	buf->f_type = NTFS_SB_MAGIC;
-	buf->f_bsize = NTFS_BLOCK_SIZE;
-	buf->f_blocks = (long) (totalBytes.QuadPart / NTFS_BLOCK_SIZE);
-	buf->f_bfree = (long) (freeBytes.QuadPart / NTFS_BLOCK_SIZE);
-	buf->f_bavail = (long) (availBytes.QuadPart / NTFS_BLOCK_SIZE);
-	buf->f_namelen = MAX_PATH;
-
-	return 0;
-}
-
 #define REPARSE_DATA_SIZE		1024
 
 /* same layout as REPARSE_DATA_BUFFER, which is defined only in old winnt.h */
@@ -190,20 +117,6 @@ readlink(const char *path, char *target, size_t size)
 
 	CloseHandle(handle);
 	return r;
-}
-
-char *
-blkid_devno_to_devname(dev_t devno)
-{
-	static char	devname[4];
-	char		letter = 'A' + devno;
-	if ('A' <= letter && letter <= 'Z')
-	{
-		snprintf(devname, lengthof(devname), "%c:\\", 'A' + devno);
-		return devname;
-	}
-	else
-		return NULL;
 }
 
 int
