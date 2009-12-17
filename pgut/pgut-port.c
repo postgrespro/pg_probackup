@@ -10,6 +10,11 @@
 #include "c.h"
 #include "pgut-port.h"
 
+#undef flock
+
+#include <unistd.h>
+#include <fcntl.h>
+
 #ifdef WIN32
 
 #include <winioctl.h>
@@ -119,13 +124,18 @@ readlink(const char *path, char *target, size_t size)
 	return r;
 }
 
+#endif
+
+#ifdef PGUT_FLOCK
+
+#ifdef WIN32
 int
-flock(int fd, int operation)
+pgut_flock(int fd, int operation)
 {
 	BOOL	ret;
 	HANDLE	handle = (HANDLE) _get_osfhandle(fd);
 	DWORD	lo = 0;
-	DWORD	hi = 1;
+	DWORD	hi = 0;
 
 	if (operation & LOCK_UN)
 	{
@@ -149,5 +159,35 @@ flock(int fd, int operation)
 
 	return 0;
 }
+
+#else
+
+int
+pgut_flock(int fd, int operation)
+{
+	struct flock	lck;
+	int				cmd;
+
+	memset(&lck, 0, sizeof(lck));
+	lck.l_whence = SEEK_SET;
+	lck.l_start = 0;
+	lck.l_len = 0;
+	lck.l_pid = getpid();
+
+	if (operation & LOCK_UN)
+		lck.l_type = F_UNLCK;
+	else if (operation & LOCK_EX)
+		lck.l_type = F_WRLCK;
+	else
+		lck.l_type = F_RDLCK;
+
+	if (operation & LOCK_NB)
+		cmd = F_SETLK;
+	else
+		cmd = F_SETLKW;
+
+	return fcntl(fd, cmd, &lck);
+}
+#endif
 
 #endif

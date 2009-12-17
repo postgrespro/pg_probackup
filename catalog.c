@@ -9,14 +9,15 @@
 
 #include "pg_rman.h"
 
-#include <stdlib.h>
-#include <libgen.h>
-#include <unistd.h>
 #include <dirent.h>
-#include <time.h>
+#include <fcntl.h>
+#include <libgen.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/file.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "pgut/pgut-port.h"
 
@@ -96,7 +97,7 @@ IsDir(const char *dirpath, const DIR *dir, const struct dirent *ent)
 	return ent->d_type == DT_DIR;
 #elif defined(_finddata_t)
 	return (dir->dd_dta.attrib & FILE_ATTRIBUTE_DIRECTORY) != 0;
-#else 
+#elif defined(WIN32)
 	char	path[MAXPGPATH];
 	DWORD	attr;
 
@@ -106,6 +107,8 @@ IsDir(const char *dirpath, const DIR *dir, const struct dirent *ent)
 	strlcat(path, ent->d_name, MAXPGPATH);
 	attr = GetFileAttributes(path);
 	return attr != (DWORD) -1 && (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+#else
+#error IsDir: this platform is not supported.
 #endif
 }
 
