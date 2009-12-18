@@ -12,9 +12,9 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/file.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
@@ -96,19 +96,18 @@ IsDir(const char *dirpath, const DIR *dir, const struct dirent *ent)
 #if defined(DT_DIR)
 	return ent->d_type == DT_DIR;
 #elif defined(_finddata_t)
+	/* Optimization for VC++ on Windows. */
 	return (dir->dd_dta.attrib & FILE_ATTRIBUTE_DIRECTORY) != 0;
-#elif defined(WIN32)
-	char	path[MAXPGPATH];
-	DWORD	attr;
+#else
+	/* Portable implementation because dirent.d_type is not in POSIX. */
+	char		path[MAXPGPATH];
+	struct stat	st;
 
-	/* dirent.d_type does not exists */
 	strlcpy(path, dirpath, MAXPGPATH);
 	strlcat(path, "/", MAXPGPATH);
 	strlcat(path, ent->d_name, MAXPGPATH);
-	attr = GetFileAttributes(path);
-	return attr != (DWORD) -1 && (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
-#else
-#error IsDir: this platform is not supported.
+
+	return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 #endif
 }
 
