@@ -311,7 +311,7 @@ catalog_get_last_srvlog_backup(parray *backup_list)
 /* create backup directory in $BACKUP_PATH */
 int
 pgBackupCreateDir(pgBackup *backup)
-{ 
+{
 	int i;
 	char path[MAXPGPATH];
 	char *subdirs[] = { DATABASE_DIR, ARCLOG_DIR, SRVLOG_DIR, NULL };

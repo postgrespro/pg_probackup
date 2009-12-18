@@ -19,6 +19,10 @@
 #include "utils/pg_crc.h"
 #include "parray.h"
 
+#if PG_VERSION_NUM < 80200
+#define XLOG_BLCKSZ		BLCKSZ
+#endif
+
 /* Directory/File names */
 #define DATABASE_DIR			"database"
 #define ARCLOG_DIR				"arclog"
@@ -52,7 +56,7 @@ typedef struct pgFile
 	time_t	mtime;			/* time of last modification */
 	mode_t	mode;			/* protection (file type and permission) */
 	size_t	size;			/* size of the file */
-	size_t	read_size;		/* size of the portion read (if only some pages are 
+	size_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up partially, it's different from size) */
 	size_t	write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
@@ -241,7 +245,7 @@ extern int pgFileCompareMtime(const void *f1, const void *f2);
 extern int pgFileCompareMtimeDesc(const void *f1, const void *f2);
 
 /* in xlog.c */
-extern bool xlog_is_complete_wal(const pgFile *file);
+extern bool xlog_is_complete_wal(const pgFile *file, int server_version);
 extern bool xlog_logfname2lsn(const char *logfname, XLogRecPtr *lsn);
 extern void xlog_fname(char *fname, size_t len, TimeLineID tli, XLogRecPtr *lsn);
 

@@ -432,7 +432,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	{
 		/*
 		 * If the odd size page is the 1st page, fallback to simple copy because
-		 * the file is not a datafile.	
+		 * the file is not a datafile.
 		 * Otherwise treat the page as a datapage with no hole.
 		 */
 		if (blknum == 0)

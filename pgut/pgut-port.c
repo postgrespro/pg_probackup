@@ -56,7 +56,7 @@ typedef struct REPARSE_DATA
 ssize_t
 readlink(const char *path, char *target, size_t size)
 {
-    HANDLE			handle; 
+    HANDLE			handle;
  	DWORD			attr;
 	REPARSE_DATA	data;
  	DWORD			datasize;
@@ -68,12 +68,12 @@ readlink(const char *path, char *target, size_t size)
 	if (attr == INVALID_FILE_ATTRIBUTES)
 	{
 		_dosmaperr(GetLastError());
-        return -1; 
-    } 
+        return -1;
+    }
 	if ((attr & FILE_ATTRIBUTE_REPARSE_POINT) == 0)
 	{
 		errno = EINVAL;	/* not a symlink */
-        return -1; 
+        return -1;
 	}
 
     handle = CreateFileA(path, 0,
@@ -83,9 +83,9 @@ readlink(const char *path, char *target, size_t size)
 	if (handle == INVALID_HANDLE_VALUE)
 	{
 		_dosmaperr(GetLastError());
-        return -1; 
+        return -1;
     }
- 
+
 	wpath = NULL;
 	if (DeviceIoControl(handle, FSCTL_GET_REPARSE_POINT, NULL, 0,
         &data, sizeof(data), &datasize, NULL))

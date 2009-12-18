@@ -177,7 +177,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 
 	/*
 	 * update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
-	 * the error occurs before deleting all backup files. 
+	 * the error occurs before deleting all backup files.
 	 */
 	if (!check)
 	{

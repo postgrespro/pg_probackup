@@ -16,10 +16,6 @@
 
 #include "catalog/pg_control.h"
 
-#if PG_VERSION_NUM < 80200
-#define XLOG_BLCKSZ		BLCKSZ
-#endif
-
 static void backup_online_files(bool re_recovery);
 static void restore_online_files(void);
 static void restore_database(pgBackup *backup);

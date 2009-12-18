@@ -27,7 +27,8 @@ static bool	in_backup = false;	/* TODO: more robust logic */
  * Backup routines
  */
 static void backup_cleanup(bool fatal, void *userdata);
-static void delete_old_files(const char *root, parray *files, int keep_files, int keep_days, bool is_arclog);
+static void delete_old_files(const char *root, parray *files, int keep_files,
+							 int keep_days, int server_version, bool is_arclog);
 static void backup_files(const char *from_root, const char *to_root,
 	parray *files, parray *prev_files, XLogRecPtr *lsn, bool compress_data);
 static parray *do_backup_database(parray *backup_list, bool smooth_checkpoint);
@@ -432,11 +433,12 @@ do_backup(bool smooth_checkpoint,
 		  int keep_data_generations,
 		  int keep_data_days)
 {
-	int ret;
 	parray *backup_list;
 	parray *files_database;
 	parray *files_arclog;
 	parray *files_srvlog;
+	int		server_version;
+	int		ret;
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
@@ -462,7 +464,7 @@ do_backup(bool smooth_checkpoint,
 #endif
 
 	/* confirm data block size and xlog block size are compatible */
-	(void) get_server_version();
+	server_version = get_server_version();
 
 	/* setup cleanup callback function */
 	in_backup = true;
@@ -546,10 +548,10 @@ do_backup(bool smooth_checkpoint,
 	 */
 	if (HAVE_ARCLOG(&current))
 		delete_old_files(arclog_path, files_arclog, keep_arclog_files,
-			keep_arclog_days, true);
+			keep_arclog_days, server_version, true);
 	if (current.with_serverlog)
 		delete_old_files(srvlog_path, files_srvlog, keep_srvlog_files,
-			keep_srvlog_days, false);
+			keep_srvlog_days, server_version, false);
 
 	/* Delete old backup files after all backup operation. */
 	pgBackupDelete(keep_data_generations, keep_data_days);
@@ -603,14 +605,17 @@ get_server_version(void)
 
 	/* confirm server version */
 	server_version = PQserverVersion(connection);
-	if (server_version < 80000)
+	if (server_version < 80200)
 		elog(ERROR_PG_INCOMPATIBLE,
-			_("server version is %d, but must be 8.0 or higher."),
-			server_version);
+			_("server version is %d.%d.%d, but must be 8.2 or higher."),
+			server_version / 10000,
+			(server_version / 100) % 100,
+			server_version % 100);
 
 	/* confirm block_size (BLCKSZ) and wal_block_size (XLOG_BLCKSZ) */
 	confirm_block_size("block_size", BLCKSZ);
-	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
+	if (server_version >= 80400)
+		confirm_block_size("wal_block_size", XLOG_BLCKSZ);
 
 	if (my_conn)
 		disconnect();
@@ -625,9 +630,7 @@ confirm_block_size(const char *name, int blcksz)
 	char	   *endp;
 	int			block_size;
 
-	res = execute(
-		"SELECT setting from pg_settings where name = $1",
-		1, &name);
+	res = execute("SELECT current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR_PG_COMMAND, _("can't get %s: %s"),
 			name, PQerrorMessage(connection));
@@ -955,7 +958,12 @@ backup_files(const char *from_root, const char *to_root, parray *files,
  * of newer files exist.
  */
 static void
-delete_old_files(const char *root, parray *files, int keep_files, int keep_days, bool is_arclog)
+delete_old_files(const char *root,
+				 parray *files,
+				 int keep_files,
+				 int keep_days,
+				 int server_version,
+				 bool is_arclog)
 {
 	int i;
 	int j;
@@ -996,7 +1004,7 @@ delete_old_files(const char *root, parray *files, int keep_files, int keep_days,
 
 		elog(LOG, "%s() %s", __FUNCTION__, file->path);
 		/* Delete complete WAL only. */
-		if (is_arclog && !xlog_is_complete_wal(file))
+		if (is_arclog && !xlog_is_complete_wal(file, server_version))
 		{
 			elog(LOG, "%s() not complete WAL", __FUNCTION__);
 			continue;

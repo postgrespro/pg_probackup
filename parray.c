@@ -56,8 +56,6 @@ parray_expand(parray *array, size_t newsize)
 
 	array->alloced = newsize;
 	array->data = p;
-
-	return; 
 }
 
 void
