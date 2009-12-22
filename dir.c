@@ -39,7 +39,7 @@ dir_create_dir(const char *dir, mode_t mode)
 	char *parent;
 
 	strncpy(copy, dir, MAXPGPATH);
-	parent= dirname(copy);
+	parent = dirname(copy);
 	if (access(parent, F_OK) == -1)
 		dir_create_dir(parent, mode);
 	if (mkdir(dir, mode) == -1)

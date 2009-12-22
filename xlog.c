@@ -104,12 +104,12 @@ bool
 xlog_logfname2lsn(const char *logfname, XLogRecPtr *lsn)
 {
 	uint32 tli;
+
 	if (sscanf(logfname, "%08X%08X%08X",
 			&tli, &lsn->xlogid, &lsn->xrecoff) != 3)
 		return false;
 
 	lsn->xrecoff *= XLogSegSize;
-
 	return true;
 }
 

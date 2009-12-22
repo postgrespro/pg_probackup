@@ -281,7 +281,7 @@ base_backup_found:
 		elog(INFO, _("restore complete. Recovery starts automatically when the PostgreSQL server is started."));
 
 	return 0;
-}
+}	
 
 /*
  * Validate and restore backup.
@@ -327,7 +327,7 @@ restore_database(pgBackup *backup)
 
 		/* keep orginal directory */
 		if (getcwd(pwd, sizeof(pwd)) == NULL)
-			elog(ERROR_SYSTEM, _("can't get current working directoryh: %s"),
+			elog(ERROR_SYSTEM, _("can't get current working directory: %s"),
 				strerror(errno));
 
 		/* create pgdata directory */
@@ -335,7 +335,7 @@ restore_database(pgBackup *backup)
 
 		/* change directory to pgdata */
 		if (chdir(pgdata))
-			elog(ERROR_SYSTEM, _("can't change directoryh: %s"),
+			elog(ERROR_SYSTEM, _("can't change directory: %s"),
 				strerror(errno));
 
 		/* Execute mkdirs.sh */
@@ -346,7 +346,7 @@ restore_database(pgBackup *backup)
 
 		/* go back to original directory */
 		if (chdir(pwd))
-			elog(ERROR_SYSTEM, _("can't change directoryh: %s"),
+			elog(ERROR_SYSTEM, _("can't change directory: %s"),
 				strerror(errno));
 	}
 
