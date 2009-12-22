@@ -74,7 +74,7 @@ pgBackupDelete(int keep_generations, int keep_days)
 	int		i;
 	parray *backup_list;
 	int		backup_num;
-	time_t	days_threashold = current.start_time - (keep_days * 60 * 60 * 24);
+	time_t	days_threshold = current.start_time - (keep_days * 60 * 60 * 24);
 
 	if (verbose)
 	{
@@ -130,18 +130,18 @@ pgBackupDelete(int keep_generations, int keep_days)
 		}
 
 		/*
-		 * If the start time of the backup is older than the threashold and
+		 * If the start time of the backup is older than the threshold and
 		 * there are enough generations of full backups, delete the backup.
 		 */
-		if (backup->start_time >= days_threashold)
+		if (backup->start_time >= days_threshold)
 		{
 			elog(LOG, "%s() %lu is not older than %lu", __FUNCTION__,
-				backup->start_time, days_threashold);
+				backup->start_time, days_threshold);
 			continue;
 		}
 
 		elog(LOG, "%s() %lu is older than %lu", __FUNCTION__,
-			backup->start_time, days_threashold);
+			backup->start_time, days_threshold);
 
 		/* delete backup and update status to DELETED */
 		pgBackupDeleteFiles(backup);

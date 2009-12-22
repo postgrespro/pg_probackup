@@ -261,7 +261,8 @@ parse_page(const DataPage *page, int server_version,
 			return true;
 		}
 	}
-
+	
+	*offset = *length = 0;
 	return false;
 }
 
@@ -273,7 +274,7 @@ parse_page(const DataPage *page, int server_version,
  */
 void
 backup_data_file(const char *from_root, const char *to_root,
-				 pgFile *file, const XLogRecPtr *lsn, bool compress_data)
+				 pgFile *file, const XLogRecPtr *lsn, bool compress)
 {
 	char				to_path[MAXPGPATH];
 	FILE			   *in;
@@ -324,7 +325,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	file->write_size = 0;
 
 #ifdef HAVE_LIBZ
-	if (compress_data)
+	if (compress)
 	{
 		z.zalloc = Z_NULL;
 		z.zfree = Z_NULL;
@@ -366,7 +367,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			fclose(out);
 			file->is_datafile = false;
 			copy_file(from_root, to_root, file,
-				compress_data ? COMPRESSION : NO_COMPRESSION);
+				compress ? COMPRESSION : NO_COMPRESSION);
 			return;
 		}
 
@@ -380,7 +381,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		upper_length = BLCKSZ - upper_offset;
 
 #ifdef HAVE_LIBZ
-		if (compress_data)
+		if (compress)
 		{
 			doDeflate(&z, sizeof(header), sizeof(outbuf), &header, outbuf, in,
 					  out, &crc, &file->write_size, Z_NO_FLUSH);
@@ -444,7 +445,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			header.hole_length = 0;
 
 #ifdef HAVE_LIBZ
-			if (compress_data)
+			if (compress)
 			{
 				doDeflate(&z, sizeof(header), sizeof(outbuf), &header, outbuf,
 					in, out, &crc, &file->write_size, Z_NO_FLUSH);
@@ -469,7 +470,7 @@ backup_data_file(const char *from_root, const char *to_root,
 
 		/* write odd size page image */
 #ifdef HAVE_LIBZ
-		if (compress_data)
+		if (compress)
 		{
 			doDeflate(&z, read_len, sizeof(outbuf), page.data, outbuf, in, out,
 				&crc, &file->write_size, Z_NO_FLUSH);
@@ -495,7 +496,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	}
 
 #ifdef HAVE_LIBZ
-	if (compress_data)
+	if (compress)
 	{
 		if (file->read_size > 0)
 		{
@@ -512,9 +513,12 @@ backup_data_file(const char *from_root, const char *to_root,
 			elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
 		}
 	}
-
 #endif
-	/* update file permission */
+
+	/*
+	 * update file permission
+	 * FIXME: Should set permission on open?
+	 */
 	if (!check && chmod(to_path, FILE_PERMISSION) == -1)
 	{
 		int errno_tmp = errno;
@@ -551,26 +555,29 @@ backup_data_file(const char *from_root, const char *to_root,
  * same relative path.
  */
 void
-restore_data_file(const char *from_root, const char *to_root, pgFile *file, bool compress_data)
+restore_data_file(const char *from_root,
+				  const char *to_root,
+				  pgFile *file,
+				  bool compress)
 {
-	char to_path[MAXPGPATH];
-	FILE *in;
-	FILE *out;
-	BackupPageHeader header;
-	BlockNumber blknum;
+	char				to_path[MAXPGPATH];
+	FILE			   *in;
+	FILE			   *out;
+	BackupPageHeader	header;
+	BlockNumber			blknum;
 #ifdef HAVE_LIBZ
-	z_stream	z;
-	int			status;
-	char		inbuf[zlibInSize];
-	pg_crc32	crc;
-	size_t		read_size;
+	z_stream			z;
+	int					status;
+	char				inbuf[zlibInSize];
+	pg_crc32			crc;
+	size_t				read_size;
 #endif
 
-	/* If the file is not a datafile, copy it. */
+	/* If the file is not a datafile, just copy it. */
 	if (!file->is_datafile)
 	{
 		copy_file(from_root, to_root, file,
-			compress_data ? DECOMPRESSION : NO_COMPRESSION);
+			compress ? DECOMPRESSION : NO_COMPRESSION);
 		return;
 	}
 
@@ -582,10 +589,16 @@ restore_data_file(const char *from_root, const char *to_root, pgFile *file, bool
 			strerror(errno));
 	}
 
-	/* open backup file for write  */
+	/*
+	 * Open backup file for write. 	We use "r+" at first to overwrite only
+	 * modified pages for incremental restore. If the file is not exists,
+	 * re-open it with "w" to create an empty file.
+	 */
 	snprintf(to_path, lengthof(to_path), "%s/%s", to_root,
 		file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "w");
+	out = fopen(to_path, "r+");
+	if (out == NULL && errno == ENOENT)
+		out = fopen(to_path, "w");
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -595,7 +608,7 @@ restore_data_file(const char *from_root, const char *to_root, pgFile *file, bool
 	}
 
 #ifdef HAVE_LIBZ
-	if (compress_data)
+	if (compress)
 	{
 		z.zalloc = Z_NULL;
 		z.zfree = Z_NULL;
@@ -611,16 +624,16 @@ restore_data_file(const char *from_root, const char *to_root, pgFile *file, bool
 	}
 #endif
 
-	for (blknum = 0; ;blknum++)
+	for (blknum = 0; ; blknum++)
 	{
-		size_t read_len;
-		DataPage page;		/* used as read buffer */
-		int upper_offset;
-		int upper_length;
+		size_t		read_len;
+		DataPage	page;		/* used as read buffer */
+		int			upper_offset;
+		int			upper_length;
 
 		/* read BackupPageHeader */
 #ifdef HAVE_LIBZ
-		if (compress_data)
+		if (compress)
 		{
 			status = doInflate(&z, sizeof(inbuf), sizeof(header), inbuf,
 						&header, in, out, &crc, &read_size);
@@ -669,14 +682,15 @@ restore_data_file(const char *from_root, const char *to_root, pgFile *file, bool
 
 		/* read lower/upper into page.data and restore hole */
 		memset(page.data + header.hole_offset, 0, header.hole_length);
+
 #ifdef HAVE_LIBZ
-		if (compress_data)
+		if (compress)
 		{
 			elog(LOG, "\n%s() %s %d %d", __FUNCTION__, file->path, header.hole_offset, upper_length);
 			if (header.hole_offset > 0)
 			{
-				doInflate(&z, sizeof(inbuf), header.hole_offset, inbuf, page.data,
-					in, out, &crc, &read_size);
+				doInflate(&z, sizeof(inbuf), header.hole_offset, inbuf,
+					page.data, in, out, &crc, &read_size);
 				if (z.avail_out != 0)
 					elog(ERROR_SYSTEM, _("can't read block %u of \"%s\""),
 						blknum, file->path);
@@ -702,25 +716,21 @@ restore_data_file(const char *from_root, const char *to_root, pgFile *file, bool
 			}
 		}
 
-		/* by the incremental backup, we skip in a page without the update. */
-		if (blknum != header.block)
-		{
-			if (fseek(out, (header.block - blknum) * BLCKSZ, SEEK_CUR) < 0)
-				elog(ERROR_SYSTEM, _("can't seek restore target file \"%s\": %s"),
-					to_path, strerror(errno));
-			blknum = header.block;
-		}
-
+		/*
+		 * Seek and write the restored page. Backup might have holes in
+		 * incremental backups.
+		 */
+		blknum = header.block;
+		if (fseek(out, blknum * BLCKSZ, SEEK_SET) < 0)
+			elog(ERROR_SYSTEM, _("can't seek block %u of \"%s\": %s"),
+				blknum, to_path, strerror(errno));
 		if (fwrite(page.data, 1, sizeof(page), out) != sizeof(page))
-		{
 			elog(ERROR_SYSTEM, _("can't write block %u of \"%s\": %s"),
 				blknum, file->path, strerror(errno));
-		}
-
 	}
 
 #ifdef HAVE_LIBZ
-	if (compress_data && inflateEnd(&z) != Z_OK)
+	if (compress && inflateEnd(&z) != Z_OK)
 		elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
 #endif
 
@@ -742,14 +752,14 @@ void
 copy_file(const char *from_root, const char *to_root, pgFile *file,
 	CompressionMode mode)
 {
-	char to_path[MAXPGPATH];
-	FILE *in;
-	FILE *out;
-	size_t read_len = 0;
-	int errno_tmp;
-	char buf[8192];
-	struct stat st;
-	pg_crc32 crc;
+	char		to_path[MAXPGPATH];
+	FILE	   *in;
+	FILE	   *out;
+	size_t		read_len = 0;
+	int			errno_tmp;
+	char		buf[8192];
+	struct stat	st;
+	pg_crc32	crc;
 #ifdef HAVE_LIBZ
 	z_stream	z;
 	int			status;

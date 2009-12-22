@@ -30,7 +30,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 static void delete_old_files(const char *root, parray *files, int keep_files,
 							 int keep_days, int server_version, bool is_arclog);
 static void backup_files(const char *from_root, const char *to_root,
-	parray *files, parray *prev_files, XLogRecPtr *lsn, bool compress_data);
+	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress);
 static parray *do_backup_database(parray *backup_list, bool smooth_checkpoint);
 static parray *do_backup_arclog(parray *backup_list);
 static parray *do_backup_srvlog(parray *backup_list);
@@ -137,7 +137,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	files = parray_new();
 	dir_list_file(files, pgdata, pgdata_exclude, true, false);
 
-	/* mark files as 'datafile' which are under base/global/pg_tblspc */
+	/* mark files that are possible datafile as 'datafile' */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
@@ -148,7 +148,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 		if (!S_ISREG(file->mode))
 			continue;
 
-		/* data files are under base/global/pg_tblspc */
+		/* data files are under "base", "global", or "pg_tblspc" */
 		relative = file->path + strlen(pgdata) + 1;
 		if (!path_is_prefix_of_path("base", relative) &&
 			!path_is_prefix_of_path("global", relative) &&
@@ -214,16 +214,16 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 static parray *
 do_backup_arclog(parray *backup_list)
 {
-	int i;
-	parray *files;
-	parray *prev_files = NULL;	/* file list of previous database backup */
-	FILE *fp;
-	char path[MAXPGPATH];
-	char timeline_dir[MAXPGPATH];
-	char prev_file_txt[MAXPGPATH];
-	pgBackup *prev_backup;
-	int64 arclog_write_bytes = 0;
-	char last_wal[MAXPGPATH];
+	int			i;
+	parray	   *files;
+	parray	   *prev_files = NULL;	/* file list of previous database backup */
+	FILE	   *fp;
+	char		path[MAXPGPATH];
+	char		timeline_dir[MAXPGPATH];
+	char		prev_file_txt[MAXPGPATH];
+	pgBackup   *prev_backup;
+	int64		arclog_write_bytes = 0;
+	char		last_wal[MAXPGPATH];
 
 	if (!HAVE_ARCLOG(&current))
 		return NULL;
@@ -345,14 +345,14 @@ do_backup_arclog(parray *backup_list)
 static parray *
 do_backup_srvlog(parray *backup_list)
 {
-	int i;
-	parray *files;
-	parray *prev_files = NULL;	/* file list of previous database backup */
-	FILE *fp;
-	char path[MAXPGPATH];
-	char prev_file_txt[MAXPGPATH];
-	pgBackup *prev_backup;
-	int64 srvlog_write_bytes = 0;
+	int			i;
+	parray	   *files;
+	parray	   *prev_files = NULL;	/* file list of previous database backup */
+	FILE	   *fp;
+	char		path[MAXPGPATH];
+	char		prev_file_txt[MAXPGPATH];
+	pgBackup   *prev_backup;
+	int64		srvlog_write_bytes = 0;
 
 	if (!current.with_serverlog)
 		return NULL;
@@ -818,10 +818,14 @@ backup_cleanup(bool fatal, void *userdata)
 
 /* take incremental backup. */
 static void
-backup_files(const char *from_root, const char *to_root, parray *files,
-	parray *prev_files, XLogRecPtr *lsn, bool compress_data)
+backup_files(const char *from_root,
+			 const char *to_root,
+			 parray *files,
+			 parray *prev_files,
+			 const XLogRecPtr *lsn,
+			 bool compress)
 {
-	int i;
+	int				i;
 	struct timeval	tv;
 
 	/* sort pathname ascending */
@@ -832,8 +836,9 @@ backup_files(const char *from_root, const char *to_root, parray *files,
 	/* backup a file or create a directory */
 	for (i = 0; i < parray_num(files); i++)
 	{
-		int ret;
-		struct stat buf;
+		int			ret;
+		struct stat	buf;
+
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		/* check for interrupt */
@@ -869,6 +874,7 @@ backup_files(const char *from_root, const char *to_root, parray *files,
 		if (S_ISDIR(buf.st_mode))
 		{
 			char dirpath[MAXPGPATH];
+
 			snprintf(dirpath, lengthof(dirpath), "%s/%s", to_root,
 				file->path + strlen(from_root) + 1);
 			if (!check)
@@ -918,7 +924,7 @@ backup_files(const char *from_root, const char *to_root, parray *files,
 			/* copy the file into backup */
 			if (file->is_datafile)
 			{
-				backup_data_file(from_root, to_root, file, lsn, compress_data);
+				backup_data_file(from_root, to_root, file, lsn, compress);
 				if (file->write_size == 0 && file->read_size > 0)
 				{
 					/* record as skipped file in file_xxx.txt */
@@ -930,7 +936,7 @@ backup_files(const char *from_root, const char *to_root, parray *files,
 			}
 			else
 				copy_file(from_root, to_root, file,
-					compress_data ? COMPRESSION : NO_COMPRESSION);
+					compress ? COMPRESSION : NO_COMPRESSION);
 
 			if (verbose)
 			{
@@ -965,11 +971,10 @@ delete_old_files(const char *root,
 				 int server_version,
 				 bool is_arclog)
 {
-	int i;
-	int j;
-	int file_num = 0;
-	time_t days_threashold =
-		current.start_time - (keep_days * 60 * 60 * 24);
+	int		i;
+	int		j;
+	int		file_num = 0;
+	time_t	days_threshold = current.start_time - (keep_days * 60 * 60 * 24);
 
 	if (verbose)
 	{
@@ -990,7 +995,7 @@ delete_old_files(const char *root,
 			root, files_str, days_str);
 	}
 
-	/* delete files which satisfy both condition */
+	/* delete files which satisfy both conditions */
 	if (keep_files == KEEP_INFINITE || keep_days == KEEP_INFINITE)
 	{
 		elog(LOG, "%s() infinite", __FUNCTION__);
@@ -1003,7 +1008,7 @@ delete_old_files(const char *root,
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		elog(LOG, "%s() %s", __FUNCTION__, file->path);
-		/* Delete complete WAL only. */
+		/* Delete completed WALs only. */
 		if (is_arclog && !xlog_is_complete_wal(file, server_version))
 		{
 			elog(LOG, "%s() not complete WAL", __FUNCTION__);
@@ -1013,17 +1018,17 @@ delete_old_files(const char *root,
 		file_num++;
 
 		/*
-		 * If the mtime of the file is older than the threashold and there are
+		 * If the mtime of the file is older than the threshold and there are
 		 * enough number of files newer than the files, delete the file.
 		 */
-		if (file->mtime >= days_threashold)
+		if (file->mtime >= days_threshold)
 		{
 			elog(LOG, "%s() %lu is not older than %lu", __FUNCTION__,
-				file->mtime, days_threashold);
+				file->mtime, days_threshold);
 			continue;
 		}
 		elog(LOG, "%s() %lu is older than %lu", __FUNCTION__,
-			file->mtime, days_threashold);
+			file->mtime, days_threshold);
 
 		if (file_num <= keep_files)
 		{
@@ -1035,7 +1040,7 @@ delete_old_files(const char *root,
 		if (verbose)
 			printf(_("delete \"%s\"\n"), file->path + strlen(root) + 1);
 
-		/* delete corresponding backup history file if any */
+		/* delete corresponding backup history file if exists */
 		file = (pgFile *) parray_remove(files, i);
 		for (j = parray_num(files) - 1; j >= 0; j--)
 		{

@@ -56,8 +56,8 @@ dir_create_dir(const char *dir, mode_t mode)
 static pgFile *
 pgFileNew(const char *path, bool omit_symlink)
 {
-	struct stat st;
-	pgFile *file;
+	struct stat		st;
+	pgFile		   *file;
 
 	/* stat the file */
 	if ((omit_symlink ? stat(path, &st) : lstat(path, &st)) == -1)
@@ -82,28 +82,6 @@ pgFileNew(const char *path, bool omit_symlink)
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 
 	return file;
-}
-
-void
-pgFileDump(pgFile *file, FILE *out)
-{
-	char mtime_str[100];
-
-	fprintf(out, "=================\n");
-	if (file)
-	{
-		time2iso(mtime_str, 100, file->mtime);
-		fprintf(out, "mtime=%lu(%s)\n", file->mtime, mtime_str);
-		fprintf(out, "size=" UINT64_FORMAT "\n", (uint64)file->size);
-		fprintf(out, "read_size=" UINT64_FORMAT "\n", (uint64)file->read_size);
-		fprintf(out, "write_size=" UINT64_FORMAT "\n", (uint64)file->write_size);
-		fprintf(out, "mode=0%o\n", file->mode);
-		fprintf(out, "crc=%u\n", file->crc);
-		fprintf(out, "is_datafile=%s\n", file->is_datafile ? "true" : "false");
-		fprintf(out, "linked=\"%s\"\n", file->linked ? file->linked : "nil");
-		fprintf(out, "path=\"%s\"\n", file->path);
-	}
-	fprintf(out, "=================\n");
 }
 
 /*
@@ -141,11 +119,11 @@ delete_file:
 pg_crc32
 pgFileGetCRC(pgFile *file)
 {
-	FILE *fp;
-	pg_crc32 crc = 0;
-	char buf[1024];
-	size_t len;
-	int errno_tmp;
+	FILE	   *fp;
+	pg_crc32	crc = 0;
+	char		buf[1024];
+	size_t		len;
+	int			errno_tmp;
 
 	/* open file in binary read mode */
 	fp = fopen(file->path, "r");
@@ -211,7 +189,8 @@ pgFileCompareMtime(const void *f1, const void *f2)
 		return 1;
 	else if (f1p->mtime < f2p->mtime)
 		return -1;
-	else return 0;
+	else
+		return 0;
 }
 
 /* Compare two pgFile with their modify timestamp in descending order. */
@@ -287,11 +266,11 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 	 */
 	while (S_ISDIR(file->mode))
 	{
-		int i;
-		bool skip = false;
-		DIR *dir;
-		struct dirent *dent;
-		char *dirname;
+		int				i;
+		bool			skip = false;
+		DIR			    *dir;
+		struct dirent   *dent;
+		char		    *dirname;
 
 		/* skip entry which matches exclude list */
 	   	dirname = strrchr(file->path, '/');
@@ -566,3 +545,27 @@ dir_copy_files(const char *from_root, const char *to_root)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 }
+
+#ifdef NOT_USED
+void
+pgFileDump(pgFile *file, FILE *out)
+{
+	char mtime_str[100];
+
+	fprintf(out, "=================\n");
+	if (file)
+	{
+		time2iso(mtime_str, 100, file->mtime);
+		fprintf(out, "mtime=%lu(%s)\n", file->mtime, mtime_str);
+		fprintf(out, "size=" UINT64_FORMAT "\n", (uint64)file->size);
+		fprintf(out, "read_size=" UINT64_FORMAT "\n", (uint64)file->read_size);
+		fprintf(out, "write_size=" UINT64_FORMAT "\n", (uint64)file->write_size);
+		fprintf(out, "mode=0%o\n", file->mode);
+		fprintf(out, "crc=%u\n", file->crc);
+		fprintf(out, "is_datafile=%s\n", file->is_datafile ? "true" : "false");
+		fprintf(out, "linked=\"%s\"\n", file->linked ? file->linked : "nil");
+		fprintf(out, "path=\"%s\"\n", file->path);
+	}
+	fprintf(out, "=================\n");
+}
+#endif

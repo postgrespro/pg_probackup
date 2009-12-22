@@ -20,7 +20,7 @@ static bool pgBackupValidateFiles(parray *files, const char *root, bool size_onl
 int
 do_validate(pgBackupRange *range)
 {
-	int i;
+	int		i;
 	parray *backup_list;
 
 	catalog_lock();
@@ -133,6 +133,7 @@ pgBackupValidateFiles(parray *files, const char *root, bool size_only)
 	for (i = 0; i < parray_num(files); i++)
 	{
 		struct stat st;
+
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		if (interrupted)
@@ -168,7 +169,8 @@ pgBackupValidateFiles(parray *files, const char *root, bool size_only)
 		/* validate CRC too */
 		if (!size_only)
 		{
-			pg_crc32 crc;
+			pg_crc32	crc;
+
 			crc = pgFileGetCRC(file);
 			if (crc != file->crc)
 			{

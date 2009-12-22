@@ -156,9 +156,7 @@ do_restore(const char *target_time,
 		}
 #endif
 		if (satisfy_timeline(timelines, base_backup))
-		{
 			goto base_backup_found;
-		}
 	}
 	/* no full backup found, can't restore */
 	elog(ERROR_NO_BACKUP, _("no full backup found, can't restore."));
@@ -291,12 +289,12 @@ base_backup_found:
 void
 restore_database(pgBackup *backup)
 {
-	char timestamp[100];
-	char path[MAXPGPATH];
-	char list_path[MAXPGPATH];
-	int ret;
+	char	timestamp[100];
+	char	path[MAXPGPATH];
+	char	list_path[MAXPGPATH];
+	int		ret;
 	parray *files;
-	int i;
+	int		i;
 
 	/* confirm block size compatibility */
 	if (backup->block_size != BLCKSZ)

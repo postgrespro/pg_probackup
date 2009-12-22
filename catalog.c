@@ -247,8 +247,8 @@ err_proc:
 pgBackup *
 catalog_get_last_data_backup(parray *backup_list)
 {
-	int i;
-	pgBackup *backup = NULL;
+	int			i;
+	pgBackup   *backup = NULL;
 
 	/* backup_list is sorted in order of descending ID */
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -269,8 +269,8 @@ catalog_get_last_data_backup(parray *backup_list)
 pgBackup *
 catalog_get_last_arclog_backup(parray *backup_list)
 {
-	int i;
-	pgBackup *backup = NULL;
+	int			i;
+	pgBackup   *backup = NULL;
 
 	/* backup_list is sorted in order of descending ID */
 	for (i = 0; i < parray_num(backup_list); i++)

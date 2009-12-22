@@ -26,29 +26,17 @@ typedef struct MemoryContextData *MemoryContext;
 #define XLOG_PAGE_MAGIC_v82		0xD05E	/* 8.2 */
 #define XLOG_PAGE_MAGIC_v83		0xD062	/* 8.3 */
 #define XLOG_PAGE_MAGIC_v84		0xD063	/* 8.4 */
-#define XLOG_PAGE_MAGIC_v85		0xD063	/* 8.5 */
+#define XLOG_PAGE_MAGIC_v85		0xD166	/* 8.5 */
 
-typedef struct XLogLongPageHeaderData_v81
-{
-	XLogPageHeaderData std;
-	uint64		xlp_sysid;
-	uint32		xlp_seg_size;
-} XLogLongPageHeaderData_v81, *XLogLongPageHeader_v81;
-
-typedef struct XLogLongPageHeaderData_v82
-{
-	XLogPageHeaderData std;		/* standard header fields */
-	uint64		xlp_sysid;		/* system identifier from pg_control */
-	uint32		xlp_seg_size;	/* just as a cross-check */
-	uint32		xlp_xlog_blcksz;	/* just as a cross-check */
-} XLogLongPageHeaderData_v82, *XLogLongPageHeader_v82;
-
+/*
+ * XLogLongPageHeaderData is modified in 8.3, but the layout is compatible
+ * except xlp_xlog_blcksz.
+ */
 typedef union XLogPage
 {
-	XLogPageHeaderData			header;
-	XLogLongPageHeaderData_v81	long_v81;	/* 8.1 - 8.2 */
-	XLogLongPageHeaderData_v82	long_v82;	/* 8.3 - */
-	char						data[XLOG_BLCKSZ];
+	XLogPageHeaderData		header;
+	XLogLongPageHeaderData	lheader;
+	char					data[XLOG_BLCKSZ];
 } XLogPage;
 
 /*
@@ -73,7 +61,9 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 	fclose(fp);
 
 	/* xlog_page_magic from server version */
-	if (server_version < 80100)
+	if (server_version < 80000)
+		return false;	/* never happen */
+	else if (server_version < 80100)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v80;
 	else if (server_version < 80200)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v81;
@@ -83,37 +73,29 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v83;
 	else if (server_version < 80500)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v84;
-	else
+	else if (server_version < 80600)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v85;
+	else
+		return false;	/* not supported */
 
 	/* check header */
 	if (page.header.xlp_magic != xlog_page_magic)
 		return false;
 	if ((page.header.xlp_info & ~XLP_ALL_FLAGS) != 0)
 		return false;
-	if (page.header.xlp_info & XLP_LONG_HEADER)
-	{
-		if (page.long_v81.xlp_seg_size != XLogSegSize)
-			return false;
+	if ((page.header.xlp_info & XLP_LONG_HEADER) == 0)
+		return false;
+	if (page.lheader.xlp_seg_size != XLogSegSize)
+		return false;
+	if (server_version >= 80300 && page.lheader.xlp_xlog_blcksz != XLOG_BLCKSZ)
+		return false;
 
-		/* compressed WAL (with lesslog) has 0 in lheader->xlp_xlog_blcksz. */
-		if (server_version >= 80300)
-		{
-			if (page.long_v82.xlp_xlog_blcksz == XLOG_BLCKSZ)
-			{
-				/* check size (actual file size, not backup file size) */
-				if (file->size != XLogSegSize)
-					return false;
-			}
-			else
-			{
-				if (page.long_v82.xlp_xlog_blcksz != 0)
-					return false;
-			}
-		}
-		else if (file->size != XLogSegSize)
-			return false;
-	}
+	/*
+	 * check size (actual file size, not backup file size)
+	 * TODO: Support pre-compressed xlog. They might have different file sizes.
+	 */
+	if (file->size != XLogSegSize)
+		return false;
 
 	return true;
 }
