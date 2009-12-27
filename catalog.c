@@ -37,8 +37,7 @@ catalog_lock(void)
 	int		ret;
 	char	id_path[MAXPGPATH];
 
-	snprintf(id_path, lengthof(id_path), "%s/%s", backup_path,
-		PG_RMAN_INI_FILE);
+	join_path_components(id_path, backup_path, PG_RMAN_INI_FILE);
 	lock_fd = open(id_path, O_RDWR);
 	if (lock_fd == -1)
 		elog(errno == ENOENT ? ERROR_CORRUPTED : ERROR_SYSTEM,
@@ -81,8 +80,8 @@ catalog_unlock(void)
 pgBackup *
 catalog_get_backup(time_t timestamp)
 {
-	pgBackup tmp;
-	char ini_path[MAXPGPATH];
+	pgBackup	tmp;
+	char		ini_path[MAXPGPATH];
 
 	tmp.start_time = timestamp;
 	pgBackupGetPath(&tmp, ini_path, lengthof(ini_path), BACKUP_INI_FILE);
@@ -120,18 +119,18 @@ parray *
 catalog_get_backup_list(const pgBackupRange *range)
 {
 	const pgBackupRange range_all = { 0, 0 };
-	DIR *date_dir = NULL;
-	struct dirent *date_ent = NULL;
-	DIR *time_dir = NULL;
-	struct dirent *time_ent = NULL;
-	char date_path[MAXPGPATH];
-	parray *backups = NULL;
-	pgBackup *backup = NULL;
-	struct tm *tm;
-	char begin_date[100];
-	char begin_time[100];
-	char end_date[100];
-	char end_time[100];
+	DIR			   *date_dir = NULL;
+	struct dirent  *date_ent = NULL;
+	DIR			   *time_dir = NULL;
+	struct dirent  *time_ent = NULL;
+	char			date_path[MAXPGPATH];
+	parray		   *backups = NULL;
+	pgBackup	   *backup = NULL;
+	struct tm	   *tm;
+	char			begin_date[100];
+	char			begin_time[100];
+	char			end_date[100];
+	char			end_time[100];
 
 	if (range == NULL)
 		range = &range_all;
@@ -172,7 +171,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 			continue;
 
 		/* open subdirectory (date directory) and search time directory */
-		snprintf(date_path, MAXPGPATH, "%s/%s", backup_path, date_ent->d_name);
+		join_path_components(date_path, backup_path, date_ent->d_name);
 		time_dir = opendir(date_path);
 		if (time_dir == NULL)
 		{
@@ -291,8 +290,8 @@ catalog_get_last_arclog_backup(parray *backup_list)
 pgBackup *
 catalog_get_last_srvlog_backup(parray *backup_list)
 {
-	int i;
-	pgBackup *backup = NULL;
+	int			i;
+	pgBackup   *backup = NULL;
 
 	/* backup_list is sorted in order of descending ID */
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -311,9 +310,9 @@ catalog_get_last_srvlog_backup(parray *backup_list)
 int
 pgBackupCreateDir(pgBackup *backup)
 {
-	int i;
-	char path[MAXPGPATH];
-	char *subdirs[] = { DATABASE_DIR, ARCLOG_DIR, SRVLOG_DIR, NULL };
+	int		i;
+	char	path[MAXPGPATH];
+	char   *subdirs[] = { DATABASE_DIR, ARCLOG_DIR, SRVLOG_DIR, NULL };
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 	dir_create_dir(path, DIR_PERMISSION);
@@ -377,8 +376,8 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 void
 pgBackupWriteIni(pgBackup *backup)
 {
-	FILE *fp = NULL;
-	char ini_path[MAXPGPATH];
+	FILE   *fp = NULL;
+	char	ini_path[MAXPGPATH];
 
 	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_INI_FILE);
 	fp = fopen(ini_path, "wt");
@@ -561,8 +560,8 @@ pgBackupCompareIdDesc(const void *l, const void *r)
 void
 pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
 {
-	char datetime[20];
-	struct tm *tm;
+	char		datetime[20];
+	struct tm  *tm;
 
 	/* generate $BACKUP_PATH/date/time path */
 	tm = localtime(&backup->start_time);

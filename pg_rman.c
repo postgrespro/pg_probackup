@@ -140,7 +140,7 @@ main(int argc, char *argv[])
 	{
 		char	path[MAXPGPATH];
 
-		snprintf(path, lengthof(path), "%s/%s", backup_path, PG_RMAN_INI_FILE);
+		join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 		pgut_readopt(path, options, ERROR_ARGS);
 	}
 

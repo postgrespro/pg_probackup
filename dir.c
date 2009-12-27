@@ -246,7 +246,7 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 
 			strncpy(dname, file->path, lengthof(dname));
 			dnamep = dirname(dname);
-			snprintf(absolute, lengthof(absolute), "%s/%s", dname, linked);
+			join_path_components(absolute, dname, linked);
 			file = pgFileNew(absolute, omit_symlink);
 		}
 		else
@@ -329,7 +329,7 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 				strcmp(dent->d_name, "..") == 0)
 				continue;
 
-			snprintf(child, lengthof(child), "%s/%s", file->path, dent->d_name);
+			join_path_components(child, file->path, dent->d_name);
 			dir_list_file(files, child, exclude, omit_symlink, true);
 		}
 		if (errno && errno != ENOENT)
@@ -438,9 +438,9 @@ dir_print_file_list(FILE *out, const parray *files, const char *root)
 parray *
 dir_read_file_list(const char *root, const char *file_txt)
 {
-	FILE *fp;
+	FILE   *fp;
 	parray *files;
-	char buf[MAXPGPATH * 2];
+	char	buf[MAXPGPATH * 2];
 
 	fp = fopen(file_txt, "rt");
 	if (fp == NULL)
@@ -508,9 +508,8 @@ dir_read_file_list(const char *root, const char *file_txt)
 void
 dir_copy_files(const char *from_root, const char *to_root)
 {
-	int i;
-	parray *files;
-	files = parray_new();
+	int		i;
+	parray *files = parray_new();
 
 	/* don't copy root directory */
 	dir_list_file(files, from_root, NULL, true, false);
@@ -522,8 +521,7 @@ dir_copy_files(const char *from_root, const char *to_root)
 		if (S_ISDIR(file->mode))
 		{
 			char to_path[MAXPGPATH];
-			snprintf(to_path, lengthof(to_path), "%s/%s", to_root,
-				file->path + strlen(from_root) + 1);
+			join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 			if (verbose && !check)
 				printf(_("create directory \"%s\"\n"),
 					file->path + strlen(from_root) + 1);

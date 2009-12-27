@@ -314,8 +314,7 @@ do_backup_arclog(parray *backup_list)
 	 * We do this after create file list, because copy_file() update
 	 * pgFile->write_size to actual size.
 	 */
-	snprintf(timeline_dir, lengthof(timeline_dir), "%s/%s", backup_path,
-		TIMELINE_HISTORY_DIR);
+	join_path_components(timeline_dir, backup_path, TIMELINE_HISTORY_DIR);
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
@@ -875,8 +874,7 @@ backup_files(const char *from_root,
 		{
 			char dirpath[MAXPGPATH];
 
-			snprintf(dirpath, lengthof(dirpath), "%s/%s", to_root,
-				file->path + strlen(from_root) + 1);
+			join_path_components(dirpath, to_root, file->path + strlen(from_root) + 1);
 			if (!check)
 				dir_create_dir(dirpath, DIR_PERMISSION);
 			if (verbose)

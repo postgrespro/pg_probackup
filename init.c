@@ -32,7 +32,7 @@ do_init(void)
 	dir_create_dir(backup_path, DIR_PERMISSION);
 
 	/* create directories for backup of online files */
-	snprintf(path, lengthof(path), "%s/%s", backup_path, RESTORE_WORK_DIR);
+	join_path_components(path, backup_path, RESTORE_WORK_DIR);
 	dir_create_dir(path, DIR_PERMISSION);
 	snprintf(path, lengthof(path), "%s/%s/%s", backup_path, RESTORE_WORK_DIR,
 		PG_XLOG_DIR);
@@ -42,18 +42,18 @@ do_init(void)
 	dir_create_dir(path, DIR_PERMISSION);
 
 	/* create directory for timeline history files */
-	snprintf(path, lengthof(path), "%s/%s", backup_path, TIMELINE_HISTORY_DIR);
+	join_path_components(path, backup_path, TIMELINE_HISTORY_DIR);
 	dir_create_dir(path, DIR_PERMISSION);
 
 	/* read postgresql.conf */
 	if (pgdata)
 	{
-		snprintf(path, lengthof(path), "%s/%s", pgdata, "postgresql.conf");
+		join_path_components(path, pgdata, "postgresql.conf");
 		parse_postgresql_conf(path, &log_directory, &archive_command);
 	}
 
 	/* create pg_rman.ini */
-	snprintf(path, lengthof(path), "%s/%s", backup_path, PG_RMAN_INI_FILE);
+	join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
 		elog(ERROR_SYSTEM, _("can't create pg_rman.ini: %s"), strerror(errno));
@@ -112,14 +112,14 @@ do_init(void)
 			else
 			{
 				srvlog_path = pgut_malloc(MAXPGPATH);
-				snprintf(srvlog_path, MAXPGPATH, "%s/%s", pgdata, log_directory);
+				join_path_components(srvlog_path, pgdata, log_directory);
 			}
 		}
 		else if (pgdata)
 		{
 			/* default: log_directory = 'pg_log' */
 			srvlog_path = pgut_malloc(MAXPGPATH);
-			snprintf(srvlog_path, MAXPGPATH, "%s/%s", pgdata, "pg_log");
+			join_path_components(srvlog_path, pgdata, "pg_log");
 		}
 	}
 	if (srvlog_path)

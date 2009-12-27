@@ -128,8 +128,7 @@ do_restore(const char *target_time,
 	 * restore timeline history files and get timeline branches can reach
 	 * recovery target point.
 	 */
-	snprintf(timeline_dir, lengthof(timeline_dir), "%s/%s", backup_path,
-		TIMELINE_HISTORY_DIR);
+	join_path_components(timeline_dir, backup_path, TIMELINE_HISTORY_DIR);
 	if (verbose && !check)
 		printf(_("restoring timeline history files\n"));
 	dir_copy_files(timeline_dir, arclog_path);
@@ -254,7 +253,7 @@ base_backup_found:
 		if (verbose)
 			printf(_("searching online WAL...\n"));
 
-		snprintf(xlogpath, lengthof(xlogpath), "%s/%s", pgdata, PG_XLOG_DIR);
+		join_path_components(xlogpath, pgdata, PG_XLOG_DIR);
 		search_next_wal(xlogpath, &needId, &needSeg, timelines);
 
 		if (verbose)
@@ -489,8 +488,7 @@ restore_archive_logs(pgBackup *backup)
 			elog(ERROR_INTERRUPTED, _("interrupted during restore WAL"));
 
 		/* print progress */
-		snprintf(path, lengthof(path), "%s/%s", arclog_path,
-			file->path + strlen(base_path) + 1);
+		join_path_components(path, arclog_path, file->path + strlen(base_path) + 1);
 		if (verbose && !check)
 			printf(_("(%d/%lu) %s "), i + 1, (unsigned long) parray_num(files),
 				file->path + strlen(base_path) + 1);
@@ -669,7 +667,7 @@ restore_online_files(void)
 		else if(S_ISREG(file->mode))
 		{
 			char to_root[MAXPGPATH];
-			snprintf(to_root, lengthof(to_root), "%s/%s", pgdata, PG_XLOG_DIR);
+			join_path_components(to_root, pgdata, PG_XLOG_DIR);
 			if (verbose && !check)
 				printf(_("restore \"%s\"\n"),
 					file->path + strlen(root_backup) + 1);
@@ -940,7 +938,7 @@ search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timel
 			pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
 
 			XLogFileName(xlogfname, timeline->tli, *needId, *needSeg);
-			snprintf(xlogpath, lengthof(xlogpath), "%s/%s", path, xlogfname);
+			join_path_components(xlogpath, path, xlogfname);
 
 			if (stat(xlogpath, &st) == 0)
 				break;

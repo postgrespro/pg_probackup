@@ -307,8 +307,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	if (check)
 		snprintf(to_path, lengthof(to_path), "%s/tmp", backup_path);
 	else
-		snprintf(to_path, lengthof(to_path), "%s/%s",
-			to_root, file->path + strlen(from_root) + 1);
+		join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	out = fopen(to_path, "w");
 	if (out == NULL)
 	{
@@ -594,8 +593,7 @@ restore_data_file(const char *from_root,
 	 * modified pages for incremental restore. If the file is not exists,
 	 * re-open it with "w" to create an empty file.
 	 */
-	snprintf(to_path, lengthof(to_path), "%s/%s", to_root,
-		file->path + strlen(from_root) + 1);
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	out = fopen(to_path, "r+");
 	if (out == NULL && errno == ENOENT)
 		out = fopen(to_path, "w");
@@ -783,8 +781,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	if (check)
 		snprintf(to_path, lengthof(to_path), "%s/tmp", backup_path);
 	else
-		snprintf(to_path, lengthof(to_path), "%s/%s", to_root,
-			file->path + strlen(from_root) + 1);
+		join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	out = fopen(to_path, "w");
 	if (out == NULL)
 	{
