@@ -2,7 +2,7 @@
  *
  * parray.c: pointer array collection.
  *
- * Copyright (c) 2009, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -24,7 +24,7 @@ struct parray
 parray *
 parray_new(void)
 {
-	parray *a = pgut_malloc(sizeof(parray));
+	parray *a = pgut_new(parray);
 
 	a->data = NULL;
 	a->used = 0;

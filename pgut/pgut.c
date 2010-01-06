@@ -2,7 +2,7 @@
  *
  * pgut.c
  *
- * Copyright (c) 2009, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -17,6 +17,15 @@
 #include <unistd.h>
 
 #include "pgut.h"
+
+/* old gcc doesn't have LLONG_MAX. */
+#ifndef LLONG_MAX
+#if defined(HAVE_LONG_INT_64) || !defined(HAVE_LONG_LONG_INT_64)
+#define LLONG_MAX		LONG_MAX
+#else
+#define LLONG_MAX		INT64CONST(0x7FFFFFFFFFFFFFFF)
+#endif
+#endif
 
 const char *PROGRAM_NAME = NULL;
 
@@ -111,7 +120,7 @@ option_merge(const pgut_option opts1[], const pgut_option opts2[])
 	size_t	len2 = option_length(opts2);
 	size_t	n = len1 + len2;
 
-	result = pgut_malloc(sizeof(struct option) * (n + 1));
+	result = pgut_newarray(struct option, n + 1);
 	option_copy(result, opts1, len1);
 	option_copy(result + len1, opts2, len2);
 	memset(&result[n], 0, sizeof(pgut_option));
@@ -404,13 +413,7 @@ parse_int64(const char *value, int64 *result)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-#if defined(HAVE_LONG_INT_64)
-		*result = LONG_MAX;
-#elif defined(HAVE_LONG_LONG_INT_64)
 		*result = LLONG_MAX;
-#else
-		*result = LONG_MAX;
-#endif
 		return true;
 	}
 
@@ -474,56 +477,50 @@ parse_uint64(const char *value, uint64 *result)
 	return true;
 }
 
-#ifdef WIN32	/* == not defined(HAVE_STRPTIME) */
-
-static char *
-strptime(const char *s, const char *format, struct tm *tm)
-{
-	int		n;
-	char	c;
-
-	/* only support single format for now */
-	if (strcmp(format, "%Y-%m-%d %H:%M:%S") != 0)
-	{
-		errno = EINVAL;
-		return NULL;
-	}
-
-	n = sscanf(s, "%d-%d-%d %d:%d:%d%c",
-		&tm->tm_year, &tm->tm_mon, &tm->tm_mday,
-		&tm->tm_hour, &tm->tm_min, &tm->tm_sec, &c);
-	if (tm->tm_year >= 1900)
-		tm->tm_year -= 1900;	/* years since 1900 */
-	if (tm->tm_mon > 0)
-		tm->tm_mon -= 1;	/* tm_mon is [0,11] */
-
-	if (n == 6)
-		return (char *) (s + strlen(s));
-	else
-		return strchr(s, c);
-}
-
-#endif
-
 /*
  * Convert ISO-8601 format string to time_t value.
  */
 bool
 parse_time(const char *value, time_t *time)
 {
-	char	   *endp;
-	struct tm	tm = { 0 };
+	size_t		len;
+	char	   *tmp;
+	int			i;
+	struct tm	tm;
+	char		junk[2];
 
-	/* special case for invalid time */
-	if (strcmp(value, "****-**-** **:**:**") == 0)
-	{
-		*time = (time_t) 0;
-		return true;
-	}
+	/* tmp = replace( value, !isalnum, ' ' ) */
+	tmp = pgut_malloc(strlen(value) + + 1);
+	len = 0;
+	for (i = 0; value[i]; i++)
+		tmp[len++] = (IsAlnum(value[i]) ? value[i] : ' ');
+	tmp[len] = '\0';
 
-	endp = strptime(value, "%Y-%m-%d %H:%M:%S", &tm);
-	if (endp == NULL || *endp)
+	/* parse for "YYYY-MM-DD HH:MI:SS" */
+	tm.tm_year = 0;		/* tm_year is year - 1900 */
+	tm.tm_mon = 0;		/* tm_mon is 0 - 11 */
+	tm.tm_mday = 1;		/* tm_mday is 1 - 31 */
+	tm.tm_hour = 0;
+	tm.tm_min = 0;
+	tm.tm_sec = 0;
+	i = sscanf(tmp, "%04d %02d %02d %02d %02d %02d%1s",
+		&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+		&tm.tm_hour, &tm.tm_min, &tm.tm_sec, junk);
+	free(tmp);
+
+	if (i < 1 || 6 < i)
 		return false;
+
+	/* adjust year */
+	if (tm.tm_year < 100)
+		tm.tm_year += 2000 - 1900;
+	else if (tm.tm_year >= 1900)
+		tm.tm_year -= 1900;
+
+	/* adjust month */
+	if (i > 1)
+		tm.tm_mon -= 1;
+
 	*time = mktime(&tm);
 
 	return true;
@@ -670,14 +667,8 @@ pgut_readopt(const char *path, pgut_option options[], int elevel)
 	if (!options)
 		return;
 
-	fp = fopen(path, "rt");
-	if (fp == NULL)
-	{
-		if (errno != ENOENT)
-			elog(WARNING, _("can't open config file \"%s\": %s"), path,
-				strerror(errno));
+	if ((fp = pgut_fopen(path, "rt", true)) == NULL)
 		return;
-	}
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
@@ -823,7 +814,7 @@ parse_pair(const char buffer[], char key[], char value[])
 	if (end - start <= 0)
 	{
 		if (*start == '=')
-			elog(WARNING, _("syntax error in \"%s\"."), buffer);
+			elog(WARNING, "syntax error in \"%s\"", buffer);
 		return false;
 	}
 
@@ -837,7 +828,7 @@ parse_pair(const char buffer[], char key[], char value[])
 
 	if (*start != '=')
 	{
-		elog(WARNING, _("syntax error in \"%s\"."), buffer);
+		elog(WARNING, "syntax error in \"%s\"", buffer);
 		return false;
 	}
 
@@ -854,7 +845,7 @@ parse_pair(const char buffer[], char key[], char value[])
 
 	if (*start != '\0' && *start != '#')
 	{
-		elog(WARNING, _("syntax error in \"%s\"."), buffer);
+		elog(WARNING, "syntax error in \"%s\"", buffer);
 		return false;
 	}
 
@@ -1297,7 +1288,7 @@ pgut_atexit_push(pgut_atexit_callback callback, void *userdata)
 
 	AssertArg(callback != NULL);
 
-	item = pgut_malloc(sizeof(pgut_atexit_item));
+	item = pgut_new(pgut_atexit_item);
 	item->callback = callback;
 	item->userdata = userdata;
 	item->next = pgut_atexit_stack;
@@ -1383,11 +1374,16 @@ help(bool details)
 		printf("  --debug                   debug mode\n");
 	}
 	printf("  --help                    show this help, then exit\n");
-	printf("  --version                 output version information, then exit\n\n");
-	if (PROGRAM_URL)
-		printf("Read the website for details. <%s>\n", PROGRAM_URL);
-	if (PROGRAM_EMAIL)
-		printf("Report bugs to <%s>.\n", PROGRAM_EMAIL);
+	printf("  --version                 output version information, then exit\n");
+
+	if (details && (PROGRAM_URL || PROGRAM_EMAIL))
+	{
+		printf("\n");
+		if (PROGRAM_URL)
+			printf("Read the website for details. <%s>\n", PROGRAM_URL);
+		if (PROGRAM_EMAIL)
+			printf("Report bugs to <%s>.\n", PROGRAM_EMAIL);
+	}
 }
 
 /*
@@ -1482,7 +1478,7 @@ pgut_malloc(size_t size)
 	char *ret;
 
 	if ((ret = malloc(size)) == NULL)
-		elog(ERROR_NOMEM, "can't allocate memory (%lu bytes): %s",
+		elog(ERROR_NOMEM, "could not allocate memory (%lu bytes): %s",
 			(unsigned long) size, strerror(errno));
 	return ret;
 }
@@ -1493,7 +1489,7 @@ pgut_realloc(void *p, size_t size)
 	char *ret;
 
 	if ((ret = realloc(p, size)) == NULL)
-		elog(ERROR_NOMEM, "can't re-allocate memory (%lu bytes): %s",
+		elog(ERROR_NOMEM, "could not re-allocate memory (%lu bytes): %s",
 			(unsigned long) size, strerror(errno));
 	return ret;
 }
@@ -1507,7 +1503,7 @@ pgut_strdup(const char *str)
 		return NULL;
 
 	if ((ret = strdup(str)) == NULL)
-		elog(ERROR_NOMEM, "can't duplicate string \"%s\": %s",
+		elog(ERROR_NOMEM, "could not duplicate string \"%s\": %s",
 			str, strerror(errno));
 	return ret;
 }
@@ -1540,6 +1536,23 @@ strdup_trim(const char *str)
 	while (len > 0 && IsSpace(str[len - 1])) { len--; }
 
 	return strdup_with_len(str, len);
+}
+
+FILE *
+pgut_fopen(const char *path, const char *mode, bool missing_ok)
+{
+	FILE *fp;
+
+	if ((fp = fopen(path, mode)) == NULL)
+	{
+		if (missing_ok && errno == ENOENT)
+			return NULL;
+
+		elog(ERROR_SYSTEM, "could not open file \"%s\": %s",
+			path, strerror(errno));
+	}
+
+	return fp;
 }
 
 #ifdef WIN32

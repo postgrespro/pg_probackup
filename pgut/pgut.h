@@ -2,7 +2,7 @@
  *
  * pgut.h
  *
- * Copyright (c) 2009, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -51,9 +51,9 @@ typedef enum pgut_optsrc
  *	b: bool (true)
  *	B: bool (false)
  *  f: pgut_optfn
- *	i: 32bit singed integer
+ *	i: 32bit signed integer
  *	u: 32bit unsigned integer
- *	I: 64bit singed integer
+ *	I: 64bit signed integer
  *	U: 64bit unsigned integer
  *	s: string
  *  t: time_t
@@ -132,6 +132,14 @@ extern void *pgut_realloc(void *p, size_t size);
 extern char *pgut_strdup(const char *str);
 extern char *strdup_with_len(const char *str, size_t len);
 extern char *strdup_trim(const char *str);
+
+#define pgut_new(type)			((type *) pgut_malloc(sizeof(type)))
+#define pgut_newarray(type, n)	((type *) pgut_malloc(sizeof(type) * (n)))
+
+/*
+ * file operations
+ */
+extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
 
 /*
  * elog

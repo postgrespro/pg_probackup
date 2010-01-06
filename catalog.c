@@ -2,7 +2,7 @@
  *
  * catalog.c: backup catalog opration
  *
- * Copyright (c) 2009, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -430,7 +430,7 @@ catalog_read_ini(const char *path)
 		{ 0 }
 	};
 
-	backup = (pgBackup *) pgut_malloc(sizeof(*backup));
+	backup = pgut_new(pgBackup);
 	catalog_init_config(backup);
 
 	i = 0;

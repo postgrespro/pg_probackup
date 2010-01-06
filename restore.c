@@ -2,7 +2,7 @@
  *
  * restore.c: restore DB cluster and archived WAL.
  *
- * Copyright (c) 2009, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -741,7 +741,7 @@ readTimeLineHistory(TimeLineID targetTLI)
 		if (*ptr == '\0' || *ptr == '#')
 			continue;
 
-		timeline = pgut_malloc(sizeof(*timeline));
+		timeline = pgut_new(pgTimeLine);
 		timeline->tli = 0;
 		timeline->end.xlogid = 0;
 		timeline->end.xrecoff = 0;
@@ -785,7 +785,7 @@ readTimeLineHistory(TimeLineID targetTLI)
 			_("Timeline IDs must be less than child timeline's ID."));
 
 	/* append target timeline */
-	timeline = pgut_malloc(sizeof(*timeline));
+	timeline = pgut_new(pgTimeLine);
 	timeline->tli = targetTLI;
 	timeline->end.xlogid = (uint32) -1; /* lsn in target timelie is valid */
 	timeline->end.xrecoff = (uint32) -1; /* lsn target timelie is valid */
