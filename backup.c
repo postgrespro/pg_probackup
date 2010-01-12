@@ -271,7 +271,7 @@ do_backup_arclog(parray *backup_list)
 		else
 			fname = file->path;
 
-		/* to backup backup hisotry files, compare tli/lsn portion only */
+		/* to backup backup history files, compare tli/lsn portion only */
 		if (strncmp(fname, last_wal, 24) > 0)
 		{
 			parray_remove(files, i);
@@ -657,6 +657,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	server_version = get_server_version();
 	if (server_version >= 80400)
 	{
+		/* 2nd argument is 'fast'*/
 		params[1] = smooth ? "false" : "true";
 		res = execute("SELECT * from pg_xlogfile_name_offset(pg_start_backup($1, $2))", 2, params);
 	}
