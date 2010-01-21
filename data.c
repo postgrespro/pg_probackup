@@ -272,7 +272,7 @@ parse_page(const DataPage *page, int server_version,
  * If lsn is not NULL, pages only which are modified after the lsn will be
  * copied.
  */
-void
+bool
 backup_data_file(const char *from_root, const char *to_root,
 				 pgFile *file, const XLogRecPtr *lsn, bool compress)
 {
@@ -291,13 +291,22 @@ backup_data_file(const char *from_root, const char *to_root,
 	char				outbuf[zlibOutSize];
 #endif
 
+	INIT_CRC32(crc);
+
+	/* reset size summary */
+	file->read_size = 0;
+	file->write_size = 0;
+
 	/* open backup mode file for read */
 	in = fopen(file->path, "r");
 	if (in == NULL)
 	{
-		/* meybe vanished, it's not error */
+		FIN_CRC32(crc);
+		file->crc = crc;
+
+		/* maybe vanished, it's not error */
 		if (errno == ENOENT)
-			return;
+			return false;
 
 		elog(ERROR_SYSTEM, _("can't open backup mode file \"%s\": %s"),
 			file->path, strerror(errno));
@@ -316,12 +325,6 @@ backup_data_file(const char *from_root, const char *to_root,
 		elog(ERROR_SYSTEM, _("can't open backup file \"%s\": %s"),
 			to_path, strerror(errno_tmp));
 	}
-
-	INIT_CRC32(crc);
-
-	/* reset size summary */
-	file->read_size = 0;
-	file->write_size = 0;
 
 #ifdef HAVE_LIBZ
 	if (compress)
@@ -365,9 +368,8 @@ backup_data_file(const char *from_root, const char *to_root,
 			fclose(in);
 			fclose(out);
 			file->is_datafile = false;
-			copy_file(from_root, to_root, file,
-				compress ? COMPRESSION : NO_COMPRESSION);
-			return;
+			return copy_file(from_root, to_root, file,
+							 compress ? COMPRESSION : NO_COMPRESSION);
 		}
 
 		file->read_size += read_len;
@@ -540,13 +542,18 @@ backup_data_file(const char *from_root, const char *to_root,
 
 	/* We do not backup if all pages skipped. */
 	if (file->write_size == 0 && file->read_size > 0)
+	{
 		if (remove(to_path) == -1)
 			elog(ERROR_SYSTEM, _("can't remove file \"%s\": %s"), to_path,
 				strerror(errno));
+		return false;
+	}
 
 	/* remove $BACKUP_PATH/tmp created during check */
 	if (check)
 		remove(to_path);
+
+	return true;
 }
 
 /*
@@ -746,7 +753,7 @@ restore_data_file(const char *from_root,
 	fclose(out);
 }
 
-void
+bool
 copy_file(const char *from_root, const char *to_root, pgFile *file,
 	CompressionMode mode)
 {
@@ -765,13 +772,22 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	char		inbuf[zlibInSize];
 #endif
 
+	INIT_CRC32(crc);
+
+	/* reset size summary */
+	file->read_size = 0;
+	file->write_size = 0;
+
 	/* open backup mode file for read */
 	in = fopen(file->path, "r");
 	if (in == NULL)
 	{
-		/* meybe deleted, it's not error */
+		FIN_CRC32(crc);
+		file->crc = crc;
+
+		/* maybe deleted, it's not error */
 		if (errno == ENOENT)
-			return;
+			return false;
 
 		elog(ERROR_SYSTEM, _("can't open source file \"%s\": %s"), file->path,
 			strerror(errno));
@@ -797,12 +813,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 		elog(ERROR_SYSTEM, _("can't stat \"%s\": %s"), file->path,
 			strerror(errno));
 	}
-
-	INIT_CRC32(crc);
-
-	/* reset size summary */
-	file->read_size = 0;
-	file->write_size = 0;
 
 #ifdef HAVE_LIBZ
 	z.zalloc = Z_NULL;
@@ -962,4 +972,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 
 	if (check)
 		remove(to_path);
+
+	return true;
 }

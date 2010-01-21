@@ -856,8 +856,10 @@ backup_files(const char *from_root,
 		{
 			if (errno == ENOENT)
 			{
+				/* record as skipped file in file_xxx.txt */
+				file->write_size = BYTES_INVALID;
 				if (verbose)
-					printf(_("deleted\n"));
+					printf(_("skip\n"));
 				continue;
 			}
 			else
@@ -921,21 +923,17 @@ backup_files(const char *from_root,
 			}
 
 			/* copy the file into backup */
-			if (file->is_datafile)
+			if (!(file->is_datafile
+					? backup_data_file(from_root, to_root, file, lsn, compress)
+					: copy_file(from_root, to_root, file,
+								compress ? COMPRESSION : NO_COMPRESSION)))
 			{
-				backup_data_file(from_root, to_root, file, lsn, compress);
-				if (file->write_size == 0 && file->read_size > 0)
-				{
-					/* record as skipped file in file_xxx.txt */
-					file->write_size = BYTES_INVALID;
-					if (verbose)
-						printf(_("skip\n"));
-					continue;
-				}
+				/* record as skipped file in file_xxx.txt */
+				file->write_size = BYTES_INVALID;
+				if (verbose)
+					printf(_("skip\n"));
+				continue;
 			}
-			else
-				copy_file(from_root, to_root, file,
-					compress ? COMPRESSION : NO_COMPRESSION);
 
 			if (verbose)
 			{

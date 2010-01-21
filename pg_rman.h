@@ -249,11 +249,11 @@ extern bool xlog_logfname2lsn(const char *logfname, XLogRecPtr *lsn);
 extern void xlog_fname(char *fname, size_t len, TimeLineID tli, XLogRecPtr *lsn);
 
 /* in data.c */
-extern void backup_data_file(const char *from_root, const char *to_root,
+extern bool backup_data_file(const char *from_root, const char *to_root,
 							 pgFile *file, const XLogRecPtr *lsn, bool compress);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, bool compress);
-extern void copy_file(const char *from_root, const char *to_root,
+extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file, CompressionMode compress);
 
 /* in util.c */
