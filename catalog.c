@@ -356,15 +356,30 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 		backup->start_lsn.xrecoff);
 	fprintf(out, "STOP_LSN=%x/%08x\n", backup->stop_lsn.xlogid,
 		backup->stop_lsn.xrecoff);
+
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
 	fprintf(out, "START_TIME='%s'\n", timestamp);
-	time2iso(timestamp, lengthof(timestamp), backup->end_time);
-	fprintf(out, "END_TIME='%s'\n", timestamp);
-	fprintf(out, "TOTAL_DATA_BYTES=" INT64_FORMAT "\n", backup->total_data_bytes);
-	fprintf(out, "READ_DATA_BYTES=" INT64_FORMAT "\n", backup->read_data_bytes);
-	fprintf(out, "READ_ARCLOG_BYTES=" INT64_FORMAT "\n", backup->read_arclog_bytes);
-	fprintf(out, "READ_SRVLOG_BYTES=" INT64_FORMAT "\n", backup->read_srvlog_bytes);
-	fprintf(out, "WRITE_BYTES=" INT64_FORMAT "\n", backup->write_bytes);
+	if (backup->end_time > 0)
+	{
+		time2iso(timestamp, lengthof(timestamp), backup->end_time);
+		fprintf(out, "END_TIME='%s'\n", timestamp);
+	}
+
+	if (backup->total_data_bytes != BYTES_INVALID)
+		fprintf(out, "TOTAL_DATA_BYTES=" INT64_FORMAT "\n",
+				backup->total_data_bytes);
+	if (backup->read_data_bytes != BYTES_INVALID)
+		fprintf(out, "READ_DATA_BYTES=" INT64_FORMAT "\n",
+				backup->read_data_bytes);
+	if (backup->read_arclog_bytes != BYTES_INVALID)
+		fprintf(out, "READ_ARCLOG_BYTES=" INT64_FORMAT "\n",
+			backup->read_arclog_bytes);
+	if (backup->read_srvlog_bytes != BYTES_INVALID)
+		fprintf(out, "READ_SRVLOG_BYTES=" INT64_FORMAT "\n",
+				backup->read_srvlog_bytes);
+	if (backup->write_bytes != BYTES_INVALID)
+		fprintf(out, "WRITE_BYTES=" INT64_FORMAT "\n",
+				backup->write_bytes);
 
 	fprintf(out, "BLOCK_SIZE=%u\n", backup->block_size);
 	fprintf(out, "XLOG_BLOCK_SIZE=%u\n", backup->wal_block_size);

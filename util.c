@@ -19,10 +19,7 @@ time2iso(char *buf, size_t len, time_t time)
 {
 	struct tm *tm = localtime(&time);
 
-	if (time == (time_t) 0)
-		strncpy(buf,"****-**-** **:**:**", len);
-	else
-		strftime(buf, len, "%Y-%m-%d %H:%M:%S", tm);
+	strftime(buf, len, "%Y-%m-%d %H:%M:%S", tm);
 }
 
 const char *
