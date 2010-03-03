@@ -75,7 +75,7 @@ do_init(void)
 
 			if ((fname = strstr(begin, "%f")) != NULL)
 			{
-				while (strchr(" \n\r\t\v""'", *begin))
+				while (strchr(" \n\r\t\v\"'", *begin))
 					begin++;
 				fname--;
 				while (fname > begin && strchr(" \n\r\t\v\"'/", fname[-1]))
