@@ -459,6 +459,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		struct tm		tm;
 		pgFile		   *file;
 
+		memset(&tm, 0, sizeof(tm));
 		if (sscanf(buf, "%s %c %lu %u %o %d-%d-%d %d:%d:%d",
 			path, &type, &write_size, &crc, &mode,
 			&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
@@ -472,6 +473,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 			elog(ERROR_CORRUPTED, _("invalid type '%c' found in \"%s\""),
 				type, file_txt);
 		}
+		tm.tm_isdst = -1;
 
 		file = (pgFile *) pgut_malloc(offsetof(pgFile, path) +
 					(root ? strlen(root) + 1 : 0) + strlen(path) + 1);

@@ -248,6 +248,7 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 	if (arg2 != NULL)
 		remove_not_digit(tmp + strlen(tmp), len - strlen(tmp), arg2);
 
+	memset(&tm, 0, sizeof(tm));
 	tm.tm_year = 0;		/* tm_year is year - 1900 */
 	tm.tm_mon = 0;		/* tm_mon is 0 - 11 */
 	tm.tm_mday = 1;		/* tm_mday is 1 - 31 */
@@ -267,6 +268,7 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 	tm.tm_year -= 1900;
 	if (num > 1)
 		tm.tm_mon -= 1;
+	tm.tm_isdst = -1;
 	range->begin = mktime(&tm);
 
 	switch (num)
