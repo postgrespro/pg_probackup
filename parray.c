@@ -104,8 +104,7 @@ parray_concat(parray *dest, const parray *src)
 	parray_expand(dest, dest->used + src->used);
 
 	/* copy content of src after content of dest */
-	memcpy(dest->data + dest->used * sizeof(void *), src->data,
-		src->used * sizeof(void *));
+	memcpy(dest->data + dest->used, src->data, src->used * sizeof(void *));
 	dest->used += parray_num(src);
 
 	return dest;
@@ -152,6 +151,22 @@ parray_remove(parray *array, size_t index)
 	array->used--;
 
 	return val;
+}
+
+bool
+parray_rm(parray *array, const void *key, int(*compare)(const void *, const void *))
+{
+	int i;
+
+	for (i = 0; i < array->used; i++)
+	{
+		if (compare(&key, &array->data[i]) == 0)
+		{
+			parray_remove(array, i);
+			return true;
+		}
+	}
+	return false;
 }
 
 size_t

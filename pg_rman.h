@@ -29,6 +29,7 @@
 #define SRVLOG_DIR				"srvlog"
 #define RESTORE_WORK_DIR		"backup"
 #define PG_XLOG_DIR				"pg_xlog"
+#define PG_TBLSPC_DIR			"pg_tblspc"
 #define TIMELINE_HISTORY_DIR	"timeline_history"
 #define BACKUP_INI_FILE			"backup.ini"
 #define PG_RMAN_INI_FILE		"pg_rman.ini"
@@ -36,6 +37,15 @@
 #define DATABASE_FILE_LIST		"file_database.txt"
 #define ARCLOG_FILE_LIST		"file_arclog.txt"
 #define SRVLOG_FILE_LIST		"file_srvlog.txt"
+#define SNAPSHOT_SCRIPT_FILE	"snapshot_script"
+
+/* Snapshot script command */
+#define SNAPSHOT_FREEZE			"freeze"
+#define SNAPSHOT_UNFREEZE		"unfreeze"
+#define SNAPSHOT_SPLIT			"split"
+#define SNAPSHOT_RESYNC			"resync"
+#define SNAPSHOT_MOUNT			"mount"
+#define SNAPSHOT_UMOUNT			"umount"
 
 /* Direcotry/File permission */
 #define DIR_PERMISSION		(0700)
@@ -158,6 +168,13 @@ typedef enum CompressionMode
 	DECOMPRESSION,
 } CompressionMode;
 
+/*
+ * return pointer that exceeds the length of prefix from character string.
+ * ex. str="/xxx/yyy/zzz", prefix="/xxx/yyy", return="zzz".
+ */
+#define JoinPathEnd(str, prefix) \
+	((strlen(str) <= strlen(prefix)) ? "" : str + strlen(prefix) + 1)
+
 /* path configuration */
 extern char *backup_path;
 extern char *pgdata;
@@ -229,7 +246,7 @@ extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_symlink, bool add_root);
 extern void dir_print_mkdirs_sh(FILE *out, const parray *files, const char *root);
-extern void dir_print_file_list(FILE *out, const parray *files, const char *root);
+extern void dir_print_file_list(FILE *out, const parray *files, const char *root, const char *prefix);
 extern parray *dir_read_file_list(const char *root, const char *file_txt);
 
 extern int dir_create_dir(const char *path, mode_t mode);

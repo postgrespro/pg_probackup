@@ -48,7 +48,11 @@ doDeflate(z_stream *zp, size_t in_size, size_t out_size, void *inbuf,
 	do
 	{
 		if (interrupted)
+		{
+			fclose(in);
+			fclose(out);
 			elog(ERROR_INTERRUPTED, _("interrupted during deflate"));
+		}
 
 		status = deflate(zp, flash);
 
@@ -334,8 +338,12 @@ backup_data_file(const char *from_root, const char *to_root,
 		z.opaque = Z_NULL;
 
 		if (deflateInit(&z, Z_DEFAULT_COMPRESSION) != Z_OK)
+		{
+			fclose(in);
+			fclose(out);
 			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
 				z.msg);
+		}
 
 		z.avail_in = 0;
 		z.next_out = (void *) outbuf;
@@ -810,6 +818,8 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	/* stat source file to change mode of destination file */
 	if (fstat(fileno(in), &st) == -1)
 	{
+		fclose(in);
+		fclose(out);
 		elog(ERROR_SYSTEM, _("can't stat \"%s\": %s"), file->path,
 			strerror(errno));
 	}
@@ -822,8 +832,12 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	if (mode == COMPRESSION)
 	{
 		if (deflateInit(&z, Z_DEFAULT_COMPRESSION) != Z_OK)
+		{
+			fclose(in);
+			fclose(out);
 			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
 				z.msg);
+		}
 
 		z.avail_in = 0;
 		z.next_out = (void *) outbuf;
@@ -834,8 +848,12 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 		z.next_in = Z_NULL;
 		z.avail_in = 0;
 		if (inflateInit(&z) != Z_OK)
+		{
+			fclose(in);
+			fclose(out);
 			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
 				z.msg);
+		}
 	}
 #endif
 
@@ -944,12 +962,20 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 		}
 
 		if (deflateEnd(&z) != Z_OK)
+		{
+			fclose(in);
+			fclose(out);
 			elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
+		}
 	}
 	else if (mode == DECOMPRESSION)
 	{
 		if (inflateEnd(&z) != Z_OK)
+		{
+			fclose(in);
+			fclose(out);
 			elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
+		}
 	}
 
 #endif

@@ -69,8 +69,8 @@ static pgut_option default_options[] =
 	{ 'b', 'q', "quiet"		, &quiet },
 	{ 's', 'U', "username"	, &username },
 #ifndef PGUT_NO_PROMPT
-	{ 'y', 'w', "no-password"	, &prompt_password },
-	{ 'Y', 'W', "password"		, &prompt_password },
+	{ 'Y', 'w', "no-password"	, &prompt_password },
+	{ 'y', 'W', "password"		, &prompt_password },
 #endif
 	{ 0 }
 };
@@ -899,7 +899,7 @@ pgut_connect(int elevel)
 		elog(ERROR_INTERRUPTED, "interrupted");
 
 #ifndef PGUT_NO_PROMPT
-	if (prompt_password == YES)
+	if (prompt_password == DEFAULT)
 		prompt_for_password(username);
 #endif
 

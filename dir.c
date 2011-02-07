@@ -26,6 +26,7 @@ const char *pgdata_exclude[] =
 	"pgsql_tmp",
 	NULL,			/* arclog_path will be set later */
 	NULL,			/* srvlog_path will be set later */
+	NULL,			/* 'pg_tblspc' will be set later */
 	NULL,			/* sentinel */
 };
 
@@ -42,7 +43,11 @@ dir_create_dir(const char *dir, mode_t mode)
 	parent = dirname(copy);
 	if (access(parent, F_OK) == -1)
 		dir_create_dir(parent, mode);
+#ifdef MACOS
+	if (mkdir(copy, mode) == -1)
+#else
 	if (mkdir(dir, mode) == -1)
+#endif
 	{
 		if (errno == EEXIST)	/* already exist */
 			return 0;
@@ -381,7 +386,7 @@ dir_print_mkdirs_sh(FILE *out, const parray *files, const char *root)
 
 /* print file list */
 void
-dir_print_file_list(FILE *out, const parray *files, const char *root)
+dir_print_file_list(FILE *out, const parray *files, const char *root, const char *prefix)
 {
 	int i;
 	int root_len = 0;
@@ -398,12 +403,19 @@ dir_print_file_list(FILE *out, const parray *files, const char *root)
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *)parray_get(files, i);
-		char *path = file->path;
+		char path[MAXPGPATH];
+		char *ptr = file->path;
 		char type;
 
 		/* omit root directory portion */
-		if (root && strstr(path, root) == path)
-			path = path + root_len;
+		if (root && strstr(ptr, root) == ptr)
+			ptr = JoinPathEnd(ptr, root);
+
+		/* append prefix if not NULL */
+		if (prefix)
+			join_path_components(path, prefix, ptr);
+		else
+			strcpy(path, ptr);
 
 		if (S_ISREG(file->mode) && file->is_datafile)
 			type = 'F';

@@ -25,6 +25,7 @@ extern parray *parray_concat(parray *head, const parray *tail);
 extern void parray_set(parray *array, size_t index, void *val);
 extern void *parray_get(const parray *array, size_t index);
 extern void *parray_remove(parray *array, size_t index);
+extern bool parray_rm(parray *array, const void *key, int(*compare)(const void *, const void *));
 extern size_t parray_num(const parray *array);
 extern void parray_qsort(parray *array, int(*compare)(const void *, const void *));
 extern void *parray_bsearch(parray *array, const void *key, int(*compare)(const void *, const void *));

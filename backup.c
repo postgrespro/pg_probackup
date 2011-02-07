@@ -14,14 +14,16 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <time.h>
 
 #include "libpq/pqsignal.h"
 #include "pgut/pgut-port.h"
 
-#define TIMEOUT_ARCHIVE		10	/* wait 10 sec until WAL archive complete */
+#define TIMEOUT_ARCHIVE		10		/* wait 10 sec until WAL archive complete */
 
-static bool	in_backup = false;	/* TODO: more robust logic */
+static bool		 in_backup = false;	/* TODO: more robust logic */
+static parray	*cleanup_list;		/* list of command to execute at error processing for snapshot */
 
 /*
  * Backup routines
@@ -30,7 +32,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 static void delete_old_files(const char *root, parray *files, int keep_files,
 							 int keep_days, int server_version, bool is_arclog);
 static void backup_files(const char *from_root, const char *to_root,
-	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress);
+	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress, const char *prefix);
 static parray *do_backup_database(parray *backup_list, bool smooth_checkpoint);
 static parray *do_backup_arclog(parray *backup_list);
 static parray *do_backup_srvlog(parray *backup_list);
@@ -44,6 +46,19 @@ static void delete_arclog_link(void);
 static void delete_online_wal_backup(void);
 
 static bool fileExists(const char *path);
+static bool dirExists(const char *path);
+
+static void execute_freeze(void);
+static void execute_unfreeze(void);
+static void execute_split(parray *tblspc_list);
+static void execute_resync(void);
+static void execute_mount(parray *tblspcmp_list);
+static void execute_umount(void);
+static void execute_script(const char *mode, bool is_cleanup, parray *output);
+static void snapshot_cleanup(bool fatal, void *userdata);
+static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
+static int strCompare(const void *str1, const void *str2);
+static void create_file_list(parray *files, const char *root, const char *prefix, bool is_append);
 
 /*
  * Take a backup of database.
@@ -52,12 +67,13 @@ static parray *
 do_backup_database(parray *backup_list, bool smooth_checkpoint)
 {
 	int			i;
-	parray	   *files;
+	parray	   *files;				/* backup file list from non-snapshot */
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
 	FILE	   *fp;
 	char		path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr *lsn = NULL;
+	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup list file */
 
 	if (!HAVE_DATABASE(&current))
 		return NULL;
@@ -72,7 +88,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	time2iso(label, lengthof(label), current.start_time);
 	strncat(label, " with pg_rman", lengthof(label));
 	pg_start_backup(label, smooth_checkpoint, &current);
-	pgut_atexit_push(backup_cleanup, NULL);
 
 	/*
 	 * list directories and symbolic links  with the physical path to make
@@ -108,7 +123,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	 */
 	if (current.backup_mode < BACKUP_MODE_FULL)
 	{
-		char		prev_file_txt[MAXPGPATH];
 		pgBackup   *prev_backup;
 
 		/* find last completed database backup */
@@ -133,59 +147,238 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 		}
 	}
 
-	/* list files with the logical path. omit $PGDATA */
+	/* initialize backup list from non-snapshot */
 	files = parray_new();
-	dir_list_file(files, pgdata, pgdata_exclude, true, false);
+	join_path_components(path, backup_path, SNAPSHOT_SCRIPT_FILE);
 
-	/* mark files that are possible datafile as 'datafile' */
-	for (i = 0; i < parray_num(files); i++)
+	/*
+	 * Check the existence of the snapshot-script.
+	 * backup use snapshot when snapshot-script exists.
+	 */
+	if (fileExists(path))
 	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-		char *relative;
-		char *fname;
+		parray		*tblspc_list;	/* list of name of TABLESPACE backup from snapshot */
+		parray		*tblspcmp_list;	/* list of mounted directory of TABLESPACE in snapshot volume */
+		PGresult	*tblspc_res;	/* contain spcname and oid in TABLESPACE */
 
-		/* data file must be a regular file */
-		if (!S_ISREG(file->mode))
-			continue;
+		tblspc_list = parray_new();
+		tblspcmp_list = parray_new();
+		cleanup_list = parray_new();
 
-		/* data files are under "base", "global", or "pg_tblspc" */
-		relative = file->path + strlen(pgdata) + 1;
-		if (!path_is_prefix_of_path("base", relative) &&
-			!path_is_prefix_of_path("global", relative) &&
-			!path_is_prefix_of_path("pg_tblspc", relative))
-			continue;
+		/*
+		 * append 'pg_tblspc' to list of directory excluded from copy.
+		 * because DB cluster and TABLESPACE are copied separately.
+		 */
+		for (i = 0; pgdata_exclude[i]; i++);	/* find first empty slot */
+		pgdata_exclude[i] = PG_TBLSPC_DIR;
 
-		/* name of data file start with digit */
-		fname = last_dir_separator(relative);
-		if (fname == NULL)
-			fname = relative;
+		/* set the error processing for the snapshot */
+		pgut_atexit_push(snapshot_cleanup, cleanup_list);
+
+		/* create snapshot volume */
+		if (!check)
+		{
+			/* freeze I/O of the file-system */
+			execute_freeze();
+			/* create the snapshot, and obtain the name of TABLESPACE backup from snapshot */
+			execute_split(tblspc_list);
+			/* unfreeze I/O of the file-system */
+			execute_unfreeze();
+		}
+
+		/*
+		 * when DB cluster is not contained in the backup from the snapshot,
+		 * DB cluster is added to the backup file list from non-snapshot.
+		 */
+		parray_qsort(tblspc_list, strCompare);
+		if (parray_bsearch(tblspc_list, "PG-DATA", strCompare) == NULL)
+			add_files(files, pgdata, false, true);
 		else
-			fname++;
-		if (!isdigit(fname[0]))
-			continue;
+			/* remove the detected tablespace("PG-DATA") from tblspc_list */
+			parray_rm(tblspc_list, "PG-DATA", strCompare);
 
-		file->is_datafile = true;
+		/*
+		 * select the TABLESPACE backup from non-snapshot,
+		 * and append TABLESPACE to the list backup from non-snapshot.
+		 * TABLESPACE name and oid is obtained by inquiring of the database.
+		 */
+		
+		reconnect();
+		tblspc_res = execute("SELECT spcname, oid FROM pg_tablespace WHERE "
+			"spcname NOT IN ('pg_default', 'pg_global') ORDER BY spcname ASC", 0, NULL);
+		disconnect();
+		for (i = 0; i < PQntuples(tblspc_res); i++)
+		{
+			char *name = PQgetvalue(tblspc_res, i, 0);
+			char *oid = PQgetvalue(tblspc_res, i, 1);
+
+			/* when not found, append it to the backup list from non-snapshot */
+			if (parray_bsearch(tblspc_list, name, strCompare) == NULL)
+			{
+				char dir[MAXPGPATH];
+				join_path_components(dir, pgdata, PG_TBLSPC_DIR);
+				join_path_components(dir, dir, oid);
+				add_files(files, dir, true, false);
+			}
+			else
+				/* remove the detected tablespace from tblspc_list */
+				parray_rm(tblspc_list, name, strCompare);
+		}
+
+		/*
+		 * tblspc_list is not empty,
+		 * so snapshot-script output the tablespace name that not exist.
+		 */
+		if (parray_num(tblspc_list) > 0)
+			elog(ERROR_SYSTEM, _("snapshot-script output the name of tablespace that not exist"));
+
+		/* clear array */
+		parray_walk(tblspc_list, free);
+		parray_free(tblspc_list);
+
+		/* backup files from non-snapshot */
+		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+		backup_files(pgdata, path, files, prev_files, lsn, current.compress_data, NULL);
+
+		/* notify end of backup */
+		pg_stop_backup(&current);
+
+		/* create file list of non-snapshot objects */
+		create_file_list(files, pgdata, NULL, false);
+
+		/* mount snapshot volume to file-system, and obtain that mounted directory */
+		if (!check)
+			execute_mount(tblspcmp_list);
+
+		/* backup files from snapshot volume */
+		for (i = 0; i < parray_num(tblspcmp_list); i++)
+		{
+			char *spcname;
+			char *mp = NULL;
+			char *item = (char *) parray_get(tblspcmp_list, i);
+			parray *snapshot_files = parray_new();
+
+			/*
+			 * obtain the TABLESPACE name and the directory where it is stored.
+			 * Note: strtok() replace the delimiter to '\0'. but no problem because
+			 *       it doesn't use former value
+			 */
+			if ((spcname = strtok(item, "=")) == NULL || (mp = strtok(NULL, "\0")) == NULL)
+				elog(ERROR_SYSTEM, _("snapshot-script output illegal format: %s"), item);
+
+			if (verbose)
+			{
+				printf(_("========================================\n"));
+				printf(_("backup files from snapshot: \"%s\"\n"), spcname);
+			}
+
+			/* tablespace storage directory not exist */
+			if (!dirExists(mp))
+				elog(ERROR_SYSTEM, _("tablespace storage directory doesn't exist: %s"), mp);
+
+			/*
+			 * create the previous backup file list to take incremental backup
+			 * from the snapshot volume.
+			 */
+			if (prev_files != NULL)
+				prev_files = dir_read_file_list(mp, prev_file_txt);
+
+			/* when DB cluster is backup from snapshot, it backup from the snapshot */
+			if (strcmp(spcname, "PG-DATA") == 0)
+			{
+				/* append DB cluster to backup file list */
+				add_files(snapshot_files, mp, false, true);
+				/* backup files of DB cluster from snapshot volume */
+				backup_files(mp, path, snapshot_files, prev_files, lsn, current.compress_data, NULL);
+				/* create file list of snapshot objects (DB cluster) */
+				create_file_list(snapshot_files, mp, NULL, true);
+				/* remove the detected tablespace("PG-DATA") from tblspcmp_list */
+				parray_rm(tblspcmp_list, "PG-DATA", strCompare);
+				i--;
+			}
+			/* backup TABLESPACE from snapshot volume */
+			else
+			{
+				int j;
+
+				/*
+				 * obtain the oid from TABLESPACE information acquired by inquiring of database.
+				 * and do backup files of TABLESPACE from snapshot volume.
+				 */
+				for (j = 0; j < PQntuples(tblspc_res); j++)
+				{
+					char  dest[MAXPGPATH];
+					char  prefix[MAXPGPATH];
+					char *name = PQgetvalue(tblspc_res, j, 0);
+					char *oid = PQgetvalue(tblspc_res, j, 1);
+
+					if (strcmp(spcname, name) == 0)
+					{
+						/* append TABLESPACE to backup file list */
+						add_files(snapshot_files, mp, true, false);
+
+						/* backup files of TABLESPACE from snapshot volume */
+						join_path_components(prefix, PG_TBLSPC_DIR, oid);
+						join_path_components(dest, path, prefix);
+						backup_files(mp, dest, snapshot_files, prev_files, lsn, current.compress_data, prefix);
+
+						/* create file list of snapshot objects (TABLESPACE) */
+						create_file_list(snapshot_files, mp, prefix, true);
+						/* remove the detected tablespace("PG-DATA") from tblspcmp_list */
+						parray_rm(tblspcmp_list, spcname, strCompare);
+						i--;
+						break;
+					}
+				}
+			}
+			parray_concat(files, snapshot_files);
+		}
+
+		/*
+		 * tblspcmp_list is not empty,
+		 * so snapshot-script output the tablespace name that not exist.
+		 */
+		if (parray_num(tblspcmp_list) > 0)
+			elog(ERROR_SYSTEM, _("snapshot-script output the name of tablespace that not exist"));
+
+		/* clear array */
+		parray_walk(tblspcmp_list, free);
+		parray_free(tblspcmp_list);
+
+		/* snapshot became unnecessary, annul the snapshot */
+		if (!check)
+		{
+			/* unmount directory of mounted snapshot volume */
+			execute_umount();
+			/* annul the snapshot */
+			execute_resync();
+		}
+
+		/* unset the error processing for the snapshot */
+		pgut_atexit_pop(snapshot_cleanup, cleanup_list);
+		/* don't use 'parray_walk'. element of parray not allocate memory by malloc */
+		parray_free(cleanup_list);
+		PQclear(tblspc_res);
 	}
-
-	pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-	backup_files(pgdata, path, files, prev_files, lsn, current.compress_data);
-
-	/* notify end of backup */
-	pg_stop_backup(&current);
-	pgut_atexit_pop(backup_cleanup, NULL);
-
-	/* create file list */
-	if (!check)
+	/* when snapshot-script not exist, DB cluster and TABLESPACE are backup
+	 * at same time.
+	 */
+	else
 	{
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_FILE_LIST);
-		fp = fopen(path, "wt");
-		if (fp == NULL)
-			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
-				strerror(errno));
-		dir_print_file_list(fp, files, pgdata);
-		fclose(fp);
-	}
+		/* list files with the logical path. omit $PGDATA */
+		add_files(files, pgdata, false, true);
 
+		/* backup files */
+		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+		backup_files(pgdata, path, files, prev_files, lsn, current.compress_data, NULL);
+
+		/* notify end of backup */
+		pg_stop_backup(&current);
+
+		/* create file list */
+		create_file_list(files, pgdata, NULL, false);
+	}
+	
 	/* print summary of size of backup mode files */
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -281,7 +474,7 @@ do_backup_arclog(parray *backup_list)
 
 	pgBackupGetPath(&current, path, lengthof(path), ARCLOG_DIR);
 	backup_files(arclog_path, path, files, prev_files, NULL,
-				 current.compress_data);
+				 current.compress_data, NULL);
 
 	/* create file list */
 	if (!check)
@@ -291,7 +484,7 @@ do_backup_arclog(parray *backup_list)
 		if (fp == NULL)
 			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
 				strerror(errno));
-		dir_print_file_list(fp, files, arclog_path);
+		dir_print_file_list(fp, files, arclog_path, NULL);
 		fclose(fp);
 	}
 
@@ -385,7 +578,7 @@ do_backup_srvlog(parray *backup_list)
 	dir_list_file(files, srvlog_path, NULL, true, false);
 
 	pgBackupGetPath(&current, path, lengthof(path), SRVLOG_DIR);
-	backup_files(srvlog_path, path, files, prev_files, NULL, false);
+	backup_files(srvlog_path, path, files, prev_files, NULL, false, NULL);
 
 	/* create file list */
 	if (!check)
@@ -395,7 +588,7 @@ do_backup_srvlog(parray *backup_list)
 		if (fp == NULL)
 			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
 				strerror(errno));
-		dir_print_file_list(fp, files, srvlog_path);
+		dir_print_file_list(fp, files, srvlog_path, NULL);
 		fclose(fp);
 	}
 
@@ -516,6 +709,9 @@ do_backup(bool smooth_checkpoint,
 	/* get list of backups already taken */
 	backup_list = catalog_get_backup_list(NULL);
 
+	/* set the error processing function for the backup process */
+	pgut_atexit_push(backup_cleanup, NULL);
+
 	/* backup data */
 	files_database = do_backup_database(backup_list, smooth_checkpoint);
 
@@ -524,7 +720,8 @@ do_backup(bool smooth_checkpoint,
 
 	/* backup serverlog */
 	files_srvlog = do_backup_srvlog(backup_list);
-
+	pgut_atexit_pop(backup_cleanup, NULL);
+	
 	/* update backup status to DONE */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
@@ -780,6 +977,22 @@ fileExists(const char *path)
 }
 
 /*
+ * Return true if the path is a existing directory.
+ */
+static bool
+dirExists(const char *path)
+{
+	struct stat buf;
+
+	if (stat(path, &buf) == -1 && errno == ENOENT)
+		return false;
+	else if (S_ISREG(buf.st_mode))
+		return false;
+	else
+		return true;
+}
+
+/*
  * Notify end of backup to server when "backup_label" is in the root directory
  * of the DB cluster.
  * Also update backup status to ERROR when the backup is not finished.
@@ -823,7 +1036,8 @@ backup_files(const char *from_root,
 			 parray *files,
 			 parray *prev_files,
 			 const XLogRecPtr *lsn,
-			 bool compress)
+			 bool compress,
+			 const char *prefix)
 {
 	int				i;
 	struct timeval	tv;
@@ -847,8 +1061,17 @@ backup_files(const char *from_root,
 
 		/* print progress in verbose mode */
 		if (verbose)
-			printf(_("(%d/%lu) %s "), i + 1, (unsigned long) parray_num(files),
-				file->path + strlen(from_root) + 1);
+		{
+			if (prefix)
+			{
+				char path[MAXPGPATH];
+				join_path_components(path, prefix, file->path + strlen(from_root) + 1);
+				printf(_("(%d/%lu) %s "), i + 1, (unsigned long) parray_num(files), path);
+			}
+			else
+				printf(_("(%d/%lu) %s "), i + 1, (unsigned long) parray_num(files),
+					file->path + strlen(from_root) + 1);
+		}
 
 		/* stat file to get file type, size and modify timestamp */
 		ret = stat(file->path, &buf);
@@ -877,7 +1100,7 @@ backup_files(const char *from_root,
 		{
 			char dirpath[MAXPGPATH];
 
-			join_path_components(dirpath, to_root, file->path + strlen(from_root) + 1);
+			join_path_components(dirpath, to_root, JoinPathEnd(file->path, from_root));
 			if (!check)
 				dir_create_dir(dirpath, DIR_PERMISSION);
 			if (verbose)
@@ -888,13 +1111,37 @@ backup_files(const char *from_root,
 			/* skip files which have not been modified since last backup */
 			if (prev_files)
 			{
-				pgFile **p;
 				pgFile *prev_file = NULL;
 
-				p = (pgFile **) parray_bsearch(prev_files, file,
-						pgFileComparePath);
-				if (p)
-					prev_file = *p;
+				/*
+				 * If prefix is not NULL, the table space is backup from the snapshot.
+				 * Therefore, adjust file name to correspond to the file list.
+				 */
+				if (prefix)
+				{
+					int j;
+
+					for (j = 0; j < parray_num(prev_files); j++)
+					{
+						pgFile *p = (pgFile *) parray_get(prev_files, j);
+						char *prev_path;
+						char curr_path[MAXPGPATH];
+
+						prev_path = p->path + strlen(from_root) + 1;
+						join_path_components(curr_path, prefix, file->path + strlen(from_root) + 1);
+						if (strcmp(curr_path, prev_path) == 0)
+						{
+							prev_file = p;
+							break;
+						}
+					}
+				}
+				else
+				{
+					pgFile **p = (pgFile **) parray_bsearch(prev_files, file, pgFileComparePath);
+					if (p)
+						prev_file = *p;
+				}
 
 				if (prev_file && prev_file->mtime >= file->mtime)
 				{
@@ -1129,4 +1376,276 @@ delete_arclog_link(void)
 
 	parray_walk(files, pgFileFree);
 	parray_free(files);
+}
+
+/*
+ * Execute the command 'freeze' of snapshot-script.
+ * When the command ends normally, 'unfreeze' is added to the cleanup list.
+ */
+static void
+execute_freeze(void)
+{
+	/* append 'unfreeze' command to cleanup list */
+	parray_append(cleanup_list, SNAPSHOT_UNFREEZE);
+
+	/* execute 'freeze' command */
+	execute_script(SNAPSHOT_FREEZE, false, NULL);
+}
+
+/*
+ * Execute the command 'unfreeze' of snapshot-script.
+ * Remove 'unfreeze' from the cleanup list before executing the command
+ * when 'unfreeze' is included in the cleanup list.
+ */
+static void
+execute_unfreeze(void)
+{
+	int	i;
+
+	/* remove 'unfreeze' command from cleanup list */
+	for (i = 0; i < parray_num(cleanup_list); i++)
+	{
+		char	*mode;
+
+		mode = (char *) parray_get(cleanup_list, i);
+		if (strcmp(mode,SNAPSHOT_UNFREEZE) == 0)
+		{
+			parray_remove(cleanup_list, i);
+			break;
+		}
+	}
+	/* execute 'unfreeze' command */
+	execute_script(SNAPSHOT_UNFREEZE, false, NULL);
+}
+
+/*
+ * Execute the command 'split' of snapshot-script.
+ * When the command ends normally, 'resync' is added to the cleanup list.
+ */
+static void
+execute_split(parray *tblspc_list)
+{
+	/* append 'resync' command to cleanup list */
+	parray_append(cleanup_list, SNAPSHOT_RESYNC);
+
+	/* execute 'split' command */
+	execute_script(SNAPSHOT_SPLIT, false, tblspc_list);
+}
+
+/*
+ * Execute the command 'resync' of snapshot-script.
+ * Remove 'resync' from the cleanup list before executing the command
+ * when 'resync' is included in the cleanup list.
+ */
+static void
+execute_resync(void)
+{
+	int	i;
+
+	/* remove 'resync' command from cleanup list */
+	for (i = 0; i < parray_num(cleanup_list); i++)
+	{
+		char *mode;
+
+		mode = (char *) parray_get(cleanup_list, i);
+		if (strcmp(mode, SNAPSHOT_RESYNC) == 0)
+		{
+			parray_remove(cleanup_list, i);
+			break;
+		}
+	}
+	/* execute 'resync' command */
+	execute_script(SNAPSHOT_RESYNC, false, NULL);
+}
+
+/*
+ * Execute the command 'mount' of snapshot-script.
+ * When the command ends normally, 'umount' is added to the cleanup list.
+ */
+static void
+execute_mount(parray *tblspcmp_list)
+{
+	/* append 'umount' command to cleanup list */
+	parray_append(cleanup_list, SNAPSHOT_UMOUNT);
+
+	/* execute 'mount' command */
+	execute_script(SNAPSHOT_MOUNT, false, tblspcmp_list);
+}
+
+/*
+ * Execute the command 'umount' of snapshot-script.
+ * Remove 'umount' from the cleanup list before executing the command
+ * when 'umount' is included in the cleanup list.
+ */
+static void
+execute_umount(void)
+{
+	int	i;
+
+	/* remove 'umount' command from cleanup list */
+	for (i = 0; i < parray_num(cleanup_list); i++)
+	{
+		char *mode = (char *) parray_get(cleanup_list, i);
+
+		if (strcmp(mode, SNAPSHOT_UMOUNT) == 0)
+		{
+			parray_remove(cleanup_list, i);
+			break;
+		}
+	}
+	/* execute 'umount' command */
+	execute_script(SNAPSHOT_UMOUNT, false, NULL);
+}
+
+/*
+ * Execute the snapshot-script in the specified mode.
+ * A standard output of snapshot-script is stored in the array given to the parameter.
+ * If is_cleanup is TRUE, processing is continued.
+ */
+static void
+execute_script(const char *mode, bool is_cleanup, parray *output)
+{
+	char	 ss_script[MAXPGPATH];
+	char	 command[1024];
+	char	 fline[2048];
+	int		 num;
+	FILE	*out;
+	parray	*lines;
+
+	/* obtain the path of snapshot-script. */
+	join_path_components(ss_script, backup_path, SNAPSHOT_SCRIPT_FILE);
+	snprintf(command, sizeof(command),
+		"%s %s %s", ss_script, mode, is_cleanup ? "cleanup" : "");
+
+	/* execute snapshot-script */
+	out = popen(command, "r");
+	if (out == NULL)
+		elog(ERROR_SYSTEM, _("could not execute snapshot-script: %s\n"), strerror(errno));
+
+	/* read STDOUT and store into the array each line */
+	lines = parray_new();
+	while (fgets(fline, sizeof(fline), out) != NULL)
+	{
+		/* remove line separator */
+		if (fline[strlen(fline) - 1] == '\n')
+			fline[strlen(fline) - 1] = '\0';
+		parray_append(lines, pgut_strdup(fline));
+	}
+	pclose(out);
+
+	/*
+	 * status of the command is obtained from the last element of the array
+	 * if last element is not 'SUCCESS', that means ERROR.
+	 */
+	num = parray_num(lines);
+	if (num <= 0 || strcmp((char *) parray_get(lines, num - 1), "SUCCESS") != 0)
+		elog(is_cleanup ? WARNING : ERROR_SYSTEM, _("snapshot-script failed: %s"), mode);
+
+	/* if output is not NULL, concat array. */
+	if (output)
+	{
+		parray_remove(lines, num -1);	/* remove last element, that is command status */
+		parray_concat(output, lines);
+	}
+	/* if output is NULL, clear directory list */
+	else
+	{
+		parray_walk(lines, free);
+		parray_free(lines);
+	}
+}
+
+/*
+ * Delete the unnecessary object created by snapshot-script.
+ * The command necessary for the deletion is given from the parameter.
+ * When the error occurs, this function is called.
+ */
+static void
+snapshot_cleanup(bool fatal, void *userdata)
+{
+	parray	*cleanup_list;
+	int		 i;
+
+	/* Execute snapshot-script for cleanup */
+	cleanup_list = (parray *) userdata;
+	for (i = parray_num(cleanup_list) - 1; i >= 0; i--)
+		execute_script((char *) parray_get(cleanup_list, i), true, NULL);
+}
+
+/*
+ * Append files to the backup list array.
+ */
+static void
+add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
+{
+	parray	*list_file;
+	int		 i;
+
+	list_file = parray_new();
+
+	/* list files with the logical path. omit $PGDATA */
+	dir_list_file(list_file, root, pgdata_exclude, true, add_root);
+
+	/* mark files that are possible datafile as 'datafile' */
+	for (i = 0; i < parray_num(list_file); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(list_file, i);
+		char *relative;
+		char *fname;
+
+		/* data file must be a regular file */
+		if (!S_ISREG(file->mode))
+			continue;
+
+		/* data files are under "base", "global", or "pg_tblspc" */
+		relative = file->path + strlen(root) + 1;
+		if (is_pgdata &&
+			!path_is_prefix_of_path("base", relative) &&
+			!path_is_prefix_of_path("global", relative) &&
+			!path_is_prefix_of_path("pg_tblspc", relative))
+			continue;
+
+		/* name of data file start with digit */
+		fname = last_dir_separator(relative);
+		if (fname == NULL)
+			fname = relative;
+		else
+			fname++;
+		if (!isdigit(fname[0]))
+			continue;
+
+		file->is_datafile = true;
+	}
+	parray_concat(files, list_file);
+}
+
+/*
+ * Comparison function for parray_bsearch() compare the character string.
+ */
+static int
+strCompare(const void *str1, const void *str2)
+{
+	return strcmp(*(char **) str1, *(char **) str2);
+}
+
+/*
+ * Output the list of backup files to backup catalog
+ */
+static void
+create_file_list(parray *files, const char *root, const char *prefix, bool is_append)
+{
+	FILE	*fp;
+	char	 path[MAXPGPATH];
+
+	if (!check)
+	{
+		/* output path is '$BACKUP_PATH/file_database.txt' */
+		pgBackupGetPath(&current, path, lengthof(path), DATABASE_FILE_LIST);
+		fp = fopen(path, is_append ? "at" : "wt");
+		if (fp == NULL)
+			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
+				strerror(errno));
+		dir_print_file_list(fp, files, root, prefix);
+		fclose(fp);
+	}
 }
