@@ -26,7 +26,7 @@ typedef struct MemoryContextData *MemoryContext;
 #define XLOG_PAGE_MAGIC_v82		0xD05E	/* 8.2 */
 #define XLOG_PAGE_MAGIC_v83		0xD062	/* 8.3 */
 #define XLOG_PAGE_MAGIC_v84		0xD063	/* 8.4 */
-#define XLOG_PAGE_MAGIC_v85		0xD166	/* 8.5 */
+#define XLOG_PAGE_MAGIC_v90		0xD064	/* 9.0 */
 
 /*
  * XLogLongPageHeaderData is modified in 8.3, but the layout is compatible
@@ -71,10 +71,10 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v82;
 	else if (server_version < 80400)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v83;
-	else if (server_version < 80500)
+	else if (server_version < 90000)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v84;
-	else if (server_version < 80600)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v85;
+	else if (server_version < 90100)
+		xlog_page_magic = XLOG_PAGE_MAGIC_v90;
 	else
 		return false;	/* not supported */
 
