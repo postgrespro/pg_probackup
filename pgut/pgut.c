@@ -899,7 +899,8 @@ pgut_connect(int elevel)
 		elog(ERROR_INTERRUPTED, "interrupted");
 
 #ifndef PGUT_NO_PROMPT
-	if (prompt_password == DEFAULT)
+//	if (prompt_password == DEFAULT) // katsumata
+	if (prompt_password == YES)
 		prompt_for_password(username);
 #endif
 

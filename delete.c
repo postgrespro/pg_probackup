@@ -2,7 +2,7 @@
  *
  * delete.c: delete backup files.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -10,14 +10,17 @@
 #include "pg_rman.h"
 
 static int pgBackupDeleteFiles(pgBackup *backup);
+static bool checkIfDeletable(pgBackup *backup);
 
 int
-do_delete(pgBackupRange *range)
+//do_delete(pgBackupRange *range)
+do_delete(pgBackupRange *range, bool force)
 {
 	int		i;
 	int		ret;
 	parray *backup_list;
 	bool	do_delete;
+	bool	force_delete;
 
 	/* DATE are always required */
 	if (!pgBackupRangeIsValid(range))
@@ -29,20 +32,31 @@ do_delete(pgBackupRange *range)
 		elog(ERROR_SYSTEM, _("can't lock backup catalog."));
 	else if (ret == 1)
 		elog(ERROR_ALREADY_RUNNING,
-			_("another pg_rman is running, stop restore."));
+			_("another pg_rman is running, stop delete."));
 
 	/* get list of backups. */
 	backup_list = catalog_get_backup_list(NULL);
+	if(!backup_list){
+		elog(ERROR_SYSTEM, _("can't process any more."));
+	}
 
 	do_delete = false;
+	force_delete = false;
 	/* find delete target backup. */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
 
+		if(force)
+			force_delete = checkIfDeletable(backup);
+
 		/* delete backup and update status to DELETED */
-		if (do_delete)
+		if (do_delete || force_delete)
 		{
+			/* check for interrupt */
+			if (interrupted)
+				elog(ERROR_INTERRUPTED, _("interrupted during delete backup"));
+
 			pgBackupDeleteFiles(backup);
 			continue;
 		}
@@ -75,6 +89,7 @@ pgBackupDelete(int keep_generations, int keep_days)
 	parray *backup_list;
 	int		backup_num;
 	time_t	days_threshold = current.start_time - (keep_days * 60 * 60 * 24);
+
 
 	if (verbose)
 	{
@@ -123,7 +138,8 @@ pgBackupDelete(int keep_generations, int keep_days)
 			backup_num++;
 
 		/* do not include the latest full backup in a count. */
-		if (backup_num - 1 <= keep_generations)
+//		if (backup_num - 1 <= keep_generations)
+		if (backup_num <= keep_generations)
 		{
 			elog(LOG, "%s() backup are only %d", __FUNCTION__, backup_num);
 			continue;
@@ -232,4 +248,16 @@ pgBackupDeleteFiles(pgBackup *backup)
 	parray_free(files);
 
 	return 0;
+}
+
+bool
+checkIfDeletable(pgBackup *backup)
+{
+	/* find latest full backup. */
+	if (backup->status != BACKUP_STATUS_OK &&
+		backup->status != BACKUP_STATUS_DELETED &&
+		backup->status != BACKUP_STATUS_DONE)
+		return true;
+
+	return false;
 }

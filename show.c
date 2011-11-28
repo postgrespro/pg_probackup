@@ -2,7 +2,7 @@
  *
  * show.c: show backup catalog.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -45,8 +45,9 @@ do_show(pgBackupRange *range, bool show_timeline, bool show_all)
 		parray *backup_list;
 
 		backup_list = catalog_get_backup_list(range);
-		if (backup_list == NULL)
-			return 1;
+		if (backup_list == NULL){
+			elog(ERROR_SYSTEM, _("can't process any more."));
+		}
 
 		if (!show_timeline)
 			show_backup_list(stdout, backup_list, show_all);

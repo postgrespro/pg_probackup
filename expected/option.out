@@ -54,7 +54,7 @@ Generic options:
 
 Read the website for details. <http://code.google.com/p/pg-rman/>
 Report bugs to <http://code.google.com/p/pg-rman/issues/list>.
-pg_rman 1.1.2
+pg_rman 1.2.2
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
 ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)
 ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
@@ -62,11 +62,11 @@ ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
 ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
 ERROR: invalid backup-mode "bad"
 ERROR: required delete range option not specified: delete DATE
-INFO: validate: 2009-05-31 17:05:53
-INFO: validate: 2009-06-01 17:05:53
+INFO: validate: 2009-05-31 17:05:53 backup and archive log files by CRC
+INFO: validate: 2009-06-01 17:05:53 backup and archive log files by CRC
 WARNING: CRC of backup file "PG_VERSION" must be 0 but FEF71BC1
 WARNING: backup 2009-06-01 17:05:53 is corrupted
-WARNING: syntax error in " = INFINITE".
+WARNING: syntax error in " = INFINITE"
 ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)
 ERROR: invalid backup-mode ""
 ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)

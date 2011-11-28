@@ -2,7 +2,7 @@
  *
  * validate.c: validate backup files.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -22,22 +22,36 @@ do_validate(pgBackupRange *range)
 {
 	int		i;
 	parray *backup_list;
+	int ret;
+	bool another_pg_rman = false;
 
-	catalog_lock();
+	ret = catalog_lock();
+	if (ret == 1)
+		another_pg_rman = true;
 
 	/* get backup list matches given range */
 	backup_list = catalog_get_backup_list(range);
+	if(!backup_list){
+		elog(ERROR_SYSTEM, _("can't process any more."));
+	}
 	parray_qsort(backup_list, pgBackupCompareId);
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
+
+		/* clean extra backups (switch STATUS to ERROR) */
+		if(!another_pg_rman &&
+		   (backup->status == BACKUP_STATUS_RUNNING || backup->status == BACKUP_STATUS_DELETING)){
+			backup->status = BACKUP_STATUS_ERROR;
+			pgBackupWriteIni(backup);
+		}
 
 		/* Validate completed backups only. */
 		if (backup->status != BACKUP_STATUS_DONE)
 			continue;
 
 		/* validate with CRC value and update status to OK */
-		pgBackupValidate(backup, false);
+		pgBackupValidate(backup, false, false, (HAVE_DATABASE(backup)));
 	}
 
 	/* cleanup */
@@ -53,7 +67,7 @@ do_validate(pgBackupRange *range)
  * Validate each files in the backup with its size.
  */
 void
-pgBackupValidate(pgBackup *backup, bool size_only)
+pgBackupValidate(pgBackup *backup, bool size_only, bool for_get_timeline, bool with_database)
 {
 	char	timestamp[100];
 	char	base_path[MAXPGPATH];
@@ -62,54 +76,65 @@ pgBackupValidate(pgBackup *backup, bool size_only)
 	bool	corrupted = false;
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	elog(INFO, "validate: %s", timestamp);
-
-	if (HAVE_DATABASE(backup))
-	{
-		elog(LOG, "database files...");
-		pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
-		pgBackupGetPath(backup, path, lengthof(path),
-			DATABASE_FILE_LIST);
-		files = dir_read_file_list(base_path, path);
-		if (!pgBackupValidateFiles(files, base_path, size_only))
-			corrupted = true;
-		parray_walk(files, pgFileFree);
-		parray_free(files);
-	}
-	if (HAVE_ARCLOG(backup))
-	{
-		elog(LOG, "archive WAL files...");
-		pgBackupGetPath(backup, base_path, lengthof(base_path), ARCLOG_DIR);
-		pgBackupGetPath(backup, path, lengthof(path), ARCLOG_FILE_LIST);
-		files = dir_read_file_list(base_path, path);
-		if (!pgBackupValidateFiles(files, base_path, size_only))
-			corrupted = true;
-		parray_walk(files, pgFileFree);
-		parray_free(files);
-	}
-	if (backup->with_serverlog)
-	{
-		elog(LOG, "server log files...");
-		pgBackupGetPath(backup, base_path, lengthof(base_path), SRVLOG_DIR);
-		pgBackupGetPath(backup, path, lengthof(path), SRVLOG_FILE_LIST);
-		files = dir_read_file_list(base_path, path);
-		if (!pgBackupValidateFiles(files, base_path, size_only))
-			corrupted = true;
-		parray_walk(files, pgFileFree);
-		parray_free(files);
+	if(!for_get_timeline){
+		if (with_database)
+			elog(INFO, "validate: %s backup and archive log files by %s", timestamp, (size_only ? "SIZE" : "CRC"));
+		else{
+			if (backup->backup_mode == BACKUP_MODE_ARCHIVE)
+				elog(INFO, "validate: %s archive log files by %s", timestamp, (size_only ? "SIZE" : "CRC"));
+			else if (backup->with_serverlog)
+				elog(INFO, "validate: %s server log files by %s", timestamp, (size_only ? "SIZE" : "CRC"));
+		}
 	}
 
-	/* update status to OK */
-	if (corrupted)
-		backup->status = BACKUP_STATUS_CORRUPT;
-	else
-		backup->status = BACKUP_STATUS_OK;
-	pgBackupWriteIni(backup);
+	if(!check){
+		if (HAVE_DATABASE(backup))
+		{
+			elog(LOG, "database files...");
+			pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
+			pgBackupGetPath(backup, path, lengthof(path),
+				DATABASE_FILE_LIST);
+			files = dir_read_file_list(base_path, path);
+			if (!pgBackupValidateFiles(files, base_path, size_only))
+				corrupted = true;
+			parray_walk(files, pgFileFree);
+			parray_free(files);
+		}
+		if (HAVE_ARCLOG(backup))
+		{
+			elog(LOG, "archive WAL files...");
+			pgBackupGetPath(backup, base_path, lengthof(base_path), ARCLOG_DIR);
+			pgBackupGetPath(backup, path, lengthof(path), ARCLOG_FILE_LIST);
+			files = dir_read_file_list(base_path, path);
+			if (!pgBackupValidateFiles(files, base_path, size_only))
+				corrupted = true;
+			parray_walk(files, pgFileFree);
+			parray_free(files);
+		}
+		if (backup->with_serverlog)
+		{
+			elog(LOG, "server log files...");
+			pgBackupGetPath(backup, base_path, lengthof(base_path), SRVLOG_DIR);
+			pgBackupGetPath(backup, path, lengthof(path), SRVLOG_FILE_LIST);
+			files = dir_read_file_list(base_path, path);
+			if (!pgBackupValidateFiles(files, base_path, size_only))
+				corrupted = true;
+			parray_walk(files, pgFileFree);
+			parray_free(files);
+		}
 
-	if (corrupted)
-		elog(WARNING, "backup %s is corrupted", timestamp);
-	else
-		elog(LOG, "backup %s is valid", timestamp);
+		/* update status to OK */
+		if (corrupted)
+			backup->status = BACKUP_STATUS_CORRUPT;
+		else
+			backup->status = BACKUP_STATUS_OK;
+		pgBackupWriteIni(backup);
+
+		if (corrupted)
+			elog(WARNING, "backup %s is corrupted", timestamp);
+		else
+			elog(LOG, "backup %s is valid", timestamp);
+	}
 }
 
 static const char *

@@ -2,7 +2,7 @@
  *
  * catalog.c: backup catalog opration
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -364,6 +364,12 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 		time2iso(timestamp, lengthof(timestamp), backup->end_time);
 		fprintf(out, "END_TIME='%s'\n", timestamp);
 	}
+	fprintf(out, "RECOVERY_XID=%u\n", backup->recovery_xid);
+	if (backup->recovery_time > 0)
+	{
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		fprintf(out, "RECOVERY_TIME='%s'\n", timestamp);
+	}
 
 	if (backup->total_data_bytes != BYTES_INVALID)
 		fprintf(out, "TOTAL_DATA_BYTES=" INT64_FORMAT "\n",
@@ -434,6 +440,8 @@ catalog_read_ini(const char *path)
 		{ 's', 0, "stop-lsn"			, NULL, SOURCE_ENV },
 		{ 't', 0, "start-time"			, NULL, SOURCE_ENV },
 		{ 't', 0, "end-time"			, NULL, SOURCE_ENV },
+		{ 'u', 0, "recovery-xid"				, NULL, SOURCE_ENV },
+		{ 't', 0, "recovery-time"				, NULL, SOURCE_ENV },
 		{ 'I', 0, "total-data-bytes"	, NULL, SOURCE_ENV },
 		{ 'I', 0, "read-data-bytes"		, NULL, SOURCE_ENV },
 		{ 'I', 0, "read-arclog-bytes"	, NULL, SOURCE_ENV },
@@ -444,6 +452,10 @@ catalog_read_ini(const char *path)
 		{ 's', 0, "status"				, NULL, SOURCE_ENV },
 		{ 0 }
 	};
+
+	if (access(path, F_OK) != 0){
+		return NULL;
+	}
 
 	backup = pgut_new(pgBackup);
 	catalog_init_config(backup);
@@ -457,6 +469,8 @@ catalog_read_ini(const char *path)
 	options[i++].var = &stop_lsn;
 	options[i++].var = &backup->start_time;
 	options[i++].var = &backup->end_time;
+	options[i++].var = &backup->recovery_xid;
+	options[i++].var = &backup->recovery_time;
 	options[i++].var = &backup->total_data_bytes;
 	options[i++].var = &backup->read_data_bytes;
 	options[i++].var = &backup->read_arclog_bytes;
@@ -601,6 +615,8 @@ catalog_init_config(pgBackup *backup)
 	backup->stop_lsn.xrecoff = 0;
 	backup->start_time = (time_t) 0;
 	backup->end_time = (time_t) 0;
+	backup->recovery_xid = 0;
+	backup->recovery_time = (time_t) 0;
 	backup->total_data_bytes = BYTES_INVALID;
 	backup->read_data_bytes = BYTES_INVALID;
 	backup->read_arclog_bytes = BYTES_INVALID;

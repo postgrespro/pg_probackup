@@ -2,7 +2,7 @@
  *
  * pg_rman.h: Backup/Recovery manager for PostgreSQL.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -21,6 +21,13 @@
 
 #if PG_VERSION_NUM < 80200
 #define XLOG_BLCKSZ		BLCKSZ
+#endif
+
+#if PG_VERSION_NUM < 80300
+#define TXID_CURRENT_SQL	"SELECT transactionid FROM pg_locks WHERE locktype = 'transactionid' AND pid = pg_backend_pid();"
+#include <sys/stat.h>
+#else
+#define TXID_CURRENT_SQL	"SELECT txid_current();"
 #endif
 
 /* Directory/File names */
@@ -88,6 +95,14 @@ typedef struct pgBackupRange
 #define pgBackupRangeIsSingle(range) \
 	(pgBackupRangeIsValid(range) && (range)->begin == ((range)->end))
 
+#define IsValidTime(tm)	\
+	((tm.tm_sec >= 0 && tm.tm_sec <= 60) && 	/* range check for tm_sec (0-60)  */ \
+	 (tm.tm_min >= 0 && tm.tm_min <= 59) && 	/* range check for tm_min (0-59)  */ \
+	 (tm.tm_hour >= 0 && tm.tm_hour <= 23) && 	/* range check for tm_hour(0-23)  */ \
+	 (tm.tm_mday >= 1 && tm.tm_mday <= 31) && 	/* range check for tm_mday(1-31)  */ \
+	 (tm.tm_mon >= 0 && tm.tm_mon <= 11) && 	/* range check for tm_mon (0-23)  */ \
+	 (tm.tm_year + 1900 >= 1900)) 			/* range check for tm_year(70-)    */
+
 /* Backup status */
 /* XXX re-order ? */
 typedef enum BackupStatus
@@ -131,6 +146,8 @@ typedef struct pgBackup
 	XLogRecPtr	stop_lsn;
 	time_t		start_time;
 	time_t		end_time;
+	time_t		recovery_time;
+	uint32		recovery_xid;
 
 	/* Size (-1 means not-backup'ed) */
 	int64		total_data_bytes;
@@ -142,6 +159,7 @@ typedef struct pgBackup
 	/* data/wal block size for compatibility check */
 	uint32		block_size;
 	uint32		wal_block_size;
+
 } pgBackup;
 
 /* special values of pgBackup */
@@ -160,6 +178,15 @@ typedef struct pgTimeLine
 	TimeLineID	tli;
 	XLogRecPtr	end;
 } pgTimeLine;
+
+typedef struct pgRecoveryTarget
+{
+	bool		time_specified;
+	time_t		recovery_target_time;
+	bool		xid_specified;
+	unsigned int	recovery_target_xid;
+	bool		recovery_target_inclusive;
+} pgRecoveryTarget;
 
 typedef enum CompressionMode
 {
@@ -215,12 +242,13 @@ extern int do_init(void);
 extern int do_show(pgBackupRange *range, bool show_timeline, bool show_all);
 
 /* in delete.c */
-extern int do_delete(pgBackupRange *range);
+//extern int do_delete(pgBackupRange *range);
+extern int do_delete(pgBackupRange *range, bool force);
 extern void pgBackupDelete(int keep_generations, int keep_days);
 
 /* in validate.c */
 extern int do_validate(pgBackupRange *range);
-extern void pgBackupValidate(pgBackup *backup, bool size_only);
+extern void pgBackupValidate(pgBackup *backup, bool size_only, bool for_get_timeline, bool with_database);
 
 /* in catalog.c */
 extern pgBackup *catalog_get_backup(time_t timestamp);

@@ -2,7 +2,7 @@
  *
  * xlog.c: Parse WAL files.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -27,6 +27,7 @@ typedef struct MemoryContextData *MemoryContext;
 #define XLOG_PAGE_MAGIC_v83		0xD062	/* 8.3 */
 #define XLOG_PAGE_MAGIC_v84		0xD063	/* 8.4 */
 #define XLOG_PAGE_MAGIC_v90		0xD064	/* 9.0 */
+#define XLOG_PAGE_MAGIC_v91		0xD066	/* 9.1 */
 
 /*
  * XLogLongPageHeaderData is modified in 8.3, but the layout is compatible
@@ -75,6 +76,8 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v84;
 	else if (server_version < 90100)
 		xlog_page_magic = XLOG_PAGE_MAGIC_v90;
+	else if (server_version < 90200)
+		xlog_page_magic = XLOG_PAGE_MAGIC_v91;
 	else
 		return false;	/* not supported */
 

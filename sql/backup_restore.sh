@@ -75,6 +75,7 @@ initdb --no-locale > $BASE_PATH/results/initdb.log 2>&1
 cat << EOF >> $PGDATA/postgresql.conf
 port = $TEST_PGPORT
 logging_collector = on
+wal_level = archive
 archive_mode = on
 archive_command = 'cp "%p" "$ARCLOG_PATH/%f"'
 EOF
@@ -113,7 +114,8 @@ EOF
 export KEEP_DATA_GENERATIONS=2
 export KEEP_DATA_DAYS=0
 for i in `seq 1 5`; do
-	pg_rman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_0_$i 2>&1
+#	pg_rman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_0_$i 2>&1
+	pg_rman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_0_$i 2>&1
 done
 pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_d_1 2>&1
 echo "# of deleted backups"
@@ -123,12 +125,14 @@ pgbench -p $TEST_PGPORT -i -s $SCALE pgbench > $BASE_PATH/results/pgbench.log 2>
 
 echo "full database backup"
 psql -p $TEST_PGPORT postgres -c "checkpoint"
-pg_rman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
+#pg_rman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
+pg_rman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
 echo "incremental database backup"
 psql -p $TEST_PGPORT postgres -c "checkpoint"
-pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
+#pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
+pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
 
 # validate all backup
 pg_rman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate1 2>&1
@@ -136,11 +140,13 @@ pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/re
 pg_dumpall > $BASE_PATH/results/dump_before_rtx.sql
 target_xid=`psql -p $TEST_PGPORT pgbench -tAq -c "INSERT INTO pgbench_history VALUES (1) RETURNING(xmin);"`
 psql -p $TEST_PGPORT postgres -c "checkpoint"
-pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
+#pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
+pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
 echo "archived WAL and serverlog backup"
-pg_rman -p $TEST_PGPORT backup -b a --verbose -d postgres > $BASE_PATH/results/log_arclog 2>&1
+#pg_rman -p $TEST_PGPORT backup -b a --verbose -d postgres > $BASE_PATH/results/log_arclog 2>&1
+pg_rman -w -p $TEST_PGPORT backup -b a --verbose -d postgres > $BASE_PATH/results/log_arclog 2>&1
 
 # stop PG during transaction and get commited info for verifing
 echo "stop DB during running pgbench"
@@ -211,7 +217,8 @@ diff $BASE_PATH/results/dump_before.sql $BASE_PATH/results/dump_after.sql
 # incrementa backup can't find last full backup because new timeline started.
 echo "full database backup after recovery"
 psql -p $TEST_PGPORT postgres -c "checkpoint"
-pg_rman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
+#pg_rman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
+pg_rman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 
 # Backup of online-WAL should been deleted, but serverlog remain.
 echo "# of files in BACKUP_PATH/backup/pg_xlog"

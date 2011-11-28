@@ -2,7 +2,7 @@
  *
  * pg_rman.c: Backup/Recovery manager for PostgreSQL.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-const char *PROGRAM_VERSION	= "1.2.1";
+const char *PROGRAM_VERSION	= "1.2.2";
 const char *PROGRAM_URL		= "http://code.google.com/p/pg-rman/";
 const char *PROGRAM_EMAIL	= "http://code.google.com/p/pg-rman/issues/list";
 
@@ -45,6 +45,9 @@ static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
 
+/* delete configuration */
+static bool		force;
+
 /* show configuration */
 static bool			show_all = false;
 
@@ -66,6 +69,8 @@ static pgut_option options[] =
 	{ 'b', 's', "with-serverlog"	, &current.with_serverlog	, SOURCE_ENV },
 	{ 'b', 'Z', "compress-data"		, &current.compress_data	, SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint"	, &smooth_checkpoint		, SOURCE_ENV },
+	/* delete options */
+	{ 'b', 'f', "force"	, &force		, SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
 	{ 'i',  1, "keep-data-generations"	, &keep_data_generations, SOURCE_ENV },
 	{ 'i',  2, "keep-data-days"			, &keep_data_days		, SOURCE_ENV },
@@ -139,6 +144,13 @@ main(int argc, char *argv[])
 	if (backup_path)
 	{
 		char	path[MAXPGPATH];
+		/* Check if backup_path is directory. */
+		struct stat stat_buf;
+		int rc = stat(backup_path, &stat_buf);
+		if(rc != -1 && !S_ISDIR(stat_buf.st_mode)){
+			/* If rc == -1,  there is no file or directory. So it's OK. */
+			elog(ERROR_ARGS, "-B, --backup-path must be a path to directory");
+		}
 
 		join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 		pgut_readopt(path, options, ERROR_ARGS);
@@ -149,6 +161,8 @@ main(int argc, char *argv[])
 		elog(ERROR_ARGS, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 
 	/* path must be absolute */
+	if (backup_path != NULL && !is_absolute_path(backup_path))
+		elog(ERROR_ARGS, "-B, --backup-path must be an absolute path");
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR_ARGS, "-D, --pgdata must be an absolute path");
 	if (arclog_path != NULL && !is_absolute_path(arclog_path))
@@ -172,14 +186,16 @@ main(int argc, char *argv[])
 						 keep_arclog_files, keep_arclog_days,
 						 keep_srvlog_files, keep_srvlog_days,
 						 keep_data_generations, keep_data_days);
-	else if (pg_strcasecmp(cmd, "restore") == 0)
+	else if (pg_strcasecmp(cmd, "restore") == 0){
 		return do_restore(target_time, target_xid, target_inclusive, target_tli);
+	}
 	else if (pg_strcasecmp(cmd, "show") == 0)
 		return do_show(&range, show_timeline, show_all);
 	else if (pg_strcasecmp(cmd, "validate") == 0)
 		return do_validate(&range);
 	else if (pg_strcasecmp(cmd, "delete") == 0)
-		return do_delete(&range);
+//		return do_delete(&range);
+		return do_delete(&range, force);
 	else
 		elog(ERROR_ARGS, "invalid command \"%s\"", cmd);
 
@@ -259,8 +275,12 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 		&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
 		&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
 
-	if (num < 1)
-		elog(ERROR_ARGS, _("supplied id(%s) is invalid."), tmp);
+	if (num < 1){
+		if (strcmp(tmp,"") != 0)
+			elog(ERROR_ARGS, _("supplied id(%s) is invalid."), tmp);
+		else
+			elog(ERROR_ARGS, _("argments are invalid. near \"%s\""), arg1);
+	}
 
 	free(tmp);
 
@@ -269,6 +289,10 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 	if (num > 1)
 		tm.tm_mon -= 1;
 	tm.tm_isdst = -1;
+
+if(!IsValidTime(tm)){
+	elog(ERROR_ARGS, _("supplied time(%s) is invalid."), arg1);
+}
 	range->begin = mktime(&tm);
 
 	switch (num)

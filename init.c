@@ -2,7 +2,7 @@
  *
  * init.c: manage backup catalog.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -10,9 +10,18 @@
 #include "pg_rman.h"
 
 #include <unistd.h>
+#include <dirent.h>
 
 static void parse_postgresql_conf(const char *path, char **log_directory,
 								  char **archive_command);
+
+/*
+ * selects function for scandir.
+ */
+static int selects(const struct dirent *dir)
+{
+  return dir->d_name[0] != '.';
+}
 
 /*
  * Initialize backup catalog.
@@ -25,8 +34,14 @@ do_init(void)
 	char   *archive_command = NULL;
 	FILE   *fp;
 
-	if (access(backup_path, F_OK) == 0)
-		elog(ERROR, _("backup catalog already exist."));
+	struct dirent **dp;
+	int results;
+	if (access(backup_path, F_OK) == 0){
+		results = scandir(backup_path, &dp, selects, NULL);
+		if(results != 0){
+			elog(ERROR, _("backup catalog already exist. and it's not empty."));
+		}
+	}
 
 	/* create backup catalog root directory */
 	dir_create_dir(backup_path, DIR_PERMISSION);
@@ -98,9 +113,11 @@ do_init(void)
 		elog(INFO, "ARCLOG_PATH is set to '%s'", arclog_path);
 	}
 	else if (archive_command && archive_command[0])
-		elog(WARNING, "ARCLOG_PATH is not set because failed to parse archive_command '%s'", archive_command);
+		elog(WARNING, "ARCLOG_PATH is not set because failed to parse archive_command '%s'."
+				"Please set ARCLOG_PATH in pg_rman.ini or environmental variable", archive_command);
 	else
-		elog(WARNING, "ARCLOG_PATH is not set because archive_command is empty");
+		elog(WARNING, "ARCLOG_PATH is not set because archive_command is empty."
+				"Please set ARCLOG_PATH in pg_rman.ini or environmental variable");
 
 	/* set SRVLOG_PATH refered with log_directory */
 	if (srvlog_path == NULL)

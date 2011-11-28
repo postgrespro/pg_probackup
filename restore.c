@@ -2,7 +2,7 @@
  *
  * restore.c: restore DB cluster and archived WAL.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -24,10 +24,14 @@ static void create_recovery_conf(const char *target_time,
 								 const char *target_xid,
 								 const char *target_inclusive,
 								 TimeLineID target_tli);
+static pgRecoveryTarget *checkIfCreateRecoveryConf(const char *target_time,
+								 const char *target_xid,
+								 const char *target_inclusive);
 static parray * readTimeLineHistory(TimeLineID targetTLI);
 static bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
+static bool satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt);
 static TimeLineID get_current_timeline(void);
-static TimeLineID get_fullbackup_timeline(parray *backups);
+static TimeLineID get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt);
 static void print_backup_id(const pgBackup *backup);
 static void search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timelines);
 
@@ -50,6 +54,7 @@ do_restore(const char *target_time,
 	char timeline_dir[MAXPGPATH];
 	uint32 needId = 0;
 	uint32 needSeg = 0;
+	pgRecoveryTarget *rt = NULL;
 
 	/* PGDATA and ARCLOG_PATH are always required */
 	if (pgdata == NULL)
@@ -80,11 +85,19 @@ do_restore(const char *target_time,
 	if (is_pg_running())
 		elog(ERROR_PG_RUNNING, _("PostgreSQL server is running"));
 
+	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
+	if(rt == NULL){
+		elog(ERROR_ARGS, _("can't create recovery.conf. specified args are invalid."));
+	}
+
 	/* get list of backups. (index == 0) is the last backup */
 	backups = catalog_get_backup_list(NULL);
+	if(!backups){
+		elog(ERROR_SYSTEM, _("can't process any more."));
+	}
 
 	cur_tli = get_current_timeline();
-	backup_tli = get_fullbackup_timeline(backups);
+	backup_tli = get_fullbackup_timeline(backups, rt);
 
 	/* determine target timeline */
 	if (target_tli == 0)
@@ -154,7 +167,7 @@ do_restore(const char *target_time,
 				_("can't restore from compressed backup (compression not supported in this installation)"));
 		}
 #endif
-		if (satisfy_timeline(timelines, base_backup))
+		if (satisfy_timeline(timelines, base_backup) && satisfy_recovery_target(base_backup, rt))
 			goto base_backup_found;
 	}
 	/* no full backup found, can't restore */
@@ -168,6 +181,7 @@ base_backup_found:
 
 	/* restore base backup */
 	restore_database(base_backup);
+
 	last_restored_index = base_index;
 
 	/* restore following incremental backup */
@@ -183,11 +197,11 @@ base_backup_found:
 			continue;
 
 		/* use database backup only */
-		if (backup->backup_mode < BACKUP_MODE_INCREMENTAL)
+		if (backup->backup_mode != BACKUP_MODE_INCREMENTAL)
 			continue;
 
 		/* is the backup is necessary for restore to target timeline ? */
-		if (!satisfy_timeline(timelines, backup))
+		if (!satisfy_timeline(timelines, backup) && !satisfy_recovery_target(backup, rt))
 			continue;
 
 		if (verbose)
@@ -314,9 +328,9 @@ restore_database(pgBackup *backup)
 
 	/*
 	 * Validate backup files with its size, because load of CRC calculation is
-	 * not light.
+	 * not right.
 	 */
-	pgBackupValidate(backup, true);
+	pgBackupValidate(backup, true, false, true);
 
 	/* make direcotries and symbolic links */
 	pgBackupGetPath(backup, path, lengthof(path), MKDIRS_SH_FILE);
@@ -452,7 +466,7 @@ restore_database(pgBackup *backup)
 	parray_free(files);
 
 	if (verbose && !check)
-		printf(_("resotre backup completed\n"));
+		printf(_("restore backup completed\n"));
 }
 
 /*
@@ -475,6 +489,12 @@ restore_archive_logs(pgBackup *backup)
 		printf(_("----------------------------------------\n"));
 		printf(_("restoring WAL from backup %s.\n"), timestamp);
 	}
+
+	/*
+	 * Validate backup files with its size, because load of CRC calculation is
+	 * not light.
+	 */
+	pgBackupValidate(backup, true, false, false);
 
 	pgBackupGetPath(backup, list_path, lengthof(list_path), ARCLOG_FILE_LIST);
 	pgBackupGetPath(backup, base_path, lengthof(list_path), ARCLOG_DIR);
@@ -807,6 +827,28 @@ readTimeLineHistory(TimeLineID targetTLI)
 }
 
 static bool
+satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
+{
+	if(rt->xid_specified){
+//		elog(INFO, "in satisfy_recovery_target:xid::%u:%u", backup->recovery_xid, rt->recovery_target_xid);
+		if(backup->recovery_xid <= rt->recovery_target_xid)
+			return true;
+		else
+			return false;
+	}
+	if(rt->time_specified){
+//		elog(INFO, "in satisfy_recovery_target:time_t::%ld:%ld", backup->recovery_time, rt->recovery_target_time);
+		if(backup->recovery_time <= rt->recovery_target_time)
+			return true;
+		else
+			return false;
+	}
+	else{
+		return true;
+	}
+}
+
+static bool
 satisfy_timeline(const parray *timelines, const pgBackup *backup)
 {
 	int i;
@@ -878,7 +920,7 @@ get_current_timeline(void)
 
 /* get TLI of the latest full backup */
 static TimeLineID
-get_fullbackup_timeline(parray *backups)
+get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt)
 {
 	int			i;
 	pgBackup   *base_backup = NULL;
@@ -892,10 +934,13 @@ get_fullbackup_timeline(parray *backups)
 		{
 			/*
 			 * Validate backup files with its size, because load of CRC
-			 * calculation is not light.
+			 * calculation is not right.
 			 */
 			if (base_backup->status == BACKUP_STATUS_DONE)
-				pgBackupValidate(base_backup, true);
+				pgBackupValidate(base_backup, true, true, false);
+
+			if(!satisfy_recovery_target(base_backup, rt))
+				continue;
 
 			if (base_backup->status == BACKUP_STATUS_OK)
 				break;
@@ -968,4 +1013,47 @@ search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timel
 
 		NextLogSeg(*needId, *needSeg);
 	}
+}
+
+static pgRecoveryTarget *
+checkIfCreateRecoveryConf(const char *target_time,
+                   const char *target_xid,
+                   const char *target_inclusive)
+{
+	time_t		dummy_time;
+	unsigned int	dummy_xid;
+	bool		dummy_bool;
+	pgRecoveryTarget *rt;
+
+	// init pgRecoveryTarget
+	rt = pgut_new(pgRecoveryTarget);
+	rt->time_specified = false;
+	rt->xid_specified = false;
+	rt->recovery_target_time = 0;
+	rt->recovery_target_xid  = 0;
+	rt->recovery_target_inclusive = false;
+
+	if(target_time){
+		rt->time_specified = true;
+		if(parse_time(target_time, &dummy_time))
+			rt->recovery_target_time = dummy_time;
+		else
+			elog(ERROR_ARGS, _("can't create recovery.conf with %s"), target_time);
+	}
+	if(target_xid){
+		rt->xid_specified = true;
+		if(parse_uint32(target_xid, &dummy_xid))
+			rt->recovery_target_xid = dummy_xid;
+		else
+			elog(ERROR_ARGS, _("can't create recovery.conf with %s"), target_xid);
+	}
+	if(target_inclusive){
+		if(parse_bool(target_inclusive, &dummy_bool))
+			rt->recovery_target_inclusive = dummy_bool;
+		else
+			elog(ERROR_ARGS, _("can't create recovery.conf with %s"), target_inclusive);
+	}
+
+	return rt;
+
 }

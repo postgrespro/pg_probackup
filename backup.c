@@ -2,7 +2,7 @@
  *
  * backup.c: backup DB cluster, archived WAL, serverlog.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -41,6 +41,7 @@ static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
 static void pg_switch_xlog(pgBackup *backup);
 static void get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn);
+static void get_xid(PGresult *res, uint32 *xid);
 
 static void delete_arclog_link(void);
 static void delete_online_wal_backup(void);
@@ -75,8 +76,26 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	XLogRecPtr *lsn = NULL;
 	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup list file */
 
-	if (!HAVE_DATABASE(&current))
-		return NULL;
+	if (!HAVE_DATABASE(&current)) {
+		/* check if arclog backup. if arclog backup and no suitable full backup, */
+		/* take full backup instead. */
+		if (HAVE_ARCLOG(&current)) {
+			pgBackup   *prev_backup;
+
+			/* find last completed database backup */
+			prev_backup = catalog_get_last_data_backup(backup_list);
+			if (prev_backup == NULL)
+			{
+				elog(ERROR_SYSTEM, _("There is indeed a full backup but it is not validated."
+							"So I can't take any arclog backup."
+							"Please validate it and retry."));
+///				elog(INFO, _("no previous full backup, performing a full backup instead"));
+///				current.backup_mode = BACKUP_MODE_FULL;
+			}
+		}
+		else
+			return NULL;
+	}
 
 	elog(INFO, _("database backup start"));
 
@@ -88,6 +107,16 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	time2iso(label, lengthof(label), current.start_time);
 	strncat(label, " with pg_rman", lengthof(label));
 	pg_start_backup(label, smooth_checkpoint, &current);
+
+	/* If backup_label does not exist in $PGDATA, stop taking backup */
+	snprintf(path, lengthof(path), "%s/backup_label", pgdata);
+	make_native_path(path);
+	if (!fileExists(path)) {
+		if (verbose)
+			printf(_("backup_label does not exist, stop backup\n"));
+		pg_stop_backup(NULL);
+		elog(ERROR_SYSTEM, _("backup_label does not exist in PGDATA."));
+	}
 
 	/*
 	 * list directories and symbolic links  with the physical path to make
@@ -127,10 +156,13 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 
 		/* find last completed database backup */
 		prev_backup = catalog_get_last_data_backup(backup_list);
-		if (prev_backup == NULL)
+		if (prev_backup == NULL || prev_backup->tli != current.tli)
 		{
-			elog(INFO, _("no previous full backup, do a full backup instead"));
-			current.backup_mode = BACKUP_MODE_FULL;
+			elog(ERROR_SYSTEM, _("There is indeed a full backup but it is not validated."
+						"So I can't take any incremental backup."
+						"Please validate it and retry."));
+///			elog(INFO, _("no previous full backup, performing a full backup instead"));
+///			current.backup_mode = BACKUP_MODE_FULL;
 		}
 		else
 		{
@@ -440,7 +472,7 @@ do_backup_arclog(parray *backup_list)
 	 */
 	prev_backup = catalog_get_last_arclog_backup(backup_list);
 	if (verbose && prev_backup == NULL)
-		printf(_("no previous full backup, do a full backup instead\n"));
+		printf(_("no previous full backup, performing a full backup instead\n"));
 
 	if (prev_backup)
 	{
@@ -564,7 +596,7 @@ do_backup_srvlog(parray *backup_list)
 	 */
 	prev_backup = catalog_get_last_srvlog_backup(backup_list);
 	if (verbose && prev_backup == NULL)
-		printf(_("no previous full backup, do a full backup instead\n"));
+		printf(_("no previous full backup, performing a full backup instead\n"));
 
 	if (prev_backup)
 	{
@@ -695,6 +727,8 @@ do_backup(bool smooth_checkpoint,
 	current.write_bytes = 0;		/* write_bytes is valid always */
 	current.block_size = BLCKSZ;
 	current.wal_block_size = XLOG_BLCKSZ;
+current.recovery_xid = 0;
+current.recovery_time = (time_t) 0;
 
 	/* create backup directory and backup.ini */
 	if (!check)
@@ -708,6 +742,9 @@ do_backup(bool smooth_checkpoint,
 
 	/* get list of backups already taken */
 	backup_list = catalog_get_backup_list(NULL);
+	if(!backup_list){
+		elog(ERROR_SYSTEM, _("can't process any more."));
+	}
 
 	/* set the error processing function for the backup process */
 	pgut_atexit_push(backup_cleanup, NULL);
@@ -893,6 +930,12 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	elog(LOG, "%s() wait for %s", __FUNCTION__, ready_path);
 
 	PQclear(res);
+
+	res = execute(TXID_CURRENT_SQL, 0, NULL);
+	if(backup != NULL){
+		get_xid(res, &backup->recovery_xid);
+		backup->recovery_time = time(NULL);
+	}
 	disconnect();
 
 	/* wait until switched WAL is archived */
@@ -958,6 +1001,26 @@ get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn)
 	elog(LOG, "%s():%s %s",
 		__FUNCTION__, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1));
 	lsn->xrecoff += off_upper << 24;
+}
+
+/*
+ * Get XID from result of txid_current() after pg_stop_backup().
+ */
+static void
+get_xid(PGresult *res, uint32 *xid)
+{
+	if(res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
+		elog(ERROR_PG_COMMAND,
+			_("result of txid_current() is invalid: %s"),
+			PQerrorMessage(connection));
+
+	if(sscanf(PQgetvalue(res, 0, 0), "%u", xid) != 1)
+	{
+		elog(ERROR_PG_COMMAND,
+			_("result of txid_current() is invalid: %s"),
+			PQerrorMessage(connection));
+	}
+	elog(LOG, "%s():%s", __FUNCTION__, PQgetvalue(res, 0, 0));
 }
 
 /*
@@ -1055,6 +1118,11 @@ backup_files(const char *from_root,
 
 		pgFile *file = (pgFile *) parray_get(files, i);
 
+		/* If current time is rewinded, abort this backup. */
+		if(tv.tv_sec < file->mtime){
+			elog(ERROR_SYSTEM, _("current time may be rewound. Please retry with full backup mode."));
+		}
+
 		/* check for interrupt */
 		if (interrupted)
 			elog(ERROR_INTERRUPTED, _("interrupted during backup"));
@@ -1101,8 +1169,9 @@ backup_files(const char *from_root,
 			char dirpath[MAXPGPATH];
 
 			join_path_components(dirpath, to_root, JoinPathEnd(file->path, from_root));
-			if (!check)
+			if (!check){
 				dir_create_dir(dirpath, DIR_PERMISSION);
+			}
 			if (verbose)
 				printf(_("directory\n"));
 		}
@@ -1143,7 +1212,7 @@ backup_files(const char *from_root,
 						prev_file = *p;
 				}
 
-				if (prev_file && prev_file->mtime >= file->mtime)
+				if (prev_file && prev_file->mtime == file->mtime)
 				{
 					/* record as skipped file in file_xxx.txt */
 					file->write_size = BYTES_INVALID;
@@ -1158,7 +1227,8 @@ backup_files(const char *from_root,
 			 * file should contain all modifications at the clock of mtime.
 			 * timer resolution of ext3 file system is one second.
 			 */
-			if (tv.tv_sec <= file->mtime)
+
+			if (tv.tv_sec == file->mtime)
 			{
 				/* update time and recheck */
 				gettimeofday(&tv, NULL);

@@ -2,7 +2,7 @@
  *
  * dir.c: directory operation utility.
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -363,11 +363,13 @@ dir_print_mkdirs_sh(FILE *out, const parray *files, const char *root)
 		pgFile *file = (pgFile *) parray_get(files, i);
 		if (S_ISDIR(file->mode))
 		{
-			if (strstr(file->path, root) == file->path)
+			if (strstr(file->path, root) == file->path) {
 				fprintf(out, "mkdir -m 700 -p %s\n", file->path + strlen(root)
 					+ 1);
-			else
+			}
+			else {
 				fprintf(out, "mkdir -m 700 -p %s\n", file->path);
+			}
 		}
 	}
 
@@ -539,8 +541,9 @@ dir_copy_files(const char *from_root, const char *to_root)
 			if (verbose && !check)
 				printf(_("create directory \"%s\"\n"),
 					file->path + strlen(from_root) + 1);
-			if (!check)
+			if (!check) {
 				dir_create_dir(to_path, DIR_PERMISSION);
+			}
 			continue;
 		}
 		else if(S_ISREG(file->mode))

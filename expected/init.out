@@ -1,6 +1,5 @@
 \! rm -rf results/init_test
-\! pg_rman init -B results/init_test --quiet;echo $?
-WARNING: ARCLOG_PATH is not set because archive_command is empty
+\! pg_rman init -B ${PWD}/results/init_test --quiet;echo $?
 0
 \! find results/init_test | xargs ls -Fd | sort
 results/init_test/
@@ -9,6 +8,6 @@ results/init_test/backup/pg_xlog/
 results/init_test/backup/srvlog/
 results/init_test/pg_rman.ini
 results/init_test/timeline_history/
-\! pg_rman init -B results/init_test --quiet;echo $?
-ERROR: backup catalog already exist.
+\! pg_rman init -B ${PWD}/results/init_test --quiet;echo $?
+ERROR: backup catalog already exist. and it's not empty.
 2
