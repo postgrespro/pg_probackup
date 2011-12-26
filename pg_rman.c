@@ -12,8 +12,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/stat.h>
 
-const char *PROGRAM_VERSION	= "1.2.2";
+const char *PROGRAM_VERSION	= "1.2.3";
 const char *PROGRAM_URL		= "http://code.google.com/p/pg-rman/";
 const char *PROGRAM_EMAIL	= "http://code.google.com/p/pg-rman/issues/list";
 
