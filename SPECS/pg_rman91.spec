@@ -9,7 +9,7 @@
 ## Set general information for pg_rman.
 Summary:    Backup and Recovery Tool for PostgreSQL
 Name:       pg_rman
-Version:    1.2.3
+Version:    1.2.4
 Release:    1%{?dist}
 License:    BSD
 Group:      Applications/Databases

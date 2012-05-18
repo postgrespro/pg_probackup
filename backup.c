@@ -112,10 +112,14 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	snprintf(path, lengthof(path), "%s/backup_label", pgdata);
 	make_native_path(path);
 	if (!fileExists(path)) {
-		if (verbose)
-			printf(_("backup_label does not exist, stop backup\n"));
-		pg_stop_backup(NULL);
-		elog(ERROR_SYSTEM, _("backup_label does not exist in PGDATA."));
+		snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
+		make_native_path(path);
+		if (!fileExists(path)) {
+			if (verbose)
+				printf(_("backup_label does not exist, stop backup\n"));
+			pg_stop_backup(NULL);
+			elog(ERROR_SYSTEM, _("backup_label does not exist in PGDATA."));
+		}
 	}
 
 	/*
