@@ -294,7 +294,6 @@ backup_data_file(const char *from_root, const char *to_root,
 	z_stream			z;
 	char				outbuf[zlibOutSize];
 #endif
-
 	INIT_CRC32(crc);
 
 	/* reset size summary */
@@ -787,7 +786,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	char		outbuf[zlibOutSize];
 	char		inbuf[zlibInSize];
 #endif
-
 	INIT_CRC32(crc);
 
 	/* reset size summary */

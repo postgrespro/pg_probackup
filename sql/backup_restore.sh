@@ -78,6 +78,7 @@ logging_collector = on
 wal_level = archive
 archive_mode = on
 archive_command = 'cp "%p" "$ARCLOG_PATH/%f"'
+log_filename = 'postgresql-%F_%H%M%S.log'
 EOF
 
 mkdir -p $ARCLOG_PATH

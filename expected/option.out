@@ -54,7 +54,7 @@ Generic options:
 
 Read the website for details. <http://code.google.com/p/pg-rman/>
 Report bugs to <http://code.google.com/p/pg-rman/issues/list>.
-pg_rman 1.2.4
+pg_rman 1.2.5
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
 ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)
 ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)

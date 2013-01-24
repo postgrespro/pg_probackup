@@ -1,7 +1,7 @@
 # SPEC file for pg_rman
-# Copyright(C) 2009-2010 NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+# Copyright(C) 2009-2012 NIPPON TELEGRAPH AND TELEPHONE CORPORATION
 
-%define _pgdir   /usr/pgsql-9.0
+%define _pgdir   /usr/pgsql-9.2
 %define _bindir  %{_pgdir}/bin
 %define _libdir  %{_pgdir}/lib
 %define _datadir %{_pgdir}/share
@@ -19,8 +19,8 @@ BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-%(%{__id_u} -n)
 Vendor:	    NIPPON TELEGRAPH AND TELEPHONE CORPORATION
 
 ## We use postgresql-devel package
-BuildRequires:  postgresql90-devel
-Requires:  postgresql90-libs
+BuildRequires:  postgresql92-devel
+Requires:  postgresql92-libs
 
 ## Description for "pg_rman"
 %description

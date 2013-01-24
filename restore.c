@@ -163,7 +163,7 @@ do_restore(const char *target_time,
 		if (base_backup->compress_data &&
 			(HAVE_DATABASE(base_backup) || HAVE_ARCLOG(base_backup)))
 		{
-			elog(EXIT_NOT_SUPPORTED,
+			elog(ERROR_SYSTEM,
 				_("can't restore from compressed backup (compression not supported in this installation)"));
 		}
 #endif
@@ -201,7 +201,7 @@ base_backup_found:
 			continue;
 
 		/* is the backup is necessary for restore to target timeline ? */
-		if (!satisfy_timeline(timelines, backup) && !satisfy_recovery_target(backup, rt))
+		if (!satisfy_timeline(timelines, backup) || !satisfy_recovery_target(backup, rt))
 			continue;
 
 		if (verbose)

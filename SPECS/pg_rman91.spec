@@ -9,7 +9,7 @@
 ## Set general information for pg_rman.
 Summary:    Backup and Recovery Tool for PostgreSQL
 Name:       pg_rman
-Version:    1.2.4
+Version:    1.2.5
 Release:    1%{?dist}
 License:    BSD
 Group:      Applications/Databases
@@ -44,7 +44,7 @@ USE_PGXS=1 make %{?_smp_mflags}
 %install
 rm -rf %{buildroot}
 
-USE_PGXS=1 make %{?_smp_mflags} install
+USE_PGXS=1 DESTDIR=%{buildroot} make %{?_smp_mflags} install
 
 install -d %{buildroot}%{_bindir}
 install -m 755 pg_rman %{buildroot}%{_bindir}/pg_rman

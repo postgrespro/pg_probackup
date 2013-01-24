@@ -15,13 +15,13 @@ diff files in BACKUP_PATH/backup/pg_xlog
 1
 diff files in BACKUP_PATH/backup/pg_xlog
 # of files in BACKUP_PATH/backup/srvlog
-1
+2
 full database backup after recovery
 CHECKPOINT
 # of files in BACKUP_PATH/backup/pg_xlog
 0
 # of files in BACKUP_PATH/backup/srvlog
-1
+2
 # of symbolic links in ARCLOG_PATH
 0
 # of files in BACKUP_PATH/timeline_history

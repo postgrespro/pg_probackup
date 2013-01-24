@@ -684,10 +684,10 @@ do_backup(bool smooth_checkpoint,
 		elog(ERROR_ARGS, _("required parameter not specified: SRVLOG_PATH (-S, --srvlog-path)"));
 
 #ifndef HAVE_LIBZ
-	if (current->compress_data)
+	if (current.compress_data)
 	{
 		elog(WARNING, _("requested compression not available in this: installation -- archive will be uncompressed"));
-		current->compress_data = false;
+		current.compress_data = false;
 	}
 #endif
 
