@@ -2,7 +2,7 @@
  *
  * pgut.h
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -120,6 +120,13 @@ extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);
 extern PGconn *reconnect_elevel(int elevel);
 extern void reconnect(void);
 extern void disconnect(void);
+
+extern const char *pgut_get_host(void);
+extern const char *pgut_get_port(void);
+extern void pgut_set_host(const char *new_host);
+extern void pgut_set_port(const char *new_port);
+
+
 extern PGresult *execute_elevel(const char *query, int nParams, const char **params, int elevel);
 extern PGresult *execute(const char *query, int nParams, const char **params);
 extern void command(const char *query, int nParams, const char **params);

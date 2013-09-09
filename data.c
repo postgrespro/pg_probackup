@@ -2,7 +2,7 @@
  *
  * data.c: compress / uncompress data pages
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -755,14 +755,6 @@ restore_data_file(const char *from_root,
 		elog(ERROR_SYSTEM, _("can't change mode of \"%s\": %s"), to_path,
 			strerror(errno_tmp));
 	}
-//aaa	if (chown(to_path, file->uid, file->gid) == -1)
-//aaa	{
-//aaa		int errno_tmp = errno;
-//aaa		fclose(in);
-//aaa		fclose(out);
-//aaa		elog(ERROR_SYSTEM, _("can't change owner of \"%s\": %s"), to_path,
-//aaa			strerror(errno_tmp));
-//aaa	}
 
 	fclose(in);
 	fclose(out);
@@ -998,14 +990,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 		elog(ERROR_SYSTEM, _("can't change mode of \"%s\": %s"), to_path,
 			strerror(errno_tmp));
 	}
-//aaa	if (chown(to_path, file->uid, file->gid) == -1)
-//aaa	{
-//aaa		errno_tmp = errno;
-//aaa		fclose(in);
-//aaa		fclose(out);
-//aaa		elog(ERROR_SYSTEM, _("can't change owner of \"%s\": %s"), to_path,
-//aaa			strerror(errno_tmp));
-//aaa	}
 
 	fclose(in);
 	fclose(out);

@@ -51,8 +51,6 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-export LANG=C
-
 # delete old database cluster
 pg_ctl stop -m immediate > /dev/null 2>&1
 rm -rf $PGDATA
@@ -140,7 +138,7 @@ pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/result
 # validate all backup
 pg_rman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate1 2>&1
 pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show0 2>&1
-pg_dumpall -p $TEST_PGPORT > $BASE_PATH/results/dump_before_rtx.sql
+pg_dumpall > $BASE_PATH/results/dump_before_rtx.sql
 target_xid=`psql -p $TEST_PGPORT pgbench -tAq -c "INSERT INTO pgbench_history VALUES (1) RETURNING(xmin);"`
 psql -p $TEST_PGPORT postgres -c "checkpoint"
 #pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
@@ -158,7 +156,7 @@ sleep `expr $DURATION / 2`
 pg_ctl stop -m immediate > /dev/null 2>&1
 cp -rp $PGDATA $PGDATA.bak
 pg_ctl start -w -t 3600 > /dev/null 2>&1
-pg_dumpall -p $TEST_PGPORT > $BASE_PATH/results/dump_before.sql
+pg_dumpall > $BASE_PATH/results/dump_before.sql
 
 # revert to crushed cluster
 pg_ctl stop > /dev/null 2>&1
@@ -213,7 +211,7 @@ find $BACKUP_PATH/backup/srvlog -type f | wc -l
 pg_ctl start -w -t 3600 > /dev/null 2>&1
 
 # compare recovery results
-pg_dumpall -p $TEST_PGPORT > $BASE_PATH/results/dump_after.sql
+pg_dumpall > $BASE_PATH/results/dump_after.sql
 diff $BASE_PATH/results/dump_before.sql $BASE_PATH/results/dump_after.sql
 
 # take a backup and delete backed up online files
@@ -256,7 +254,7 @@ grep -c "recovery_target_" $PGDATA/recovery.conf
 # recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
 
-pg_dumpall -p $TEST_PGPORT > $BASE_PATH/results/dump_after_rtx.sql
+pg_dumpall > $BASE_PATH/results/dump_after_rtx.sql
 diff $BASE_PATH/results/dump_before_rtx.sql $BASE_PATH/results/dump_after_rtx.sql
 
 # show timeline

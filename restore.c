@@ -2,7 +2,7 @@
  *
  * restore.c: restore DB cluster and archived WAL.
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -19,7 +19,7 @@
 static void backup_online_files(bool re_recovery);
 static void restore_online_files(void);
 static void restore_database(pgBackup *backup);
-static void restore_archive_logs(pgBackup *backup);
+static void restore_archive_logs(pgBackup *backup, bool is_hard_copy);
 static void create_recovery_conf(const char *target_time,
 								 const char *target_xid,
 								 const char *target_inclusive,
@@ -39,7 +39,8 @@ int
 do_restore(const char *target_time,
 		   const char *target_xid,
 		   const char *target_inclusive,
-		   TimeLineID target_tli)
+		   TimeLineID target_tli,
+		   bool is_hard_copy)
 {
 	int i;
 	int base_index;				/* index of base (full) backup */
@@ -201,6 +202,7 @@ base_backup_found:
 			continue;
 
 		/* is the backup is necessary for restore to target timeline ? */
+		//if (!satisfy_timeline(timelines, backup) && !satisfy_recovery_target(backup, rt))
 		if (!satisfy_timeline(timelines, backup) || !satisfy_recovery_target(backup, rt))
 			continue;
 
@@ -242,7 +244,7 @@ base_backup_found:
 		if (!satisfy_timeline(timelines, backup))
 			continue;
 
-		restore_archive_logs(backup);
+		restore_archive_logs(backup, is_hard_copy);
 
 		if (check)
 		{
@@ -474,7 +476,7 @@ restore_database(pgBackup *backup)
  * archive directory.
  */
 void
-restore_archive_logs(pgBackup *backup)
+restore_archive_logs(pgBackup *backup, bool is_hard_copy)
 {
 	int i;
 	char timestamp[100];
@@ -549,12 +551,27 @@ restore_archive_logs(pgBackup *backup)
 				elog(ERROR_SYSTEM, _("can't remove file \"%s\": %s"), path,
 					strerror(errno));
 
-			if ((symlink(file->path, path) == -1))
-				elog(ERROR_SYSTEM, _("can't create link to \"%s\": %s"),
-					file->path, strerror(errno));
+			if (!is_hard_copy)
+			{
+				/* create symlink */
+				if ((symlink(file->path, path) == -1))
+					elog(ERROR_SYSTEM, _("can't create link to \"%s\": %s"),
+						file->path, strerror(errno));
 
-			if (verbose)
-				printf(_("linked\n"));
+				if (verbose)
+					printf(_("linked\n"));
+			}
+			else
+			{
+				/* create hard-copy */
+				if (!copy_file(base_path, arclog_path, file, NO_COMPRESSION))
+					elog(ERROR_SYSTEM, _("can't copy to \"%s\": %s"),
+						file->path, strerror(errno));
+
+				if (verbose)
+					printf(_("copied\n"));
+			}
+
 		}
 	}
 

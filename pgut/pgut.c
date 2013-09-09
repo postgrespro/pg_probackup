@@ -2,7 +2,7 @@
  *
  * pgut.c
  *
- * Copyright (c) 2009-2010, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -899,7 +899,6 @@ pgut_connect(int elevel)
 		elog(ERROR_INTERRUPTED, "interrupted");
 
 #ifndef PGUT_NO_PROMPT
-//	if (prompt_password == DEFAULT) // katsumata
 	if (prompt_password == YES)
 		prompt_for_password(username);
 #endif
@@ -961,6 +960,31 @@ disconnect(void)
 		PQfinish(connection);
 		connection = NULL;
 	}
+}
+
+/*  set/get host and port for connecting standby server */
+const char *
+pgut_get_host()
+{
+	return host;
+}
+
+const char *
+pgut_get_port()
+{
+	return port;
+}
+
+void
+pgut_set_host(const char *new_host)
+{
+	host = new_host;
+}
+
+void
+pgut_set_port(const char *new_port)
+{
+	port = new_port;
 }
 
 PGresult *

@@ -2,7 +2,7 @@
  *
  * pg_rman.h: Backup/Recovery manager for PostgreSQL.
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -32,19 +32,21 @@
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"
-#define ARCLOG_DIR				"arclog"
-#define SRVLOG_DIR				"srvlog"
+#define ARCLOG_DIR			"arclog"
+#define SRVLOG_DIR			"srvlog"
 #define RESTORE_WORK_DIR		"backup"
-#define PG_XLOG_DIR				"pg_xlog"
+#define PG_XLOG_DIR			"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
-#define TIMELINE_HISTORY_DIR	"timeline_history"
+#define TIMELINE_HISTORY_DIR		"timeline_history"
 #define BACKUP_INI_FILE			"backup.ini"
 #define PG_RMAN_INI_FILE		"pg_rman.ini"
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
 #define ARCLOG_FILE_LIST		"file_arclog.txt"
 #define SRVLOG_FILE_LIST		"file_srvlog.txt"
-#define SNAPSHOT_SCRIPT_FILE	"snapshot_script"
+#define SNAPSHOT_SCRIPT_FILE		"snapshot_script"
+#define PG_BACKUP_LABEL_FILE		"backup_label"
+#define PG_BLACK_LIST			"black_list"
 
 /* Snapshot script command */
 #define SNAPSHOT_FREEZE			"freeze"
@@ -160,7 +162,24 @@ typedef struct pgBackup
 	uint32		block_size;
 	uint32		wal_block_size;
 
+	/* if backup from standby or not */
+	bool		is_from_standby;
+
 } pgBackup;
+
+typedef struct pgBackupOption
+{
+	bool smooth_checkpoint;
+	int  keep_arclog_files;
+	int  keep_arclog_days;
+	int  keep_srvlog_files;
+	int  keep_srvlog_days;
+	int  keep_data_generations;
+	int  keep_data_days;
+	char *standby_host;
+	char *standby_port;
+} pgBackupOption;
+
 
 /* special values of pgBackup */
 #define KEEP_INFINITE			(INT_MAX)
@@ -219,21 +238,17 @@ extern pgBackup current;
 extern const char *pgdata_exclude[];
 
 /* in backup.c */
-extern int do_backup(bool smooth_checkpoint,
-					 int keep_arclog_files,
-					 int keep_arclog_days,
-					 int keep_srvlog_files,
-					 int keep_srvlog_days,
-					 int keep_data_generations,
-					 int keep_data_days);
+extern int do_backup(pgBackupOption bkupopt);
 extern BackupMode parse_backup_mode(const char *value, int elevel);
 extern int get_server_version(void);
+extern bool fileExists(const char *path);
 
 /* in restore.c */
 extern int do_restore(const char *target_time,
 					  const char *target_xid,
 					  const char *target_inclusive,
-					  TimeLineID target_tli);
+					  TimeLineID target_tli,
+					  bool is_hard_copy);
 
 /* in init.c */
 extern int do_init(void);
@@ -242,7 +257,6 @@ extern int do_init(void);
 extern int do_show(pgBackupRange *range, bool show_timeline, bool show_all);
 
 /* in delete.c */
-//extern int do_delete(pgBackupRange *range);
 extern int do_delete(pgBackupRange *range, bool force);
 extern void pgBackupDelete(int keep_generations, int keep_days);
 
@@ -273,6 +287,8 @@ extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_symlink, bool add_root);
+extern void dir_list_file_internal(parray *files, const char *root, const char *exclude[],
+					bool omit_symlink, bool add_root, parray *black_list);
 extern void dir_print_mkdirs_sh(FILE *out, const parray *files, const char *root);
 extern void dir_print_file_list(FILE *out, const parray *files, const char *root, const char *prefix);
 extern parray *dir_read_file_list(const char *root, const char *file_txt);

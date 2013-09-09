@@ -2,7 +2,7 @@
  *
  * dir.c: directory operation utility.
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -31,6 +31,7 @@ const char *pgdata_exclude[] =
 };
 
 static pgFile *pgFileNew(const char *path, bool omit_symlink);
+static int BlackListCompare(const void *str1, const void *str2);
 
 /* create directory, also create parent directories if necessary */
 int
@@ -205,6 +206,12 @@ pgFileCompareMtimeDesc(const void *f1, const void *f2)
 	return -pgFileCompareMtime(f1, f2);
 }
 
+static int
+BlackListCompare(const void *str1, const void *str2)
+{
+	return strcmp(*(char **) str1, *(char **) str2);
+}
+
 /*
  * List files, symbolic links and directories in the directory "root" and add
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
@@ -218,11 +225,54 @@ pgFileCompareMtimeDesc(const void *f1, const void *f2)
 void
 dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_symlink, bool add_root)
 {
+	char path[MAXPGPATH];
+	char buf[MAXPGPATH * 2];
+	char black_item[MAXPGPATH * 2];
+	parray *black_list = NULL;
+
+	join_path_components(path, backup_path, PG_BLACK_LIST);
+	if (root && pgdata && strcmp(root, pgdata) == 0 &&
+	    fileExists(path))
+	{
+		FILE *black_list_file = NULL;
+		black_list = parray_new();
+		black_list_file = fopen(path, "r");
+		if (black_list_file == NULL)
+			elog(ERROR_SYSTEM, _("can't open black_list: %s"), 
+				strerror(errno));
+		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
+		{
+			join_path_components(black_item, pgdata, buf);
+			if (black_item[strlen(black_item) - 1] == '\n')
+				black_item[strlen(black_item) - 1] = '\0';
+			if (black_item[0] == '#' || black_item[0] == '\0')
+				continue;
+			parray_append(black_list, black_item);
+		}
+		fclose(black_list_file);
+		parray_qsort(black_list, BlackListCompare);
+		dir_list_file_internal(files, root, exclude, omit_symlink, add_root, black_list);
+	}
+	else
+		dir_list_file_internal(files, root, exclude, omit_symlink, add_root, NULL);
+}
+
+void
+dir_list_file_internal(parray *files, const char *root, const char *exclude[],
+			bool omit_symlink, bool add_root, parray *black_list)
+{
 	pgFile *file;
 
 	file = pgFileNew(root, omit_symlink);
 	if (file == NULL)
 		return;
+
+	/* skip if the file is in black_list defined by user */
+	if (black_list && parray_bsearch(black_list, root, BlackListCompare))
+	{
+		/* found in black_list. skip this item */
+		return;
+	}
 
 	if (add_root)
 		parray_append(files, file);
@@ -335,7 +385,7 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 				continue;
 
 			join_path_components(child, file->path, dent->d_name);
-			dir_list_file(files, child, exclude, omit_symlink, true);
+			dir_list_file_internal(files, child, exclude, omit_symlink, true, black_list);
 		}
 		if (errno && errno != ENOENT)
 		{

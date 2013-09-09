@@ -2,7 +2,7 @@
  *
  * delete.c: delete backup files.
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -13,7 +13,6 @@ static int pgBackupDeleteFiles(pgBackup *backup);
 static bool checkIfDeletable(pgBackup *backup);
 
 int
-//do_delete(pgBackupRange *range)
 do_delete(pgBackupRange *range, bool force)
 {
 	int		i;

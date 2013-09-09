@@ -2,7 +2,7 @@
  *
  * backup.c: backup DB cluster, archived WAL, serverlog.
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -33,20 +33,22 @@ static void delete_old_files(const char *root, parray *files, int keep_files,
 							 int keep_days, int server_version, bool is_arclog);
 static void backup_files(const char *from_root, const char *to_root,
 	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress, const char *prefix);
-static parray *do_backup_database(parray *backup_list, bool smooth_checkpoint);
+static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
 static parray *do_backup_arclog(parray *backup_list);
 static parray *do_backup_srvlog(parray *backup_list);
+static void remove_stopinfo_from_backup_label(char *history_file, char *bkup_label);
+static void make_backup_label(parray *backup_list);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
 static void pg_switch_xlog(pgBackup *backup);
 static void get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
+static bool execute_restartpoint(pgBackupOption bkupopt);
 
 static void delete_arclog_link(void);
 static void delete_online_wal_backup(void);
 
-static bool fileExists(const char *path);
 static bool dirExists(const char *path);
 
 static void execute_freeze(void);
@@ -65,7 +67,7 @@ static void create_file_list(parray *files, const char *root, const char *prefix
  * Take a backup of database.
  */
 static parray *
-do_backup_database(parray *backup_list, bool smooth_checkpoint)
+do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 {
 	int			i;
 	parray	   *files;				/* backup file list from non-snapshot */
@@ -75,6 +77,11 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	char		label[1024];
 	XLogRecPtr *lsn = NULL;
 	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup list file */
+	bool		has_backup_label  = true;	/* flag if backup_label is there  */
+	bool		has_recovery_conf = false;	/* flag if recovery.conf is there */
+
+	/* repack the options */
+	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
 
 	if (!HAVE_DATABASE(&current)) {
 		/* check if arclog backup. if arclog backup and no suitable full backup, */
@@ -112,14 +119,34 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	snprintf(path, lengthof(path), "%s/backup_label", pgdata);
 	make_native_path(path);
 	if (!fileExists(path)) {
-		snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
-		make_native_path(path);
-		if (!fileExists(path)) {
-			if (verbose)
-				printf(_("backup_label does not exist, stop backup\n"));
+		has_backup_label = false;
+	}
+	snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
+	make_native_path(path);
+	if (fileExists(path)) {
+		has_recovery_conf = true;
+	}
+	if (!has_backup_label && !has_recovery_conf)
+	{
+		if (verbose)
+			printf(_("backup_label does not exist, stop backup\n"));
+		pg_stop_backup(NULL);
+		elog(ERROR_SYSTEM, _("backup_label does not exist in PGDATA."));
+	}
+	else if (has_recovery_conf)
+	{
+
+		if (!bkupopt.standby_host || !bkupopt.standby_port)
+		{
 			pg_stop_backup(NULL);
-			elog(ERROR_SYSTEM, _("backup_label does not exist in PGDATA."));
+			elog(ERROR_SYSTEM, _("could not specified standby host or port."));
 		}
+		if (!execute_restartpoint(bkupopt))
+		{
+			pg_stop_backup(NULL);
+			elog(ERROR_SYSTEM, _("could not execute restartpoint."));
+		}
+		current.is_from_standby = true;
 	}
 
 	/*
@@ -411,6 +438,11 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 		/* notify end of backup */
 		pg_stop_backup(&current);
 
+		/* if backup is from standby, making backup_label from	*/
+		/* backup.history file.					*/
+		if (current.is_from_standby)
+			make_backup_label(files);
+
 		/* create file list */
 		create_file_list(files, pgdata, NULL, false);
 	}
@@ -435,6 +467,25 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	}
 
 	return files;
+}
+
+static bool
+execute_restartpoint(pgBackupOption bkupopt)
+{
+	PGconn *sby_conn = NULL;
+	const char *tmp_host;
+	const char *tmp_port;
+	tmp_host = pgut_get_host();
+	tmp_port = pgut_get_port();
+	pgut_set_host(bkupopt.standby_host);
+	pgut_set_port(bkupopt.standby_port);
+	sby_conn = reconnect_elevel(ERROR_PG_CONNECT);
+	if (!sby_conn)
+		return false;
+	command("CHECKPOINT", 0, NULL);
+	pgut_set_host(tmp_host);
+	pgut_set_port(tmp_port);
+	return true;
 }
 
 /*
@@ -653,13 +704,7 @@ do_backup_srvlog(parray *backup_list)
 }
 
 int
-do_backup(bool smooth_checkpoint,
-		  int keep_arclog_files,
-		  int keep_arclog_days,
-		  int keep_srvlog_files,
-		  int keep_srvlog_days,
-		  int keep_data_generations,
-		  int keep_data_days)
+do_backup(pgBackupOption bkupopt)
 {
 	parray *backup_list;
 	parray *files_database;
@@ -667,6 +712,14 @@ do_backup(bool smooth_checkpoint,
 	parray *files_srvlog;
 	int		server_version;
 	int		ret;
+
+	/* repack the necesary options */
+	int	keep_arclog_files = bkupopt.keep_arclog_files;
+	int	keep_arclog_days  = bkupopt.keep_arclog_days;
+	int	keep_srvlog_files = bkupopt.keep_srvlog_files;
+	int	keep_srvlog_days  = bkupopt.keep_srvlog_days;
+	int	keep_data_generations = bkupopt.keep_data_generations;
+	int	keep_data_days        = bkupopt.keep_data_days;
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
@@ -731,8 +784,9 @@ do_backup(bool smooth_checkpoint,
 	current.write_bytes = 0;		/* write_bytes is valid always */
 	current.block_size = BLCKSZ;
 	current.wal_block_size = XLOG_BLCKSZ;
-current.recovery_xid = 0;
-current.recovery_time = (time_t) 0;
+	current.recovery_xid = 0;
+	current.recovery_time = (time_t) 0;
+	current.is_from_standby = false;
 
 	/* create backup directory and backup.ini */
 	if (!check)
@@ -754,7 +808,7 @@ current.recovery_time = (time_t) 0;
 	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
-	files_database = do_backup_database(backup_list, smooth_checkpoint);
+	files_database = do_backup_database(backup_list, bkupopt);
 
 	/* backup archived WAL */
 	files_arclog = do_backup_arclog(backup_list);
@@ -820,6 +874,80 @@ current.recovery_time = (time_t) 0;
 	catalog_unlock();
 
 	return 0;
+}
+
+void
+remove_stopinfo_from_backup_label(char *history_file, char *bkup_label)
+{
+	FILE	*read;
+	FILE	*write;
+	char	buf[MAXPGPATH * 2];
+
+	if ((read  = fopen(history_file, "r")) == NULL)
+		elog(ERROR_SYSTEM,
+			_("can't open backup history file for standby backup."));
+	if ((write = fopen(bkup_label, "w")) == NULL)
+		elog(ERROR_SYSTEM,
+			_("can't open backup_label file for standby backup."));
+	while (fgets(buf, lengthof(buf), read) != NULL)
+	{
+		if (strstr(buf, "STOP") - buf == 0)
+			continue;
+		fputs(buf, write);
+	}
+	fclose(write);
+	fclose(read);
+}
+
+/*
+ *  creating backup_label from backup.history for standby backup.
+ */
+void
+make_backup_label(parray *backup_list)
+{
+	char dest_path[MAXPGPATH];
+	char src_bkup_history_file[MAXPGPATH];
+	char dst_bkup_label_file[MAXPGPATH];
+	char original_bkup_label_file[MAXPGPATH];
+	parray *bkuped_arc_files = NULL;
+	int i;
+
+	pgBackupGetPath(&current, dest_path, lengthof(dest_path), DATABASE_DIR);
+	bkuped_arc_files = parray_new();
+	dir_list_file(bkuped_arc_files, arclog_path, NULL, true, false);
+
+	for (i = parray_num(bkuped_arc_files) - 1; i >= 0; i--)
+	{
+		char *current_arc_fname;
+		pgFile *current_arc_file;
+
+		current_arc_file = (pgFile *) parray_get(bkuped_arc_files, i);
+		current_arc_fname = last_dir_separator(current_arc_file->path) + 1;
+
+		if(strlen(current_arc_fname) <= 24) continue;
+
+		copy_file(arclog_path, dest_path, current_arc_file, NO_COMPRESSION);
+		join_path_components(src_bkup_history_file, dest_path, current_arc_fname);
+		join_path_components(dst_bkup_label_file, dest_path, PG_BACKUP_LABEL_FILE);
+		join_path_components(original_bkup_label_file, pgdata, PG_BACKUP_LABEL_FILE);
+		remove_stopinfo_from_backup_label(src_bkup_history_file, dst_bkup_label_file);
+
+		dir_list_file(backup_list, dst_bkup_label_file, NULL, false, true);
+		for (i = 0; i < parray_num(backup_list); i++)
+		{
+			pgFile *file = (pgFile *)parray_get(backup_list, i);
+			if (strcmp(file->path, dst_bkup_label_file) == 0)
+			{
+				struct stat st;
+				stat(dst_bkup_label_file, &st);
+				file->write_size = st.st_size;
+				file->crc        = pgFileGetCRC(file);
+				strcpy(file->path, original_bkup_label_file);
+			}
+		}
+		parray_qsort(backup_list, pgFileComparePath);
+		break;
+	}
 }
 
 /*
@@ -1030,7 +1158,7 @@ get_xid(PGresult *res, uint32 *xid)
 /*
  * Return true if the path is a existing regular file.
  */
-static bool
+bool
 fileExists(const char *path)
 {
 	struct stat buf;

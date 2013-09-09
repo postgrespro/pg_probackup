@@ -2,7 +2,7 @@
  *
  * pg_rman.c: Backup/Recovery manager for PostgreSQL.
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
@@ -14,7 +14,7 @@
 #include <time.h>
 #include <sys/stat.h>
 
-const char *PROGRAM_VERSION	= "1.2.5";
+const char *PROGRAM_VERSION	= "1.2.6";
 const char *PROGRAM_URL		= "http://code.google.com/p/pg-rman/";
 const char *PROGRAM_EMAIL	= "http://code.google.com/p/pg-rman/issues/list";
 
@@ -39,12 +39,15 @@ static int		keep_srvlog_files = KEEP_INFINITE;
 static int		keep_srvlog_days = KEEP_INFINITE;
 static int		keep_data_generations = KEEP_INFINITE;
 static int		keep_data_days = KEEP_INFINITE;
+static char		*standby_host = NULL;
+static char		*standby_port = NULL;
 
 /* restore configuration */
 static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
+static bool		is_hard_copy = false;
 
 /* delete configuration */
 static bool		force;
@@ -70,6 +73,8 @@ static pgut_option options[] =
 	{ 'b', 's', "with-serverlog"	, &current.with_serverlog	, SOURCE_ENV },
 	{ 'b', 'Z', "compress-data"		, &current.compress_data	, SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint"	, &smooth_checkpoint		, SOURCE_ENV },
+	{ 's', 12, "standby-host"	, &standby_host		, SOURCE_ENV },
+	{ 's', 13, "standby-port"	, &standby_port		, SOURCE_ENV },
 	/* delete options */
 	{ 'b', 'f', "force"	, &force		, SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
@@ -84,6 +89,7 @@ static pgut_option options[] =
 	{ 's',  8, "recovery-target-xid"		, &target_xid		, SOURCE_ENV },
 	{ 's',  9, "recovery-target-inclusive"	, &target_inclusive	, SOURCE_ENV },
 	{ 'u', 10, "recovery-target-timeline"	, &target_tli		, SOURCE_ENV },
+	{ 'b', 11, "hard-copy"	, &is_hard_copy		, SOURCE_ENV },
 	/* catalog options */
 	{ 'b', 'a', "show-all"		, &show_all },
 	{ 0 }
@@ -183,19 +189,28 @@ main(int argc, char *argv[])
 	if (pg_strcasecmp(cmd, "init") == 0)
 		return do_init();
 	else if (pg_strcasecmp(cmd, "backup") == 0)
-		return do_backup(smooth_checkpoint,
-						 keep_arclog_files, keep_arclog_days,
-						 keep_srvlog_files, keep_srvlog_days,
-						 keep_data_generations, keep_data_days);
+	{
+		pgBackupOption bkupopt;
+		bkupopt.smooth_checkpoint	= smooth_checkpoint;
+		bkupopt.keep_arclog_files	= keep_arclog_files;
+		bkupopt.keep_arclog_days	= keep_arclog_days;
+		bkupopt.keep_srvlog_files	= keep_srvlog_files;
+		bkupopt.keep_srvlog_days	= keep_srvlog_days;
+		bkupopt.keep_data_generations	= keep_data_generations;
+		bkupopt.keep_data_days		= keep_data_days;
+		bkupopt.standby_host		= standby_host;
+		bkupopt.standby_port		= standby_port;
+		return do_backup(bkupopt);
+	}
 	else if (pg_strcasecmp(cmd, "restore") == 0){
-		return do_restore(target_time, target_xid, target_inclusive, target_tli);
+		return do_restore(target_time, target_xid,
+					target_inclusive, target_tli, is_hard_copy);
 	}
 	else if (pg_strcasecmp(cmd, "show") == 0)
 		return do_show(&range, show_timeline, show_all);
 	else if (pg_strcasecmp(cmd, "validate") == 0)
 		return do_validate(&range);
 	else if (pg_strcasecmp(cmd, "delete") == 0)
-//		return do_delete(&range);
 		return do_delete(&range, force);
 	else
 		elog(ERROR_ARGS, "invalid command \"%s\"", cmd);
@@ -236,11 +251,14 @@ pgut_help(bool details)
 	printf(_("  --keep-arclog-days=DAY    keep archived WAL modified in DAY days\n"));
 	printf(_("  --keep-srvlog-files=NUM   keep NUM of serverlogs\n"));
 	printf(_("  --keep-srvlog-days=DAY    keep serverlog modified in DAY days\n"));
+	printf(_("  --standby-host=HOSTNAME   standby host when taking backup from standby\n"));
+	printf(_("  --standby-port=PORT       standby port when taking backup from standby\n"));
 	printf(_("\nRestore options:\n"));
 	printf(_("  --recovery-target-time    time stamp up to which recovery will proceed\n"));
 	printf(_("  --recovery-target-xid     transaction ID up to which recovery will proceed\n"));
 	printf(_("  --recovery-target-inclusive whether we stop just after the recovery target\n"));
 	printf(_("  --recovery-target-timeline  recovering into a particular timeline\n"));
+	printf(_("  --hard-copy                 copying archivelog not symbolic link\n"));
 	printf(_("\nCatalog options:\n"));
 	printf(_("  -a, --show-all            show deleted backup too\n"));
 }
