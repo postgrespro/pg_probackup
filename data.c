@@ -265,7 +265,7 @@ parse_page(const DataPage *page, int server_version,
 			return true;
 		}
 	}
-	
+
 	*offset = *length = 0;
 	return false;
 }
@@ -382,7 +382,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		file->read_size += read_len;
 
 		/* if the page has not been modified since last backup, skip it */
-		if (lsn && !XLogRecPtrIsInvalid(page_lsn) && XLByteLT(page_lsn, *lsn))
+		if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
 			continue;
 
 		upper_offset = header.hole_offset + header.hole_length;

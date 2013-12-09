@@ -352,10 +352,12 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 
 	fprintf(out, "# result\n");
 	fprintf(out, "TIMELINEID=%d\n", backup->tli);
-	fprintf(out, "START_LSN=%x/%08x\n", backup->start_lsn.xlogid,
-		backup->start_lsn.xrecoff);
-	fprintf(out, "STOP_LSN=%x/%08x\n", backup->stop_lsn.xlogid,
-		backup->stop_lsn.xrecoff);
+	fprintf(out, "START_LSN=%x/%08x\n",
+			(uint32) (backup->start_lsn >> 32),
+			(uint32) backup->start_lsn);
+	fprintf(out, "STOP_LSN=%x/%08x\n",
+			(uint32) (backup->stop_lsn >> 32),
+			(uint32) backup->stop_lsn);
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
 	fprintf(out, "START_TIME='%s'\n", timestamp);
@@ -491,9 +493,11 @@ catalog_read_ini(const char *path)
 
 	if (start_lsn)
 	{
-		XLogRecPtr lsn;
-		if (sscanf(start_lsn, "%X/%X", &lsn.xlogid, &lsn.xrecoff) == 2)
-			backup->start_lsn = lsn;
+		uint32 xlogid;
+		uint32 xrecoff;
+
+		if (sscanf(start_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
+			backup->start_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
 			elog(WARNING, _("invalid START_LSN \"%s\""), start_lsn);
 		free(start_lsn);
@@ -501,9 +505,11 @@ catalog_read_ini(const char *path)
 
 	if (stop_lsn)
 	{
-		XLogRecPtr lsn;
-		if (sscanf(stop_lsn, "%X/%X", &lsn.xlogid, &lsn.xrecoff) == 2)
-			backup->stop_lsn = lsn;
+		uint32 xlogid;
+		uint32 xrecoff;
+
+		if (sscanf(stop_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
+			backup->stop_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
 			elog(WARNING, _("invalid STOP_LSN \"%s\""), stop_lsn);
 		free(stop_lsn);
@@ -609,10 +615,8 @@ catalog_init_config(pgBackup *backup)
 	backup->compress_data = false;
 	backup->status = BACKUP_STATUS_INVALID;
 	backup->tli = 0;
-	backup->start_lsn.xlogid = 0;
-	backup->start_lsn.xrecoff = 0;
-	backup->stop_lsn.xlogid = 0;
-	backup->stop_lsn.xrecoff = 0;
+	backup->start_lsn = 0;
+	backup->stop_lsn = 0;
 	backup->start_time = (time_t) 0;
 	backup->end_time = (time_t) 0;
 	backup->recovery_xid = 0;

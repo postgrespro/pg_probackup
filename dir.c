@@ -238,7 +238,7 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 		black_list = parray_new();
 		black_list_file = fopen(path, "r");
 		if (black_list_file == NULL)
-			elog(ERROR_SYSTEM, _("can't open black_list: %s"), 
+			elog(ERROR_SYSTEM, _("can't open black_list: %s"),
 				strerror(errno));
 		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
 		{
@@ -296,11 +296,9 @@ dir_list_file_internal(parray *files, const char *root, const char *exclude[],
 		if (linked[0] != '/')
 		{
 			char	dname[MAXPGPATH];
-			char   *dnamep;
 			char	absolute[MAXPGPATH];
 
 			strncpy(dname, file->path, lengthof(dname));
-			dnamep = dirname(dname);
 			join_path_components(absolute, dname, linked);
 			file = pgFileNew(absolute, omit_symlink);
 		}

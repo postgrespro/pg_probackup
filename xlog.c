@@ -113,12 +113,17 @@ bool
 xlog_logfname2lsn(const char *logfname, XLogRecPtr *lsn)
 {
 	uint32 tli;
+	uint32 xlogid;
+	uint32 xrecoff;
 
 	if (sscanf(logfname, "%08X%08X%08X",
-			&tli, &lsn->xlogid, &lsn->xrecoff) != 3)
+			&tli, &xlogid, &xrecoff) != 3)
 		return false;
 
-	lsn->xrecoff *= XLogSegSize;
+	xrecoff *= XLogSegSize;
+
+	/* Finish calculation of LSN */
+	*lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 	return true;
 }
 
@@ -129,5 +134,6 @@ void
 xlog_fname(char *fname, size_t len, TimeLineID tli, XLogRecPtr *lsn)
 {
 	snprintf(fname, len, "%08X%08X%08X", tli,
-		lsn->xlogid, lsn->xrecoff / XLogSegSize);
+			 (uint32) (*lsn / XLogSegSize),
+			 (uint32) (*lsn % XLogSegSize));
 }

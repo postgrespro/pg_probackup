@@ -224,9 +224,11 @@ base_backup_found:
 	if (check)
 	{
 		pgBackup *backup = (pgBackup *) parray_get(backups, last_restored_index);
-		/* XLByteToSeg(xlrp, logId, logSeg) */
-		needId = backup->start_lsn.xlogid;
-		needSeg = backup->start_lsn.xrecoff / XLogSegSize;
+		uint32 xrecoff = (uint32) backup->start_lsn;
+		uint32 xlogid = (uint32) (backup->start_lsn >> 32);
+
+		needId = xlogid;
+		needSeg = xrecoff / XLogSegSize;
 	}
 
 	for (i = last_restored_index; i >= 0; i--)
@@ -296,7 +298,7 @@ base_backup_found:
 		elog(INFO, _("restore complete. Recovery starts automatically when the PostgreSQL server is started."));
 
 	return 0;
-}	
+}
 
 /*
  * Validate and restore backup.
@@ -780,8 +782,7 @@ readTimeLineHistory(TimeLineID targetTLI)
 
 		timeline = pgut_new(pgTimeLine);
 		timeline->tli = 0;
-		timeline->end.xlogid = 0;
-		timeline->end.xrecoff = 0;
+		timeline->end = 0;
 
 		/* expect a numeric timeline ID as first field of line */
 		timeline->tli = (TimeLineID) strtoul(ptr, &endptr, 0);
@@ -824,8 +825,8 @@ readTimeLineHistory(TimeLineID targetTLI)
 	/* append target timeline */
 	timeline = pgut_new(pgTimeLine);
 	timeline->tli = targetTLI;
-	timeline->end.xlogid = (uint32) -1; /* lsn in target timelie is valid */
-	timeline->end.xrecoff = (uint32) -1; /* lsn target timelie is valid */
+	/* lsn in target timeline is valid */
+	timeline->end = (uint32) (-1UL << 32) | -1UL;
 	parray_insert(result, 0, timeline);
 
 	/* dump timeline branches for debug */
@@ -836,7 +837,9 @@ readTimeLineHistory(TimeLineID targetTLI)
 		{
 			pgTimeLine *timeline = parray_get(result, i);
 			elog(LOG, "%s() result[%d]: %08X/%08X/%08X", __FUNCTION__, i,
-				timeline->tli, timeline->end.xlogid, timeline->end.xrecoff);
+				timeline->tli,
+				 (uint32) (timeline->end >> 32),
+				 (uint32) timeline->end);
 		}
 	}
 
@@ -873,7 +876,7 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 	{
 		pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
-				XLByteLT(backup->stop_lsn, timeline->end))
+			backup->stop_lsn < timeline->end)
 			return true;
 	}
 	return false;
@@ -977,8 +980,10 @@ print_backup_id(const pgBackup *backup)
 {
 	char timestamp[100];
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	printf(_("  %s (%X/%08X)\n"), timestamp, backup->stop_lsn.xlogid,
-		backup->stop_lsn.xrecoff);
+	printf(_("  %s (%X/%08X)\n"),
+		   timestamp,
+		   (uint32) (backup->stop_lsn >> 32),
+		   (uint32) backup->stop_lsn);
 }
 
 static void

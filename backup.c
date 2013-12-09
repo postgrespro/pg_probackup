@@ -206,7 +206,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 			 */
 			lsn = &prev_backup->start_lsn;
 			elog(LOG, _("backup only the page that there was of the update from LSN(%X/%08X).\n"),
-				lsn->xlogid, lsn->xrecoff);
+				 (uint32) (*lsn >> 32), (uint32) *lsn);
 		}
 	}
 
@@ -265,7 +265,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		 * and append TABLESPACE to the list backup from non-snapshot.
 		 * TABLESPACE name and oid is obtained by inquiring of the database.
 		 */
-		
+
 		reconnect();
 		tblspc_res = execute("SELECT spcname, oid FROM pg_tablespace WHERE "
 			"spcname NOT IN ('pg_default', 'pg_global') ORDER BY spcname ASC", 0, NULL);
@@ -446,7 +446,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		/* create file list */
 		create_file_list(files, pgdata, NULL, false);
 	}
-	
+
 	/* print summary of size of backup mode files */
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -518,7 +518,7 @@ do_backup_arclog(parray *backup_list)
 	current.read_arclog_bytes = 0;
 
 	/* switch xlog if database is not backed up */
-	if (current.stop_lsn.xrecoff == 0)
+	if ((uint32) current.stop_lsn == 0)
 		pg_switch_xlog(&current);
 
 	/*
@@ -771,10 +771,8 @@ do_backup(pgBackupOption bkupopt)
 	/* initialize backup result */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.tli = 0;		/* get from result of pg_start_backup() */
-	current.start_lsn.xlogid = 0;
-	current.start_lsn.xrecoff = 0;
-	current.stop_lsn.xlogid = 0;
-	current.stop_lsn.xrecoff = 0;
+	current.start_lsn = 0;
+	current.stop_lsn = 0;
 	current.start_time = time(NULL);
 	current.end_time = (time_t) 0;
 	current.total_data_bytes = BYTES_INVALID;
@@ -816,7 +814,7 @@ do_backup(pgBackupOption bkupopt)
 	/* backup serverlog */
 	files_srvlog = do_backup_srvlog(backup_list);
 	pgut_atexit_pop(backup_cleanup, NULL);
-	
+
 	/* update backup status to DONE */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
@@ -1052,8 +1050,10 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	if (backup != NULL)
 	{
 		get_lsn(res, &backup->tli, &backup->stop_lsn);
-		elog(LOG, _("%s(): tli=%X lsn=%X/%08X"), __FUNCTION__, backup->tli,
-			backup->stop_lsn.xlogid, backup->stop_lsn.xrecoff);
+		elog(LOG, _("%s(): tli=%X lsn=%X/%08X"),
+			 __FUNCTION__, backup->tli,
+			 (uint32) (backup->stop_lsn >> 32),
+			 (uint32) backup->stop_lsn);
 	}
 
 	/* get filename from the result of pg_xlogfile_name_offset() */
@@ -1114,6 +1114,8 @@ static void
 get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn)
 {
 	uint32 off_upper;
+	uint32 xlogid;
+	uint32 xrecoff;
 
 	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 2)
 		elog(ERROR_PG_COMMAND,
@@ -1122,8 +1124,8 @@ get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn)
 
 	/* get TimeLineID, LSN from result of pg_stop_backup() */
 	if (sscanf(PQgetvalue(res, 0, 0), "%08X%08X%08X",
-			timeline, &lsn->xlogid, &off_upper) != 3 ||
-		sscanf(PQgetvalue(res, 0, 1), "%u", &lsn->xrecoff) != 1)
+			timeline, &xlogid, &off_upper) != 3 ||
+		sscanf(PQgetvalue(res, 0, 1), "%u", &xrecoff) != 1)
 	{
 		elog(ERROR_PG_COMMAND,
 			_("result of pg_xlogfile_name_offset() is invalid: %s"),
@@ -1132,7 +1134,10 @@ get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn)
 
 	elog(LOG, "%s():%s %s",
 		__FUNCTION__, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1));
-	lsn->xrecoff += off_upper << 24;
+	xrecoff += off_upper << 24;
+
+	/* Set LSN correctly */
+	*lsn = (XLogRecPtr) (xlogid << 32) | xrecoff;
 }
 
 /*
