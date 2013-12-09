@@ -343,7 +343,7 @@ extern bool is_pg_running(void);
 	} while (0)
 
 #define MAXFNAMELEN		64
-#define XLogFileName(fname, tli, log, seg)	\
+#define XLogFileNameLong(fname, tli, log, seg)	\
 	snprintf(fname, MAXFNAMELEN, "%08X%08X%08X", tli, log, seg)
 
 #endif /* PG_RMAN_H */

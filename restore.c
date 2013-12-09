@@ -1004,7 +1004,7 @@ search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timel
 		{
 			pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
 
-			XLogFileName(xlogfname, timeline->tli, *needId, *needSeg);
+			XLogFileNameLong(xlogfname, timeline->tli, *needId, *needSeg);
 			join_path_components(xlogpath, path, xlogfname);
 
 			if (stat(xlogpath, &st) == 0)
