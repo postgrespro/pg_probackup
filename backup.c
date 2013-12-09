@@ -1137,7 +1137,7 @@ get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn)
 	xrecoff += off_upper << 24;
 
 	/* Set LSN correctly */
-	*lsn = (XLogRecPtr) (xlogid << 32) | xrecoff;
+	*lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 }
 
 /*
