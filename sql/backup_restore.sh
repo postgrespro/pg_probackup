@@ -106,7 +106,7 @@ pg_ctl start -w -t 3600 > /dev/null 2>&1
 
 # create tablespace and database for pgbench
 mkdir -p $TBLSPC_PATH/pgbench
-psql -p $TEST_PGPORT postgres <<EOF
+psql --no-psqlrc -p $TEST_PGPORT postgres <<EOF
 CREATE TABLESPACE pgbench LOCATION '$TBLSPC_PATH/pgbench';
 CREATE DATABASE pgbench TABLESPACE = pgbench;
 EOF
@@ -125,13 +125,13 @@ grep -c DELETED $BASE_PATH/results/log_show_d_1
 pgbench -p $TEST_PGPORT -i -s $SCALE pgbench > $BASE_PATH/results/pgbench.log 2>&1
 
 echo "full database backup"
-psql -p $TEST_PGPORT postgres -c "checkpoint"
+psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 #pg_rman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
 pg_rman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
 echo "incremental database backup"
-psql -p $TEST_PGPORT postgres -c "checkpoint"
+psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 #pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
 pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
 
@@ -139,8 +139,8 @@ pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/result
 pg_rman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate1 2>&1
 pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show0 2>&1
 pg_dumpall > $BASE_PATH/results/dump_before_rtx.sql
-target_xid=`psql -p $TEST_PGPORT pgbench -tAq -c "INSERT INTO pgbench_history VALUES (1) RETURNING(xmin);"`
-psql -p $TEST_PGPORT postgres -c "checkpoint"
+target_xid=`psql --no-psqlrc -p $TEST_PGPORT pgbench -tAq -c "INSERT INTO pgbench_history VALUES (1) RETURNING(xmin);"`
+psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 #pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
 pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
 
@@ -217,7 +217,7 @@ diff $BASE_PATH/results/dump_before.sql $BASE_PATH/results/dump_after.sql
 # take a backup and delete backed up online files
 # incrementa backup can't find last full backup because new timeline started.
 echo "full database backup after recovery"
-psql -p $TEST_PGPORT postgres -c "checkpoint"
+psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 #pg_rman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 pg_rman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 
@@ -279,4 +279,3 @@ pg_rman -p $TEST_PGPORT show timeline `date +%Y` -a --verbose -d postgres > $BAS
 
 # cleanup
 pg_ctl stop -m immediate > /dev/null 2>&1
-
