@@ -109,24 +109,6 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 	return true;
 }
 
-bool
-xlog_logfname2lsn(const char *logfname, XLogRecPtr *lsn)
-{
-	uint32 tli;
-	uint32 xlogid;
-	uint32 xrecoff;
-
-	if (sscanf(logfname, "%08X%08X%08X",
-			&tli, &xlogid, &xrecoff) != 3)
-		return false;
-
-	xrecoff *= XLogSegSize;
-
-	/* Finish calculation of LSN */
-	*lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
-	return true;
-}
-
 /*
  * based on XLogFileName() in xlog_internal.h
  */

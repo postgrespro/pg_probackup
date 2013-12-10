@@ -306,7 +306,6 @@ extern int pgFileCompareMtimeDesc(const void *f1, const void *f2);
 
 /* in xlog.c */
 extern bool xlog_is_complete_wal(const pgFile *file, int server_version);
-extern bool xlog_logfname2lsn(const char *logfname, XLogRecPtr *lsn);
 extern void xlog_fname(char *fname, size_t len, TimeLineID tli, XLogRecPtr *lsn);
 
 /* in data.c */

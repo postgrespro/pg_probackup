@@ -768,28 +768,41 @@ readTimeLineHistory(TimeLineID targetTLI)
 	 */
 	while (fd && fgets(fline, sizeof(fline), fd) != NULL)
 	{
-		/* skip leading whitespaces and check for # comment */
 		char	   *ptr;
-		char	   *endptr;
+		TimeLineID	tli;
+		uint32		switchpoint_hi;
+		uint32		switchpoint_lo;
+		int			nfields;
 
 		for (ptr = fline; *ptr; ptr++)
 		{
-			if (!IsSpace(*ptr))
+			if (!isspace((unsigned char) *ptr))
 				break;
 		}
 		if (*ptr == '\0' || *ptr == '#')
 			continue;
+
+		/* Parse one entry... */
+		nfields = sscanf(fline, "%u\t%X/%X", &tli, &switchpoint_hi, &switchpoint_lo);
 
 		timeline = pgut_new(pgTimeLine);
 		timeline->tli = 0;
 		timeline->end = 0;
 
 		/* expect a numeric timeline ID as first field of line */
-		timeline->tli = (TimeLineID) strtoul(ptr, &endptr, 0);
-		if (endptr == ptr)
+		timeline->tli = tli;
+
+		if (nfields < 1)
+		{
+			/* expect a numeric timeline ID as first field of line */
 			elog(ERROR_CORRUPTED,
-					_("syntax error(timeline ID) in history file: %s"),
-					fline);
+				 _("syntax error in history file: %s. Expected a numeric timeline ID."),
+				   fline);
+		}
+		if (nfields != 3)
+			elog(ERROR_CORRUPTED,
+				 _("syntax error in history file: %s. Expected a transaction log switchpoint location."),
+				   fline);
 
 		if (last_timeline && timeline->tli <= last_timeline->tli)
 			elog(ERROR_CORRUPTED,
@@ -799,20 +812,9 @@ readTimeLineHistory(TimeLineID targetTLI)
 		parray_insert(result, 0, timeline);
 		last_timeline = timeline;
 
-		/* parse end point(logfname, xid) in the timeline */
-		for (ptr = endptr; *ptr; ptr++)
-		{
-			if (!IsSpace(*ptr))
-				break;
-		}
-		if (*ptr == '\0' || *ptr == '#')
-			elog(ERROR_CORRUPTED,
-			   _("End logfile must follow Timeline ID."));
-
-		if (!xlog_logfname2lsn(ptr, &timeline->end))
-			elog(ERROR_CORRUPTED,
-					_("syntax error(endfname) in history file: %s"), fline);
-		/* we ignore the remainder of each line */
+		/* Calculate the end lsn finally */
+		timeline->end = (XLogRecPtr)
+			((uint64) switchpoint_hi << 32) | switchpoint_lo;
 	}
 
 	if (fd)
