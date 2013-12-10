@@ -170,7 +170,7 @@ pg_rman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate2 2>&1
 pg_rman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_1 2>&1
 
 # restore with pg_rman
-CUR_TLI=`pg_controldata | grep TimeLineID | awk '{print $4}'`
+CUR_TLI=`pg_controldata | grep "Latest checkpoint's TimeLineID:" | awk '{print $4}'`
 pg_rman restore -! --verbose > $BASE_PATH/results/log_restore1_1 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore1_1 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore1_1 | awk '{print $5}'`
@@ -193,7 +193,7 @@ pg_ctl stop -m immediate > /dev/null 2>&1
 # restore check with pg_rman
 pg_rman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_2 2>&1
 
-CUR_TLI=`pg_controldata | grep TimeLineID | awk '{print $4}'`
+CUR_TLI=`pg_controldata | grep "Latest checkpoint's TimeLineID:" | awk '{print $4}'`
 pg_rman restore -! --verbose > $BASE_PATH/results/log_restore1_2 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore1_2 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore1_2 | awk '{print $5}'`
@@ -241,7 +241,7 @@ pg_ctl stop -m immediate > /dev/null 2>&1
 # restore check with pg_rman
 pg_rman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_3 2>&1
 
-CUR_TLI=`pg_controldata | grep TimeLineID | awk '{print $4}'`
+CUR_TLI=`pg_controldata | grep "Latest checkpoint's TimeLineID:" | awk '{print $4}'`
 pg_rman restore -! --recovery-target-xid $target_xid --recovery-target-inclusive false --verbose > $BASE_PATH/results/log_restore2 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore2 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore2 | awk '{print $5}'`
