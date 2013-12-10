@@ -174,7 +174,7 @@ CUR_TLI=`pg_controldata | grep TimeLineID | awk '{print $4}'`
 pg_rman restore -! --verbose > $BASE_PATH/results/log_restore1_1 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore1_1 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore1_1 | awk '{print $5}'`
-if [ "$CUR_TLI" != "$CUR_TLI_R" -o "$CUR_TLI" != "$CUR_TLI_R" ]; then
+if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
 	echo "failed: bad timeline ID" CUR_TLI=$CUR_TLI CUR_TLI_R=$CUR_TLI_R
 fi
 
@@ -197,7 +197,7 @@ CUR_TLI=`pg_controldata | grep TimeLineID | awk '{print $4}'`
 pg_rman restore -! --verbose > $BASE_PATH/results/log_restore1_2 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore1_2 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore1_2 | awk '{print $5}'`
-if [ "$CUR_TLI" != "$CUR_TLI_R" -o "$CUR_TLI" != "$CUR_TLI_R" ]; then
+if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
 	echo "failed: bad timeline ID" CUR_TLI=$CUR_TLI CUR_TLI_R=$CUR_TLI_R
 fi
 
@@ -245,7 +245,7 @@ CUR_TLI=`pg_controldata | grep TimeLineID | awk '{print $4}'`
 pg_rman restore -! --recovery-target-xid $target_xid --recovery-target-inclusive false --verbose > $BASE_PATH/results/log_restore2 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore2 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore2 | awk '{print $5}'`
-if [ "$CUR_TLI" != "$CUR_TLI_R" -o "$CUR_TLI" != "$CUR_TLI_R" ]; then
+if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
 	echo "failed: bad timeline ID" CUR_TLI=$CUR_TLI CUR_TLI_R=$CUR_TLI_R
 fi
 echo "# of recovery target option in recovery.conf"
