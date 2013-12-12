@@ -5,6 +5,7 @@ SRCS = \
 	data.c \
 	delete.c \
 	dir.c \
+	fetch.c \
 	init.c \
 	parray.c \
 	pg_rman.c \

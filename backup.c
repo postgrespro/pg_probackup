@@ -17,6 +17,7 @@
 #include <dirent.h>
 #include <time.h>
 
+#include "catalog/pg_control.h"
 #include "libpq/pqsignal.h"
 #include "pgut/pgut-port.h"
 
@@ -48,7 +49,7 @@ static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
 static void pg_switch_xlog(pgBackup *backup);
-static void get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn);
+static void get_lsn(PGresult *res, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
 static bool execute_restartpoint(pgBackupOption bkupopt);
 
@@ -60,6 +61,7 @@ static bool dirExists(const char *path);
 static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
 static int strCompare(const void *str1, const void *str2);
 static void create_file_list(parray *files, const char *root, const char *prefix, bool is_append);
+static TimeLineID get_current_timeline(void);
 
 /*
  * Take a backup of database.
@@ -107,6 +109,13 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	/* initialize size summary */
 	current.total_data_bytes = 0;
 	current.read_data_bytes = 0;
+
+	/*
+	 * Obtain current timeline by scanning control file, theh LSN
+	 * obtained at output of pg_start_backup or pg_stop_backup does
+	 * not contain this information.
+	 */
+	current.tli = get_current_timeline();
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
@@ -492,8 +501,8 @@ do_backup_arclog(parray *backup_list)
 		pg_switch_xlog(&current);
 
 	/*
-	 * To take incremental backup, the file list of the last completed database
-	 * backup is needed.
+	 * To take incremental backup, the file list of the last completed
+	 * database backup is needed.
 	 */
 	prev_backup = catalog_get_last_arclog_backup(backup_list);
 	if (verbose && prev_backup == NULL)
@@ -985,10 +994,10 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
-	res = execute("SELECT * from pg_xlogfile_name_offset(pg_start_backup($1, $2))", 2, params);
+	res = execute("SELECT pg_start_backup($1, $2)", 2, params);
 
 	if (backup != NULL)
-		get_lsn(res, &backup->tli, &backup->start_lsn);
+		get_lsn(res, &backup->start_lsn);
 	PQclear(res);
 	disconnect();
 }
@@ -998,22 +1007,42 @@ wait_for_archive(pgBackup *backup, const char *sql)
 {
 	PGresult	   *res;
 	char			ready_path[MAXPGPATH];
+	char			file_name[MAXFNAMELEN];
 	int				try_count;
+	XLogRecPtr		lsn;
+	TimeLineID		tli;
 
 	reconnect();
 	res = execute(sql, 0, NULL);
+
+	/* Get LSN from execution result */
+	get_lsn(res, &lsn);
+
+	/*
+	 * Enforce TLI obtention if backup is not present as this code
+	 * path can be taken as a callback at exit.
+	 */
+	if (backup != NULL)
+		tli = backup->tli;
+	else
+		tli = get_current_timeline();
+
+	/* Fill in fields if backup exists */
 	if (backup != NULL)
 	{
-		get_lsn(res, &backup->tli, &backup->stop_lsn);
+		backup->stop_lsn = lsn;
 		elog(LOG, _("%s(): tli=%X lsn=%X/%08X"),
 			 __FUNCTION__, backup->tli,
 			 (uint32) (backup->stop_lsn >> 32),
 			 (uint32) backup->stop_lsn);
 	}
 
-	/* get filename from the result of pg_xlogfile_name_offset() */
+	/* As well as WAL file name */
+	XLogFileName(file_name, tli, lsn);
+
 	snprintf(ready_path, lengthof(ready_path),
-		"%s/pg_xlog/archive_status/%s.ready", pgdata, PQgetvalue(res, 0, 0));
+		"%s/pg_xlog/archive_status/%s.ready", pgdata,
+			 file_name);
 	elog(LOG, "%s() wait for %s", __FUNCTION__, ready_path);
 
 	PQclear(res);
@@ -1049,32 +1078,41 @@ static void
 pg_stop_backup(pgBackup *backup)
 {
 	wait_for_archive(backup,
-		"SELECT * FROM pg_xlogfile_name_offset(pg_stop_backup())");
+		"SELECT * FROM pg_stop_backup()");
 }
 
 /*
- * Force switch to a new transaction log file and update backup->tli.
+ * Force switch to a new transaction log file
  */
 static void
 pg_switch_xlog(pgBackup *backup)
 {
 	wait_for_archive(backup,
-		"SELECT * FROM pg_xlogfile_name_offset(pg_switch_xlog())");
+		"SELECT * FROM pg_switch_xlog())");
 }
 
 /*
- * Get TimeLineID and LSN from result of pg_xlogfile_name_offset().
+ * Get LSN from result of pg_start_backup() or pg_stop_backup().
  */
 static void
-get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn)
+get_lsn(PGresult *res, XLogRecPtr *lsn)
 {
-	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 2)
+	uint32	xlogid;
+	uint32	xrecoff;
+
+	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR_PG_COMMAND,
-			_("result of pg_xlogfile_name_offset() is invalid: %s"),
+			_("result of backup command is invalid: %s"),
 			PQerrorMessage(connection));
 
-	/* Extract timeline and LSN from result of pg_stop_backup() */
-	XLogFromFileName(PQgetvalue(res, 0, 0), timeline, lsn);
+	/*
+	 * Extract timeline and LSN from results of pg_stop_backup()
+	 * and friends.
+	 */
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+
+	/* Calculate LSN */
+	*lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 }
 
 /*
@@ -1597,4 +1635,28 @@ create_file_list(parray *files, const char *root, const char *prefix, bool is_ap
 		dir_print_file_list(fp, files, root, prefix);
 		fclose(fp);
 	}
+}
+
+/*
+ * Scan control file of given cluster at obtain the current timeline
+ * since last checkpoint that occurred on it.
+ */
+static TimeLineID
+get_current_timeline(void)
+{
+	char	   *buffer;
+	size_t		size;
+	ControlFileData control_file;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata, "global/pg_control", &size);
+
+	/* .. Then interpret it */
+    if (size != PG_CONTROL_SIZE)
+		elog(ERROR_CORRUPTED, "unexpected control file size %d, expected %d\n",
+			 (int) size, PG_CONTROL_SIZE);
+	memcpy(&control_file, buffer, sizeof(ControlFileData));
+
+	/* Finally return the timeline wanted */
+	return control_file.checkPointCopy.ThisTimeLineID;
 }

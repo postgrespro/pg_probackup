@@ -214,6 +214,13 @@ typedef enum CompressionMode
 #define JoinPathEnd(str, prefix) \
 	((strlen(str) <= strlen(prefix)) ? "" : str + strlen(prefix) + 1)
 
+/*
+ * Return timeline, xlog ID and record offset from an LSN of the type
+ * 0/B000188, usual result from pg_stop_backup() and friends.
+ */
+#define XLogDataFromLSN(data, xlogid, xrecoff)		\
+	sscanf(data, "%X/%X", xlogid, xrecoff)
+
 /* path configuration */
 extern char *backup_path;
 extern char *pgdata;
@@ -252,6 +259,11 @@ extern int do_show(pgBackupRange *range, bool show_all);
 /* in delete.c */
 extern int do_delete(pgBackupRange *range, bool force);
 extern void pgBackupDelete(int keep_generations, int keep_days);
+
+/* in fetch.c */
+extern char *slurpFile(const char *datadir,
+					   const char *path,
+					   size_t *filesize);
 
 /* in validate.c */
 extern int do_validate(pgBackupRange *range);
