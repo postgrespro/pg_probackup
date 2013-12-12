@@ -10,7 +10,6 @@
 #include "pg_rman.h"
 
 static void show_backup_list(FILE *out, parray *backup_list, bool show_all);
-static void show_timeline_backup_list(FILE *out, parray *backup_list, bool show_all);
 static void show_backup_detail(FILE *out, pgBackup *backup);
 
 /*
@@ -19,7 +18,7 @@ static void show_backup_detail(FILE *out, pgBackup *backup);
  * backup indicated by id.
  */
 int
-do_show(pgBackupRange *range, bool show_timeline, bool show_all)
+do_show(pgBackupRange *range, bool show_all)
 {
 	if (pgBackupRangeIsSingle(range))
 	{
@@ -49,10 +48,7 @@ do_show(pgBackupRange *range, bool show_timeline, bool show_all)
 			elog(ERROR_SYSTEM, _("can't process any more."));
 		}
 
-		if (!show_timeline)
-			show_backup_list(stdout, backup_list, show_all);
-		else
-			show_timeline_backup_list(stdout, backup_list, show_all);
+		show_backup_list(stdout, backup_list, show_all);
 
 		/* cleanup */
 		parray_walk(backup_list, pgBackupFree);
@@ -165,13 +161,15 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 	int i;
 
 	/* show header */
-	fputs("============================================================================\n", out);
-	fputs("Start                Time   Total    Data     WAL     Log  Backup   Status  \n", out);
-	fputs("============================================================================\n", out);
+	fputs("===========================================================================================================\n", out);
+	fputs("Start                Mode  Current TLI  Parent TLI  Time   Total    Data     WAL     Log  Backup   Status  \n", out);
+	fputs("===========================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup;
+		const char *modes[] = { "", "ARCH", "INCR", "FULL"};
+		TimeLineID  parent_tli;
 		char timestamp[20];
 		char duration[20] = "----";
 		char total_data_bytes_str[10] = "----";
@@ -206,45 +204,13 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		pretty_size(backup->write_bytes, write_bytes_str,
 				lengthof(write_bytes_str));
 
-		fprintf(out, "%-19s %5s  %6s  %6s  %6s  %6s  %6s   %s\n",
-			timestamp, duration,
-			total_data_bytes_str, read_data_bytes_str, read_arclog_bytes_str,
-			read_srvlog_bytes_str, write_bytes_str, status2str(backup->status));
-	}
-}
-
-static void
-show_timeline_backup_list(FILE *out, parray *backup_list, bool show_all)
-{
-	int		i;
-
-	/* show header */
-	fputs("============================================================\n", out);
-	fputs("Start                Mode  Current TLI  Parent TLI  Status  \n", out);
-	fputs("============================================================\n", out);
-
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		static const char *modes[] = { "", "ARCH", "INCR", "FULL"};
-
-		pgBackup *backup;
-		char timestamp[20];
-		TimeLineID	parent_tli;
-
-		backup = parray_get(backup_list, i);
-
-		/* skip deleted backup and serverlog backup */
-		if ((backup->status == BACKUP_STATUS_DELETED || !HAVE_ARCLOG(backup)) &&
-			!show_all)
-			continue;
-
-		time2iso(timestamp, lengthof(timestamp), backup->start_time);
-
+		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-19s  %-4s   %10d  %10d  %s\n",
-			timestamp, modes[backup->backup_mode], backup->tli, parent_tli,
-			status2str(backup->status));
+		fprintf(out, "%-19s  %-4s   %10d  %10d %5s  %6s  %6s  %6s  %6s  %6s   %s\n",
+				timestamp,  modes[backup->backup_mode], backup->tli, parent_tli, duration,
+			total_data_bytes_str, read_data_bytes_str, read_arclog_bytes_str,
+			read_srvlog_bytes_str, write_bytes_str, status2str(backup->status));
 	}
 }
 
