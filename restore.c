@@ -29,11 +29,15 @@ static pgRecoveryTarget *checkIfCreateRecoveryConf(const char *target_time,
 								 const char *target_inclusive);
 static parray * readTimeLineHistory(TimeLineID targetTLI);
 static bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
-static bool satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt);
+static bool satisfy_recovery_target(const pgBackup *backup,
+									const pgRecoveryTarget *rt);
 static TimeLineID get_current_timeline(void);
-static TimeLineID get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt);
+static TimeLineID get_fullbackup_timeline(parray *backups,
+										  const pgRecoveryTarget *rt);
 static void print_backup_id(const pgBackup *backup);
-static void search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timelines);
+static void search_next_wal(const char *path,
+							XLogRecPtr *need_lsn,
+							parray *timelines);
 
 int
 do_restore(const char *target_time,
@@ -53,9 +57,8 @@ do_restore(const char *target_time,
 	parray *files;
 	parray *timelines;
 	char timeline_dir[MAXPGPATH];
-	uint32 needId = 0;
-	uint32 needSeg = 0;
 	pgRecoveryTarget *rt = NULL;
+	XLogRecPtr need_lsn;
 
 	/* PGDATA and ARCLOG_PATH are always required */
 	if (pgdata == NULL)
@@ -224,11 +227,7 @@ base_backup_found:
 	if (check)
 	{
 		pgBackup *backup = (pgBackup *) parray_get(backups, last_restored_index);
-		uint32 xrecoff = (uint32) backup->start_lsn;
-		uint32 xlogid = (uint32) (backup->start_lsn >> 32);
-
-		needId = xlogid;
-		needSeg = xrecoff / XLogSegSize;
+		need_lsn = backup->start_lsn;
 	}
 
 	for (i = last_restored_index; i >= 0; i--)
@@ -253,7 +252,7 @@ base_backup_found:
 			char	xlogpath[MAXPGPATH];
 
 			pgBackupGetPath(backup, xlogpath, lengthof(xlogpath), ARCLOG_DIR);
-			search_next_wal(xlogpath, &needId, &needSeg, timelines);
+			search_next_wal(xlogpath, &need_lsn, timelines);
 		}
 	}
 
@@ -266,13 +265,13 @@ base_backup_found:
 		if (verbose)
 			printf(_("searching archived WAL...\n"));
 
-		search_next_wal(arclog_path, &needId, &needSeg, timelines);
+		search_next_wal(arclog_path, &need_lsn, timelines);
 
 		if (verbose)
 			printf(_("searching online WAL...\n"));
 
 		join_path_components(xlogpath, pgdata, PG_XLOG_DIR);
-		search_next_wal(xlogpath, &needId, &needSeg, timelines);
+		search_next_wal(xlogpath, &need_lsn, timelines);
 
 		if (verbose)
 			printf(_("all necessary files are found.\n"));
@@ -989,7 +988,7 @@ print_backup_id(const pgBackup *backup)
 }
 
 static void
-search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timelines)
+search_next_wal(const char *path, XLogRecPtr *need_lsn, parray *timelines)
 {
 	int		i;
 	int		j;
@@ -1006,7 +1005,7 @@ search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timel
 		{
 			pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
 
-			XLogFileNameLong(xlogfname, timeline->tli, *needId, *needSeg);
+			XLogFileName(xlogfname, timeline->tli, *need_lsn);
 			join_path_components(xlogpath, path, xlogfname);
 
 			if (stat(xlogpath, &st) == 0)
@@ -1035,7 +1034,8 @@ search_next_wal(const char *path, uint32 *needId, uint32 *needSeg, parray *timel
 			parray_remove(timelines, i + 1);
 		/* XXX: should we add a linebreak when we find a timeline? */
 
-		NextLogSeg(*needId, *needSeg);
+		/* Move to next xlog record */
+		(*need_lsn)++;
 	}
 }
 

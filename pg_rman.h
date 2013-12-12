@@ -318,19 +318,4 @@ extern void remove_not_digit(char *buf, size_t len, const char *str);
 /* in pgsql_src/pg_ctl.c */
 extern bool is_pg_running(void);
 
-#define NextLogSeg(logId, logSeg)	\
-	do { \
-		if ((logSeg) >= XLogSegmentsPerXLogId - 1) \
-		{ \
-			(logId)++; \
-			(logSeg) = 0; \
-		} \
-		else \
-			(logSeg)++; \
-	} while (0)
-
-#define MAXFNAMELEN		64
-#define XLogFileNameLong(fname, tli, log, seg)	\
-	snprintf(fname, MAXFNAMELEN, "%08X%08X%08X", tli, log, seg)
-
 #endif /* PG_RMAN_H */
