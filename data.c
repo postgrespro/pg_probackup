@@ -18,10 +18,6 @@
 #include "storage/block.h"
 #include "storage/bufpage.h"
 
-#if PG_VERSION_NUM < 80300
-#define XLogRecPtrIsInvalid(r)	((r).xrecoff == 0)
-#endif
-
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 
@@ -156,10 +152,6 @@ doInflate(z_stream *zp, size_t in_size, size_t out_size,void *inbuf,
 }
 #endif
 
-#define PG_PAGE_LAYOUT_VERSION_v80		2	/* 8.0 */
-#define PG_PAGE_LAYOUT_VERSION_v81		3	/* 8.1 - 8.2 */
-#define PG_PAGE_LAYOUT_VERSION_v83		4	/* 8.3 - */
-
 /* 80000 <= PG_VERSION_NUM < 80300 */
 typedef struct PageHeaderData_v80
 {
@@ -201,9 +193,8 @@ typedef struct PageHeaderData_v83
 
 typedef union DataPage
 {
-	PageHeaderData_v80	v80;	/* 8.0 - 8.2 */
-	PageHeaderData_v83	v83;	/* 8.3 - */
-	char				data[BLCKSZ];
+	PageHeaderData	page_data;
+	char			data[BLCKSZ];
 } DataPage;
 
 typedef struct BackupPageHeader
@@ -214,56 +205,27 @@ typedef struct BackupPageHeader
 } BackupPageHeader;
 
 static bool
-parse_page(const DataPage *page, int server_version,
+parse_page(const DataPage *page,
 		   XLogRecPtr *lsn, uint16 *offset, uint16 *length)
 {
-	uint16		page_layout_version;
+	const PageHeaderData *page_data = &page->page_data;
 
-	/* Determine page layout version */
-	if (server_version < 80100)
-		page_layout_version = PG_PAGE_LAYOUT_VERSION_v80;
-	else if (server_version < 80300)
-		page_layout_version = PG_PAGE_LAYOUT_VERSION_v81;
-	else
-		page_layout_version = PG_PAGE_LAYOUT_VERSION_v83;
+	/* Get lsn from page header */
+	*lsn = PageXLogRecPtrGet(page_data->pd_lsn);
 
-	/* Check normal case */
-	if (server_version < 80300)
+	if (PageGetPageSize(page_data) == BLCKSZ &&
+		PageGetPageLayoutVersion(page_data) == PG_PAGE_LAYOUT_VERSION &&
+		(page_data->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
+		page_data->pd_lower >= SizeOfPageHeaderData &&
+		page_data->pd_lower <= page_data->pd_upper &&
+		page_data->pd_upper <= page_data->pd_special &&
+		page_data->pd_special <= BLCKSZ &&
+		page_data->pd_special == MAXALIGN(page_data->pd_special) &&
+		!XLogRecPtrIsInvalid(*lsn))
 	{
-		const PageHeaderData_v80 *v80 = &page->v80;
-
-		if (PageGetPageSize_v80(v80) == BLCKSZ &&
-			PageGetPageLayoutVersion_v80(v80) == page_layout_version &&
-			v80->pd_lower >= SizeOfPageHeaderData_v80 &&
-			v80->pd_lower <= v80->pd_upper &&
-			v80->pd_upper <= v80->pd_special &&
-			v80->pd_special <= BLCKSZ &&
-			v80->pd_special == MAXALIGN(v80->pd_special) &&
-			!XLogRecPtrIsInvalid(*lsn = v80->pd_lsn))
-		{
-			*offset = v80->pd_lower;
-			*length = v80->pd_upper - v80->pd_lower;
-			return true;
-		}
-	}
-	else
-	{
-		const PageHeaderData_v83 *v83 = &page->v83;
-
-		if (PageGetPageSize_v83(v83) == BLCKSZ &&
-			PageGetPageLayoutVersion_v83(v83) == page_layout_version &&
-			(v83->pd_flags & ~PD_VALID_FLAG_BITS_v83) == 0 &&
-			v83->pd_lower >= SizeOfPageHeaderData_v83 &&
-			v83->pd_lower <= v83->pd_upper &&
-			v83->pd_upper <= v83->pd_special &&
-			v83->pd_special <= BLCKSZ &&
-			v83->pd_special == MAXALIGN(v83->pd_special) &&
-			!XLogRecPtrIsInvalid(*lsn = v83->pd_lsn))
-		{
-			*offset = v83->pd_lower;
-			*length = v83->pd_upper - v83->pd_lower;
-			return true;
-		}
+		*offset = page_data->pd_lower;
+		*length = page_data->pd_upper - page_data->pd_lower;
+		return true;
 	}
 
 	*offset = *length = 0;
@@ -289,7 +251,6 @@ backup_data_file(const char *from_root, const char *to_root,
 	size_t				read_len;
 	int					errno_tmp;
 	pg_crc32			crc;
-	int					server_version;
 #ifdef HAVE_LIBZ
 	z_stream			z;
 	char				outbuf[zlibOutSize];
@@ -351,7 +312,7 @@ backup_data_file(const char *from_root, const char *to_root,
 #endif
 
 	/* confirm server version */
-	server_version = get_server_version();
+	check_server_version();
 
 	/* read each page and write the page excluding hole */
 	for (blknum = 0;
@@ -368,7 +329,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		 * If a invalid data page was found, fallback to simple copy to ensure
 		 * all pages in the file don't have BackupPageHeader.
 		 */
-		if (!parse_page(&page, server_version, &page_lsn,
+		if (!parse_page(&page, &page_lsn,
 						&header.hole_offset, &header.hole_length))
 		{
 			elog(LOG, "%s fall back to simple copy", file->path);

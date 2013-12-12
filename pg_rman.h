@@ -20,16 +20,8 @@
 #include "utils/pg_crc.h"
 #include "parray.h"
 
-#if PG_VERSION_NUM < 80200
-#define XLOG_BLCKSZ		BLCKSZ
-#endif
-
-#if PG_VERSION_NUM < 80300
-#define TXID_CURRENT_SQL	"SELECT transactionid FROM pg_locks WHERE locktype = 'transactionid' AND pid = pg_backend_pid();"
-#include <sys/stat.h>
-#else
+/* Query to fetch current transaction ID */
 #define TXID_CURRENT_SQL	"SELECT txid_current();"
-#endif
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"
@@ -241,7 +233,7 @@ extern const char *pgdata_exclude[];
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);
 extern BackupMode parse_backup_mode(const char *value, int elevel);
-extern int get_server_version(void);
+extern void check_server_version(void);
 extern bool fileExists(const char *path);
 
 /* in restore.c */
@@ -306,7 +298,7 @@ extern int pgFileCompareMtime(const void *f1, const void *f2);
 extern int pgFileCompareMtimeDesc(const void *f1, const void *f2);
 
 /* in xlog.c */
-extern bool xlog_is_complete_wal(const pgFile *file, int server_version);
+extern bool xlog_is_complete_wal(const pgFile *file);
 extern void xlog_fname(char *fname, size_t len, TimeLineID tli, XLogRecPtr *lsn);
 
 /* in data.c */

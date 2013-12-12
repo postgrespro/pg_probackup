@@ -14,10 +14,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#if PG_VERSION_NUM >= 80400
 typedef unsigned long Datum;
 typedef struct MemoryContextData *MemoryContext;
-#endif
 
 #include "access/xlog_internal.h"
 
@@ -37,7 +35,7 @@ typedef union XLogPage
  * based on ValidXLOGHeader() in src/backend/access/transam/xlog.c.
  */
 bool
-xlog_is_complete_wal(const pgFile *file, int server_version)
+xlog_is_complete_wal(const pgFile *file)
 {
 	FILE		   *fp;
 	XLogPage		page;
@@ -61,7 +59,7 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 		return false;
 	if (page.lheader.xlp_seg_size != XLogSegSize)
 		return false;
-	if (server_version >= 80300 && page.lheader.xlp_xlog_blcksz != XLOG_BLCKSZ)
+	if (page.lheader.xlp_xlog_blcksz != XLOG_BLCKSZ)
 		return false;
 
 	/*

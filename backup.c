@@ -20,17 +20,23 @@
 #include "libpq/pqsignal.h"
 #include "pgut/pgut-port.h"
 
-#define TIMEOUT_ARCHIVE		10		/* wait 10 sec until WAL archive complete */
+/* wait 10 sec until WAL archive complete */
+#define TIMEOUT_ARCHIVE		10
+
+/* Server version */
+static int server_version = 0;
 
 static bool		 in_backup = false;	/* TODO: more robust logic */
-static parray	*cleanup_list;		/* list of command to execute at error processing for snapshot */
+/* List of commands to execute at error processing for snapshot */
+static parray	*cleanup_list;
 
 /*
  * Backup routines
  */
 static void backup_cleanup(bool fatal, void *userdata);
-static void delete_old_files(const char *root, parray *files, int keep_files,
-							 int keep_days, int server_version, bool is_arclog);
+static void delete_old_files(const char *root,
+							 parray *files, int keep_files,
+							 int keep_days, bool is_arclog);
 static void backup_files(const char *from_root, const char *to_root,
 	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress, const char *prefix);
 static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
@@ -710,7 +716,6 @@ do_backup(pgBackupOption bkupopt)
 	parray *files_database;
 	parray *files_arclog;
 	parray *files_srvlog;
-	int		server_version;
 	int		ret;
 
 	/* repack the necesary options */
@@ -745,7 +750,7 @@ do_backup(pgBackupOption bkupopt)
 #endif
 
 	/* confirm data block size and xlog block size are compatible */
-	server_version = get_server_version();
+	check_server_version();
 
 	/* setup cleanup callback function */
 	in_backup = true;
@@ -837,10 +842,10 @@ do_backup(pgBackupOption bkupopt)
 	 */
 	if (HAVE_ARCLOG(&current))
 		delete_old_files(arclog_path, files_arclog, keep_arclog_files,
-			keep_arclog_days, server_version, true);
+			keep_arclog_days, true);
 	if (current.with_serverlog)
 		delete_old_files(srvlog_path, files_srvlog, keep_srvlog_files,
-			keep_srvlog_days, server_version, false);
+			keep_srvlog_days, false);
 
 	/* Delete old backup files after all backup operation. */
 	pgBackupDelete(keep_data_generations, keep_data_days);
@@ -951,15 +956,14 @@ make_backup_label(parray *backup_list)
 /*
  * get server version and confirm block sizes.
  */
-int
-get_server_version(void)
+void
+check_server_version(void)
 {
-	static int	server_version = 0;
 	bool		my_conn;
 
-	/* return cached server version */
+	/* Leave if server has already been checked */
 	if (server_version > 0)
-		return server_version;
+		return;
 
 	my_conn = (connection == NULL);
 
@@ -968,22 +972,19 @@ get_server_version(void)
 
 	/* confirm server version */
 	server_version = PQserverVersion(connection);
-	if (server_version < 80200)
+	if (server_version != PG_VERSION_NUM)
 		elog(ERROR_PG_INCOMPATIBLE,
-			_("server version is %d.%d.%d, but must be 8.2 or higher."),
-			server_version / 10000,
-			(server_version / 100) % 100,
-			server_version % 100);
+			_("server version is %d.%d.%d, must be %s or higher."),
+			 server_version / 10000,
+			 (server_version / 100) % 100,
+			 server_version % 100, PG_MAJORVERSION);
 
 	/* confirm block_size (BLCKSZ) and wal_block_size (XLOG_BLCKSZ) */
 	confirm_block_size("block_size", BLCKSZ);
-	if (server_version >= 80400)
-		confirm_block_size("wal_block_size", XLOG_BLCKSZ);
+	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
 
 	if (my_conn)
 		disconnect();
-
-	return server_version;
 }
 
 static void
@@ -1013,25 +1014,15 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 {
 	PGresult	   *res;
 	const char	   *params[2];
-	int				server_version;
 
 	params[0] = label;
 
 	reconnect();
-	server_version = get_server_version();
-	if (server_version >= 80400)
-	{
-		/* 2nd argument is 'fast'*/
-		params[1] = smooth ? "false" : "true";
-		res = execute("SELECT * from pg_xlogfile_name_offset(pg_start_backup($1, $2))", 2, params);
-	}
-	else
-	{
-		/* v8.3 always uses smooth checkpoint */
-		if (!smooth && server_version >= 80300)
-			command("CHECKPOINT", 0, NULL);
-		res = execute("SELECT * from pg_xlogfile_name_offset(pg_start_backup($1))", 1, params);
-	}
+
+	/* 2nd argument is 'fast'*/
+	params[1] = smooth ? "false" : "true";
+	res = execute("SELECT * from pg_xlogfile_name_offset(pg_start_backup($1, $2))", 2, params);
+
 	if (backup != NULL)
 		get_lsn(res, &backup->tli, &backup->start_lsn);
 	PQclear(res);
@@ -1419,7 +1410,6 @@ delete_old_files(const char *root,
 				 parray *files,
 				 int keep_files,
 				 int keep_days,
-				 int server_version,
 				 bool is_arclog)
 {
 	int		i;
@@ -1460,7 +1450,7 @@ delete_old_files(const char *root,
 
 		elog(LOG, "%s() %s", __FUNCTION__, file->path);
 		/* Delete completed WALs only. */
-		if (is_arclog && !xlog_is_complete_wal(file, server_version))
+		if (is_arclog && !xlog_is_complete_wal(file))
 		{
 			elog(LOG, "%s() not complete WAL", __FUNCTION__);
 			continue;
