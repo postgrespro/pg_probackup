@@ -240,6 +240,7 @@ pgut_help(bool details)
 	printf(_("  -S, --srvlog-path=PATH    location of server log storage area\n"));
 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
 	printf(_("  -c, --check               show what would have been done\n"));
+	printf(_("  -v, --verbose             output process information\n"));
 	printf(_("\nBackup options:\n"));
 	printf(_("  -b, --backup-mode=MODE    full, incremental, or archive\n"));
 	printf(_("  -s, --with-serverlog      also backup server log files\n"));
