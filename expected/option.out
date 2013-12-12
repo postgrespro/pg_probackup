@@ -6,7 +6,6 @@ Usage:
   pg_rman OPTION backup
   pg_rman OPTION restore
   pg_rman OPTION show [DATE]
-  pg_rman OPTION show timeline [DATE]
   pg_rman OPTION validate [DATE]
   pg_rman OPTION delete DATE
 
@@ -16,6 +15,7 @@ Common Options:
   -S, --srvlog-path=PATH    location of server log storage area
   -B, --backup-path=PATH    location of the backup storage area
   -c, --check               show what would have been done
+  -v, --verbose             output process information
 
 Backup options:
   -b, --backup-mode=MODE    full, incremental, or archive
