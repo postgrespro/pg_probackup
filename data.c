@@ -152,45 +152,6 @@ doInflate(z_stream *zp, size_t in_size, size_t out_size,void *inbuf,
 }
 #endif
 
-/* 80000 <= PG_VERSION_NUM < 80300 */
-typedef struct PageHeaderData_v80
-{
-	XLogRecPtr		pd_lsn;
-	TimeLineID		pd_tli;
-	LocationIndex	pd_lower;
-	LocationIndex	pd_upper;
-	LocationIndex	pd_special;
-	uint16			pd_pagesize_version;
-	ItemIdData		pd_linp[1];
-} PageHeaderData_v80;
-
-#define PageGetPageSize_v80(page) \
-	((Size) ((page)->pd_pagesize_version & (uint16) 0xFF00))
-#define PageGetPageLayoutVersion_v80(page) \
-	((page)->pd_pagesize_version & 0x00FF)
-#define SizeOfPageHeaderData_v80	(offsetof(PageHeaderData_v80, pd_linp))
-
-/* 80300 <= PG_VERSION_NUM */
-typedef struct PageHeaderData_v83
-{
-	XLogRecPtr		pd_lsn;
-	uint16			pd_tli;
-	uint16			pd_flags;
-	LocationIndex	pd_lower;
-	LocationIndex	pd_upper;
-	LocationIndex	pd_special;
-	uint16			pd_pagesize_version;
-	TransactionId	pd_prune_xid;
-	ItemIdData		pd_linp[1];
-} PageHeaderData_v83;
-
-#define PageGetPageSize_v83(page) \
-	((Size) ((page)->pd_pagesize_version & (uint16) 0xFF00))
-#define PageGetPageLayoutVersion_v83(page) \
-	((page)->pd_pagesize_version & 0x00FF)
-#define SizeOfPageHeaderData_v83	(offsetof(PageHeaderData_v83, pd_linp))
-#define PD_VALID_FLAG_BITS_v83		0x0007
-
 typedef union DataPage
 {
 	PageHeaderData	page_data;
