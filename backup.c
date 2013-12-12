@@ -57,14 +57,6 @@ static void delete_online_wal_backup(void);
 
 static bool dirExists(const char *path);
 
-static void execute_freeze(void);
-static void execute_unfreeze(void);
-static void execute_split(parray *tblspc_list);
-static void execute_resync(void);
-static void execute_mount(parray *tblspcmp_list);
-static void execute_umount(void);
-static void execute_script(const char *mode, bool is_cleanup, parray *output);
-static void snapshot_cleanup(bool fatal, void *userdata);
 static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
 static int strCompare(const void *str1, const void *str2);
 static void create_file_list(parray *files, const char *root, const char *prefix, bool is_append);
@@ -241,20 +233,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		for (i = 0; pgdata_exclude[i]; i++);	/* find first empty slot */
 		pgdata_exclude[i] = PG_TBLSPC_DIR;
 
-		/* set the error processing for the snapshot */
-		pgut_atexit_push(snapshot_cleanup, cleanup_list);
-
-		/* create snapshot volume */
-		if (!check)
-		{
-			/* freeze I/O of the file-system */
-			execute_freeze();
-			/* create the snapshot, and obtain the name of TABLESPACE backup from snapshot */
-			execute_split(tblspc_list);
-			/* unfreeze I/O of the file-system */
-			execute_unfreeze();
-		}
-
 		/*
 		 * when DB cluster is not contained in the backup from the snapshot,
 		 * DB cluster is added to the backup file list from non-snapshot.
@@ -314,10 +292,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 		/* create file list of non-snapshot objects */
 		create_file_list(files, pgdata, NULL, false);
-
-		/* mount snapshot volume to file-system, and obtain that mounted directory */
-		if (!check)
-			execute_mount(tblspcmp_list);
 
 		/* backup files from snapshot volume */
 		for (i = 0; i < parray_num(tblspcmp_list); i++)
@@ -414,17 +388,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		parray_walk(tblspcmp_list, free);
 		parray_free(tblspcmp_list);
 
-		/* snapshot became unnecessary, annul the snapshot */
-		if (!check)
-		{
-			/* unmount directory of mounted snapshot volume */
-			execute_umount();
-			/* annul the snapshot */
-			execute_resync();
-		}
 
-		/* unset the error processing for the snapshot */
-		pgut_atexit_pop(snapshot_cleanup, cleanup_list);
 		/* don't use 'parray_walk'. element of parray not allocate memory by malloc */
 		parray_free(cleanup_list);
 		PQclear(tblspc_res);
@@ -1555,200 +1519,6 @@ delete_arclog_link(void)
 
 	parray_walk(files, pgFileFree);
 	parray_free(files);
-}
-
-/*
- * Execute the command 'freeze' of snapshot-script.
- * When the command ends normally, 'unfreeze' is added to the cleanup list.
- */
-static void
-execute_freeze(void)
-{
-	/* append 'unfreeze' command to cleanup list */
-	parray_append(cleanup_list, SNAPSHOT_UNFREEZE);
-
-	/* execute 'freeze' command */
-	execute_script(SNAPSHOT_FREEZE, false, NULL);
-}
-
-/*
- * Execute the command 'unfreeze' of snapshot-script.
- * Remove 'unfreeze' from the cleanup list before executing the command
- * when 'unfreeze' is included in the cleanup list.
- */
-static void
-execute_unfreeze(void)
-{
-	int	i;
-
-	/* remove 'unfreeze' command from cleanup list */
-	for (i = 0; i < parray_num(cleanup_list); i++)
-	{
-		char	*mode;
-
-		mode = (char *) parray_get(cleanup_list, i);
-		if (strcmp(mode,SNAPSHOT_UNFREEZE) == 0)
-		{
-			parray_remove(cleanup_list, i);
-			break;
-		}
-	}
-	/* execute 'unfreeze' command */
-	execute_script(SNAPSHOT_UNFREEZE, false, NULL);
-}
-
-/*
- * Execute the command 'split' of snapshot-script.
- * When the command ends normally, 'resync' is added to the cleanup list.
- */
-static void
-execute_split(parray *tblspc_list)
-{
-	/* append 'resync' command to cleanup list */
-	parray_append(cleanup_list, SNAPSHOT_RESYNC);
-
-	/* execute 'split' command */
-	execute_script(SNAPSHOT_SPLIT, false, tblspc_list);
-}
-
-/*
- * Execute the command 'resync' of snapshot-script.
- * Remove 'resync' from the cleanup list before executing the command
- * when 'resync' is included in the cleanup list.
- */
-static void
-execute_resync(void)
-{
-	int	i;
-
-	/* remove 'resync' command from cleanup list */
-	for (i = 0; i < parray_num(cleanup_list); i++)
-	{
-		char *mode;
-
-		mode = (char *) parray_get(cleanup_list, i);
-		if (strcmp(mode, SNAPSHOT_RESYNC) == 0)
-		{
-			parray_remove(cleanup_list, i);
-			break;
-		}
-	}
-	/* execute 'resync' command */
-	execute_script(SNAPSHOT_RESYNC, false, NULL);
-}
-
-/*
- * Execute the command 'mount' of snapshot-script.
- * When the command ends normally, 'umount' is added to the cleanup list.
- */
-static void
-execute_mount(parray *tblspcmp_list)
-{
-	/* append 'umount' command to cleanup list */
-	parray_append(cleanup_list, SNAPSHOT_UMOUNT);
-
-	/* execute 'mount' command */
-	execute_script(SNAPSHOT_MOUNT, false, tblspcmp_list);
-}
-
-/*
- * Execute the command 'umount' of snapshot-script.
- * Remove 'umount' from the cleanup list before executing the command
- * when 'umount' is included in the cleanup list.
- */
-static void
-execute_umount(void)
-{
-	int	i;
-
-	/* remove 'umount' command from cleanup list */
-	for (i = 0; i < parray_num(cleanup_list); i++)
-	{
-		char *mode = (char *) parray_get(cleanup_list, i);
-
-		if (strcmp(mode, SNAPSHOT_UMOUNT) == 0)
-		{
-			parray_remove(cleanup_list, i);
-			break;
-		}
-	}
-	/* execute 'umount' command */
-	execute_script(SNAPSHOT_UMOUNT, false, NULL);
-}
-
-/*
- * Execute the snapshot-script in the specified mode.
- * A standard output of snapshot-script is stored in the array given to the parameter.
- * If is_cleanup is TRUE, processing is continued.
- */
-static void
-execute_script(const char *mode, bool is_cleanup, parray *output)
-{
-	char	 ss_script[MAXPGPATH];
-	char	 command[1024];
-	char	 fline[2048];
-	int		 num;
-	FILE	*out;
-	parray	*lines;
-
-	/* obtain the path of snapshot-script. */
-	join_path_components(ss_script, backup_path, SNAPSHOT_SCRIPT_FILE);
-	snprintf(command, sizeof(command),
-		"%s %s %s", ss_script, mode, is_cleanup ? "cleanup" : "");
-
-	/* execute snapshot-script */
-	out = popen(command, "r");
-	if (out == NULL)
-		elog(ERROR_SYSTEM, _("could not execute snapshot-script: %s\n"), strerror(errno));
-
-	/* read STDOUT and store into the array each line */
-	lines = parray_new();
-	while (fgets(fline, sizeof(fline), out) != NULL)
-	{
-		/* remove line separator */
-		if (fline[strlen(fline) - 1] == '\n')
-			fline[strlen(fline) - 1] = '\0';
-		parray_append(lines, pgut_strdup(fline));
-	}
-	pclose(out);
-
-	/*
-	 * status of the command is obtained from the last element of the array
-	 * if last element is not 'SUCCESS', that means ERROR.
-	 */
-	num = parray_num(lines);
-	if (num <= 0 || strcmp((char *) parray_get(lines, num - 1), "SUCCESS") != 0)
-		elog(is_cleanup ? WARNING : ERROR_SYSTEM, _("snapshot-script failed: %s"), mode);
-
-	/* if output is not NULL, concat array. */
-	if (output)
-	{
-		parray_remove(lines, num -1);	/* remove last element, that is command status */
-		parray_concat(output, lines);
-	}
-	/* if output is NULL, clear directory list */
-	else
-	{
-		parray_walk(lines, free);
-		parray_free(lines);
-	}
-}
-
-/*
- * Delete the unnecessary object created by snapshot-script.
- * The command necessary for the deletion is given from the parameter.
- * When the error occurs, this function is called.
- */
-static void
-snapshot_cleanup(bool fatal, void *userdata)
-{
-	parray	*cleanup_list;
-	int		 i;
-
-	/* Execute snapshot-script for cleanup */
-	cleanup_list = (parray *) userdata;
-	for (i = parray_num(cleanup_list) - 1; i >= 0; i--)
-		execute_script((char *) parray_get(cleanup_list, i), true, NULL);
 }
 
 /*
