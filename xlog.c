@@ -21,16 +21,6 @@ typedef struct MemoryContextData *MemoryContext;
 
 #include "access/xlog_internal.h"
 
-#define XLOG_PAGE_MAGIC_v80		0xD05C	/* 8.0 */
-#define XLOG_PAGE_MAGIC_v81		0xD05D	/* 8.1 */
-#define XLOG_PAGE_MAGIC_v82		0xD05E	/* 8.2 */
-#define XLOG_PAGE_MAGIC_v83		0xD062	/* 8.3 */
-#define XLOG_PAGE_MAGIC_v84		0xD063	/* 8.4 */
-#define XLOG_PAGE_MAGIC_v90		0xD064	/* 9.0 */
-#define XLOG_PAGE_MAGIC_v91		0xD066	/* 9.1 */
-#define XLOG_PAGE_MAGIC_v92		0xD071	/* 9.2 */
-#define XLOG_PAGE_MAGIC_v93		0xD075	/* 9.2 */
-
 /*
  * XLogLongPageHeaderData is modified in 8.3, but the layout is compatible
  * except xlp_xlog_blcksz.
@@ -51,7 +41,6 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 {
 	FILE		   *fp;
 	XLogPage		page;
-	uint16			xlog_page_magic;
 
 	fp = fopen(file->path, "r");
 	if (!fp)
@@ -63,32 +52,8 @@ xlog_is_complete_wal(const pgFile *file, int server_version)
 	}
 	fclose(fp);
 
-	/* xlog_page_magic from server version */
-	if (server_version < 80000)
-		return false;	/* never happen */
-	else if (server_version < 80100)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v80;
-	else if (server_version < 80200)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v81;
-	else if (server_version < 80300)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v82;
-	else if (server_version < 80400)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v83;
-	else if (server_version < 90000)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v84;
-	else if (server_version < 90100)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v90;
-	else if (server_version < 90200)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v91;
-	else if (server_version < 90300)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v92;
-	else if (server_version < 90400)
-		xlog_page_magic = XLOG_PAGE_MAGIC_v93;
-	else
-		return false;	/* not supported */
-
 	/* check header */
-	if (page.header.xlp_magic != xlog_page_magic)
+	if (page.header.xlp_magic != XLOG_PAGE_MAGIC)
 		return false;
 	if ((page.header.xlp_info & ~XLP_ALL_FLAGS) != 0)
 		return false;
