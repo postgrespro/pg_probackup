@@ -1104,31 +1104,13 @@ pg_switch_xlog(pgBackup *backup)
 static void
 get_lsn(PGresult *res, TimeLineID *timeline, XLogRecPtr *lsn)
 {
-	uint32 off_upper;
-	uint32 xlogid;
-	uint32 xrecoff;
-
 	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 2)
 		elog(ERROR_PG_COMMAND,
 			_("result of pg_xlogfile_name_offset() is invalid: %s"),
 			PQerrorMessage(connection));
 
-	/* get TimeLineID, LSN from result of pg_stop_backup() */
-	if (sscanf(PQgetvalue(res, 0, 0), "%08X%08X%08X",
-			timeline, &xlogid, &off_upper) != 3 ||
-		sscanf(PQgetvalue(res, 0, 1), "%u", &xrecoff) != 1)
-	{
-		elog(ERROR_PG_COMMAND,
-			_("result of pg_xlogfile_name_offset() is invalid: %s"),
-			PQerrorMessage(connection));
-	}
-
-	elog(LOG, "%s():%s %s",
-		__FUNCTION__, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1));
-	xrecoff += off_upper << 24;
-
-	/* Set LSN correctly */
-	*lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+	/* Extract timeline and LSN from result of pg_stop_backup() */
+	XLogFromFileName(PQgetvalue(res, 0, 0), timeline, lsn);
 }
 
 /*
