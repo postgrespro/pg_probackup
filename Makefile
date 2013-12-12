@@ -10,10 +10,10 @@ SRCS = \
 	pg_rman.c \
 	restore.c \
 	show.c \
+	status.c \
 	util.c \
 	validate.c \
 	xlog.c \
-	pgsql_src/pg_ctl.c \
 	pgut/pgut.c \
 	pgut/pgut-port.c
 OBJS = $(SRCS:.c=.o)
