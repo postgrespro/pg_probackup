@@ -16,6 +16,7 @@
 
 #include "pgut/pgut.h"
 #include "access/xlogdefs.h"
+#include "access/xlog_internal.h"
 #include "utils/pg_crc.h"
 #include "parray.h"
 
@@ -325,14 +326,9 @@ extern void remove_not_digit(char *buf, size_t len, const char *str);
 /* in pgsql_src/pg_ctl.c */
 extern bool is_pg_running(void);
 
-/* access/xlog_internal.h */
-#define XLogSegSize		((uint32) XLOG_SEG_SIZE)
-#define XLogSegsPerFile (((uint32) 0xffffffff) / XLogSegSize)
-#define XLogFileSize	(XLogSegsPerFile * XLogSegSize)
-
 #define NextLogSeg(logId, logSeg)	\
 	do { \
-		if ((logSeg) >= XLogSegsPerFile-1) \
+		if ((logSeg) >= XLogSegmentsPerXLogId - 1) \
 		{ \
 			(logId)++; \
 			(logSeg) = 0; \
