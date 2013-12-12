@@ -49,16 +49,16 @@ get_pgpid(void)
 			elog(ERROR_SYSTEM, _("could not open PID file \"%s\": %s\n"),
 				 pid_file, strerror(errno));
 		}
-		if (fscanf(pidf, "%ld", &pid) != 1)
-		{
-			/* Is the file empty? */
-			if (ftell(pidf) == 0 && feof(pidf))
-				elog(ERROR_SYSTEM, _("the PID file \"%s\" is empty\n"),
-					 pid_file);
-			else
-				elog(ERROR_SYSTEM, _("invalid data in PID file \"%s\"\n"),
-					 pid_file);
-		}
+	}
+	if (fscanf(pidf, "%ld", &pid) != 1)
+	{
+		/* Is the file empty? */
+		if (ftell(pidf) == 0 && feof(pidf))
+			elog(ERROR_SYSTEM, _("the PID file \"%s\" is empty\n"),
+				 pid_file);
+		else
+			elog(ERROR_SYSTEM, _("invalid data in PID file \"%s\"\n"),
+				 pid_file);
 	}
 	fclose(pidf);
 	return (pgpid_t) pid;
