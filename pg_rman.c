@@ -39,8 +39,6 @@ static int		keep_srvlog_files = KEEP_INFINITE;
 static int		keep_srvlog_days = KEEP_INFINITE;
 static int		keep_data_generations = KEEP_INFINITE;
 static int		keep_data_days = KEEP_INFINITE;
-static char		*standby_host = NULL;
-static char		*standby_port = NULL;
 
 /* restore configuration */
 static char		   *target_time;
@@ -73,8 +71,6 @@ static pgut_option options[] =
 	{ 'b', 's', "with-serverlog"	, &current.with_serverlog	, SOURCE_ENV },
 	{ 'b', 'Z', "compress-data"		, &current.compress_data	, SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint"	, &smooth_checkpoint		, SOURCE_ENV },
-	{ 's', 12, "standby-host"	, &standby_host		, SOURCE_ENV },
-	{ 's', 13, "standby-port"	, &standby_port		, SOURCE_ENV },
 	/* delete options */
 	{ 'b', 'f', "force"	, &force		, SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
@@ -194,8 +190,6 @@ main(int argc, char *argv[])
 		bkupopt.keep_srvlog_days	= keep_srvlog_days;
 		bkupopt.keep_data_generations	= keep_data_generations;
 		bkupopt.keep_data_days		= keep_data_days;
-		bkupopt.standby_host		= standby_host;
-		bkupopt.standby_port		= standby_port;
 		return do_backup(bkupopt);
 	}
 	else if (pg_strcasecmp(cmd, "restore") == 0){
@@ -247,8 +241,6 @@ pgut_help(bool details)
 	printf(_("  --keep-arclog-days=DAY    keep archived WAL modified in DAY days\n"));
 	printf(_("  --keep-srvlog-files=NUM   keep NUM of serverlogs\n"));
 	printf(_("  --keep-srvlog-days=DAY    keep serverlog modified in DAY days\n"));
-	printf(_("  --standby-host=HOSTNAME   standby host when taking backup from standby\n"));
-	printf(_("  --standby-port=PORT       standby port when taking backup from standby\n"));
 	printf(_("\nRestore options:\n"));
 	printf(_("  --recovery-target-time    time stamp up to which recovery will proceed\n"));
 	printf(_("  --recovery-target-xid     transaction ID up to which recovery will proceed\n"));

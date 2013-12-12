@@ -169,8 +169,6 @@ typedef struct pgBackupOption
 	int  keep_srvlog_days;
 	int  keep_data_generations;
 	int  keep_data_days;
-	char *standby_host;
-	char *standby_port;
 } pgBackupOption;
 
 

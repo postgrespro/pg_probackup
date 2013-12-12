@@ -51,7 +51,6 @@ static void pg_stop_backup(pgBackup *backup);
 static void pg_switch_xlog(pgBackup *backup);
 static void get_lsn(PGresult *res, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
-static bool execute_restartpoint(pgBackupOption bkupopt);
 
 static void delete_arclog_link(void);
 static void delete_online_wal_backup(void);
@@ -78,7 +77,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	XLogRecPtr *lsn = NULL;
 	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup list file */
 	bool		has_backup_label  = true;	/* flag if backup_label is there  */
-	bool		has_recovery_conf = false;	/* flag if recovery.conf is there */
 
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
@@ -131,29 +129,14 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
 	make_native_path(path);
 	if (fileExists(path)) {
-		has_recovery_conf = true;
+		current.is_from_standby = true;
 	}
-	if (!has_backup_label && !has_recovery_conf)
+	if (!has_backup_label && !current.is_from_standby)
 	{
 		if (verbose)
 			printf(_("backup_label does not exist, stop backup\n"));
 		pg_stop_backup(NULL);
 		elog(ERROR_SYSTEM, _("backup_label does not exist in PGDATA."));
-	}
-	else if (has_recovery_conf)
-	{
-
-		if (!bkupopt.standby_host || !bkupopt.standby_port)
-		{
-			pg_stop_backup(NULL);
-			elog(ERROR_SYSTEM, _("could not specified standby host or port."));
-		}
-		if (!execute_restartpoint(bkupopt))
-		{
-			pg_stop_backup(NULL);
-			elog(ERROR_SYSTEM, _("could not execute restartpoint."));
-		}
-		current.is_from_standby = true;
 	}
 
 	/*
@@ -448,24 +431,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	return files;
 }
 
-static bool
-execute_restartpoint(pgBackupOption bkupopt)
-{
-	PGconn *sby_conn = NULL;
-	const char *tmp_host;
-	const char *tmp_port;
-	tmp_host = pgut_get_host();
-	tmp_port = pgut_get_port();
-	pgut_set_host(bkupopt.standby_host);
-	pgut_set_port(bkupopt.standby_port);
-	sby_conn = reconnect_elevel(ERROR_PG_CONNECT);
-	if (!sby_conn)
-		return false;
-	command("CHECKPOINT", 0, NULL);
-	pgut_set_host(tmp_host);
-	pgut_set_port(tmp_port);
-	return true;
-}
 
 /*
  * backup archived WAL incrementally.
