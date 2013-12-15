@@ -230,7 +230,7 @@ extern const char *pgdata_exclude[];
 
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);
-extern BackupMode parse_backup_mode(const char *value, int elevel);
+extern BackupMode parse_backup_mode(const char *value);
 extern void check_server_version(void);
 extern bool fileExists(const char *path);
 

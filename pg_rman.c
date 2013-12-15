@@ -330,5 +330,5 @@ if(!IsValidTime(tm)){
 static void
 opt_backup_mode(pgut_option *opt, const char *arg)
 {
-	current.backup_mode = parse_backup_mode(arg, ERROR_ARGS);
+	current.backup_mode = parse_backup_mode(arg);
 }

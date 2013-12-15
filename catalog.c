@@ -492,7 +492,7 @@ catalog_read_ini(const char *path)
 
 	if (backup_mode)
 	{
-		backup->backup_mode = parse_backup_mode(backup_mode, WARNING);
+		backup->backup_mode = parse_backup_mode(backup_mode);
 		free(backup_mode);
 	}
 
@@ -545,12 +545,14 @@ catalog_read_ini(const char *path)
 }
 
 BackupMode
-parse_backup_mode(const char *value, int elevel)
+parse_backup_mode(const char *value)
 {
 	const char *v = value;
 	size_t		len;
 
-	while (IsSpace(*v)) { v++; }
+	/* Skip all spaces detected */
+	while (IsSpace(*v))
+		v++;
 	len = strlen(v);
 
 	if (len > 0 && pg_strncasecmp("full", v, len) == 0)
@@ -560,7 +562,8 @@ parse_backup_mode(const char *value, int elevel)
 	else if (len > 0 && pg_strncasecmp("archive", v, len) == 0)
 		return BACKUP_MODE_ARCHIVE;
 
-	elog(elevel, _("invalid backup-mode \"%s\""), value);
+	/* Backup mode is invalid, so leave with an error */
+	elog(ERROR_ARGS, _("invalid backup-mode \"%s\""), value);
 	return BACKUP_MODE_INVALID;
 }
 
