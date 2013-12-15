@@ -205,8 +205,8 @@ base_backup_found:
 			continue;
 
 		/* is the backup is necessary for restore to target timeline ? */
-		//if (!satisfy_timeline(timelines, backup) && !satisfy_recovery_target(backup, rt))
-		if (!satisfy_timeline(timelines, backup) || !satisfy_recovery_target(backup, rt))
+		if (!satisfy_timeline(timelines, backup) ||
+			!satisfy_recovery_target(backup, rt))
 			continue;
 
 		if (verbose)
@@ -850,23 +850,13 @@ readTimeLineHistory(TimeLineID targetTLI)
 static bool
 satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 {
-	if(rt->xid_specified){
-//		elog(INFO, "in satisfy_recovery_target:xid::%u:%u", backup->recovery_xid, rt->recovery_target_xid);
-		if(backup->recovery_xid <= rt->recovery_target_xid)
-			return true;
-		else
-			return false;
-	}
-	if(rt->time_specified){
-//		elog(INFO, "in satisfy_recovery_target:time_t::%ld:%ld", backup->recovery_time, rt->recovery_target_time);
-		if(backup->recovery_time <= rt->recovery_target_time)
-			return true;
-		else
-			return false;
-	}
-	else{
+	if(rt->xid_specified)
+		return backup->recovery_xid <= rt->recovery_target_xid);
+
+	if (rt->time_specified)
+		return backup->recovery_time <= rt->recovery_target_time);
+	else
 		return true;
-	}
 }
 
 static bool
@@ -1049,7 +1039,7 @@ checkIfCreateRecoveryConf(const char *target_time,
 	bool		dummy_bool;
 	pgRecoveryTarget *rt;
 
-	// init pgRecoveryTarget
+	/* Initialize pgRecoveryTarget */
 	rt = pgut_new(pgRecoveryTarget);
 	rt->time_specified = false;
 	rt->xid_specified = false;

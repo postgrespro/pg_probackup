@@ -175,11 +175,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		prev_backup = catalog_get_last_data_backup(backup_list);
 		if (prev_backup == NULL || prev_backup->tli != current.tli)
 		{
-			elog(ERROR_SYSTEM, _("There is indeed a full backup but it is not validated."
-						"So I can't take any incremental backup."
-						"Please validate it and retry."));
-///			elog(INFO, _("no previous full backup, performing a full backup instead"));
-///			current.backup_mode = BACKUP_MODE_FULL;
+			elog(ERROR_SYSTEM, _("Full backup detected  but it is not "
+								 "validated so incremental backup cannot be taken"));
 		}
 		else
 		{
