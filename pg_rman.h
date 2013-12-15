@@ -144,7 +144,7 @@ typedef struct pgBackup
 	time_t		recovery_time;
 	uint32		recovery_xid;
 
-	/* Size (-1 means not-backup'ed) */
+	/* Size (-1 means nothing was backed up) */
 	int64		total_data_bytes;
 	int64		read_data_bytes;
 	int64		read_arclog_bytes;

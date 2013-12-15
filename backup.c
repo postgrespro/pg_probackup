@@ -63,7 +63,7 @@ static void create_file_list(parray *files, const char *root, const char *prefix
 static TimeLineID get_current_timeline(void);
 
 /*
- * Take a backup of database.
+ * Take a backup of database and return the list of files backed up.
  */
 static parray *
 do_backup_database(parray *backup_list, pgBackupOption bkupopt)
@@ -75,36 +75,34 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	char		path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr *lsn = NULL;
-	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup list file */
-	bool		has_backup_label  = true;	/* flag if backup_label is there  */
+	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup
+											 * list file */
+	bool		has_backup_label  = true;	/* flag if backup_label is there */
 
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
 
-	if (!HAVE_DATABASE(&current)) {
-		/* check if arclog backup. if arclog backup and no suitable full backup, */
-		/* take full backup instead. */
-		if (HAVE_ARCLOG(&current)) {
-			pgBackup   *prev_backup;
+	/*
+	 * In archive backup mode, check if there is an already validated
+	 * full backup on current timeline.
+	 */
+	if (current.backup_mode == BACKUP_MODE_ARCHIVE)
+	{
+		pgBackup   *prev_backup;
 
-			/* find last completed database backup */
-			prev_backup = catalog_get_last_data_backup(backup_list);
-			if (prev_backup == NULL)
-			{
-				elog(ERROR_SYSTEM, _("There is indeed a full backup but it is not validated."
-							"So I can't take any arclog backup."
-							"Please validate it and retry."));
-///				elog(INFO, _("no previous full backup, performing a full backup instead"));
-///				current.backup_mode = BACKUP_MODE_FULL;
-			}
+		prev_backup = catalog_get_last_data_backup(backup_list);
+		if (prev_backup == NULL)
+		{
+			elog(ERROR_SYSTEM, _("Full backup detected but it is not "
+					"validated so archive backup cannot be taken. "
+					"backup. Validate it and retry."));
 		}
-		else
-			return NULL;
+		return NULL;
 	}
 
 	elog(INFO, _("database backup start"));
 
-	/* initialize size summary */
+	/* Initialize size summary */
 	current.total_data_bytes = 0;
 	current.read_data_bytes = 0;
 
@@ -123,14 +121,14 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	/* If backup_label does not exist in $PGDATA, stop taking backup */
 	snprintf(path, lengthof(path), "%s/backup_label", pgdata);
 	make_native_path(path);
-	if (!fileExists(path)) {
+	if (!fileExists(path))
 		has_backup_label = false;
-	}
+
 	snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
 	make_native_path(path);
-	if (fileExists(path)) {
+	if (fileExists(path))
 		current.is_from_standby = true;
-	}
+
 	if (!has_backup_label && !current.is_from_standby)
 	{
 		if (verbose)
@@ -140,10 +138,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	}
 
 	/*
-	 * list directories and symbolic links  with the physical path to make
-	 * mkdirs.sh
-	 * Sort in order of path.
-	 * omit $PGDATA.
+	 * List directories and symbolic links with the physical path to make
+	 * mkdirs.sh, then sort them in order of path. Omit $PGDATA.
 	 */
 	files = parray_new();
 	dir_list_file(files, pgdata, NULL, false, false);
@@ -433,7 +429,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 
 /*
- * backup archived WAL incrementally.
+ * Backup archived WAL incrementally.
  */
 static parray *
 do_backup_arclog(parray *backup_list)
@@ -449,8 +445,9 @@ do_backup_arclog(parray *backup_list)
 	int64		arclog_write_bytes = 0;
 	char		last_wal[MAXPGPATH];
 
-	if (!HAVE_ARCLOG(&current))
-		return NULL;
+	Assert(current.backup_mode == BACKUP_MODE_ARCHIVE ||
+		   current.backup_mode == BACKUP_MODE_INCREMENTAL ||
+		   current.backup_mode == BACKUP_MODE_FULL);
 
 	if (verbose)
 	{
