@@ -1,0 +1,60 @@
+pg_rman
+=======
+
+pg_rman is a backup and recovery manager for PostgreSQL servers able to do
+incremental, archive and full backup as well as restore a cluster to a
+state defined by a given recovery target. It is designed to perform
+periodic backups of an existing PostgreSQL server, combined with WAL
+archives to provide a way to recover a server in case of failure of
+server because of a reason or another. Its incremental and archive backup
+facilities reduces the amount of data necessary to be taken between
+two consecutive backups.
+
+Download
+--------
+
+The latest version of this software can be found on the project website at
+https://github.com/michaelpq/pg_rman.
+
+Installation
+------------
+
+Compiling pg_rman requires a PostgreSQL installation and can be done in
+two ways:
+
+1. Put pg_rman project directory inside PostgreSQL source tree as
+contrib/pg_rman, and use "make" to compile
+
+or
+
+2. Keep the project directory as-is and use the PGXS development
+infrastructure provided by a PostgreSQL installation to perform the
+compilation: "make USE_PGXS=1"
+
+In addition, you must have pg_config in $PATH.
+
+The current version of pg_rman is compatible with PostgreSQL 9.3 and
+upper versions.
+
+Documentation
+-------------
+
+All the documentation is written and maintained in pg_rman.txt.
+
+Regression tests
+----------------
+
+The test suite of pg_rman is available in the code tree and can be
+launched in a way similar to common PostgreSQL extensions and modules:
+
+1) "make check" or "make installcheck" if the project directory is
+located in PostgreSQL code tree.
+
+2) "make installcheck" on an already installed server if project
+directory is kept as-is.
+
+License
+-------
+
+pg_rman can be distributed under the PostgreSQL license. See COPYRIGHT
+file for more information.
