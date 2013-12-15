@@ -36,6 +36,11 @@ In addition, you must have pg_config in $PATH.
 The current version of pg_rman is compatible with PostgreSQL 9.3 and
 upper versions.
 
+Platforms
+---------
+
+pg_rman has been tested on Linux and Unix-based platforms.
+
 Documentation
 -------------
 
