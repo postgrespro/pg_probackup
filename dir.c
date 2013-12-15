@@ -42,9 +42,13 @@ dir_create_dir(const char *dir, mode_t mode)
 
 	strncpy(copy, dir, MAXPGPATH);
 	parent = dirname(copy);
+
+	/* Create parent first */
 	if (access(parent, F_OK) == -1)
 		dir_create_dir(parent, mode);
-#ifdef MACOS
+
+	/* Create directory */
+#ifdef __darwin__
 	if (mkdir(copy, mode) == -1)
 #else
 	if (mkdir(dir, mode) == -1)
