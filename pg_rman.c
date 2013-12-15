@@ -253,7 +253,7 @@ pgut_help(bool details)
 
 /*
  * Create range object from one or two arguments.
- * All not-digit characters in the argument(s) are igonred.
+ * All not-digit characters in the argument(s) are ignored.
  * Both arg1 and arg2 must be valid pointer.
  */
 static void

@@ -194,4 +194,3 @@ parray_bsearch(parray *array, const void *key, int(*compare)(const void *, const
 {
 	return bsearch(&key, array->data, array->used, sizeof(void *), compare);
 }
-
