@@ -51,7 +51,7 @@ do_validate(pgBackupRange *range)
 			continue;
 
 		/* validate with CRC value and update status to OK */
-		pgBackupValidate(backup, false, false, (HAVE_DATABASE(backup)));
+		pgBackupValidate(backup, false, false);
 	}
 
 	/* cleanup */
@@ -67,7 +67,9 @@ do_validate(pgBackupRange *range)
  * Validate each files in the backup with its size.
  */
 void
-pgBackupValidate(pgBackup *backup, bool size_only, bool for_get_timeline, bool with_database)
+pgBackupValidate(pgBackup *backup,
+				 bool size_only,
+				 bool for_get_timeline)
 {
 	char	timestamp[100];
 	char	base_path[MAXPGPATH];
@@ -76,19 +78,27 @@ pgBackupValidate(pgBackup *backup, bool size_only, bool for_get_timeline, bool w
 	bool	corrupted = false;
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	if(!for_get_timeline){
-		if (with_database)
-			elog(INFO, "validate: %s backup and archive log files by %s", timestamp, (size_only ? "SIZE" : "CRC"));
-		else{
+	if (!for_get_timeline)
+	{
+		if (backup->backup_mode == BACKUP_MODE_FULL ||
+			backup->backup_mode == BACKUP_MODE_INCREMENTAL)
+			elog(INFO, "validate: %s backup and archive log files by %s",
+				 timestamp, (size_only ? "SIZE" : "CRC"));
+		else
+		{
 			if (backup->backup_mode == BACKUP_MODE_ARCHIVE)
-				elog(INFO, "validate: %s archive log files by %s", timestamp, (size_only ? "SIZE" : "CRC"));
+				elog(INFO, "validate: %s archive log files by %s",
+					 timestamp, (size_only ? "SIZE" : "CRC"));
 			else if (backup->with_serverlog)
-				elog(INFO, "validate: %s server log files by %s", timestamp, (size_only ? "SIZE" : "CRC"));
+				elog(INFO, "validate: %s server log files by %s",
+					 timestamp, (size_only ? "SIZE" : "CRC"));
 		}
 	}
 
-	if(!check){
-		if (HAVE_DATABASE(backup))
+	if (!check)
+	{
+		if (backup->backup_mode == BACKUP_MODE_FULL ||
+			backup->backup_mode == BACKUP_MODE_INCREMENTAL)
 		{
 			elog(LOG, "database files...");
 			pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
@@ -100,17 +110,17 @@ pgBackupValidate(pgBackup *backup, bool size_only, bool for_get_timeline, bool w
 			parray_walk(files, pgFileFree);
 			parray_free(files);
 		}
-		if (HAVE_ARCLOG(backup))
-		{
-			elog(LOG, "archive WAL files...");
-			pgBackupGetPath(backup, base_path, lengthof(base_path), ARCLOG_DIR);
-			pgBackupGetPath(backup, path, lengthof(path), ARCLOG_FILE_LIST);
-			files = dir_read_file_list(base_path, path);
-			if (!pgBackupValidateFiles(files, base_path, size_only))
-				corrupted = true;
-			parray_walk(files, pgFileFree);
-			parray_free(files);
-		}
+
+		/* WAL archives are present for all modes */
+		elog(LOG, "archive WAL files...");
+		pgBackupGetPath(backup, base_path, lengthof(base_path), ARCLOG_DIR);
+		pgBackupGetPath(backup, path, lengthof(path), ARCLOG_FILE_LIST);
+		files = dir_read_file_list(base_path, path);
+		if (!pgBackupValidateFiles(files, base_path, size_only))
+			corrupted = true;
+		parray_walk(files, pgFileFree);
+		parray_free(files);
+
 		if (backup->with_serverlog)
 		{
 			elog(LOG, "server log files...");

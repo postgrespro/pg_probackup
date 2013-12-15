@@ -189,15 +189,14 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 			snprintf(duration, lengthof(duration), "%lum",
 				(backup->end_time - backup->start_time) / 60);
 		/* "Full" is only for full backup */
-		if (backup->backup_mode >= BACKUP_MODE_FULL)
+		if (backup->backup_mode == BACKUP_MODE_FULL)
 			pretty_size(backup->total_data_bytes, total_data_bytes_str,
 					lengthof(total_data_bytes_str));
-		else if (backup->backup_mode >= BACKUP_MODE_INCREMENTAL)
+		if (backup->backup_mode == BACKUP_MODE_INCREMENTAL)
 			pretty_size(backup->read_data_bytes, read_data_bytes_str,
 					lengthof(read_data_bytes_str));
-		if (HAVE_ARCLOG(backup))
-			pretty_size(backup->read_arclog_bytes, read_arclog_bytes_str,
-					lengthof(read_arclog_bytes_str));
+		pretty_size(backup->read_arclog_bytes, read_arclog_bytes_str,
+				lengthof(read_arclog_bytes_str));
 		if (backup->with_serverlog)
 			pretty_size(backup->read_srvlog_bytes, read_srvlog_bytes_str,
 					lengthof(read_srvlog_bytes_str));

@@ -176,13 +176,6 @@ typedef struct pgBackupOption
 #define KEEP_INFINITE			(INT_MAX)
 #define BYTES_INVALID			(-1)
 
-#define HAVE_DATABASE(backup)	((backup)->backup_mode >= BACKUP_MODE_INCREMENTAL)
-#define HAVE_ARCLOG(backup)		((backup)->backup_mode >= BACKUP_MODE_ARCHIVE)
-#define TOTAL_READ_SIZE(backup)	\
-	((HAVE_DATABASE((backup)) ? (backup)->read_data_bytes : 0) + \
-	 (HAVE_ARCLOG((backup)) ? (backup)->read_arclog_bytes : 0) + \
-	 ((backup)->with_serverlog ? (backup)->read_srvlog_bytes : 0))
-
 typedef struct pgTimeLine
 {
 	TimeLineID	tli;
@@ -265,7 +258,9 @@ extern char *slurpFile(const char *datadir,
 
 /* in validate.c */
 extern int do_validate(pgBackupRange *range);
-extern void pgBackupValidate(pgBackup *backup, bool size_only, bool for_get_timeline, bool with_database);
+extern void pgBackupValidate(pgBackup *backup,
+							 bool size_only,
+							 bool for_get_timeline);
 
 /* in catalog.c */
 extern pgBackup *catalog_get_backup(time_t timestamp);

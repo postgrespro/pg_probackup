@@ -660,28 +660,35 @@ do_backup(pgBackupOption bkupopt)
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
-		elog(ERROR_ARGS, _("required parameter not specified: PGDATA (-D, --pgdata)"));
+		elog(ERROR_ARGS, _("Required parameter not specified: PGDATA "
+						   "(-D, --pgdata)"));
 
+	/* A backup mode is needed */
 	if (current.backup_mode == BACKUP_MODE_INVALID)
-		elog(ERROR_ARGS, _("required parameter not specified: BACKUP_MODE (-b, --backup-mode)"));
+		elog(ERROR_ARGS, _("Required parameter not specified: BACKUP_MODE "
+						   "(-b, --backup-mode)"));
 
-	/* ARCLOG_PATH is requried only when backup archive WAL */
-	if (HAVE_ARCLOG(&current) && arclog_path == NULL)
-		elog(ERROR_ARGS, _("required parameter not specified: ARCLOG_PATH (-A, --arclog-path)"));
+	/* ARCLOG_PATH is required for all the modes */
+	if (arclog_path == NULL)
+		elog(ERROR_ARGS,
+			 _("Required parameter not specified: ARCLOG_PATH "
+			   "(-A, --arclog-path)"));
 
 	/* SRVLOG_PATH is required only when backup serverlog */
 	if (current.with_serverlog && srvlog_path == NULL)
-		elog(ERROR_ARGS, _("required parameter not specified: SRVLOG_PATH (-S, --srvlog-path)"));
+		elog(ERROR_ARGS, _("required parameter not specified: SRVLOG_PATH "
+						   "(-S, --srvlog-path)"));
 
 #ifndef HAVE_LIBZ
 	if (current.compress_data)
 	{
-		elog(WARNING, _("requested compression not available in this: installation -- archive will be uncompressed"));
+		elog(WARNING, _("requested compression not available in this "
+						"installation. Archive will not be compressed"));
 		current.compress_data = false;
 	}
 #endif
 
-	/* confirm data block size and xlog block size are compatible */
+	/* Confirm data block size and xlog block size are compatible */
 	check_server_version();
 
 	/* setup cleanup callback function */
@@ -758,23 +765,37 @@ do_backup(pgBackupOption bkupopt)
 	if (!check)
 		pgBackupWriteIni(&current);
 
+	/* Calculate the total data read */
 	if (verbose)
 	{
-		if (TOTAL_READ_SIZE(&current) == 0)
+		int64 total_read = 0;
+
+		/* WAL archives */
+		total_read += current.read_arclog_bytes;
+
+		/* Database data */
+		if (current.backup_mode == BACKUP_MODE_FULL ||
+			current.backup_mode == BACKUP_MODE_INCREMENTAL)
+			total_read += current.read_arclog_bytes;
+
+		/* Server logs */
+		if (current.with_serverlog)
+			total_read += current.read_srvlog_bytes;
+
+		if (total_read == 0)
 			printf(_("nothing to backup\n"));
 		else
 			printf(_("all backup completed(read: " INT64_FORMAT " write: "
 				INT64_FORMAT ")\n"),
-				TOTAL_READ_SIZE(&current), current.write_bytes);
+				total_read, current.write_bytes);
 		printf(_("========================================\n"));
 	}
 
 	/*
 	 * Delete old files (archived WAL and serverlog) after update of status.
 	 */
-	if (HAVE_ARCLOG(&current))
-		delete_old_files(arclog_path, files_arclog, keep_arclog_files,
-			keep_arclog_days, true);
+	delete_old_files(arclog_path, files_arclog, keep_arclog_files,
+		keep_arclog_days, true);
 	if (current.with_serverlog)
 		delete_old_files(srvlog_path, files_srvlog, keep_srvlog_files,
 			keep_srvlog_days, false);

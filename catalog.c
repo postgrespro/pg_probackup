@@ -254,8 +254,13 @@ catalog_get_last_data_backup(parray *backup_list)
 	{
 		backup = (pgBackup *) parray_get(backup_list, i);
 
-		/* we need completed database backup */
-		if (backup->status == BACKUP_STATUS_OK && HAVE_DATABASE(backup))
+		/*
+		 * We need completed database backup in the case of a full or
+		 * incremental backup.
+		 */
+		if (backup->status == BACKUP_STATUS_OK &&
+			(backup->backup_mode == BACKUP_MODE_INCREMENTAL ||
+			 backup->backup_mode == BACKUP_MODE_FULL))
 			return backup;
 	}
 
@@ -277,7 +282,7 @@ catalog_get_last_arclog_backup(parray *backup_list)
 		backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* we need completed archived WAL backup */
-		if (backup->status == BACKUP_STATUS_OK && HAVE_ARCLOG(backup))
+		if (backup->status == BACKUP_STATUS_OK)
 			return backup;
 	}
 

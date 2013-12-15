@@ -164,14 +164,14 @@ do_restore(const char *target_time,
 
 #ifndef HAVE_LIBZ
 		/* Make sure we won't need decompression we haven't got */
-		if (base_backup->compress_data &&
-			(HAVE_DATABASE(base_backup) || HAVE_ARCLOG(base_backup)))
-		{
+		if (base_backup->compress_data)
 			elog(ERROR_SYSTEM,
-				_("can't restore from compressed backup (compression not supported in this installation)"));
-		}
+				_("can't restore from compressed backup (compression "
+				  "not supported in this installation)"));
+
 #endif
-		if (satisfy_timeline(timelines, base_backup) && satisfy_recovery_target(base_backup, rt))
+		if (satisfy_timeline(timelines, base_backup) &&
+			satisfy_recovery_target(base_backup, rt))
 			goto base_backup_found;
 	}
 	/* no full backup found, can't restore */
@@ -236,9 +236,6 @@ base_backup_found:
 
 		/* don't use incomplete backup */
 		if (backup->status != BACKUP_STATUS_OK)
-			continue;
-
-		if (!HAVE_ARCLOG(backup))
 			continue;
 
 		/* care timeline junction */
@@ -333,7 +330,7 @@ restore_database(pgBackup *backup)
 	 * Validate backup files with its size, because load of CRC calculation is
 	 * not right.
 	 */
-	pgBackupValidate(backup, true, false, true);
+	pgBackupValidate(backup, true, false);
 
 	/* make direcotries and symbolic links */
 	pgBackupGetPath(backup, path, lengthof(path), MKDIRS_SH_FILE);
@@ -497,7 +494,7 @@ restore_archive_logs(pgBackup *backup, bool is_hard_copy)
 	 * Validate backup files with its size, because load of CRC calculation is
 	 * not light.
 	 */
-	pgBackupValidate(backup, true, false, false);
+	pgBackupValidate(backup, true, false);
 
 	pgBackupGetPath(backup, list_path, lengthof(list_path), ARCLOG_FILE_LIST);
 	pgBackupGetPath(backup, base_path, lengthof(list_path), ARCLOG_DIR);
@@ -850,13 +847,13 @@ readTimeLineHistory(TimeLineID targetTLI)
 static bool
 satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 {
-	if(rt->xid_specified)
-		return backup->recovery_xid <= rt->recovery_target_xid);
+	if (rt->xid_specified)
+		return backup->recovery_xid <= rt->recovery_target_xid;
 
 	if (rt->time_specified)
-		return backup->recovery_time <= rt->recovery_target_time);
-	else
-		return true;
+		return backup->recovery_time <= rt->recovery_target_time;
+
+	return true;
 }
 
 static bool
@@ -948,7 +945,7 @@ get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt)
 			 * calculation is not right.
 			 */
 			if (base_backup->status == BACKUP_STATUS_DONE)
-				pgBackupValidate(base_backup, true, true, false);
+				pgBackupValidate(base_backup, true, true);
 
 			if(!satisfy_recovery_target(base_backup, rt))
 				continue;
