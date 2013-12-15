@@ -14,9 +14,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-typedef unsigned long Datum;
-typedef struct MemoryContextData *MemoryContext;
-
 #include "access/xlog_internal.h"
 
 /*
