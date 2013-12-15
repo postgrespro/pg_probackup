@@ -320,7 +320,7 @@ extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
 
-/* in pgsql_src/pg_ctl.c */
+/* in status.c */
 extern bool is_pg_running(void);
 
 #endif /* PG_RMAN_H */
