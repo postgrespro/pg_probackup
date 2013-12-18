@@ -53,8 +53,8 @@ Generic options:
   --help                    show this help, then exit
   --version                 output version information, then exit
 
-Read the website for details. <http://code.google.com/p/pg-rman/>
-Report bugs to <http://code.google.com/p/pg-rman/issues/list>.
+Read the website for details. <https://github.com/michaelpq/pg_rman>
+Report bugs to <https://github.com/michaelpq/pg_rman/issues>.
 pg_rman 1.2.6
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
 ERROR: Required parameter not specified: BACKUP_MODE (-b, --backup-mode)
