@@ -1002,14 +1002,12 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	 * Enforce TLI obtention if backup is not present as this code
 	 * path can be taken as a callback at exit.
 	 */
-	if (backup != NULL)
-		tli = backup->tli;
-	else
-		tli = get_current_timeline();
+	tli = get_current_timeline();
 
 	/* Fill in fields if backup exists */
 	if (backup != NULL)
 	{
+		backup->tli = tli;
 		backup->stop_lsn = lsn;
 		elog(LOG, _("%s(): tli=%X lsn=%X/%08X"),
 			 __FUNCTION__, backup->tli,
