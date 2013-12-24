@@ -82,23 +82,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
 
-	/*
-	 * In archive backup mode, check if there is an already validated
-	 * full backup on current timeline.
-	 */
+	/* Leave in case od archive mode */
 	if (current.backup_mode == BACKUP_MODE_ARCHIVE)
-	{
-		pgBackup   *prev_backup;
-
-		prev_backup = catalog_get_last_data_backup(backup_list);
-		if (prev_backup == NULL)
-		{
-			elog(ERROR_SYSTEM, _("Full backup detected but it is not "
-					"validated so archive backup cannot be taken. "
-					"backup. Validate it and retry."));
-		}
 		return NULL;
-	}
 
 	elog(INFO, _("database backup start"));
 
@@ -112,6 +98,21 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 * not contain this information.
 	 */
 	current.tli = get_current_timeline();
+
+	/*
+	 * In incremental backup mode, check if there is an already-validated
+	 * full backup on current timeline.
+	 */
+	if (current.backup_mode == BACKUP_MODE_INCREMENTAL)
+	{
+		pgBackup   *prev_backup;
+
+		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
+		if (prev_backup == NULL)
+			elog(ERROR_SYSTEM, _("Valid full backup not found for "
+					"incremental backup. Either create a full backup "
+					"or validate existing one."));
+	}
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
@@ -167,30 +168,22 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 * To take incremental backup, the file list of the last completed database
 	 * backup is needed.
 	 */
-	if (current.backup_mode < BACKUP_MODE_FULL)
+	if (current.backup_mode == BACKUP_MODE_INCREMENTAL)
 	{
 		pgBackup   *prev_backup;
 
 		/* find last completed database backup */
-		prev_backup = catalog_get_last_data_backup(backup_list);
-		if (prev_backup == NULL || prev_backup->tli != current.tli)
-		{
-			elog(ERROR_SYSTEM, _("Full backup detected  but it is not "
-								 "validated so incremental backup cannot be taken"));
-		}
-		else
-		{
-			pgBackupGetPath(prev_backup, prev_file_txt, lengthof(prev_file_txt),
-				DATABASE_FILE_LIST);
-			prev_files = dir_read_file_list(pgdata, prev_file_txt);
+		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
+		pgBackupGetPath(prev_backup, prev_file_txt, lengthof(prev_file_txt),
+			DATABASE_FILE_LIST);
+		prev_files = dir_read_file_list(pgdata, prev_file_txt);
 
-			/*
-			 * Do backup only pages having larger LSN than previous backup.
-			 */
-			lsn = &prev_backup->start_lsn;
-			elog(LOG, _("backup only the page that there was of the update from LSN(%X/%08X).\n"),
-				 (uint32) (*lsn >> 32), (uint32) *lsn);
-		}
+		/*
+		 * Do backup only pages having larger LSN than previous backup.
+		 */
+		lsn = &prev_backup->start_lsn;
+		elog(LOG, _("backup only the page that there was of the update from LSN(%X/%08X).\n"),
+			 (uint32) (*lsn >> 32), (uint32) *lsn);
 	}
 
 	/* initialize backup list from non-snapshot */
@@ -455,15 +448,28 @@ do_backup_arclog(parray *backup_list)
 	/* initialize size summary */
 	current.read_arclog_bytes = 0;
 
-	/* switch xlog if database is not backed up */
+	/*
+	 * Switch xlog if database is not backed up, current timeline of
+	 * server is obtained here.
+	 */
 	if ((uint32) current.stop_lsn == 0)
 		pg_switch_xlog(&current);
+
+	/*
+	 * Check if there is a full backup present on current timeline.
+	 * For an incremental or full backup, we are sure that there is one
+	 * so this error can be bypassed safely.
+	 */
+	if (current.backup_mode == BACKUP_MODE_ARCHIVE &&
+		catalog_get_last_data_backup(backup_list, current.tli) == NULL)
+		elog(ERROR_SYSTEM, _("No valid full or incremental backup detected "
+							 "on current timeline "));
 
 	/*
 	 * To take incremental backup, the file list of the last completed
 	 * database backup is needed.
 	 */
-	prev_backup = catalog_get_last_arclog_backup(backup_list);
+	prev_backup = catalog_get_last_arclog_backup(backup_list, current.tli);
 	if (verbose && prev_backup == NULL)
 		printf(_("no previous full backup, performing a full backup instead\n"));
 
@@ -587,7 +593,8 @@ do_backup_srvlog(parray *backup_list)
 	 * To take incremental backup, the file list of the last completed database
 	 * backup is needed.
 	 */
-	prev_backup = catalog_get_last_srvlog_backup(backup_list);
+	prev_backup = catalog_get_last_srvlog_backup(backup_list,
+										get_current_timeline());
 	if (verbose && prev_backup == NULL)
 		printf(_("no previous full backup, performing a full backup instead\n"));
 

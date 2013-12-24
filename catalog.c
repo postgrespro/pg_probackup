@@ -244,7 +244,7 @@ err_proc:
  * Find the last completed database backup from the backup list.
  */
 pgBackup *
-catalog_get_last_data_backup(parray *backup_list)
+catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 {
 	int			i;
 	pgBackup   *backup = NULL;
@@ -256,9 +256,10 @@ catalog_get_last_data_backup(parray *backup_list)
 
 		/*
 		 * We need completed database backup in the case of a full or
-		 * incremental backup.
+		 * incremental backup on current timeline.
 		 */
 		if (backup->status == BACKUP_STATUS_OK &&
+			backup->tli == tli &&
 			(backup->backup_mode == BACKUP_MODE_INCREMENTAL ||
 			 backup->backup_mode == BACKUP_MODE_FULL))
 			return backup;
@@ -268,10 +269,11 @@ catalog_get_last_data_backup(parray *backup_list)
 }
 
 /*
- * Find the last completed archived WAL backup from the backup list.
+ * Find the last completed archived WAL backup from the backup list
+ * on current timeline.
  */
 pgBackup *
-catalog_get_last_arclog_backup(parray *backup_list)
+catalog_get_last_arclog_backup(parray *backup_list, TimeLineID tli)
 {
 	int			i;
 	pgBackup   *backup = NULL;
@@ -282,7 +284,8 @@ catalog_get_last_arclog_backup(parray *backup_list)
 		backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* we need completed archived WAL backup */
-		if (backup->status == BACKUP_STATUS_OK)
+		if (backup->status == BACKUP_STATUS_OK &&
+			backup->tli == tli)
 			return backup;
 	}
 
@@ -290,10 +293,11 @@ catalog_get_last_arclog_backup(parray *backup_list)
 }
 
 /*
- * Find the last completed serverlog backup from the backup list.
+ * Find the last completed serverlog backup from the backup list
+ * on current timeline.
  */
 pgBackup *
-catalog_get_last_srvlog_backup(parray *backup_list)
+catalog_get_last_srvlog_backup(parray *backup_list, TimeLineID tli)
 {
 	int			i;
 	pgBackup   *backup = NULL;
@@ -304,7 +308,9 @@ catalog_get_last_srvlog_backup(parray *backup_list)
 		backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* we need completed serverlog backup */
-		if (backup->status == BACKUP_STATUS_OK && backup->with_serverlog)
+		if (backup->status == BACKUP_STATUS_OK &&
+			backup->with_serverlog &&
+			backup->tli == tli)
 			return backup;
 	}
 

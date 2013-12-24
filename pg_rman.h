@@ -265,9 +265,12 @@ extern void pgBackupValidate(pgBackup *backup,
 /* in catalog.c */
 extern pgBackup *catalog_get_backup(time_t timestamp);
 extern parray *catalog_get_backup_list(const pgBackupRange *range);
-extern pgBackup *catalog_get_last_data_backup(parray *backup_list);
-extern pgBackup *catalog_get_last_arclog_backup(parray *backup_list);
-extern pgBackup *catalog_get_last_srvlog_backup(parray *backup_list);
+extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
+											  TimeLineID tli);
+extern pgBackup *catalog_get_last_arclog_backup(parray *backup_list,
+												TimeLineID tli);
+extern pgBackup *catalog_get_last_srvlog_backup(parray *backup_list,
+												TimeLineID tli);
 
 extern int catalog_lock(void);
 extern void catalog_unlock(void);
