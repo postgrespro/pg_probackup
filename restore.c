@@ -1021,7 +1021,12 @@ search_next_wal(const char *path, XLogRecPtr *need_lsn, parray *timelines)
 			parray_remove(timelines, i + 1);
 		/* XXX: should we add a linebreak when we find a timeline? */
 
-		/* Move to next xlog segment */
+		/*
+		 * Move to next xlog segment. Note that we need to increment
+		 * by XLogSegSize to jump directly to the next WAL segment file
+		 * and as this value is used to generate the WAL file name with
+		 * the current timeline of backup.
+		 */
 		*need_lsn += XLogSegSize;
 	}
 }
