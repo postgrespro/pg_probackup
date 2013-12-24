@@ -82,7 +82,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
 
-	/* Leave in case od archive mode */
+	/* Leave in case of archive mode */
 	if (current.backup_mode == BACKUP_MODE_ARCHIVE)
 		return NULL;
 
