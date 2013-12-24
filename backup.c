@@ -455,6 +455,10 @@ do_backup_arclog(parray *backup_list)
 	if ((uint32) current.stop_lsn == 0)
 		pg_switch_xlog(&current);
 
+	/* Archive backup is not available for a standby */
+	if (current.is_from_standby)
+		elog(ERROR_SYSTEM, _("Archive backup not allowed on a standby node"));
+
 	/*
 	 * Check if there is a full backup present on current timeline.
 	 * For an incremental or full backup, we are sure that there is one
