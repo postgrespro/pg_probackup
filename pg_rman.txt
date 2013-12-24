@@ -1,0 +1,444 @@
+pg_rman, Documentation
+======================
+
+pg_rman is a backup and recovery manager for PostgreSQL.
+
+It proposes the features below:
+- Backup while database runs including tablespaces with just one
+  command
+- Recovery from backup with just one command, with customized targets
+  to facilitate the use of PITR.
+- Support for full, incremental and archive backup
+- Compression of backup files
+- Management of backups with integrated catalog
+
+========
+Synopsis
+========
+
+pg_rman [ OPTIONS ]
+    { init |
+      backup |
+      restore |
+      show [ DATE | timeline ] |
+      validate [ DATE ] |
+      delete DATE }
+
+DATE is the start time of the target backup in ISO-format:
+(YYYY-MM-DD HH:MI:SS). Prefix match is used to compare DATE and backup
+files.
+
+========
+Commands
+========
+pg_rman supports the following commands. See also Options for details of
+OPTIONS.
+
+init
+    Initialize a backup catalog.
+
+backup
+    Take an online backup.
+
+restore
+    Perform restore.
+
+show
+    Show backup history.
+    The timeline option shows timeline of the backup and the parent's
+    timeline for each backup. 
+
+validate
+    Validate backup files.
+
+delete
+    Delete backup files.
+
+===========
+Description
+===========
+
+pg_rman is a utility program to backup and restore PostgreSQL database.
+It takes a physical online backup of whole database cluster, archive
+WALs, and server logs.
+
+- Initialize a backup catalog
+First, you need to create "a backup catalog" to store backup files and
+their metadata. It is recommended to setup archive_mode and archive_command
+in postgresql.conf before initializing the backup catalog. If the variables
+are initialized, pg_rman can adjust the config file to the setting. In this
+case, you have to specify the database cluster path for PostgreSQL. Please
+specify it in PGDATA environmental variable or -D/--pgdata option.
+
+    $ pg_rman init -B <a backup catalog path>
+
+- Backup
+Backup target can be one of the following types. Also serverlogs can be added.
+
+Full backup
+    Backup a whole database cluster. 
+
+Incremental backup
+    Backup only files or pages modified after the last verified backup. 
+
+Archive WAL backup
+    Backup only archive WAL files. 
+
+It is recommended to verify backup files as soon as possible after backup.
+Unverified backup cannot be used in restore and in incremental backup. 
+
+- Restore
+PostgreSQL server should be stopped before performing a restore. If database
+cluster still exists, restore command will save unarchived transaction log
+and delete all database files. You can retry recovery until a new backup is
+taken. After restoring files, pg_rman creates recovery.conf in $PGDATA. The
+conf file contains parameters for recovery. It is as well possible to modify
+the file manually.
+
+It is recommended to take a full backup as soon as possible after recovery
+has succeeded.
+
+If "--recovery-target-timeline" is not specifed, the last checkpoint's
+TimeLineID in control file ($PGDATA/global/pg_control) will be the restore
+target. If pg_control is not present, TimeLineID in the full backup used by
+the restore will be a restore target. 
+
+========
+Examples
+========
+
+To reduce the number of command line arguments, you can set BACKUP_PATH,
+an environment variable, to the absolute path of the backup catalog and
+write default configuration into ${BACKUP_PATH}/pg_rman.ini.
+
+$ cat $BACKUP_PATH/pg_rman.ini
+ARCLOG_PATH = /home/postgres/arclog
+SRVLOG_PATH = /home/postgres/pgdata/pg_log
+BACKUP_MODE = F
+COMPRESS_DATA = YES
+KEEP_ARCLOG_FILES = 10
+KEEP_ARCLOG_DAYS = 10
+KEEP_DATA_GENERATIONS = 3
+KEEP_DATA_DAYS = 120
+KEEP_SRVLOG_FILES = 10
+KEEP_SRVLOG_DAYS = 10
+
+- Take a backup.
+This example takes a full backup of the whole database with server logs.
+Then, it validates all unvalidated backups.
+$ pg_rman backup --backup-mode=full --with-serverlog
+$ pg_rman validate
+
+- Restore from a backup.
+$ pg_ctl stop -m immediate
+$ pg_rman restore
+$ pg_ctl start
+
+- Show a backup
+$ pg_rman show
+===========================================================================================================
+Start                Mode  Current TLI  Parent TLI  Time   Total    Data     WAL     Log  Backup   Status  
+===========================================================================================================
+2013-12-25 03:02:31  INCR            1           0    0m    ----   203kB    67MB    ----    67MB   DONE
+2013-12-25 03:02:31  INCR            1           0    0m    ----      0B    ----    ----      0B   ERROR
+2013-12-25 03:02:25  FULL            1           0    0m    33MB    ----    33MB    ----    64MB   OK
+
+The fields are:
+- Start : start time of backup
+- Mode: Mode of backup
+-- FULL for a full backup
+-- INCR for an incremental backup
+-- ARCH for archive backup
+- Current TLI: current timeline of backup
+- Parent TLI: parent timeline of backup
+- Time : total time necessary to take this backup
+- Total : Total size of backup
+- Data : size of data files
+- WAL : size of read WAL archive files
+- Log : size of read server log files
+- Backup: size of backup (= written size)
+- Status: status of backup. Possible values are:
+-- OK : backup is done and validated.
+-- DONE : backup is done, but not validated yet.
+-- RUNNING : backup is running
+-- DELETING : backup is being deleted.
+-- DELETED : backup has been deleted.
+-- ERROR : backup is unavailable because some errors occur during backup.
+-- CORRUPT : backup is unavailable because it is broken.
+
+When a date is specified, more details about a backup is retrived:
+$ pg_rman show '2011-11-27 19:15:45'
+# configuration
+BACKUP_MODE=FULL
+WITH_SERVERLOG=false
+COMPRESS_DATA=false
+# result
+TIMELINEID=1
+START_LSN=0/08000020
+STOP_LSN=0/080000a0
+START_TIME='2011-11-27 19:15:45'
+END_TIME='2011-11-27 19:19:02'
+RECOVERY_XID=1759
+RECOVERY_TIME='2011-11-27 19:15:53'
+TOTAL_DATA_BYTES=1242420184
+READ_DATA_BYTES=25420184
+READ_ARCLOG_BYTES=32218912
+WRITE_BYTES=242919520
+BLOCK_SIZE=8192
+XLOG_BLOCK_SIZE=8192
+STATUS=OK
+
+You can check the "RECOVERY_XID" and "RECOVERY_TIME" which are used for
+restore option "--recovery-target-xid", "--recovery-target-time".
+
+The delete command deletes backup files not required by recovery after
+the specified date.
+
+=======
+Options
+=======
+
+pg_rman accepts the following command line parameters. Some of them can
+be also sepcified as environment variables. See also Parameters for the
+details.
+
+- Common options
+As a general rule, paths for data location need to be specified as
+absolute paths; relative paths are not allowed.
+
+-D PATH / --pgdata=PATH
+    The absolute path of database cluster. Required on backup and
+    restore.
+
+-A PATH / --arclog-path=PATH
+    The absolute path of archive WAL directory. Required on backup
+    and restore. 
+
+-S PATH / --srvlog-path=PATH
+    The absolute path of server log directory. Required on backup with
+    server logs and restore. 
+
+-B PATH / --backup-path=PATH
+    The absolute path of backup catalog. This option is mandatory.
+
+-c / --check
+    If specifed, pg_rman doesn't perform actual jobs but only checks
+    parameters and required resources. The option is typically used with
+    --verbose option to verify the operation. 
+
+-v / --verbose
+    If specified, pg_rman works in verbose mode.
+
+- Backup options
+
+-b { full | incremental | archive } /
+--backup-mode={ full | incremental | archive }
+    Specify backup target files. Available options are: "full" backup,
+    "incremental" backup, and "archive" backup. Abbreviated forms
+    (prefix match) are also available. For example, -b f means "full"
+    backup. 
+
+    full : Whole database backup and archive backup
+    incremental : Incremental backup and archive backup
+    archive : Only archive backup 
+
+-s / --with-serverlog
+    Backup server log files if specified. 
+
+-Z / --compress-data
+    Compress backup files with zlib if specified. 
+
+-C / --smooth-checkpoint
+    Checkpoint is performed on every backups. If the option is specified,
+    do smooth checkpoint then. See also the second argument for
+    pg_start_backup(). 
+
+--keep-data-generations / --keep-data-days
+    Specify how long backuped data files will be kept.
+    --keep-data-generations means number of backup generations.
+    --keep-data-days means days to be kept.
+    Only files exceeded both settings are deleted. 
+
+--keep-arclog-files / --keep-arclog-days
+    Specify how long backuped archive WAL files will be kept.
+    --keep-arclog-files means number of backup files.
+    --keep-arclog-days means days to be kept. When backup is run, only
+    files exceeded both settings are deleted from archive storage.
+
+--keep-srvlog-files / --keep-srvlog-days
+    Specify how long backuped serverlog files will be kept.
+    --keep-srvlog-files means number of backup files.
+    --keep-srvlog-days means days to be kept.
+    When backup is run, only files exceeded both settings are deleted
+    from server log directory (log_directory). This option works when
+    you specify --with-serverlog and --srvlog-path options in backup
+    command.
+
+- Restore options
+The parameters whose name start are started with --recovery refer to
+the same parameters as the ones in recovery.confin recovery.conf.
+
+--recovery-target-timeline TIMELINE
+    Specifies recovering into a particular timeline. 
+    If not specified, the current timeline is used.
+
+--recovery-target-time TIMESTAMP
+    This parameter specifies the timestamp up to which recovery will
+    proceed.
+
+--recovery-target-xid XID
+    This parameter specifies the transaction ID up to which recovery
+    will proceed. 
+
+--recovery-target-inclusive
+    Specifies whether server pauses when recovery target is reached.
+
+--hard-copy
+    Archived WAL files are copied to archive WAL storage area. If you
+    do not specify --hard-copy, pg_rman makes symlink to archive WAL
+    where are in the backup catalog directory.
+
+- Catalog options
+
+-a / --show-all
+    Show all existing backups, including the deleted ones.
+
+- Connection options
+Parameters to connect PostgreSQL server.
+
+-d DBNAME / --dbname=DBNAME
+    The database name to execute pg_start_backup() and pg_stop_backup().
+
+-h HOSTNAME / --host=HOSTNAME
+    Specifies the host name of the machine on which the server is running.
+    If the value begins with a slash, it is used as the directory for the
+    Unix domain socket.
+
+-p PORT / --port=PORT
+    Specifies the TCP port or local Unix domain socket file extension on
+    which the server is listening for connections.
+
+-U USERNAME / --username=USERNAME
+    User name to connect as. 
+
+-w / --no-password
+    Never issue a password prompt. If the server requires password
+    authentication and a password is not available by other means such as
+    a .pgpass file, the connection attempt will fail. This option can be
+    useful in batch jobs and scripts where no user is present to enter a
+    password. 
+
+-W / --password
+    Force pg_rman to prompt for a password before connecting to a database.
+    This option is never essential, since pg_rman will automatically
+    prompt for a password if the server demands password authentication.
+    However, pg_rman will waste a connection attempt in order to find out
+    if the server wants a password. In some cases it is worth typing -W
+    to avoid the extra connection attempt. 
+
+- Generic options
+
+--help
+    Print help, then exit.
+
+-V / --version
+    Print version information, then exit.
+
+-! / --debug
+    Show debug information.
+
+==========
+Parameters
+==========
+
+Some of parameters can be specified as command line arguments, environment
+variables or in configuration file as follows:
+
+Short	Long			Environment		Conf file
+-h	--host			PGHOST			No
+-p	--port			PGPORT			No
+-d	--dbname		PGDATABASE		No
+-U	--username		PGUSER			No
+				PGPASSWORD		No
+-w	--password					No
+-W	--no-password					No
+-D	--pgdata		PGDATA			Yes
+-B	--backup-path		BACKUP_PATH		Yes
+-A	--arclog-path		ARCLOG_PATH		Yes
+-S	--srvlog-path		SRVLOG_PATH		Yes
+-b	--backup-mode		BACKUP_MODE		Yes
+-s	--with-serverlog	WITH_SERVERLOG		Yes
+-Z	--compress-data		COMPRESS_DATA		Yes
+-C	--smooth-checkpoint	SMOOTH_CHECKPOINT	Yes
+	--keep-data-generations	KEEP_DATA_GENERATIONS	Yes
+	--keep-data-days	KEEP_DATA_DAYS		Yes
+	--keep-srvlog-files	KEEP_SRVLOG_FILES	Yes
+	--keep-srvlog-days	KEEP_SRVLOG_DAYS	Yes
+	--keep-arclog-files	KEEP_ARCLOG_FILES	Yes
+	--keep-arclog-days	KEEP_ARCLOG_DAYS	Yes
+	--recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes
+	--recovery-target-xid	RECOVERY_TARGET_XID	Yes
+	--recovery-target-time	RECOVERY_TARGET_TIME	Yes
+	--recovery-target-inclusive RECOVERY_TARGET_INCLUSIVE Yes
+	--hard-copy		HARD_COPY		Yes
+
+Variable names in configuration file are the same as long names or names
+of environment variables. The password can not be specified in command
+line and configuration file for security reason. 
+
+This utility, like most other PostgreSQL utilities, also uses the
+environment variables supported by libpq (see Environment Variables) 
+
+============
+Restrictions
+============
+pg_rman has the following restrictions.
+
+- Requires to read database cluster directory and write backup catalog
+  directory. It is usually necessary to mount the disk where backup
+  catalog is placed with NFS or related from database server.
+- Major versions of pg_rman and server should match.
+- Block sizes of pg_rman and server should match.
+- If there are some unreadable files/directories in data folder of server
+  WAL directory or archived WAL directory, the backup or restore will fail
+  depending on the backup mode selected.
+- Incremental backup is not able to take necessary files after a database
+  creation, so take a full backup once a new database is created.
+
+=======
+Details
+=======
+- Recovery to Point-in-Time
+pg_rman can recover to point-in-time if timeline, transaction ID, or
+timestamp is specified in recovery.conf. xlogdump is a contrib module of
+PostgreSQL core that allows checking in the content of WAL files and
+determine when to recover. This might help.
+
+- Configuration file
+Setting parameters in configuration file is done as "name=value". Quotes
+are required if the value contains whitespaces. Comments should start with
+"#" and are automatically ignored. Whitespaces and tabs are ignored
+excluding values.
+
+- Exit codes
+pg_rman returns exit codes for each error status.
+
+Code	Name			Description
+0	SUCCESS			Operation succeeded.
+1	HELP			Print help, then exit
+2	ERROR			Generic error
+3	FATAL			Exit because of repeated errors
+4	PANIC			Unknown critical condition
+10	ERROR_SYSTEM		I/O or system error
+11	ERROR_NOMEM		Out of memory
+12	ERROR_ARGS		Invalid input parameters
+13	ERROR_INTERRUPTED	Interrupted by user (Ctrl+C etc.)
+14	ERROR_PG_COMMAND	SQL error
+15	ERROR_PG_CONNECT	Cannot connect to PostgreSQL server
+20	ERROR_ARCHIVE_FAILED	Cannot archive WAL files
+21	ERROR_NO_BACKUP		Backup file not found
+22	ERROR_CORRUPTED		Backup file is broken
+23	ERROR_ALREADY_RUNNING	Cannot start because another pg_rman is running
+24	ERROR_PG_INCOMPATIBLE	Version conflicted with server
+25	ERROR_PG_RUNNING	Error due to server running
+26	ERROR_PID_BROKEN	postmaster.pid is broken

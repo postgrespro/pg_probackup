@@ -20,6 +20,8 @@ SRCS = \
 OBJS = $(SRCS:.c=.o)
 # pg_crc.c and are copied from PostgreSQL source tree.
 
+DOCS = pg_rman.txt
+
 # XXX for debug, add -g and disable optimization
 PG_CPPFLAGS = -I$(libpq_srcdir)
 PG_LIBS = $(libpq_pgport)
