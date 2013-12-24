@@ -992,7 +992,7 @@ search_next_wal(const char *path, XLogRecPtr *need_lsn, parray *timelines)
 		{
 			pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
 
-			XLogFileName(xlogfname, timeline->tli, *need_lsn);
+			xlog_fname(xlogfname, timeline->tli, *need_lsn);
 			join_path_components(xlogpath, path, xlogfname);
 
 			if (stat(xlogpath, &st) == 0)
@@ -1021,8 +1021,8 @@ search_next_wal(const char *path, XLogRecPtr *need_lsn, parray *timelines)
 			parray_remove(timelines, i + 1);
 		/* XXX: should we add a linebreak when we find a timeline? */
 
-		/* Move to next xlog record */
-		(*need_lsn)++;
+		/* Move to next xlog segment */
+		*need_lsn += XLogSegSize;
 	}
 }
 

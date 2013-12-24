@@ -433,7 +433,7 @@ do_backup_arclog(parray *backup_list)
 	char		prev_file_txt[MAXPGPATH];
 	pgBackup   *prev_backup;
 	int64		arclog_write_bytes = 0;
-	char		last_wal[MAXPGPATH];
+	char		last_wal[MAXFNAMELEN];
 
 	Assert(current.backup_mode == BACKUP_MODE_ARCHIVE ||
 		   current.backup_mode == BACKUP_MODE_INCREMENTAL ||
@@ -485,7 +485,7 @@ do_backup_arclog(parray *backup_list)
 	dir_list_file(files, arclog_path, NULL, true, false);
 
 	/* remove WALs archived after pg_stop_backup()/pg_switch_xlog() */
-	xlog_fname(last_wal, lengthof(last_wal), current.tli, &current.stop_lsn);
+	xlog_fname(last_wal, current.tli, current.stop_lsn);
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
@@ -1023,7 +1023,7 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	}
 
 	/* As well as WAL file name */
-	XLogFileName(file_name, tli, lsn);
+	xlog_fname(file_name, tli, lsn);
 
 	snprintf(ready_path, lengthof(ready_path),
 		"%s/pg_xlog/archive_status/%s.ready", pgdata,

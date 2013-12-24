@@ -73,9 +73,9 @@ xlog_is_complete_wal(const pgFile *file)
  * based on XLogFileName() in xlog_internal.h
  */
 void
-xlog_fname(char *fname, size_t len, TimeLineID tli, XLogRecPtr *lsn)
+xlog_fname(char *fname, TimeLineID tli, XLogRecPtr lsn)
 {
-	snprintf(fname, len, "%08X%08X%08X", tli,
-			 (uint32) (*lsn / XLogSegSize),
-			 (uint32) (*lsn % XLogSegSize));
+	snprintf(fname, MAXFNAMELEN, "%08X%08X%08X", tli,
+			 (uint32) (lsn >> 32),
+			 (uint32) (lsn / XLogSegSize));
 }
