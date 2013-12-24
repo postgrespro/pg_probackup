@@ -1068,7 +1068,7 @@ static void
 pg_switch_xlog(pgBackup *backup)
 {
 	wait_for_archive(backup,
-		"SELECT * FROM pg_switch_xlog())");
+		"SELECT * FROM pg_switch_xlog()");
 }
 
 /*
