@@ -43,12 +43,11 @@ static void backup_files(const char *from_root, const char *to_root,
 static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
 static parray *do_backup_arclog(parray *backup_list);
 static parray *do_backup_srvlog(parray *backup_list);
-static void remove_stopinfo_from_backup_label(char *history_file, char *bkup_label);
-static void make_backup_label(parray *backup_list);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
 static void pg_switch_xlog(pgBackup *backup);
+static bool pg_is_standby(void);
 static void get_lsn(PGresult *res, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
 
@@ -85,6 +84,10 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	/* Leave in case of archive mode */
 	if (current.backup_mode == BACKUP_MODE_ARCHIVE)
 		return NULL;
+
+	/* Block backup operations on a standby */
+	if (pg_is_standby())
+		elog(ERROR_SYSTEM, _("Backup cannot run on a standby."));
 
 	elog(INFO, _("database backup start"));
 
@@ -125,12 +128,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	if (!fileExists(path))
 		has_backup_label = false;
 
-	snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
-	make_native_path(path);
-	if (fileExists(path))
-		current.is_from_standby = true;
-
-	if (!has_backup_label && !current.is_from_standby)
+	/* Leave if no backup file */
+	if (!has_backup_label)
 	{
 		if (verbose)
 			printf(_("backup_label does not exist, stop backup\n"));
@@ -386,11 +385,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		/* notify end of backup */
 		pg_stop_backup(&current);
 
-		/* if backup is from standby, making backup_label from	*/
-		/* backup.history file.					*/
-		if (current.is_from_standby)
-			make_backup_label(files);
-
 		/* create file list */
 		create_file_list(files, pgdata, NULL, false);
 	}
@@ -439,6 +433,10 @@ do_backup_arclog(parray *backup_list)
 		   current.backup_mode == BACKUP_MODE_INCREMENTAL ||
 		   current.backup_mode == BACKUP_MODE_FULL);
 
+	/* Block backup operations on a standby */
+	if (pg_is_standby())
+		elog(ERROR_SYSTEM, _("Backup cannot run on a standby."));
+
 	if (verbose)
 	{
 		printf(_("========================================\n"));
@@ -454,10 +452,6 @@ do_backup_arclog(parray *backup_list)
 	 */
 	if ((uint32) current.stop_lsn == 0)
 		pg_switch_xlog(&current);
-
-	/* Archive backup is not available for a standby */
-	if (current.is_from_standby)
-		elog(ERROR_SYSTEM, _("Archive backup not allowed on a standby node"));
 
 	/*
 	 * Check if there is a full backup present on current timeline.
@@ -583,6 +577,10 @@ do_backup_srvlog(parray *backup_list)
 
 	if (!current.with_serverlog)
 		return NULL;
+
+	/* Block backup operations on a standby */
+	if (pg_is_standby())
+		elog(ERROR_SYSTEM, _("Backup cannot run on a standby."));
 
 	if (verbose)
 	{
@@ -739,7 +737,6 @@ do_backup(pgBackupOption bkupopt)
 	current.wal_block_size = XLOG_BLCKSZ;
 	current.recovery_xid = 0;
 	current.recovery_time = (time_t) 0;
-	current.is_from_standby = false;
 
 	/* create backup directory and backup.ini */
 	if (!check)
@@ -841,80 +838,6 @@ do_backup(pgBackupOption bkupopt)
 	catalog_unlock();
 
 	return 0;
-}
-
-void
-remove_stopinfo_from_backup_label(char *history_file, char *bkup_label)
-{
-	FILE	*read;
-	FILE	*write;
-	char	buf[MAXPGPATH * 2];
-
-	if ((read  = fopen(history_file, "r")) == NULL)
-		elog(ERROR_SYSTEM,
-			_("can't open backup history file for standby backup."));
-	if ((write = fopen(bkup_label, "w")) == NULL)
-		elog(ERROR_SYSTEM,
-			_("can't open backup_label file for standby backup."));
-	while (fgets(buf, lengthof(buf), read) != NULL)
-	{
-		if (strstr(buf, "STOP") - buf == 0)
-			continue;
-		fputs(buf, write);
-	}
-	fclose(write);
-	fclose(read);
-}
-
-/*
- *  creating backup_label from backup.history for standby backup.
- */
-void
-make_backup_label(parray *backup_list)
-{
-	char dest_path[MAXPGPATH];
-	char src_bkup_history_file[MAXPGPATH];
-	char dst_bkup_label_file[MAXPGPATH];
-	char original_bkup_label_file[MAXPGPATH];
-	parray *bkuped_arc_files = NULL;
-	int i;
-
-	pgBackupGetPath(&current, dest_path, lengthof(dest_path), DATABASE_DIR);
-	bkuped_arc_files = parray_new();
-	dir_list_file(bkuped_arc_files, arclog_path, NULL, true, false);
-
-	for (i = parray_num(bkuped_arc_files) - 1; i >= 0; i--)
-	{
-		char *current_arc_fname;
-		pgFile *current_arc_file;
-
-		current_arc_file = (pgFile *) parray_get(bkuped_arc_files, i);
-		current_arc_fname = last_dir_separator(current_arc_file->path) + 1;
-
-		if(strlen(current_arc_fname) <= 24) continue;
-
-		copy_file(arclog_path, dest_path, current_arc_file, NO_COMPRESSION);
-		join_path_components(src_bkup_history_file, dest_path, current_arc_fname);
-		join_path_components(dst_bkup_label_file, dest_path, PG_BACKUP_LABEL_FILE);
-		join_path_components(original_bkup_label_file, pgdata, PG_BACKUP_LABEL_FILE);
-		remove_stopinfo_from_backup_label(src_bkup_history_file, dst_bkup_label_file);
-
-		dir_list_file(backup_list, dst_bkup_label_file, NULL, false, true);
-		for (i = 0; i < parray_num(backup_list); i++)
-		{
-			pgFile *file = (pgFile *)parray_get(backup_list, i);
-			if (strcmp(file->path, dst_bkup_label_file) == 0)
-			{
-				struct stat st;
-				stat(dst_bkup_label_file, &st);
-				file->write_size = st.st_size;
-				file->crc        = pgFileGetCRC(file);
-				strcpy(file->path, original_bkup_label_file);
-			}
-		}
-		parray_qsort(backup_list, pgFileComparePath);
-		break;
-	}
 }
 
 /*
@@ -1078,6 +1001,19 @@ pg_switch_xlog(pgBackup *backup)
 {
 	wait_for_archive(backup,
 		"SELECT * FROM pg_switch_xlog()");
+}
+
+/*
+ * Check if node is a standby by looking at the presence of
+ * recovery.conf.
+ */
+static bool
+pg_is_standby(void)
+{
+	char	path[MAXPGPATH];
+	snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
+	make_native_path(path);
+	return fileExists(path);
 }
 
 /*

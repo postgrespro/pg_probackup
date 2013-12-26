@@ -154,10 +154,6 @@ typedef struct pgBackup
 	/* data/wal block size for compatibility check */
 	uint32		block_size;
 	uint32		wal_block_size;
-
-	/* if backup from standby or not */
-	bool		is_from_standby;
-
 } pgBackup;
 
 typedef struct pgBackupOption

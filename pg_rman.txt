@@ -82,8 +82,7 @@ Incremental backup
     Backup only files or pages modified after the last verified backup. 
 
 Archive WAL backup
-    Backup only archive WAL files. Archive backup is not available for
-    a standby node.
+    Backup only archive WAL files.
 
 It is recommended to verify backup files as soon as possible after backup.
 Unverified backup cannot be used in restore and in incremental backup. 
