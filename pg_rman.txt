@@ -263,15 +263,15 @@ absolute paths; relative paths are not allowed.
     Specify how long backuped archive WAL files will be kept.
     --keep-arclog-files means number of backup files.
     --keep-arclog-days means days to be kept. When backup is run, only
-    files exceeded both settings are deleted from archive storage.
+    files exceeded one of those settings are deleted from archive storage.
 
 --keep-srvlog-files / --keep-srvlog-days
     Specify how long backuped serverlog files will be kept.
     --keep-srvlog-files means number of backup files.
     --keep-srvlog-days means days to be kept.
-    When backup is run, only files exceeded both settings are deleted
-    from server log directory (log_directory). This option works when
-    you specify --with-serverlog and --srvlog-path options in backup
+    When backup is run, only files exceeded one of those settings are
+    deleted from server log directory (log_directory). This option works
+    when you specify --with-serverlog and --srvlog-path options in backup
     command.
 
 - Restore options

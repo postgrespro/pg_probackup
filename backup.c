@@ -1345,8 +1345,8 @@ delete_old_files(const char *root,
 			root, files_str, days_str);
 	}
 
-	/* delete files which satisfy both conditions */
-	if (keep_files == KEEP_INFINITE || keep_days == KEEP_INFINITE)
+	/* Leave if both settings are set to infinite, there is nothing to do */
+	if (keep_files == KEEP_INFINITE && keep_days == KEEP_INFINITE)
 	{
 		elog(LOG, "%s() infinite", __FUNCTION__);
 		return;
@@ -1358,6 +1358,7 @@ delete_old_files(const char *root,
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		elog(LOG, "%s() %s", __FUNCTION__, file->path);
+
 		/* Delete completed WALs only. */
 		if (is_arclog && !xlog_is_complete_wal(file))
 		{
@@ -1377,10 +1378,7 @@ delete_old_files(const char *root,
 				file->mtime, days_threshold);
 			continue;
 		}
-		elog(LOG, "%s() %lu is older than %lu", __FUNCTION__,
-			file->mtime, days_threshold);
-
-		if (file_num <= keep_files)
+		else if (file_num <= keep_files)
 		{
 			elog(LOG, "%s() newer files are only %d", __FUNCTION__, file_num);
 			continue;
