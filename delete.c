@@ -25,7 +25,7 @@ do_delete(pgBackupRange *range, bool force)
 	if (!pgBackupRangeIsValid(range))
 		elog(ERROR_ARGS, _("required delete range option not specified: delete DATE"));
 
-	/* get exclusive lock of backup catalog */
+	/* Lock backup catalog */
 	ret = catalog_lock();
 	if (ret == -1)
 		elog(ERROR_SYSTEM, _("can't lock backup catalog."));
@@ -33,15 +33,14 @@ do_delete(pgBackupRange *range, bool force)
 		elog(ERROR_ALREADY_RUNNING,
 			_("another pg_rman is running, stop delete."));
 
-	/* get list of backups. */
+	/* Get complete list of backup */
 	backup_list = catalog_get_backup_list(NULL);
-	if(!backup_list){
-		elog(ERROR_SYSTEM, _("can't process any more."));
-	}
+	if (!backup_list)
+		elog(ERROR_SYSTEM, _("No backup list found, can't process any more."));
 
+	/* Find backups to be deleted */
 	do_delete = false;
 	force_delete = false;
-	/* find delete target backup. */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
@@ -60,7 +59,7 @@ do_delete(pgBackupRange *range, bool force)
 			continue;
 		}
 
-		/* find latest full backup. */
+		/* Found the latest full backup */
 		if (backup->backup_mode >= BACKUP_MODE_FULL &&
 			backup->status == BACKUP_STATUS_OK &&
 			backup->start_time <= range->begin)
@@ -111,45 +110,45 @@ pgBackupDelete(int keep_generations, int keep_days)
 			generations_str, days_str);
 	}
 
-	/* delete files which satisfy both condition */
-	if (keep_generations == KEEP_INFINITE || keep_days == KEEP_INFINITE)
+	/* Leave if an infinite generation of backups is kept */
+	if (keep_generations == KEEP_INFINITE && keep_days == KEEP_INFINITE)
 	{
 		elog(LOG, "%s() infinite", __FUNCTION__);
 		return;
 	}
 
-	/* get list of backups. */
+	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(NULL);
 
+	/* Find target backups to be deleted */
 	backup_num = 0;
-	/* find delete target backup. */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
 
 		elog(LOG, "%s() %lu", __FUNCTION__, backup->start_time);
+
 		/*
-		 * when validate full backup was found, we can delete the backup
-		 * that is older than it
+		 * When a validate full backup was found, we can delete the
+		 * backup that is older than it.
 		 */
 		if (backup->backup_mode >= BACKUP_MODE_FULL &&
 			backup->status == BACKUP_STATUS_OK)
 			backup_num++;
 
-		/* do not include the latest full backup in a count. */
-//		if (backup_num - 1 <= keep_generations)
+		/* Evaluate if this backup is eligible for removal */
 		if (backup_num <= keep_generations)
 		{
+			/* Do not include the latest full backup in this count */
 			elog(LOG, "%s() backup are only %d", __FUNCTION__, backup_num);
 			continue;
 		}
-
-		/*
-		 * If the start time of the backup is older than the threshold and
-		 * there are enough generations of full backups, delete the backup.
-		 */
-		if (backup->start_time >= days_threshold)
+		else if (backup->start_time >= days_threshold)
 		{
+			/*
+			 * If the start time of the backup is older than the threshold and
+			 * there are enough generations of full backups, delete the backup.
+			 */
 			elog(LOG, "%s() %lu is not older than %lu", __FUNCTION__,
 				backup->start_time, days_threshold);
 			continue;

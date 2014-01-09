@@ -257,7 +257,7 @@ absolute paths; relative paths are not allowed.
     Specify how long backuped data files will be kept.
     --keep-data-generations means number of backup generations.
     --keep-data-days means days to be kept.
-    Only files exceeded both settings are deleted. 
+    Only files exceeded one of those settings are deleted.
 
 --keep-arclog-files / --keep-arclog-days
     Specify how long backuped archive WAL files will be kept.
