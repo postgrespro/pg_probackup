@@ -92,8 +92,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	elog(INFO, _("database backup start"));
 
 	/* Initialize size summary */
-	current.total_data_bytes = 0;
-	current.read_data_bytes = 0;
+	current.data_bytes = 0;
 
 	/*
 	 * Obtain current timeline by scanning control file, theh LSN
@@ -395,16 +394,25 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pgFile *file = (pgFile *) parray_get(files, i);
 		if (!S_ISREG(file->mode))
 			continue;
-		current.total_data_bytes += file->size;
-		current.read_data_bytes += file->read_size;
+		/*
+		 * Count only the amount of data. For a full backup, the total
+		 * amount of data written counts while for an incremental
+		 * backup only the data read counts.
+		 */
+		if (current.backup_mode == BACKUP_MODE_INCREMENTAL)
+			current.data_bytes += file->read_size;
+		else if (current.backup_mode == BACKUP_MODE_FULL)
+			current.data_bytes += file->size;
+
+		/* Count total amount of data for backup */
 		if (file->write_size != BYTES_INVALID)
-			current.write_bytes += file->write_size;
+			current.backup_bytes += file->write_size;
 	}
 
 	if (verbose)
 	{
-		printf(_("database backup completed(read: " INT64_FORMAT " write: " INT64_FORMAT ")\n"),
-			current.read_data_bytes, current.write_bytes);
+		printf(_("database backup completed(written: " INT64_FORMAT " Backup: " INT64_FORMAT ")\n"),
+			current.data_bytes, current.backup_bytes);
 		printf(_("========================================\n"));
 	}
 
@@ -444,7 +452,7 @@ do_backup_arclog(parray *backup_list)
 	}
 
 	/* initialize size summary */
-	current.read_arclog_bytes = 0;
+	current.arclog_bytes = 0;
 
 	/*
 	 * Switch xlog if database is not backed up, current timeline of
@@ -523,10 +531,10 @@ do_backup_arclog(parray *backup_list)
 		pgFile *file = (pgFile *) parray_get(files, i);
 		if (!S_ISREG(file->mode))
 			continue;
-		current.read_arclog_bytes += file->read_size;
+		current.arclog_bytes += file->read_size;
 		if (file->write_size != BYTES_INVALID)
 		{
-			current.write_bytes += file->write_size;
+			current.backup_bytes += file->write_size;
 			arclog_write_bytes += file->write_size;
 		}
 	}
@@ -553,7 +561,7 @@ do_backup_arclog(parray *backup_list)
 	if (verbose)
 	{
 		printf(_("archived WAL backup completed(read: " INT64_FORMAT " write: " INT64_FORMAT ")\n"),
-			current.read_arclog_bytes, arclog_write_bytes);
+			current.arclog_bytes, arclog_write_bytes);
 		printf(_("========================================\n"));
 	}
 
@@ -589,7 +597,7 @@ do_backup_srvlog(parray *backup_list)
 	}
 
 	/* initialize size summary */
-	current.read_srvlog_bytes = 0;
+	current.srvlog_bytes = 0;
 
 	/*
 	 * To take incremental backup, the file list of the last completed database
@@ -632,10 +640,10 @@ do_backup_srvlog(parray *backup_list)
 		pgFile *file = (pgFile *) parray_get(files, i);
 		if (!S_ISREG(file->mode))
 			continue;
-		current.read_srvlog_bytes += file->read_size;
+		current.srvlog_bytes += file->read_size;
 		if (file->write_size != BYTES_INVALID)
 		{
-			current.write_bytes += file->write_size;
+			current.backup_bytes += file->write_size;
 			srvlog_write_bytes += file->write_size;
 		}
 	}
@@ -643,7 +651,7 @@ do_backup_srvlog(parray *backup_list)
 	if (verbose)
 	{
 		printf(_("serverlog backup completed(read: " INT64_FORMAT " write: " INT64_FORMAT ")\n"),
-			current.read_srvlog_bytes, srvlog_write_bytes);
+			current.srvlog_bytes, srvlog_write_bytes);
 		printf(_("========================================\n"));
 	}
 
@@ -728,11 +736,10 @@ do_backup(pgBackupOption bkupopt)
 	current.stop_lsn = 0;
 	current.start_time = time(NULL);
 	current.end_time = (time_t) 0;
-	current.total_data_bytes = BYTES_INVALID;
-	current.read_data_bytes = BYTES_INVALID;
-	current.read_arclog_bytes = BYTES_INVALID;
-	current.read_srvlog_bytes = BYTES_INVALID;
-	current.write_bytes = 0;		/* write_bytes is valid always */
+	current.data_bytes = BYTES_INVALID;
+	current.arclog_bytes = BYTES_INVALID;
+	current.srvlog_bytes = BYTES_INVALID;
+	current.backup_bytes = 0;
 	current.block_size = BLCKSZ;
 	current.wal_block_size = XLOG_BLCKSZ;
 	current.recovery_xid = 0;
@@ -779,23 +786,23 @@ do_backup(pgBackupOption bkupopt)
 		int64 total_read = 0;
 
 		/* WAL archives */
-		total_read += current.read_arclog_bytes;
+		total_read += current.arclog_bytes;
 
 		/* Database data */
 		if (current.backup_mode == BACKUP_MODE_FULL ||
 			current.backup_mode == BACKUP_MODE_INCREMENTAL)
-			total_read += current.read_arclog_bytes;
+			total_read += current.arclog_bytes;
 
 		/* Server logs */
 		if (current.with_serverlog)
-			total_read += current.read_srvlog_bytes;
+			total_read += current.srvlog_bytes;
 
 		if (total_read == 0)
 			printf(_("nothing to backup\n"));
 		else
 			printf(_("all backup completed(read: " INT64_FORMAT " write: "
 				INT64_FORMAT ")\n"),
-				total_read, current.write_bytes);
+				total_read, current.backup_bytes);
 		printf(_("========================================\n"));
 	}
 

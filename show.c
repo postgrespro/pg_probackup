@@ -161,9 +161,9 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 	int i;
 
 	/* show header */
-	fputs("===========================================================================================================\n", out);
-	fputs("Start                Mode  Current TLI  Parent TLI  Time   Total    Data     WAL     Log  Backup   Status  \n", out);
-	fputs("===========================================================================================================\n", out);
+	fputs("==================================================================================================\n", out);
+	fputs("Start                Mode  Current TLI  Parent TLI  Time   Data     WAL     Log  Backup   Status  \n", out);
+	fputs("==================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -172,11 +172,10 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		TimeLineID  parent_tli;
 		char timestamp[20];
 		char duration[20] = "----";
-		char total_data_bytes_str[10] = "----";
-		char read_data_bytes_str[10] = "----";
-		char read_arclog_bytes_str[10] = "----";
-		char read_srvlog_bytes_str[10] = "----";
-		char write_bytes_str[10];
+		char data_bytes_str[10] = "----";
+		char arclog_bytes_str[10] = "----";
+		char srvlog_bytes_str[10] = "----";
+		char backup_bytes_str[10];
 
 		backup = parray_get(backup_list, i);
 
@@ -188,28 +187,42 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		if (backup->end_time != (time_t) 0)
 			snprintf(duration, lengthof(duration), "%lum",
 				(backup->end_time - backup->start_time) / 60);
-		/* "Full" is only for full backup */
-		if (backup->backup_mode == BACKUP_MODE_FULL)
-			pretty_size(backup->total_data_bytes, total_data_bytes_str,
-					lengthof(total_data_bytes_str));
-		if (backup->backup_mode == BACKUP_MODE_INCREMENTAL)
-			pretty_size(backup->read_data_bytes, read_data_bytes_str,
-					lengthof(read_data_bytes_str));
-		pretty_size(backup->read_arclog_bytes, read_arclog_bytes_str,
-				lengthof(read_arclog_bytes_str));
+
+		/*
+		 * Calculate Data field, in the case of full backup this shows the
+		 * total amount of data. For an incremental backup, this size is only
+		 * the differential of data accumulated.
+		 */
+		pretty_size(backup->data_bytes, data_bytes_str,
+				lengthof(data_bytes_str));
+
+		/* Calculate amount of data for archive files */
+		pretty_size(backup->arclog_bytes, arclog_bytes_str,
+				lengthof(arclog_bytes_str));
+
+		/* Calculate amount of data for server logs */
 		if (backup->with_serverlog)
-			pretty_size(backup->read_srvlog_bytes, read_srvlog_bytes_str,
-					lengthof(read_srvlog_bytes_str));
-		pretty_size(backup->write_bytes, write_bytes_str,
-				lengthof(write_bytes_str));
+			pretty_size(backup->srvlog_bytes, srvlog_bytes_str,
+					lengthof(srvlog_bytes_str));
+
+		/* Calculate amount of data for total backup */
+		pretty_size(backup->backup_bytes, backup_bytes_str,
+				lengthof(backup_bytes_str));
 
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-19s  %-4s   %10d  %10d %5s  %6s  %6s  %6s  %6s  %6s   %s\n",
-				timestamp,  modes[backup->backup_mode], backup->tli, parent_tli, duration,
-			total_data_bytes_str, read_data_bytes_str, read_arclog_bytes_str,
-			read_srvlog_bytes_str, write_bytes_str, status2str(backup->status));
+		fprintf(out, "%-19s  %-4s   %10d  %10d %5s  %6s  %6s  %6s  %6s   %s\n",
+				timestamp,
+				modes[backup->backup_mode],
+				backup->tli,
+				parent_tli,
+				duration,
+				data_bytes_str,
+				arclog_bytes_str,
+				srvlog_bytes_str,
+				backup_bytes_str,
+				status2str(backup->status));
 	}
 }
 

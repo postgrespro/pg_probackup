@@ -384,21 +384,18 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 		fprintf(out, "RECOVERY_TIME='%s'\n", timestamp);
 	}
 
-	if (backup->total_data_bytes != BYTES_INVALID)
-		fprintf(out, "TOTAL_DATA_BYTES=" INT64_FORMAT "\n",
-				backup->total_data_bytes);
-	if (backup->read_data_bytes != BYTES_INVALID)
-		fprintf(out, "READ_DATA_BYTES=" INT64_FORMAT "\n",
-				backup->read_data_bytes);
-	if (backup->read_arclog_bytes != BYTES_INVALID)
-		fprintf(out, "READ_ARCLOG_BYTES=" INT64_FORMAT "\n",
-			backup->read_arclog_bytes);
-	if (backup->read_srvlog_bytes != BYTES_INVALID)
-		fprintf(out, "READ_SRVLOG_BYTES=" INT64_FORMAT "\n",
-				backup->read_srvlog_bytes);
-	if (backup->write_bytes != BYTES_INVALID)
-		fprintf(out, "WRITE_BYTES=" INT64_FORMAT "\n",
-				backup->write_bytes);
+	if (backup->data_bytes != BYTES_INVALID)
+		fprintf(out, "DATA_BYTES=" INT64_FORMAT "\n",
+				backup->data_bytes);
+	if (backup->arclog_bytes != BYTES_INVALID)
+		fprintf(out, "ARCLOG_BYTES=" INT64_FORMAT "\n",
+			backup->arclog_bytes);
+	if (backup->srvlog_bytes != BYTES_INVALID)
+		fprintf(out, "SRVLOG_BYTES=" INT64_FORMAT "\n",
+				backup->srvlog_bytes);
+	if (backup->backup_bytes != BYTES_INVALID)
+		fprintf(out, "BACKUP_BYTES=" INT64_FORMAT "\n",
+				backup->backup_bytes);
 
 	fprintf(out, "BLOCK_SIZE=%u\n", backup->block_size);
 	fprintf(out, "XLOG_BLOCK_SIZE=%u\n", backup->wal_block_size);
@@ -455,11 +452,10 @@ catalog_read_ini(const char *path)
 		{ 't', 0, "end-time"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "recovery-xid"				, NULL, SOURCE_ENV },
 		{ 't', 0, "recovery-time"				, NULL, SOURCE_ENV },
-		{ 'I', 0, "total-data-bytes"	, NULL, SOURCE_ENV },
-		{ 'I', 0, "read-data-bytes"		, NULL, SOURCE_ENV },
-		{ 'I', 0, "read-arclog-bytes"	, NULL, SOURCE_ENV },
-		{ 'I', 0, "read-srvlog-bytes"	, NULL, SOURCE_ENV },
-		{ 'I', 0, "write-bytes"			, NULL, SOURCE_ENV },
+		{ 'I', 0, "data-bytes"		, NULL, SOURCE_ENV },
+		{ 'I', 0, "arclog-bytes"	, NULL, SOURCE_ENV },
+		{ 'I', 0, "srvlog-bytes"	, NULL, SOURCE_ENV },
+		{ 'I', 0, "backup-bytes"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "block-size"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "xlog-block-size"		, NULL, SOURCE_ENV },
 		{ 's', 0, "status"				, NULL, SOURCE_ENV },
@@ -484,11 +480,10 @@ catalog_read_ini(const char *path)
 	options[i++].var = &backup->end_time;
 	options[i++].var = &backup->recovery_xid;
 	options[i++].var = &backup->recovery_time;
-	options[i++].var = &backup->total_data_bytes;
-	options[i++].var = &backup->read_data_bytes;
-	options[i++].var = &backup->read_arclog_bytes;
-	options[i++].var = &backup->read_srvlog_bytes;
-	options[i++].var = &backup->write_bytes;
+	options[i++].var = &backup->data_bytes;
+	options[i++].var = &backup->arclog_bytes;
+	options[i++].var = &backup->srvlog_bytes;
+	options[i++].var = &backup->backup_bytes;
 	options[i++].var = &backup->block_size;
 	options[i++].var = &backup->wal_block_size;
 	options[i++].var = &status;
@@ -635,9 +630,8 @@ catalog_init_config(pgBackup *backup)
 	backup->end_time = (time_t) 0;
 	backup->recovery_xid = 0;
 	backup->recovery_time = (time_t) 0;
-	backup->total_data_bytes = BYTES_INVALID;
-	backup->read_data_bytes = BYTES_INVALID;
-	backup->read_arclog_bytes = BYTES_INVALID;
-	backup->read_srvlog_bytes = BYTES_INVALID;
-	backup->write_bytes = BYTES_INVALID;
+	backup->data_bytes = BYTES_INVALID;
+	backup->arclog_bytes = BYTES_INVALID;
+	backup->srvlog_bytes = BYTES_INVALID;
+	backup->backup_bytes = BYTES_INVALID;
 }

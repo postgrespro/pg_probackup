@@ -144,12 +144,19 @@ typedef struct pgBackup
 	time_t		recovery_time;
 	uint32		recovery_xid;
 
-	/* Size (-1 means nothing was backed up) */
-	int64		total_data_bytes;
-	int64		read_data_bytes;
-	int64		read_arclog_bytes;
-	int64		read_srvlog_bytes;
-	int64		write_bytes;
+	/* Different sizes (-1 means nothing was backed up) */
+	/*
+	 * Amount of raw data. For a full backup, this is the total amount of
+	 * data while for an incremental backup this is just the differential
+	 * of data taken.
+	 */
+	int64		data_bytes;
+	/* Amount of data for WAL archives */
+	int64		arclog_bytes;
+	/* Amount of data for server logs */
+	int64		srvlog_bytes;
+	/* Total size of backup */
+	int64		backup_bytes;
 
 	/* data/wal block size for compatibility check */
 	uint32		block_size;
