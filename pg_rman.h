@@ -244,7 +244,7 @@ extern int do_init(void);
 extern int do_show(pgBackupRange *range, bool show_all);
 
 /* in delete.c */
-extern int do_delete(pgBackupRange *range, bool force);
+extern int do_delete(pgBackupRange *range);
 extern void pgBackupDelete(int keep_generations, int keep_days);
 
 /* in fetch.c */

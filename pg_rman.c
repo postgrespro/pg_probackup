@@ -47,9 +47,6 @@ static char		   *target_inclusive;
 static TimeLineID	target_tli;
 static bool		is_hard_copy = false;
 
-/* delete configuration */
-static bool		force;
-
 /* show configuration */
 static bool			show_all = false;
 
@@ -71,8 +68,6 @@ static pgut_option options[] =
 	{ 'b', 's', "with-serverlog"	, &current.with_serverlog	, SOURCE_ENV },
 	{ 'b', 'Z', "compress-data"		, &current.compress_data	, SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint"	, &smooth_checkpoint		, SOURCE_ENV },
-	/* delete options */
-	{ 'b', 'f', "force"	, &force		, SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
 	{ 'i',  1, "keep-data-generations"	, &keep_data_generations, SOURCE_ENV },
 	{ 'i',  2, "keep-data-days"			, &keep_data_days		, SOURCE_ENV },
@@ -201,7 +196,7 @@ main(int argc, char *argv[])
 	else if (pg_strcasecmp(cmd, "validate") == 0)
 		return do_validate(&range);
 	else if (pg_strcasecmp(cmd, "delete") == 0)
-		return do_delete(&range, force);
+		return do_delete(&range);
 	else
 		elog(ERROR_ARGS, "invalid command \"%s\"", cmd);
 

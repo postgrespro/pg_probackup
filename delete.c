@@ -10,16 +10,14 @@
 #include "pg_rman.h"
 
 static int pgBackupDeleteFiles(pgBackup *backup);
-static bool checkIfDeletable(pgBackup *backup);
 
 int
-do_delete(pgBackupRange *range, bool force)
+do_delete(pgBackupRange *range)
 {
 	int		i;
 	int		ret;
 	parray *backup_list;
-	bool	do_delete;
-	bool	force_delete;
+	bool	do_delete = false;
 
 	/* DATE are always required */
 	if (!pgBackupRangeIsValid(range))
@@ -39,17 +37,12 @@ do_delete(pgBackupRange *range, bool force)
 		elog(ERROR_SYSTEM, _("No backup list found, can't process any more."));
 
 	/* Find backups to be deleted */
-	do_delete = false;
-	force_delete = false;
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
 
-		if(force)
-			force_delete = checkIfDeletable(backup);
-
 		/* delete backup and update status to DELETED */
-		if (do_delete || force_delete)
+		if (do_delete)
 		{
 			/* check for interrupt */
 			if (interrupted)
@@ -72,7 +65,6 @@ do_delete(pgBackupRange *range, bool force)
 	/* cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
-
 	return 0;
 }
 
@@ -246,16 +238,4 @@ pgBackupDeleteFiles(pgBackup *backup)
 	parray_free(files);
 
 	return 0;
-}
-
-bool
-checkIfDeletable(pgBackup *backup)
-{
-	/* find latest full backup. */
-	if (backup->status != BACKUP_STATUS_OK &&
-		backup->status != BACKUP_STATUS_DELETED &&
-		backup->status != BACKUP_STATUS_DONE)
-		return true;
-
-	return false;
 }
