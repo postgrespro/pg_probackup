@@ -29,11 +29,11 @@ CHECKPOINT
 # of recovery target option in recovery.conf
 3
 # of deleted backups (show all)
-3
+4
 # of deleted backups
 0
 delete backup
 # of deleted backups
-3
+4
 # of deleted backups
-8
+9

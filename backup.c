@@ -1379,13 +1379,15 @@ delete_old_files(const char *root,
 		 * If the mtime of the file is older than the threshold and there are
 		 * enough number of files newer than the files, delete the file.
 		 */
-		if (file->mtime >= days_threshold)
+		if (file->mtime >= days_threshold &&
+			keep_days != KEEP_INFINITE)
 		{
 			elog(LOG, "%s() %lu is not older than %lu", __FUNCTION__,
 				file->mtime, days_threshold);
 			continue;
 		}
-		else if (file_num <= keep_files)
+		else if (file_num <= keep_files &&
+				 keep_files != KEEP_INFINITE)
 		{
 			elog(LOG, "%s() newer files are only %d", __FUNCTION__, file_num);
 			continue;

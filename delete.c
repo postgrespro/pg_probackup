@@ -129,13 +129,15 @@ pgBackupDelete(int keep_generations, int keep_days)
 			backup_num++;
 
 		/* Evaluate if this backup is eligible for removal */
-		if (backup_num <= keep_generations)
+		if (backup_num <= keep_generations &&
+			keep_generations != KEEP_INFINITE)
 		{
 			/* Do not include the latest full backup in this count */
 			elog(LOG, "%s() backup are only %d", __FUNCTION__, backup_num);
 			continue;
 		}
-		else if (backup->start_time >= days_threshold)
+		else if (backup->start_time >= days_threshold &&
+				 keep_days != KEEP_INFINITE)
 		{
 			/*
 			 * If the start time of the backup is older than the threshold and
