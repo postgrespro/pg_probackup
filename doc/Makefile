@@ -30,4 +30,3 @@ endif # ASCIIDOC
 clean:
 	rm -rf $(manpages) *.html *.xml
 
-.PHONY: clean
