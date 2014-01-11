@@ -25,6 +25,7 @@ It takes a physical online backup of whole database cluster, archive
 WALs, and server logs.
 
 It proposes the following features:
+
 - Backup while database runs including tablespaces with just one
   command
 - Recovery from backup with just one command, with customized targets
@@ -35,8 +36,8 @@ It proposes the following features:
 
 == COMMANDS ==
 
-pg_rman supports the following commands. See also Options for details of
-OPTIONS.
+pg_rman supports the following commands. See also OPTIONS for more
+details.
 
 init::
     Initialize a backup catalog.
@@ -73,10 +74,8 @@ specify it in PGDATA environmental variable or -D/--pgdata option.
 Backup target can be one of the following types also serverlogs can be added):
 
 - Full backup, backup a whole database cluster. 
-
 - Incremental backup, backup only files or pages modified after the last
 verified backup. 
-
 - Archive WAL backup, Backup only archive WAL files.
 
 It is recommended to verify backup files as soon as possible after backup.
@@ -100,7 +99,7 @@ target. If pg_control is not present, TimeLineID in the full backup used by
 the restore will be a restore target. 
 
 
-== Examples ==
+== EXAMPLES ==
 
 To reduce the number of command line arguments, you can set BACKUP_PATH,
 an environment variable, to the absolute path of the backup catalog and
@@ -122,12 +121,14 @@ write default configuration into ${BACKUP_PATH}/pg_rman.ini.
 
 This example takes a full backup of the whole database with server logs.
 Then, it validates all unvalidated backups.
+
 	$ pg_rman backup --backup-mode=full --with-serverlog
 	$ pg_rman validate
 
 === RESTORE FROM A BACKUP ===
 
 Here are some commands to restore from a backup:
+
 	$ pg_ctl stop -m immediate
 	$ pg_rman restore
 	$ pg_ctl start
@@ -143,27 +144,24 @@ Here are some commands to restore from a backup:
 	2013-12-25 03:02:25  FULL            1           0    0m    33MB    33MB    ----    64MB   OK
 
 The fields are:
-- Start : start time of backup
-- Mode: Mode of backup
--- FULL for a full backup
--- INCR for an incremental backup
--- ARCH for archive backup
-- Current TLI: current timeline of backup
-- Parent TLI: parent timeline of backup
-- Time : total time necessary to take this backup
-- Total : Total size of backup
-- Data : size of data files
-- WAL : size of read WAL archive files
-- Log : size of read server log files
-- Backup: size of backup (= written size)
-- Status: status of backup. Possible values are:
--- OK : backup is done and validated.
--- DONE : backup is done, but not validated yet.
--- RUNNING : backup is running
--- DELETING : backup is being deleted.
--- DELETED : backup has been deleted.
--- ERROR : backup is unavailable because some errors occur during backup.
--- CORRUPT : backup is unavailable because it is broken.
+
+* Start: start time of backup
+* Mode: Mode of backup: FULL (full), INCR (incremental) or ARCH (archive)
+* Current TLI: current timeline of backup
+* Parent TLI: parent timeline of backup
+* Time: total time necessary to take this backup
+* Data: size of data files
+* WAL: size of read WAL archive files
+* Log: size of read server log files
+* Backup: size of backup (= written size)
+* Status: status of backup. Possible values are:
+- OK : backup is done and validated.
+- DONE : backup is done, but not validated yet.
+- RUNNING : backup is running
+- DELETING : backup is being deleted.
+- DELETED : backup has been deleted.
+- ERROR : backup is unavailable because some errors occur during backup.
+- CORRUPT : backup is unavailable because it is broken.
 
 When a date is specified, more details about a backup is retrieved:
 
@@ -196,7 +194,7 @@ the specified date.
 == OPTIONS ==
 
 pg_rman accepts the following command line parameters. Some of them can
-be also sepcified as environment variables. See also Parameters for the
+be also sepcified as environment variables. See also PARAMETERS for the
 details.
 
 === COMMON OPTIONS ===
@@ -228,15 +226,11 @@ absolute paths; relative paths are not allowed.
 
 === BACKUP OPTIONS ===
 
--b { full | incremental | archive } --backup-mode={ full | incremental | archive }::
+-b { full | incremental | archive } / --backup-mode={ full | incremental | archive }::
     Specify backup target files. Available options are: "full" backup,
     "incremental" backup, and "archive" backup. Abbreviated forms
     (prefix match) are also available. For example, -b f means "full"
     backup. 
-
-    full : Whole database backup and archive backup
-    incremental : Incremental backup and archive backup
-    archive : Only archive backup 
 
 -s / --with-serverlog::
     Backup server log files if specified. 
@@ -438,7 +432,7 @@ pg_rman returns exit codes for each error status.
 	26	ERROR_PID_BROKEN	postmaster.pid is broken
 
 == AUTHOR ==
-pg_rman was originally written by NTT, and maintained in some way by Michael
-Paquier.
+pg_rman was originally written by NTT, mainly Itagaki Takahiro, and maintained
+in some way by Michael Paquier.
 
 Please report bug reports at <https://github.com/michaelpq/pg_rman>.
