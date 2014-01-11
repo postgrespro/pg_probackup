@@ -23,13 +23,16 @@ Compiling pg_rman requires a PostgreSQL installation and can be done in
 two ways:
 
 1. Put pg_rman project directory inside PostgreSQL source tree as
-contrib/pg_rman, and use "make" to compile
+contrib/pg_rman, and use this command for compilation:
 
-or
+	$ cd $POSTGRES_SOURCE/contrib/pg_rman
+	$ make
 
 2. Keep the project directory as-is and use the PGXS development
 infrastructure provided by a PostgreSQL installation to perform the
-compilation: "make USE_PGXS=1"
+compilation:
+
+	$ make USE_PGXS=1
 
 In addition, you must have pg_config in $PATH.
 
@@ -44,7 +47,18 @@ pg_rman has been tested on Linux and Unix-based platforms.
 Documentation
 -------------
 
-All the documentation is written and maintained in pg_rman.txt.
+All the documentation is maintained in doc/ as text file, that is then
+fetched by asciidoc to generate automatically man pages and html
+documentation.
+
+In order to generate the documentation, the variables XMLTO and ASCIIDOC
+need to be set to proper values indicating where are located the binaries
+of respectively xmlto and asciidoc. An example of build is as follows:
+
+	$ make USE_PGXS=1 ASCIIDOC=asciidoc XMLTO=xmlto
+
+They could as well be set as environment variables for development
+purposes.
 
 Regression tests
 ----------------

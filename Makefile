@@ -18,11 +18,19 @@ SRCS = \
 	pgut/pgut.c \
 	pgut/pgut-port.c
 OBJS = $(SRCS:.c=.o)
-# pg_crc.c and are copied from PostgreSQL source tree.
 
-DOCS = pg_rman.txt
+DOCS = doc/pg_rman.txt
 
-# XXX for debug, add -g and disable optimization
+# asciidoc and xmlto are present, so install the html documentation and man
+# pages as well. html is part of the vanilla documentation. Man pages need a
+# special handling at installation.
+ifneq ($(ASCIIDOC),)
+ifneq ($(XMLTO),)
+man_DOCS = doc/pg_rman.1
+DOCS += doc/pg_rman.html doc/README.html
+endif # XMLTO
+endif # ASCIIDOC
+
 PG_CPPFLAGS = -I$(libpq_srcdir)
 PG_LIBS = $(libpq_pgport)
 
@@ -44,3 +52,25 @@ LIBS := $(filter-out -lxml2, $(LIBS))
 LIBS := $(filter-out -lxslt, $(LIBS))
 
 $(OBJS): pg_rman.h
+
+# Part related to documentation
+# Compile documentation as well is ASCIIDOC and XMLTO are defined
+ifneq ($(ASCIIDOC),)
+ifneq ($(XMLTO),)
+all: docs
+docs:
+	$(MAKE) -C doc/
+
+# Special handling for man pages, they need to be in a dedicated folder
+install: install-man
+
+install-man:
+	$(MKDIR_P) '$(DESTDIR)$(docdir)/$(docmoduledir)/man1/'
+	$(INSTALL_DATA) $(man_DOCS) '$(DESTDIR)$(docdir)/$(docmoduledir)/man1/'
+endif # XMLTO
+endif # ASCIIDOC
+
+# Clean up documentation as well
+clean: clean-docs
+clean-docs:
+	$(MAKE) -C doc/ clean
