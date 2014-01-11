@@ -194,7 +194,7 @@ the specified date.
 == OPTIONS ==
 
 pg_rman accepts the following command line parameters. Some of them can
-be also sepcified as environment variables. See also PARAMETERS for the
+be also specified as environment variables. See also PARAMETERS for the
 details.
 
 === COMMON OPTIONS ===
