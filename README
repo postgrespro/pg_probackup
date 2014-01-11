@@ -60,6 +60,12 @@ of respectively xmlto and asciidoc. An example of build is as follows:
 They could as well be set as environment variables for development
 purposes.
 
+On OSX, it is necessary to set XML_CATALOG_FILES to point to the correct
+xml catalogs. In the case of an environment with Homebrew after having
+install xmlto and asciidoc:
+
+	$ export XML_CATALOG_FILES="/usr/local/etc/xml/catalog"
+
 Regression tests
 ----------------
 
