@@ -36,26 +36,26 @@ It proposes the following features:
 
 == COMMANDS ==
 
-pg_rman supports the following commands. See also OPTIONS for more
+pg_rman supports the following commands. See also *OPTIONS* for more
 details.
 
-init::
+*init*::
     Initialize a backup catalog.
 
-backup::
+*backup*::
     Take an online backup.
 
-restore::
+*restore*::
     Perform restore.
 
-show::
+*show*::
     Show backup history. The timeline option shows timeline of the backup
     and the parent's timeline for each backup. 
 
-validate::
+*validate*::
     Validate backup files.
 
-delete::
+*delete*::
     Delete backup files.
 
 === INITIALIZATION ===
@@ -67,7 +67,7 @@ are initialized, pg_rman can adjust the config file to the setting. In this
 case, you have to specify the database cluster path for PostgreSQL. Please
 specify it in PGDATA environmental variable or -D/--pgdata option.
 
-	$ pg_rman init -B <a backup catalog path>
+	$ pg_rman init -B /path/to/backup/
 
 === BACKUP ===
 
@@ -194,68 +194,68 @@ the specified date.
 == OPTIONS ==
 
 pg_rman accepts the following command line parameters. Some of them can
-be also specified as environment variables. See also PARAMETERS for the
+be also specified as environment variables. See also *PARAMETERS* for the
 details.
 
 === COMMON OPTIONS ===
 As a general rule, paths for data location need to be specified as
 absolute paths; relative paths are not allowed.
 
--D PATH / --pgdata=PATH::
+*-D* _PATH_ / *--pgdata*=_PATH_::
     The absolute path of database cluster. Required on backup and
     restore.
 
--A PATH / --arclog-path=PATH::
+*-A* _PATH_ / *--arclog-path*=_PATH_::
     The absolute path of archive WAL directory. Required on backup
     and restore. 
 
--S PATH / --srvlog-path=PATH::
+*-S* _PATH_ / *--srvlog-path*=_PATH_::
     The absolute path of server log directory. Required on backup with
     server logs and restore. 
 
--B PATH / --backup-path=PATH::
+*-B* _PATH_ / *--backup-path*=_PATH_::
     The absolute path of backup catalog. This option is mandatory.
 
--c / --check::
+*-c* / *--check*::
     If specifed, pg_rman doesn't perform actual jobs but only checks
     parameters and required resources. The option is typically used with
     --verbose option to verify the operation. 
 
--v / --verbose::
+*-v* / *--verbose*::
     If specified, pg_rman works in verbose mode.
 
 === BACKUP OPTIONS ===
 
--b { full | incremental | archive } / --backup-mode={ full | incremental | archive }::
-    Specify backup target files. Available options are: "full" backup,
-    "incremental" backup, and "archive" backup. Abbreviated forms
-    (prefix match) are also available. For example, -b f means "full"
-    backup. 
+*-b* _BACKUPMODE_ / *--backup-mode*=_BACKUPMODE_::
+    Specify backup target files. Available options are: "full",
+    "incremental" and "archive".
+    Abbreviated forms (prefix match) are also available. For example,
+    -b f means "full" backup. 
 
--s / --with-serverlog::
+*-s* / *--with-serverlog*::
     Backup server log files if specified. 
 
--Z / --compress-data::
+*-Z* / *--compress-data*::
     Compress backup files with zlib if specified. 
 
--C / --smooth-checkpoint::
+*-C* / *--smooth-checkpoint*::
     Checkpoint is performed on every backups. If the option is specified,
     do smooth checkpoint then. See also the second argument for
     pg_start_backup(). 
 
---keep-data-generations / --keep-data-days::
+*--keep-data-generations*=_NUMBER_ / *--keep-data-days*=_DAYS_::
     Specify how long backuped data files will be kept.
     --keep-data-generations means number of backup generations.
     --keep-data-days means days to be kept.
     Only files exceeded one of those settings are deleted.
 
---keep-arclog-files / --keep-arclog-days::
+*--keep-arclog-files*=_NUMBER_ / *--keep-arclog-days*=_DAYS_::
     Specify how long backuped archive WAL files will be kept.
     --keep-arclog-files means number of backup files.
     --keep-arclog-days means days to be kept. When backup is run, only
     files exceeded one of those settings are deleted from archive storage.
 
---keep-srvlog-files / --keep-srvlog-days::
+*--keep-srvlog-files*=_NUMBER_ / *--keep-srvlog-days*=_DAYS_::
     Specify how long backuped serverlog files will be kept.
     --keep-srvlog-files means number of backup files.
     --keep-srvlog-days means days to be kept.
@@ -269,57 +269,57 @@ absolute paths; relative paths are not allowed.
 The parameters whose name start are started with --recovery refer to
 the same parameters as the ones in recovery.confin recovery.conf.
 
---recovery-target-timeline TIMELINE::
+*--recovery-target-timeline*=_TIMELINE_::
     Specifies recovering into a particular timeline. 
     If not specified, the current timeline is used.
 
---recovery-target-time TIMESTAMP::
+*--recovery-target-time*=_TIMESTAMP_::
     This parameter specifies the timestamp up to which recovery will
     proceed.
 
---recovery-target-xid XID::
+*--recovery-target-xid*=_XID::
     This parameter specifies the transaction ID up to which recovery
     will proceed. 
 
---recovery-target-inclusive::
+*--recovery-target-inclusive*::
     Specifies whether server pauses when recovery target is reached.
 
---hard-copy::
+*--hard-copy*::
     Archived WAL files are copied to archive WAL storage area. If you
     do not specify --hard-copy, pg_rman makes symlink to archive WAL
     where are in the backup catalog directory.
 
 === CATALOG OPTIONS ===
 
--a / --show-all::
+*-a* / *--show-all*::
     Show all existing backups, including the deleted ones.
 
 === CONNECTION OPTIONS ===
 Parameters to connect PostgreSQL server.
 
--d DBNAME / --dbname=DBNAME::
+*-d* _DBNAME_ / *--dbname*=_DBNAME_::
     The database name to execute pg_start_backup() and pg_stop_backup().
 
--h HOSTNAME / --host=HOSTNAME::
+*-h* _HOSTNAME_ / *--host*=_HOSTNAME_::
     Specifies the host name of the machine on which the server is running.
     If the value begins with a slash, it is used as the directory for the
     Unix domain socket.
 
--p PORT / --port=PORT::
+*-p* _PORT_ / *--port*=_PORT_::
     Specifies the TCP port or local Unix domain socket file extension on
     which the server is listening for connections.
 
--U USERNAME / --username=USERNAME::
+*-U* _USERNAME_ / *--username*=_USERNAME_::
     User name to connect as. 
 
--w / --no-password::
+*-w* / *--no-password*::
     Never issue a password prompt. If the server requires password
     authentication and a password is not available by other means such as
     a .pgpass file, the connection attempt will fail. This option can be
     useful in batch jobs and scripts where no user is present to enter a
     password. 
 
--W / --password::
+*-W* / *--password*::
     Force pg_rman to prompt for a password before connecting to a database.
     This option is never essential, since pg_rman will automatically
     prompt for a password if the server demands password authentication.
@@ -329,13 +329,13 @@ Parameters to connect PostgreSQL server.
 
 === GLOBAL OPTIONS ===
 
---help::
+*--help*::
     Print help, then exit.
 
--V / --version::
+*-V* / *--version*::
     Print version information, then exit.
 
--! / --debug::
+*-!* / *--debug*::
     Show debug information.
 
 == PARAMETERS ==
