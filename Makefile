@@ -65,8 +65,8 @@ docs:
 install: install-man
 
 install-man:
-	$(MKDIR_P) '$(DESTDIR)$(docdir)/$(docmoduledir)/man1/'
-	$(INSTALL_DATA) $(man_DOCS) '$(DESTDIR)$(docdir)/$(docmoduledir)/man1/'
+	$(MKDIR_P) '$(DESTDIR)$(mandir)/man1/'
+	$(INSTALL_DATA) $(man_DOCS) '$(DESTDIR)$(mandir)/man1/'
 endif # XMLTO
 endif # ASCIIDOC
 
