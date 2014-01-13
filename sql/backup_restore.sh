@@ -182,7 +182,7 @@ fi
 echo "diff files in BACKUP_PATH/backup/pg_xlog"
 diff -r $PGDATA/pg_xlog $BACKUP_PATH/backup/pg_xlog
 echo "# of files in BACKUP_PATH/backup/srvlog"
-find $BACKUP_PATH/backup/srvlog -type f | wc -l
+find $BACKUP_PATH/backup/srvlog -type f | wc -l | tr -d ' '
 
 # recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
@@ -205,7 +205,7 @@ fi
 echo "diff files in BACKUP_PATH/backup/pg_xlog"
 diff -r $PGDATA/pg_xlog $BACKUP_PATH/backup/pg_xlog
 echo "# of files in BACKUP_PATH/backup/srvlog"
-find $BACKUP_PATH/backup/srvlog -type f | wc -l
+find $BACKUP_PATH/backup/srvlog -type f | wc -l | tr -d ' '
 
 # re-recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
@@ -223,17 +223,17 @@ pg_rman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/result
 
 # Backup of online-WAL should been deleted, but serverlog remain.
 echo "# of files in BACKUP_PATH/backup/pg_xlog"
-find $BACKUP_PATH/backup/pg_xlog -type f | wc -l
+find $BACKUP_PATH/backup/pg_xlog -type f | wc -l | tr -d ' '
 echo "# of files in BACKUP_PATH/backup/srvlog"
-find $BACKUP_PATH/backup/srvlog -type f | wc -l
+find $BACKUP_PATH/backup/srvlog -type f | wc -l | tr -d ' '
 
 # Symbolic links in $ARCLOG_PATH should be deleted.
 echo "# of symbolic links in ARCLOG_PATH"
-find $ARCLOG_PATH -type l | wc -l
+find $ARCLOG_PATH -type l | wc -l  | tr -d ' '
 
 # timeline history files are backed up.
 echo "# of files in BACKUP_PATH/timeline_history"
-find $BACKUP_PATH/timeline_history -type f | wc -l
+find $BACKUP_PATH/timeline_history -type f | wc -l | tr -d ' '
 
 # restore with pg_rman
 pg_ctl stop -m immediate > /dev/null 2>&1

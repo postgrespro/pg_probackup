@@ -77,5 +77,4 @@ ERROR: option -Z, --compress-data should be a boolean: 'FOO'
 ERROR: option --keep-arclog-files should be a 32bit signed integer: 'YES'
 ERROR: invalid option "TIMELINEID"
 ERROR: invalid option "BACKUP_TARGETS"
-ERROR: invalid backup-mode "F''\F"
 ERROR: invalid backup-mode "ENV_PATH"
