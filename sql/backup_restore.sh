@@ -257,10 +257,10 @@ pg_ctl start -w -t 3600 > /dev/null 2>&1
 pg_dumpall > $BASE_PATH/results/dump_after_rtx.sql
 diff $BASE_PATH/results/dump_before_rtx.sql $BASE_PATH/results/dump_after_rtx.sql
 
-# show timeline
-pg_rman -p $TEST_PGPORT show timeline --verbose -a -d postgres > $BASE_PATH/results/log_show_timeline_1 2>&1
-pg_rman -p $TEST_PGPORT show timeline `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_2 2>&1
-pg_rman -p $TEST_PGPORT show timeline `date +%Y` --verbose -d postgres > $BASE_PATH/results/log_show_timeline_3 2>&1
+# show
+pg_rman -p $TEST_PGPORT show --verbose -a -d postgres > $BASE_PATH/results/log_show_timeline_1 2>&1
+pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_2 2>&1
+pg_rman -p $TEST_PGPORT show `date +%Y` --verbose -d postgres > $BASE_PATH/results/log_show_timeline_3 2>&1
 echo "# of deleted backups (show all)"
 grep -c DELETED $BASE_PATH/results/log_show_timeline_2
 echo "# of deleted backups"
@@ -275,7 +275,7 @@ pg_rman -p $TEST_PGPORT delete `date "+%Y-%m-%d %T"` --debug -d postgres > $BASE
 pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show2 2>&1
 echo "# of deleted backups"
 grep -c DELETED $BASE_PATH/results/log_show2
-pg_rman -p $TEST_PGPORT show timeline `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_4 2>&1
+pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_4 2>&1
 
 # cleanup
 pg_ctl stop -m immediate > /dev/null 2>&1
