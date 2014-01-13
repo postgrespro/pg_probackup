@@ -58,7 +58,11 @@ static bool dirExists(const char *path);
 
 static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
 static int strCompare(const void *str1, const void *str2);
-static void create_file_list(parray *files, const char *root, const char *prefix, bool is_append);
+static void create_file_list(parray *files,
+							 const char *root,
+							 const char *subdir,
+							 const char *prefix,
+							 bool is_append);
 static TimeLineID get_current_timeline(void);
 
 /*
@@ -267,7 +271,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pg_stop_backup(&current);
 
 		/* create file list of non-snapshot objects */
-		create_file_list(files, pgdata, NULL, false);
+		create_file_list(files, pgdata, DATABASE_FILE_LIST, NULL, false);
 
 		/* backup files from snapshot volume */
 		for (i = 0; i < parray_num(tblspcmp_list); i++)
@@ -310,7 +314,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 				/* backup files of DB cluster from snapshot volume */
 				backup_files(mp, path, snapshot_files, prev_files, lsn, current.compress_data, NULL);
 				/* create file list of snapshot objects (DB cluster) */
-				create_file_list(snapshot_files, mp, NULL, true);
+				create_file_list(snapshot_files, mp, DATABASE_FILE_LIST,
+								 NULL, true);
 				/* remove the detected tablespace("PG-DATA") from tblspcmp_list */
 				parray_rm(tblspcmp_list, "PG-DATA", strCompare);
 				i--;
@@ -342,8 +347,12 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 						backup_files(mp, dest, snapshot_files, prev_files, lsn, current.compress_data, prefix);
 
 						/* create file list of snapshot objects (TABLESPACE) */
-						create_file_list(snapshot_files, mp, prefix, true);
-						/* remove the detected tablespace("PG-DATA") from tblspcmp_list */
+						create_file_list(snapshot_files, mp, DATABASE_FILE_LIST,
+										 prefix, true);
+						/*
+						 * Remove the detected tablespace("PG-DATA") from
+						 * tblspcmp_list.
+						 */
 						parray_rm(tblspcmp_list, spcname, strCompare);
 						i--;
 						break;
@@ -385,7 +394,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pg_stop_backup(&current);
 
 		/* create file list */
-		create_file_list(files, pgdata, NULL, false);
+		create_file_list(files, pgdata, DATABASE_FILE_LIST, NULL, false);
 	}
 
 	/* print summary of size of backup mode files */
@@ -429,7 +438,6 @@ do_backup_arclog(parray *backup_list)
 	int			i;
 	parray	   *files;
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
-	FILE	   *fp;
 	char		path[MAXPGPATH];
 	char		timeline_dir[MAXPGPATH];
 	char		prev_file_txt[MAXPGPATH];
@@ -513,19 +521,10 @@ do_backup_arclog(parray *backup_list)
 	backup_files(arclog_path, path, files, prev_files, NULL,
 				 current.compress_data, NULL);
 
-	/* create file list */
-	if (!check)
-	{
-		pgBackupGetPath(&current, path, lengthof(path), ARCLOG_FILE_LIST);
-		fp = fopen(path, "wt");
-		if (fp == NULL)
-			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
-				strerror(errno));
-		dir_print_file_list(fp, files, arclog_path, NULL);
-		fclose(fp);
-	}
+	/* Create file list */
+	create_file_list(files, arclog_path, ARCLOG_FILE_LIST, NULL, false);
 
-	/* print summary of size of backup files */
+	/* Print summary of size of backup files */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
@@ -577,7 +576,6 @@ do_backup_srvlog(parray *backup_list)
 	int			i;
 	parray	   *files;
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
-	FILE	   *fp;
 	char		path[MAXPGPATH];
 	char		prev_file_txt[MAXPGPATH];
 	pgBackup   *prev_backup;
@@ -623,16 +621,7 @@ do_backup_srvlog(parray *backup_list)
 	backup_files(srvlog_path, path, files, prev_files, NULL, false, NULL);
 
 	/* create file list */
-	if (!check)
-	{
-		pgBackupGetPath(&current, path, lengthof(path), SRVLOG_FILE_LIST);
-		fp = fopen(path, "wt");
-		if (fp == NULL)
-			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
-				strerror(errno));
-		dir_print_file_list(fp, files, srvlog_path, NULL);
-		fclose(fp);
-	}
+	create_file_list(files, arclog_path, SRVLOG_FILE_LIST, NULL, false);
 
 	/* print summary of size of backup mode files */
 	for (i = 0; i < parray_num(files); i++)
@@ -1548,10 +1537,14 @@ strCompare(const void *str1, const void *str2)
 }
 
 /*
- * Output the list of backup files to backup catalog
+ * Output the list of files to backup catalog
  */
 static void
-create_file_list(parray *files, const char *root, const char *prefix, bool is_append)
+create_file_list(parray *files,
+				 const char *root,
+				 const char *subdir,
+				 const char *prefix,
+				 bool is_append)
 {
 	FILE	*fp;
 	char	 path[MAXPGPATH];
@@ -1559,7 +1552,7 @@ create_file_list(parray *files, const char *root, const char *prefix, bool is_ap
 	if (!check)
 	{
 		/* output path is '$BACKUP_PATH/file_database.txt' */
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_FILE_LIST);
+		pgBackupGetPath(&current, path, lengthof(path), subdir);
 		fp = fopen(path, is_append ? "at" : "wt");
 		if (fp == NULL)
 			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
