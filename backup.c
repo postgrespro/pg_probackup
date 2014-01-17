@@ -746,9 +746,8 @@ do_backup(pgBackupOption bkupopt)
 
 	/* get list of backups already taken */
 	backup_list = catalog_get_backup_list(NULL);
-	if(!backup_list){
+	if (!backup_list)
 		elog(ERROR_SYSTEM, _("can't process any more."));
-	}
 
 	/* set the error processing function for the backup process */
 	pgut_atexit_push(backup_cleanup, NULL);

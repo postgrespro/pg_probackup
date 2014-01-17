@@ -39,14 +39,14 @@ static int		keep_srvlog_files = KEEP_INFINITE;
 static int		keep_srvlog_days = KEEP_INFINITE;
 static int		keep_data_generations = KEEP_INFINITE;
 static int		keep_data_days = KEEP_INFINITE;
+static bool		backup_validate = false;
 
 /* restore configuration */
 static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
-static bool		is_hard_copy = false;
-static bool		backup_validate = false;
+static bool			is_hard_copy = false;
 
 /* show configuration */
 static bool			show_all = false;
