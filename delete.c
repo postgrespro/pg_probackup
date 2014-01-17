@@ -80,7 +80,6 @@ pgBackupDelete(int keep_generations, int keep_days)
 	int		backup_num;
 	time_t	days_threshold = current.start_time - (keep_days * 60 * 60 * 24);
 
-
 	if (verbose)
 	{
 		char generations_str[100];
@@ -116,20 +115,21 @@ pgBackupDelete(int keep_generations, int keep_days)
 	backup_num = 0;
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+		int			backup_num_evaluate = backup_num;
 
 		elog(LOG, "%s() %lu", __FUNCTION__, backup->start_time);
 
 		/*
 		 * When a validate full backup was found, we can delete the
-		 * backup that is older than it.
+		 * backup that is older than it using the number of generations.
 		 */
-		if (backup->backup_mode >= BACKUP_MODE_FULL &&
+		if (backup->backup_mode == BACKUP_MODE_FULL &&
 			backup->status == BACKUP_STATUS_OK)
 			backup_num++;
 
 		/* Evaluate if this backup is eligible for removal */
-		if (backup_num <= keep_generations &&
+		if (backup_num_evaluate + 1 <= keep_generations &&
 			keep_generations != KEEP_INFINITE)
 		{
 			/* Do not include the latest full backup in this count */
