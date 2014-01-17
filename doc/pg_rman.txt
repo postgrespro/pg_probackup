@@ -243,6 +243,10 @@ absolute paths; relative paths are not allowed.
     do smooth checkpoint then. See also the second argument for
     pg_start_backup(). 
 
+*--validate*::
+    Validate a backup just after taking it. Other backups taken
+    previously are ignored.
+
 *--keep-data-generations*=_NUMBER_ / *--keep-data-days*=_DAYS_::
     Specify how long backuped data files will be kept.
     --keep-data-generations means number of backup generations.
@@ -359,6 +363,7 @@ variables or in configuration file as follows:
 	-s	--with-serverlog	WITH_SERVERLOG		Yes
 	-Z	--compress-data		COMPRESS_DATA		Yes
 	-C	--smooth-checkpoint	SMOOTH_CHECKPOINT	Yes
+		--validate	        VALIDATE		Yes
 		--keep-data-generations	KEEP_DATA_GENERATIONS	Yes
 		--keep-data-days	KEEP_DATA_DAYS		Yes
 		--keep-srvlog-files	KEEP_SRVLOG_FILES	Yes

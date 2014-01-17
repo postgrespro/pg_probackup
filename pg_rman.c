@@ -46,6 +46,7 @@ static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
 static bool		is_hard_copy = false;
+static bool		backup_validate = false;
 
 /* show configuration */
 static bool			show_all = false;
@@ -56,33 +57,34 @@ static void parse_range(pgBackupRange *range, const char *arg1, const char *arg2
 static pgut_option options[] =
 {
 	/* directory options */
-	{ 's', 'D', "pgdata"		, &pgdata		, SOURCE_ENV },
-	{ 's', 'A', "arclog-path"	, &arclog_path	, SOURCE_ENV },
-	{ 's', 'B', "backup-path"	, &backup_path	, SOURCE_ENV },
-	{ 's', 'S', "srvlog-path"	, &srvlog_path	, SOURCE_ENV },
+	{ 's', 'D', "pgdata",		&pgdata,		SOURCE_ENV },
+	{ 's', 'A', "arclog-path",	&arclog_path,	SOURCE_ENV },
+	{ 's', 'B', "backup-path",	&backup_path,	SOURCE_ENV },
+	{ 's', 'S', "srvlog-path",	&srvlog_path,	SOURCE_ENV },
 	/* common options */
-	{ 'b', 'v', "verbose"		, &verbose },
-	{ 'b', 'c', "check"			, &check },
+	{ 'b', 'v', "verbose",		&verbose },
+	{ 'b', 'c', "check",		&check },
 	/* backup options */
-	{ 'f', 'b', "backup-mode"		, opt_backup_mode			, SOURCE_ENV },
-	{ 'b', 's', "with-serverlog"	, &current.with_serverlog	, SOURCE_ENV },
-	{ 'b', 'Z', "compress-data"		, &current.compress_data	, SOURCE_ENV },
-	{ 'b', 'C', "smooth-checkpoint"	, &smooth_checkpoint		, SOURCE_ENV },
+	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
+	{ 'b', 's', "with-serverlog",		&current.with_serverlog, SOURCE_ENV },
+	{ 'b', 'Z', "compress-data",		&current.compress_data,	SOURCE_ENV },
+	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
-	{ 'i',  1, "keep-data-generations"	, &keep_data_generations, SOURCE_ENV },
-	{ 'i',  2, "keep-data-days"			, &keep_data_days		, SOURCE_ENV },
-	{ 'i',  3, "keep-arclog-files"		, &keep_arclog_files	, SOURCE_ENV },
-	{ 'i',  4, "keep-arclog-days"		, &keep_arclog_days		, SOURCE_ENV },
-	{ 'i',  5, "keep-srvlog-files"		, &keep_srvlog_files	, SOURCE_ENV },
-	{ 'i',  6, "keep-srvlog-days"		, &keep_srvlog_days		, SOURCE_ENV },
+	{ 'i',  1, "keep-data-generations", &keep_data_generations, SOURCE_ENV },
+	{ 'i',  2, "keep-data-days",		&keep_data_days,		SOURCE_ENV },
+	{ 'i',  3, "keep-arclog-files",		&keep_arclog_files,	SOURCE_ENV },
+	{ 'i',  4, "keep-arclog-days",		&keep_arclog_days,	SOURCE_ENV },
+	{ 'i',  5, "keep-srvlog-files",		&keep_srvlog_files,	SOURCE_ENV },
+	{ 'i',  6, "keep-srvlog-days",		&keep_srvlog_days,	SOURCE_ENV },
 	/* restore options */
-	{ 's',  7, "recovery-target-time"		, &target_time		, SOURCE_ENV },
-	{ 's',  8, "recovery-target-xid"		, &target_xid		, SOURCE_ENV },
-	{ 's',  9, "recovery-target-inclusive"	, &target_inclusive	, SOURCE_ENV },
-	{ 'u', 10, "recovery-target-timeline"	, &target_tli		, SOURCE_ENV },
-	{ 'b', 11, "hard-copy"	, &is_hard_copy		, SOURCE_ENV },
+	{ 's',  7, "recovery-target-time",		&target_time,		SOURCE_ENV },
+	{ 's',  8, "recovery-target-xid",		&target_xid,		SOURCE_ENV },
+	{ 's',  9, "recovery-target-inclusive", &target_inclusive,	SOURCE_ENV },
+	{ 'u', 10, "recovery-target-timeline",	&target_tli,		SOURCE_ENV },
+	{ 'b', 11, "hard-copy",					&is_hard_copy,		SOURCE_ENV },
+	{ 'b', 12, "validate",					&backup_validate,	SOURCE_ENV },
 	/* catalog options */
-	{ 'b', 'a', "show-all"		, &show_all },
+	{ 'b', 'a', "show-all",					&show_all },
 	{ 0 }
 };
 
@@ -178,14 +180,25 @@ main(int argc, char *argv[])
 	else if (pg_strcasecmp(cmd, "backup") == 0)
 	{
 		pgBackupOption bkupopt;
-		bkupopt.smooth_checkpoint	= smooth_checkpoint;
-		bkupopt.keep_arclog_files	= keep_arclog_files;
-		bkupopt.keep_arclog_days	= keep_arclog_days;
-		bkupopt.keep_srvlog_files	= keep_srvlog_files;
-		bkupopt.keep_srvlog_days	= keep_srvlog_days;
-		bkupopt.keep_data_generations	= keep_data_generations;
-		bkupopt.keep_data_days		= keep_data_days;
-		return do_backup(bkupopt);
+		int res;
+		bkupopt.smooth_checkpoint = smooth_checkpoint;
+		bkupopt.keep_arclog_files = keep_arclog_files;
+		bkupopt.keep_arclog_days = keep_arclog_days;
+		bkupopt.keep_srvlog_files = keep_srvlog_files;
+		bkupopt.keep_srvlog_days = keep_srvlog_days;
+		bkupopt.keep_data_generations = keep_data_generations;
+		bkupopt.keep_data_days = keep_data_days;
+
+		/* Do the backup */
+		res = do_backup(bkupopt);
+		if (res != 0)
+			return res;
+
+		/* If validation has been requested, do it */
+		range.begin = current.start_time;
+		range.end = current.start_time + 1;
+		if (backup_validate)
+			do_validate(&range);
 	}
 	else if (pg_strcasecmp(cmd, "restore") == 0){
 		return do_restore(target_time, target_xid,
@@ -230,6 +243,7 @@ pgut_help(bool details)
 	printf(_("  -s, --with-serverlog      also backup server log files\n"));
 	printf(_("  -Z, --compress-data       compress data backup with zlib\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
+	printf(_("  --validate                validate backup after taking it\n"));
 	printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
 	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));
 	printf(_("  --keep-arclog-files=NUM   keep NUM of archived WAL\n"));

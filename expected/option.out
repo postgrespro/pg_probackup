@@ -22,6 +22,7 @@ Backup options:
   -s, --with-serverlog      also backup server log files
   -Z, --compress-data       compress data backup with zlib
   -C, --smooth-checkpoint   do smooth checkpoint before backup
+  --validate                validate backup after taking it
   --keep-data-generations=N keep GENERATION of full data backup
   --keep-data-days=DAY      keep enough data backup to recover to DAY days age
   --keep-arclog-files=NUM   keep NUM of archived WAL
