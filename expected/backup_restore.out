@@ -8,18 +8,11 @@ CHECKPOINT
 incremental database backup
 CHECKPOINT
 CHECKPOINT
-archived WAL backup
 stop DB during running pgbench
-diff files in BACKUP_PATH/backup/pg_xlog
-diff files in BACKUP_PATH/backup/pg_xlog
 full database backup after recovery
 CHECKPOINT
-# of files in BACKUP_PATH/backup/pg_xlog
-0
 # of symbolic links in ARCLOG_PATH
 0
-# of files in BACKUP_PATH/timeline_history
-2
 # of recovery target option in recovery.conf
 3
 # of deleted backups (show all)
@@ -30,4 +23,4 @@ delete backup
 # of deleted backups
 4
 # of deleted backups
-9
+8

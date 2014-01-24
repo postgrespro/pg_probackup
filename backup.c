@@ -35,23 +35,15 @@ static parray	*cleanup_list;
  * Backup routines
  */
 static void backup_cleanup(bool fatal, void *userdata);
-static void delete_old_files(const char *root,
-							 parray *files, int keep_files,
-							 int keep_days, bool is_arclog);
 static void backup_files(const char *from_root, const char *to_root,
 	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress, const char *prefix);
 static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
-static parray *do_backup_arclog(parray *backup_list);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
-static void pg_switch_xlog(pgBackup *backup);
 static bool pg_is_standby(void);
 static void get_lsn(PGresult *res, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
-
-static void delete_arclog_link(void);
-static void delete_online_wal_backup(void);
 
 static bool dirExists(const char *path);
 
@@ -83,10 +75,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
-
-	/* Leave in case of archive mode */
-	if (current.backup_mode == BACKUP_MODE_ARCHIVE)
-		return NULL;
 
 	/* Block backup operations on a standby */
 	if (pg_is_standby())
@@ -411,172 +399,27 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 			current.data_bytes += file->read_size;
 		else if (current.backup_mode == BACKUP_MODE_FULL)
 			current.data_bytes += file->size;
-
-		/* Count total amount of data for backup */
-		if (file->write_size != BYTES_INVALID)
-			current.backup_bytes += file->write_size;
 	}
 
 	if (verbose)
 	{
-		printf(_("database backup completed(written: " INT64_FORMAT " Backup: " INT64_FORMAT ")\n"),
-			current.data_bytes, current.backup_bytes);
+		printf(_("database backup completed(Backup: " INT64_FORMAT ")\n"),
+			current.data_bytes);
 		printf(_("========================================\n"));
 	}
 
 	return files;
 }
 
-
-/*
- * Backup archived WAL incrementally.
- */
-static parray *
-do_backup_arclog(parray *backup_list)
-{
-	int			i;
-	parray	   *files;
-	parray	   *prev_files = NULL;	/* file list of previous database backup */
-	char		path[MAXPGPATH];
-	char		timeline_dir[MAXPGPATH];
-	char		prev_file_txt[MAXPGPATH];
-	pgBackup   *prev_backup;
-	int64		arclog_write_bytes = 0;
-	char		last_wal[MAXFNAMELEN];
-
-	Assert(current.backup_mode == BACKUP_MODE_ARCHIVE ||
-		   current.backup_mode == BACKUP_MODE_INCREMENTAL ||
-		   current.backup_mode == BACKUP_MODE_FULL);
-
-	/* Block backup operations on a standby */
-	if (pg_is_standby())
-		elog(ERROR_SYSTEM, _("Backup cannot run on a standby."));
-
-	if (verbose)
-	{
-		printf(_("========================================\n"));
-		printf(_("archived WAL backup start\n"));
-	}
-
-	/* initialize size summary */
-	current.arclog_bytes = 0;
-
-	/*
-	 * Switch xlog if database is not backed up, current timeline of
-	 * server is obtained here.
-	 */
-	if ((uint32) current.stop_lsn == 0)
-		pg_switch_xlog(&current);
-
-	/*
-	 * Check if there is a full backup present on current timeline.
-	 * For an incremental or full backup, we are sure that there is one
-	 * so this error can be bypassed safely.
-	 */
-	if (current.backup_mode == BACKUP_MODE_ARCHIVE &&
-		catalog_get_last_data_backup(backup_list, current.tli) == NULL)
-		elog(ERROR_SYSTEM, _("No valid full or incremental backup detected "
-							 "on current timeline "));
-
-	/*
-	 * To take incremental backup, the file list of the last completed
-	 * database backup is needed.
-	 */
-	prev_backup = catalog_get_last_arclog_backup(backup_list, current.tli);
-	if (verbose && prev_backup == NULL)
-		printf(_("no previous full backup, performing a full backup instead\n"));
-
-	if (prev_backup)
-	{
-		pgBackupGetPath(prev_backup, prev_file_txt, lengthof(prev_file_txt),
-			ARCLOG_FILE_LIST);
-		prev_files = dir_read_file_list(arclog_path, prev_file_txt);
-	}
-
-	/* list files with the logical path. omit ARCLOG_PATH */
-	files = parray_new();
-	dir_list_file(files, arclog_path, NULL, true, false);
-
-	/* remove WALs archived after pg_stop_backup()/pg_switch_xlog() */
-	xlog_fname(last_wal, current.tli, current.stop_lsn);
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-		char *fname;
-		if ((fname = last_dir_separator(file->path)))
-			fname++;
-		else
-			fname = file->path;
-
-		/* to backup backup history files, compare tli/lsn portion only */
-		if (strncmp(fname, last_wal, 24) > 0)
-		{
-			parray_remove(files, i);
-			i--;
-		}
-	}
-
-	pgBackupGetPath(&current, path, lengthof(path), ARCLOG_DIR);
-	backup_files(arclog_path, path, files, prev_files, NULL,
-				 current.compress_data, NULL);
-
-	/* Create file list */
-	create_file_list(files, arclog_path, ARCLOG_FILE_LIST, NULL, false);
-
-	/* Print summary of size of backup files */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-		if (!S_ISREG(file->mode))
-			continue;
-		current.arclog_bytes += file->read_size;
-		if (file->write_size != BYTES_INVALID)
-		{
-			current.backup_bytes += file->write_size;
-			arclog_write_bytes += file->write_size;
-		}
-	}
-
-	/*
-	 * Backup timeline history files to special directory.
-	 * We do this after create file list, because copy_file() update
-	 * pgFile->write_size to actual size.
-	 */
-	join_path_components(timeline_dir, backup_path, TIMELINE_HISTORY_DIR);
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-		if (!S_ISREG(file->mode))
-			continue;
-		if (strstr(file->path, ".history") ==
-				file->path + strlen(file->path) - strlen(".history"))
-		{
-			elog(LOG, _("(timeline history) %s"), file->path);
-			copy_file(arclog_path, timeline_dir, file, NO_COMPRESSION);
-		}
-	}
-
-	if (verbose)
-	{
-		printf(_("archived WAL backup completed(read: " INT64_FORMAT " write: " INT64_FORMAT ")\n"),
-			current.arclog_bytes, arclog_write_bytes);
-		printf(_("========================================\n"));
-	}
-
-	return files;
-}
 
 int
 do_backup(pgBackupOption bkupopt)
 {
 	parray *backup_list;
 	parray *files_database;
-	parray *files_arclog;
 	int		ret;
 
-	/* repack the necesary options */
-	int	keep_arclog_files = bkupopt.keep_arclog_files;
-	int	keep_arclog_days  = bkupopt.keep_arclog_days;
+	/* repack the necessary options */
 	int	keep_data_generations = bkupopt.keep_data_generations;
 	int	keep_data_days        = bkupopt.keep_data_days;
 
@@ -589,12 +432,6 @@ do_backup(pgBackupOption bkupopt)
 	if (current.backup_mode == BACKUP_MODE_INVALID)
 		elog(ERROR_ARGS, _("Required parameter not specified: BACKUP_MODE "
 						   "(-b, --backup-mode)"));
-
-	/* ARCLOG_PATH is required for all the modes */
-	if (arclog_path == NULL)
-		elog(ERROR_ARGS,
-			 _("Required parameter not specified: ARCLOG_PATH "
-			   "(-A, --arclog-path)"));
 
 #ifndef HAVE_LIBZ
 	if (current.compress_data)
@@ -637,8 +474,6 @@ do_backup(pgBackupOption bkupopt)
 	current.start_time = time(NULL);
 	current.end_time = (time_t) 0;
 	current.data_bytes = BYTES_INVALID;
-	current.arclog_bytes = BYTES_INVALID;
-	current.backup_bytes = 0;
 	current.block_size = BLCKSZ;
 	current.wal_block_size = XLOG_BLCKSZ;
 	current.recovery_xid = 0;
@@ -664,9 +499,6 @@ do_backup(pgBackupOption bkupopt)
 
 	/* backup data */
 	files_database = do_backup_database(backup_list, bkupopt);
-
-	/* backup archived WAL */
-	files_arclog = do_backup_arclog(backup_list);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* update backup status to DONE */
@@ -680,28 +512,20 @@ do_backup(pgBackupOption bkupopt)
 	{
 		int64 total_read = 0;
 
-		/* WAL archives */
-		total_read += current.arclog_bytes;
-
 		/* Database data */
 		if (current.backup_mode == BACKUP_MODE_FULL ||
 			current.backup_mode == BACKUP_MODE_INCREMENTAL)
-			total_read += current.arclog_bytes;
+			total_read += current.data_bytes;
 
 		if (total_read == 0)
 			printf(_("nothing to backup\n"));
 		else
 			printf(_("all backup completed(read: " INT64_FORMAT " write: "
 				INT64_FORMAT ")\n"),
-				total_read, current.backup_bytes);
+				total_read, current.data_bytes);
 		printf(_("========================================\n"));
 	}
 
-	/*
-	 * Delete old files (archived WAL) after update of status.
-	 */
-	delete_old_files(arclog_path, files_arclog, keep_arclog_files,
-		keep_arclog_days, true);
 
 	/* Delete old backup files after all backup operation. */
 	pgBackupDelete(keep_data_generations, keep_data_days);
@@ -710,21 +534,6 @@ do_backup(pgBackupOption bkupopt)
 	if (files_database)
 		parray_walk(files_database, pgFileFree);
 	parray_free(files_database);
-	if (files_arclog)
-		parray_walk(files_arclog, pgFileFree);
-	parray_free(files_arclog);
-
-	/*
-	 * If this backup is full backup, delete backup of online WAL.
-	 * Note that sereverlog files which were backed up during first restoration
-	 * don't be delete.
-	 * Also delete symbolic link in the archive directory.
-	 */
-	if (current.backup_mode == BACKUP_MODE_FULL)
-	{
-		delete_online_wal_backup();
-		delete_arclog_link();
-	}
 
 	/* release catalog lock */
 	catalog_unlock();
@@ -885,15 +694,6 @@ pg_stop_backup(pgBackup *backup)
 		"SELECT * FROM pg_stop_backup()");
 }
 
-/*
- * Force switch to a new transaction log file
- */
-static void
-pg_switch_xlog(pgBackup *backup)
-{
-	wait_for_archive(backup,
-		"SELECT * FROM pg_switch_xlog()");
-}
 
 /*
  * Check if node is a standby by looking at the presence of
@@ -1202,179 +1002,6 @@ backup_files(const char *from_root,
 	}
 }
 
-/*
- * Delete files modified before than KEEP_xxx_DAYS or more than KEEP_xxx_FILES
- * of newer files exist.
- */
-static void
-delete_old_files(const char *root,
-				 parray *files,
-				 int keep_files,
-				 int keep_days,
-				 bool is_arclog)
-{
-	int		i;
-	int		j;
-	int		file_num = 0;
-	time_t	days_threshold = current.start_time - (keep_days * 60 * 60 * 24);
-
-	if (verbose)
-	{
-		char files_str[100];
-		char days_str[100];
-
-		if (keep_files == KEEP_INFINITE)
-			strncpy(files_str, "INFINITE", lengthof(files_str));
-		else
-			snprintf(files_str, lengthof(files_str), "%d", keep_files);
-
-		if (keep_days == KEEP_INFINITE)
-			strncpy(days_str, "INFINITE", lengthof(days_str));
-		else
-			snprintf(days_str, lengthof(days_str), "%d", keep_days);
-
-		printf(_("delete old files from \"%s\" (files=%s, days=%s)\n"),
-			root, files_str, days_str);
-	}
-
-	/* Leave if both settings are set to infinite, there is nothing to do */
-	if (keep_files == KEEP_INFINITE && keep_days == KEEP_INFINITE)
-	{
-		elog(LOG, "%s() infinite", __FUNCTION__);
-		return;
-	}
-
-	parray_qsort(files, pgFileCompareMtime);
-	for (i = parray_num(files) - 1; i >= 0; i--)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-
-		elog(LOG, "%s() %s", __FUNCTION__, file->path);
-
-		/* Delete completed WALs only. */
-		if (is_arclog && !xlog_is_complete_wal(file))
-		{
-			elog(LOG, "%s() not complete WAL", __FUNCTION__);
-			continue;
-		}
-
-		file_num++;
-
-		/*
-		 * If the mtime of the file is older than the threshold and there are
-		 * enough number of files newer than the files, delete the file.
-		 */
-		if (file->mtime >= days_threshold &&
-			keep_days != KEEP_INFINITE)
-		{
-			elog(LOG, "%s() %lu is not older than %lu", __FUNCTION__,
-				file->mtime, days_threshold);
-			continue;
-		}
-		else if (file_num <= keep_files &&
-				 keep_files != KEEP_INFINITE)
-		{
-			elog(LOG, "%s() newer files are only %d", __FUNCTION__, file_num);
-			continue;
-		}
-
-		/* Now we found a file should be deleted. */
-		if (verbose)
-			printf(_("delete \"%s\"\n"), file->path + strlen(root) + 1);
-
-		/* delete corresponding backup history file if exists */
-		file = (pgFile *) parray_remove(files, i);
-		for (j = parray_num(files) - 1; j >= 0; j--)
-		{
-			pgFile *file2 = (pgFile *)parray_get(files, j);
-			if (strstr(file2->path, file->path) == file2->path)
-			{
-				file2 = (pgFile *)parray_remove(files, j);
-				if (verbose)
-					printf(_("delete \"%s\"\n"),
-						file2->path + strlen(root) + 1);
-				if (!check)
-					pgFileDelete(file2);
-				pgFileFree(file2);
-			}
-		}
-		if (!check)
-			pgFileDelete(file);
-		pgFileFree(file);
-	}
-}
-
-static void
-delete_online_wal_backup(void)
-{
-	int i;
-	parray *files = parray_new();
-	char work_path[MAXPGPATH];
-
-	if (verbose)
-	{
-		printf(_("========================================\n"));
-		printf(_("delete online WAL backup\n"));
-	}
-
-	snprintf(work_path, lengthof(work_path), "%s/%s/%s", backup_path,
-		RESTORE_WORK_DIR, PG_XLOG_DIR);
-	/* don't delete root dir */
-	dir_list_file(files, work_path, NULL, true, false);
-	if (parray_num(files) == 0)
-	{
-		parray_free(files);
-		return;
-	}
-
-	parray_qsort(files, pgFileComparePathDesc);	/* delete from leaf */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-		if (verbose)
-			printf(_("delete \"%s\"\n"), file->path);
-		if (!check)
-			pgFileDelete(file);
-	}
-
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-}
-
-/*
- * Remove symbolic links point archived WAL in backup catalog.
- */
-static void
-delete_arclog_link(void)
-{
-	int i;
-	parray *files = parray_new();
-
-	if (verbose)
-	{
-		printf(_("========================================\n"));
-		printf(_("delete symbolic link in archive directory\n"));
-	}
-
-	dir_list_file(files, arclog_path, NULL, false, false);
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-
-		if (!S_ISLNK(file->mode))
-			continue;
-
-		if (verbose)
-			printf(_("delete \"%s\"\n"), file->path);
-
-		if (!check && remove(file->path) == -1)
-			elog(ERROR_SYSTEM, _("can't remove link \"%s\": %s"), file->path,
-				strerror(errno));
-	}
-
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-}
 
 /*
  * Append files to the backup list array.

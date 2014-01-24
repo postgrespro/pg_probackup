@@ -84,12 +84,6 @@ pgBackupValidate(pgBackup *backup,
 			backup->backup_mode == BACKUP_MODE_INCREMENTAL)
 			elog(INFO, "validate: %s backup and archive log files by %s",
 				 timestamp, (size_only ? "SIZE" : "CRC"));
-		else
-		{
-			if (backup->backup_mode == BACKUP_MODE_ARCHIVE)
-				elog(INFO, "validate: %s archive log files by %s",
-					 timestamp, (size_only ? "SIZE" : "CRC"));
-		}
 	}
 
 	if (!check)
@@ -107,16 +101,6 @@ pgBackupValidate(pgBackup *backup,
 			parray_walk(files, pgFileFree);
 			parray_free(files);
 		}
-
-		/* WAL archives are present for all modes */
-		elog(LOG, "archive WAL files...");
-		pgBackupGetPath(backup, base_path, lengthof(base_path), ARCLOG_DIR);
-		pgBackupGetPath(backup, path, lengthof(path), ARCLOG_FILE_LIST);
-		files = dir_read_file_list(base_path, path);
-		if (!pgBackupValidateFiles(files, base_path, size_only))
-			corrupted = true;
-		parray_walk(files, pgFileFree);
-		parray_free(files);
 
 		/* update status to OK */
 		if (corrupted)

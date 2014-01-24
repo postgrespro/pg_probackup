@@ -32,8 +32,6 @@ pgBackup	current;
 
 /* backup configuration */
 static bool		smooth_checkpoint;
-static int		keep_arclog_files = KEEP_INFINITE;
-static int		keep_arclog_days = KEEP_INFINITE;
 static int		keep_data_generations = KEEP_INFINITE;
 static int		keep_data_days = KEEP_INFINITE;
 static bool		backup_validate = false;
@@ -43,7 +41,6 @@ static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
-static bool			is_hard_copy = false;
 
 /* show configuration */
 static bool			show_all = false;
@@ -67,15 +64,12 @@ static pgut_option options[] =
 	/* options with only long name (keep-xxx) */
 	{ 'i',  1, "keep-data-generations", &keep_data_generations, SOURCE_ENV },
 	{ 'i',  2, "keep-data-days",		&keep_data_days,		SOURCE_ENV },
-	{ 'i',  3, "keep-arclog-files",		&keep_arclog_files,	SOURCE_ENV },
-	{ 'i',  4, "keep-arclog-days",		&keep_arclog_days,	SOURCE_ENV },
 	/* restore options */
-	{ 's',  7, "recovery-target-time",		&target_time,		SOURCE_ENV },
-	{ 's',  8, "recovery-target-xid",		&target_xid,		SOURCE_ENV },
-	{ 's',  9, "recovery-target-inclusive", &target_inclusive,	SOURCE_ENV },
-	{ 'u', 10, "recovery-target-timeline",	&target_tli,		SOURCE_ENV },
-	{ 'b', 11, "hard-copy",					&is_hard_copy,		SOURCE_ENV },
-	{ 'b', 12, "validate",					&backup_validate,	SOURCE_ENV },
+	{ 's',  3, "recovery-target-time",		&target_time,		SOURCE_ENV },
+	{ 's',  4, "recovery-target-xid",		&target_xid,		SOURCE_ENV },
+	{ 's',  5, "recovery-target-inclusive", &target_inclusive,	SOURCE_ENV },
+	{ 'u',  6, "recovery-target-timeline",	&target_tli,		SOURCE_ENV },
+	{ 'b',  7, "validate",					&backup_validate,	SOURCE_ENV },
 	/* catalog options */
 	{ 'b', 'a', "show-all",					&show_all },
 	{ 0 }
@@ -171,8 +165,6 @@ main(int argc, char *argv[])
 		pgBackupOption bkupopt;
 		int res;
 		bkupopt.smooth_checkpoint = smooth_checkpoint;
-		bkupopt.keep_arclog_files = keep_arclog_files;
-		bkupopt.keep_arclog_days = keep_arclog_days;
 		bkupopt.keep_data_generations = keep_data_generations;
 		bkupopt.keep_data_days = keep_data_days;
 
@@ -189,7 +181,7 @@ main(int argc, char *argv[])
 	}
 	else if (pg_strcasecmp(cmd, "restore") == 0){
 		return do_restore(target_time, target_xid,
-					target_inclusive, target_tli, is_hard_copy);
+					target_inclusive, target_tli);
 	}
 	else if (pg_strcasecmp(cmd, "show") == 0)
 		return do_show(&range, show_all);
@@ -225,20 +217,17 @@ pgut_help(bool details)
 	printf(_("  -c, --check               show what would have been done\n"));
 	printf(_("  -v, --verbose             output process information\n"));
 	printf(_("\nBackup options:\n"));
-	printf(_("  -b, --backup-mode=MODE    full, incremental, or archive\n"));
+	printf(_("  -b, --backup-mode=MODE    full or incremental\n"));
 	printf(_("  -Z, --compress-data       compress data backup with zlib\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
 	printf(_("  --validate                validate backup after taking it\n"));
 	printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
 	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));
-	printf(_("  --keep-arclog-files=NUM   keep NUM of archived WAL\n"));
-	printf(_("  --keep-arclog-days=DAY    keep archived WAL modified in DAY days\n"));
 	printf(_("\nRestore options:\n"));
 	printf(_("  --recovery-target-time    time stamp up to which recovery will proceed\n"));
 	printf(_("  --recovery-target-xid     transaction ID up to which recovery will proceed\n"));
 	printf(_("  --recovery-target-inclusive whether we stop just after the recovery target\n"));
 	printf(_("  --recovery-target-timeline  recovering into a particular timeline\n"));
-	printf(_("  --hard-copy                 copying archivelog not symbolic link\n"));
 	printf(_("\nCatalog options:\n"));
 	printf(_("  -a, --show-all            show deleted backup too\n"));
 }

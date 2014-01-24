@@ -127,9 +127,6 @@ psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
-echo "archived WAL backup"
-#pg_rman -p $TEST_PGPORT backup -b a --verbose -d postgres > $BASE_PATH/results/log_arclog 2>&1
-pg_rman -w -p $TEST_PGPORT backup -b a --verbose -d postgres > $BASE_PATH/results/log_arclog 2>&1
 
 # stop PG during transaction and get commited info for verifing
 echo "stop DB during running pgbench"
@@ -160,10 +157,6 @@ if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
 	echo "failed: bad timeline ID" CUR_TLI=$CUR_TLI CUR_TLI_R=$CUR_TLI_R
 fi
 
-# Backup of online-WAL
-echo "diff files in BACKUP_PATH/backup/pg_xlog"
-diff -r $PGDATA/pg_xlog $BACKUP_PATH/backup/pg_xlog
-
 # recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
 
@@ -181,10 +174,6 @@ if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
 	echo "failed: bad timeline ID" CUR_TLI=$CUR_TLI CUR_TLI_R=$CUR_TLI_R
 fi
 
-# Backup of online-WAL
-echo "diff files in BACKUP_PATH/backup/pg_xlog"
-diff -r $PGDATA/pg_xlog $BACKUP_PATH/backup/pg_xlog
-
 # re-recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
 
@@ -199,17 +188,9 @@ psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 #pg_rman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 pg_rman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 
-# Backup of online-WAL should been deleted
-echo "# of files in BACKUP_PATH/backup/pg_xlog"
-find $BACKUP_PATH/backup/pg_xlog -type f | wc -l | tr -d ' '
-
 # Symbolic links in $ARCLOG_PATH should be deleted.
 echo "# of symbolic links in ARCLOG_PATH"
 find $ARCLOG_PATH -type l | wc -l  | tr -d ' '
-
-# timeline history files are backed up.
-echo "# of files in BACKUP_PATH/timeline_history"
-find $BACKUP_PATH/timeline_history -type f | wc -l | tr -d ' '
 
 # restore with pg_rman
 pg_ctl stop -m immediate > /dev/null 2>&1

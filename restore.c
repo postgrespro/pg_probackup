@@ -17,9 +17,7 @@
 #include "catalog/pg_control.h"
 
 static void backup_online_files(bool re_recovery);
-static void restore_online_files(void);
 static void restore_database(pgBackup *backup);
-static void restore_archive_logs(pgBackup *backup, bool is_hard_copy);
 static void create_recovery_conf(const char *target_time,
 								 const char *target_xid,
 								 const char *target_inclusive,
@@ -43,8 +41,7 @@ int
 do_restore(const char *target_time,
 		   const char *target_xid,
 		   const char *target_inclusive,
-		   TimeLineID target_tli,
-		   bool is_hard_copy)
+		   TimeLineID target_tli)
 {
 	int i;
 	int base_index;				/* index of base (full) backup */
@@ -56,7 +53,6 @@ do_restore(const char *target_time,
 	pgBackup *base_backup = NULL;
 	parray *files;
 	parray *timelines;
-	char timeline_dir[MAXPGPATH];
 	pgRecoveryTarget *rt = NULL;
 	XLogRecPtr need_lsn;
 
@@ -138,14 +134,7 @@ do_restore(const char *target_time,
 		parray_free(files);
 	}
 
-	/*
-	 * restore timeline history files and get timeline branches can reach
-	 * recovery target point.
-	 */
-	join_path_components(timeline_dir, backup_path, TIMELINE_HISTORY_DIR);
-	if (verbose && !check)
-		printf(_("restoring timeline history files\n"));
-	dir_copy_files(timeline_dir, arclog_path);
+	/* Read timeline history files from archives */
 	timelines = readTimeLineHistory(target_tli);
 
 	/* find last full backup which can be used as base backup. */
@@ -213,47 +202,7 @@ base_backup_found:
 		last_restored_index = i;
 	}
 
-	/*
-	 * Restore archived WAL which backed up with or after last restored backup.
-	 * We don't check the backup->tli because a backup of arhived WAL
-	 * can contain WALs which were archived in multiple timeline.
-	 */
-	if (verbose)
-		printf(_("searching backed-up WAL...\n"));
-
-	if (check)
-	{
-		pgBackup *backup = (pgBackup *) parray_get(backups, last_restored_index);
-		need_lsn = backup->start_lsn;
-	}
-
 	for (i = last_restored_index; i >= 0; i--)
-	{
-		pgBackup *backup = (pgBackup *) parray_get(backups, i);
-
-		/* don't use incomplete backup */
-		if (backup->status != BACKUP_STATUS_OK)
-			continue;
-
-		/* care timeline junction */
-		if (!satisfy_timeline(timelines, backup))
-			continue;
-
-		restore_archive_logs(backup, is_hard_copy);
-
-		if (check)
-		{
-			char	xlogpath[MAXPGPATH];
-
-			pgBackupGetPath(backup, xlogpath, lengthof(xlogpath), ARCLOG_DIR);
-			search_next_wal(xlogpath, &need_lsn, timelines);
-		}
-	}
-
-	/* copy online WAL backup to $PGDATA/pg_xlog */
-	restore_online_files();
-
-	if (check)
 	{
 		char	xlogpath[MAXPGPATH];
 		if (verbose)
@@ -466,113 +415,6 @@ restore_database(pgBackup *backup)
 		printf(_("restore backup completed\n"));
 }
 
-/*
- * Restore archived WAL by creating symbolic link which linked to backup WAL in
- * archive directory.
- */
-void
-restore_archive_logs(pgBackup *backup, bool is_hard_copy)
-{
-	int i;
-	char timestamp[100];
-	parray *files;
-	char path[MAXPGPATH];
-	char list_path[MAXPGPATH];
-	char base_path[MAXPGPATH];
-
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	if (verbose && !check)
-	{
-		printf(_("----------------------------------------\n"));
-		printf(_("restoring WAL from backup %s.\n"), timestamp);
-	}
-
-	/*
-	 * Validate backup files with its size, because load of CRC calculation is
-	 * not light.
-	 */
-	pgBackupValidate(backup, true, false);
-
-	pgBackupGetPath(backup, list_path, lengthof(list_path), ARCLOG_FILE_LIST);
-	pgBackupGetPath(backup, base_path, lengthof(list_path), ARCLOG_DIR);
-	files = dir_read_file_list(base_path, list_path);
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-
-		/* check for interrupt */
-		if (interrupted)
-			elog(ERROR_INTERRUPTED, _("interrupted during restore WAL"));
-
-		/* print progress */
-		join_path_components(path, arclog_path, file->path + strlen(base_path) + 1);
-		if (verbose && !check)
-			printf(_("(%d/%lu) %s "), i + 1, (unsigned long) parray_num(files),
-				file->path + strlen(base_path) + 1);
-
-		/* skip files which are not in backup */
-		if (file->write_size == BYTES_INVALID)
-		{
-			if (verbose && !check)
-				printf(_("skip(not backed up)\n"));
-			continue;
-		}
-
-		/*
-		 * skip timeline history files because timeline history files will be
-		 * restored from $BACKUP_PATH/timeline_history.
-		 */
-		if (strstr(file->path, ".history") ==
-				file->path + strlen(file->path) - strlen(".history"))
-		{
-			if (verbose && !check)
-				printf(_("skip(timeline history)\n"));
-			continue;
-		}
-
-		if (!check)
-		{
-			if (backup->compress_data)
-			{
-				copy_file(base_path, arclog_path, file, DECOMPRESSION);
-				if (verbose)
-					printf(_("decompressed\n"));
-
-				continue;
-			}
-
-			/* even same file exist, use backup file */
-			if ((remove(path) == -1) && errno != ENOENT)
-				elog(ERROR_SYSTEM, _("can't remove file \"%s\": %s"), path,
-					strerror(errno));
-
-			if (!is_hard_copy)
-			{
-				/* create symlink */
-				if ((symlink(file->path, path) == -1))
-					elog(ERROR_SYSTEM, _("can't create link to \"%s\": %s"),
-						file->path, strerror(errno));
-
-				if (verbose)
-					printf(_("linked\n"));
-			}
-			else
-			{
-				/* create hard-copy */
-				if (!copy_file(base_path, arclog_path, file, NO_COMPRESSION))
-					elog(ERROR_SYSTEM, _("can't copy to \"%s\": %s"),
-						file->path, strerror(errno));
-
-				if (verbose)
-					printf(_("copied\n"));
-			}
-
-		}
-	}
-
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-}
 
 static void
 create_recovery_conf(const char *target_time,
@@ -654,58 +496,6 @@ backup_online_files(bool re_recovery)
 	dir_copy_files(pg_xlog_path, work_path);
 }
 
-static void
-restore_online_files(void)
-{
-	int		i;
-	char	root_backup[MAXPGPATH];
-	parray *files_backup;
-
-	/* get list of files in $BACKUP_PATH/backup/pg_xlog */
-	files_backup = parray_new();
-	snprintf(root_backup, lengthof(root_backup), "%s/%s/%s", backup_path,
-		RESTORE_WORK_DIR, PG_XLOG_DIR);
-	dir_list_file(files_backup, root_backup, NULL, true, false);
-
-	if (verbose && !check)
-	{
-		printf(_("----------------------------------------\n"));
-		printf(_("restoring online WAL\n"));
-	}
-
-	/* restore online WAL */
-	for (i = 0; i < parray_num(files_backup); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files_backup, i);
-
-		if (S_ISDIR(file->mode))
-		{
-			char to_path[MAXPGPATH];
-			snprintf(to_path, lengthof(to_path), "%s/%s/%s", pgdata,
-				PG_XLOG_DIR, file->path + strlen(root_backup) + 1);
-			if (verbose && !check)
-				printf(_("create directory \"%s\"\n"),
-					file->path + strlen(root_backup) + 1);
-			if (!check)
-				dir_create_dir(to_path, DIR_PERMISSION);
-			continue;
-		}
-		else if(S_ISREG(file->mode))
-		{
-			char to_root[MAXPGPATH];
-			join_path_components(to_root, pgdata, PG_XLOG_DIR);
-			if (verbose && !check)
-				printf(_("restore \"%s\"\n"),
-					file->path + strlen(root_backup) + 1);
-			if (!check)
-				copy_file(root_backup, to_root, file, NO_COMPRESSION);
-		}
-	}
-
-	/* cleanup */
-	parray_walk(files_backup, pgFileFree);
-	parray_free(files_backup);
-}
 
 /*
  * Try to read a timeline's history file.

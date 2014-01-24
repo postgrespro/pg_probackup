@@ -21,8 +21,6 @@ files.
 == DESCRIPTION ==
 
 pg_rman is a utility program to backup and restore PostgreSQL database.
-It takes a physical online backup of whole database cluster and archive
-WALs.
 
 It proposes the following features:
 
@@ -30,7 +28,7 @@ It proposes the following features:
   command
 - Recovery from backup with just one command, with customized targets
   to facilitate the use of PITR.
-- Support for full, incremental and archive backup
+- Support for full and incremental
 - Compression of backup files
 - Management of backups with integrated catalog
 
@@ -76,7 +74,6 @@ Backup target can be one of the following types:
 - Full backup, backup a whole database cluster. 
 - Incremental backup, backup only files or pages modified after the last
 verified backup. 
-- Archive WAL backup, Backup only archive WAL files.
 
 It is recommended to verify backup files as soon as possible after backup.
 Unverified backup cannot be used in restore and in incremental backup. 
@@ -143,12 +140,11 @@ Here are some commands to restore from a backup:
 The fields are:
 
 * Start: start time of backup
-* Mode: Mode of backup: FULL (full), INCR (incremental) or ARCH (archive)
+* Mode: Mode of backup: FULL (full) or INCR (incremental)
 * Current TLI: current timeline of backup
 * Parent TLI: parent timeline of backup
 * Time: total time necessary to take this backup
 * Data: size of data files
-* WAL: size of read WAL archive files
 * Log: size of read server log files
 * Backup: size of backup (= written size)
 * Status: status of backup. Possible values are:
@@ -175,8 +171,6 @@ When a date is specified, more details about a backup is retrieved:
 	RECOVERY_XID=1759
 	RECOVERY_TIME='2011-11-27 19:15:53'
 	DATA_BYTES=25420184
-	ARCLOG_BYTES=32218912
-	BACKUP_BYTES=242919520
 	BLOCK_SIZE=8192
 	XLOG_BLOCK_SIZE=8192
 	STATUS=OK
@@ -202,8 +196,8 @@ absolute paths; relative paths are not allowed.
     restore.
 
 *-A* _PATH_ / *--arclog-path*=_PATH_::
-    The absolute path of archive WAL directory. Required on backup
-    and restore. 
+    The absolute path of archive WAL directory. Required for restore
+    and show command.
 
 *-B* _PATH_ / *--backup-path*=_PATH_::
     The absolute path of backup catalog. This option is mandatory.
@@ -220,9 +214,8 @@ absolute paths; relative paths are not allowed.
 
 *-b* _BACKUPMODE_ / *--backup-mode*=_BACKUPMODE_::
     Specify backup target files. Available options are: "full",
-    "incremental" and "archive".
-    Abbreviated forms (prefix match) are also available. For example,
-    -b f means "full" backup. 
+    "incremental". Abbreviated forms (prefix match) are also available.
+    For example, -b f means "full" backup. 
 
 *-Z* / *--compress-data*::
     Compress backup files with zlib if specified. 
@@ -241,12 +234,6 @@ absolute paths; relative paths are not allowed.
     --keep-data-generations means number of backup generations.
     --keep-data-days means days to be kept.
     Only files exceeded one of those settings are deleted.
-
-*--keep-arclog-files*=_NUMBER_ / *--keep-arclog-days*=_DAYS_::
-    Specify how long backuped archive WAL files will be kept.
-    --keep-arclog-files means number of backup files.
-    --keep-arclog-days means days to be kept. When backup is run, only
-    files exceeded one of those settings are deleted from archive storage.
 
 === RESTORE OPTIONS ===
 
@@ -267,11 +254,6 @@ the same parameters as the ones in recovery.confin recovery.conf.
 
 *--recovery-target-inclusive*::
     Specifies whether server pauses when recovery target is reached.
-
-*--hard-copy*::
-    Archived WAL files are copied to archive WAL storage area. If you
-    do not specify --hard-copy, pg_rman makes symlink to archive WAL
-    where are in the backup catalog directory.
 
 === CATALOG OPTIONS ===
 
@@ -350,7 +332,6 @@ variables or in configuration file as follows:
 		--recovery-target-xid	RECOVERY_TARGET_XID	Yes
 		--recovery-target-time	RECOVERY_TARGET_TIME	Yes
 		--recovery-target-inclusive RECOVERY_TARGET_INCLUSIVE Yes
-		--hard-copy		HARD_COPY		Yes
 
 Variable names in configuration file are the same as long names or names
 of environment variables. The password can not be specified in command
@@ -403,7 +384,7 @@ pg_rman returns exit codes for each error status.
 	13	ERROR_INTERRUPTED	Interrupted by user (Ctrl+C etc.)
 	14	ERROR_PG_COMMAND	SQL error
 	15	ERROR_PG_CONNECT	Cannot connect to PostgreSQL server
-	20	ERROR_ARCHIVE_FAILED	Cannot archive WAL files
+	20	ERROR_ARCHIVE_FAILED    Cannot archive WAL file
 	21	ERROR_NO_BACKUP		Backup file not found
 	22	ERROR_CORRUPTED		Backup file is broken
 	23	ERROR_ALREADY_RUNNING	Cannot start because another pg_rman

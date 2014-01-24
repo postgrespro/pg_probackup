@@ -268,37 +268,13 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 	return NULL;
 }
 
-/*
- * Find the last completed archived WAL backup from the backup list
- * on current timeline.
- */
-pgBackup *
-catalog_get_last_arclog_backup(parray *backup_list, TimeLineID tli)
-{
-	int			i;
-	pgBackup   *backup = NULL;
-
-	/* backup_list is sorted in order of descending ID */
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		backup = (pgBackup *) parray_get(backup_list, i);
-
-		/* we need completed archived WAL backup */
-		if (backup->status == BACKUP_STATUS_OK &&
-			backup->tli == tli)
-			return backup;
-	}
-
-	return NULL;
-}
-
 /* create backup directory in $BACKUP_PATH */
 int
 pgBackupCreateDir(pgBackup *backup)
 {
 	int		i;
 	char	path[MAXPGPATH];
-	char   *subdirs[] = { DATABASE_DIR, ARCLOG_DIR, NULL };
+	char   *subdirs[] = { DATABASE_DIR, NULL };
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 	dir_create_dir(path, DIR_PERMISSION);
@@ -319,7 +295,7 @@ pgBackupCreateDir(pgBackup *backup)
 void
 pgBackupWriteConfigSection(FILE *out, pgBackup *backup)
 {
-	static const char *modes[] = { "", "ARCHIVE", "INCREMENTAL", "FULL"};
+	static const char *modes[] = { "", "INCREMENTAL", "FULL"};
 
 	fprintf(out, "# configuration\n");
 
@@ -361,13 +337,6 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 	if (backup->data_bytes != BYTES_INVALID)
 		fprintf(out, "DATA_BYTES=" INT64_FORMAT "\n",
 				backup->data_bytes);
-	if (backup->arclog_bytes != BYTES_INVALID)
-		fprintf(out, "ARCLOG_BYTES=" INT64_FORMAT "\n",
-			backup->arclog_bytes);
-	if (backup->backup_bytes != BYTES_INVALID)
-		fprintf(out, "BACKUP_BYTES=" INT64_FORMAT "\n",
-				backup->backup_bytes);
-
 	fprintf(out, "BLOCK_SIZE=%u\n", backup->block_size);
 	fprintf(out, "XLOG_BLOCK_SIZE=%u\n", backup->wal_block_size);
 
@@ -423,8 +392,6 @@ catalog_read_ini(const char *path)
 		{ 'u', 0, "recovery-xid"				, NULL, SOURCE_ENV },
 		{ 't', 0, "recovery-time"				, NULL, SOURCE_ENV },
 		{ 'I', 0, "data-bytes"		, NULL, SOURCE_ENV },
-		{ 'I', 0, "arclog-bytes"	, NULL, SOURCE_ENV },
-		{ 'I', 0, "backup-bytes"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "block-size"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "xlog-block-size"		, NULL, SOURCE_ENV },
 		{ 's', 0, "status"				, NULL, SOURCE_ENV },
@@ -449,8 +416,6 @@ catalog_read_ini(const char *path)
 	options[i++].var = &backup->recovery_xid;
 	options[i++].var = &backup->recovery_time;
 	options[i++].var = &backup->data_bytes;
-	options[i++].var = &backup->arclog_bytes;
-	options[i++].var = &backup->backup_bytes;
 	options[i++].var = &backup->block_size;
 	options[i++].var = &backup->wal_block_size;
 	options[i++].var = &status;
@@ -527,8 +492,6 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_FULL;
 	else if (len > 0 && pg_strncasecmp("incremental", v, len) == 0)
 		return BACKUP_MODE_INCREMENTAL;
-	else if (len > 0 && pg_strncasecmp("archive", v, len) == 0)
-		return BACKUP_MODE_ARCHIVE;
 
 	/* Backup mode is invalid, so leave with an error */
 	elog(ERROR_ARGS, _("invalid backup-mode \"%s\""), value);
@@ -597,6 +560,4 @@ catalog_init_config(pgBackup *backup)
 	backup->recovery_xid = 0;
 	backup->recovery_time = (time_t) 0;
 	backup->data_bytes = BYTES_INVALID;
-	backup->arclog_bytes = BYTES_INVALID;
-	backup->backup_bytes = BYTES_INVALID;
 }

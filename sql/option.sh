@@ -12,7 +12,6 @@ unset BACKUP_PATH
 unset ARCLOG_PATH
 unset BACKUP_MODE
 unset COMPRESS_DATA
-unset KEEP_ARCLOG_DAYS
 unset KEEP_DATA_GENERATIONS
 unset KEEP_DATA_DAYS
 
@@ -29,13 +28,15 @@ cp -rp data/sample_backup $BACKUP_PATH
 pg_rman --help
 pg_rman --version
 
+# show option
+# required argument check
+pg_rman show
+pg_rman show -B $BACKUP_PATH
+
 # backup option
 # required arguments check
 pg_rman backup --verbose
 pg_rman backup --verbose -B $BACKUP_PATH
-pg_rman backup --verbose -B $BACKUP_PATH -b f
-pg_rman backup --verbose -B $BACKUP_PATH -b i
-pg_rman backup --verbose -B $BACKUP_PATH -b a
 
 # bad arguments check
 pg_rman backup --verbose -B $BACKUP_PATH -b bad
@@ -49,15 +50,9 @@ echo " = INFINITE" > $BACKUP_PATH/pg_rman.ini
 pg_rman backup --verbose -B $BACKUP_PATH
 echo "BACKUP_MODE= " > $BACKUP_PATH/pg_rman.ini
 pg_rman backup --verbose -B $BACKUP_PATH
-echo "BACKUP_MODE = F#S" > $BACKUP_PATH/pg_rman.ini
-pg_rman backup --verbose -B $BACKUP_PATH
-echo "BACKUP_MODE = F #comment A" > $BACKUP_PATH/pg_rman.ini
-pg_rman backup --verbose -B $BACKUP_PATH
 echo "BACKUP_MODE=B" > $BACKUP_PATH/pg_rman.ini
 pg_rman backup --verbose -B $BACKUP_PATH
 echo "COMPRESS_DATA=FOO" > $BACKUP_PATH/pg_rman.ini
-pg_rman backup --verbose -B $BACKUP_PATH
-echo "KEEP_ARCLOG_FILES=YES" > $BACKUP_PATH/pg_rman.ini
 pg_rman backup --verbose -B $BACKUP_PATH
 echo "TIMELINEID=-1" > $BACKUP_PATH/pg_rman.ini
 pg_rman backup --verbose -B $BACKUP_PATH

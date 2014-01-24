@@ -25,16 +25,13 @@
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"
-#define ARCLOG_DIR			"arclog"
 #define RESTORE_WORK_DIR		"backup"
 #define PG_XLOG_DIR			"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
-#define TIMELINE_HISTORY_DIR		"timeline_history"
 #define BACKUP_INI_FILE			"backup.ini"
 #define PG_RMAN_INI_FILE		"pg_rman.ini"
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
-#define ARCLOG_FILE_LIST		"file_arclog.txt"
 #define SNAPSHOT_SCRIPT_FILE		"snapshot_script"
 #define PG_BACKUP_LABEL_FILE		"backup_label"
 #define PG_BLACK_LIST			"black_list"
@@ -113,7 +110,6 @@ typedef enum BackupStatus
 typedef enum BackupMode
 {
 	BACKUP_MODE_INVALID,
-	BACKUP_MODE_ARCHIVE,		/* archive only */
 	BACKUP_MODE_INCREMENTAL,	/* incremental backup */
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
@@ -148,10 +144,6 @@ typedef struct pgBackup
 	 * of data taken.
 	 */
 	int64		data_bytes;
-	/* Amount of data for WAL archives */
-	int64		arclog_bytes;
-	/* Total size of backup */
-	int64		backup_bytes;
 
 	/* data/wal block size for compatibility check */
 	uint32		block_size;
@@ -161,8 +153,6 @@ typedef struct pgBackup
 typedef struct pgBackupOption
 {
 	bool smooth_checkpoint;
-	int  keep_arclog_files;
-	int  keep_arclog_days;
 	int  keep_data_generations;
 	int  keep_data_days;
 } pgBackupOption;
@@ -233,8 +223,7 @@ extern bool fileExists(const char *path);
 extern int do_restore(const char *target_time,
 					  const char *target_xid,
 					  const char *target_inclusive,
-					  TimeLineID target_tli,
-					  bool is_hard_copy);
+					  TimeLineID target_tli);
 
 /* in init.c */
 extern int do_init(void);
@@ -262,8 +251,6 @@ extern pgBackup *catalog_get_backup(time_t timestamp);
 extern parray *catalog_get_backup_list(const pgBackupRange *range);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
-extern pgBackup *catalog_get_last_arclog_backup(parray *backup_list,
-												TimeLineID tli);
 
 extern int catalog_lock(void);
 extern void catalog_unlock(void);

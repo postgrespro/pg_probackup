@@ -53,10 +53,6 @@ do_init(void)
 		PG_XLOG_DIR);
 	dir_create_dir(path, DIR_PERMISSION);
 
-	/* create directory for timeline history files */
-	join_path_components(path, backup_path, TIMELINE_HISTORY_DIR);
-	dir_create_dir(path, DIR_PERMISSION);
-
 	/* read postgresql.conf */
 	if (pgdata)
 	{
