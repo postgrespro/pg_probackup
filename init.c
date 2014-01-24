@@ -52,9 +52,6 @@ do_init(void)
 	snprintf(path, lengthof(path), "%s/%s/%s", backup_path, RESTORE_WORK_DIR,
 		PG_XLOG_DIR);
 	dir_create_dir(path, DIR_PERMISSION);
-	snprintf(path, lengthof(path), "%s/%s/%s", backup_path, RESTORE_WORK_DIR,
-		SRVLOG_DIR);
-	dir_create_dir(path, DIR_PERMISSION);
 
 	/* create directory for timeline history files */
 	join_path_components(path, backup_path, TIMELINE_HISTORY_DIR);
@@ -118,32 +115,6 @@ do_init(void)
 	else
 		elog(WARNING, "ARCLOG_PATH is not set because archive_command is empty."
 				"Please set ARCLOG_PATH in pg_rman.ini or environmental variable");
-
-	/* set SRVLOG_PATH refered with log_directory */
-	if (srvlog_path == NULL)
-	{
-		if (log_directory)
-		{
-			if (is_absolute_path(log_directory))
-				srvlog_path = pgut_strdup(log_directory);
-			else
-			{
-				srvlog_path = pgut_malloc(MAXPGPATH);
-				join_path_components(srvlog_path, pgdata, log_directory);
-			}
-		}
-		else if (pgdata)
-		{
-			/* default: log_directory = 'pg_log' */
-			srvlog_path = pgut_malloc(MAXPGPATH);
-			join_path_components(srvlog_path, pgdata, "pg_log");
-		}
-	}
-	if (srvlog_path)
-	{
-		fprintf(fp, "SRVLOG_PATH='%s'\n", srvlog_path);
-		elog(INFO, "SRVLOG_PATH is set to '%s'", srvlog_path);
-	}
 
 	fprintf(fp, "\n");
 	fclose(fp);

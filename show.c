@@ -161,9 +161,9 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 	int i;
 
 	/* show header */
-	fputs("==================================================================================================\n", out);
-	fputs("Start                Mode  Current TLI  Parent TLI  Time   Data     WAL     Log  Backup   Status  \n", out);
-	fputs("==================================================================================================\n", out);
+	fputs("===========================================================================================\n", out);
+	fputs("Start                Mode  Current TLI  Parent TLI  Time    Data     WAL  Backup   Status  \n", out);
+	fputs("===========================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -174,7 +174,6 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		char duration[20] = "----";
 		char data_bytes_str[10] = "----";
 		char arclog_bytes_str[10] = "----";
-		char srvlog_bytes_str[10] = "----";
 		char backup_bytes_str[10];
 
 		backup = parray_get(backup_list, i);
@@ -200,11 +199,6 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		pretty_size(backup->arclog_bytes, arclog_bytes_str,
 				lengthof(arclog_bytes_str));
 
-		/* Calculate amount of data for server logs */
-		if (backup->with_serverlog)
-			pretty_size(backup->srvlog_bytes, srvlog_bytes_str,
-					lengthof(srvlog_bytes_str));
-
 		/* Calculate amount of data for total backup */
 		pretty_size(backup->backup_bytes, backup_bytes_str,
 				lengthof(backup_bytes_str));
@@ -212,7 +206,7 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-19s  %-4s   %10d  %10d %5s  %6s  %6s  %6s  %6s   %s\n",
+		fprintf(out, "%-19s  %-4s   %10d  %10d %5s  %6s  %6s  %6s   %s\n",
 				timestamp,
 				modes[backup->backup_mode],
 				backup->tli,
@@ -220,7 +214,6 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 				duration,
 				data_bytes_str,
 				arclog_bytes_str,
-				srvlog_bytes_str,
 				backup_bytes_str,
 				status2str(backup->status));
 	}

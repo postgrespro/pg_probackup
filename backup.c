@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------------------
  *
- * backup.c: backup DB cluster, archived WAL, serverlog.
+ * backup.c: backup DB cluster, archived WAL
  *
  * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
@@ -42,7 +42,6 @@ static void backup_files(const char *from_root, const char *to_root,
 	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress, const char *prefix);
 static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
 static parray *do_backup_arclog(parray *backup_list);
-static parray *do_backup_srvlog(parray *backup_list);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
@@ -567,100 +566,17 @@ do_backup_arclog(parray *backup_list)
 	return files;
 }
 
-/*
- * Take a backup of serverlog.
- */
-static parray *
-do_backup_srvlog(parray *backup_list)
-{
-	int			i;
-	parray	   *files;
-	parray	   *prev_files = NULL;	/* file list of previous database backup */
-	char		path[MAXPGPATH];
-	char		prev_file_txt[MAXPGPATH];
-	pgBackup   *prev_backup;
-	int64		srvlog_write_bytes = 0;
-
-	if (!current.with_serverlog)
-		return NULL;
-
-	/* Block backup operations on a standby */
-	if (pg_is_standby())
-		elog(ERROR_SYSTEM, _("Backup cannot run on a standby."));
-
-	if (verbose)
-	{
-		printf(_("========================================\n"));
-		printf(_("serverlog backup start\n"));
-	}
-
-	/* initialize size summary */
-	current.srvlog_bytes = 0;
-
-	/*
-	 * To take incremental backup, the file list of the last completed database
-	 * backup is needed.
-	 */
-	prev_backup = catalog_get_last_srvlog_backup(backup_list,
-										get_current_timeline());
-	if (verbose && prev_backup == NULL)
-		printf(_("no previous full backup, performing a full backup instead\n"));
-
-	if (prev_backup)
-	{
-		pgBackupGetPath(prev_backup, prev_file_txt, lengthof(prev_file_txt),
-			SRVLOG_FILE_LIST);
-		prev_files = dir_read_file_list(srvlog_path, prev_file_txt);
-	}
-
-	/* list files with the logical path. omit SRVLOG_PATH */
-	files = parray_new();
-	dir_list_file(files, srvlog_path, NULL, true, false);
-
-	pgBackupGetPath(&current, path, lengthof(path), SRVLOG_DIR);
-	backup_files(srvlog_path, path, files, prev_files, NULL, false, NULL);
-
-	/* create file list */
-	create_file_list(files, arclog_path, SRVLOG_FILE_LIST, NULL, false);
-
-	/* print summary of size of backup mode files */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-		if (!S_ISREG(file->mode))
-			continue;
-		current.srvlog_bytes += file->read_size;
-		if (file->write_size != BYTES_INVALID)
-		{
-			current.backup_bytes += file->write_size;
-			srvlog_write_bytes += file->write_size;
-		}
-	}
-
-	if (verbose)
-	{
-		printf(_("serverlog backup completed(read: " INT64_FORMAT " write: " INT64_FORMAT ")\n"),
-			current.srvlog_bytes, srvlog_write_bytes);
-		printf(_("========================================\n"));
-	}
-
-	return files;
-}
-
 int
 do_backup(pgBackupOption bkupopt)
 {
 	parray *backup_list;
 	parray *files_database;
 	parray *files_arclog;
-	parray *files_srvlog;
 	int		ret;
 
 	/* repack the necesary options */
 	int	keep_arclog_files = bkupopt.keep_arclog_files;
 	int	keep_arclog_days  = bkupopt.keep_arclog_days;
-	int	keep_srvlog_files = bkupopt.keep_srvlog_files;
-	int	keep_srvlog_days  = bkupopt.keep_srvlog_days;
 	int	keep_data_generations = bkupopt.keep_data_generations;
 	int	keep_data_days        = bkupopt.keep_data_days;
 
@@ -679,11 +595,6 @@ do_backup(pgBackupOption bkupopt)
 		elog(ERROR_ARGS,
 			 _("Required parameter not specified: ARCLOG_PATH "
 			   "(-A, --arclog-path)"));
-
-	/* SRVLOG_PATH is required only when backup serverlog */
-	if (current.with_serverlog && srvlog_path == NULL)
-		elog(ERROR_ARGS, _("required parameter not specified: SRVLOG_PATH "
-						   "(-S, --srvlog-path)"));
 
 #ifndef HAVE_LIBZ
 	if (current.compress_data)
@@ -727,7 +638,6 @@ do_backup(pgBackupOption bkupopt)
 	current.end_time = (time_t) 0;
 	current.data_bytes = BYTES_INVALID;
 	current.arclog_bytes = BYTES_INVALID;
-	current.srvlog_bytes = BYTES_INVALID;
 	current.backup_bytes = 0;
 	current.block_size = BLCKSZ;
 	current.wal_block_size = XLOG_BLCKSZ;
@@ -757,9 +667,6 @@ do_backup(pgBackupOption bkupopt)
 
 	/* backup archived WAL */
 	files_arclog = do_backup_arclog(backup_list);
-
-	/* backup serverlog */
-	files_srvlog = do_backup_srvlog(backup_list);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* update backup status to DONE */
@@ -781,10 +688,6 @@ do_backup(pgBackupOption bkupopt)
 			current.backup_mode == BACKUP_MODE_INCREMENTAL)
 			total_read += current.arclog_bytes;
 
-		/* Server logs */
-		if (current.with_serverlog)
-			total_read += current.srvlog_bytes;
-
 		if (total_read == 0)
 			printf(_("nothing to backup\n"));
 		else
@@ -795,13 +698,10 @@ do_backup(pgBackupOption bkupopt)
 	}
 
 	/*
-	 * Delete old files (archived WAL and serverlog) after update of status.
+	 * Delete old files (archived WAL) after update of status.
 	 */
 	delete_old_files(arclog_path, files_arclog, keep_arclog_files,
 		keep_arclog_days, true);
-	if (current.with_serverlog)
-		delete_old_files(srvlog_path, files_srvlog, keep_srvlog_files,
-			keep_srvlog_days, false);
 
 	/* Delete old backup files after all backup operation. */
 	pgBackupDelete(keep_data_generations, keep_data_days);
@@ -813,9 +713,6 @@ do_backup(pgBackupOption bkupopt)
 	if (files_arclog)
 		parray_walk(files_arclog, pgFileFree);
 	parray_free(files_arclog);
-	if (files_srvlog)
-		parray_walk(files_srvlog, pgFileFree);
-	parray_free(files_srvlog);
 
 	/*
 	 * If this backup is full backup, delete backup of online WAL.

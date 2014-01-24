@@ -26,7 +26,6 @@
 /* Directory/File names */
 #define DATABASE_DIR			"database"
 #define ARCLOG_DIR			"arclog"
-#define SRVLOG_DIR			"srvlog"
 #define RESTORE_WORK_DIR		"backup"
 #define PG_XLOG_DIR			"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
@@ -36,7 +35,6 @@
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
 #define ARCLOG_FILE_LIST		"file_arclog.txt"
-#define SRVLOG_FILE_LIST		"file_srvlog.txt"
 #define SNAPSHOT_SCRIPT_FILE		"snapshot_script"
 #define PG_BACKUP_LABEL_FILE		"backup_label"
 #define PG_BLACK_LIST			"black_list"
@@ -129,7 +127,6 @@ typedef struct pgBackup
 {
 	/* Backup Level */
 	BackupMode	backup_mode;
-	bool		with_serverlog;
 	bool		compress_data;
 
 	/* Status - one of BACKUP_STATUS_xxx */
@@ -153,8 +150,6 @@ typedef struct pgBackup
 	int64		data_bytes;
 	/* Amount of data for WAL archives */
 	int64		arclog_bytes;
-	/* Amount of data for server logs */
-	int64		srvlog_bytes;
 	/* Total size of backup */
 	int64		backup_bytes;
 
@@ -168,8 +163,6 @@ typedef struct pgBackupOption
 	bool smooth_checkpoint;
 	int  keep_arclog_files;
 	int  keep_arclog_days;
-	int  keep_srvlog_files;
-	int  keep_srvlog_days;
 	int  keep_data_generations;
 	int  keep_data_days;
 } pgBackupOption;
@@ -219,7 +212,6 @@ typedef enum CompressionMode
 extern char *backup_path;
 extern char *pgdata;
 extern char *arclog_path;
-extern char *srvlog_path;
 
 /* common configuration */
 extern bool verbose;
@@ -271,8 +263,6 @@ extern parray *catalog_get_backup_list(const pgBackupRange *range);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 extern pgBackup *catalog_get_last_arclog_backup(parray *backup_list,
-												TimeLineID tli);
-extern pgBackup *catalog_get_last_srvlog_backup(parray *backup_list,
 												TimeLineID tli);
 
 extern int catalog_lock(void);

@@ -22,7 +22,6 @@ const char *PROGRAM_EMAIL	= "https://github.com/michaelpq/pg_rman/issues";
 char *backup_path;
 char *pgdata;
 char *arclog_path;
-char *srvlog_path;
 
 /* common configuration */
 bool verbose = false;
@@ -35,8 +34,6 @@ pgBackup	current;
 static bool		smooth_checkpoint;
 static int		keep_arclog_files = KEEP_INFINITE;
 static int		keep_arclog_days = KEEP_INFINITE;
-static int		keep_srvlog_files = KEEP_INFINITE;
-static int		keep_srvlog_days = KEEP_INFINITE;
 static int		keep_data_generations = KEEP_INFINITE;
 static int		keep_data_days = KEEP_INFINITE;
 static bool		backup_validate = false;
@@ -60,13 +57,11 @@ static pgut_option options[] =
 	{ 's', 'D', "pgdata",		&pgdata,		SOURCE_ENV },
 	{ 's', 'A', "arclog-path",	&arclog_path,	SOURCE_ENV },
 	{ 's', 'B', "backup-path",	&backup_path,	SOURCE_ENV },
-	{ 's', 'S', "srvlog-path",	&srvlog_path,	SOURCE_ENV },
 	/* common options */
 	{ 'b', 'v', "verbose",		&verbose },
 	{ 'b', 'c', "check",		&check },
 	/* backup options */
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
-	{ 'b', 's', "with-serverlog",		&current.with_serverlog, SOURCE_ENV },
 	{ 'b', 'Z', "compress-data",		&current.compress_data,	SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
@@ -74,8 +69,6 @@ static pgut_option options[] =
 	{ 'i',  2, "keep-data-days",		&keep_data_days,		SOURCE_ENV },
 	{ 'i',  3, "keep-arclog-files",		&keep_arclog_files,	SOURCE_ENV },
 	{ 'i',  4, "keep-arclog-days",		&keep_arclog_days,	SOURCE_ENV },
-	{ 'i',  5, "keep-srvlog-files",		&keep_srvlog_files,	SOURCE_ENV },
-	{ 'i',  6, "keep-srvlog-days",		&keep_srvlog_days,	SOURCE_ENV },
 	/* restore options */
 	{ 's',  7, "recovery-target-time",		&target_time,		SOURCE_ENV },
 	{ 's',  8, "recovery-target-xid",		&target_xid,		SOURCE_ENV },
@@ -163,16 +156,12 @@ main(int argc, char *argv[])
 		elog(ERROR_ARGS, "-D, --pgdata must be an absolute path");
 	if (arclog_path != NULL && !is_absolute_path(arclog_path))
 		elog(ERROR_ARGS, "-A, --arclog-path must be an absolute path");
-	if (srvlog_path != NULL && !is_absolute_path(srvlog_path))
-		elog(ERROR_ARGS, "-S, --srvlog-path must be an absolute path");
 
 	/* setup exclusion list for file search */
 	for (i = 0; pgdata_exclude[i]; i++)		/* find first empty slot */
 		;
 	if (arclog_path)
 		pgdata_exclude[i++] = arclog_path;
-	if (srvlog_path)
-		pgdata_exclude[i++] = srvlog_path;
 
 	/* do actual operation */
 	if (pg_strcasecmp(cmd, "init") == 0)
@@ -184,8 +173,6 @@ main(int argc, char *argv[])
 		bkupopt.smooth_checkpoint = smooth_checkpoint;
 		bkupopt.keep_arclog_files = keep_arclog_files;
 		bkupopt.keep_arclog_days = keep_arclog_days;
-		bkupopt.keep_srvlog_files = keep_srvlog_files;
-		bkupopt.keep_srvlog_days = keep_srvlog_days;
 		bkupopt.keep_data_generations = keep_data_generations;
 		bkupopt.keep_data_days = keep_data_days;
 
@@ -234,13 +221,11 @@ pgut_help(bool details)
 	printf(_("\nCommon Options:\n"));
 	printf(_("  -D, --pgdata=PATH         location of the database storage area\n"));
 	printf(_("  -A, --arclog-path=PATH    location of archive WAL storage area\n"));
-	printf(_("  -S, --srvlog-path=PATH    location of server log storage area\n"));
 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
 	printf(_("  -c, --check               show what would have been done\n"));
 	printf(_("  -v, --verbose             output process information\n"));
 	printf(_("\nBackup options:\n"));
 	printf(_("  -b, --backup-mode=MODE    full, incremental, or archive\n"));
-	printf(_("  -s, --with-serverlog      also backup server log files\n"));
 	printf(_("  -Z, --compress-data       compress data backup with zlib\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
 	printf(_("  --validate                validate backup after taking it\n"));
@@ -248,8 +233,6 @@ pgut_help(bool details)
 	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));
 	printf(_("  --keep-arclog-files=NUM   keep NUM of archived WAL\n"));
 	printf(_("  --keep-arclog-days=DAY    keep archived WAL modified in DAY days\n"));
-	printf(_("  --keep-srvlog-files=NUM   keep NUM of serverlogs\n"));
-	printf(_("  --keep-srvlog-days=DAY    keep serverlog modified in DAY days\n"));
 	printf(_("\nRestore options:\n"));
 	printf(_("  --recovery-target-time    time stamp up to which recovery will proceed\n"));
 	printf(_("  --recovery-target-xid     transaction ID up to which recovery will proceed\n"));

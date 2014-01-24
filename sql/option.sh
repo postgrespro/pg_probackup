@@ -10,14 +10,11 @@ BASE_PATH=`pwd`
 # List of environment variables is defined in catalog.c.
 unset BACKUP_PATH
 unset ARCLOG_PATH
-unset SRVLOG_PATH
 unset BACKUP_MODE
 unset COMPRESS_DATA
 unset KEEP_ARCLOG_DAYS
 unset KEEP_DATA_GENERATIONS
 unset KEEP_DATA_DAYS
-unset KEEP_SRVLOG_FILES
-unset KEEP_SRVLOG_DAYS
 
 export PGDATA=$BASE_PATH/results/sample_database
 

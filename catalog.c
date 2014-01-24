@@ -160,7 +160,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 		if (!IsDir(backup_path, date_dir, date_ent) || date_ent->d_name[0] == '.')
 			continue;
 
-		/* skip online WAL & serverlog backup directory */
+		/* skip online WAL backup directory */
 		if (strcmp(date_ent->d_name, RESTORE_WORK_DIR) == 0)
 			continue;
 
@@ -292,38 +292,13 @@ catalog_get_last_arclog_backup(parray *backup_list, TimeLineID tli)
 	return NULL;
 }
 
-/*
- * Find the last completed serverlog backup from the backup list
- * on current timeline.
- */
-pgBackup *
-catalog_get_last_srvlog_backup(parray *backup_list, TimeLineID tli)
-{
-	int			i;
-	pgBackup   *backup = NULL;
-
-	/* backup_list is sorted in order of descending ID */
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		backup = (pgBackup *) parray_get(backup_list, i);
-
-		/* we need completed serverlog backup */
-		if (backup->status == BACKUP_STATUS_OK &&
-			backup->with_serverlog &&
-			backup->tli == tli)
-			return backup;
-	}
-
-	return NULL;
-}
-
 /* create backup directory in $BACKUP_PATH */
 int
 pgBackupCreateDir(pgBackup *backup)
 {
 	int		i;
 	char	path[MAXPGPATH];
-	char   *subdirs[] = { DATABASE_DIR, ARCLOG_DIR, SRVLOG_DIR, NULL };
+	char   *subdirs[] = { DATABASE_DIR, ARCLOG_DIR, NULL };
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 	dir_create_dir(path, DIR_PERMISSION);
@@ -349,7 +324,6 @@ pgBackupWriteConfigSection(FILE *out, pgBackup *backup)
 	fprintf(out, "# configuration\n");
 
 	fprintf(out, "BACKUP_MODE=%s\n", modes[backup->backup_mode]);
-	fprintf(out, "WITH_SERVERLOG=%s\n", BOOL_TO_STR(backup->with_serverlog));
 	fprintf(out, "COMPRESS_DATA=%s\n", BOOL_TO_STR(backup->compress_data));
 }
 
@@ -390,9 +364,6 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 	if (backup->arclog_bytes != BYTES_INVALID)
 		fprintf(out, "ARCLOG_BYTES=" INT64_FORMAT "\n",
 			backup->arclog_bytes);
-	if (backup->srvlog_bytes != BYTES_INVALID)
-		fprintf(out, "SRVLOG_BYTES=" INT64_FORMAT "\n",
-				backup->srvlog_bytes);
 	if (backup->backup_bytes != BYTES_INVALID)
 		fprintf(out, "BACKUP_BYTES=" INT64_FORMAT "\n",
 				backup->backup_bytes);
@@ -443,7 +414,6 @@ catalog_read_ini(const char *path)
 	pgut_option options[] =
 	{
 		{ 's', 0, "backup-mode"			, NULL, SOURCE_ENV },
-		{ 'b', 0, "with-serverlog"		, NULL, SOURCE_ENV },
 		{ 'b', 0, "compress-data"		, NULL, SOURCE_ENV },
 		{ 'u', 0, "timelineid"			, NULL, SOURCE_ENV },
 		{ 's', 0, "start-lsn"			, NULL, SOURCE_ENV },
@@ -454,7 +424,6 @@ catalog_read_ini(const char *path)
 		{ 't', 0, "recovery-time"				, NULL, SOURCE_ENV },
 		{ 'I', 0, "data-bytes"		, NULL, SOURCE_ENV },
 		{ 'I', 0, "arclog-bytes"	, NULL, SOURCE_ENV },
-		{ 'I', 0, "srvlog-bytes"	, NULL, SOURCE_ENV },
 		{ 'I', 0, "backup-bytes"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "block-size"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "xlog-block-size"		, NULL, SOURCE_ENV },
@@ -471,7 +440,6 @@ catalog_read_ini(const char *path)
 
 	i = 0;
 	options[i++].var = &backup_mode;
-	options[i++].var = &backup->with_serverlog;
 	options[i++].var = &backup->compress_data;
 	options[i++].var = &backup->tli;
 	options[i++].var = &start_lsn;
@@ -482,7 +450,6 @@ catalog_read_ini(const char *path)
 	options[i++].var = &backup->recovery_time;
 	options[i++].var = &backup->data_bytes;
 	options[i++].var = &backup->arclog_bytes;
-	options[i++].var = &backup->srvlog_bytes;
 	options[i++].var = &backup->backup_bytes;
 	options[i++].var = &backup->block_size;
 	options[i++].var = &backup->wal_block_size;
@@ -620,7 +587,6 @@ void
 catalog_init_config(pgBackup *backup)
 {
 	backup->backup_mode = BACKUP_MODE_INVALID;
-	backup->with_serverlog = false;
 	backup->compress_data = false;
 	backup->status = BACKUP_STATUS_INVALID;
 	backup->tli = 0;
@@ -632,6 +598,5 @@ catalog_init_config(pgBackup *backup)
 	backup->recovery_time = (time_t) 0;
 	backup->data_bytes = BYTES_INVALID;
 	backup->arclog_bytes = BYTES_INVALID;
-	backup->srvlog_bytes = BYTES_INVALID;
 	backup->backup_bytes = BYTES_INVALID;
 }

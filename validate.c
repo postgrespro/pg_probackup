@@ -89,9 +89,6 @@ pgBackupValidate(pgBackup *backup,
 			if (backup->backup_mode == BACKUP_MODE_ARCHIVE)
 				elog(INFO, "validate: %s archive log files by %s",
 					 timestamp, (size_only ? "SIZE" : "CRC"));
-			else if (backup->with_serverlog)
-				elog(INFO, "validate: %s server log files by %s",
-					 timestamp, (size_only ? "SIZE" : "CRC"));
 		}
 	}
 
@@ -120,18 +117,6 @@ pgBackupValidate(pgBackup *backup,
 			corrupted = true;
 		parray_walk(files, pgFileFree);
 		parray_free(files);
-
-		if (backup->with_serverlog)
-		{
-			elog(LOG, "server log files...");
-			pgBackupGetPath(backup, base_path, lengthof(base_path), SRVLOG_DIR);
-			pgBackupGetPath(backup, path, lengthof(path), SRVLOG_FILE_LIST);
-			files = dir_read_file_list(base_path, path);
-			if (!pgBackupValidateFiles(files, base_path, size_only))
-				corrupted = true;
-			parray_walk(files, pgFileFree);
-			parray_free(files);
-		}
 
 		/* update status to OK */
 		if (corrupted)

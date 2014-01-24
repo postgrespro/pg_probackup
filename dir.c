@@ -25,7 +25,6 @@ const char *pgdata_exclude[] =
 	"pg_stat_tmp",
 	"pgsql_tmp",
 	NULL,			/* arclog_path will be set later */
-	NULL,			/* srvlog_path will be set later */
 	NULL,			/* 'pg_tblspc' will be set later */
 	NULL,			/* sentinel */
 };

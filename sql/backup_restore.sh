@@ -5,7 +5,6 @@ export PGDATA=$BASE_PATH/results/sample_database
 
 export BACKUP_PATH=$BASE_PATH/results/sample_backup2
 export ARCLOG_PATH=$BASE_PATH/results/arclog
-export SRVLOG_PATH=$PGDATA/pg_log
 export COMPRESS_DATA=YES
 XLOG_PATH=$PGDATA/pg_xlog
 TBLSPC_PATH=$BASE_PATH/results/tblspc
@@ -16,15 +15,10 @@ TEST_PGPORT=54321
 # configuration
 SCALE=1
 DURATION=10
-ISOLATE_SRVLOG=0
 ISOLATE_WAL=0
 
 while [ $# -gt 0 ]; do
 	case $1 in
-		"-s")
-			ISOLATE_SRVLOG=1
-			shift
-			;;
 		"-w")
 			ISOLATE_WAL=1
 			shift
@@ -55,9 +49,7 @@ done
 pg_ctl stop -m immediate > /dev/null 2>&1
 rm -rf $PGDATA
 rm -rf $BASE_PATH/results/pg_xlog
-rm -rf $BASE_PATH/results/srvlog
 rm -rf $ARCLOG_PATH
-rm -rf $SRVLOG_PATH
 rm -rf $TBLSPC_PATH
 
 # create new backup catalog
@@ -83,16 +75,6 @@ EOF
 
 mkdir -p $ARCLOG_PATH
 mkdir -p $TBLSPC_PATH
-
-# determine serverlog directory
-if [ "$ISOLATE_SRVLOG" -ne 0 ]; then
-	export SRVLOG_PATH=$BASE_PATH/results/srvlog
-	echo "log_directory = '$SRVLOG_PATH'" >> $PGDATA/postgresql.conf
-	mkdir -p $SRVLOG_PATH
-else
-	export SRVLOG_PATH=$PGDATA/pg_log
-	echo "log_directory = 'pg_log'" >> $PGDATA/postgresql.conf
-fi
 
 # isolate online WAL
 if [ "$ISOLATE_WAL" -ne 0 ]; then
@@ -145,7 +127,7 @@ psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
-echo "archived WAL and serverlog backup"
+echo "archived WAL backup"
 #pg_rman -p $TEST_PGPORT backup -b a --verbose -d postgres > $BASE_PATH/results/log_arclog 2>&1
 pg_rman -w -p $TEST_PGPORT backup -b a --verbose -d postgres > $BASE_PATH/results/log_arclog 2>&1
 
@@ -178,11 +160,9 @@ if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
 	echo "failed: bad timeline ID" CUR_TLI=$CUR_TLI CUR_TLI_R=$CUR_TLI_R
 fi
 
-# Backup of online-WAL and serverlog.
+# Backup of online-WAL
 echo "diff files in BACKUP_PATH/backup/pg_xlog"
 diff -r $PGDATA/pg_xlog $BACKUP_PATH/backup/pg_xlog
-echo "# of files in BACKUP_PATH/backup/srvlog"
-find $BACKUP_PATH/backup/srvlog -type f | wc -l | tr -d ' '
 
 # recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
@@ -201,11 +181,9 @@ if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
 	echo "failed: bad timeline ID" CUR_TLI=$CUR_TLI CUR_TLI_R=$CUR_TLI_R
 fi
 
-# Backup of online-WAL and serverlog.
+# Backup of online-WAL
 echo "diff files in BACKUP_PATH/backup/pg_xlog"
 diff -r $PGDATA/pg_xlog $BACKUP_PATH/backup/pg_xlog
-echo "# of files in BACKUP_PATH/backup/srvlog"
-find $BACKUP_PATH/backup/srvlog -type f | wc -l | tr -d ' '
 
 # re-recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
@@ -221,11 +199,9 @@ psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 #pg_rman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 pg_rman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 
-# Backup of online-WAL should been deleted, but serverlog remain.
+# Backup of online-WAL should been deleted
 echo "# of files in BACKUP_PATH/backup/pg_xlog"
 find $BACKUP_PATH/backup/pg_xlog -type f | wc -l | tr -d ' '
-echo "# of files in BACKUP_PATH/backup/srvlog"
-find $BACKUP_PATH/backup/srvlog -type f | wc -l | tr -d ' '
 
 # Symbolic links in $ARCLOG_PATH should be deleted.
 echo "# of symbolic links in ARCLOG_PATH"

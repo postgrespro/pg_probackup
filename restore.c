@@ -67,9 +67,6 @@ do_restore(const char *target_time,
 	if (arclog_path == NULL)
 		elog(ERROR_ARGS,
 			_("required parameter not specified: ARCLOG_PATH (-A, --arclog-path)"));
-	if (srvlog_path == NULL)
-		elog(ERROR_ARGS,
-			_("required parameter not specified: SRVLOG_PATH (-S, --srvlog-path)"));
 
 	if (verbose)
 	{
@@ -114,7 +111,7 @@ do_restore(const char *target_time,
 		printf(_("target timeline ID = %u\n"), target_tli);
 	}
 
-	/* backup online WAL and serverlog */
+	/* backup online WAL */
 	backup_online_files(cur_tli != 0 && cur_tli != backup_tli);
 
 	/*
@@ -626,7 +623,7 @@ backup_online_files(bool re_recovery)
 	if (verbose && !check)
 	{
 		printf(_("----------------------------------------\n"));
-		printf(_("backup online WAL and serverlog start\n"));
+		printf(_("backup online WAL start\n"));
 	}
 
 	/* get list of files in $BACKUP_PATH/backup/pg_xlog */
@@ -655,12 +652,6 @@ backup_online_files(bool re_recovery)
 		RESTORE_WORK_DIR, PG_XLOG_DIR);
 	dir_create_dir(work_path, DIR_PERMISSION);
 	dir_copy_files(pg_xlog_path, work_path);
-
-	/* backup serverlog */
-	snprintf(work_path, lengthof(work_path), "%s/%s/%s", backup_path,
-		RESTORE_WORK_DIR, SRVLOG_DIR);
-	dir_create_dir(work_path, DIR_PERMISSION);
-	dir_copy_files(srvlog_path, work_path);
 }
 
 static void

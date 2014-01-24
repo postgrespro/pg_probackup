@@ -12,14 +12,12 @@ Usage:
 Common Options:
   -D, --pgdata=PATH         location of the database storage area
   -A, --arclog-path=PATH    location of archive WAL storage area
-  -S, --srvlog-path=PATH    location of server log storage area
   -B, --backup-path=PATH    location of the backup storage area
   -c, --check               show what would have been done
   -v, --verbose             output process information
 
 Backup options:
   -b, --backup-mode=MODE    full, incremental, or archive
-  -s, --with-serverlog      also backup server log files
   -Z, --compress-data       compress data backup with zlib
   -C, --smooth-checkpoint   do smooth checkpoint before backup
   --validate                validate backup after taking it
@@ -27,8 +25,6 @@ Backup options:
   --keep-data-days=DAY      keep enough data backup to recover to DAY days age
   --keep-arclog-files=NUM   keep NUM of archived WAL
   --keep-arclog-days=DAY    keep archived WAL modified in DAY days
-  --keep-srvlog-files=NUM   keep NUM of serverlogs
-  --keep-srvlog-days=DAY    keep serverlog modified in DAY days
 
 Restore options:
   --recovery-target-time    time stamp up to which recovery will proceed

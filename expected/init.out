@@ -5,7 +5,6 @@
 results/init_test/
 results/init_test/backup/
 results/init_test/backup/pg_xlog/
-results/init_test/backup/srvlog/
 results/init_test/pg_rman.ini
 results/init_test/timeline_history/
 \! pg_rman init -B ${PWD}/results/init_test --quiet;echo $?

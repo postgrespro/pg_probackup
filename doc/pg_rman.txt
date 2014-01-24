@@ -21,8 +21,8 @@ files.
 == DESCRIPTION ==
 
 pg_rman is a utility program to backup and restore PostgreSQL database.
-It takes a physical online backup of whole database cluster, archive
-WALs, and server logs.
+It takes a physical online backup of whole database cluster and archive
+WALs.
 
 It proposes the following features:
 
@@ -71,7 +71,7 @@ specify it in PGDATA environmental variable or -D/--pgdata option.
 
 === BACKUP ===
 
-Backup target can be one of the following types also serverlogs can be added):
+Backup target can be one of the following types:
 
 - Full backup, backup a whole database cluster. 
 - Incremental backup, backup only files or pages modified after the last
@@ -107,22 +107,19 @@ write default configuration into ${BACKUP_PATH}/pg_rman.ini.
 
 	$ cat $BACKUP_PATH/pg_rman.ini
 	ARCLOG_PATH = /home/postgres/arclog
-	SRVLOG_PATH = /home/postgres/pgdata/pg_log
 	BACKUP_MODE = F
 	COMPRESS_DATA = YES
 	KEEP_ARCLOG_FILES = 10
 	KEEP_ARCLOG_DAYS = 10
 	KEEP_DATA_GENERATIONS = 3
 	KEEP_DATA_DAYS = 120
-	KEEP_SRVLOG_FILES = 10
-	KEEP_SRVLOG_DAYS = 10
 
 === TAKE A BACKUP ===
 
-This example takes a full backup of the whole database with server logs.
-Then, it validates all unvalidated backups.
+This example takes a full backup of the whole database. Then, it validates
+all unvalidated backups.
 
-	$ pg_rman backup --backup-mode=full --with-serverlog
+	$ pg_rman backup --backup-mode=full
 	$ pg_rman validate
 
 === RESTORE FROM A BACKUP ===
@@ -168,7 +165,6 @@ When a date is specified, more details about a backup is retrieved:
 	$ pg_rman show '2011-11-27 19:15:45'
 	# configuration
 	BACKUP_MODE=FULL
-	WITH_SERVERLOG=false
 	COMPRESS_DATA=false
 	# result
 	TIMELINEID=1
@@ -209,10 +205,6 @@ absolute paths; relative paths are not allowed.
     The absolute path of archive WAL directory. Required on backup
     and restore. 
 
-*-S* _PATH_ / *--srvlog-path*=_PATH_::
-    The absolute path of server log directory. Required on backup with
-    server logs and restore. 
-
 *-B* _PATH_ / *--backup-path*=_PATH_::
     The absolute path of backup catalog. This option is mandatory.
 
@@ -231,9 +223,6 @@ absolute paths; relative paths are not allowed.
     "incremental" and "archive".
     Abbreviated forms (prefix match) are also available. For example,
     -b f means "full" backup. 
-
-*-s* / *--with-serverlog*::
-    Backup server log files if specified. 
 
 *-Z* / *--compress-data*::
     Compress backup files with zlib if specified. 
@@ -258,15 +247,6 @@ absolute paths; relative paths are not allowed.
     --keep-arclog-files means number of backup files.
     --keep-arclog-days means days to be kept. When backup is run, only
     files exceeded one of those settings are deleted from archive storage.
-
-*--keep-srvlog-files*=_NUMBER_ / *--keep-srvlog-days*=_DAYS_::
-    Specify how long backuped serverlog files will be kept.
-    --keep-srvlog-files means number of backup files.
-    --keep-srvlog-days means days to be kept.
-    When backup is run, only files exceeded one of those settings are
-    deleted from server log directory (log_directory). This option works
-    when you specify --with-serverlog and --srvlog-path options in backup
-    command.
 
 === RESTORE OPTIONS ===
 
@@ -358,16 +338,12 @@ variables or in configuration file as follows:
 	-D	--pgdata		PGDATA			Yes
 	-B	--backup-path		BACKUP_PATH		Yes
 	-A	--arclog-path		ARCLOG_PATH		Yes
-	-S	--srvlog-path		SRVLOG_PATH		Yes
 	-b	--backup-mode		BACKUP_MODE		Yes
-	-s	--with-serverlog	WITH_SERVERLOG		Yes
 	-Z	--compress-data		COMPRESS_DATA		Yes
 	-C	--smooth-checkpoint	SMOOTH_CHECKPOINT	Yes
 		--validate	        VALIDATE		Yes
 		--keep-data-generations	KEEP_DATA_GENERATIONS	Yes
 		--keep-data-days	KEEP_DATA_DAYS		Yes
-		--keep-srvlog-files	KEEP_SRVLOG_FILES	Yes
-		--keep-srvlog-days	KEEP_SRVLOG_DAYS	Yes
 		--keep-arclog-files	KEEP_ARCLOG_FILES	Yes
 		--keep-arclog-days	KEEP_ARCLOG_DAYS	Yes
 		--recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes

@@ -199,8 +199,6 @@ pgBackupDeleteFiles(pgBackup *backup)
 	dir_list_file(files, path, NULL, true, true);
 	pgBackupGetPath(backup, path, lengthof(path), ARCLOG_DIR);
 	dir_list_file(files, path, NULL, true, true);
-	pgBackupGetPath(backup, path, lengthof(path), SRVLOG_DIR);
-	dir_list_file(files, path, NULL, true, true);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);
