@@ -1,4 +1,4 @@
-PROGRAM = pg_rman
+PROGRAM = pg_arman
 SRCS = \
 	backup.c \
 	catalog.c \
@@ -8,7 +8,7 @@ SRCS = \
 	fetch.c \
 	init.c \
 	parray.c \
-	pg_rman.c \
+	pg_arman.c \
 	restore.c \
 	show.c \
 	status.c \
@@ -19,15 +19,15 @@ SRCS = \
 	pgut/pgut-port.c
 OBJS = $(SRCS:.c=.o)
 
-DOCS = doc/pg_rman.txt
+DOCS = doc/pg_arman.txt
 
 # asciidoc and xmlto are present, so install the html documentation and man
 # pages as well. html is part of the vanilla documentation. Man pages need a
 # special handling at installation.
 ifneq ($(ASCIIDOC),)
 ifneq ($(XMLTO),)
-man_DOCS = doc/pg_rman.1
-DOCS += doc/pg_rman.html doc/README.html
+man_DOCS = doc/pg_arman.1
+DOCS += doc/pg_arman.html doc/README.html
 endif # XMLTO
 endif # ASCIIDOC
 
@@ -41,7 +41,7 @@ PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 else
-subdir = contrib/pg_rman
+subdir = contrib/pg_arman
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
@@ -51,7 +51,7 @@ endif
 LIBS := $(filter-out -lxml2, $(LIBS))
 LIBS := $(filter-out -lxslt, $(LIBS))
 
-$(OBJS): pg_rman.h
+$(OBJS): pg_arman.h
 
 # Part related to documentation
 # Compile documentation as well is ASCIIDOC and XMLTO are defined

@@ -1,7 +1,7 @@
-pg_rman
-=======
+pg_arman
+========
 
-pg_rman is a backup and recovery manager for PostgreSQL servers able to do
+pg_arman is a backup and recovery manager for PostgreSQL servers able to do
 incremental, archive and full backup as well as restore a cluster to a
 state defined by a given recovery target. It is designed to perform
 periodic backups of an existing PostgreSQL server, combined with WAL
@@ -14,18 +14,18 @@ Download
 --------
 
 The latest version of this software can be found on the project website at
-https://github.com/michaelpq/pg_rman.
+https://github.com/michaelpq/pg_arman.
 
 Installation
 ------------
 
-Compiling pg_rman requires a PostgreSQL installation and can be done in
+Compiling pg_arman requires a PostgreSQL installation and can be done in
 two ways:
 
-1. Put pg_rman project directory inside PostgreSQL source tree as
-contrib/pg_rman, and use this command for compilation:
+1. Put pg_arman project directory inside PostgreSQL source tree as
+contrib/pg_arman, and use this command for compilation:
 
-	$ cd $POSTGRES_SOURCE/contrib/pg_rman
+	$ cd $POSTGRES_SOURCE/contrib/pg_arman
 	$ make
 
 2. Keep the project directory as-is and use the PGXS development
@@ -36,13 +36,13 @@ compilation:
 
 In addition, you must have pg_config in $PATH.
 
-The current version of pg_rman is compatible with PostgreSQL 9.3 and
+The current version of pg_arman is compatible with PostgreSQL 9.3 and
 upper versions.
 
 Platforms
 ---------
 
-pg_rman has been tested on Linux and Unix-based platforms.
+pg_arman has been tested on Linux and Unix-based platforms.
 
 Documentation
 -------------
@@ -69,7 +69,7 @@ install xmlto and asciidoc:
 Regression tests
 ----------------
 
-The test suite of pg_rman is available in the code tree and can be
+The test suite of pg_arman is available in the code tree and can be
 launched in a way similar to common PostgreSQL extensions and modules:
 
 1) "make check" or "make installcheck" if the project directory is
@@ -81,5 +81,5 @@ directory is kept as-is.
 License
 -------
 
-pg_rman can be distributed under the PostgreSQL license. See COPYRIGHT
+pg_arman can be distributed under the PostgreSQL license. See COPYRIGHT
 file for more information.

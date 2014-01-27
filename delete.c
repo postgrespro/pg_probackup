@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 static int pgBackupDeleteFiles(pgBackup *backup);
 
@@ -29,7 +29,7 @@ do_delete(pgBackupRange *range)
 		elog(ERROR_SYSTEM, _("can't lock backup catalog."));
 	else if (ret == 1)
 		elog(ERROR_ALREADY_RUNNING,
-			_("another pg_rman is running, stop delete."));
+			_("another pg_arman is running, stop delete."));
 
 	/* Get complete list of backup */
 	backup_list = catalog_get_backup_list(NULL);

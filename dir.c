@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 #include <libgen.h>
 #include <unistd.h>

@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 #include <sys/stat.h>
 
@@ -23,11 +23,11 @@ do_validate(pgBackupRange *range)
 	int		i;
 	parray *backup_list;
 	int ret;
-	bool another_pg_rman = false;
+	bool another_pg_arman = false;
 
 	ret = catalog_lock();
 	if (ret == 1)
-		another_pg_rman = true;
+		another_pg_arman = true;
 
 	/* get backup list matches given range */
 	backup_list = catalog_get_backup_list(range);
@@ -40,7 +40,7 @@ do_validate(pgBackupRange *range)
 		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
 
 		/* clean extra backups (switch STATUS to ERROR) */
-		if(!another_pg_rman &&
+		if(!another_pg_arman &&
 		   (backup->status == BACKUP_STATUS_RUNNING || backup->status == BACKUP_STATUS_DELETING)){
 			backup->status = BACKUP_STATUS_ERROR;
 			pgBackupWriteIni(backup);

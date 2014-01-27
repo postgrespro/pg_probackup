@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 #include <stdio.h>
 #include <sys/types.h>

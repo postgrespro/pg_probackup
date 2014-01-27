@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -109,7 +109,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
-	strncat(label, " with pg_rman", lengthof(label));
+	strncat(label, " with pg_arman", lengthof(label));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
 	/* If backup_label does not exist in $PGDATA, stop taking backup */
@@ -464,7 +464,7 @@ do_backup(pgBackupOption bkupopt)
 		elog(ERROR_SYSTEM, _("can't lock backup catalog."));
 	else if (ret == 1)
 		elog(ERROR_ALREADY_RUNNING,
-			_("another pg_rman is running, skip this backup."));
+			_("another pg_arman is running, skip this backup."));
 
 	/* initialize backup result */
 	current.status = BACKUP_STATUS_RUNNING;

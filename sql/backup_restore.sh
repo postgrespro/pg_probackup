@@ -54,10 +54,10 @@ rm -rf $TBLSPC_PATH
 
 # create new backup catalog
 rm -rf $BACKUP_PATH
-pg_rman init -B $BACKUP_PATH --quiet
+pg_arman init -B $BACKUP_PATH --quiet
 
 # create default configuration file
-cat << EOF > $BACKUP_PATH/pg_rman.ini
+cat << EOF > $BACKUP_PATH/pg_arman.ini
   # comment
   BACKUP_MODE = F # comment
 EOF
@@ -97,10 +97,10 @@ EOF
 export KEEP_DATA_GENERATIONS=2
 export KEEP_DATA_DAYS=0
 for i in `seq 1 5`; do
-#	pg_rman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_0_$i 2>&1
-	pg_rman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_0_$i 2>&1
+#	pg_arman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_0_$i 2>&1
+	pg_arman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_0_$i 2>&1
 done
-pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_d_1 2>&1
+pg_arman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_d_1 2>&1
 echo "# of deleted backups"
 grep -c DELETED $BASE_PATH/results/log_show_d_1
 
@@ -108,23 +108,23 @@ pgbench -p $TEST_PGPORT -i -s $SCALE pgbench > $BASE_PATH/results/pgbench.log 2>
 
 echo "full database backup"
 psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
-#pg_rman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
-pg_rman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
+#pg_arman -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
+pg_arman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
 echo "incremental database backup"
 psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
-#pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
-pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
+#pg_arman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
+pg_arman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
 
 # validate all backup
-pg_rman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate1 2>&1
-pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show0 2>&1
+pg_arman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate1 2>&1
+pg_arman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show0 2>&1
 pg_dumpall > $BASE_PATH/results/dump_before_rtx.sql
 target_xid=`psql --no-psqlrc -p $TEST_PGPORT pgbench -tAq -c "INSERT INTO pgbench_history VALUES (1) RETURNING(xmin);"`
 psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
-#pg_rman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
-pg_rman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
+#pg_arman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
+pg_arman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
 
@@ -143,14 +143,14 @@ rm -rf $PGDATA
 mv $PGDATA.bak $PGDATA
 
 # validate all backup
-pg_rman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate2 2>&1
+pg_arman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate2 2>&1
 
-# restore check with pg_rman
-pg_rman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_1 2>&1
+# restore check with pg_arman
+pg_arman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_1 2>&1
 
-# restore with pg_rman
+# restore with pg_arman
 CUR_TLI=`pg_controldata | grep "Latest checkpoint's TimeLineID:" | awk '{print $4}'`
-pg_rman restore -! --verbose > $BASE_PATH/results/log_restore1_1 2>&1
+pg_arman restore -! --verbose > $BASE_PATH/results/log_restore1_1 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore1_1 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore1_1 | awk '{print $5}'`
 if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
@@ -160,14 +160,14 @@ fi
 # recovery database
 pg_ctl start -w -t 3600 > /dev/null 2>&1
 
-# re-restore with pg_rman
+# re-restore with pg_arman
 pg_ctl stop -m immediate > /dev/null 2>&1
 
-# restore check with pg_rman
-pg_rman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_2 2>&1
+# restore check with pg_arman
+pg_arman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_2 2>&1
 
 CUR_TLI=`pg_controldata | grep "Latest checkpoint's TimeLineID:" | awk '{print $4}'`
-pg_rman restore -! --verbose > $BASE_PATH/results/log_restore1_2 2>&1
+pg_arman restore -! --verbose > $BASE_PATH/results/log_restore1_2 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore1_2 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore1_2 | awk '{print $5}'`
 if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
@@ -185,21 +185,21 @@ diff $BASE_PATH/results/dump_before.sql $BASE_PATH/results/dump_after.sql
 # incrementa backup can't find last full backup because new timeline started.
 echo "full database backup after recovery"
 psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
-#pg_rman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
-pg_rman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
+#pg_arman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
+pg_arman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 
 # Symbolic links in $ARCLOG_PATH should be deleted.
 echo "# of symbolic links in ARCLOG_PATH"
 find $ARCLOG_PATH -type l | wc -l  | tr -d ' '
 
-# restore with pg_rman
+# restore with pg_arman
 pg_ctl stop -m immediate > /dev/null 2>&1
 
-# restore check with pg_rman
-pg_rman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_3 2>&1
+# restore check with pg_arman
+pg_arman restore -! --verbose --check > $BASE_PATH/results/log_restore_check_3 2>&1
 
 CUR_TLI=`pg_controldata | grep "Latest checkpoint's TimeLineID:" | awk '{print $4}'`
-pg_rman restore -! --recovery-target-xid $target_xid --recovery-target-inclusive false --verbose > $BASE_PATH/results/log_restore2 2>&1
+pg_arman restore -! --recovery-target-xid $target_xid --recovery-target-inclusive false --verbose > $BASE_PATH/results/log_restore2 2>&1
 CUR_TLI_R=`grep "current timeline ID = " $BASE_PATH/results/log_restore2 | awk '{print $5}'`
 TARGET_TLI=`grep "target timeline ID = " $BASE_PATH/results/log_restore2 | awk '{print $5}'`
 if [ "$CUR_TLI" != "$CUR_TLI_R" ]; then
@@ -215,24 +215,24 @@ pg_dumpall > $BASE_PATH/results/dump_after_rtx.sql
 diff $BASE_PATH/results/dump_before_rtx.sql $BASE_PATH/results/dump_after_rtx.sql
 
 # show
-pg_rman -p $TEST_PGPORT show --verbose -a -d postgres > $BASE_PATH/results/log_show_timeline_1 2>&1
-pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_2 2>&1
-pg_rman -p $TEST_PGPORT show `date +%Y` --verbose -d postgres > $BASE_PATH/results/log_show_timeline_3 2>&1
+pg_arman -p $TEST_PGPORT show --verbose -a -d postgres > $BASE_PATH/results/log_show_timeline_1 2>&1
+pg_arman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_2 2>&1
+pg_arman -p $TEST_PGPORT show `date +%Y` --verbose -d postgres > $BASE_PATH/results/log_show_timeline_3 2>&1
 echo "# of deleted backups (show all)"
 grep -c DELETED $BASE_PATH/results/log_show_timeline_2
 echo "# of deleted backups"
 grep -c DELETED $BASE_PATH/results/log_show_timeline_3
 
 echo "delete backup"
-pg_rman -p $TEST_PGPORT delete --debug -d postgres > $BASE_PATH/results/log_delete1 2>&1
-pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show1 2>&1
+pg_arman -p $TEST_PGPORT delete --debug -d postgres > $BASE_PATH/results/log_delete1 2>&1
+pg_arman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show1 2>&1
 echo "# of deleted backups"
 grep -c DELETED $BASE_PATH/results/log_show1
-pg_rman -p $TEST_PGPORT delete `date "+%Y-%m-%d %T"` --debug -d postgres > $BASE_PATH/results/log_delete2 2>&1
-pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show2 2>&1
+pg_arman -p $TEST_PGPORT delete `date "+%Y-%m-%d %T"` --debug -d postgres > $BASE_PATH/results/log_delete2 2>&1
+pg_arman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show2 2>&1
 echo "# of deleted backups"
 grep -c DELETED $BASE_PATH/results/log_show2
-pg_rman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_4 2>&1
+pg_arman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/results/log_show_timeline_4 2>&1
 
 # cleanup
 pg_ctl stop -m immediate > /dev/null 2>&1

@@ -1,22 +1,22 @@
 /*-------------------------------------------------------------------------
  *
- * pg_rman.c: Backup/Recovery manager for PostgreSQL.
+ * pg_arman.c: Backup/Recovery manager for PostgreSQL.
  *
  * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
 
-const char *PROGRAM_VERSION	= "1.3dev";
-const char *PROGRAM_URL		= "https://github.com/michaelpq/pg_rman";
-const char *PROGRAM_EMAIL	= "https://github.com/michaelpq/pg_rman/issues";
+const char *PROGRAM_VERSION	= "0.1";
+const char *PROGRAM_URL		= "https://github.com/michaelpq/pg_arman";
+const char *PROGRAM_EMAIL	= "https://github.com/michaelpq/pg_arman/issues";
 
 /* path configuration */
 char *backup_path;
@@ -76,7 +76,7 @@ static pgut_option options[] =
 };
 
 /*
- * Entry point of pg_rman command.
+ * Entry point of pg_arman command.
  */
 int
 main(int argc, char *argv[])

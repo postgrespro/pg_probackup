@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------------------
  *
- * pg_rman.h: Backup/Recovery manager for PostgreSQL.
+ * pg_arman.h: Backup/Recovery manager for PostgreSQL.
  *
  * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
@@ -29,7 +29,7 @@
 #define PG_XLOG_DIR			"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define BACKUP_INI_FILE			"backup.ini"
-#define PG_RMAN_INI_FILE		"pg_rman.ini"
+#define PG_RMAN_INI_FILE		"pg_arman.ini"
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
 #define SNAPSHOT_SCRIPT_FILE		"snapshot_script"
@@ -52,7 +52,7 @@
 #define ERROR_ARCHIVE_FAILED	20	/* cannot archive xlog file */
 #define ERROR_NO_BACKUP			21	/* backup was not found in the catalog */
 #define ERROR_CORRUPTED			22	/* backup catalog is corrupted */
-#define ERROR_ALREADY_RUNNING	23	/* another pg_rman is running */
+#define ERROR_ALREADY_RUNNING	23	/* another pg_arman is running */
 #define ERROR_PG_INCOMPATIBLE	24	/* block size is not compatible */
 #define ERROR_PG_RUNNING		25	/* PostgreSQL server is running */
 #define ERROR_PID_BROKEN		26	/* postmaster.pid file is broken */
@@ -115,7 +115,7 @@ typedef enum BackupMode
 } BackupMode;
 
 /*
- * pg_rman takes backup into the directroy $BACKUP_PATH/<date>/<time>.
+ * pg_arman takes backup into the directroy $BACKUP_PATH/<date>/<time>.
  *
  * status == -1 indicates the pgBackup is invalid.
  */

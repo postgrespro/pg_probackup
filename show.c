@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 static void show_backup_list(FILE *out, parray *backup_list, bool show_all);
 static void show_backup_detail(FILE *out, pgBackup *backup);

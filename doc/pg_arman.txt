@@ -1,12 +1,12 @@
-= pg_rman(1) =
+= pg_arman(1) =
 
 == NAME ==
 
-pg_rman - Backup and recovery manager for PostgreSQL
+pg_arman - Backup and recovery manager for PostgreSQL
 
 == SYNOPSIS ==
 
-pg_rman [ OPTIONS ]
+pg_arman [ OPTIONS ]
     { init |
       backup |
       restore |
@@ -20,7 +20,7 @@ files.
 
 == DESCRIPTION ==
 
-pg_rman is a utility program to backup and restore PostgreSQL database.
+pg_arman is a utility program to backup and restore PostgreSQL database.
 
 It proposes the following features:
 
@@ -34,7 +34,7 @@ It proposes the following features:
 
 == COMMANDS ==
 
-pg_rman supports the following commands. See also *OPTIONS* for more
+pg_arman supports the following commands. See also *OPTIONS* for more
 details.
 
 *init*::
@@ -61,11 +61,11 @@ details.
 First, you need to create "a backup catalog" to store backup files and
 their metadata. It is recommended to setup archive_mode and archive_command
 in postgresql.conf before initializing the backup catalog. If the variables
-are initialized, pg_rman can adjust the config file to the setting. In this
+are initialized, pg_arman can adjust the config file to the setting. In this
 case, you have to specify the database cluster path for PostgreSQL. Please
 specify it in PGDATA environmental variable or -D/--pgdata option.
 
-	$ pg_rman init -B /path/to/backup/
+	$ pg_arman init -B /path/to/backup/
 
 === BACKUP ===
 
@@ -83,7 +83,7 @@ Unverified backup cannot be used in restore and in incremental backup.
 PostgreSQL server should be stopped before performing a restore. If database
 cluster still exists, restore command will save unarchived transaction log
 and delete all database files. You can retry recovery until a new backup is
-taken. After restoring files, pg_rman creates recovery.conf in $PGDATA. The
+taken. After restoring files, pg_arman creates recovery.conf in $PGDATA. The
 conf file contains parameters for recovery. It is as well possible to modify
 the file manually.
 
@@ -100,9 +100,9 @@ the restore will be a restore target.
 
 To reduce the number of command line arguments, you can set BACKUP_PATH,
 an environment variable, to the absolute path of the backup catalog and
-write default configuration into ${BACKUP_PATH}/pg_rman.ini.
+write default configuration into ${BACKUP_PATH}/pg_arman.ini.
 
-	$ cat $BACKUP_PATH/pg_rman.ini
+	$ cat $BACKUP_PATH/pg_arman.ini
 	ARCLOG_PATH = /home/postgres/arclog
 	BACKUP_MODE = F
 	COMPRESS_DATA = YES
@@ -116,20 +116,20 @@ write default configuration into ${BACKUP_PATH}/pg_rman.ini.
 This example takes a full backup of the whole database. Then, it validates
 all unvalidated backups.
 
-	$ pg_rman backup --backup-mode=full
-	$ pg_rman validate
+	$ pg_arman backup --backup-mode=full
+	$ pg_arman validate
 
 === RESTORE FROM A BACKUP ===
 
 Here are some commands to restore from a backup:
 
 	$ pg_ctl stop -m immediate
-	$ pg_rman restore
+	$ pg_arman restore
 	$ pg_ctl start
 
 === SHOW A BACKUP ===
 
-	$ pg_rman show
+	$ pg_arman show
 	==================================================================================================
 	Start                Mode  Current TLI  Parent TLI  Time    Data     WAL     Log  Backup   Status  
 	==================================================================================================
@@ -158,7 +158,7 @@ The fields are:
 
 When a date is specified, more details about a backup is retrieved:
 
-	$ pg_rman show '2011-11-27 19:15:45'
+	$ pg_arman show '2011-11-27 19:15:45'
 	# configuration
 	BACKUP_MODE=FULL
 	COMPRESS_DATA=false
@@ -183,7 +183,7 @@ the specified date.
 
 == OPTIONS ==
 
-pg_rman accepts the following command line parameters. Some of them can
+pg_arman accepts the following command line parameters. Some of them can
 be also specified as environment variables. See also *PARAMETERS* for the
 details.
 
@@ -203,12 +203,12 @@ absolute paths; relative paths are not allowed.
     The absolute path of backup catalog. This option is mandatory.
 
 *-c* / *--check*::
-    If specifed, pg_rman doesn't perform actual jobs but only checks
+    If specifed, pg_arman doesn't perform actual jobs but only checks
     parameters and required resources. The option is typically used with
     --verbose option to verify the operation. 
 
 *-v* / *--verbose*::
-    If specified, pg_rman works in verbose mode.
+    If specified, pg_arman works in verbose mode.
 
 === BACKUP OPTIONS ===
 
@@ -286,10 +286,10 @@ Parameters to connect PostgreSQL server.
     password. 
 
 *-W* / *--password*::
-    Force pg_rman to prompt for a password before connecting to a database.
-    This option is never essential, since pg_rman will automatically
+    Force pg_arman to prompt for a password before connecting to a database.
+    This option is never essential, since pg_arman will automatically
     prompt for a password if the server demands password authentication.
-    However, pg_rman will waste a connection attempt in order to find out
+    However, pg_arman will waste a connection attempt in order to find out
     if the server wants a password. In some cases it is worth typing -W
     to avoid the extra connection attempt. 
 
@@ -342,13 +342,13 @@ environment variables supported by libpq (see Environment Variables)
 
 == RESTRICTIONS ==
 
-pg_rman has the following restrictions.
+pg_arman has the following restrictions.
 
 - Requires to read database cluster directory and write backup catalog
   directory. It is usually necessary to mount the disk where backup
   catalog is placed with NFS or related from database server.
-- Major versions of pg_rman and server should match.
-- Block sizes of pg_rman and server should match.
+- Major versions of pg_arman and server should match.
+- Block sizes of pg_arman and server should match.
 - If there are some unreadable files/directories in data folder of server
   WAL directory or archived WAL directory, the backup or restore will fail
   depending on the backup mode selected.
@@ -358,7 +358,7 @@ pg_rman has the following restrictions.
 == DETAILS ==
 
 === RECOVERY TO POINT-IN-TIME ===
-pg_rman can recover to point-in-time if timeline, transaction ID, or
+pg_arman can recover to point-in-time if timeline, transaction ID, or
 timestamp is specified in recovery.conf. xlogdump is a contrib module of
 PostgreSQL core that allows checking in the content of WAL files and
 determine when to recover. This might help.
@@ -370,7 +370,7 @@ are required if the value contains whitespaces. Comments should start with
 excluding values.
 
 === EXIT CODE ===
-pg_rman returns exit codes for each error status.
+pg_arman returns exit codes for each error status.
 
 	Code	Name			Description
 	0	SUCCESS			Operation succeeded.
@@ -387,14 +387,14 @@ pg_rman returns exit codes for each error status.
 	20	ERROR_ARCHIVE_FAILED    Cannot archive WAL file
 	21	ERROR_NO_BACKUP		Backup file not found
 	22	ERROR_CORRUPTED		Backup file is broken
-	23	ERROR_ALREADY_RUNNING	Cannot start because another pg_rman
+	23	ERROR_ALREADY_RUNNING	Cannot start because another pg_arman
 					is running
 	24	ERROR_PG_INCOMPATIBLE	Version conflicted with server
 	25	ERROR_PG_RUNNING	Error due to server running
 	26	ERROR_PID_BROKEN	postmaster.pid is broken
 
 == AUTHOR ==
-pg_rman was originally written by NTT, mainly Itagaki Takahiro, and maintained
-in some way by Michael Paquier.
+pg_arman is a fork of pg_rman that was originally written by NTT, now
+maintained by Michael Paquier.
 
-Please report bug reports at <https://github.com/michaelpq/pg_rman>.
+Please report bug reports at <https://github.com/michaelpq/pg_arman>.

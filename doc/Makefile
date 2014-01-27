@@ -1,9 +1,9 @@
 
-manpages = pg_rman.1
+manpages = pg_arman.1
 
-EXTRA_DIST = pg_rman.txt Makefile $(manpages)
+EXTRA_DIST = pg_arman.txt Makefile $(manpages)
 
-htmls = pg_rman.html README.html
+htmls = pg_arman.html README.html
 
 # We have asciidoc and xmlto, so build everything and define correct
 # rules for build.
@@ -12,7 +12,7 @@ ifneq ($(XMLTO),)
 dist_man_MANS = $(manpages)
 doc_DATA = $(htmls)
 
-pg_rman.1: pg_rman.xml $(doc_DATA)
+pg_arman.1: pg_arman.xml $(doc_DATA)
 	$(XMLTO) man $<
 
 %.xml: %.txt

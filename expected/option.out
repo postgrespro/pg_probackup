@@ -1,13 +1,13 @@
 \! sh sql/option.sh
-pg_rman manage backup/recovery of PostgreSQL database.
+pg_arman manage backup/recovery of PostgreSQL database.
 
 Usage:
-  pg_rman OPTION init
-  pg_rman OPTION backup
-  pg_rman OPTION restore
-  pg_rman OPTION show [DATE]
-  pg_rman OPTION validate [DATE]
-  pg_rman OPTION delete DATE
+  pg_arman OPTION init
+  pg_arman OPTION backup
+  pg_arman OPTION restore
+  pg_arman OPTION show [DATE]
+  pg_arman OPTION validate [DATE]
+  pg_arman OPTION delete DATE
 
 Common Options:
   -D, --pgdata=PATH         location of the database storage area
@@ -47,9 +47,9 @@ Generic options:
   --help                    show this help, then exit
   --version                 output version information, then exit
 
-Read the website for details. <https://github.com/michaelpq/pg_rman>
-Report bugs to <https://github.com/michaelpq/pg_rman/issues>.
-pg_rman 1.3dev
+Read the website for details. <https://github.com/michaelpq/pg_arman>
+Report bugs to <https://github.com/michaelpq/pg_arman/issues>.
+pg_arman 1.3dev
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
 ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)

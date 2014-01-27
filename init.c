@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_rman.h"
+#include "pg_arman.h"
 
 #include <unistd.h>
 #include <dirent.h>
@@ -60,11 +60,11 @@ do_init(void)
 		parse_postgresql_conf(path, &log_directory, &archive_command);
 	}
 
-	/* create pg_rman.ini */
+	/* create pg_arman.ini */
 	join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
-		elog(ERROR_SYSTEM, _("can't create pg_rman.ini: %s"), strerror(errno));
+		elog(ERROR_SYSTEM, _("can't create pg_arman.ini: %s"), strerror(errno));
 
 	/* set ARCLOG_PATH refered with log_directory */
 	if (arclog_path == NULL && archive_command && archive_command[0])
@@ -107,10 +107,10 @@ do_init(void)
 	}
 	else if (archive_command && archive_command[0])
 		elog(WARNING, "ARCLOG_PATH is not set because failed to parse archive_command '%s'."
-				"Please set ARCLOG_PATH in pg_rman.ini or environmental variable", archive_command);
+				"Please set ARCLOG_PATH in pg_arman.ini or environmental variable", archive_command);
 	else
 		elog(WARNING, "ARCLOG_PATH is not set because archive_command is empty."
-				"Please set ARCLOG_PATH in pg_rman.ini or environmental variable");
+				"Please set ARCLOG_PATH in pg_arman.ini or environmental variable");
 
 	fprintf(fp, "\n");
 	fclose(fp);
