@@ -48,7 +48,7 @@ details.
 
 *show*::
     Show backup history. The timeline option shows timeline of the backup
-    and the parent's timeline for each backup. 
+    and the parent's timeline for each backup.
 
 *validate*::
     Validate backup files.
@@ -71,12 +71,12 @@ specify it in PGDATA environmental variable or -D/--pgdata option.
 
 Backup target can be one of the following types:
 
-- Full backup, backup a whole database cluster. 
+- Full backup, backup a whole database cluster.
 - Incremental backup, backup only files or pages modified after the last
-verified backup. 
+verified backup.
 
 It is recommended to verify backup files as soon as possible after backup.
-Unverified backup cannot be used in restore and in incremental backup. 
+Unverified backup cannot be used in restore and in incremental backup.
 
 === RESTORE ===
 
@@ -93,7 +93,7 @@ has succeeded.
 If "--recovery-target-timeline" is not specifed, the last checkpoint's
 TimeLineID in control file ($PGDATA/global/pg_control) will be the restore
 target. If pg_control is not present, TimeLineID in the full backup used by
-the restore will be a restore target. 
+the restore will be a restore target.
 
 
 == EXAMPLES ==
@@ -130,12 +130,12 @@ Here are some commands to restore from a backup:
 === SHOW A BACKUP ===
 
 	$ pg_arman show
-	==================================================================================================
-	Start                Mode  Current TLI  Parent TLI  Time    Data     WAL     Log  Backup   Status  
-	==================================================================================================
-	2013-12-25 03:02:31  INCR            1           0    0m   203kB    67MB    ----    67MB   DONE
-	2013-12-25 03:02:31  INCR            1           0    0m      0B    ----    ----      0B   ERROR
-	2013-12-25 03:02:25  FULL            1           0    0m    33MB    33MB    ----    64MB   OK
+	===================================================================================
+	Start                Mode  Current TLI  Parent TLI  Time    Data   Backup   Status 
+	===================================================================================
+	2013-12-25 03:02:31  INCR            1           0    0m   203kB     67MB   DONE
+	2013-12-25 03:02:31  INCR            1           0    0m      0B       0B   ERROR
+	2013-12-25 03:02:25  FULL            1           0    0m    33MB    364MB   OK
 
 The fields are:
 
@@ -205,7 +205,7 @@ absolute paths; relative paths are not allowed.
 *-c* / *--check*::
     If specifed, pg_arman doesn't perform actual jobs but only checks
     parameters and required resources. The option is typically used with
-    --verbose option to verify the operation. 
+    --verbose option to verify the operation.
 
 *-v* / *--verbose*::
     If specified, pg_arman works in verbose mode.
@@ -215,15 +215,15 @@ absolute paths; relative paths are not allowed.
 *-b* _BACKUPMODE_ / *--backup-mode*=_BACKUPMODE_::
     Specify backup target files. Available options are: "full",
     "incremental". Abbreviated forms (prefix match) are also available.
-    For example, -b f means "full" backup. 
+    For example, -b f means "full" backup.
 
 *-Z* / *--compress-data*::
-    Compress backup files with zlib if specified. 
+    Compress backup files with zlib if specified.
 
 *-C* / *--smooth-checkpoint*::
     Checkpoint is performed on every backups. If the option is specified,
     do smooth checkpoint then. See also the second argument for
-    pg_start_backup(). 
+    pg_start_backup().
 
 *--validate*::
     Validate a backup just after taking it. Other backups taken
@@ -241,8 +241,8 @@ The parameters whose name start are started with --recovery refer to
 the same parameters as the ones in recovery.confin recovery.conf.
 
 *--recovery-target-timeline*=_TIMELINE_::
-    Specifies recovering into a particular timeline. 
-    If not specified, the current timeline is used.
+    Specifies recovering into a particular timeline. If not specified,
+    the current timeline is used.
 
 *--recovery-target-time*=_TIMESTAMP_::
     This parameter specifies the timestamp up to which recovery will
@@ -250,7 +250,7 @@ the same parameters as the ones in recovery.confin recovery.conf.
 
 *--recovery-target-xid*=_XID::
     This parameter specifies the transaction ID up to which recovery
-    will proceed. 
+    will proceed.
 
 *--recovery-target-inclusive*::
     Specifies whether server pauses when recovery target is reached.
@@ -276,14 +276,14 @@ Parameters to connect PostgreSQL server.
     which the server is listening for connections.
 
 *-U* _USERNAME_ / *--username*=_USERNAME_::
-    User name to connect as. 
+    User name to connect as.
 
 *-w* / *--no-password*::
     Never issue a password prompt. If the server requires password
     authentication and a password is not available by other means such as
     a .pgpass file, the connection attempt will fail. This option can be
     useful in batch jobs and scripts where no user is present to enter a
-    password. 
+    password.
 
 *-W* / *--password*::
     Force pg_arman to prompt for a password before connecting to a database.
@@ -291,7 +291,7 @@ Parameters to connect PostgreSQL server.
     prompt for a password if the server demands password authentication.
     However, pg_arman will waste a connection attempt in order to find out
     if the server wants a password. In some cases it is worth typing -W
-    to avoid the extra connection attempt. 
+    to avoid the extra connection attempt.
 
 === GLOBAL OPTIONS ===
 
@@ -326,8 +326,6 @@ variables or in configuration file as follows:
 		--validate	        VALIDATE		Yes
 		--keep-data-generations	KEEP_DATA_GENERATIONS	Yes
 		--keep-data-days	KEEP_DATA_DAYS		Yes
-		--keep-arclog-files	KEEP_ARCLOG_FILES	Yes
-		--keep-arclog-days	KEEP_ARCLOG_DAYS	Yes
 		--recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes
 		--recovery-target-xid	RECOVERY_TARGET_XID	Yes
 		--recovery-target-time	RECOVERY_TARGET_TIME	Yes
@@ -335,10 +333,10 @@ variables or in configuration file as follows:
 
 Variable names in configuration file are the same as long names or names
 of environment variables. The password can not be specified in command
-line and configuration file for security reason. 
+line and configuration file for security reason.
 
 This utility, like most other PostgreSQL utilities, also uses the
-environment variables supported by libpq (see Environment Variables) 
+environment variables supported by libpq (see Environment Variables).
 
 == RESTRICTIONS ==
 
@@ -394,7 +392,7 @@ pg_arman returns exit codes for each error status.
 	26	ERROR_PID_BROKEN	postmaster.pid is broken
 
 == AUTHOR ==
-pg_arman is a fork of pg_rman that was originally written by NTT, now
-maintained by Michael Paquier.
+pg_arman is a fork of pg_rman that was originally written by NTT, now developed
+and maintained by Michael Paquier.
 
 Please report bug reports at <https://github.com/michaelpq/pg_arman>.
