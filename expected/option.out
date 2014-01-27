@@ -49,7 +49,7 @@ Generic options:
 
 Read the website for details. <https://github.com/michaelpq/pg_arman>
 Report bugs to <https://github.com/michaelpq/pg_arman/issues>.
-pg_arman 1.3dev
+pg_arman 0.1
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
 ERROR: required parameter not specified: ARCLOG_PATH (-A, --arclog-path)
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
