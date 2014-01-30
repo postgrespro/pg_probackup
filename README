@@ -2,12 +2,12 @@ pg_arman
 ========
 
 pg_arman is a backup and recovery manager for PostgreSQL servers able to do
-incremental, archive and full backup as well as restore a cluster to a
+incremental and full backup as well as restore a cluster to a
 state defined by a given recovery target. It is designed to perform
 periodic backups of an existing PostgreSQL server, combined with WAL
 archives to provide a way to recover a server in case of failure of
-server because of a reason or another. Its incremental and archive backup
-facilities reduces the amount of data necessary to be taken between
+server because of a reason or another. Its incremental backup
+facility reduces the amount of data necessary to be taken between
 two consecutive backups.
 
 Download
