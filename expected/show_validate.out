@@ -6,7 +6,7 @@
 Start                Mode  Current TLI  Parent TLI  Time    Data  Status  
 ==========================================================================
 2009-06-03 17:05:53  FULL            1           0    0m    ----  RUNNING 
-2009-06-01 17:05:53  INCR            1           0    3m  9223PB  DONE 
+2009-06-01 17:05:53  PAGE            1           0    3m  9223PB  DONE 
 2009-05-31 17:05:53  FULL            1           0    3m  1242MB  DONE 
 \! pg_arman validate -B ${PWD}/results/sample_backup 2009-05-31 17:05:53 --debug
 INFO: validate: 2009-05-31 17:05:53 backup and archive log files by CRC
@@ -25,11 +25,11 @@ Start                Mode  Current TLI  Parent TLI  Time    Data  Status
 ==========================================================================
 2009-06-03 17:05:53  FULL            1           0    0m    ----  RUNNING 
 2009-06-02 17:05:03  FULL            1           0    0m    ----  DELETED 
-2009-06-01 17:05:53  INCR            1           0    3m  9223PB  CORRUPT 
+2009-06-01 17:05:53  PAGE            1           0    3m  9223PB  CORRUPT 
 2009-05-31 17:05:53  FULL            1           0    3m  1242MB  OK 
 \! pg_arman show 2009-06-01 17:05:53 -A ${PWD}/results/arclog -B ${PWD}/results/sample_backup
 # configuration
-BACKUP_MODE=INCREMENTAL
+BACKUP_MODE=PAGE
 COMPRESS_DATA=false
 # result
 TIMELINEID=1

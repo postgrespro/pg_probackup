@@ -256,11 +256,11 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 
 		/*
 		 * We need completed database backup in the case of a full or
-		 * incremental backup on current timeline.
+		 * differential backup on current timeline.
 		 */
 		if (backup->status == BACKUP_STATUS_OK &&
 			backup->tli == tli &&
-			(backup->backup_mode == BACKUP_MODE_INCREMENTAL ||
+			(backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
 			 backup->backup_mode == BACKUP_MODE_FULL))
 			return backup;
 	}
@@ -295,7 +295,7 @@ pgBackupCreateDir(pgBackup *backup)
 void
 pgBackupWriteConfigSection(FILE *out, pgBackup *backup)
 {
-	static const char *modes[] = { "", "INCREMENTAL", "FULL"};
+	static const char *modes[] = { "", "PAGE", "FULL"};
 
 	fprintf(out, "# configuration\n");
 
@@ -488,10 +488,10 @@ parse_backup_mode(const char *value)
 		v++;
 	len = strlen(v);
 
-	if (len > 0 && pg_strncasecmp("full", v, len) == 0)
+	if (len > 0 && pg_strncasecmp("full", v, strlen("full")) == 0)
 		return BACKUP_MODE_FULL;
-	else if (len > 0 && pg_strncasecmp("incremental", v, len) == 0)
-		return BACKUP_MODE_INCREMENTAL;
+	else if (len > 0 && pg_strncasecmp("page", v, strlen("page")) == 0)
+		return BACKUP_MODE_DIFF_PAGE;
 
 	/* Backup mode is invalid, so leave with an error */
 	elog(ERROR_ARGS, _("invalid backup-mode \"%s\""), value);

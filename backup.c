@@ -93,17 +93,17 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	current.tli = get_current_timeline();
 
 	/*
-	 * In incremental backup mode, check if there is an already-validated
+	 * In differential backup mode, check if there is an already-validated
 	 * full backup on current timeline.
 	 */
-	if (current.backup_mode == BACKUP_MODE_INCREMENTAL)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
 		pgBackup   *prev_backup;
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
 			elog(ERROR_SYSTEM, _("Valid full backup not found for "
-					"incremental backup. Either create a full backup "
+					"differential backup. Either create a full backup "
 					"or validate existing one."));
 	}
 
@@ -154,10 +154,10 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	files = NULL;
 
 	/*
-	 * To take incremental backup, the file list of the last completed database
+	 * To take differential backup, the file list of the last completed database
 	 * backup is needed.
 	 */
-	if (current.backup_mode == BACKUP_MODE_INCREMENTAL)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
 		pgBackup   *prev_backup;
 
@@ -287,7 +287,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 				elog(ERROR_SYSTEM, _("tablespace storage directory doesn't exist: %s"), mp);
 
 			/*
-			 * create the previous backup file list to take incremental backup
+			 * create the previous backup file list to take differential backup
 			 * from the snapshot volume.
 			 */
 			if (prev_files != NULL)
@@ -392,10 +392,10 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 			continue;
 		/*
 		 * Count only the amount of data. For a full backup, the total
-		 * amount of data written counts while for an incremental
+		 * amount of data written counts while for an differential
 		 * backup only the data read counts.
 		 */
-		if (current.backup_mode == BACKUP_MODE_INCREMENTAL)
+		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 			current.data_bytes += file->read_size;
 		else if (current.backup_mode == BACKUP_MODE_FULL)
 			current.data_bytes += file->size;
@@ -514,7 +514,7 @@ do_backup(pgBackupOption bkupopt)
 
 		/* Database data */
 		if (current.backup_mode == BACKUP_MODE_FULL ||
-			current.backup_mode == BACKUP_MODE_INCREMENTAL)
+			current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 			total_read += current.data_bytes;
 
 		if (total_read == 0)
@@ -821,7 +821,9 @@ backup_cleanup(bool fatal, void *userdata)
 	}
 }
 
-/* take incremental backup. */
+/*
+ * Take differential backup at page level.
+ */
 static void
 backup_files(const char *from_root,
 			 const char *to_root,

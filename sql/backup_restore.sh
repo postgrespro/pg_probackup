@@ -112,10 +112,10 @@ psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
 pg_arman -w -p $TEST_PGPORT backup --verbose -d postgres > $BASE_PATH/results/log_full_1 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
-echo "incremental database backup"
+echo "differential database backup"
 psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
-#pg_arman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
-pg_arman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
+#pg_arman -p $TEST_PGPORT backup -b page --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
+pg_arman -w -p $TEST_PGPORT backup -b page --verbose -d postgres > $BASE_PATH/results/log_incr1 2>&1
 
 # validate all backup
 pg_arman validate `date +%Y` --verbose > $BASE_PATH/results/log_validate1 2>&1
@@ -123,8 +123,8 @@ pg_arman -p $TEST_PGPORT show `date +%Y` -a --verbose -d postgres > $BASE_PATH/r
 pg_dumpall > $BASE_PATH/results/dump_before_rtx.sql
 target_xid=`psql --no-psqlrc -p $TEST_PGPORT pgbench -tAq -c "INSERT INTO pgbench_history VALUES (1) RETURNING(xmin);"`
 psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
-#pg_arman -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
-pg_arman -w -p $TEST_PGPORT backup -b i --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
+#pg_arman -p $TEST_PGPORT backup -b page --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
+pg_arman -w -p $TEST_PGPORT backup -b page --verbose -d postgres > $BASE_PATH/results/log_incr2 2>&1
 
 pgbench -p $TEST_PGPORT -T $DURATION -c 10 pgbench >> $BASE_PATH/results/pgbench.log 2>&1
 
@@ -185,8 +185,8 @@ diff $BASE_PATH/results/dump_before.sql $BASE_PATH/results/dump_after.sql
 # incrementa backup can't find last full backup because new timeline started.
 echo "full database backup after recovery"
 psql --no-psqlrc -p $TEST_PGPORT postgres -c "checkpoint"
-#pg_arman -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
-pg_arman -w -p $TEST_PGPORT backup -b f --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
+#pg_arman -p $TEST_PGPORT backup -b full --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
+pg_arman -w -p $TEST_PGPORT backup -b full --verbose -d postgres > $BASE_PATH/results/log_full2 2>&1
 
 # Symbolic links in $ARCLOG_PATH should be deleted.
 echo "# of symbolic links in ARCLOG_PATH"

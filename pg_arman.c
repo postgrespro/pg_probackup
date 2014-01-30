@@ -217,7 +217,7 @@ pgut_help(bool details)
 	printf(_("  -c, --check               show what would have been done\n"));
 	printf(_("  -v, --verbose             output process information\n"));
 	printf(_("\nBackup options:\n"));
-	printf(_("  -b, --backup-mode=MODE    full or incremental\n"));
+	printf(_("  -b, --backup-mode=MODE    full or page\n"));
 	printf(_("  -Z, --compress-data       compress data backup with zlib\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
 	printf(_("  --validate                validate backup after taking it\n"));

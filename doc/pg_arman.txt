@@ -28,7 +28,7 @@ It proposes the following features:
   command
 - Recovery from backup with just one command, with customized targets
   to facilitate the use of PITR.
-- Support for full and incremental
+- Support for full and differential backup
 - Compression of backup files
 - Management of backups with integrated catalog
 
@@ -72,11 +72,11 @@ specify it in PGDATA environmental variable or -D/--pgdata option.
 Backup target can be one of the following types:
 
 - Full backup, backup a whole database cluster.
-- Incremental backup, backup only files or pages modified after the last
+- Differential backup, backup only files or pages modified after the last
 verified backup.
 
 It is recommended to verify backup files as soon as possible after backup.
-Unverified backup cannot be used in restore and in incremental backup.
+Unverified backup cannot be used in restore and in differential backup.
 
 === RESTORE ===
 
@@ -140,7 +140,7 @@ Here are some commands to restore from a backup:
 The fields are:
 
 * Start: start time of backup
-* Mode: Mode of backup: FULL (full) or INCR (incremental)
+* Mode: Mode of backup: FULL (full) or PAGE (page differential)
 * Current TLI: current timeline of backup
 * Parent TLI: parent timeline of backup
 * Time: total time necessary to take this backup
@@ -214,8 +214,7 @@ absolute paths; relative paths are not allowed.
 
 *-b* _BACKUPMODE_ / *--backup-mode*=_BACKUPMODE_::
     Specify backup target files. Available options are: "full",
-    "incremental". Abbreviated forms (prefix match) are also available.
-    For example, -b f means "full" backup.
+    "page".
 
 *-Z* / *--compress-data*::
     Compress backup files with zlib if specified.
@@ -350,7 +349,7 @@ pg_arman has the following restrictions.
 - If there are some unreadable files/directories in data folder of server
   WAL directory or archived WAL directory, the backup or restore will fail
   depending on the backup mode selected.
-- Incremental backup is not able to take necessary files after a database
+- Differential backup is not able to take necessary files after a database
   creation, so take a full backup once a new database is created.
 
 == DETAILS ==

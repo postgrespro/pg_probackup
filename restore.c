@@ -174,9 +174,9 @@ base_backup_found:
 
 	last_restored_index = base_index;
 
-	/* restore following incremental backup */
+	/* restore following differential backup */
 	if (verbose)
-		printf(_("searching incremental backup...\n"));
+		printf(_("searching differential backup...\n"));
 	for (i = base_index - 1; i >= 0; i--)
 	{
 		pgBackup *backup = (pgBackup *) parray_get(backups, i);
@@ -187,7 +187,7 @@ base_backup_found:
 			continue;
 
 		/* use database backup only */
-		if (backup->backup_mode != BACKUP_MODE_INCREMENTAL)
+		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE)
 			continue;
 
 		/* is the backup is necessary for restore to target timeline ? */

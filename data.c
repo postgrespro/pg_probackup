@@ -526,7 +526,7 @@ restore_data_file(const char *from_root,
 
 	/*
 	 * Open backup file for write. 	We use "r+" at first to overwrite only
-	 * modified pages for incremental restore. If the file is not exists,
+	 * modified pages for differential restore. If the file is not exists,
 	 * re-open it with "w" to create an empty file.
 	 */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
@@ -652,7 +652,7 @@ restore_data_file(const char *from_root,
 
 		/*
 		 * Seek and write the restored page. Backup might have holes in
-		 * incremental backups.
+		 * differential backups.
 		 */
 		blknum = header.block;
 		if (fseek(out, blknum * BLCKSZ, SEEK_SET) < 0)

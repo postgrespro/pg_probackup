@@ -177,7 +177,7 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup;
-		const char *modes[] = { "", "INCR", "FULL"};
+		const char *modes[] = { "", "PAGE", "FULL"};
 		TimeLineID  parent_tli;
 		char timestamp[20];
 		char duration[20] = "----";
@@ -196,8 +196,8 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 
 		/*
 		 * Calculate Data field, in the case of full backup this shows the
-		 * total amount of data. For an incremental backup, this size is only
-		 * the differential of data accumulated.
+		 * total amount of data. For an differential backup, this size is only
+		 * the difference of data accumulated.
 		 */
 		pretty_size(backup->data_bytes, data_bytes_str,
 				lengthof(data_bytes_str));

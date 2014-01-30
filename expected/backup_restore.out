@@ -5,7 +5,7 @@ CREATE DATABASE
 0
 full database backup
 CHECKPOINT
-incremental database backup
+differential database backup
 CHECKPOINT
 CHECKPOINT
 stop DB during running pgbench

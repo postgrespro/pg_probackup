@@ -81,7 +81,7 @@ pgBackupValidate(pgBackup *backup,
 	if (!for_get_timeline)
 	{
 		if (backup->backup_mode == BACKUP_MODE_FULL ||
-			backup->backup_mode == BACKUP_MODE_INCREMENTAL)
+			backup->backup_mode == BACKUP_MODE_DIFF_PAGE)
 			elog(INFO, "validate: %s backup and archive log files by %s",
 				 timestamp, (size_only ? "SIZE" : "CRC"));
 	}
@@ -89,7 +89,7 @@ pgBackupValidate(pgBackup *backup,
 	if (!check)
 	{
 		if (backup->backup_mode == BACKUP_MODE_FULL ||
-			backup->backup_mode == BACKUP_MODE_INCREMENTAL)
+			backup->backup_mode == BACKUP_MODE_DIFF_PAGE)
 		{
 			elog(LOG, "database files...");
 			pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
@@ -143,7 +143,7 @@ pgBackupValidateFiles(parray *files, const char *root, bool size_only)
 		if (interrupted)
 			elog(ERROR_INTERRUPTED, _("interrupted during validate"));
 
-		/* skipped backup while incremental backup */
+		/* skipped backup while differential backup */
 		if (file->write_size == BYTES_INVALID || !S_ISREG(file->mode))
 			continue;
 

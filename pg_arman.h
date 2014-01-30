@@ -110,7 +110,7 @@ typedef enum BackupStatus
 typedef enum BackupMode
 {
 	BACKUP_MODE_INVALID,
-	BACKUP_MODE_INCREMENTAL,	/* incremental backup */
+	BACKUP_MODE_DIFF_PAGE,		/* differential page backup */
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
 
@@ -140,7 +140,7 @@ typedef struct pgBackup
 	/* Different sizes (-1 means nothing was backed up) */
 	/*
 	 * Amount of raw data. For a full backup, this is the total amount of
-	 * data while for an incremental backup this is just the differential
+	 * data while for a differential backup this is just the difference
 	 * of data taken.
 	 */
 	int64		data_bytes;
