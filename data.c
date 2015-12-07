@@ -68,7 +68,7 @@ doDeflate(z_stream *zp, size_t in_size, size_t out_size, void *inbuf,
 		}
 
 		/* update CRC */
-		COMP_CRC32(*crc, outbuf, out_size - zp->avail_out);
+		COMP_CRC32C(*crc, outbuf, out_size - zp->avail_out);
 
 		*write_size += out_size - zp->avail_out;
 
@@ -146,7 +146,7 @@ doInflate(z_stream *zp, size_t in_size, size_t out_size,void *inbuf,
 	}
 
 	/* update CRC */
-	COMP_CRC32(*crc, outbuf, out_size - zp->avail_out);
+	COMP_CRC32C(*crc, outbuf, out_size - zp->avail_out);
 
 	return status;
 }
@@ -216,7 +216,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	z_stream			z;
 	char				outbuf[zlibOutSize];
 #endif
-	INIT_CRC32(crc);
+	INIT_CRC32C(crc);
 
 	/* reset size summary */
 	file->read_size = 0;
@@ -226,7 +226,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	in = fopen(file->path, "r");
 	if (in == NULL)
 	{
-		FIN_CRC32(crc);
+		FIN_CRC32C(crc);
 		file->crc = crc;
 
 		/* maybe vanished, it's not error */
@@ -338,9 +338,9 @@ backup_data_file(const char *from_root, const char *to_root,
 			}
 
 			/* update CRC */
-			COMP_CRC32(crc, &header, sizeof(header));
-			COMP_CRC32(crc, page.data, header.hole_offset);
-			COMP_CRC32(crc, page.data + upper_offset, upper_length);
+			COMP_CRC32C(crc, &header, sizeof(header));
+			COMP_CRC32C(crc, page.data, header.hole_offset);
+			COMP_CRC32C(crc, page.data + upper_offset, upper_length);
 
 			file->write_size += sizeof(header) + read_len - header.hole_length;
 		}
@@ -393,7 +393,7 @@ backup_data_file(const char *from_root, const char *to_root,
 						 _("can't write at block %u of \"%s\": %s"),
 						 blknum, to_path, strerror(errno_tmp));
 				}
-				COMP_CRC32(crc, &header, sizeof(header));
+				COMP_CRC32C(crc, &header, sizeof(header));
 				file->write_size += sizeof(header);
 			}
 		}
@@ -418,7 +418,7 @@ backup_data_file(const char *from_root, const char *to_root,
 					blknum, to_path, strerror(errno_tmp));
 			}
 
-			COMP_CRC32(crc, page.data, read_len);
+			COMP_CRC32C(crc, page.data, read_len);
 			file->write_size += read_len;
 		}
 
@@ -462,7 +462,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	fclose(out);
 
 	/* finish CRC calculation and store into pgFile */
-	FIN_CRC32(crc);
+	FIN_CRC32C(crc);
 	file->crc = crc;
 
 	/* Treat empty file as not-datafile */
@@ -553,7 +553,7 @@ restore_data_file(const char *from_root,
 		if (inflateInit(&z) != Z_OK)
 			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
 				z.msg);
-		INIT_CRC32(crc);
+		INIT_CRC32C(crc);
 		read_size = 0;
 	}
 #endif
@@ -700,7 +700,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	char		outbuf[zlibOutSize];
 	char		inbuf[zlibInSize];
 #endif
-	INIT_CRC32(crc);
+	INIT_CRC32C(crc);
 
 	/* reset size summary */
 	file->read_size = 0;
@@ -710,7 +710,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	in = fopen(file->path, "r");
 	if (in == NULL)
 	{
-		FIN_CRC32(crc);
+		FIN_CRC32C(crc);
 		file->crc = crc;
 
 		/* maybe deleted, it's not error */
@@ -825,7 +825,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 					strerror(errno_tmp));
 			}
 			/* update CRC */
-			COMP_CRC32(crc, buf, read_len);
+			COMP_CRC32C(crc, buf, read_len);
 
 			file->write_size += sizeof(buf);
 			file->read_size += sizeof(buf);
@@ -862,7 +862,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 					strerror(errno_tmp));
 			}
 			/* update CRC */
-			COMP_CRC32(crc, buf, read_len);
+			COMP_CRC32C(crc, buf, read_len);
 
 			file->write_size += read_len;
 		}
@@ -900,7 +900,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 
 #endif
 	/* finish CRC calculation and store into pgFile */
-	FIN_CRC32(crc);
+	FIN_CRC32C(crc);
 	file->crc = crc;
 
 	/* update file permission */
