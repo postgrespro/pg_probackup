@@ -104,10 +104,8 @@ write default configuration into ${BACKUP_PATH}/pg_arman.ini.
 
 	$ cat $BACKUP_PATH/pg_arman.ini
 	ARCLOG_PATH = /home/postgres/arclog
-	BACKUP_MODE = F
+	BACKUP_MODE = FULL
 	COMPRESS_DATA = YES
-	KEEP_ARCLOG_FILES = 10
-	KEEP_ARCLOG_DAYS = 10
 	KEEP_DATA_GENERATIONS = 3
 	KEEP_DATA_DAYS = 120
 
@@ -133,8 +131,8 @@ Here are some commands to restore from a backup:
 	===================================================================================
 	Start                Mode  Current TLI  Parent TLI  Time    Data   Backup   Status 
 	===================================================================================
-	2013-12-25 03:02:31  INCR            1           0    0m   203kB     67MB   DONE
-	2013-12-25 03:02:31  INCR            1           0    0m      0B       0B   ERROR
+	2013-12-25 03:02:31  PAGE            1           0    0m   203kB     67MB   DONE
+	2013-12-25 03:02:31  PAGE            1           0    0m      0B       0B   ERROR
 	2013-12-25 03:02:25  FULL            1           0    0m    33MB    364MB   OK
 
 The fields are:
