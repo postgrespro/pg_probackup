@@ -125,8 +125,11 @@ pgbench -p ${TEST_PGPORT} pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-before.out
 TARGET_XID=`psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -tAq -c "INSERT INTO tbl0006 VALUES ('inserted') RETURNING (xmin);"`
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
-# Enforce segment to be archived to ensure that recovery goes well.
+# Enforce segment to be archived to ensure that recovery goes up to the
+# wanted point. There is no way to ensure that all segments needed have
+# been archived up to the xmin point saved earlier without that.
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c 'SELECT pg_switch_xlog()' > /dev/null 2>&1
+# Fast mode is used to ensure that the last segment is archived as well.
 pg_ctl stop -m fast > /dev/null 2>&1
 pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --quiet;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
@@ -151,7 +154,11 @@ pgbench -p ${TEST_PGPORT} pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0007-before.out
 TARGET_XID=`psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -tAq -c "INSERT INTO tbl0007 VALUES ('inserted') RETURNING (xmin);"`
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
+# Enforce segment to be archived to ensure that recovery goes up to the
+# wanted point. There is no way to ensure that all segments needed have
+# been archived up to the xmin point saved earlier without that.
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c 'SELECT pg_switch_xlog()' > /dev/null 2>&1
+# Fast mode is used to ensure that the last segment is archived as well.
 pg_ctl stop -m fast > /dev/null 2>&1
 pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --recovery-target-inclusive=false --quiet;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
