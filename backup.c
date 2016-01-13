@@ -626,6 +626,7 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	int				try_count;
 	XLogRecPtr		lsn;
 	TimeLineID		tli;
+	XLogSegNo	targetSegNo;
 
 	reconnect();
 	res = execute(sql, 0, NULL);
@@ -651,12 +652,13 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	}
 
 	/* As well as WAL file name */
-	xlog_fname(file_name, tli, lsn);
+	XLByteToSeg(lsn, targetSegNo);
+	XLogFileName(file_name, tli, targetSegNo + 1);
 
 	snprintf(ready_path, lengthof(ready_path),
 		"%s/pg_xlog/archive_status/%s.ready", pgdata,
 			 file_name);
-	elog(LOG, "%s() wait for %s", __FUNCTION__, ready_path);
+	elog(LOG, "%s() wait for %s\n", __FUNCTION__, ready_path);
 
 	PQclear(res);
 

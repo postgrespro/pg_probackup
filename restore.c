@@ -772,8 +772,10 @@ search_next_wal(const char *path, XLogRecPtr *need_lsn, parray *timelines)
 		for (i = 0; i < parray_num(timelines); i++)
 		{
 			pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
+			XLogSegNo	targetSegNo;
 
-			xlog_fname(xlogfname, timeline->tli, *need_lsn);
+			XLByteToSeg(*need_lsn, targetSegNo);
+			XLogFileName(xlogfname, timeline->tli, targetSegNo);
 			join_path_components(xlogpath, path, xlogfname);
 
 			if (stat(xlogpath, &st) == 0)
