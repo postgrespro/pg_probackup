@@ -1,11 +1,33 @@
-\! rm -rf results/init_test
-\! pg_arman init -B ${PWD}/results/init_test --quiet;echo $?
+\! bash sql/init.sh
+###### INIT COMMAND TEST-0001 ######
+###### success with archive_command ######
 0
-\! find results/init_test | xargs ls -Fd | sort
-results/init_test/
-results/init_test/backup/
-results/init_test/backup/pg_xlog/
-results/init_test/pg_arman.ini
-\! pg_arman init -B ${PWD}/results/init_test --quiet;echo $?
+results/init/backup/
+results/init/backup/backup/
+results/init/backup/backup/pg_xlog/
+results/init/backup/pg_arman.ini
+###### INIT COMMAND TEST-0002 ######
+###### success with archive_command and log_directory ######
+0
+results/init/backup/
+results/init/backup/backup/
+results/init/backup/backup/pg_xlog/
+results/init/backup/pg_arman.ini
+###### INIT COMMAND TEST-0003 ######
+###### success without archive_command ######
+WARNING: ARCLOG_PATH is not set because archive_command is empty.Please set ARCLOG_PATH in pg_arman.ini or environmental variable
+0
+results/init/backup/
+results/init/backup/backup/
+results/init/backup/backup/pg_xlog/
+results/init/backup/pg_arman.ini
+###### INIT COMMAND TEST-0004 ######
+###### failure with backup catalog already existed ######
 ERROR: backup catalog already exist. and it's not empty.
 2
+
+###### INIT COMMAND TEST-0005 ######
+###### failure with backup catalog should be given as absolute path ######
+ERROR: -B, --backup-path must be an absolute path
+12
+

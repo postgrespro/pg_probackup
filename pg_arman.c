@@ -21,7 +21,7 @@ const char *PROGRAM_EMAIL	= "https://github.com/michaelpq/pg_arman/issues";
 /* path configuration */
 char *backup_path;
 char *pgdata;
-char *arclog_path;
+char *arclog_path = NULL;
 
 /* common configuration */
 bool verbose = false;

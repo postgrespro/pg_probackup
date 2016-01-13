@@ -1,0 +1,20 @@
+\! bash sql/delete.sh
+###### DELETE COMMAND TEST-0001 ######
+###### delete full backups ######
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+try to delete the oldest backup
+2
+1
+Number of deleted backups should be 1, is it so?: 1
+###### DELETE COMMAND TEST-0002 ######
+###### keep backups which are necessary for recovery ######
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+try to delete before third backup
+3
+1
+Number of deleted backups should be 1, is it so?: 1

@@ -389,7 +389,7 @@ pg_arman returns exit codes for each error status.
 	26	ERROR_PID_BROKEN	postmaster.pid is broken
 
 == AUTHOR ==
-pg_arman is a fork of pg_rman that was originally written by NTT, now developed
+pg_arman is a fork of pg_arman that was originally written by NTT, now developed
 and maintained by Michael Paquier.
 
 Please report bug reports at <https://github.com/michaelpq/pg_arman>.

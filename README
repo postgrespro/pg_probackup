@@ -83,4 +83,4 @@ License
 
 pg_arman can be distributed under the PostgreSQL license. See COPYRIGHT
 file for more information. pg_arman is a fork of the existing project
-pg_rman, initially created and maintained by NTT and Itagaki Takahiro.
+pg_arman, initially created and maintained by NTT and Itagaki Takahiro.

@@ -1,70 +1,99 @@
-#!/bin/sh
+#!/bin/bash
 
 #============================================================================
-# This is a test script for option test of pg_arman.
+# This is a test script for options of pg_arman.
 #============================================================================
 
-BASE_PATH=`pwd`
+# Load common rules
+. sql/common.sh option
 
-# Clear environment variables used by pg_arman except $PGDATA.
-# List of environment variables is defined in catalog.c.
-unset BACKUP_PATH
-unset ARCLOG_PATH
-unset BACKUP_MODE
-unset COMPRESS_DATA
-unset KEEP_DATA_GENERATIONS
-unset KEEP_DATA_DAYS
+cleanup
 
-export PGDATA=$BASE_PATH/results/sample_database
+echo '###### COMMAND OPTION TEST-0001 ######'
+echo '###### help option ######'
+pg_arman --help;echo $?
+echo ''
 
-# Note: not exported
-BACKUP_PATH=$BASE_PATH/results/sample_backup2
+echo '###### COMMAND OPTION TEST-0002 ######'
+echo '###### version option ######'
+pg_arman --version;echo $?
+echo ''
 
-# Setup backup catalog for backup test.
-rm -rf $BACKUP_PATH
-cp -rp data/sample_backup $BACKUP_PATH
+echo '###### COMMAND OPTION TEST-0003 ######'
+echo '###### backup command failure without backup path option ######'
+pg_arman backup -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+echo ''
 
-# general option
-pg_arman --help
-pg_arman --version
+echo '###### COMMAND OPTION TEST-0004 ######'
+echo '###### backup command failure without backup mode option ######'
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+echo ''
 
-# show option
-# required argument check
-pg_arman show
-pg_arman show -B $BACKUP_PATH
+echo '###### COMMAND OPTION TEST-0005 ######'
+echo '###### backup command failure with invalid backup mode option ######'
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b bad -p ${TEST_PGPORT};echo $?
+echo ''
 
-# backup option
-# required arguments check
-pg_arman backup --verbose
-pg_arman backup --verbose -B $BACKUP_PATH
+echo '###### COMMAND OPTION TEST-0006 ######'
+echo '###### delete failure without DATE ######'
+pg_arman delete -B ${BACKUP_PATH};echo $?
+echo ''
 
-# bad arguments check
-pg_arman backup --verbose -B $BACKUP_PATH -b bad
+init_backup
 
-# delete or validate requires DATE
-pg_arman delete -B $BACKUP_PATH
-pg_arman validate -B $BACKUP_PATH
+echo '###### COMMAND OPTION TEST-0007 ######'
+echo '###### syntax error in pg_arman.ini ######'
+echo " = INFINITE" >> ${BACKUP_PATH}/pg_arman.ini
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+echo ''
 
-# invalid configuration file check
-echo " = INFINITE" > $BACKUP_PATH/pg_arman.ini
-pg_arman backup --verbose -B $BACKUP_PATH
-echo "BACKUP_MODE= " > $BACKUP_PATH/pg_arman.ini
-pg_arman backup --verbose -B $BACKUP_PATH
-echo "BACKUP_MODE=B" > $BACKUP_PATH/pg_arman.ini
-pg_arman backup --verbose -B $BACKUP_PATH
-echo "COMPRESS_DATA=FOO" > $BACKUP_PATH/pg_arman.ini
-pg_arman backup --verbose -B $BACKUP_PATH
-echo "TIMELINEID=-1" > $BACKUP_PATH/pg_arman.ini
-pg_arman backup --verbose -B $BACKUP_PATH
-echo "BACKUP_TARGETS=F" > $BACKUP_PATH/pg_arman.ini
-pg_arman backup --verbose -B $BACKUP_PATH
+echo '###### COMMAND OPTION TEST-0008 ######'
+echo '###### invalid value in pg_arman.ini ######'
+init_catalog
+echo "BACKUP_MODE=" >> ${BACKUP_PATH}/pg_arman.ini
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+echo ''
 
-# configuration priorityfile check
-echo "BACKUP_MODE=ENV_PATH" > $BACKUP_PATH/pg_arman.ini
-mkdir $BACKUP_PATH/conf_path
-echo "BACKUP_PATH=$BACKUP_PATH/conf_path" > $BACKUP_PATH/pg_arman.conf
-echo "BACKUP_MODE=CONF_PATH" > $BACKUP_PATH/conf_path/pg_arman.ini
-mkdir $BACKUP_PATH/comm_path
-echo "BACKUP_MODE=COMM_PATH" > $BACKUP_PATH/comm_path/pg_arman.ini
-export BACKUP_PATH=$BACKUP_PATH
-pg_arman backup --verbose
+echo '###### COMMAND OPTION TEST-0009 ######'
+echo '###### invalid value in pg_arman.ini ######'
+init_catalog
+echo "COMPRESS_DATA=FOO" >> ${BACKUP_PATH}/pg_arman.ini
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+echo ''
+
+echo '###### COMMAND OPTION TEST-0010 ######'
+echo '###### invalid value in pg_arman.ini ######'
+init_catalog
+echo "KEEP_DATA_GENERATIONS=TRUE" >> ${BACKUP_PATH}/pg_arman.ini
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+echo ''
+
+echo '###### COMMAND OPTION TEST-0011 ######'
+echo '###### invalid value in pg_arman.ini ######'
+init_catalog
+echo "SMOOTH_CHECKPOINT=FOO" >> ${BACKUP_PATH}/pg_arman.ini
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+echo ''
+
+echo '###### COMMAND OPTION TEST-0012 ######'
+echo '###### invalid option in pg_arman.ini ######'
+init_catalog
+echo "TIMELINEID=1" >> ${BACKUP_PATH}/pg_arman.ini
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+echo ''
+
+echo '###### COMMAND OPTION TEST-0013 ######'
+echo '###### check priority of several pg_arman.ini files ######'
+init_catalog
+mkdir -p ${BACKUP_PATH}/conf_path_a
+echo "BACKUP_MODE=ENV_PATH" > ${BACKUP_PATH}/pg_arman.ini
+echo "BACKUP_MODE=ENV_PATH_A" > ${BACKUP_PATH}/conf_path_a/pg_arman.ini
+pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+echo ''
+
+# clean up the temporal test data
+pg_ctl stop -m immediate > /dev/null 2>&1
+rm -fr ${PGDATA_PATH}
+rm -fr ${BACKUP_PATH}
+rm -fr ${ARCLOG_PATH}
+rm -fr ${TBLSPC_PATH}

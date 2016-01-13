@@ -1,1 +1,1 @@
-\! sh sql/option.sh
+\! bash sql/option.sh

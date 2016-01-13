@@ -1,0 +1,33 @@
+\! bash sql/show.sh
+###### SHOW COMMAND TEST-0001 ######
+###### Status DONE and OK ######
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+0
+OK: DONE status is shown properly.
+0
+OK: OK status is shown properly.
+
+###### SHOW COMMAND TEST-0002 ######
+###### Status RUNNING  ######
+OK: RUNNING status is shown properly.
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+
+###### SHOW COMMAND TEST-0003 ######
+###### Status CORRUPT ######
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+0
+remove a file from backup intentionally
+0
+OK: CORRUPT status is shown properly.
+
+###### SHOW COMMAND TEST-0004 ######
+###### Status DELETED ######
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+0
+0
+NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
+0
+0
+0
+OK: DELETED status is shown properly.
+
