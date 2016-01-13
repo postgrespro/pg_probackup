@@ -267,7 +267,7 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 		if (strcmp(tmp,"") != 0)
 			elog(ERROR_ARGS, _("supplied id(%s) is invalid."), tmp);
 		else
-			elog(ERROR_ARGS, _("argments are invalid. near \"%s\""), arg1);
+			elog(ERROR_ARGS, _("arguments are invalid. near \"%s\""), arg1);
 	}
 
 	free(tmp);
