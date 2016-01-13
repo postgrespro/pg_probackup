@@ -1,23 +1,21 @@
 PROGRAM = pg_arman
-SRCS = \
-	backup.c \
-	catalog.c \
-	data.c \
-	delete.c \
-	dir.c \
-	fetch.c \
-	init.c \
-	parray.c \
-	pg_arman.c \
-	restore.c \
-	show.c \
-	status.c \
-	util.c \
-	validate.c \
-	xlog.c \
-	pgut/pgut.c \
-	pgut/pgut-port.c
-OBJS = $(SRCS:.c=.o)
+OBJS = backup.o \
+	catalog.o \
+	data.o \
+	delete.o \
+	dir.o \
+	fetch.o \
+	init.o \
+	parray.o \
+	pg_arman.o \
+	restore.o \
+	show.o \
+	status.o \
+	util.o \
+	validate.o \
+	xlog.o \
+	pgut/pgut.o \
+	pgut/pgut-port.o
 
 DOCS = doc/pg_arman.txt
 
@@ -32,6 +30,7 @@ endif # XMLTO
 endif # ASCIIDOC
 
 PG_CPPFLAGS = -I$(libpq_srcdir)
+override CPPFLAGS := -DFRONTEND $(CPPFLAGS)
 PG_LIBS = $(libpq_pgport)
 
 REGRESS = init option show delete backup restore
@@ -39,8 +38,6 @@ REGRESS = init option show delete backup restore
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
-
-$(OBJS): pg_arman.h
 
 # Part related to documentation
 # Compile documentation as well is ASCIIDOC and XMLTO are defined
