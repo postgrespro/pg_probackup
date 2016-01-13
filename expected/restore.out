@@ -48,11 +48,3 @@ NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
 0
 OK: recovery-target-inclusive=false works well.
 
-###### RESTORE COMMAND TEST-0008 ######
-###### recovery from page backup after database creation ######
-NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
-0
-NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
-0
-0
-

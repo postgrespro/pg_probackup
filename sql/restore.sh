@@ -125,7 +125,9 @@ pgbench -p ${TEST_PGPORT} pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-before.out
 TARGET_XID=`psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -tAq -c "INSERT INTO tbl0006 VALUES ('inserted') RETURNING (xmin);"`
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
-pg_ctl stop -m immediate > /dev/null 2>&1
+# Enforce segment to be archived to ensure that recovery goes well.
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c 'SELECT pg_switch_xlog()' > /dev/null 2>&1
+pg_ctl stop -m fast > /dev/null 2>&1
 pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --quiet;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-after.out
@@ -149,7 +151,8 @@ pgbench -p ${TEST_PGPORT} pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0007-before.out
 TARGET_XID=`psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -tAq -c "INSERT INTO tbl0007 VALUES ('inserted') RETURNING (xmin);"`
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
-pg_ctl stop -m immediate > /dev/null 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c 'SELECT pg_switch_xlog()' > /dev/null 2>&1
+pg_ctl stop -m fast > /dev/null 2>&1
 pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --recovery-target-inclusive=false --quiet;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0007-after.out
@@ -160,26 +163,6 @@ if grep "inserted" ${TEST_BASE}/TEST-0007-tbl.dump > /dev/null ; then
 else
 	echo 'OK: recovery-target-inclusive=false works well.'
 fi
-echo ''
-
-echo '###### RESTORE COMMAND TEST-0008 ######'
-echo '###### recovery from page backup after database creation ######'
-init_backup
-pgbench_objs 0008
-pg_ctl start -w -t 600 > /dev/null 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b full -Z -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
-createdb db0008 -p ${TEST_PGPORT}
-pgbench -i -s $SCALE -d db0008 -p ${TEST_PGPORT} > ${TEST_BASE}/TEST-0008-db0008-init.out 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b page -Z -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
-pgbench -p ${TEST_PGPORT} -d db0008 >> ${TEST_BASE}/TEST-0008-db0008-init.out 2>&1
-psql --no-psqlrc -p ${TEST_PGPORT} -d db0008 -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0008-before.out
-pg_ctl stop -m immediate > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --quiet;echo $?
-pg_ctl start -w -t 600 > /dev/null 2>&1
-psql --no-psqlrc -p ${TEST_PGPORT} -d db0008 -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0008-after.out
-diff ${TEST_BASE}/TEST-0008-before.out ${TEST_BASE}/TEST-0008-after.out
 echo ''
 
 # clean up the temporal test data
