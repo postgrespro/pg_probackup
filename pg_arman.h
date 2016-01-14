@@ -123,7 +123,6 @@ typedef struct pgBackup
 {
 	/* Backup Level */
 	BackupMode	backup_mode;
-	bool		compress_data;
 
 	/* Status - one of BACKUP_STATUS_xxx */
 	BackupStatus	status;
@@ -177,12 +176,6 @@ typedef struct pgRecoveryTarget
 	bool		recovery_target_inclusive;
 } pgRecoveryTarget;
 
-typedef enum CompressionMode
-{
-	NO_COMPRESSION,
-	COMPRESSION,
-	DECOMPRESSION,
-} CompressionMode;
 
 /*
  * return pointer that exceeds the length of prefix from character string.
@@ -290,11 +283,11 @@ extern bool xlog_is_complete_wal(const pgFile *file);
 
 /* in data.c */
 extern bool backup_data_file(const char *from_root, const char *to_root,
-							 pgFile *file, const XLogRecPtr *lsn, bool compress);
+							 pgFile *file, const XLogRecPtr *lsn);
 extern void restore_data_file(const char *from_root, const char *to_root,
-							  pgFile *file, bool compress);
+							  pgFile *file);
 extern bool copy_file(const char *from_root, const char *to_root,
-					  pgFile *file, CompressionMode compress);
+					  pgFile *file);
 
 /* in util.c */
 extern void time2iso(char *buf, size_t len, time_t time);

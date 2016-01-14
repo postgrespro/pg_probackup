@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------------------
  *
- * data.c: compress / uncompress data pages
+ * data.c: data parsing pages
  *
  * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  *
@@ -17,140 +17,6 @@
 #include "libpq/pqsignal.h"
 #include "storage/block.h"
 #include "storage/bufpage.h"
-
-#ifdef HAVE_LIBZ
-#include <zlib.h>
-
-#define zlibOutSize 4096
-#define zlibInSize  4096
-
-static int doDeflate(z_stream *zp, size_t in_size, size_t out_size, void *inbuf,
-	void *outbuf, FILE *in, FILE *out, pg_crc32 *crc, size_t *write_size,
-	int flash);
-static int doInflate(z_stream *zp, size_t in_size, size_t out_size,void *inbuf,
-	void *outbuf, FILE *in, FILE *out, pg_crc32 *crc, size_t *read_size);
-
-static int
-doDeflate(z_stream *zp, size_t in_size, size_t out_size, void *inbuf,
-	void *outbuf, FILE *in, FILE *out, pg_crc32 *crc, size_t *write_size,
-	int flash)
-{
-	int	status;
-
-	zp->next_in = inbuf;
-	zp->avail_in = in_size;
-
-	/* compresses until an input buffer becomes empty. */
-	do
-	{
-		if (interrupted)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_INTERRUPTED, _("interrupted during deflate"));
-		}
-
-		status = deflate(zp, flash);
-
-		if (status == Z_STREAM_ERROR)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't compress data: %s"), zp->msg);
-		}
-
-		if (fwrite(outbuf, 1, out_size - zp->avail_out, out) !=
-				out_size - zp->avail_out)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't write file: %s"), strerror(errno));
-		}
-
-		/* update CRC */
-		COMP_CRC32C(*crc, outbuf, out_size - zp->avail_out);
-
-		*write_size += out_size - zp->avail_out;
-
-		zp->next_out = outbuf;
-		zp->avail_out = out_size;
-	} while (zp->avail_in != 0);
-
-	return status;
-}
-
-static int
-doInflate(z_stream *zp, size_t in_size, size_t out_size,void *inbuf,
-	void *outbuf, FILE *in, FILE *out, pg_crc32 *crc, size_t *read_size)
-{
-	int	status = Z_OK;
-
-	zp->next_out = outbuf;
-	zp->avail_out = out_size;
-
-	/* decompresses until an output buffer becomes full. */
-	for (;;)
-	{
-		if (interrupted)
-			elog(ERROR_INTERRUPTED, _("interrupted during inflate"));
-
-		/* input buffer becomes empty, read it from a file. */
-		if (zp->avail_in == 0)
-		{
-			size_t	read_len;
-
-			read_len = fread(inbuf, 1, in_size, in);
-
-			if (read_len != in_size)
-			{
-				int errno_tmp = errno;
-
-				if (!feof(in))
-				{
-					fclose(in);
-					fclose(out);
-					elog(ERROR_CORRUPTED,
-						_("can't read compress file: %s"), strerror(errno_tmp));
-				}
-
-				if (read_len == 0 && *read_size == 0)
-					return Z_STREAM_END;
-			}
-
-			zp->next_in = inbuf;
-			zp->avail_in = read_len;
-			*read_size += read_len;
-		}
-
-		/* decompresses input file data */
-		status = inflate(zp, Z_NO_FLUSH);
-
-		if (status == Z_STREAM_END)
-		{
-			if (feof(in))
-				break;
-			/* not reached to EOF, read again */
-		}
-		else if (status == Z_OK)
-		{
-			if (zp->avail_out == 0)
-				break;
-			/* more input needed to fill out_buf */
-		}
-		else if (status != Z_OK)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't uncompress data: %s"), strerror(errno));
-		}
-	}
-
-	/* update CRC */
-	COMP_CRC32C(*crc, outbuf, out_size - zp->avail_out);
-
-	return status;
-}
-#endif
 
 typedef union DataPage
 {
@@ -201,7 +67,7 @@ parse_page(const DataPage *page,
  */
 bool
 backup_data_file(const char *from_root, const char *to_root,
-				 pgFile *file, const XLogRecPtr *lsn, bool compress)
+				 pgFile *file, const XLogRecPtr *lsn)
 {
 	char				to_path[MAXPGPATH];
 	FILE			   *in;
@@ -212,10 +78,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	size_t				read_len;
 	int					errno_tmp;
 	pg_crc32			crc;
-#ifdef HAVE_LIBZ
-	z_stream			z;
-	char				outbuf[zlibOutSize];
-#endif
+
 	INIT_CRC32C(crc);
 
 	/* reset size summary */
@@ -251,27 +114,6 @@ backup_data_file(const char *from_root, const char *to_root,
 			to_path, strerror(errno_tmp));
 	}
 
-#ifdef HAVE_LIBZ
-	if (compress)
-	{
-		z.zalloc = Z_NULL;
-		z.zfree = Z_NULL;
-		z.opaque = Z_NULL;
-
-		if (deflateInit(&z, Z_DEFAULT_COMPRESSION) != Z_OK)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
-				z.msg);
-		}
-
-		z.avail_in = 0;
-		z.next_out = (void *) outbuf;
-		z.avail_out = zlibOutSize;
-	}
-#endif
-
 	/* confirm server version */
 	check_server_version();
 
@@ -297,8 +139,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			fclose(in);
 			fclose(out);
 			file->is_datafile = false;
-			return copy_file(from_root, to_root, file,
-							 compress ? COMPRESSION : NO_COMPRESSION);
+			return copy_file(from_root, to_root, file);
 		}
 
 		file->read_size += read_len;
@@ -310,41 +151,25 @@ backup_data_file(const char *from_root, const char *to_root,
 		upper_offset = header.hole_offset + header.hole_length;
 		upper_length = BLCKSZ - upper_offset;
 
-#ifdef HAVE_LIBZ
-		if (compress)
+		/* write data page excluding hole */
+		if (fwrite(&header, 1, sizeof(header), out) != sizeof(header) ||
+			fwrite(page.data, 1, header.hole_offset, out) != header.hole_offset ||
+			fwrite(page.data + upper_offset, 1, upper_length, out) != upper_length)
 		{
-			doDeflate(&z, sizeof(header), sizeof(outbuf), &header, outbuf, in,
-					  out, &crc, &file->write_size, Z_NO_FLUSH);
-			doDeflate(&z, header.hole_offset, sizeof(outbuf), page.data, outbuf,
-					  in, out, &crc, &file->write_size, Z_NO_FLUSH);
-			doDeflate(&z, upper_length, sizeof(outbuf),
-					  page.data + upper_offset, outbuf, in, out, &crc,
-					  &file->write_size, Z_NO_FLUSH);
-		}
-		else
-#endif
-		{
-			/* write data page excluding hole */
-			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header) ||
-				fwrite(page.data, 1, header.hole_offset, out) != header.hole_offset ||
-				fwrite(page.data + upper_offset, 1, upper_length, out) != upper_length)
-			{
-				int errno_tmp = errno;
-				/* oops */
-				fclose(in);
-				fclose(out);
-				elog(ERROR_SYSTEM, _("can't write at block %u of \"%s\": %s"),
-					blknum, to_path, strerror(errno_tmp));
-			}
-
-			/* update CRC */
-			COMP_CRC32C(crc, &header, sizeof(header));
-			COMP_CRC32C(crc, page.data, header.hole_offset);
-			COMP_CRC32C(crc, page.data + upper_offset, upper_length);
-
-			file->write_size += sizeof(header) + read_len - header.hole_length;
+			int errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR_SYSTEM, _("can't write at block %u of \"%s\": %s"),
+				blknum, to_path, strerror(errno_tmp));
 		}
 
+		/* update CRC */
+		COMP_CRC32C(crc, &header, sizeof(header));
+		COMP_CRC32C(crc, page.data, header.hole_offset);
+		COMP_CRC32C(crc, page.data + upper_offset, upper_length);
+
+		file->write_size += sizeof(header) + read_len - header.hole_length;
 	}
 	errno_tmp = errno;
 	if (!feof(in))
@@ -374,76 +199,36 @@ backup_data_file(const char *from_root, const char *to_root,
 			header.hole_offset = 0;
 			header.hole_length = 0;
 
-#ifdef HAVE_LIBZ
-			if (compress)
-			{
-				doDeflate(&z, sizeof(header), sizeof(outbuf), &header, outbuf,
-					in, out, &crc, &file->write_size, Z_NO_FLUSH);
-			}
-			else
-#endif
-			{
-				if (fwrite(&header, 1, sizeof(header), out) != sizeof(header))
-				{
-					int errno_tmp = errno;
-					/* oops */
-					fclose(in);
-					fclose(out);
-					elog(ERROR_SYSTEM,
-						 _("can't write at block %u of \"%s\": %s"),
-						 blknum, to_path, strerror(errno_tmp));
-				}
-				COMP_CRC32C(crc, &header, sizeof(header));
-				file->write_size += sizeof(header);
-			}
-		}
-
-		/* write odd size page image */
-#ifdef HAVE_LIBZ
-		if (compress)
-		{
-			doDeflate(&z, read_len, sizeof(outbuf), page.data, outbuf, in, out,
-				&crc, &file->write_size, Z_NO_FLUSH);
-		}
-		else
-#endif
-		{
-			if (fwrite(page.data, 1, read_len, out) != read_len)
+			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header))
 			{
 				int errno_tmp = errno;
 				/* oops */
 				fclose(in);
 				fclose(out);
-				elog(ERROR_SYSTEM, _("can't write at block %u of \"%s\": %s"),
-					blknum, to_path, strerror(errno_tmp));
+				elog(ERROR_SYSTEM,
+					 _("can't write at block %u of \"%s\": %s"),
+					 blknum, to_path, strerror(errno_tmp));
 			}
-
-			COMP_CRC32C(crc, page.data, read_len);
-			file->write_size += read_len;
+			COMP_CRC32C(crc, &header, sizeof(header));
+			file->write_size += sizeof(header);
 		}
 
-		file->read_size += read_len;
-	}
-
-#ifdef HAVE_LIBZ
-	if (compress)
-	{
-		if (file->read_size > 0)
+		/* write odd size page image */
+		if (fwrite(page.data, 1, read_len, out) != read_len)
 		{
-			while (doDeflate(&z, 0, sizeof(outbuf), NULL, outbuf, in, out, &crc,
-							 &file->write_size, Z_FINISH) != Z_STREAM_END)
-			{
-			}
-		}
-
-		if (deflateEnd(&z) != Z_OK)
-		{
+			int errno_tmp = errno;
+			/* oops */
 			fclose(in);
 			fclose(out);
-			elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
+			elog(ERROR_SYSTEM, _("can't write at block %u of \"%s\": %s"),
+				blknum, to_path, strerror(errno_tmp));
 		}
+
+		COMP_CRC32C(crc, page.data, read_len);
+
+		file->write_size += read_len;
+		file->read_size += read_len;
 	}
-#endif
 
 	/*
 	 * update file permission
@@ -492,27 +277,18 @@ backup_data_file(const char *from_root, const char *to_root,
 void
 restore_data_file(const char *from_root,
 				  const char *to_root,
-				  pgFile *file,
-				  bool compress)
+				  pgFile *file)
 {
 	char				to_path[MAXPGPATH];
 	FILE			   *in;
 	FILE			   *out;
 	BackupPageHeader	header;
 	BlockNumber			blknum;
-#ifdef HAVE_LIBZ
-	z_stream			z;
-	int					status;
-	char				inbuf[zlibInSize];
-	pg_crc32			crc;
-	size_t				read_size;
-#endif
 
 	/* If the file is not a datafile, just copy it. */
 	if (!file->is_datafile)
 	{
-		copy_file(from_root, to_root, file,
-			compress ? DECOMPRESSION : NO_COMPRESSION);
+		copy_file(from_root, to_root, file);
 		return;
 	}
 
@@ -541,23 +317,6 @@ restore_data_file(const char *from_root,
 			to_path, strerror(errno_tmp));
 	}
 
-#ifdef HAVE_LIBZ
-	if (compress)
-	{
-		z.zalloc = Z_NULL;
-		z.zfree = Z_NULL;
-		z.opaque = Z_NULL;
-		z.next_in = Z_NULL;
-		z.avail_in = 0;
-
-		if (inflateInit(&z) != Z_OK)
-			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
-				z.msg);
-		INIT_CRC32C(crc);
-		read_size = 0;
-	}
-#endif
-
 	for (blknum = 0; ; blknum++)
 	{
 		size_t		read_len;
@@ -566,41 +325,22 @@ restore_data_file(const char *from_root,
 		int			upper_length;
 
 		/* read BackupPageHeader */
-#ifdef HAVE_LIBZ
-		if (compress)
+		read_len = fread(&header, 1, sizeof(header), in);
+		if (read_len != sizeof(header))
 		{
-			status = doInflate(&z, sizeof(inbuf), sizeof(header), inbuf,
-						&header, in, out, &crc, &read_size);
-			if (status == Z_STREAM_END)
+			int errno_tmp = errno;
+			if (read_len == 0 && feof(in))
+				break;		/* EOF found */
+			else if (read_len != 0 && feof(in))
 			{
-				if (z.avail_out != sizeof(header))
-					elog(ERROR_CORRUPTED, _("backup is broken header"));
-				break;
-			}
-			if (z.avail_out != 0)
-				elog(ERROR_SYSTEM, _("can't read block %u of \"%s\""),
+				elog(ERROR_CORRUPTED,
+					_("odd size page found at block %u of \"%s\""),
 					blknum, file->path);
-		}
-		else
-#endif
-		{
-			read_len = fread(&header, 1, sizeof(header), in);
-			if (read_len != sizeof(header))
+			}
+			else
 			{
-				int errno_tmp = errno;
-				if (read_len == 0 && feof(in))
-					break;		/* EOF found */
-				else if (read_len != 0 && feof(in))
-				{
-					elog(ERROR_CORRUPTED,
-						_("odd size page found at block %u of \"%s\""),
-						blknum, file->path);
-				}
-				else
-				{
-					elog(ERROR_SYSTEM, _("can't read block %u of \"%s\": %s"),
-						blknum, file->path, strerror(errno_tmp));
-				}
+				elog(ERROR_SYSTEM, _("can't read block %u of \"%s\": %s"),
+					blknum, file->path, strerror(errno_tmp));
 			}
 		}
 
@@ -617,37 +357,11 @@ restore_data_file(const char *from_root,
 		/* read lower/upper into page.data and restore hole */
 		memset(page.data + header.hole_offset, 0, header.hole_length);
 
-#ifdef HAVE_LIBZ
-		if (compress)
+		if (fread(page.data, 1, header.hole_offset, in) != header.hole_offset ||
+			fread(page.data + upper_offset, 1, upper_length, in) != upper_length)
 		{
-			elog(LOG, "\n%s() %s %d %d", __FUNCTION__, file->path, header.hole_offset, upper_length);
-			if (header.hole_offset > 0)
-			{
-				doInflate(&z, sizeof(inbuf), header.hole_offset, inbuf,
-					page.data, in, out, &crc, &read_size);
-				if (z.avail_out != 0)
-					elog(ERROR_SYSTEM, _("can't read block %u of \"%s\""),
-						blknum, file->path);
-			}
-
-			if (upper_length > 0)
-			{
-				doInflate(&z, sizeof(inbuf), upper_length, inbuf,
-					page.data + upper_offset, in, out, &crc, &read_size);
-				if (z.avail_out != 0)
-					elog(ERROR_SYSTEM, _("can't read block %u of \"%s\""),
-						blknum, file->path);
-			}
-		}
-		else
-#endif
-		{
-			if (fread(page.data, 1, header.hole_offset, in) != header.hole_offset ||
-				fread(page.data + upper_offset, 1, upper_length, in) != upper_length)
-			{
-				elog(ERROR_SYSTEM, _("can't read block %u of \"%s\": %s"),
-					blknum, file->path, strerror(errno));
-			}
+			elog(ERROR_SYSTEM, _("can't read block %u of \"%s\": %s"),
+				blknum, file->path, strerror(errno));
 		}
 
 		/*
@@ -662,11 +376,6 @@ restore_data_file(const char *from_root,
 			elog(ERROR_SYSTEM, _("can't write block %u of \"%s\": %s"),
 				blknum, file->path, strerror(errno));
 	}
-
-#ifdef HAVE_LIBZ
-	if (compress && inflateEnd(&z) != Z_OK)
-		elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
-#endif
 
 	/* update file permission */
 	if (chmod(to_path, file->mode) == -1)
@@ -683,8 +392,7 @@ restore_data_file(const char *from_root,
 }
 
 bool
-copy_file(const char *from_root, const char *to_root, pgFile *file,
-	CompressionMode mode)
+copy_file(const char *from_root, const char *to_root, pgFile *file)
 {
 	char		to_path[MAXPGPATH];
 	FILE	   *in;
@@ -694,12 +402,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	char		buf[8192];
 	struct stat	st;
 	pg_crc32	crc;
-#ifdef HAVE_LIBZ
-	z_stream	z;
-	int			status;
-	char		outbuf[zlibOutSize];
-	char		inbuf[zlibInSize];
-#endif
+
 	INIT_CRC32C(crc);
 
 	/* reset size summary */
@@ -744,93 +447,28 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 			strerror(errno));
 	}
 
-#ifdef HAVE_LIBZ
-	z.zalloc = Z_NULL;
-	z.zfree = Z_NULL;
-	z.opaque = Z_NULL;
-
-	if (mode == COMPRESSION)
-	{
-		if (deflateInit(&z, Z_DEFAULT_COMPRESSION) != Z_OK)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
-				z.msg);
-		}
-
-		z.avail_in = 0;
-		z.next_out = (void *) outbuf;
-		z.avail_out = zlibOutSize;
-	}
-	else if (mode == DECOMPRESSION)
-	{
-		z.next_in = Z_NULL;
-		z.avail_in = 0;
-		if (inflateInit(&z) != Z_OK)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't initialize compression library: %s"),
-				z.msg);
-		}
-	}
-#endif
-
 	/* copy content and calc CRC */
 	for (;;)
 	{
-#ifdef HAVE_LIBZ
-		if (mode == COMPRESSION)
+		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
+			break;
+
+		if (fwrite(buf, 1, read_len, out) != read_len)
 		{
-			if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
-				break;
-
-			doDeflate(&z, read_len, sizeof(outbuf), buf, outbuf, in, out, &crc,
-					  &file->write_size, Z_NO_FLUSH);
-			file->read_size += sizeof(buf);
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR_SYSTEM, _("can't write to \"%s\": %s"), to_path,
+				strerror(errno_tmp));
 		}
-		else if (mode == DECOMPRESSION)
-		{
-			status = doInflate(&z, sizeof(inbuf), sizeof(outbuf), inbuf, outbuf,
-						in, out, &crc, &file->read_size);
-			if (fwrite(outbuf, 1, sizeof(outbuf) - z.avail_out, out) !=
-					sizeof(outbuf) - z.avail_out)
-			{
-				errno_tmp = errno;
-				/* oops */
-				fclose(in);
-				fclose(out);
-				elog(ERROR_SYSTEM, _("can't write to \"%s\": %s"), to_path,
-					strerror(errno_tmp));
-			}
+		/* update CRC */
+		COMP_CRC32C(crc, buf, read_len);
 
-			file->write_size += sizeof(outbuf) - z.avail_out;
-			if (status == Z_STREAM_END)
-				break;
-		}
-		else
-#endif
-		{
-			if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
-				break;
-
-			if (fwrite(buf, 1, read_len, out) != read_len)
-			{
-				errno_tmp = errno;
-				/* oops */
-				fclose(in);
-				fclose(out);
-				elog(ERROR_SYSTEM, _("can't write to \"%s\": %s"), to_path,
-					strerror(errno_tmp));
-			}
-			/* update CRC */
-			COMP_CRC32C(crc, buf, read_len);
-
-			file->write_size += sizeof(buf);
-			file->read_size += sizeof(buf);
-		}
+		file->write_size += sizeof(buf);
+		file->read_size += sizeof(buf);
 	}
+
 	errno_tmp = errno;
 	if (!feof(in))
 	{
@@ -843,62 +481,22 @@ copy_file(const char *from_root, const char *to_root, pgFile *file,
 	/* copy odd part. */
 	if (read_len > 0)
 	{
-#ifdef HAVE_LIBZ
-		if (mode == COMPRESSION)
+		if (fwrite(buf, 1, read_len, out) != read_len)
 		{
-			doDeflate(&z, read_len, sizeof(outbuf), buf, outbuf, in, out, &crc,
-					  &file->write_size, Z_NO_FLUSH);
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR_SYSTEM, _("can't write to \"%s\": %s"), to_path,
+				strerror(errno_tmp));
 		}
-		else
-#endif
-		{
-			if (fwrite(buf, 1, read_len, out) != read_len)
-			{
-				errno_tmp = errno;
-				/* oops */
-				fclose(in);
-				fclose(out);
-				elog(ERROR_SYSTEM, _("can't write to \"%s\": %s"), to_path,
-					strerror(errno_tmp));
-			}
-			/* update CRC */
-			COMP_CRC32C(crc, buf, read_len);
+		/* update CRC */
+		COMP_CRC32C(crc, buf, read_len);
 
-			file->write_size += read_len;
-		}
-
+		file->write_size += read_len;
 		file->read_size += read_len;
 	}
 
-#ifdef HAVE_LIBZ
-	if (mode == COMPRESSION)
-	{
-		if (file->read_size > 0)
-		{
-			while (doDeflate(&z, 0, sizeof(outbuf), NULL, outbuf, in, out, &crc,
-							 &file->write_size, Z_FINISH) != Z_STREAM_END)
-			{
-			}
-		}
-
-		if (deflateEnd(&z) != Z_OK)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
-		}
-	}
-	else if (mode == DECOMPRESSION)
-	{
-		if (inflateEnd(&z) != Z_OK)
-		{
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, _("can't close compression stream: %s"), z.msg);
-		}
-	}
-
-#endif
 	/* finish CRC calculation and store into pgFile */
 	FIN_CRC32C(crc);
 	file->crc = crc;

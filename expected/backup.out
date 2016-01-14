@@ -12,19 +12,12 @@ NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
 2
 6
 ###### BACKUP COMMAND TEST-0003 ######
-###### full backup with compression ######
-NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
-0
-1
-0
-3
-###### BACKUP COMMAND TEST-0004 ######
 ###### full backup with smooth checkpoint ######
 NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
 0
 1
 3
-###### BACKUP COMMAND TEST-0005 ######
+###### BACKUP COMMAND TEST-0004 ######
 ###### full backup with keep-data-generations and keep-data-days ######
 NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
 0
@@ -40,7 +33,7 @@ NOTICE:  pg_stop_backup complete, all required WAL segments have been archived
 Number of remaining full backups validated: 2
 Number of deleted backups : 2
 6
-###### BACKUP COMMAND TEST-0006 ######
+###### BACKUP COMMAND TEST-0005 ######
 ###### switch backup mode from page to full ######
 page-level backup without validated full backup
 INFO: database backup start

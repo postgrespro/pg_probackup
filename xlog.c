@@ -59,10 +59,7 @@ xlog_is_complete_wal(const pgFile *file)
 	if (page.lheader.xlp_xlog_blcksz != XLOG_BLCKSZ)
 		return false;
 
-	/*
-	 * check size (actual file size, not backup file size)
-	 * TODO: Support pre-compressed xlog. They might have different file sizes.
-	 */
+	/* check size (the actual file size, not backup file size) */
 	if (file->size != XLogSegSize)
 		return false;
 

@@ -11,7 +11,7 @@ init_backup
 
 echo '###### SHOW COMMAND TEST-0001 ######'
 echo '###### Status DONE and OK ######'
-pg_arman backup -B ${BACKUP_PATH} -b full -Z -p ${TEST_PGPORT} -d postgres --quiet;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0001-show.out.1 2>&1
 if grep "DONE" ${TEST_BASE}/TEST-0001-show.out.1 > /dev/null ; then
      echo 'OK: DONE status is shown properly.'
@@ -30,7 +30,7 @@ echo ''
 echo '###### SHOW COMMAND TEST-0002 ######'
 echo '###### Status RUNNING  ######'
 init_catalog
-pg_arman backup -B ${BACKUP_PATH} -b full -Z -p ${TEST_PGPORT} -d postgres --quiet &
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet &
 sleep 1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0002-show.out 2>&1
 if grep "RUNNING" ${TEST_BASE}/TEST-0002-show.out > /dev/null ; then
@@ -44,7 +44,7 @@ echo ''
 echo '###### SHOW COMMAND TEST-0003 ######'
 echo '###### Status CORRUPT ######'
 init_catalog
-pg_arman backup -B ${BACKUP_PATH} -b full -Z -p ${TEST_PGPORT} -d postgres --quiet;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
 echo 'remove a file from backup intentionally'
 rm -f `find ${BACKUP_PATH} -name postgresql.conf`
 pg_arman validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
@@ -59,10 +59,10 @@ echo ''
 echo '###### SHOW COMMAND TEST-0004 ######'
 echo '###### Status DELETED ######'
 init_catalog
-pg_arman backup -B ${BACKUP_PATH} -b full -Z -p ${TEST_PGPORT} -d postgres --quiet;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
 pg_arman validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
 DELETE_DATE=`date +"%Y-%m-%d %H:%M:%S"`
-pg_arman backup -B ${BACKUP_PATH} -b full -Z -p ${TEST_PGPORT} -d postgres --quiet;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
 pg_arman validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
 pg_arman delete ${DELETE_DATE} -B ${BACKUP_PATH} > /dev/null 2>&1;echo $?
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-show.out 2>&1

@@ -300,7 +300,6 @@ pgBackupWriteConfigSection(FILE *out, pgBackup *backup)
 	fprintf(out, "# configuration\n");
 
 	fprintf(out, "BACKUP_MODE=%s\n", modes[backup->backup_mode]);
-	fprintf(out, "COMPRESS_DATA=%s\n", BOOL_TO_STR(backup->compress_data));
 }
 
 /*
@@ -383,7 +382,6 @@ catalog_read_ini(const char *path)
 	pgut_option options[] =
 	{
 		{ 's', 0, "backup-mode"			, NULL, SOURCE_ENV },
-		{ 'b', 0, "compress-data"		, NULL, SOURCE_ENV },
 		{ 'u', 0, "timelineid"			, NULL, SOURCE_ENV },
 		{ 's', 0, "start-lsn"			, NULL, SOURCE_ENV },
 		{ 's', 0, "stop-lsn"			, NULL, SOURCE_ENV },
@@ -407,7 +405,6 @@ catalog_read_ini(const char *path)
 
 	i = 0;
 	options[i++].var = &backup_mode;
-	options[i++].var = &backup->compress_data;
 	options[i++].var = &backup->tli;
 	options[i++].var = &start_lsn;
 	options[i++].var = &stop_lsn;
@@ -550,7 +547,6 @@ void
 catalog_init_config(pgBackup *backup)
 {
 	backup->backup_mode = BACKUP_MODE_INVALID;
-	backup->compress_data = false;
 	backup->status = BACKUP_STATUS_INVALID;
 	backup->tli = 0;
 	backup->start_lsn = 0;

@@ -29,7 +29,6 @@ It proposes the following features:
 - Recovery from backup with just one command, with customized targets
   to facilitate the use of PITR.
 - Support for full and differential backup
-- Compression of backup files
 - Management of backups with integrated catalog
 
 == COMMANDS ==
@@ -105,7 +104,6 @@ write default configuration into ${BACKUP_PATH}/pg_arman.ini.
 	$ cat $BACKUP_PATH/pg_arman.ini
 	ARCLOG_PATH = /home/postgres/arclog
 	BACKUP_MODE = FULL
-	COMPRESS_DATA = YES
 	KEEP_DATA_GENERATIONS = 3
 	KEEP_DATA_DAYS = 120
 
@@ -159,7 +157,6 @@ When a date is specified, more details about a backup is retrieved:
 	$ pg_arman show '2011-11-27 19:15:45'
 	# configuration
 	BACKUP_MODE=FULL
-	COMPRESS_DATA=false
 	# result
 	TIMELINEID=1
 	START_LSN=0/08000020
@@ -213,9 +210,6 @@ absolute paths; relative paths are not allowed.
 *-b* _BACKUPMODE_ / *--backup-mode*=_BACKUPMODE_::
     Specify backup target files. Available options are: "full",
     "page".
-
-*-Z* / *--compress-data*::
-    Compress backup files with zlib if specified.
 
 *-C* / *--smooth-checkpoint*::
     Checkpoint is performed on every backups. If the option is specified,
@@ -318,7 +312,6 @@ variables or in configuration file as follows:
 	-B	--backup-path		BACKUP_PATH		Yes
 	-A	--arclog-path		ARCLOG_PATH		Yes
 	-b	--backup-mode		BACKUP_MODE		Yes
-	-Z	--compress-data		COMPRESS_DATA		Yes
 	-C	--smooth-checkpoint	SMOOTH_CHECKPOINT	Yes
 		--validate	        VALIDATE		Yes
 		--keep-data-generations	KEEP_DATA_GENERATIONS	Yes

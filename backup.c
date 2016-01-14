@@ -36,7 +36,7 @@ static parray	*cleanup_list;
  */
 static void backup_cleanup(bool fatal, void *userdata);
 static void backup_files(const char *from_root, const char *to_root,
-	parray *files, parray *prev_files, const XLogRecPtr *lsn, bool compress, const char *prefix);
+	parray *files, parray *prev_files, const XLogRecPtr *lsn, const char *prefix);
 static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
@@ -252,7 +252,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 		/* backup files from non-snapshot */
 		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-		backup_files(pgdata, path, files, prev_files, lsn, current.compress_data, NULL);
+		backup_files(pgdata, path, files, prev_files, lsn, NULL);
 
 		/* notify end of backup */
 		pg_stop_backup(&current);
@@ -299,7 +299,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 				/* append DB cluster to backup file list */
 				add_files(snapshot_files, mp, false, true);
 				/* backup files of DB cluster from snapshot volume */
-				backup_files(mp, path, snapshot_files, prev_files, lsn, current.compress_data, NULL);
+				backup_files(mp, path, snapshot_files, prev_files, lsn, NULL);
 				/* create file list of snapshot objects (DB cluster) */
 				create_file_list(snapshot_files, mp, DATABASE_FILE_LIST,
 								 NULL, true);
@@ -331,7 +331,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 						/* backup files of TABLESPACE from snapshot volume */
 						join_path_components(prefix, PG_TBLSPC_DIR, oid);
 						join_path_components(dest, path, prefix);
-						backup_files(mp, dest, snapshot_files, prev_files, lsn, current.compress_data, prefix);
+						backup_files(mp, dest, snapshot_files, prev_files, lsn, prefix);
 
 						/* create file list of snapshot objects (TABLESPACE) */
 						create_file_list(snapshot_files, mp, DATABASE_FILE_LIST,
@@ -375,7 +375,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 		/* backup files */
 		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-		backup_files(pgdata, path, files, prev_files, lsn, current.compress_data, NULL);
+		backup_files(pgdata, path, files, prev_files, lsn, NULL);
 
 		/* notify end of backup */
 		pg_stop_backup(&current);
@@ -432,15 +432,6 @@ do_backup(pgBackupOption bkupopt)
 	if (current.backup_mode == BACKUP_MODE_INVALID)
 		elog(ERROR_ARGS, _("Required parameter not specified: BACKUP_MODE "
 						   "(-b, --backup-mode)"));
-
-#ifndef HAVE_LIBZ
-	if (current.compress_data)
-	{
-		elog(WARNING, _("requested compression not available in this "
-						"installation. Archive will not be compressed"));
-		current.compress_data = false;
-	}
-#endif
 
 	/* Confirm data block size and xlog block size are compatible */
 	check_server_version();
@@ -832,7 +823,6 @@ backup_files(const char *from_root,
 			 parray *files,
 			 parray *prev_files,
 			 const XLogRecPtr *lsn,
-			 bool compress,
 			 const char *prefix)
 {
 	int				i;
@@ -974,9 +964,8 @@ backup_files(const char *from_root,
 
 			/* copy the file into backup */
 			if (!(file->is_datafile
-					? backup_data_file(from_root, to_root, file, lsn, compress)
-					: copy_file(from_root, to_root, file,
-								compress ? COMPRESSION : NO_COMPRESSION)))
+					? backup_data_file(from_root, to_root, file, lsn)
+					: copy_file(from_root, to_root, file)))
 			{
 				/* record as skipped file in file_xxx.txt */
 				file->write_size = BYTES_INVALID;
@@ -986,17 +975,7 @@ backup_files(const char *from_root,
 			}
 
 			if (verbose)
-			{
-				/* print compression rate */
-				if (file->write_size != file->size)
-					printf(_("compressed %lu (%.2f%% of %lu)\n"),
-						(unsigned long) file->write_size,
-						100.0 * file->write_size / file->size,
-						(unsigned long) file->size);
-				else
-					printf(_("copied %lu\n"), (unsigned long) file->write_size);
-			}
-
+				printf(_("copied %lu\n"), (unsigned long) file->write_size);
 		}
 		else
 		{

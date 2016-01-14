@@ -20,7 +20,6 @@ Common Options:
 
 Backup options:
   -b, --backup-mode=MODE    full or page
-  -Z, --compress-data       compress data backup with zlib
   -C, --smooth-checkpoint   do smooth checkpoint before backup
   --validate                validate backup after taking it
   --keep-data-generations=N keep GENERATION of full data backup
@@ -91,25 +90,20 @@ ERROR: invalid backup-mode ""
 
 ###### COMMAND OPTION TEST-0009 ######
 ###### invalid value in pg_arman.ini ######
-ERROR: option -Z, --compress-data should be a boolean: 'FOO'
+ERROR: option --keep-data-generations should be a 32bit signed integer: 'TRUE'
 12
 
 ###### COMMAND OPTION TEST-0010 ######
 ###### invalid value in pg_arman.ini ######
-ERROR: option --keep-data-generations should be a 32bit signed integer: 'TRUE'
-12
-
-###### COMMAND OPTION TEST-0011 ######
-###### invalid value in pg_arman.ini ######
 ERROR: option -C, --smooth-checkpoint should be a boolean: 'FOO'
 12
 
-###### COMMAND OPTION TEST-0012 ######
+###### COMMAND OPTION TEST-0011 ######
 ###### invalid option in pg_arman.ini ######
 ERROR: invalid option "TIMELINEID"
 12
 
-###### COMMAND OPTION TEST-0013 ######
+###### COMMAND OPTION TEST-0012 ######
 ###### check priority of several pg_arman.ini files ######
 ERROR: invalid backup-mode "ENV_PATH"
 12

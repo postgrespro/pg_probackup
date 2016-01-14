@@ -148,14 +148,6 @@ do_restore(const char *target_time,
 			base_backup->status != BACKUP_STATUS_OK)
 			continue;
 
-#ifndef HAVE_LIBZ
-		/* Make sure we won't need decompression we haven't got */
-		if (base_backup->compress_data)
-			elog(ERROR_SYSTEM,
-				_("can't restore from compressed backup (compression "
-				  "not supported in this installation)"));
-
-#endif
 		if (satisfy_timeline(timelines, base_backup) &&
 			satisfy_recovery_target(base_backup, rt))
 			goto base_backup_found;
@@ -359,7 +351,7 @@ restore_database(pgBackup *backup)
 
 		/* restore file */
 		if (!check)
-			restore_data_file(from_root, pgdata, file, backup->compress_data);
+			restore_data_file(from_root, pgdata, file);
 
 		/* print size of restored file */
 		if (verbose && !check)

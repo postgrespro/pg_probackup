@@ -59,7 +59,6 @@ static pgut_option options[] =
 	{ 'b', 'c', "check",		&check },
 	/* backup options */
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
-	{ 'b', 'Z', "compress-data",		&current.compress_data,	SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
 	{ 'i',  1, "keep-data-generations", &keep_data_generations, SOURCE_ENV },
@@ -218,7 +217,6 @@ pgut_help(bool details)
 	printf(_("  -v, --verbose             output process information\n"));
 	printf(_("\nBackup options:\n"));
 	printf(_("  -b, --backup-mode=MODE    full or page\n"));
-	printf(_("  -Z, --compress-data       compress data backup with zlib\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
 	printf(_("  --validate                validate backup after taking it\n"));
 	printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));

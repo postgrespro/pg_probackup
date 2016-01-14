@@ -603,7 +603,7 @@ dir_copy_files(const char *from_root, const char *to_root)
 				printf(_("copy \"%s\"\n"),
 					file->path + strlen(from_root) + 1);
 			if (!check)
-				copy_file(from_root, to_root, file, NO_COMPRESSION);
+				copy_file(from_root, to_root, file);
 		}
 	}
 

@@ -57,32 +57,25 @@ echo ''
 echo '###### COMMAND OPTION TEST-0009 ######'
 echo '###### invalid value in pg_arman.ini ######'
 init_catalog
-echo "COMPRESS_DATA=FOO" >> ${BACKUP_PATH}/pg_arman.ini
+echo "KEEP_DATA_GENERATIONS=TRUE" >> ${BACKUP_PATH}/pg_arman.ini
 pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0010 ######'
 echo '###### invalid value in pg_arman.ini ######'
 init_catalog
-echo "KEEP_DATA_GENERATIONS=TRUE" >> ${BACKUP_PATH}/pg_arman.ini
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
-echo ''
-
-echo '###### COMMAND OPTION TEST-0011 ######'
-echo '###### invalid value in pg_arman.ini ######'
-init_catalog
 echo "SMOOTH_CHECKPOINT=FOO" >> ${BACKUP_PATH}/pg_arman.ini
 pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
 echo ''
 
-echo '###### COMMAND OPTION TEST-0012 ######'
+echo '###### COMMAND OPTION TEST-0011 ######'
 echo '###### invalid option in pg_arman.ini ######'
 init_catalog
 echo "TIMELINEID=1" >> ${BACKUP_PATH}/pg_arman.ini
 pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
 echo ''
 
-echo '###### COMMAND OPTION TEST-0013 ######'
+echo '###### COMMAND OPTION TEST-0012 ######'
 echo '###### check priority of several pg_arman.ini files ######'
 init_catalog
 mkdir -p ${BACKUP_PATH}/conf_path_a
