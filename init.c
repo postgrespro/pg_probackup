@@ -36,11 +36,11 @@ do_init(void)
 
 	struct dirent **dp;
 	int results;
-	if (access(backup_path, F_OK) == 0){
+	if (access(backup_path, F_OK) == 0)
+	{
 		results = scandir(backup_path, &dp, selects, NULL);
-		if(results != 0){
-			elog(ERROR, _("backup catalog already exist. and it's not empty."));
-		}
+		if (results != 0)
+			elog(ERROR, "backup catalog already exist. and it's not empty");
 	}
 
 	/* create backup catalog root directory */
@@ -64,7 +64,7 @@ do_init(void)
 	join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
-		elog(ERROR_SYSTEM, _("can't create pg_arman.ini: %s"), strerror(errno));
+		elog(ERROR_SYSTEM, "cannot create pg_arman.ini: %s", strerror(errno));
 
 	/* set ARCLOG_PATH refered with log_directory */
 	if (arclog_path == NULL && archive_command && archive_command[0])

@@ -91,7 +91,7 @@ extern const char  *host;
 extern const char  *port;
 extern const char  *username;
 extern char		   *password;
-extern bool			debug;
+extern bool			verbose;
 extern bool			quiet;
 
 #ifndef PGUT_NO_PROMPT

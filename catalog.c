@@ -41,7 +41,7 @@ catalog_lock(void)
 	lock_fd = open(id_path, O_RDWR);
 	if (lock_fd == -1)
 		elog(errno == ENOENT ? ERROR_CORRUPTED : ERROR_SYSTEM,
-			_("can't open file \"%s\": %s"), id_path, strerror(errno));
+			"cannot open file \"%s\": %s", id_path, strerror(errno));
 
 	ret = flock(lock_fd, LOCK_EX | LOCK_NB);	/* non-blocking */
 	if (ret == -1)
@@ -55,7 +55,7 @@ catalog_lock(void)
 		{
 			int errno_tmp = errno;
 			close(lock_fd);
-			elog(ERROR_SYSTEM, _("can't lock file \"%s\": %s"), id_path,
+			elog(ERROR_SYSTEM, "cannot lock file \"%s\": %s", id_path,
 				strerror(errno_tmp));
 		}
 	}
@@ -147,7 +147,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 	date_dir = opendir(backup_path);
 	if (date_dir == NULL)
 	{
-		elog(WARNING, _("can't open directory \"%s\": %s"), backup_path,
+		elog(WARNING, "cannot open directory \"%s\": %s", backup_path,
 			strerror(errno));
 		goto err_proc;
 	}
@@ -175,7 +175,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 		time_dir = opendir(date_path);
 		if (time_dir == NULL)
 		{
-			elog(WARNING, _("can't open directory \"%s\": %s"),
+			elog(WARNING, "cannot open directory \"%s\": %s",
 				date_ent->d_name, strerror(errno));
 			goto err_proc;
 		}
@@ -206,7 +206,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 		}
 		if (errno && errno != ENOENT)
 		{
-			elog(WARNING, _("can't read date directory \"%s\": %s"),
+			elog(WARNING, "cannot read date directory \"%s\": %s",
 				date_ent->d_name, strerror(errno));
 			goto err_proc;
 		}
@@ -215,7 +215,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 	}
 	if (errno)
 	{
-		elog(WARNING, _("can't read backup root directory \"%s\": %s"),
+		elog(WARNING, "cannot read backup root directory \"%s\": %s",
 			backup_path, strerror(errno));
 		goto err_proc;
 	}
@@ -298,7 +298,6 @@ pgBackupWriteConfigSection(FILE *out, pgBackup *backup)
 	static const char *modes[] = { "", "PAGE", "FULL"};
 
 	fprintf(out, "# configuration\n");
-
 	fprintf(out, "BACKUP_MODE=%s\n", modes[backup->backup_mode]);
 }
 
@@ -352,7 +351,7 @@ pgBackupWriteIni(pgBackup *backup)
 	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_INI_FILE);
 	fp = fopen(ini_path, "wt");
 	if (fp == NULL)
-		elog(ERROR_SYSTEM, _("can't open INI file \"%s\": %s"), ini_path,
+		elog(ERROR_SYSTEM, "cannot open INI file \"%s\": %s", ini_path,
 			strerror(errno));
 
 	/* configuration section */
@@ -396,9 +395,8 @@ catalog_read_ini(const char *path)
 		{ 0 }
 	};
 
-	if (access(path, F_OK) != 0){
+	if (access(path, F_OK) != 0)
 		return NULL;
-	}
 
 	backup = pgut_new(pgBackup);
 	catalog_init_config(backup);
@@ -434,7 +432,7 @@ catalog_read_ini(const char *path)
 		if (sscanf(start_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
 			backup->start_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
-			elog(WARNING, _("invalid START_LSN \"%s\""), start_lsn);
+			elog(WARNING, "invalid START_LSN \"%s\"", start_lsn);
 		free(start_lsn);
 	}
 
@@ -446,7 +444,7 @@ catalog_read_ini(const char *path)
 		if (sscanf(stop_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
 			backup->stop_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
-			elog(WARNING, _("invalid STOP_LSN \"%s\""), stop_lsn);
+			elog(WARNING, "invalid STOP_LSN \"%s\"", stop_lsn);
 		free(stop_lsn);
 	}
 
@@ -467,7 +465,7 @@ catalog_read_ini(const char *path)
 		else if (strcmp(status, "CORRUPT") == 0)
 			backup->status = BACKUP_STATUS_CORRUPT;
 		else
-			elog(WARNING, _("invalid STATUS \"%s\""), status);
+			elog(WARNING, "invalid STATUS \"%s\"", status);
 		free(status);
 	}
 
@@ -491,7 +489,7 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_DIFF_PAGE;
 
 	/* Backup mode is invalid, so leave with an error */
-	elog(ERROR_ARGS, _("invalid backup-mode \"%s\""), value);
+	elog(ERROR_ARGS, "invalid backup-mode \"%s\"", value);
 	return BACKUP_MODE_INVALID;
 }
 

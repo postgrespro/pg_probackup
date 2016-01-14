@@ -33,7 +33,7 @@ const char	   *host = NULL;
 const char	   *port = NULL;
 const char	   *username = NULL;
 char		   *password = NULL;
-bool			debug = false;
+bool			verbose = false;
 bool			quiet = false;
 
 #ifndef PGUT_NO_PROMPT
@@ -61,12 +61,12 @@ static const char *get_username(void);
 
 static pgut_option default_options[] =
 {
-	{ 'b', '!', "debug"		, &debug },
 	{ 's', 'd', "dbname"	, &dbname },
 	{ 's', 'h', "host"		, &host },
 	{ 's', 'p', "port"		, &port },
 	{ 'b', 'q', "quiet"		, &quiet },
 	{ 's', 'U', "username"	, &username },
+	{ 'b', 'v', "verbose"	, &verbose },
 #ifndef PGUT_NO_PROMPT
 	{ 'Y', 'w', "no-password"	, &prompt_password },
 	{ 'y', 'W', "password"		, &prompt_password },
@@ -986,8 +986,8 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, 
 	if (interrupted && !in_cleanup)
 		elog(ERROR_INTERRUPTED, "interrupted");
 
-	/* write query to elog if debug */
-	if (debug)
+	/* write query to elog if verbose */
+	if (verbose)
 	{
 		int		i;
 
@@ -1041,8 +1041,8 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 	if (interrupted && !in_cleanup)
 		elog(ERROR_INTERRUPTED, "interrupted");
 
-	/* write query to elog if debug */
-	if (debug)
+	/* write query to elog if verbose */
+	if (verbose)
 	{
 		int		i;
 
@@ -1161,7 +1161,7 @@ elog(int elevel, const char *fmt, ...)
 {
 	va_list		args;
 
-	if (!debug && elevel <= LOG)
+	if (!verbose && elevel <= LOG)
 		return;
 	if (quiet && elevel < WARNING)
 		return;
@@ -1391,7 +1391,7 @@ help(bool details)
 	if (details)
 	{
 		printf("  -q, --quiet               don't write any messages\n");
-		printf("  --debug                   debug mode\n");
+		printf("  -v, --verbose             verbose mode\n");
 	}
 	printf("  --help                    show this help, then exit\n");
 	printf("  --version                 output version information, then exit\n");

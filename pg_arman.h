@@ -197,7 +197,6 @@ extern char *pgdata;
 extern char *arclog_path;
 
 /* common configuration */
-extern bool verbose;
 extern bool check;
 
 /* current settings */

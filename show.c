@@ -27,7 +27,7 @@ do_show(pgBackupRange *range, bool show_all)
 	 */
 	if (arclog_path == NULL)
 		elog(ERROR_ARGS,
-			 _("required parameter not specified: ARCLOG_PATH (-A, --arclog-path)"));
+			 "required parameter not specified: ARCLOG_PATH (-A, --arclog-path)");
 
 	if (pgBackupRangeIsSingle(range))
 	{
@@ -38,7 +38,7 @@ do_show(pgBackupRange *range, bool show_all)
 		{
 			char timestamp[100];
 			time2iso(timestamp, lengthof(timestamp), range->begin);
-			elog(INFO, _("backup taken at \"%s\" does not exist."),
+			elog(INFO, "backup taken at \"%s\" does not exist.",
 				timestamp);
 			/* This is not error case */
 			return 0;
@@ -53,9 +53,8 @@ do_show(pgBackupRange *range, bool show_all)
 		parray *backup_list;
 
 		backup_list = catalog_get_backup_list(range);
-		if (backup_list == NULL){
-			elog(ERROR_SYSTEM, _("can't process any more."));
-		}
+		if (backup_list == NULL)
+			elog(ERROR_SYSTEM, "can't process any more.");
 
 		show_backup_list(stdout, backup_list, show_all);
 
@@ -127,7 +126,7 @@ get_parent_tli(TimeLineID child_tli)
 	if (fd == NULL)
 	{
 		if (errno != ENOENT)
-			elog(ERROR_SYSTEM, _("could not open file \"%s\": %s"), path,
+			elog(ERROR_SYSTEM, "could not open file \"%s\": %s", path,
 				strerror(errno));
 
 		return 0;
@@ -154,7 +153,7 @@ get_parent_tli(TimeLineID child_tli)
 		result = (TimeLineID) strtoul(ptr, &endptr, 0);
 		if (endptr == ptr)
 			elog(ERROR_CORRUPTED,
-					_("syntax error(timeline ID) in history file: %s"),
+					"syntax error(timeline ID) in history file: %s",
 					fline);
 	}
 

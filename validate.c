@@ -31,17 +31,19 @@ do_validate(pgBackupRange *range)
 
 	/* get backup list matches given range */
 	backup_list = catalog_get_backup_list(range);
-	if(!backup_list){
-		elog(ERROR_SYSTEM, _("can't process any more."));
-	}
+	if (!backup_list)
+		elog(ERROR_SYSTEM, "cannot process any more.");
+
 	parray_qsort(backup_list, pgBackupCompareId);
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
 
 		/* clean extra backups (switch STATUS to ERROR) */
-		if(!another_pg_arman &&
-		   (backup->status == BACKUP_STATUS_RUNNING || backup->status == BACKUP_STATUS_DELETING)){
+		if (!another_pg_arman &&
+			(backup->status == BACKUP_STATUS_RUNNING ||
+			 backup->status == BACKUP_STATUS_DELETING))
+		{
 			backup->status = BACKUP_STATUS_ERROR;
 			pgBackupWriteIni(backup);
 		}
@@ -141,29 +143,29 @@ pgBackupValidateFiles(parray *files, const char *root, bool size_only)
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		if (interrupted)
-			elog(ERROR_INTERRUPTED, _("interrupted during validate"));
+			elog(ERROR_INTERRUPTED, "interrupted during validate");
 
 		/* skipped backup while differential backup */
 		if (file->write_size == BYTES_INVALID || !S_ISREG(file->mode))
 			continue;
 
 		/* print progress */
-		elog(LOG, _("(%d/%lu) %s"), i + 1, (unsigned long) parray_num(files),
+		elog(LOG, "(%d/%lu) %s", i + 1, (unsigned long) parray_num(files),
 			get_relative_path(file->path, root));
 
 		/* always validate file size */
 		if (stat(file->path, &st) == -1)
 		{
 			if (errno == ENOENT)
-				elog(WARNING, _("backup file \"%s\" vanished"), file->path);
+				elog(WARNING, "backup file \"%s\" vanished", file->path);
 			else
-				elog(ERROR_SYSTEM, _("can't stat backup file \"%s\": %s"),
+				elog(ERROR_SYSTEM, "cannot stat backup file \"%s\": %s",
 					get_relative_path(file->path, root), strerror(errno));
 			return false;
 		}
 		if (file->write_size != st.st_size)
 		{
-			elog(WARNING, _("size of backup file \"%s\" must be %lu but %lu"),
+			elog(WARNING, "size of backup file \"%s\" must be %lu but %lu",
 				get_relative_path(file->path, root),
 				(unsigned long) file->write_size,
 				(unsigned long) st.st_size);
@@ -178,7 +180,7 @@ pgBackupValidateFiles(parray *files, const char *root, bool size_only)
 			crc = pgFileGetCRC(file);
 			if (crc != file->crc)
 			{
-				elog(WARNING, _("CRC of backup file \"%s\" must be %X but %X"),
+				elog(WARNING, "CRC of backup file \"%s\" must be %X but %X",
 					get_relative_path(file->path, root), file->crc, crc);
 				return false;
 			}

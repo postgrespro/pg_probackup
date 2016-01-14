@@ -21,20 +21,20 @@ do_delete(pgBackupRange *range)
 
 	/* DATE are always required */
 	if (!pgBackupRangeIsValid(range))
-		elog(ERROR_ARGS, _("required delete range option not specified: delete DATE"));
+		elog(ERROR_ARGS, "required delete range option not specified: delete DATE");
 
 	/* Lock backup catalog */
 	ret = catalog_lock();
 	if (ret == -1)
-		elog(ERROR_SYSTEM, _("can't lock backup catalog."));
+		elog(ERROR_SYSTEM, "can't lock backup catalog.");
 	else if (ret == 1)
 		elog(ERROR_ALREADY_RUNNING,
-			_("another pg_arman is running, stop delete."));
+			"another pg_arman is running, stop delete.");
 
 	/* Get complete list of backup */
 	backup_list = catalog_get_backup_list(NULL);
 	if (!backup_list)
-		elog(ERROR_SYSTEM, _("No backup list found, can't process any more."));
+		elog(ERROR_SYSTEM, "No backup list found, can't process any more.");
 
 	/* Find backups to be deleted */
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -46,7 +46,7 @@ do_delete(pgBackupRange *range)
 		{
 			/* check for interrupt */
 			if (interrupted)
-				elog(ERROR_INTERRUPTED, _("interrupted during delete backup"));
+				elog(ERROR_INTERRUPTED, "interrupted during delete backup");
 
 			pgBackupDeleteFiles(backup);
 			continue;
@@ -97,8 +97,8 @@ pgBackupDelete(int keep_generations, int keep_days)
 		else
 			snprintf(days_str, lengthof(days_str), "%d", keep_days);
 
-		printf(_("delete old backups (generations=%s, days=%s)\n"),
-			generations_str, days_str);
+		elog(LOG, "deleted old backups (generations=%s, days=%s)\n",
+			 generations_str, days_str);
 	}
 
 	/* Leave if an infinite generation of backups is kept */
@@ -181,7 +181,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
 
-	elog(INFO, _("delete: %s"), timestamp);
+	elog(INFO, "delete: %s", timestamp);
 
 	/*
 	 * update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
@@ -205,7 +205,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		/* print progress */
-		elog(LOG, _("delete file(%d/%lu) \"%s\"\n"), i + 1,
+		elog(LOG, "delete file(%d/%lu) \"%s\"", i + 1,
 				(unsigned long) parray_num(files), file->path);
 
 		/* skip actual deletion in check mode */
@@ -213,7 +213,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 		{
 			if (remove(file->path))
 			{
-				elog(WARNING, _("can't remove \"%s\": %s"), file->path,
+				elog(WARNING, "can't remove \"%s\": %s", file->path,
 					strerror(errno));
 				parray_walk(files, pgFileFree);
 				parray_free(files);

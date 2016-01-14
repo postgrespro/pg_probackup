@@ -202,9 +202,6 @@ absolute paths; relative paths are not allowed.
     parameters and required resources. The option is typically used with
     --verbose option to verify the operation.
 
-*-v* / *--verbose*::
-    If specified, pg_arman works in verbose mode.
-
 === BACKUP OPTIONS ===
 
 *-b* _BACKUPMODE_ / *--backup-mode*=_BACKUPMODE_::
@@ -292,8 +289,8 @@ Parameters to connect PostgreSQL server.
 *-V* / *--version*::
     Print version information, then exit.
 
-*-!* / *--debug*::
-    Show debug information.
+*-v* / *--verbose*::
+    If specified, pg_arman works in verbose mode.
 
 == PARAMETERS ==
 
@@ -357,6 +354,11 @@ are required if the value contains whitespaces. Comments should start with
 "#" and are automatically ignored. Whitespaces and tabs are ignored
 excluding values.
 
+=== Restrictions ===
+In order to work, the PostgreSQL instance on which backups are taken need
+to have data checksums enabled or to enable wal_log_hints. pg_arman is
+aimed at working with PostgreSQL 9.5 and newer versions.
+
 === EXIT CODE ===
 pg_arman returns exit codes for each error status.
 
@@ -382,7 +384,7 @@ pg_arman returns exit codes for each error status.
 	26	ERROR_PID_BROKEN	postmaster.pid is broken
 
 == AUTHOR ==
-pg_arman is a fork of pg_arman that was originally written by NTT, now developed
-and maintained by Michael Paquier.
+pg_arman is a fork of pg_arman that was originally written by NTT, now
+developed and maintained by Michael Paquier.
 
 Please report bug reports at <https://github.com/michaelpq/pg_arman>.

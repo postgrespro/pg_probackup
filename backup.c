@@ -78,9 +78,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* Block backup operations on a standby */
 	if (pg_is_standby())
-		elog(ERROR_SYSTEM, _("Backup cannot run on a standby."));
+		elog(ERROR_SYSTEM, "Backup cannot run on a standby.");
 
-	elog(INFO, _("database backup start"));
+	elog(INFO, "database backup start");
 
 	/* Initialize size summary */
 	current.data_bytes = 0;
@@ -102,9 +102,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
-			elog(ERROR_SYSTEM, _("Valid full backup not found for "
+			elog(ERROR_SYSTEM, "Valid full backup not found for "
 					"differential backup. Either create a full backup "
-					"or validate existing one."));
+					"or validate existing one.");
 	}
 
 	/* notify start of backup to PostgreSQL server */
@@ -121,10 +121,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	/* Leave if no backup file */
 	if (!has_backup_label)
 	{
-		if (verbose)
-			printf(_("backup_label does not exist, stop backup\n"));
+		elog(LOG, "backup_label does not exist, stopping backup");
 		pg_stop_backup(NULL);
-		elog(ERROR_SYSTEM, _("backup_label does not exist in PGDATA."));
+		elog(ERROR_SYSTEM, "backup_label does not exist in PGDATA.");
 	}
 
 	/*
@@ -139,12 +138,12 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pgBackupGetPath(&current, path, lengthof(path), MKDIRS_SH_FILE);
 		fp = fopen(path, "wt");
 		if (fp == NULL)
-			elog(ERROR_SYSTEM, _("can't open make directory script \"%s\": %s"),
+			elog(ERROR_SYSTEM, "can't open make directory script \"%s\": %s",
 				path, strerror(errno));
 		dir_print_mkdirs_sh(fp, files, pgdata);
 		fclose(fp);
 		if (chmod(path, DIR_PERMISSION) == -1)
-			elog(ERROR_SYSTEM, _("can't change mode of \"%s\": %s"), path,
+			elog(ERROR_SYSTEM, "can't change mode of \"%s\": %s", path,
 				strerror(errno));
 	}
 
@@ -171,7 +170,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		 * Do backup only pages having larger LSN than previous backup.
 		 */
 		lsn = &prev_backup->start_lsn;
-		elog(LOG, _("backup only the page that there was of the update from LSN(%X/%08X).\n"),
+		elog(LOG, "backup only the page that there was of the update from LSN(%X/%08X)",
 			 (uint32) (*lsn >> 32), (uint32) *lsn);
 	}
 
@@ -244,7 +243,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		 * so snapshot-script output the tablespace name that not exist.
 		 */
 		if (parray_num(tblspc_list) > 0)
-			elog(ERROR_SYSTEM, _("snapshot-script output the name of tablespace that not exist"));
+			elog(ERROR_SYSTEM, "snapshot-script output the name of tablespace that not exist");
 
 		/* clear array */
 		parray_walk(tblspc_list, free);
@@ -274,17 +273,14 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 			 *       it doesn't use former value
 			 */
 			if ((spcname = strtok(item, "=")) == NULL || (mp = strtok(NULL, "\0")) == NULL)
-				elog(ERROR_SYSTEM, _("snapshot-script output illegal format: %s"), item);
+				elog(ERROR_SYSTEM, "snapshot-script output illegal format: %s", item);
 
-			if (verbose)
-			{
-				printf(_("========================================\n"));
-				printf(_("backup files from snapshot: \"%s\"\n"), spcname);
-			}
+			elog(LOG, "========================================");
+			elog(LOG, "backup files from snapshot: \"%s\"", spcname);
 
 			/* tablespace storage directory not exist */
 			if (!dirExists(mp))
-				elog(ERROR_SYSTEM, _("tablespace storage directory doesn't exist: %s"), mp);
+				elog(ERROR_SYSTEM, "tablespace storage directory doesn't exist: %s", mp);
 
 			/*
 			 * create the previous backup file list to take differential backup
@@ -354,7 +350,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		 * so snapshot-script output the tablespace name that not exist.
 		 */
 		if (parray_num(tblspcmp_list) > 0)
-			elog(ERROR_SYSTEM, _("snapshot-script output the name of tablespace that not exist"));
+			elog(ERROR_SYSTEM, "snapshot-script output the name of tablespace that not exist");
 
 		/* clear array */
 		parray_walk(tblspcmp_list, free);
@@ -401,12 +397,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 			current.data_bytes += file->size;
 	}
 
-	if (verbose)
-	{
-		printf(_("database backup completed(Backup: " INT64_FORMAT ")\n"),
-			current.data_bytes);
-		printf(_("========================================\n"));
-	}
+	elog(LOG, "database backup completed(Backup: " INT64_FORMAT ")",
+		 current.data_bytes);
+	elog(LOG, "========================================");
 
 	return files;
 }
@@ -425,13 +418,13 @@ do_backup(pgBackupOption bkupopt)
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
-		elog(ERROR_ARGS, _("Required parameter not specified: PGDATA "
-						   "(-D, --pgdata)"));
+		elog(ERROR_ARGS, "Required parameter not specified: PGDATA "
+						 "(-D, --pgdata)");
 
 	/* A backup mode is needed */
 	if (current.backup_mode == BACKUP_MODE_INVALID)
-		elog(ERROR_ARGS, _("Required parameter not specified: BACKUP_MODE "
-						   "(-b, --backup-mode)"));
+		elog(ERROR_ARGS, "Required parameter not specified: BACKUP_MODE "
+						 "(-b, --backup-mode)");
 
 	/* Confirm data block size and xlog block size are compatible */
 	check_server_version();
@@ -440,22 +433,20 @@ do_backup(pgBackupOption bkupopt)
 	in_backup = true;
 
 	/* show configuration actually used */
+	elog(LOG, "========================================");
+	elog(LOG, "backup start");
+	elog(LOG, "----------------------------------------");
 	if (verbose)
-	{
-		printf(_("========================================\n"));
-		printf(_("backup start\n"));
-		printf(_("----------------------------------------\n"));
 		pgBackupWriteConfigSection(stderr, &current);
-		printf(_("----------------------------------------\n"));
-	}
+	elog(LOG, "----------------------------------------");
 
 	/* get exclusive lock of backup catalog */
 	ret = catalog_lock();
 	if (ret == -1)
-		elog(ERROR_SYSTEM, _("can't lock backup catalog."));
+		elog(ERROR_SYSTEM, "cannot lock backup catalog");
 	else if (ret == 1)
 		elog(ERROR_ALREADY_RUNNING,
-			_("another pg_arman is running, skip this backup."));
+			"another pg_arman is running, skipping this backup");
 
 	/* initialize backup result */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -474,16 +465,15 @@ do_backup(pgBackupOption bkupopt)
 	if (!check)
 	{
 		if (pgBackupCreateDir(&current))
-			elog(ERROR_SYSTEM, _("can't create backup directory."));
+			elog(ERROR_SYSTEM, "cannot create backup directory");
 		pgBackupWriteIni(&current);
 	}
-	if (verbose)
-		printf(_("backup destination is initialized.\n"));
+	elog(LOG, "backup destination is initialized");
 
 	/* get list of backups already taken */
 	backup_list = catalog_get_backup_list(NULL);
 	if (!backup_list)
-		elog(ERROR_SYSTEM, _("can't process any more."));
+		elog(ERROR_SYSTEM, "cannot process any more");
 
 	/* set the error processing function for the backup process */
 	pgut_atexit_push(backup_cleanup, NULL);
@@ -509,12 +499,12 @@ do_backup(pgBackupOption bkupopt)
 			total_read += current.data_bytes;
 
 		if (total_read == 0)
-			printf(_("nothing to backup\n"));
+			elog(LOG, "nothing to backup");
 		else
-			printf(_("all backup completed(read: " INT64_FORMAT " write: "
-				INT64_FORMAT ")\n"),
-				total_read, current.data_bytes);
-		printf(_("========================================\n"));
+			elog(LOG, "all backup completed(read: " INT64_FORMAT " write: "
+						INT64_FORMAT ")",
+				 total_read, current.data_bytes);
+		elog(LOG, "========================================");
 	}
 
 
@@ -553,7 +543,7 @@ check_server_version(void)
 	server_version = PQserverVersion(connection);
 	if (server_version != PG_VERSION_NUM)
 		elog(ERROR_PG_INCOMPATIBLE,
-			_("server version is %d.%d.%d, must be %s or higher."),
+			"server version is %d.%d.%d, must be %s or higher.",
 			 server_version / 10000,
 			 (server_version / 100) % 100,
 			 server_version % 100, PG_MAJORVERSION);
@@ -575,13 +565,13 @@ confirm_block_size(const char *name, int blcksz)
 
 	res = execute("SELECT current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
-		elog(ERROR_PG_COMMAND, _("can't get %s: %s"),
+		elog(ERROR_PG_COMMAND, "cannot get %s: %s",
 			name, PQerrorMessage(connection));
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
 	PQclear(res);
 	if ((endp && *endp) || block_size != blcksz)
 		elog(ERROR_PG_INCOMPATIBLE,
-			_("%s(%d) is not compatible(%d expected)"),
+			"%s(%d) is not compatible(%d expected)",
 			name, block_size, blcksz);
 }
 
@@ -636,7 +626,7 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	{
 		backup->tli = tli;
 		backup->stop_lsn = lsn;
-		elog(LOG, _("%s(): tli=%X lsn=%X/%08X"),
+		elog(LOG, "%s(): tli=%X lsn=%X/%08X",
 			 __FUNCTION__, backup->tli,
 			 (uint32) (backup->stop_lsn >> 32),
 			 (uint32) backup->stop_lsn);
@@ -649,12 +639,13 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	snprintf(ready_path, lengthof(ready_path),
 		"%s/pg_xlog/archive_status/%s.ready", pgdata,
 			 file_name);
-	elog(LOG, "%s() wait for %s\n", __FUNCTION__, ready_path);
+	elog(LOG, "%s() wait for %s", __FUNCTION__, ready_path);
 
 	PQclear(res);
 
 	res = execute(TXID_CURRENT_SQL, 0, NULL);
-	if(backup != NULL){
+	if (backup != NULL)
+	{
 		get_xid(res, &backup->recovery_xid);
 		backup->recovery_time = time(NULL);
 	}
@@ -667,11 +658,11 @@ wait_for_archive(pgBackup *backup, const char *sql)
 		sleep(1);
 		if (interrupted)
 			elog(ERROR_INTERRUPTED,
-				_("interrupted during waiting for WAL archiving"));
+				"interrupted during waiting for WAL archiving");
 		try_count++;
 		if (try_count > TIMEOUT_ARCHIVE)
 			elog(ERROR_ARCHIVE_FAILED,
-				_("switched WAL could not be archived in %d seconds"),
+				"switched WAL could not be archived in %d seconds",
 				TIMEOUT_ARCHIVE);
 	}
 	elog(LOG, "%s() .ready deleted in %d try", __FUNCTION__, try_count);
@@ -712,7 +703,7 @@ get_lsn(PGresult *res, XLogRecPtr *lsn)
 
 	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR_PG_COMMAND,
-			_("result of backup command is invalid: %s"),
+			"result of backup command is invalid: %s",
 			PQerrorMessage(connection));
 
 	/*
@@ -731,15 +722,15 @@ get_lsn(PGresult *res, XLogRecPtr *lsn)
 static void
 get_xid(PGresult *res, uint32 *xid)
 {
-	if(res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
+	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR_PG_COMMAND,
-			_("result of txid_current() is invalid: %s"),
+			"result of txid_current() is invalid: %s",
 			PQerrorMessage(connection));
 
-	if(sscanf(PQgetvalue(res, 0, 0), "%u", xid) != 1)
+	if (sscanf(PQgetvalue(res, 0, 0), "%u", xid) != 1)
 	{
 		elog(ERROR_PG_COMMAND,
-			_("result of txid_current() is invalid: %s"),
+			"result of txid_current() is invalid: %s",
 			PQerrorMessage(connection));
 	}
 	elog(LOG, "%s():%s", __FUNCTION__, PQgetvalue(res, 0, 0));
@@ -795,8 +786,7 @@ backup_cleanup(bool fatal, void *userdata)
 	make_native_path(path);
 	if (fileExists(path))
 	{
-		if (verbose)
-			printf(_("backup_label exists, stop backup\n"));
+		elog(LOG, "backup_label exists, stop backup");
 		pg_stop_backup(NULL);	/* don't care stop_lsn on error case */
 	}
 
@@ -806,8 +796,7 @@ backup_cleanup(bool fatal, void *userdata)
 	 */
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
 	{
-		if (verbose)
-			printf(_("backup is running, update its status to ERROR\n"));
+		elog(LOG, "backup is running, update its status to ERROR");
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
 		pgBackupWriteIni(&current);
@@ -842,13 +831,13 @@ backup_files(const char *from_root,
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		/* If current time is rewinded, abort this backup. */
-		if(tv.tv_sec < file->mtime){
-			elog(ERROR_SYSTEM, _("current time may be rewound. Please retry with full backup mode."));
-		}
+		if (tv.tv_sec < file->mtime)
+			elog(ERROR_SYSTEM,
+				 "current time may be rewound. Please retry with full backup mode.");
 
 		/* check for interrupt */
 		if (interrupted)
-			elog(ERROR_INTERRUPTED, _("interrupted during backup"));
+			elog(ERROR_INTERRUPTED, "interrupted during backup");
 
 		/* print progress in verbose mode */
 		if (verbose)
@@ -857,10 +846,11 @@ backup_files(const char *from_root,
 			{
 				char path[MAXPGPATH];
 				join_path_components(path, prefix, file->path + strlen(from_root) + 1);
-				printf(_("(%d/%lu) %s "), i + 1, (unsigned long) parray_num(files), path);
+				elog(LOG, "(%d/%lu) %s", i + 1,
+					 (unsigned long) parray_num(files), path);
 			}
 			else
-				printf(_("(%d/%lu) %s "), i + 1, (unsigned long) parray_num(files),
+				elog(LOG, "(%d/%lu) %s", i + 1, (unsigned long) parray_num(files),
 					file->path + strlen(from_root) + 1);
 		}
 
@@ -872,16 +862,14 @@ backup_files(const char *from_root,
 			{
 				/* record as skipped file in file_xxx.txt */
 				file->write_size = BYTES_INVALID;
-				if (verbose)
-					printf(_("skip\n"));
+				elog(LOG, "skip");
 				continue;
 			}
 			else
 			{
-				if (verbose)
-					printf("\n");
+				elog(LOG, "\n");
 				elog(ERROR_SYSTEM,
-					_("can't stat backup mode. \"%s\": %s"),
+					"can't stat backup mode. \"%s\": %s",
 					file->path, strerror(errno));
 			}
 		}
@@ -892,11 +880,9 @@ backup_files(const char *from_root,
 			char dirpath[MAXPGPATH];
 
 			join_path_components(dirpath, to_root, JoinPathEnd(file->path, from_root));
-			if (!check){
+			if (!check)
 				dir_create_dir(dirpath, DIR_PERMISSION);
-			}
-			if (verbose)
-				printf(_("directory\n"));
+			elog(LOG, "directory");
 		}
 		else if (S_ISREG(buf.st_mode))
 		{
@@ -939,8 +925,7 @@ backup_files(const char *from_root,
 				{
 					/* record as skipped file in file_xxx.txt */
 					file->write_size = BYTES_INVALID;
-					if (verbose)
-						printf(_("skip\n"));
+					elog(LOG, "skip");
 					continue;
 				}
 			}
@@ -969,19 +954,14 @@ backup_files(const char *from_root,
 			{
 				/* record as skipped file in file_xxx.txt */
 				file->write_size = BYTES_INVALID;
-				if (verbose)
-					printf(_("skip\n"));
+				elog(LOG, "skip");
 				continue;
 			}
 
-			if (verbose)
-				printf(_("copied %lu\n"), (unsigned long) file->write_size);
+			elog(LOG, "copied %lu", (unsigned long) file->write_size);
 		}
 		else
-		{
-			if (verbose)
-				printf(_(" unexpected file type %d\n"), buf.st_mode);
-		}
+			elog(LOG, "unexpected file type %d", buf.st_mode);
 	}
 }
 
@@ -1061,7 +1041,7 @@ create_file_list(parray *files,
 		pgBackupGetPath(&current, path, lengthof(path), subdir);
 		fp = fopen(path, is_append ? "at" : "wt");
 		if (fp == NULL)
-			elog(ERROR_SYSTEM, _("can't open file list \"%s\": %s"), path,
+			elog(ERROR_SYSTEM, "can't open file list \"%s\": %s", path,
 				strerror(errno));
 		dir_print_file_list(fp, files, root, prefix);
 		fclose(fp);
@@ -1084,7 +1064,7 @@ get_current_timeline(void)
 
 	/* .. Then interpret it */
     if (size != PG_CONTROL_SIZE)
-		elog(ERROR_CORRUPTED, "unexpected control file size %d, expected %d\n",
+		elog(ERROR_CORRUPTED, "unexpected control file size %d, expected %d",
 			 (int) size, PG_CONTROL_SIZE);
 	memcpy(&control_file, buffer, sizeof(ControlFileData));
 

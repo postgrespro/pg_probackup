@@ -16,7 +16,6 @@ Common Options:
   -A, --arclog-path=PATH    location of archive WAL storage area
   -B, --backup-path=PATH    location of the backup storage area
   -c, --check               show what would have been done
-  -v, --verbose             output process information
 
 Backup options:
   -b, --backup-mode=MODE    full or page
@@ -44,7 +43,7 @@ Connection options:
 
 Generic options:
   -q, --quiet               don't write any messages
-  --debug                   debug mode
+  -v, --verbose             verbose mode
   --help                    show this help, then exit
   --version                 output version information, then exit
 

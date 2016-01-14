@@ -24,7 +24,6 @@ char *pgdata;
 char *arclog_path = NULL;
 
 /* common configuration */
-bool verbose = false;
 bool check = false;
 
 /* directory configuration */
@@ -55,7 +54,6 @@ static pgut_option options[] =
 	{ 's', 'A', "arclog-path",	&arclog_path,	SOURCE_ENV },
 	{ 's', 'B', "backup-path",	&backup_path,	SOURCE_ENV },
 	/* common options */
-	{ 'b', 'v', "verbose",		&verbose },
 	{ 'b', 'c', "check",		&check },
 	/* backup options */
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
@@ -129,10 +127,10 @@ main(int argc, char *argv[])
 		/* Check if backup_path is directory. */
 		struct stat stat_buf;
 		int rc = stat(backup_path, &stat_buf);
-		if(rc != -1 && !S_ISDIR(stat_buf.st_mode)){
-			/* If rc == -1,  there is no file or directory. So it's OK. */
+
+		/* If rc == -1,  there is no file or directory. So it's OK. */
+		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 			elog(ERROR_ARGS, "-B, --backup-path must be a path to directory");
-		}
 
 		join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 		pgut_readopt(path, options, ERROR_ARGS);
@@ -178,10 +176,9 @@ main(int argc, char *argv[])
 		if (backup_validate)
 			do_validate(&range);
 	}
-	else if (pg_strcasecmp(cmd, "restore") == 0){
+	else if (pg_strcasecmp(cmd, "restore") == 0)
 		return do_restore(target_time, target_xid,
 					target_inclusive, target_tli);
-	}
 	else if (pg_strcasecmp(cmd, "show") == 0)
 		return do_show(&range, show_all);
 	else if (pg_strcasecmp(cmd, "validate") == 0)
@@ -214,7 +211,6 @@ pgut_help(bool details)
 	printf(_("  -A, --arclog-path=PATH    location of archive WAL storage area\n"));
 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
 	printf(_("  -c, --check               show what would have been done\n"));
-	printf(_("  -v, --verbose             output process information\n"));
 	printf(_("\nBackup options:\n"));
 	printf(_("  -b, --backup-mode=MODE    full or page\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
@@ -261,11 +257,12 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 		&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
 		&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
 
-	if (num < 1){
+	if (num < 1)
+	{
 		if (strcmp(tmp,"") != 0)
-			elog(ERROR_ARGS, _("supplied id(%s) is invalid."), tmp);
+			elog(ERROR_ARGS, "supplied id(%s) is invalid", tmp);
 		else
-			elog(ERROR_ARGS, _("arguments are invalid. near \"%s\""), arg1);
+			elog(ERROR_ARGS, "arguments are invalid. near \"%s\"", arg1);
 	}
 
 	free(tmp);
@@ -276,9 +273,9 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 		tm.tm_mon -= 1;
 	tm.tm_isdst = -1;
 
-if(!IsValidTime(tm)){
-	elog(ERROR_ARGS, _("supplied time(%s) is invalid."), arg1);
-}
+	if (!IsValidTime(tm))
+		elog(ERROR_ARGS, "supplied time(%s) is invalid.", arg1);
+
 	range->begin = mktime(&tm);
 
 	switch (num)
