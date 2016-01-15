@@ -97,7 +97,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			return false;
 
 		elog(ERROR_SYSTEM, "cannot open backup mode file \"%s\": %s",
-			file->path, strerror(errno));
+			 file->path, strerror(errno));
 	}
 
 	/* open backup file for write  */
@@ -111,7 +111,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		int errno_tmp = errno;
 		fclose(in);
 		elog(ERROR_SYSTEM, "cannot open backup file \"%s\": %s",
-			to_path, strerror(errno_tmp));
+			 to_path, strerror(errno_tmp));
 	}
 
 	/* confirm server version */
@@ -161,7 +161,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			fclose(in);
 			fclose(out);
 			elog(ERROR_SYSTEM, "cannot write at block %u of \"%s\": %s",
-				blknum, to_path, strerror(errno_tmp));
+				 blknum, to_path, strerror(errno_tmp));
 		}
 
 		/* update CRC */
@@ -177,7 +177,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		fclose(in);
 		fclose(out);
 		elog(ERROR_SYSTEM, "cannot read backup mode file \"%s\": %s",
-			file->path, strerror(errno_tmp));
+			 file->path, strerror(errno_tmp));
 	}
 
 	/*
@@ -221,7 +221,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			fclose(in);
 			fclose(out);
 			elog(ERROR_SYSTEM, "cannot write at block %u of \"%s\": %s",
-				blknum, to_path, strerror(errno_tmp));
+				 blknum, to_path, strerror(errno_tmp));
 		}
 
 		COMP_CRC32C(crc, page.data, read_len);
@@ -240,7 +240,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		fclose(in);
 		fclose(out);
 		elog(ERROR_SYSTEM, "cannot change mode of \"%s\": %s", file->path,
-			strerror(errno_tmp));
+			 strerror(errno_tmp));
 	}
 
 	fclose(in);
@@ -259,7 +259,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	{
 		if (remove(to_path) == -1)
 			elog(ERROR_SYSTEM, "cannot remove file \"%s\": %s", to_path,
-				strerror(errno));
+				 strerror(errno));
 		return false;
 	}
 
@@ -297,7 +297,7 @@ restore_data_file(const char *from_root,
 	if (in == NULL)
 	{
 		elog(ERROR_SYSTEM, "cannot open backup file \"%s\": %s", file->path,
-			strerror(errno));
+			 strerror(errno));
 	}
 
 	/*
@@ -314,7 +314,7 @@ restore_data_file(const char *from_root,
 		int errno_tmp = errno;
 		fclose(in);
 		elog(ERROR_SYSTEM, "cannot open restore target file \"%s\": %s",
-			to_path, strerror(errno_tmp));
+			 to_path, strerror(errno_tmp));
 	}
 
 	for (blknum = 0; ; blknum++)
@@ -334,13 +334,13 @@ restore_data_file(const char *from_root,
 			else if (read_len != 0 && feof(in))
 			{
 				elog(ERROR_CORRUPTED,
-					"odd size page found at block %u of \"%s\"",
-					blknum, file->path);
+					 "odd size page found at block %u of \"%s\"",
+					 blknum, file->path);
 			}
 			else
 			{
 				elog(ERROR_SYSTEM, "cannot read block %u of \"%s\": %s",
-					blknum, file->path, strerror(errno_tmp));
+					 blknum, file->path, strerror(errno_tmp));
 			}
 		}
 
@@ -348,7 +348,7 @@ restore_data_file(const char *from_root,
 			(int) header.hole_offset + (int) header.hole_length > BLCKSZ)
 		{
 			elog(ERROR_CORRUPTED, "backup is broken at block %u",
-				blknum);
+				 blknum);
 		}
 
 		upper_offset = header.hole_offset + header.hole_length;
@@ -361,7 +361,7 @@ restore_data_file(const char *from_root,
 			fread(page.data + upper_offset, 1, upper_length, in) != upper_length)
 		{
 			elog(ERROR_SYSTEM, "cannot read block %u of \"%s\": %s",
-				blknum, file->path, strerror(errno));
+				 blknum, file->path, strerror(errno));
 		}
 
 		/*
@@ -371,10 +371,10 @@ restore_data_file(const char *from_root,
 		blknum = header.block;
 		if (fseek(out, blknum * BLCKSZ, SEEK_SET) < 0)
 			elog(ERROR_SYSTEM, "cannot seek block %u of \"%s\": %s",
-				blknum, to_path, strerror(errno));
+				 blknum, to_path, strerror(errno));
 		if (fwrite(page.data, 1, sizeof(page), out) != sizeof(page))
 			elog(ERROR_SYSTEM, "cannot write block %u of \"%s\": %s",
-				blknum, file->path, strerror(errno));
+				 blknum, file->path, strerror(errno));
 	}
 
 	/* update file permission */
@@ -384,7 +384,7 @@ restore_data_file(const char *from_root,
 		fclose(in);
 		fclose(out);
 		elog(ERROR_SYSTEM, "cannot change mode of \"%s\": %s", to_path,
-			strerror(errno_tmp));
+			 strerror(errno_tmp));
 	}
 
 	fclose(in);
@@ -421,7 +421,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 			return false;
 
 		elog(ERROR_SYSTEM, "cannot open source file \"%s\": %s", file->path,
-			strerror(errno));
+			 strerror(errno));
 	}
 
 	/* open backup file for write  */
@@ -435,7 +435,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		int errno_tmp = errno;
 		fclose(in);
 		elog(ERROR_SYSTEM, "cannot open destination file \"%s\": %s",
-			to_path, strerror(errno_tmp));
+			 to_path, strerror(errno_tmp));
 	}
 
 	/* stat source file to change mode of destination file */
@@ -444,7 +444,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		fclose(in);
 		fclose(out);
 		elog(ERROR_SYSTEM, "cannot stat \"%s\": %s", file->path,
-			strerror(errno));
+			 strerror(errno));
 	}
 
 	/* copy content and calc CRC */
@@ -460,7 +460,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 			fclose(in);
 			fclose(out);
 			elog(ERROR_SYSTEM, "cannot write to \"%s\": %s", to_path,
-				strerror(errno_tmp));
+				 strerror(errno_tmp));
 		}
 		/* update CRC */
 		COMP_CRC32C(crc, buf, read_len);
@@ -475,7 +475,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		fclose(in);
 		fclose(out);
 		elog(ERROR_SYSTEM, "cannot read backup mode file \"%s\": %s",
-			file->path, strerror(errno_tmp));
+			 file->path, strerror(errno_tmp));
 	}
 
 	/* copy odd part. */
@@ -488,7 +488,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 			fclose(in);
 			fclose(out);
 			elog(ERROR_SYSTEM, "cannot write to \"%s\": %s", to_path,
-				strerror(errno_tmp));
+				 strerror(errno_tmp));
 		}
 		/* update CRC */
 		COMP_CRC32C(crc, buf, read_len);
@@ -508,7 +508,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		fclose(in);
 		fclose(out);
 		elog(ERROR_SYSTEM, "cannot change mode of \"%s\": %s", to_path,
-			strerror(errno_tmp));
+			 strerror(errno_tmp));
 	}
 
 	fclose(in);
