@@ -155,13 +155,14 @@ base_backup_found:
 
 	/* restore following differential backup */
 	elog(LOG, "searching differential backup...");
+
 	for (i = base_index - 1; i >= 0; i--)
 	{
 		pgBackup *backup = (pgBackup *) parray_get(backups, i);
 
 		/* don't use incomplete nor different timeline backup */
 		if (backup->status != BACKUP_STATUS_OK ||
-					backup->tli != base_backup->tli)
+			backup->tli != base_backup->tli)
 			continue;
 
 		/* use database backup only */

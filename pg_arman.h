@@ -17,8 +17,10 @@
 #include "pgut/pgut.h"
 #include "access/xlogdefs.h"
 #include "access/xlog_internal.h"
+#include "catalog/pg_control.h"
 #include "utils/pg_crc.h"
 #include "parray.h"
+#include "datapagemap.h"
 
 /* Query to fetch current transaction ID */
 #define TXID_CURRENT_SQL	"SELECT txid_current();"
@@ -62,7 +64,8 @@ typedef struct pgFile
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char	path[1]; 		/* path of the file */
+	char	*path; 		/* path of the file */
+	datapagemap_t pagemap;
 } pgFile;
 
 typedef struct pgBackupRange
@@ -196,11 +199,16 @@ extern pgBackup current;
 /* exclude directory list for $PGDATA file listing */
 extern const char *pgdata_exclude[];
 
+/* backup file list from non-snapshot */
+extern parray *backup_files_list;
+
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);
 extern BackupMode parse_backup_mode(const char *value);
 extern void check_server_version(void);
 extern bool fileExists(const char *path);
+extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
+								 BlockNumber blkno);
 
 /* in restore.c */
 extern int do_restore(const char *target_time,
@@ -279,8 +287,13 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
 
+/* parsexlog.c */
+extern void extractPageMap(const char *datadir, XLogRecPtr startpoint,
+						   TimeLineID tli, XLogRecPtr endpoint);
+
 /* in util.c */
 extern TimeLineID get_current_timeline(void);
+extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);

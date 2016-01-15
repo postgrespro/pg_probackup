@@ -72,7 +72,11 @@ Backup target can be one of the following types:
 
 - Full backup, backup a whole database cluster.
 - Differential backup, backup only files or pages modified after the last
-verified backup.
+verified backup. A scan of the WAL records since the last backup up to the
+LSN position of pg_start_backup is done and all the blocks touched are
+recorded and tracked as part of the backup. As the WAL segments scanned
+need to be located in the WAL archive, the last segment after pg_start_backup
+has been run needs to be forcibly switched.
 
 It is recommended to verify backup files as soon as possible after backup.
 Unverified backup cannot be used in restore and in differential backup.

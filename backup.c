@@ -28,6 +28,9 @@ static int server_version = 0;
 
 static bool		 in_backup = false;	/* TODO: more robust logic */
 
+/* list of files contained in backup */
+parray			*backup_files_list;
+
 /*
  * Backup routines
  */
@@ -48,6 +51,7 @@ static void create_file_list(parray *files,
 							 const char *subdir,
 							 const char *prefix,
 							 bool is_append);
+static void wait_for_archive(pgBackup *backup, const char *sql);
 
 /*
  * Take a backup of database and return the list of files backed up.
@@ -56,7 +60,6 @@ static parray *
 do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 {
 	int			i;
-	parray	   *files;				/* backup file list from non-snapshot */
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
 	FILE	   *fp;
 	char		path[MAXPGPATH];
@@ -68,6 +71,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
+	pgBackup   *prev_backup = NULL;
 
 	/* Block backup operations on a standby */
 	if (pg_is_standby())
@@ -77,6 +81,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* Initialize size summary */
 	current.data_bytes = 0;
+
+	/* do some checks on the node */
+	sanityChecks();
 
 	/*
 	 * Obtain current timeline by scanning control file, theh LSN
@@ -123,8 +130,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 * List directories and symbolic links with the physical path to make
 	 * mkdirs.sh, then sort them in order of path. Omit $PGDATA.
 	 */
-	files = parray_new();
-	dir_list_file(files, pgdata, NULL, false, false);
+	backup_files_list = parray_new();
+	dir_list_file(backup_files_list, pgdata, NULL, false, false);
 
 	if (!check)
 	{
@@ -133,7 +140,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		if (fp == NULL)
 			elog(ERROR_SYSTEM, "can't open make directory script \"%s\": %s",
 				path, strerror(errno));
-		dir_print_mkdirs_sh(fp, files, pgdata);
+		dir_print_mkdirs_sh(fp, backup_files_list, pgdata);
 		fclose(fp);
 		if (chmod(path, DIR_PERMISSION) == -1)
 			elog(ERROR_SYSTEM, "can't change mode of \"%s\": %s", path,
@@ -141,9 +148,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	}
 
 	/* clear directory list */
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-	files = NULL;
+	parray_walk(backup_files_list, pgFileFree);
+	parray_free(backup_files_list);
+	backup_files_list = NULL;
 
 	/*
 	 * To take differential backup, the file list of the last completed database
@@ -151,8 +158,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
-		pgBackup   *prev_backup;
-
 		/* find last completed database backup */
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		pgBackupGetPath(prev_backup, prev_file_txt, lengthof(prev_file_txt),
@@ -167,26 +172,55 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 			 (uint32) (*lsn >> 32), (uint32) *lsn);
 	}
 
-	/* initialize backup list from non-snapshot */
-	files = parray_new();
+	/* initialize backup list */
+	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	add_files(files, pgdata, false, true);
+	add_files(backup_files_list, pgdata, false, true);
 
 	/* backup files */
 	pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-	backup_files(pgdata, path, files, prev_files, lsn, NULL);
+
+	/*
+	 * Build page mapping in differential mode. When using this mode, the
+	 * list of blocks to be taken is known by scanning the WAL segments
+	 * present in archives up to the point where start backup has begun.
+	 * However, normally this segment is not yet available in the archives,
+	 * leading to failures when building the page map. Hence before doing
+	 * anything and in order to ensure that all the segments needed for the
+	 * scan are here, for a switch of the last segment with pg_switch_xlog.
+	 */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+	{
+		/* Enforce archiving of last segment and wait for it to be here */
+		wait_for_archive(&current, "SELECT * FROM pg_switch_xlog()");
+
+		/* Now build the page map */
+		parray_qsort(backup_files_list, pgFileComparePathDesc);
+		elog(LOG, "extractPageMap");
+		elog(LOG, "current_tli:%X", current.tli);
+		elog(LOG, "prev_backup->start_lsn: %X/%X",
+			 (uint32) (prev_backup->start_lsn >> 32),
+			 (uint32) (prev_backup->start_lsn));
+		elog(LOG, "current.start_lsn: %X/%X",
+			 (uint32) (current.start_lsn >> 32),
+			 (uint32) (current.start_lsn));
+		extractPageMap(arclog_path, prev_backup->start_lsn, current.tli,
+					   current.start_lsn);
+	}
+
+	backup_files(pgdata, path, backup_files_list, prev_files, lsn, NULL);
 
 	/* notify end of backup */
 	pg_stop_backup(&current);
 
 	/* create file list */
-	create_file_list(files, pgdata, DATABASE_FILE_LIST, NULL, false);
+	create_file_list(backup_files_list, pgdata, DATABASE_FILE_LIST, NULL, false);
 
 	/* print summary of size of backup mode files */
-	for (i = 0; i < parray_num(files); i++)
+	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
-		pgFile *file = (pgFile *) parray_get(files, i);
+		pgFile *file = (pgFile *) parray_get(backup_files_list, i);
 		if (!S_ISREG(file->mode))
 			continue;
 		/*
@@ -204,7 +238,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		 current.data_bytes);
 	elog(LOG, "========================================");
 
-	return files;
+	return backup_files_list;
 }
 
 
@@ -654,7 +688,6 @@ backup_files(const char *from_root,
 			}
 			else
 			{
-				elog(LOG, "\n");
 				elog(ERROR_SYSTEM,
 					"can't stat backup mode. \"%s\": %s",
 					file->path, strerror(errno));
@@ -824,4 +857,73 @@ create_file_list(parray *files,
 		dir_print_file_list(fp, files, root, prefix);
 		fclose(fp);
 	}
+}
+
+/*
+ * A helper function to create the path of a relation file and segment.
+ *
+ * The returned path is palloc'd
+ */
+static char *
+datasegpath(RelFileNode rnode, ForkNumber forknum, BlockNumber segno)
+{
+	char	   *path;
+	char	   *segpath;
+
+	path = relpathperm(rnode, forknum);
+	if (segno > 0)
+	{
+		segpath = psprintf("%s.%u", path, segno);
+		pfree(path);
+		return segpath;
+	}
+	else
+		return path;
+}
+
+/*
+ * This routine gets called while reading WAL segments from the WAL archive,
+ * for every block that have changed in the target system. It makes note of
+ * all the changed blocks in the pagemap of the file and adds them in the
+ * things to track for the backup.
+ */
+void
+process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
+{
+	char		*path;
+	char		*rel_path;
+	BlockNumber blkno_inseg;
+	int			segno;
+	pgFile		*file_item = NULL;
+	int			j;
+
+	segno = blkno / RELSEG_SIZE;
+	blkno_inseg = blkno % RELSEG_SIZE;
+
+	rel_path = datasegpath(rnode, forknum, segno);
+	path = pg_malloc(strlen(rel_path) + strlen(pgdata) + 2);
+	sprintf(path, "%s/%s", pgdata, rel_path);
+
+	for (j = 0; j < parray_num(backup_files_list); j++)
+	{
+		pgFile *p = (pgFile *) parray_get(backup_files_list, j);
+
+		if (strcmp(p->path, path) == 0)
+		{
+			file_item = p;
+			break;
+		}
+	}
+
+	/*
+	 * If we don't have any record of this file in the file map, it means
+	 * that it's a relation that did not have much activity since the last
+	 * backup. We can safely ignore it. If it is a new relation file, the
+	 * backup would simply copy it as-is.
+	 */
+	if (file_item)
+		datapagemap_add(&file_item->pagemap, blkno_inseg);
+
+	pg_free(path);
+	pg_free(rel_path);
 }

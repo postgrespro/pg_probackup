@@ -74,10 +74,10 @@ backup_data_file(const char *from_root, const char *to_root,
 	FILE			   *out;
 	BackupPageHeader	header;
 	DataPage			page;		/* used as read buffer */
-	BlockNumber			blknum;
-	size_t				read_len;
-	int					errno_tmp;
+	BlockNumber			blknum = 0;
+	size_t				read_len = 0;
 	pg_crc32			crc;
+	off_t				offset;
 
 	INIT_CRC32C(crc);
 
@@ -117,117 +117,139 @@ backup_data_file(const char *from_root, const char *to_root,
 	/* confirm server version */
 	check_server_version();
 
-	/* read each page and write the page excluding hole */
-	for (blknum = 0;
-		 (read_len = fread(&page, 1, sizeof(page), in)) == sizeof(page);
-		 ++blknum)
-	{
-		XLogRecPtr	page_lsn;
-		int		upper_offset;
-		int		upper_length;
-
-		header.block = blknum;
-
-		/*
-		 * If a invalid data page was found, fallback to simple copy to ensure
-		 * all pages in the file don't have BackupPageHeader.
-		 */
-		if (!parse_page(&page, &page_lsn,
-						&header.hole_offset, &header.hole_length))
-		{
-			elog(LOG, "%s fall back to simple copy", file->path);
-			fclose(in);
-			fclose(out);
-			file->is_datafile = false;
-			return copy_file(from_root, to_root, file);
-		}
-
-		file->read_size += read_len;
-
-		/* if the page has not been modified since last backup, skip it */
-		if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
-			continue;
-
-		upper_offset = header.hole_offset + header.hole_length;
-		upper_length = BLCKSZ - upper_offset;
-
-		/* write data page excluding hole */
-		if (fwrite(&header, 1, sizeof(header), out) != sizeof(header) ||
-			fwrite(page.data, 1, header.hole_offset, out) != header.hole_offset ||
-			fwrite(page.data + upper_offset, 1, upper_length, out) != upper_length)
-		{
-			int errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, "cannot write at block %u of \"%s\": %s",
-				 blknum, to_path, strerror(errno_tmp));
-		}
-
-		/* update CRC */
-		COMP_CRC32C(crc, &header, sizeof(header));
-		COMP_CRC32C(crc, page.data, header.hole_offset);
-		COMP_CRC32C(crc, page.data + upper_offset, upper_length);
-
-		file->write_size += sizeof(header) + read_len - header.hole_length;
-	}
-	errno_tmp = errno;
-	if (!feof(in))
-	{
-		fclose(in);
-		fclose(out);
-		elog(ERROR_SYSTEM, "cannot read backup mode file \"%s\": %s",
-			 file->path, strerror(errno_tmp));
-	}
-
 	/*
-	 * The odd size page at the tail is probably a page exactly written now, so
-	 * write whole of it.
+	 * Read each page and write the page excluding hole. If it has been
+	 * determined that the page can be copied safely, but no page map
+	 * has been built, it means that we are in presence of a relation
+	 * file that needs to be completely scanned. If a page map is present
+	 * only scan the blocks needed. In each case, pages are copied without
+	 * their hole to ensure some basic level of compression.
 	 */
-	if (read_len > 0)
+	if (file->pagemap.bitmapsize == 0)
 	{
-		/*
-		 * If the odd size page is the 1st page, fallback to simple copy because
-		 * the file is not a datafile.
-		 * Otherwise treat the page as a datapage with no hole.
-		 */
-		if (blknum == 0)
-			file->is_datafile = false;
-		else
+		for (blknum = 0;
+			 (read_len = fread(&page, 1, sizeof(page), in)) == sizeof(page);
+			 ++blknum)
 		{
-			header.block = blknum;
-			header.hole_offset = 0;
-			header.hole_length = 0;
+			XLogRecPtr	page_lsn;
+			int		upper_offset;
+			int		upper_length;
 
-			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header))
+			header.block = blknum;
+
+			/*
+			 * If an invalid data page was found, fallback to simple copy to ensure
+			 * all pages in the file don't have BackupPageHeader.
+			 */
+			if (!parse_page(&page, &page_lsn,
+							&header.hole_offset, &header.hole_length))
+			{
+				elog(LOG, "%s fall back to simple copy", file->path);
+				fclose(in);
+				fclose(out);
+				file->is_datafile = false;
+				return copy_file(from_root, to_root, file);
+			}
+
+			file->read_size += read_len;
+
+			/* if the page has not been modified since last backup, skip it */
+			if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
+				continue;
+
+			upper_offset = header.hole_offset + header.hole_length;
+			upper_length = BLCKSZ - upper_offset;
+
+			/* write data page excluding hole */
+			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header) ||
+				fwrite(page.data, 1, header.hole_offset, out) != header.hole_offset ||
+				fwrite(page.data + upper_offset, 1, upper_length, out) != upper_length)
 			{
 				int errno_tmp = errno;
 				/* oops */
 				fclose(in);
 				fclose(out);
-				elog(ERROR_SYSTEM,
-					 "cannot write at block %u of \"%s\": %s",
+				elog(ERROR_SYSTEM, "cannot write at block %u of \"%s\": %s",
 					 blknum, to_path, strerror(errno_tmp));
 			}
+
+			/* update CRC */
 			COMP_CRC32C(crc, &header, sizeof(header));
-			file->write_size += sizeof(header);
-		}
+			COMP_CRC32C(crc, page.data, header.hole_offset);
+			COMP_CRC32C(crc, page.data + upper_offset, upper_length);
 
-		/* write odd size page image */
-		if (fwrite(page.data, 1, read_len, out) != read_len)
+			file->write_size += sizeof(header) + read_len - header.hole_length;
+		}
+	}
+	else
+	{
+		datapagemap_iterator_t *iter;
+
+		iter = datapagemap_iterate(&file->pagemap);
+		while (datapagemap_next(iter, &blknum))
 		{
-			int errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR_SYSTEM, "cannot write at block %u of \"%s\": %s",
-				 blknum, to_path, strerror(errno_tmp));
+			XLogRecPtr	page_lsn;
+			int		upper_offset;
+			int		upper_length;
+			int 	ret;
+
+			offset = blknum * BLCKSZ;
+			if (offset > 0)
+			{
+				ret = fseek(in, offset, SEEK_SET);
+				if (ret != 0)
+					elog(ERROR_PG_INCOMPATIBLE,
+						 "Can't seek in file offset: %llu ret:%i\n",
+						 (long long unsigned int) offset, ret);
+			}
+			read_len = fread(&page, 1, sizeof(page), in);
+
+			header.block = blknum;
+
+			/*
+			 * If an invalid data page was found, fallback to simple copy to ensure
+			 * all pages in the file don't have BackupPageHeader.
+			 */
+			if (!parse_page(&page, &page_lsn,
+							&header.hole_offset, &header.hole_length))
+			{
+				elog(LOG, "%s fall back to simple copy", file->path);
+				fclose(in);
+				fclose(out);
+				file->is_datafile = false;
+				return copy_file(from_root, to_root, file);
+			}
+
+			file->read_size += read_len;
+
+			/* if the page has not been modified since last backup, skip it */
+			if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
+				continue;
+
+			upper_offset = header.hole_offset + header.hole_length;
+			upper_length = BLCKSZ - upper_offset;
+
+			/* write data page excluding hole */
+			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header) ||
+				fwrite(page.data, 1, header.hole_offset, out) != header.hole_offset ||
+				fwrite(page.data + upper_offset, 1, upper_length, out) != upper_length)
+			{
+				int errno_tmp = errno;
+				/* oops */
+				fclose(in);
+				fclose(out);
+				elog(ERROR_SYSTEM, "cannot write at block %u of \"%s\": %s",
+					 blknum, to_path, strerror(errno_tmp));
+			}
+
+			/* update CRC */
+			COMP_CRC32C(crc, &header, sizeof(header));
+			COMP_CRC32C(crc, page.data, header.hole_offset);
+			COMP_CRC32C(crc, page.data + upper_offset, upper_length);
+
+			file->write_size += sizeof(header) + read_len - header.hole_length;
 		}
-
-		COMP_CRC32C(crc, page.data, read_len);
-
-		file->write_size += read_len;
-		file->read_size += read_len;
+		pg_free(iter);
 	}
 
 	/*
@@ -344,6 +366,11 @@ restore_data_file(const char *from_root,
 			}
 		}
 
+		elog(LOG, "header block: %i, blknum: %i, hole_offset: %i, BLCKSZ:%i",
+				header.block,
+				blknum,
+				header.hole_offset,
+				BLCKSZ);
 		if (header.block < blknum || header.hole_offset > BLCKSZ ||
 			(int) header.hole_offset + (int) header.hole_length > BLCKSZ)
 		{
@@ -381,6 +408,7 @@ restore_data_file(const char *from_root,
 	if (chmod(to_path, file->mode) == -1)
 	{
 		int errno_tmp = errno;
+
 		fclose(in);
 		fclose(out);
 		elog(ERROR_SYSTEM, "cannot change mode of \"%s\": %s", to_path,

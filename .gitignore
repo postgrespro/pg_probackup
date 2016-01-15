@@ -25,3 +25,8 @@
 /regression.diffs
 /regression.out
 /results
+
+# Extra files
+/datapagemap.c
+/datapagemap.h
+/xlogreader.c

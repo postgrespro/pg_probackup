@@ -97,7 +97,7 @@ pgBackupDelete(int keep_generations, int keep_days)
 		else
 			snprintf(days_str, lengthof(days_str), "%d", keep_days);
 
-		elog(LOG, "deleted old backups (generations=%s, days=%s)\n",
+		elog(LOG, "deleted old backups (generations=%s, days=%s)",
 			 generations_str, days_str);
 	}
 
