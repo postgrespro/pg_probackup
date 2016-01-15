@@ -11,16 +11,16 @@ init_backup
 
 echo '###### BACKUP COMMAND TEST-0001 ######'
 echo '###### full backup mode ######'
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0001-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0001-run.log 2>&1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0001.log 2>&1
 grep -c OK ${TEST_BASE}/TEST-0001.log
 grep OK ${TEST_BASE}/TEST-0001.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
 
 echo '###### BACKUP COMMAND TEST-0002 ######'
 echo '###### page-level backup mode ######'
-pg_arman backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
+pg_arman backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0002-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} >> ${TEST_BASE}/TEST-0002-run.log 2>&1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0002.log 2>&1
 grep -c OK ${TEST_BASE}/TEST-0002.log
 grep OK ${TEST_BASE}/TEST-0002.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
@@ -28,8 +28,8 @@ grep OK ${TEST_BASE}/TEST-0002.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
 echo '###### BACKUP COMMAND TEST-0003 ######'
 echo '###### full backup with smooth checkpoint ######'
 init_catalog
-pg_arman backup -B ${BACKUP_PATH} -b full -C -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
+pg_arman backup -B ${BACKUP_PATH} -b full -C -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0003-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} >> ${TEST_BASE}/TEST-0003-run.log 2>&1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0003.log 2>&1
 grep -c OK ${TEST_BASE}/TEST-0003.log
 grep OK ${TEST_BASE}/TEST-0003.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
@@ -37,10 +37,10 @@ grep OK ${TEST_BASE}/TEST-0003.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
 echo '###### BACKUP COMMAND TEST-0004 ######'
 echo '###### full backup with keep-data-generations and keep-data-days ######'
 init_catalog
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-before.log 2>&1
 NUM_OF_FULL_BACKUPS_BEFORE=`grep OK ${TEST_BASE}/TEST-0004-before.log | grep FULL | wc -l | sed 's/^ *//'`
 if [ ${NUM_OF_FULL_BACKUPS_BEFORE} -gt 2 ] ; then
@@ -49,12 +49,14 @@ if [ ${NUM_OF_FULL_BACKUPS_BEFORE} -gt 2 ] ; then
 else
 	echo "The number of existing full backups validated is not greater than 2."
 	echo "NG. There was something wrong in preparation of this test."
+	pg_ctl stop -m immediate -D ${PGDATA_PATH} > /dev/null 2>&1
+	exit 1
 fi
 # The actual value of NUM_OF_FULL_BACKUPS_BEFORE can vary on env, so commented out as default.
 #echo "Number of existing full backups validated: ${NUM_OF_FULL_BACKUPS_BEFORE}"
 grep OK ${TEST_BASE}/TEST-0004-before.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
-pg_arman backup -B ${BACKUP_PATH} -b full --keep-data-days=-1 --keep-data-generations=1 -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
+pg_arman backup -B ${BACKUP_PATH} -b full --keep-data-days=-1 --keep-data-generations=1 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0005-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0005-run.log 2>&1
 pg_arman show --show-all -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-after.log 2>&1
 NUM_OF_FULL_BACKUPS_AFTER=`grep OK ${TEST_BASE}/TEST-0004-after.log | grep FULL | wc -l | sed 's/^ *//'`
 echo "Number of remaining full backups validated: ${NUM_OF_FULL_BACKUPS_AFTER}"
@@ -66,15 +68,15 @@ echo '###### BACKUP COMMAND TEST-0005 ######'
 echo '###### switch backup mode from page to full ######'
 init_catalog
 echo 'page-level backup without validated full backup'
-pg_arman backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet
+pg_arman backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0006-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.log 2>&1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0005.log 2>&1
 grep OK ${TEST_BASE}/TEST-0005.log | grep FULL | wc -l | sed 's/^ *//'
 grep ERROR ${TEST_BASE}/TEST-0005.log | grep INCR | wc -l | sed 's/^ *//'
 
 # cleanup
 ## clean up the temporal test data
-pg_ctl stop -m immediate > /dev/null 2>&1
+pg_ctl stop -m immediate -D ${PGDATA_PATH} > /dev/null 2>&1
 rm -fr ${PGDATA_PATH}
 rm -fr ${BACKUP_PATH}
 rm -fr ${ARCLOG_PATH}
