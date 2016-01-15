@@ -634,7 +634,7 @@ wait_for_archive(pgBackup *backup, const char *sql)
 
 	/* As well as WAL file name */
 	XLByteToSeg(lsn, targetSegNo);
-	XLogFileName(file_name, tli, targetSegNo + 1);
+	XLogFileName(file_name, tli, targetSegNo);
 
 	snprintf(ready_path, lengthof(ready_path),
 		"%s/pg_xlog/archive_status/%s.ready", pgdata,
