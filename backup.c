@@ -27,8 +27,6 @@
 static int server_version = 0;
 
 static bool		 in_backup = false;	/* TODO: more robust logic */
-/* List of commands to execute at error processing for snapshot */
-static parray	*cleanup_list;
 
 /*
  * Backup routines
@@ -44,10 +42,7 @@ static bool pg_is_standby(void);
 static void get_lsn(PGresult *res, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
 
-static bool dirExists(const char *path);
-
 static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
-static int strCompare(const void *str1, const void *str2);
 static void create_file_list(parray *files,
 							 const char *root,
 							 const char *subdir,
@@ -174,209 +169,19 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* initialize backup list from non-snapshot */
 	files = parray_new();
-	join_path_components(path, backup_path, SNAPSHOT_SCRIPT_FILE);
 
-	/*
-	 * Check the existence of the snapshot-script.
-	 * backup use snapshot when snapshot-script exists.
-	 */
-	if (fileExists(path))
-	{
-		parray		*tblspc_list;	/* list of name of TABLESPACE backup from snapshot */
-		parray		*tblspcmp_list;	/* list of mounted directory of TABLESPACE in snapshot volume */
-		PGresult	*tblspc_res;	/* contain spcname and oid in TABLESPACE */
+	/* list files with the logical path. omit $PGDATA */
+	add_files(files, pgdata, false, true);
 
-		tblspc_list = parray_new();
-		tblspcmp_list = parray_new();
-		cleanup_list = parray_new();
+	/* backup files */
+	pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+	backup_files(pgdata, path, files, prev_files, lsn, NULL);
 
-		/*
-		 * append 'pg_tblspc' to list of directory excluded from copy.
-		 * because DB cluster and TABLESPACE are copied separately.
-		 */
-		for (i = 0; pgdata_exclude[i]; i++);	/* find first empty slot */
-		pgdata_exclude[i] = PG_TBLSPC_DIR;
+	/* notify end of backup */
+	pg_stop_backup(&current);
 
-		/*
-		 * when DB cluster is not contained in the backup from the snapshot,
-		 * DB cluster is added to the backup file list from non-snapshot.
-		 */
-		parray_qsort(tblspc_list, strCompare);
-		if (parray_bsearch(tblspc_list, "PG-DATA", strCompare) == NULL)
-			add_files(files, pgdata, false, true);
-		else
-			/* remove the detected tablespace("PG-DATA") from tblspc_list */
-			parray_rm(tblspc_list, "PG-DATA", strCompare);
-
-		/*
-		 * select the TABLESPACE backup from non-snapshot,
-		 * and append TABLESPACE to the list backup from non-snapshot.
-		 * TABLESPACE name and oid is obtained by inquiring of the database.
-		 */
-
-		reconnect();
-		tblspc_res = execute("SELECT spcname, oid FROM pg_tablespace WHERE "
-			"spcname NOT IN ('pg_default', 'pg_global') ORDER BY spcname ASC", 0, NULL);
-		disconnect();
-		for (i = 0; i < PQntuples(tblspc_res); i++)
-		{
-			char *name = PQgetvalue(tblspc_res, i, 0);
-			char *oid = PQgetvalue(tblspc_res, i, 1);
-
-			/* when not found, append it to the backup list from non-snapshot */
-			if (parray_bsearch(tblspc_list, name, strCompare) == NULL)
-			{
-				char dir[MAXPGPATH];
-				join_path_components(dir, pgdata, PG_TBLSPC_DIR);
-				join_path_components(dir, dir, oid);
-				add_files(files, dir, true, false);
-			}
-			else
-				/* remove the detected tablespace from tblspc_list */
-				parray_rm(tblspc_list, name, strCompare);
-		}
-
-		/*
-		 * tblspc_list is not empty,
-		 * so snapshot-script output the tablespace name that not exist.
-		 */
-		if (parray_num(tblspc_list) > 0)
-			elog(ERROR_SYSTEM, "snapshot-script output the name of tablespace that not exist");
-
-		/* clear array */
-		parray_walk(tblspc_list, free);
-		parray_free(tblspc_list);
-
-		/* backup files from non-snapshot */
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-		backup_files(pgdata, path, files, prev_files, lsn, NULL);
-
-		/* notify end of backup */
-		pg_stop_backup(&current);
-
-		/* create file list of non-snapshot objects */
-		create_file_list(files, pgdata, DATABASE_FILE_LIST, NULL, false);
-
-		/* backup files from snapshot volume */
-		for (i = 0; i < parray_num(tblspcmp_list); i++)
-		{
-			char *spcname;
-			char *mp = NULL;
-			char *item = (char *) parray_get(tblspcmp_list, i);
-			parray *snapshot_files = parray_new();
-
-			/*
-			 * obtain the TABLESPACE name and the directory where it is stored.
-			 * Note: strtok() replace the delimiter to '\0'. but no problem because
-			 *       it doesn't use former value
-			 */
-			if ((spcname = strtok(item, "=")) == NULL || (mp = strtok(NULL, "\0")) == NULL)
-				elog(ERROR_SYSTEM, "snapshot-script output illegal format: %s", item);
-
-			elog(LOG, "========================================");
-			elog(LOG, "backup files from snapshot: \"%s\"", spcname);
-
-			/* tablespace storage directory not exist */
-			if (!dirExists(mp))
-				elog(ERROR_SYSTEM, "tablespace storage directory doesn't exist: %s", mp);
-
-			/*
-			 * create the previous backup file list to take differential backup
-			 * from the snapshot volume.
-			 */
-			if (prev_files != NULL)
-				prev_files = dir_read_file_list(mp, prev_file_txt);
-
-			/* when DB cluster is backup from snapshot, it backup from the snapshot */
-			if (strcmp(spcname, "PG-DATA") == 0)
-			{
-				/* append DB cluster to backup file list */
-				add_files(snapshot_files, mp, false, true);
-				/* backup files of DB cluster from snapshot volume */
-				backup_files(mp, path, snapshot_files, prev_files, lsn, NULL);
-				/* create file list of snapshot objects (DB cluster) */
-				create_file_list(snapshot_files, mp, DATABASE_FILE_LIST,
-								 NULL, true);
-				/* remove the detected tablespace("PG-DATA") from tblspcmp_list */
-				parray_rm(tblspcmp_list, "PG-DATA", strCompare);
-				i--;
-			}
-			/* backup TABLESPACE from snapshot volume */
-			else
-			{
-				int j;
-
-				/*
-				 * obtain the oid from TABLESPACE information acquired by inquiring of database.
-				 * and do backup files of TABLESPACE from snapshot volume.
-				 */
-				for (j = 0; j < PQntuples(tblspc_res); j++)
-				{
-					char  dest[MAXPGPATH];
-					char  prefix[MAXPGPATH];
-					char *name = PQgetvalue(tblspc_res, j, 0);
-					char *oid = PQgetvalue(tblspc_res, j, 1);
-
-					if (strcmp(spcname, name) == 0)
-					{
-						/* append TABLESPACE to backup file list */
-						add_files(snapshot_files, mp, true, false);
-
-						/* backup files of TABLESPACE from snapshot volume */
-						join_path_components(prefix, PG_TBLSPC_DIR, oid);
-						join_path_components(dest, path, prefix);
-						backup_files(mp, dest, snapshot_files, prev_files, lsn, prefix);
-
-						/* create file list of snapshot objects (TABLESPACE) */
-						create_file_list(snapshot_files, mp, DATABASE_FILE_LIST,
-										 prefix, true);
-						/*
-						 * Remove the detected tablespace("PG-DATA") from
-						 * tblspcmp_list.
-						 */
-						parray_rm(tblspcmp_list, spcname, strCompare);
-						i--;
-						break;
-					}
-				}
-			}
-			parray_concat(files, snapshot_files);
-		}
-
-		/*
-		 * tblspcmp_list is not empty,
-		 * so snapshot-script output the tablespace name that not exist.
-		 */
-		if (parray_num(tblspcmp_list) > 0)
-			elog(ERROR_SYSTEM, "snapshot-script output the name of tablespace that not exist");
-
-		/* clear array */
-		parray_walk(tblspcmp_list, free);
-		parray_free(tblspcmp_list);
-
-
-		/* don't use 'parray_walk'. element of parray not allocate memory by malloc */
-		parray_free(cleanup_list);
-		PQclear(tblspc_res);
-	}
-	/* when snapshot-script not exist, DB cluster and TABLESPACE are backup
-	 * at same time.
-	 */
-	else
-	{
-		/* list files with the logical path. omit $PGDATA */
-		add_files(files, pgdata, false, true);
-
-		/* backup files */
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-		backup_files(pgdata, path, files, prev_files, lsn, NULL);
-
-		/* notify end of backup */
-		pg_stop_backup(&current);
-
-		/* create file list */
-		create_file_list(files, pgdata, DATABASE_FILE_LIST, NULL, false);
-	}
+	/* create file list */
+	create_file_list(files, pgdata, DATABASE_FILE_LIST, NULL, false);
 
 	/* print summary of size of backup mode files */
 	for (i = 0; i < parray_num(files); i++)
@@ -751,22 +556,6 @@ fileExists(const char *path)
 }
 
 /*
- * Return true if the path is a existing directory.
- */
-static bool
-dirExists(const char *path)
-{
-	struct stat buf;
-
-	if (stat(path, &buf) == -1 && errno == ENOENT)
-		return false;
-	else if (S_ISREG(buf.st_mode))
-		return false;
-	else
-		return true;
-}
-
-/*
  * Notify end of backup to server when "backup_label" is in the root directory
  * of the DB cluster.
  * Also update backup status to ERROR when the backup is not finished.
@@ -1009,15 +798,6 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		file->is_datafile = true;
 	}
 	parray_concat(files, list_file);
-}
-
-/*
- * Comparison function for parray_bsearch() compare the character string.
- */
-static int
-strCompare(const void *str1, const void *str2)
-{
-	return strcmp(*(char **) str1, *(char **) str2);
 }
 
 /*

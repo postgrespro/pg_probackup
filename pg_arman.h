@@ -32,17 +32,8 @@
 #define PG_RMAN_INI_FILE		"pg_arman.ini"
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
-#define SNAPSHOT_SCRIPT_FILE		"snapshot_script"
 #define PG_BACKUP_LABEL_FILE		"backup_label"
 #define PG_BLACK_LIST			"black_list"
-
-/* Snapshot script command */
-#define SNAPSHOT_FREEZE			"freeze"
-#define SNAPSHOT_UNFREEZE		"unfreeze"
-#define SNAPSHOT_SPLIT			"split"
-#define SNAPSHOT_RESYNC			"resync"
-#define SNAPSHOT_MOUNT			"mount"
-#define SNAPSHOT_UMOUNT			"umount"
 
 /* Direcotry/File permission */
 #define DIR_PERMISSION		(0700)
