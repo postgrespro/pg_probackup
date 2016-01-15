@@ -289,6 +289,7 @@ extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
 
 /* in util.c */
+extern TimeLineID get_current_timeline(void);
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);

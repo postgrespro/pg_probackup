@@ -17,7 +17,6 @@
 #include <dirent.h>
 #include <time.h>
 
-#include "catalog/pg_control.h"
 #include "libpq/pqsignal.h"
 #include "pgut/pgut-port.h"
 
@@ -54,7 +53,6 @@ static void create_file_list(parray *files,
 							 const char *subdir,
 							 const char *prefix,
 							 bool is_append);
-static TimeLineID get_current_timeline(void);
 
 /*
  * Take a backup of database and return the list of files backed up.
@@ -1046,28 +1044,4 @@ create_file_list(parray *files,
 		dir_print_file_list(fp, files, root, prefix);
 		fclose(fp);
 	}
-}
-
-/*
- * Scan control file of given cluster at obtain the current timeline
- * since last checkpoint that occurred on it.
- */
-static TimeLineID
-get_current_timeline(void)
-{
-	char	   *buffer;
-	size_t		size;
-	ControlFileData control_file;
-
-	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size);
-
-	/* .. Then interpret it */
-    if (size != PG_CONTROL_SIZE)
-		elog(ERROR_CORRUPTED, "unexpected control file size %d, expected %d",
-			 (int) size, PG_CONTROL_SIZE);
-	memcpy(&control_file, buffer, sizeof(ControlFileData));
-
-	/* Finally return the timeline wanted */
-	return control_file.checkPointCopy.ThisTimeLineID;
 }

@@ -29,7 +29,6 @@ static parray * readTimeLineHistory(TimeLineID targetTLI);
 static bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
 static bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
-static TimeLineID get_current_timeline(void);
 static TimeLineID get_fullbackup_timeline(parray *backups,
 										  const pgRecoveryTarget *rt);
 static void print_backup_lsn(const pgBackup *backup);
@@ -622,62 +621,6 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 			return true;
 	}
 	return false;
-}
-
-/* get TLI of the current database */
-static TimeLineID
-get_current_timeline(void)
-{
-	ControlFileData ControlFile;
-	int			fd;
-	char		ControlFilePath[MAXPGPATH];
-	pg_crc32	crc;
-	TimeLineID	ret;
-
-	snprintf(ControlFilePath, MAXPGPATH, "%s/global/pg_control", pgdata);
-
-	if ((fd = open(ControlFilePath, O_RDONLY | PG_BINARY, 0)) == -1)
-	{
-		elog(WARNING, "cannot open pg_controldata file \"%s\": %s",
-			ControlFilePath, strerror(errno));
-		return 0;
-	}
-
-	if (read(fd, &ControlFile, sizeof(ControlFileData)) != sizeof(ControlFileData))
-	{
-		elog(WARNING, "cannot read pg_controldata file \"%s\": %s",
-			ControlFilePath, strerror(errno));
-		return 0;
-	}
-	close(fd);
-
-	/* Check the CRC. */
-	INIT_CRC32C(crc);
-	COMP_CRC32C(crc,
-		   	(char *) &ControlFile,
-		   	offsetof(ControlFileData, crc));
-	FIN_CRC32C(crc);
-
-	if (!EQ_CRC32C(crc, ControlFile.crc))
-	{
-		elog(WARNING, "Calculated CRC checksum does not match value stored in file.\n"
-			"Either the file is corrupt, or it has a different layout than this program\n"
-			"is expecting.  The results below are untrustworthy.\n");
-		return 0;
-	}
-
-	if (ControlFile.pg_control_version % 65536 == 0 && ControlFile.pg_control_version / 65536 != 0)
-	{
-		elog(WARNING, "possible byte ordering mismatch\n"
-			"The byte ordering used to store the pg_control file might not match the one\n"
-			"used by this program.  In that case the results below would be incorrect, and\n"
-			"the PostgreSQL installation would be incompatible with this data directory.\n");
-		return 0;
-	}
-
-	ret = ControlFile.checkPointCopy.ThisTimeLineID;
-
-	return ret;
 }
 
 /* get TLI of the latest full backup */
