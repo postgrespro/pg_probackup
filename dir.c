@@ -617,27 +617,3 @@ dir_copy_files(const char *from_root, const char *to_root)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 }
-
-#ifdef NOT_USED
-void
-pgFileDump(pgFile *file, FILE *out)
-{
-	char mtime_str[100];
-
-	fprintf(out, "=================\n");
-	if (file)
-	{
-		time2iso(mtime_str, 100, file->mtime);
-		fprintf(out, "mtime=%lu(%s)\n", file->mtime, mtime_str);
-		fprintf(out, "size=" UINT64_FORMAT "\n", (uint64)file->size);
-		fprintf(out, "read_size=" UINT64_FORMAT "\n", (uint64)file->read_size);
-		fprintf(out, "write_size=" UINT64_FORMAT "\n", (uint64)file->write_size);
-		fprintf(out, "mode=0%o\n", file->mode);
-		fprintf(out, "crc=%u\n", file->crc);
-		fprintf(out, "is_datafile=%s\n", file->is_datafile ? "true" : "false");
-		fprintf(out, "linked=\"%s\"\n", file->linked ? file->linked : "nil");
-		fprintf(out, "path=\"%s\"\n", file->path);
-	}
-	fprintf(out, "=================\n");
-}
-#endif
