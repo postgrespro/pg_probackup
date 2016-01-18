@@ -31,7 +31,7 @@ do_delete(pgBackupRange *range)
 		elog(ERROR_ALREADY_RUNNING,
 			"another pg_arman is running, stop delete.");
 
-	/* Get complete list of backup */
+	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(NULL);
 	if (!backup_list)
 		elog(ERROR_SYSTEM, "No backup list found, can't process any more.");
@@ -39,7 +39,7 @@ do_delete(pgBackupRange *range)
 	/* Find backups to be deleted */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* delete backup and update status to DELETED */
 		if (do_delete)
@@ -173,8 +173,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 	parray *files;
 
 	/*
-	 * If the backup was deleted already, nothing to do and such situation
-	 * is not error.
+	 * If the backup was deleted already, there is nothing to do.
 	 */
 	if (backup->status == BACKUP_STATUS_DELETED)
 		return 0;
@@ -184,7 +183,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 	elog(INFO, "delete: %s", timestamp);
 
 	/*
-	 * update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
+	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
 	if (!check)
