@@ -178,7 +178,9 @@ You can check the "RECOVERY_XID" and "RECOVERY_TIME" which are used for
 restore option "--recovery-target-xid", "--recovery-target-time".
 
 The delete command deletes backup files not required by recovery after
-the specified date.
+the specified date. This command also cleans up in the WAL archive the
+WAL segments that are no longer needed to restore from the remaining
+backups.
 
 == OPTIONS ==
 

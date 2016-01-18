@@ -148,6 +148,10 @@ main(int argc, char *argv[])
 	if (arclog_path != NULL && !is_absolute_path(arclog_path))
 		elog(ERROR_ARGS, "-A, --arclog-path must be an absolute path");
 
+	/* Sanity checks with commands */
+	if (pg_strcasecmp(cmd, "delete") == 0 && arclog_path == NULL)
+		elog(ERROR_ARGS, "delete command needs ARCLOG_PATH (-A, --arclog-path) to be set");
+
 	/* setup exclusion list for file search */
 	for (i = 0; pgdata_exclude[i]; i++)		/* find first empty slot */
 		;

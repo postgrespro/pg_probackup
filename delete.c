@@ -9,15 +9,20 @@
 
 #include "pg_arman.h"
 
+#include <dirent.h>
+#include <unistd.h>
+
 static int pgBackupDeleteFiles(pgBackup *backup);
 
 int
 do_delete(pgBackupRange *range)
 {
-	int		i;
-	int		ret;
-	parray *backup_list;
-	bool	do_delete = false;
+	int			i;
+	int			ret;
+	parray	   *backup_list;
+	bool		do_delete = false;
+	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
+	TimeLineID	oldest_tli;
 
 	/* DATE are always required */
 	if (!pgBackupRangeIsValid(range))
@@ -56,7 +61,11 @@ do_delete(pgBackupRange *range)
 		if (backup->backup_mode >= BACKUP_MODE_FULL &&
 			backup->status == BACKUP_STATUS_OK &&
 			backup->start_time <= range->begin)
+		{
 			do_delete = true;
+			oldest_lsn = backup->start_lsn;
+			oldest_tli = backup->tli;
+		}
 	}
 
 	/* release catalog lock */
@@ -65,6 +74,80 @@ do_delete(pgBackupRange *range)
 	/* cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
+
+	/*
+	 * Delete in archive WAL segments that are not needed anymore. The oldest
+	 * segment to be kept is the first segment that the oldest full backup
+	 * found around needs to keep.
+	 */
+	if (!XLogRecPtrIsInvalid(oldest_lsn))
+	{
+		XLogSegNo   targetSegNo;
+		char		oldestSegmentNeeded[MAXFNAMELEN];
+		DIR		   *arcdir;
+		struct dirent *arcde;
+		char		wal_file[MAXPGPATH];
+		int			rc;
+
+		XLByteToSeg(oldest_lsn, targetSegNo);
+		XLogFileName(oldestSegmentNeeded, oldest_tli, targetSegNo);
+		elog(LOG, "Removing segments older than %s", oldestSegmentNeeded);
+
+		/*
+		 * Now is time to do the actual work and to remove all the segments
+		 * not needed anymore.
+		 */
+		if ((arcdir = opendir(arclog_path)) != NULL)
+		{
+			while (errno = 0, (arcde = readdir(arcdir)) != NULL)
+			{
+				/*
+				 * We ignore the timeline part of the XLOG segment identifiers in
+				 * deciding whether a segment is still needed.  This ensures that
+				 * we won't prematurely remove a segment from a parent timeline.
+				 * We could probably be a little more proactive about removing
+				 * segments of non-parent timelines, but that would be a whole lot
+				 * more complicated.
+				 *
+				 * We use the alphanumeric sorting property of the filenames to
+				 * decide which ones are earlier than the exclusiveCleanupFileName
+				 * file. Note that this means files are not removed in the order
+				 * they were originally written, in case this worries you.
+				 */
+				if ((IsXLogFileName(arcde->d_name) ||
+					 IsPartialXLogFileName(arcde->d_name)) &&
+					strcmp(arcde->d_name + 8, oldestSegmentNeeded + 8) < 0)
+				{
+					/*
+					 * Use the original file name again now, including any
+					 * extension that might have been chopped off before testing
+					 * the sequence.
+					 */
+					snprintf(wal_file, MAXPGPATH, "%s/%s",
+							 arclog_path, arcde->d_name);
+
+					rc = unlink(wal_file);
+					if (rc != 0)
+					{
+						elog(WARNING, "could not remove file \"%s\": %s",
+							 wal_file, strerror(errno));
+						break;
+					}
+					elog(LOG, "removed WAL segment \"%s\"", wal_file);
+				}
+			}
+			if (errno)
+				elog(WARNING, "could not read archive location \"%s\": %s",
+					 arclog_path, strerror(errno));
+			if (closedir(arcdir))
+				elog(WARNING, "could not close archive location \"%s\": %s",
+					 arclog_path, strerror(errno));
+		}
+		else
+			elog(WARNING, "could not open archive location \"%s\": %s",
+				 arclog_path, strerror(errno));
+	}
+
 	return 0;
 }
 
