@@ -90,24 +90,14 @@ catalog_get_backup(time_t timestamp)
 }
 
 static bool
-IsDir(const char *dirpath, const DIR *dir, const struct dirent *ent)
+IsDir(const char *dirpath, const char *entry)
 {
-#if defined(DT_DIR)
-	return ent->d_type == DT_DIR;
-#elif defined(_finddata_t)
-	/* Optimization for VC++ on Windows. */
-	return (dir->dd_dta.attrib & FILE_ATTRIBUTE_DIRECTORY) != 0;
-#else
-	/* Portable implementation because dirent.d_type is not in POSIX. */
 	char		path[MAXPGPATH];
 	struct stat	st;
 
-	strlcpy(path, dirpath, MAXPGPATH);
-	strlcat(path, "/", MAXPGPATH);
-	strlcat(path, ent->d_name, MAXPGPATH);
+	snprintf(path, MAXPGPATH, "%s/%s", dirpath, entry);
 
 	return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
-#endif
 }
 
 /*
@@ -157,7 +147,7 @@ catalog_get_backup_list(const pgBackupRange *range)
 	for (; (date_ent = readdir(date_dir)) != NULL; errno = 0)
 	{
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_path, date_dir, date_ent) || date_ent->d_name[0] == '.')
+		if (!IsDir(backup_path, date_ent->d_name) || date_ent->d_name[0] == '.')
 			continue;
 
 		/* skip online WAL backup directory */
@@ -183,20 +173,21 @@ catalog_get_backup_list(const pgBackupRange *range)
 		{
 			char ini_path[MAXPGPATH];
 
-			/* skip not-directory and hidden directories */
-			if (!IsDir(date_path, date_dir, time_ent) || time_ent->d_name[0] == '.')
+			/* skip entries that are directories and hidden directories */
+			if (!IsDir(date_path, time_ent->d_name) || time_ent->d_name[0] == '.')
 				continue;
 
 			/* If the time is out of range, skip it. */
 			if (pgBackupRangeIsValid(range) &&
-					(strcmp(begin_time, time_ent->d_name) > 0 ||
-									strcmp(end_time, time_ent->d_name) < 0))
+				(strcmp(begin_time, time_ent->d_name) > 0 ||
+				 strcmp(end_time, time_ent->d_name) < 0))
 				continue;
 
 			/* read backup information from backup.ini */
 			snprintf(ini_path, MAXPGPATH, "%s/%s/%s", date_path,
-				time_ent->d_name, BACKUP_INI_FILE);
+					 time_ent->d_name, BACKUP_INI_FILE);
 			backup = catalog_read_ini(ini_path);
+
 			/* ignore corrupted backup */
 			if (backup)
 			{
