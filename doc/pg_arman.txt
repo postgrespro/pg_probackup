@@ -343,8 +343,6 @@ pg_arman has the following restrictions.
 - If there are some unreadable files/directories in data folder of server
   WAL directory or archived WAL directory, the backup or restore will fail
   depending on the backup mode selected.
-- Differential backup is not able to take necessary files after a database
-  creation, so take a full backup once a new database is created.
 
 == DETAILS ==
 
