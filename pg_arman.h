@@ -276,9 +276,6 @@ extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileCompareMtime(const void *f1, const void *f2);
 extern int pgFileCompareMtimeDesc(const void *f1, const void *f2);
 
-/* in xlog.c */
-extern bool xlog_is_complete_wal(const pgFile *file);
-
 /* in data.c */
 extern bool backup_data_file(const char *from_root, const char *to_root,
 							 pgFile *file, const XLogRecPtr *lsn);

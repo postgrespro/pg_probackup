@@ -13,7 +13,6 @@ OBJS = backup.o \
 	status.o \
 	util.o \
 	validate.o \
-	xlog.o \
 	datapagemap.o \
 	parsexlog.o \
 	xlogreader.o \
