@@ -59,56 +59,56 @@ pg_arman 0.1
 ###### COMMAND OPTION TEST-0003 ######
 ###### backup command failure without backup path option ######
 ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)
-12
+1
 
 ###### COMMAND OPTION TEST-0004 ######
 ###### backup command failure without backup mode option ######
 ERROR: Required parameter not specified: BACKUP_MODE (-b, --backup-mode)
-12
+1
 
 ###### COMMAND OPTION TEST-0005 ######
 ###### backup command failure with invalid backup mode option ######
 ERROR: invalid backup-mode "bad"
-12
+1
 
 ###### COMMAND OPTION TEST-0006 ######
 ###### delete failure without archive path ######
 ERROR: delete command needs ARCLOG_PATH (-A, --arclog-path) to be set
-12
+1
 
 ###### COMMAND OPTION TEST-0007 ######
 ###### delete failure without DATE ######
 ERROR: required delete range option not specified: delete DATE
-12
+1
 
 ###### COMMAND OPTION TEST-0008 ######
 ###### syntax error in pg_arman.ini ######
 WARNING: syntax error in " = INFINITE"
 ERROR: Required parameter not specified: BACKUP_MODE (-b, --backup-mode)
-12
+1
 
 ###### COMMAND OPTION TEST-0009 ######
 ###### invalid value in pg_arman.ini ######
 ERROR: invalid backup-mode ""
-12
+1
 
 ###### COMMAND OPTION TEST-0010 ######
 ###### invalid value in pg_arman.ini ######
 ERROR: option --keep-data-generations should be a 32bit signed integer: 'TRUE'
-12
+1
 
 ###### COMMAND OPTION TEST-0011 ######
 ###### invalid value in pg_arman.ini ######
 ERROR: option -C, --smooth-checkpoint should be a boolean: 'FOO'
-12
+1
 
 ###### COMMAND OPTION TEST-0012 ######
 ###### invalid option in pg_arman.ini ######
 ERROR: invalid option "TIMELINEID"
-12
+1
 
 ###### COMMAND OPTION TEST-0013 ######
 ###### check priority of several pg_arman.ini files ######
 ERROR: invalid backup-mode "ENV_PATH"
-12
+1
 

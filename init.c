@@ -64,7 +64,7 @@ do_init(void)
 	join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
-		elog(ERROR_SYSTEM, "cannot create pg_arman.ini: %s", strerror(errno));
+		elog(ERROR, "cannot create pg_arman.ini: %s", strerror(errno));
 
 	/* set ARCLOG_PATH refered with log_directory */
 	if (arclog_path == NULL && archive_command && archive_command[0])

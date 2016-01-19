@@ -24,10 +24,10 @@ results/init/backup/pg_arman.ini
 ###### INIT COMMAND TEST-0004 ######
 ###### failure with backup catalog already existed ######
 ERROR: backup catalog already exist. and it's not empty
-2
+1
 
 ###### INIT COMMAND TEST-0005 ######
 ###### failure with backup catalog should be given as absolute path ######
 ERROR: -B, --backup-path must be an absolute path
-12
+1
 

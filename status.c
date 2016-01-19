@@ -46,7 +46,7 @@ get_pgpid(void)
 			return 0;
 		else
 		{
-			elog(ERROR_SYSTEM, "could not open PID file \"%s\": %s",
+			elog(ERROR, "could not open PID file \"%s\": %s",
 				 pid_file, strerror(errno));
 		}
 	}
@@ -54,10 +54,10 @@ get_pgpid(void)
 	{
 		/* Is the file empty? */
 		if (ftell(pidf) == 0 && feof(pidf))
-			elog(ERROR_SYSTEM, "the PID file \"%s\" is empty",
+			elog(ERROR, "the PID file \"%s\" is empty",
 				 pid_file);
 		else
-			elog(ERROR_SYSTEM, "invalid data in PID file \"%s\"\n",
+			elog(ERROR, "invalid data in PID file \"%s\"\n",
 				 pid_file);
 	}
 	fclose(pidf);

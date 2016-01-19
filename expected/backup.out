@@ -29,6 +29,6 @@ Number of deleted backups : 2
 ###### BACKUP COMMAND TEST-0005 ######
 ###### switch backup mode from page to full ######
 page-level backup without validated full backup
-10
+1
 0
 0

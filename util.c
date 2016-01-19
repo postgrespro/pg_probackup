@@ -25,12 +25,12 @@ checkControlFile(ControlFileData *ControlFile)
 
 	/* Then compare it */
     if (!EQ_CRC32C(crc, ControlFile->crc))
-		elog(ERROR_CORRUPTED, "Calculated CRC checksum does not match value stored in file.\n"
+		elog(ERROR, "Calculated CRC checksum does not match value stored in file.\n"
 			 "Either the file is corrupt, or it has a different layout than this program\n"
 			 "is expecting. The results below are untrustworthy.");
 
 	if (ControlFile->pg_control_version % 65536 == 0 && ControlFile->pg_control_version / 65536 != 0)
-		elog(ERROR_CORRUPTED, "possible byte ordering mismatch\n"
+		elog(ERROR, "possible byte ordering mismatch\n"
 			 "The byte ordering used to store the pg_control file might not match the one\n"
 			 "used by this program. In that case the results below would be incorrect, and\n"
 			 "the PostgreSQL installation would be incompatible with this data directory.");
@@ -43,7 +43,7 @@ static void
 digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 {
 	if (size != PG_CONTROL_SIZE)
-		elog(ERROR_PG_INCOMPATIBLE, "unexpected control file size %d, expected %d",
+		elog(ERROR, "unexpected control file size %d, expected %d",
 			 (int) size, PG_CONTROL_SIZE);
 
 	memcpy(ControlFile, src, sizeof(ControlFileData));
@@ -71,7 +71,7 @@ sanityChecks(void)
 	 */
 	if (ControlFile.data_checksum_version != PG_DATA_CHECKSUM_VERSION &&
 		!ControlFile.wal_log_hints)
-		elog(ERROR_PG_INCOMPATIBLE,
+		elog(ERROR,
 			 "target master need to use either data checksums or \"wal_log_hints = on\".");
 }
 

@@ -102,14 +102,14 @@ main(int argc, char *argv[])
 		else if (range2 == NULL)
 			range2 = argv[i];
 		else
-			elog(ERROR_ARGS, "too many arguments");
+			elog(ERROR, "too many arguments");
 	}
 
 	/* command argument (backup/restore/show/...) is required. */
 	if (cmd == NULL)
 	{
 		help(false);
-		return HELP;
+		return 1;
 	}
 
 	/* get object range argument if any */
@@ -130,27 +130,27 @@ main(int argc, char *argv[])
 
 		/* If rc == -1,  there is no file or directory. So it's OK. */
 		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-			elog(ERROR_ARGS, "-B, --backup-path must be a path to directory");
+			elog(ERROR, "-B, --backup-path must be a path to directory");
 
 		join_path_components(path, backup_path, PG_RMAN_INI_FILE);
-		pgut_readopt(path, options, ERROR_ARGS);
+		pgut_readopt(path, options, ERROR);
 	}
 
 	/* BACKUP_PATH is always required */
 	if (backup_path == NULL)
-		elog(ERROR_ARGS, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 
 	/* path must be absolute */
 	if (backup_path != NULL && !is_absolute_path(backup_path))
-		elog(ERROR_ARGS, "-B, --backup-path must be an absolute path");
+		elog(ERROR, "-B, --backup-path must be an absolute path");
 	if (pgdata != NULL && !is_absolute_path(pgdata))
-		elog(ERROR_ARGS, "-D, --pgdata must be an absolute path");
+		elog(ERROR, "-D, --pgdata must be an absolute path");
 	if (arclog_path != NULL && !is_absolute_path(arclog_path))
-		elog(ERROR_ARGS, "-A, --arclog-path must be an absolute path");
+		elog(ERROR, "-A, --arclog-path must be an absolute path");
 
 	/* Sanity checks with commands */
 	if (pg_strcasecmp(cmd, "delete") == 0 && arclog_path == NULL)
-		elog(ERROR_ARGS, "delete command needs ARCLOG_PATH (-A, --arclog-path) to be set");
+		elog(ERROR, "delete command needs ARCLOG_PATH (-A, --arclog-path) to be set");
 
 	/* setup exclusion list for file search */
 	for (i = 0; pgdata_exclude[i]; i++)		/* find first empty slot */
@@ -190,7 +190,7 @@ main(int argc, char *argv[])
 	else if (pg_strcasecmp(cmd, "delete") == 0)
 		return do_delete(&range);
 	else
-		elog(ERROR_ARGS, "invalid command \"%s\"", cmd);
+		elog(ERROR, "invalid command \"%s\"", cmd);
 
 	return 0;
 }
@@ -264,9 +264,9 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 	if (num < 1)
 	{
 		if (strcmp(tmp,"") != 0)
-			elog(ERROR_ARGS, "supplied id(%s) is invalid", tmp);
+			elog(ERROR, "supplied id(%s) is invalid", tmp);
 		else
-			elog(ERROR_ARGS, "arguments are invalid. near \"%s\"", arg1);
+			elog(ERROR, "arguments are invalid. near \"%s\"", arg1);
 	}
 
 	free(tmp);
@@ -278,7 +278,7 @@ parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
 	tm.tm_isdst = -1;
 
 	if (!IsValidTime(tm))
-		elog(ERROR_ARGS, "supplied time(%s) is invalid.", arg1);
+		elog(ERROR, "supplied time(%s) is invalid.", arg1);
 
 	range->begin = mktime(&tm);
 

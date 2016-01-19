@@ -40,7 +40,7 @@ catalog_lock(void)
 	join_path_components(id_path, backup_path, PG_RMAN_INI_FILE);
 	lock_fd = open(id_path, O_RDWR);
 	if (lock_fd == -1)
-		elog(errno == ENOENT ? ERROR_CORRUPTED : ERROR_SYSTEM,
+		elog(errno == ENOENT ? ERROR : ERROR,
 			"cannot open file \"%s\": %s", id_path, strerror(errno));
 
 	ret = flock(lock_fd, LOCK_EX | LOCK_NB);	/* non-blocking */
@@ -55,7 +55,7 @@ catalog_lock(void)
 		{
 			int errno_tmp = errno;
 			close(lock_fd);
-			elog(ERROR_SYSTEM, "cannot lock file \"%s\": %s", id_path,
+			elog(ERROR, "cannot lock file \"%s\": %s", id_path,
 				strerror(errno_tmp));
 		}
 	}
@@ -351,7 +351,7 @@ pgBackupWriteIni(pgBackup *backup)
 	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_INI_FILE);
 	fp = fopen(ini_path, "wt");
 	if (fp == NULL)
-		elog(ERROR_SYSTEM, "cannot open INI file \"%s\": %s", ini_path,
+		elog(ERROR, "cannot open INI file \"%s\": %s", ini_path,
 			strerror(errno));
 
 	/* configuration section */
@@ -416,7 +416,7 @@ catalog_read_ini(const char *path)
 	options[i++].var = &status;
 	Assert(i == lengthof(options) - 1);
 
-	pgut_readopt(path, options, ERROR_CORRUPTED);
+	pgut_readopt(path, options, ERROR);
 
 	if (backup_mode)
 	{
@@ -489,7 +489,7 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_DIFF_PAGE;
 
 	/* Backup mode is invalid, so leave with an error */
-	elog(ERROR_ARGS, "invalid backup-mode \"%s\"", value);
+	elog(ERROR, "invalid backup-mode \"%s\"", value);
 	return BACKUP_MODE_INVALID;
 }
 

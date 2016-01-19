@@ -370,24 +370,9 @@ pg_arman returns exit codes for each error status.
 
 	Code	Name			Description
 	0	SUCCESS			Operation succeeded.
-	1	HELP			Print help, then exit
-	2	ERROR			Generic error
-	3	FATAL			Exit because of repeated errors
-	4	PANIC			Unknown critical condition
-	10	ERROR_SYSTEM		I/O or system error
-	11	ERROR_NOMEM		Out of memory
-	12	ERROR_ARGS		Invalid input parameters
-	13	ERROR_INTERRUPTED	Interrupted by user (Ctrl+C etc.)
-	14	ERROR_PG_COMMAND	SQL error
-	15	ERROR_PG_CONNECT	Cannot connect to PostgreSQL server
-	20	ERROR_ARCHIVE_FAILED    Cannot archive WAL file
-	21	ERROR_NO_BACKUP		Backup file not found
-	22	ERROR_CORRUPTED		Backup file is broken
-	23	ERROR_ALREADY_RUNNING	Cannot start because another pg_arman
-					is running
-	24	ERROR_PG_INCOMPATIBLE	Version conflicted with server
-	25	ERROR_PG_RUNNING	Error due to server running
-	26	ERROR_PID_BROKEN	postmaster.pid is broken
+	1	ERROR			Generic error
+	2	FATAL			Exit because of repeated errors
+	3	PANIC			Unknown critical condition
 
 == AUTHOR ==
 pg_arman is a fork of pg_arman that was originally written by NTT, now

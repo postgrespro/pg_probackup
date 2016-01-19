@@ -26,20 +26,20 @@ do_delete(pgBackupRange *range)
 
 	/* DATE are always required */
 	if (!pgBackupRangeIsValid(range))
-		elog(ERROR_ARGS, "required delete range option not specified: delete DATE");
+		elog(ERROR, "required delete range option not specified: delete DATE");
 
 	/* Lock backup catalog */
 	ret = catalog_lock();
 	if (ret == -1)
-		elog(ERROR_SYSTEM, "can't lock backup catalog.");
+		elog(ERROR, "can't lock backup catalog.");
 	else if (ret == 1)
-		elog(ERROR_ALREADY_RUNNING,
+		elog(ERROR,
 			"another pg_arman is running, stop delete.");
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(NULL);
 	if (!backup_list)
-		elog(ERROR_SYSTEM, "No backup list found, can't process any more.");
+		elog(ERROR, "No backup list found, can't process any more.");
 
 	/* Find backups to be deleted */
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -51,7 +51,7 @@ do_delete(pgBackupRange *range)
 		{
 			/* check for interrupt */
 			if (interrupted)
-				elog(ERROR_INTERRUPTED, "interrupted during delete backup");
+				elog(ERROR, "interrupted during delete backup");
 
 			pgBackupDeleteFiles(backup);
 			continue;

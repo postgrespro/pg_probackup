@@ -41,15 +41,6 @@
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
 
-/* Exit code */
-#define ERROR_ARCHIVE_FAILED	20	/* cannot archive xlog file */
-#define ERROR_NO_BACKUP			21	/* backup was not found in the catalog */
-#define ERROR_CORRUPTED			22	/* backup catalog is corrupted */
-#define ERROR_ALREADY_RUNNING	23	/* another pg_arman is running */
-#define ERROR_PG_INCOMPATIBLE	24	/* block size is not compatible */
-#define ERROR_PG_RUNNING		25	/* PostgreSQL server is running */
-#define ERROR_PID_BROKEN		26	/* postmaster.pid file is broken */
-
 /* backup mode file */
 typedef struct pgFile
 {

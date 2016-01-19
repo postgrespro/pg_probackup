@@ -155,17 +155,9 @@ extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
 #define INFO		(-3)
 #define NOTICE		(-2)
 #define WARNING		(-1)
-#define HELP		1
-#define ERROR		2
-#define FATAL		3
-#define PANIC		4
-
-#define ERROR_SYSTEM			10	/* I/O or system error */
-#define ERROR_NOMEM				11	/* memory exhausted */
-#define ERROR_ARGS				12	/* some configurations are invalid */
-#define ERROR_INTERRUPTED		13	/* interrupted by signal */
-#define ERROR_PG_COMMAND		14	/* PostgreSQL query or command error */
-#define ERROR_PG_CONNECT		15	/* PostgreSQL connection error */
+#define ERROR		1
+#define FATAL		2
+#define PANIC		3
 
 #undef elog
 extern void

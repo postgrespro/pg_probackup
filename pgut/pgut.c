@@ -150,7 +150,7 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 	if (opt == NULL)
 	{
 		fprintf(stderr, "Try \"%s --help\" for more information.\n", PROGRAM_NAME);
-		exit_or_abort(ERROR_ARGS);
+		exit_or_abort(ERROR);
 	}
 
 	if (opt->source > src)
@@ -241,10 +241,10 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 	}
 
 	if (isprint(opt->sname))
-		elog(ERROR_ARGS, "option -%c, --%s should be %s: '%s'",
+		elog(ERROR, "option -%c, --%s should be %s: '%s'",
 			opt->sname, opt->lname, message, optarg);
 	else
-		elog(ERROR_ARGS, "option --%s should be %s: '%s'",
+		elog(ERROR, "option --%s should be %s: '%s'",
 			opt->lname, message, optarg);
 }
 
@@ -605,12 +605,12 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 		if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0)
 		{
 			help(true);
-			exit_or_abort(HELP);
+			exit_or_abort(1);
 		}
 		if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0)
 		{
 			fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
-			exit_or_abort(HELP);
+			exit_or_abort(1);
 		}
 	}
 
@@ -887,7 +887,7 @@ pgut_connect(int elevel)
 	PGconn	   *conn;
 
 	if (interrupted && !in_cleanup)
-		elog(ERROR_INTERRUPTED, "interrupted");
+		elog(ERROR, "interrupted");
 
 #ifndef PGUT_NO_PROMPT
 	if (prompt_password == YES)
@@ -940,7 +940,7 @@ reconnect_elevel(int elevel)
 void
 reconnect(void)
 {
-	reconnect_elevel(ERROR_PG_CONNECT);
+	reconnect_elevel(ERROR);
 }
 
 void
@@ -984,7 +984,7 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, 
 	PGresult   *res;
 
 	if (interrupted && !in_cleanup)
-		elog(ERROR_INTERRUPTED, "interrupted");
+		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
 	if (verbose)
@@ -1039,7 +1039,7 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 	int			res;
 
 	if (interrupted && !in_cleanup)
-		elog(ERROR_INTERRUPTED, "interrupted");
+		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
 	if (verbose)
@@ -1141,7 +1141,7 @@ execute_elevel(const char *query, int nParams, const char **params, int elevel)
 PGresult *
 execute(const char *query, int nParams, const char **params)
 {
-	return execute_elevel(query, nParams, params, ERROR_PG_COMMAND);
+	return execute_elevel(query, nParams, params, ERROR);
 }
 
 /*
@@ -1433,7 +1433,7 @@ get_username(void)
 #endif
 
 	if (ret == NULL)
-		elog(ERROR_SYSTEM, "%s: could not get current user name: %s",
+		elog(ERROR, "%s: could not get current user name: %s",
 				PROGRAM_NAME, strerror(errno));
 	return ret;
 }
@@ -1498,7 +1498,7 @@ pgut_malloc(size_t size)
 	char *ret;
 
 	if ((ret = malloc(size)) == NULL)
-		elog(ERROR_NOMEM, "could not allocate memory (%lu bytes): %s",
+		elog(ERROR, "could not allocate memory (%lu bytes): %s",
 			(unsigned long) size, strerror(errno));
 	return ret;
 }
@@ -1509,7 +1509,7 @@ pgut_realloc(void *p, size_t size)
 	char *ret;
 
 	if ((ret = realloc(p, size)) == NULL)
-		elog(ERROR_NOMEM, "could not re-allocate memory (%lu bytes): %s",
+		elog(ERROR, "could not re-allocate memory (%lu bytes): %s",
 			(unsigned long) size, strerror(errno));
 	return ret;
 }
@@ -1523,7 +1523,7 @@ pgut_strdup(const char *str)
 		return NULL;
 
 	if ((ret = strdup(str)) == NULL)
-		elog(ERROR_NOMEM, "could not duplicate string \"%s\": %s",
+		elog(ERROR, "could not duplicate string \"%s\": %s",
 			str, strerror(errno));
 	return ret;
 }
@@ -1568,7 +1568,7 @@ pgut_fopen(const char *path, const char *mode, bool missing_ok)
 		if (missing_ok && errno == ENOENT)
 			return NULL;
 
-		elog(ERROR_SYSTEM, "could not open file \"%s\": %s",
+		elog(ERROR, "could not open file \"%s\": %s",
 			path, strerror(errno));
 	}
 
@@ -1601,9 +1601,9 @@ wait_for_sockets(int nfds, fd_set *fds, struct timeval *timeout)
 		if (i < 0)
 		{
 			if (interrupted)
-				elog(ERROR_INTERRUPTED, "interrupted");
+				elog(ERROR, "interrupted");
 			else if (errno != EINTR)
-				elog(ERROR_SYSTEM, "select failed: %s", strerror(errno));
+				elog(ERROR, "select failed: %s", strerror(errno));
 		}
 		else
 			return i;

@@ -32,7 +32,7 @@ do_validate(pgBackupRange *range)
 	/* get backup list matches given range */
 	backup_list = catalog_get_backup_list(range);
 	if (!backup_list)
-		elog(ERROR_SYSTEM, "cannot process any more.");
+		elog(ERROR, "cannot process any more.");
 
 	parray_qsort(backup_list, pgBackupCompareId);
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -143,7 +143,7 @@ pgBackupValidateFiles(parray *files, const char *root, bool size_only)
 		pgFile *file = (pgFile *) parray_get(files, i);
 
 		if (interrupted)
-			elog(ERROR_INTERRUPTED, "interrupted during validate");
+			elog(ERROR, "interrupted during validate");
 
 		/* skipped backup while differential backup */
 		if (file->write_size == BYTES_INVALID || !S_ISREG(file->mode))
@@ -159,7 +159,7 @@ pgBackupValidateFiles(parray *files, const char *root, bool size_only)
 			if (errno == ENOENT)
 				elog(WARNING, "backup file \"%s\" vanished", file->path);
 			else
-				elog(ERROR_SYSTEM, "cannot stat backup file \"%s\": %s",
+				elog(ERROR, "cannot stat backup file \"%s\": %s",
 					get_relative_path(file->path, root), strerror(errno));
 			return false;
 		}

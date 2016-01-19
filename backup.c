@@ -75,7 +75,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* Block backup operations on a standby */
 	if (pg_is_standby())
-		elog(ERROR_SYSTEM, "Backup cannot run on a standby.");
+		elog(ERROR, "Backup cannot run on a standby.");
 
 	elog(INFO, "database backup start");
 
@@ -102,7 +102,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
-			elog(ERROR_SYSTEM, "Valid full backup not found for "
+			elog(ERROR, "Valid full backup not found for "
 					"differential backup. Either create a full backup "
 					"or validate existing one.");
 	}
@@ -123,7 +123,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	{
 		elog(LOG, "backup_label does not exist, stopping backup");
 		pg_stop_backup(NULL);
-		elog(ERROR_SYSTEM, "backup_label does not exist in PGDATA.");
+		elog(ERROR, "backup_label does not exist in PGDATA.");
 	}
 
 	/*
@@ -138,12 +138,12 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pgBackupGetPath(&current, path, lengthof(path), MKDIRS_SH_FILE);
 		fp = fopen(path, "wt");
 		if (fp == NULL)
-			elog(ERROR_SYSTEM, "can't open make directory script \"%s\": %s",
+			elog(ERROR, "can't open make directory script \"%s\": %s",
 				path, strerror(errno));
 		dir_print_mkdirs_sh(fp, backup_files_list, pgdata);
 		fclose(fp);
 		if (chmod(path, DIR_PERMISSION) == -1)
-			elog(ERROR_SYSTEM, "can't change mode of \"%s\": %s", path,
+			elog(ERROR, "can't change mode of \"%s\": %s", path,
 				strerror(errno));
 	}
 
@@ -255,12 +255,12 @@ do_backup(pgBackupOption bkupopt)
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
-		elog(ERROR_ARGS, "Required parameter not specified: PGDATA "
+		elog(ERROR, "Required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
 	/* A backup mode is needed */
 	if (current.backup_mode == BACKUP_MODE_INVALID)
-		elog(ERROR_ARGS, "Required parameter not specified: BACKUP_MODE "
+		elog(ERROR, "Required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
 	/* Confirm data block size and xlog block size are compatible */
@@ -280,9 +280,9 @@ do_backup(pgBackupOption bkupopt)
 	/* get exclusive lock of backup catalog */
 	ret = catalog_lock();
 	if (ret == -1)
-		elog(ERROR_SYSTEM, "cannot lock backup catalog");
+		elog(ERROR, "cannot lock backup catalog");
 	else if (ret == 1)
-		elog(ERROR_ALREADY_RUNNING,
+		elog(ERROR,
 			"another pg_arman is running, skipping this backup");
 
 	/* initialize backup result */
@@ -302,7 +302,7 @@ do_backup(pgBackupOption bkupopt)
 	if (!check)
 	{
 		if (pgBackupCreateDir(&current))
-			elog(ERROR_SYSTEM, "cannot create backup directory");
+			elog(ERROR, "cannot create backup directory");
 		pgBackupWriteIni(&current);
 	}
 	elog(LOG, "backup destination is initialized");
@@ -310,7 +310,7 @@ do_backup(pgBackupOption bkupopt)
 	/* get list of backups already taken */
 	backup_list = catalog_get_backup_list(NULL);
 	if (!backup_list)
-		elog(ERROR_SYSTEM, "cannot process any more");
+		elog(ERROR, "cannot process any more");
 
 	/* set the error processing function for the backup process */
 	pgut_atexit_push(backup_cleanup, NULL);
@@ -379,7 +379,7 @@ check_server_version(void)
 	/* confirm server version */
 	server_version = PQserverVersion(connection);
 	if (server_version != PG_VERSION_NUM)
-		elog(ERROR_PG_INCOMPATIBLE,
+		elog(ERROR,
 			"server version is %d.%d.%d, must be %s or higher.",
 			 server_version / 10000,
 			 (server_version / 100) % 100,
@@ -402,12 +402,12 @@ confirm_block_size(const char *name, int blcksz)
 
 	res = execute("SELECT current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
-		elog(ERROR_PG_COMMAND, "cannot get %s: %s",
+		elog(ERROR, "cannot get %s: %s",
 			name, PQerrorMessage(connection));
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
 	PQclear(res);
 	if ((endp && *endp) || block_size != blcksz)
-		elog(ERROR_PG_INCOMPATIBLE,
+		elog(ERROR,
 			"%s(%d) is not compatible(%d expected)",
 			name, block_size, blcksz);
 }
@@ -494,11 +494,11 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	{
 		sleep(1);
 		if (interrupted)
-			elog(ERROR_INTERRUPTED,
+			elog(ERROR,
 				"interrupted during waiting for WAL archiving");
 		try_count++;
 		if (try_count > TIMEOUT_ARCHIVE)
-			elog(ERROR_ARCHIVE_FAILED,
+			elog(ERROR,
 				"switched WAL could not be archived in %d seconds",
 				TIMEOUT_ARCHIVE);
 	}
@@ -539,7 +539,7 @@ get_lsn(PGresult *res, XLogRecPtr *lsn)
 	uint32	xrecoff;
 
 	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
-		elog(ERROR_PG_COMMAND,
+		elog(ERROR,
 			"result of backup command is invalid: %s",
 			PQerrorMessage(connection));
 
@@ -560,13 +560,13 @@ static void
 get_xid(PGresult *res, uint32 *xid)
 {
 	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
-		elog(ERROR_PG_COMMAND,
+		elog(ERROR,
 			"result of txid_current() is invalid: %s",
 			PQerrorMessage(connection));
 
 	if (sscanf(PQgetvalue(res, 0, 0), "%u", xid) != 1)
 	{
-		elog(ERROR_PG_COMMAND,
+		elog(ERROR,
 			"result of txid_current() is invalid: %s",
 			PQerrorMessage(connection));
 	}
@@ -653,12 +653,12 @@ backup_files(const char *from_root,
 
 		/* If current time is rewinded, abort this backup. */
 		if (tv.tv_sec < file->mtime)
-			elog(ERROR_SYSTEM,
+			elog(ERROR,
 				 "current time may be rewound. Please retry with full backup mode.");
 
 		/* check for interrupt */
 		if (interrupted)
-			elog(ERROR_INTERRUPTED, "interrupted during backup");
+			elog(ERROR, "interrupted during backup");
 
 		/* print progress in verbose mode */
 		if (verbose)
@@ -688,7 +688,7 @@ backup_files(const char *from_root,
 			}
 			else
 			{
-				elog(ERROR_SYSTEM,
+				elog(ERROR,
 					"can't stat backup mode. \"%s\": %s",
 					file->path, strerror(errno));
 			}
@@ -852,7 +852,7 @@ create_file_list(parray *files,
 		pgBackupGetPath(&current, path, lengthof(path), subdir);
 		fp = fopen(path, is_append ? "at" : "wt");
 		if (fp == NULL)
-			elog(ERROR_SYSTEM, "can't open file list \"%s\": %s", path,
+			elog(ERROR, "can't open file list \"%s\": %s", path,
 				strerror(errno));
 		dir_print_file_list(fp, files, root, prefix);
 		fclose(fp);
