@@ -11,20 +11,6 @@
 #define PGUT_PORT_H
 
 /*
- * readlink ports
- */
-#ifdef WIN32
-
-#define S_IFLNK			(0)
-#define S_IRWXG			(0)
-#define S_IRWXO			(0)
-#define S_ISLNK(mode)	(0)
-
-extern ssize_t readlink(const char *path, char *target, size_t size);
-
-#endif
-
-/*
  * flock ports
  */
 #ifndef LOCK_EX
