@@ -292,11 +292,13 @@ dir_list_file_internal(parray *files, const char *root, const char *exclude[],
 		char	linked[MAXPGPATH];
 
 		len = readlink(file->path, linked, sizeof(linked));
-		if (len == -1)
-		{
+		if (len < 0)
 			elog(ERROR, "cannot read link \"%s\": %s", file->path,
 				strerror(errno));
-		}
+		if (len >= sizeof(linked))
+			elog(ERROR, "symbolic link \"%s\" target is too long\n",
+				 file->path);
+
 		linked[len] = '\0';
 		file->linked = pgut_strdup(linked);
 
