@@ -27,7 +27,7 @@ to make, in the top_srcdir variable:
 
 In addition, you must have pg_config in $PATH.
 
-The current version of pg_arman is compatible with PostgreSQL 9.3 and
+The current version of pg_arman is compatible with PostgreSQL 9.5 and
 upper versions.
 
 Platforms
