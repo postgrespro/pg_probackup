@@ -133,15 +133,53 @@ fi
 echo ''
 
 echo '###### RESTORE COMMAND TEST-0006 ######'
-echo '###### recovery with target inclusive false ######'
+echo '###### recovery to latest from full + ptrack backups ######'
 init_backup
 pgbench_objs 0006
-psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "CREATE TABLE tbl0006 (a text);" > /dev/null 2>&1
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1
+pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-before.out
+pg_ctl stop -m immediate > /dev/null 2>&1
+pg_arman restore -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
+pg_ctl start -w -t 600 > /dev/null 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-after.out
+diff ${TEST_BASE}/TEST-0006-before.out ${TEST_BASE}/TEST-0006-after.out
+echo ''
+
+echo '###### RESTORE COMMAND TEST-0007 ######'
+echo '###### recovery to latest from full + ptrack + ptrack backups ######'
+init_backup
+pgbench_objs 0007
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1
+pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1
+pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1
+pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0007-show.out 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0007-before.out
+pg_ctl stop -m immediate > /dev/null 2>&1
+pg_arman restore -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
+pg_ctl start -w -t 600 > /dev/null 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0007-after.out
+diff ${TEST_BASE}/TEST-0007-before.out ${TEST_BASE}/TEST-0007-after.out
+echo ''
+
+echo '###### RESTORE COMMAND TEST-0008 ######'
+echo '###### recovery with target inclusive false ######'
+init_backup
+pgbench_objs 0008
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "CREATE TABLE tbl0008 (a text);" > /dev/null 2>&1
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0008-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0003-run.out 2>&1
 pgbench -p ${TEST_PGPORT} pgbench > /dev/null 2>&1
-psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-before.out
-TARGET_XID=`psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -tAq -c "INSERT INTO tbl0006 VALUES ('inserted') RETURNING (xmin);"`
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0008-before.out
+TARGET_XID=`psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -tAq -c "INSERT INTO tbl0008 VALUES ('inserted') RETURNING (xmin);"`
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 # Enforce segment to be archived to ensure that recovery goes up to the
 # wanted point. There is no way to ensure that all segments needed have
@@ -149,12 +187,12 @@ pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c 'SELECT pg_switch_xlog()' > /dev/null 2>&1
 # Fast mode is used to ensure that the last segment is archived as well.
 pg_ctl stop -m fast > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --recovery-target-inclusive=false --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
+pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --recovery-target-inclusive=false --verbose >> ${TEST_BASE}/TEST-0008-run.out 2>&1;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
-psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-after.out
-psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM tbl0006;" > ${TEST_BASE}/TEST-0006-tbl.dump
-diff ${TEST_BASE}/TEST-0006-before.out ${TEST_BASE}/TEST-0006-after.out
-if grep "inserted" ${TEST_BASE}/TEST-0006-tbl.dump > /dev/null ; then
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0008-after.out
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM tbl0008;" > ${TEST_BASE}/TEST-0008-tbl.dump
+diff ${TEST_BASE}/TEST-0008-before.out ${TEST_BASE}/TEST-0008-after.out
+if grep "inserted" ${TEST_BASE}/TEST-0008-tbl.dump > /dev/null ; then
 	echo 'NG: recovery-target-inclusive=false does not work well.'
 else
 	echo 'OK: recovery-target-inclusive=false works well.'
@@ -162,6 +200,7 @@ else
 	exit 1
 fi
 echo ''
+
 
 # clean up the temporal test data
 pg_ctl stop -m immediate > /dev/null 2>&1

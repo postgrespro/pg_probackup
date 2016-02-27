@@ -83,7 +83,8 @@ pgBackupValidate(pgBackup *backup,
 	if (!for_get_timeline)
 	{
 		if (backup->backup_mode == BACKUP_MODE_FULL ||
-			backup->backup_mode == BACKUP_MODE_DIFF_PAGE)
+			backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
+			backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
 			elog(INFO, "validate: %s backup and archive log files by %s",
 				 timestamp, (size_only ? "SIZE" : "CRC"));
 	}
@@ -91,7 +92,8 @@ pgBackupValidate(pgBackup *backup,
 	if (!check)
 	{
 		if (backup->backup_mode == BACKUP_MODE_FULL ||
-			backup->backup_mode == BACKUP_MODE_DIFF_PAGE)
+			backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
+			backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
 		{
 			elog(LOG, "database files...");
 			pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);

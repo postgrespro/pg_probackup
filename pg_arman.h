@@ -21,6 +21,8 @@
 #include "utils/pg_crc.h"
 #include "parray.h"
 #include "datapagemap.h"
+#include "storage/bufpage.h"
+#include "storage/block.h"
 
 /* Query to fetch current transaction ID */
 #define TXID_CURRENT_SQL	"SELECT txid_current();"
@@ -55,7 +57,8 @@ typedef struct pgFile
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char	*path; 		/* path of the file */
+	char	*path;			/* path of the file */
+	char	*ptrack_path;
 	datapagemap_t pagemap;
 } pgFile;
 
@@ -96,6 +99,7 @@ typedef enum BackupMode
 {
 	BACKUP_MODE_INVALID,
 	BACKUP_MODE_DIFF_PAGE,		/* differential page backup */
+	BACKUP_MODE_DIFF_PTRACK,	/* differential page backup with ptrack system*/
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
 
@@ -161,6 +165,11 @@ typedef struct pgRecoveryTarget
 	bool		recovery_target_inclusive;
 } pgRecoveryTarget;
 
+typedef union DataPage
+{
+	PageHeaderData	page_data;
+	char			data[BLCKSZ];
+} DataPage;
 
 /*
  * return pointer that exceeds the length of prefix from character string.

@@ -18,12 +18,6 @@
 #include "storage/block.h"
 #include "storage/bufpage.h"
 
-typedef union DataPage
-{
-	PageHeaderData	page_data;
-	char			data[BLCKSZ];
-} DataPage;
-
 typedef struct BackupPageHeader
 {
 	BlockNumber	block;			/* block number */
@@ -184,7 +178,6 @@ backup_data_file(const char *from_root, const char *to_root,
 	else
 	{
 		datapagemap_iterator_t *iter;
-
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
 		{

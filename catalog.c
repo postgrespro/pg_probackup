@@ -252,6 +252,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 		if (backup->status == BACKUP_STATUS_OK &&
 			backup->tli == tli &&
 			(backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
+			 backup->backup_mode == BACKUP_MODE_DIFF_PTRACK ||
 			 backup->backup_mode == BACKUP_MODE_FULL))
 			return backup;
 	}
@@ -286,7 +287,7 @@ pgBackupCreateDir(pgBackup *backup)
 void
 pgBackupWriteConfigSection(FILE *out, pgBackup *backup)
 {
-	static const char *modes[] = { "", "PAGE", "FULL"};
+	static const char *modes[] = { "", "PAGE", "PTRACK", "FULL"};
 
 	fprintf(out, "# configuration\n");
 	fprintf(out, "BACKUP_MODE=%s\n", modes[backup->backup_mode]);
@@ -478,6 +479,8 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_FULL;
 	else if (len > 0 && pg_strncasecmp("page", v, strlen("page")) == 0)
 		return BACKUP_MODE_DIFF_PAGE;
+	else if (len > 0 && pg_strncasecmp("ptrack", v, strlen("ptrack")) == 0)
+		return BACKUP_MODE_DIFF_PTRACK;
 
 	/* Backup mode is invalid, so leave with an error */
 	elog(ERROR, "invalid backup-mode \"%s\"", value);

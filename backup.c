@@ -19,6 +19,8 @@
 
 #include "libpq/pqsignal.h"
 #include "pgut/pgut-port.h"
+#include "storage/bufpage.h"
+#include "datapagemap.h"
 
 /* wait 10 sec until WAL archive complete */
 #define TIMEOUT_ARCHIVE		10
@@ -44,6 +46,7 @@ static void pg_stop_backup(pgBackup *backup);
 static bool pg_is_standby(void);
 static void get_lsn(PGresult *res, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
+static void pg_ptrack_clear(void);
 
 static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
 static void create_file_list(parray *files,
@@ -52,6 +55,7 @@ static void create_file_list(parray *files,
 							 const char *prefix,
 							 bool is_append);
 static void wait_for_archive(pgBackup *backup, const char *sql);
+static void make_pagemap_from_ptrack(parray *files);
 
 /*
  * Take a backup of database and return the list of files backed up.
@@ -96,7 +100,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 * In differential backup mode, check if there is an already-validated
 	 * full backup on current timeline.
 	 */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		pgBackup   *prev_backup;
 
@@ -156,7 +161,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 * To take differential backup, the file list of the last completed database
 	 * backup is needed.
 	 */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		/* find last completed database backup */
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
@@ -209,15 +215,24 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 					   current.start_lsn);
 	}
 
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	{
+		parray_qsort(backup_files_list, pgFileComparePathDesc);
+		make_pagemap_from_ptrack(backup_files_list);
+	}
+
 	backup_files(pgdata, path, backup_files_list, prev_files, lsn, NULL);
 
-	/* notify end of backup */
+	/* Clear ptrack files after backup */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		pg_ptrack_clear();
+	/* Notify end of backup */
 	pg_stop_backup(&current);
 
-	/* create file list */
+	/* Create file list */
 	create_file_list(backup_files_list, pgdata, DATABASE_FILE_LIST, NULL, false);
 
-	/* print summary of size of backup mode files */
+	/* Print summary of size of backup mode files */
 	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(backup_files_list, i);
@@ -228,7 +243,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		 * amount of data written counts while for an differential
 		 * backup only the data read counts.
 		 */
-		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
+			current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 			current.data_bytes += file->read_size;
 		else if (current.backup_mode == BACKUP_MODE_FULL)
 			current.data_bytes += file->size;
@@ -332,7 +348,8 @@ do_backup(pgBackupOption bkupopt)
 
 		/* Database data */
 		if (current.backup_mode == BACKUP_MODE_FULL ||
-			current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+			current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
+			current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 			total_read += current.data_bytes;
 
 		if (total_read == 0)
@@ -431,6 +448,17 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 
 	if (backup != NULL)
 		get_lsn(res, &backup->start_lsn);
+	PQclear(res);
+	disconnect();
+}
+
+static void
+pg_ptrack_clear(void)
+{
+	PGresult	   *res;
+
+	reconnect();
+	res = execute("select pg_ptrack_clear()", 0, NULL);
 	PQclear(res);
 	disconnect();
 }
@@ -806,6 +834,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		pgFile *file = (pgFile *) parray_get(list_file, i);
 		char *relative;
 		char *fname;
+		int path_len;
 
 		/* data file must be a regular file */
 		if (!S_ISREG(file->mode))
@@ -818,6 +847,27 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			!path_is_prefix_of_path("global", relative) &&
 			!path_is_prefix_of_path("pg_tblspc", relative))
 			continue;
+
+		path_len = strlen(file->path);
+		if (path_len > 6 && strncmp(file->path+(path_len-6), "ptrack", 6) == 0)
+		{
+			pgFile tmp_file;
+			pgFile *search_file;
+			//elog(WARNING, "Remove ptrack file from backup %s", file->path);
+			tmp_file.path = pg_strdup(file->path);
+			tmp_file.path[path_len-7] = '\0';
+			search_file = *(pgFile **) parray_bsearch(list_file, &tmp_file, pgFileComparePath);
+			if (search_file != NULL)
+			{
+				//elog(WARNING, "Finded main fork for ptrak:%s", search_file->path);
+				search_file->ptrack_path = pg_strdup(file->path);
+			}
+			free(tmp_file.path);
+			pgFileFree(file);
+			parray_remove(list_file, i);
+			i--;
+			continue;
+		}
 
 		/* name of data file start with digit */
 		fname = last_dir_separator(relative);
@@ -926,4 +976,43 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 
 	pg_free(path);
 	pg_free(rel_path);
+}
+
+void make_pagemap_from_ptrack(parray *files)
+{
+	int i;
+	for (i = 0; i < parray_num(files); i++)
+	{
+		pgFile *p = (pgFile *) parray_get(files, i);
+		if (p->ptrack_path != NULL)
+		{
+			DataPage page;
+			int i;
+			struct stat st;
+			FILE *ptrack_file = fopen(p->ptrack_path, "r");
+			if (ptrack_file == NULL)
+			{
+				elog(ERROR, "cannot open ptrack file \"%s\": %s", p->ptrack_path,
+					strerror(errno));
+			}
+
+			elog(LOG, "Start copy bitmap from ptrack:%s", p->ptrack_path);
+			fstat(fileno(ptrack_file), &st);
+			p->pagemap.bitmapsize = st.st_size-(st.st_size/BLCKSZ)*MAXALIGN(SizeOfPageHeaderData);
+			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
+			while(fread(page.data, BLCKSZ, 1, ptrack_file) == BLCKSZ)
+			{
+				char *map = PageGetContents(page.data);
+				memcpy(p->pagemap.bitmap, map, BLCKSZ-MAXALIGN(SizeOfPageHeaderData)); 
+			}
+			fclose(ptrack_file);
+			for(i = 0; i < p->pagemap.bitmapsize; i++)
+				if (p->pagemap.bitmap[i] != 0)
+					goto end_loop;
+
+			pg_free(p->pagemap.bitmap);
+			p->pagemap.bitmapsize = 0;
+		}
+		end_loop:;
+	}
 }

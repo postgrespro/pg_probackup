@@ -166,7 +166,8 @@ base_backup_found:
 			continue;
 
 		/* use database backup only */
-		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE)
+		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
+			backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
 			continue;
 
 		/* is the backup is necessary for restore to target timeline ? */

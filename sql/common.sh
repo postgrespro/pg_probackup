@@ -73,6 +73,7 @@ wal_level = hot_standby
 wal_log_hints = on
 archive_mode = on
 archive_command = 'cp %p ${ARCLOG_PATH}/%f'
+ptrack_enable = on
 EOF
 
     # start PostgreSQL

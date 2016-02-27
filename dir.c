@@ -91,6 +91,7 @@ pgFileNew(const char *path, bool omit_symlink)
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
 	file->pagemap.bitmapsize = 0;
+	file->ptrack_path = NULL;
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 
@@ -172,6 +173,8 @@ pgFileFree(void *file)
 		return;
 	free(((pgFile *)file)->linked);
 	free(((pgFile *)file)->path);
+	if (((pgFile *)file)->ptrack_path != NULL)
+		free(((pgFile *)file)->ptrack_path);
 	free(file);
 }
 
@@ -549,6 +552,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 		file = (pgFile *) pgut_malloc(sizeof(pgFile));
 		file->path = pgut_malloc((root ? strlen(root) + 1 : 0) + strlen(path) + 1);
+		file->ptrack_path = NULL;
 		file->pagemap.bitmap = NULL;
 		file->pagemap.bitmapsize = 0;
 
