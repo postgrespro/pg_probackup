@@ -987,7 +987,6 @@ void make_pagemap_from_ptrack(parray *files)
 		if (p->ptrack_path != NULL)
 		{
 			DataPage page;
-			int i;
 			struct stat st;
 			FILE *ptrack_file = fopen(p->ptrack_path, "r");
 			if (ptrack_file == NULL)
@@ -996,23 +995,17 @@ void make_pagemap_from_ptrack(parray *files)
 					strerror(errno));
 			}
 
-			elog(LOG, "Start copy bitmap from ptrack:%s", p->ptrack_path);
 			fstat(fileno(ptrack_file), &st);
 			p->pagemap.bitmapsize = st.st_size-(st.st_size/BLCKSZ)*MAXALIGN(SizeOfPageHeaderData);
 			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
-			while(fread(page.data, BLCKSZ, 1, ptrack_file) == BLCKSZ)
+
+			elog(LOG, "Start copy bitmap from ptrack:%s size:%i", p->ptrack_path, p->pagemap.bitmapsize);
+			while(fread(page.data, BLCKSZ, 1, ptrack_file) == 1)
 			{
 				char *map = PageGetContents(page.data);
-				memcpy(p->pagemap.bitmap, map, BLCKSZ-MAXALIGN(SizeOfPageHeaderData)); 
+				memcpy(p->pagemap.bitmap, map, BLCKSZ - MAXALIGN(SizeOfPageHeaderData));
 			}
 			fclose(ptrack_file);
-			for(i = 0; i < p->pagemap.bitmapsize; i++)
-				if (p->pagemap.bitmap[i] != 0)
-					goto end_loop;
-
-			pg_free(p->pagemap.bitmap);
-			p->pagemap.bitmapsize = 0;
 		}
-		end_loop:;
 	}
 }
