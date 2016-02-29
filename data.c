@@ -359,11 +359,6 @@ restore_data_file(const char *from_root,
 			}
 		}
 
-		elog(LOG, "header block: %i, blknum: %i, hole_offset: %i, BLCKSZ:%i",
-				header.block,
-				blknum,
-				header.hole_offset,
-				BLCKSZ);
 		if (header.block < blknum || header.hole_offset > BLCKSZ ||
 			(int) header.hole_offset + (int) header.hole_length > BLCKSZ)
 		{

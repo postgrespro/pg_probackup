@@ -50,7 +50,7 @@ pg_arman backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres --verbos
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0002-run.out 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0002-before.out
 pg_ctl stop -m immediate > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0002-run.out 2>&1;echo $?
+pg_arman restore -B ${BACKUP_PATH} -j 4 --verbose >> ${TEST_BASE}/TEST-0002-run.out 2>&1;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0002-after.out
 diff ${TEST_BASE}/TEST-0002-before.out ${TEST_BASE}/TEST-0002-after.out
