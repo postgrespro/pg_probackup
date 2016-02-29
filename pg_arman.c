@@ -56,7 +56,7 @@ static pgut_option options[] =
 	{ 's', 'B', "backup-path",	&backup_path,	SOURCE_ENV },
 	/* common options */
 	{ 'b', 'c', "check",		&check },
-	{ 'i', 'j', "check",		&num_threads },
+	{ 'i', 'j', "threads",		&num_threads },
 	/* backup options */
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },
@@ -217,8 +217,9 @@ pgut_help(bool details)
 	printf(_("  -A, --arclog-path=PATH    location of archive WAL storage area\n"));
 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
 	printf(_("  -c, --check               show what would have been done\n"));
+	printf(_("  -j, --threads=NUM         num threads for backup and restore\n"));
 	printf(_("\nBackup options:\n"));
-	printf(_("  -b, --backup-mode=MODE    full or page\n"));
+	printf(_("  -b, --backup-mode=MODE    full,page,ptrack\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
 	printf(_("  --validate                validate backup after taking it\n"));
 	printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
