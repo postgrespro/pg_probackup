@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "libpq/pqsignal.h"
 #include "pgut/pgut-port.h"
@@ -33,12 +34,22 @@ static bool		 in_backup = false;	/* TODO: more robust logic */
 /* list of files contained in backup */
 parray			*backup_files_list;
 
+typedef struct
+{
+	const char *from_root;
+	const char *to_root;
+	parray *files;
+	parray *prev_files;
+	const XLogRecPtr *lsn;
+	unsigned int start_file_idx;
+	unsigned int end_file_idx;
+} backup_files_args;
+
 /*
  * Backup routines
  */
 static void backup_cleanup(bool fatal, void *userdata);
-static void backup_files(const char *from_root, const char *to_root,
-	parray *files, parray *prev_files, const XLogRecPtr *lsn, const char *prefix);
+static void backup_files(void *arg);
 static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
@@ -72,6 +83,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup
 											 * list file */
 	bool		has_backup_label  = true;	/* flag if backup_label is there */
+	pthread_t	backup_threads[num_threads];
+	backup_files_args *backup_threads_args[num_threads];
 
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
@@ -221,7 +234,77 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		make_pagemap_from_ptrack(backup_files_list);
 	}
 
-	backup_files(pgdata, path, backup_files_list, prev_files, lsn, NULL);
+	/* sort pathname ascending */
+	parray_qsort(backup_files_list, pgFileComparePath);
+
+	/* make dirs before backup */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		int ret;
+		struct stat buf;
+		pgFile *file = (pgFile *) parray_get(backup_files_list, i);
+
+		ret = stat(file->path, &buf);
+		if (ret == -1)
+		{
+			if (errno == ENOENT)
+			{
+				/* record as skipped file in file_xxx.txt */
+				file->write_size = BYTES_INVALID;
+				elog(LOG, "skip");
+				continue;
+			}
+			else
+			{
+				elog(ERROR,
+					"can't stat backup mode. \"%s\": %s",
+					file->path, strerror(errno));
+			}
+		}
+		/* if the entry was a directory, create it in the backup */
+		if (S_ISDIR(buf.st_mode))
+		{
+			char dirpath[MAXPGPATH];
+			if (verbose)
+				elog(LOG, "Make dir %s",  file->path + strlen(pgdata) + 1);
+			join_path_components(dirpath, path, JoinPathEnd(file->path, pgdata));
+			if (!check)
+				dir_create_dir(dirpath, DIR_PERMISSION);
+		}
+	}
+
+	if (num_threads < 1)
+		num_threads = 1;
+
+	for (i = 0; i < num_threads; i++)
+	{
+		backup_files_args *arg = pg_malloc(sizeof(backup_files_args));
+		arg->from_root = pgdata;
+		arg->to_root = path;
+		arg->files = backup_files_list;
+		arg->prev_files = prev_files;
+		arg->lsn = lsn;
+		arg->start_file_idx = i * (parray_num(backup_files_list)/num_threads);
+		if (i == num_threads - 1)
+			arg->end_file_idx = parray_num(backup_files_list);
+		else
+			arg->end_file_idx =  (i + 1) * (parray_num(backup_files_list)/num_threads);
+
+		if (verbose)
+			elog(WARNING, "Start thread for start_file_idx:%i end_file_idx:%i num:%li",
+				arg->start_file_idx,
+				arg->end_file_idx,
+				parray_num(backup_files_list));
+		backup_threads_args[i] = arg;
+		pthread_create(&backup_threads[i], NULL, (void *(*)(void *)) backup_files, arg);
+	}
+
+	/* Wait theads */
+	for (i = 0; i < num_threads; i++)
+	{
+		pthread_join(backup_threads[i], NULL);
+		pg_free(backup_threads_args[i]);
+	}
 
 	/* Clear ptrack files after backup */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
@@ -266,8 +349,8 @@ do_backup(pgBackupOption bkupopt)
 	int		ret;
 
 	/* repack the necessary options */
-	int	keep_data_generations = bkupopt.keep_data_generations;
-	int	keep_data_days        = bkupopt.keep_data_days;
+	int keep_data_generations = bkupopt.keep_data_generations;
+	int keep_data_days        = bkupopt.keep_data_days;
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
@@ -656,28 +739,22 @@ backup_cleanup(bool fatal, void *userdata)
  * Take differential backup at page level.
  */
 static void
-backup_files(const char *from_root,
-			 const char *to_root,
-			 parray *files,
-			 parray *prev_files,
-			 const XLogRecPtr *lsn,
-			 const char *prefix)
+backup_files(void *arg)
 {
 	int				i;
 	struct timeval	tv;
 
-	/* sort pathname ascending */
-	parray_qsort(files, pgFileComparePath);
+	backup_files_args *arguments = (backup_files_args *) arg;
 
 	gettimeofday(&tv, NULL);
 
 	/* backup a file or create a directory */
-	for (i = 0; i < parray_num(files); i++)
+	for (i = arguments->start_file_idx; i < arguments->end_file_idx; i++)
 	{
 		int			ret;
 		struct stat	buf;
 
-		pgFile *file = (pgFile *) parray_get(files, i);
+		pgFile *file = (pgFile *) parray_get(arguments->files, i);
 
 		/* If current time is rewinded, abort this backup. */
 		if (tv.tv_sec < file->mtime)
@@ -690,18 +767,8 @@ backup_files(const char *from_root,
 
 		/* print progress in verbose mode */
 		if (verbose)
-		{
-			if (prefix)
-			{
-				char path[MAXPGPATH];
-				join_path_components(path, prefix, file->path + strlen(from_root) + 1);
-				elog(LOG, "(%d/%lu) %s", i + 1,
-					 (unsigned long) parray_num(files), path);
-			}
-			else
-				elog(LOG, "(%d/%lu) %s", i + 1, (unsigned long) parray_num(files),
-					file->path + strlen(from_root) + 1);
-		}
+			elog(LOG, "(%d/%lu) %s", i + 1, (unsigned long) parray_num(arguments->files),
+				file->path + strlen(arguments->from_root) + 1);
 
 		/* stat file to get file type, size and modify timestamp */
 		ret = stat(file->path, &buf);
@@ -722,52 +789,20 @@ backup_files(const char *from_root,
 			}
 		}
 
-		/* if the entry was a directory, create it in the backup */
+		/* skip dir because make before */
 		if (S_ISDIR(buf.st_mode))
 		{
-			char dirpath[MAXPGPATH];
-
-			join_path_components(dirpath, to_root, JoinPathEnd(file->path, from_root));
-			if (!check)
-				dir_create_dir(dirpath, DIR_PERMISSION);
-			elog(LOG, "directory");
+			continue;
 		}
 		else if (S_ISREG(buf.st_mode))
 		{
 			/* skip files which have not been modified since last backup */
-			if (prev_files)
+			if (arguments->prev_files)
 			{
 				pgFile *prev_file = NULL;
-
-				/*
-				 * If prefix is not NULL, the table space is backup from the snapshot.
-				 * Therefore, adjust file name to correspond to the file list.
-				 */
-				if (prefix)
-				{
-					int j;
-
-					for (j = 0; j < parray_num(prev_files); j++)
-					{
-						pgFile *p = (pgFile *) parray_get(prev_files, j);
-						char *prev_path;
-						char curr_path[MAXPGPATH];
-
-						prev_path = p->path + strlen(from_root) + 1;
-						join_path_components(curr_path, prefix, file->path + strlen(from_root) + 1);
-						if (strcmp(curr_path, prev_path) == 0)
-						{
-							prev_file = p;
-							break;
-						}
-					}
-				}
-				else
-				{
-					pgFile **p = (pgFile **) parray_bsearch(prev_files, file, pgFileComparePath);
-					if (p)
-						prev_file = *p;
-				}
+				pgFile **p = (pgFile **) parray_bsearch(arguments->prev_files, file, pgFileComparePath);
+				if (p)
+					prev_file = *p;
 
 				if (prev_file && prev_file->mtime == file->mtime)
 				{
@@ -797,8 +832,8 @@ backup_files(const char *from_root,
 
 			/* copy the file into backup */
 			if (!(file->is_datafile
-					? backup_data_file(from_root, to_root, file, lsn)
-					: copy_file(from_root, to_root, file)))
+					? backup_data_file(arguments->from_root, arguments->to_root, file, arguments->lsn)
+					: copy_file(arguments->from_root, arguments->to_root, file)))
 			{
 				/* record as skipped file in file_xxx.txt */
 				file->write_size = BYTES_INVALID;

@@ -30,10 +30,10 @@ init_backup
 pgbench_objs 0001
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0001-before.out
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0001-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0001-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0001-run.out 2>&1
 pg_ctl stop -m immediate > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0001-run.out 2>&1;echo $?
+pg_arman restore -B ${BACKUP_PATH} -j 4 --verbose >> ${TEST_BASE}/TEST-0001-run.out 2>&1;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0001-after.out
 diff ${TEST_BASE}/TEST-0001-before.out ${TEST_BASE}/TEST-0001-after.out
@@ -43,7 +43,7 @@ echo '###### RESTORE COMMAND TEST-0002 ######'
 echo '###### recovery to latest from full + page backups ######'
 init_backup
 pgbench_objs 0002
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0002-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0002-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0002-run.out 2>&1
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 pg_arman backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0002-run.out 2>&1;echo $?
@@ -61,7 +61,7 @@ echo '###### recovery to target timeline ######'
 init_backup
 pgbench_objs 0003
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0003-before.out
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0003-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0003-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0003-run.out 2>&1
 TARGET_TLI=`pg_controldata | grep " TimeLineID:" | awk '{print $4}'`
 pg_ctl stop -m immediate > /dev/null 2>&1
@@ -90,7 +90,7 @@ init_backup
 pgbench_objs 0004
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0004-before.out
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0004-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0004-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0004-run.out 2>&1
 TARGET_TIME=`date +"%Y-%m-%d %H:%M:%S"`
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
@@ -106,7 +106,7 @@ echo '###### recovery to target XID ######'
 init_backup
 pgbench_objs 0005
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "CREATE TABLE tbl0005 (a text);" > /dev/null 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0005-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0005-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0005-run.out 2>&1
 pgbench -p ${TEST_PGPORT} pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0005-before.out
@@ -136,10 +136,10 @@ echo '###### RESTORE COMMAND TEST-0006 ######'
 echo '###### recovery to latest from full + ptrack backups ######'
 init_backup
 pgbench_objs 0006
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -j 4 -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0006-before.out
 pg_ctl stop -m immediate > /dev/null 2>&1
@@ -153,13 +153,13 @@ echo '###### RESTORE COMMAND TEST-0007 ######'
 echo '###### recovery to latest from full + ptrack + ptrack backups ######'
 init_backup
 pgbench_objs 0007
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -j 4 -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -j 4 -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.out 2>&1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0007-show.out 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0007-before.out
@@ -175,7 +175,7 @@ echo '###### recovery with target inclusive false ######'
 init_backup
 pgbench_objs 0008
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "CREATE TABLE tbl0008 (a text);" > /dev/null 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0008-run.out 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0008-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0003-run.out 2>&1
 pgbench -p ${TEST_PGPORT} pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0008-before.out

@@ -202,6 +202,8 @@ extern const char *pgdata_exclude[];
 /* backup file list from non-snapshot */
 extern parray *backup_files_list;
 
+extern int num_threads;
+
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);
 extern BackupMode parse_backup_mode(const char *value);

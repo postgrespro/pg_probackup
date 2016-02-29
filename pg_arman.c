@@ -33,6 +33,7 @@ pgBackup	current;
 static bool		smooth_checkpoint;
 static int		keep_data_generations = KEEP_INFINITE;
 static int		keep_data_days = KEEP_INFINITE;
+int				num_threads = 1;
 static bool		backup_validate = false;
 
 /* restore configuration */
@@ -55,6 +56,7 @@ static pgut_option options[] =
 	{ 's', 'B', "backup-path",	&backup_path,	SOURCE_ENV },
 	/* common options */
 	{ 'b', 'c', "check",		&check },
+	{ 'i', 'j', "check",		&num_threads },
 	/* backup options */
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },

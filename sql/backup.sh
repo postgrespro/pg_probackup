@@ -85,6 +85,17 @@ pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0006.log 2>&1
 grep -c OK ${TEST_BASE}/TEST-0006.log
 grep OK ${TEST_BASE}/TEST-0006.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
 
+echo '###### BACKUP COMMAND TEST-0007 ######'
+echo '###### ptrack multi thread backup mode ######'
+init_catalog
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0007-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0007-run.log 2>&1
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0007-run.log 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} >> ${TEST_BASE}/TEST-0007-run.log 2>&1
+pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0007.log 2>&1
+grep -c OK ${TEST_BASE}/TEST-0007.log
+grep OK ${TEST_BASE}/TEST-0007.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
+
 # cleanup
 ## clean up the temporal test data
 pg_ctl stop -m immediate -D ${PGDATA_PATH} > /dev/null 2>&1

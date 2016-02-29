@@ -33,9 +33,9 @@ DOCS += doc/pg_arman.html doc/README.html
 endif # XMLTO
 endif # ASCIIDOC
 
-PG_CPPFLAGS = -I$(libpq_srcdir)
-override CPPFLAGS := -DFRONTEND $(CPPFLAGS)
-PG_LIBS = $(libpq_pgport)
+PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS}
+override CPPFLAGS := -DFRONTEND $(CPPFLAGS) 
+PG_LIBS = $(libpq_pgport) ${PTHREAD_LIBS} ${PTHREAD_CFLAGS}
 
 REGRESS = init option show delete backup restore
 
