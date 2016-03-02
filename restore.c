@@ -98,7 +98,7 @@ do_restore(const char *target_time,
 	if (!backups)
 		elog(ERROR, "cannot process any more.");
 
-	cur_tli = get_current_timeline();
+	cur_tli = get_current_timeline(true);
 	backup_tli = get_fullbackup_timeline(backups, rt);
 
 	/* determine target timeline */

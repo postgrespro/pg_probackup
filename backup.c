@@ -107,7 +107,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 * obtained at output of pg_start_backup or pg_stop_backup does
 	 * not contain this information.
 	 */
-	current.tli = get_current_timeline();
+	current.tli = get_current_timeline(false);
 
 	/*
 	 * In differential backup mode, check if there is an already-validated
@@ -567,7 +567,7 @@ wait_for_archive(pgBackup *backup, const char *sql)
 	 * Enforce TLI obtention if backup is not present as this code
 	 * path can be taken as a callback at exit.
 	 */
-	tli = get_current_timeline();
+	tli = get_current_timeline(false);
 
 	/* Fill in fields if backup exists */
 	if (backup != NULL)

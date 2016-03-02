@@ -33,7 +33,7 @@
  *
  */
 char *
-slurpFile(const char *datadir, const char *path, size_t *filesize)
+slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
 {
 	int		 fd;
 	char	   *buffer;
@@ -43,20 +43,35 @@ slurpFile(const char *datadir, const char *path, size_t *filesize)
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", datadir, path);
 
 	if ((fd = open(fullpath, O_RDONLY | PG_BINARY, 0)) == -1)
-		elog(ERROR, "could not open file \"%s\" for reading: %s",
-				fullpath, strerror(errno));
+	{
+		if (safe)
+			return NULL;
+		else
+			elog(ERROR, "could not open file \"%s\" for reading: %s",
+					fullpath, strerror(errno));
+	}
 
 	if (fstat(fd, &statbuf) < 0)
-		elog(ERROR, "could not open file \"%s\" for reading: %s",
-			 fullpath, strerror(errno));
+	{
+		if (safe)
+			return NULL;
+		else
+			elog(ERROR, "could not open file \"%s\" for reading: %s",
+				fullpath, strerror(errno));
+	}
 
 	len = statbuf.st_size;
 
 	buffer = pg_malloc(len + 1);
 
 	if (read(fd, buffer, len) != len)
-		elog(ERROR, "could not read file \"%s\": %s\n",
-			 fullpath, strerror(errno));
+	{
+		if (safe)
+			return NULL;
+		else
+			elog(ERROR, "could not read file \"%s\": %s\n",
+				fullpath, strerror(errno));
+	}
 
 	close(fd);
 

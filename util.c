@@ -60,7 +60,7 @@ sanityChecks(void)
 	size_t			size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size);
+	buffer = slurpFile(pgdata, "global/pg_control", &size, false);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -80,14 +80,16 @@ sanityChecks(void)
  * used by a node.
  */
 TimeLineID
-get_current_timeline(void)
+get_current_timeline(bool safe)
 {
 	ControlFileData ControlFile;
 	char       *buffer;
 	size_t      size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size);
+	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
+	if (buffer == NULL)
+		return 0;
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 

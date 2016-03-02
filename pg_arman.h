@@ -231,7 +231,8 @@ extern void pgBackupDelete(int keep_generations, int keep_days);
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
 					   const char *path,
-					   size_t *filesize);
+					   size_t *filesize,
+					   bool safe);
 
 /* in validate.c */
 extern int do_validate(pgBackupRange *range);
@@ -291,7 +292,7 @@ extern void extractPageMap(const char *datadir, XLogRecPtr startpoint,
 						   TimeLineID tli, XLogRecPtr endpoint);
 
 /* in util.c */
-extern TimeLineID get_current_timeline(void);
+extern TimeLineID get_current_timeline(bool safe);
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
