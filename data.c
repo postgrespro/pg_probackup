@@ -213,12 +213,14 @@ backup_data_file(const char *from_root, const char *to_root,
 				return copy_file(from_root, to_root, file);
 			}
 
-			file->read_size += read_len;
+			
 
 			/* if the page has not been modified since last backup, skip it */
 			if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
 				continue;
 
+			file->read_size += read_len;
+			
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
 

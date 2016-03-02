@@ -328,7 +328,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		 */
 		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
 			current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
-			current.data_bytes += file->read_size;
+			current.data_bytes += file->write_size;
 		else if (current.backup_mode == BACKUP_MODE_FULL)
 			current.data_bytes += file->size;
 	}
