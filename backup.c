@@ -478,12 +478,12 @@ check_server_version(void)
 
 	/* confirm server version */
 	server_version = PQserverVersion(connection);
-	if (server_version != PG_VERSION_NUM)
+	if (server_version < 90500)
 		elog(ERROR,
 			"server version is %d.%d.%d, must be %s or higher.",
 			 server_version / 10000,
 			 (server_version / 100) % 100,
-			 server_version % 100, PG_MAJORVERSION);
+			 server_version % 100, "9.5");
 
 	/* confirm block_size (BLCKSZ) and wal_block_size (XLOG_BLCKSZ) */
 	confirm_block_size("block_size", BLCKSZ);
