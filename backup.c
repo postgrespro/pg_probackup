@@ -307,8 +307,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	}
 
 	/* Clear ptrack files after backup */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
-		pg_ptrack_clear();
+	pg_ptrack_clear();
 	/* Notify end of backup */
 	pg_stop_backup(&current);
 
