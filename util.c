@@ -75,6 +75,21 @@ sanityChecks(void)
 			 "target master need to use either data checksums or \"wal_log_hints = on\".");
 }
 
+XLogRecPtr
+get_last_ptrack_lsn(void)
+{
+	char		*buffer;
+	size_t		size;
+	XLogRecPtr	lsn;
+
+	buffer = slurpFile(pgdata, "global/ptrack_control", &size, false);
+	if (buffer == NULL)
+		return 0;
+
+	lsn = *(XLogRecPtr *)buffer;
+	return lsn;
+}
+
 /*
  * Utility shared by backup and restore to fetch the current timeline
  * used by a node.

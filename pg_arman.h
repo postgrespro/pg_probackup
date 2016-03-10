@@ -298,6 +298,7 @@ extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
+extern XLogRecPtr get_last_ptrack_lsn(void);
 
 /* in status.c */
 extern bool is_pg_running(void);

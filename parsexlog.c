@@ -107,11 +107,9 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 {
 	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
 	uint32		targetPageOff;
-	XLogRecPtr	targetSegEnd;
 	XLogSegNo	targetSegNo;
 
 	XLByteToSeg(targetPagePtr, targetSegNo);
-	XLogSegNoOffsetToRecPtr(targetSegNo + 1, 0, targetSegEnd);
 	targetPageOff = targetPagePtr % XLogSegSize;
 
 	/*
