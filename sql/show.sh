@@ -39,13 +39,14 @@ else
      echo 'NG: RUNNING status is not shown.'
 fi
 counter=0
-while [[ `pg_arman show -B ${BACKUP_PATH}` == *"RUNNING"* ]]
-do
-     if [ $counter -gt 30 ] ; then
-          break
+# Wait for backup to finish properly before moving on to next test
+while [[ `pg_arman show -B ${BACKUP_PATH}` == *"RUNNING"* ]]; do
+     if [ $counter -gt 60 ] ; then
+          echo "Backup took too long to finish"
+          exit 1
      fi
-     sleep 2
-     let counter=counter+1
+     sleep 1
+     counter=$(($counter + 1))
 done
 echo ''
 
