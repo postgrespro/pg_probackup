@@ -41,7 +41,7 @@ fi
 counter=0
 while [[ `pg_arman show -B ${BACKUP_PATH}` == *"RUNNING"* ]]
 do
-     if [ $counter -lt 30 ] ; then
+     if [ $counter -gt 30 ] ; then
           break
      fi
      sleep 2
