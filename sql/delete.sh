@@ -10,14 +10,14 @@
 init_backup
 echo '###### DELETE COMMAND TEST-0001 ######'
 echo '###### delete full backups ######'
-FIRST_BACKUP_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
+FIRST_BACKUP_DATE=$(get_time_last_backup)
 pgbench -p ${TEST_PGPORT} >> ${TEST_BASE}/pgbench.log 2>&1
-SECOND_BACKUP_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
+SECOND_BACKUP_DATE=$(get_time_last_backup)
 pgbench -p ${TEST_PGPORT} >> ${TEST_BASE}/pgbench.log 2>&1
-THIRD_BACKUP_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
+THIRD_BACKUP_DATE=$(get_time_last_backup)
 pg_arman validate -B ${BACKUP_PATH} --quiet
 
 echo "try to delete the oldest backup"
@@ -32,18 +32,18 @@ echo "Number of deleted backups should be 1, is it so?: ${NUM_OF_DELETED_BACKUPS
 init_backup
 echo '###### DELETE COMMAND TEST-0002 ######'
 echo '###### keep backups which are necessary for recovery ######'
-FIRST_BACKUP_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
+FIRST_BACKUP_DATE=$(get_time_last_backup)
 pgbench -p ${TEST_PGPORT} >> ${TEST_BASE}/pgbench.log 2>&1
-SECOND_BACKUP_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
+SECOND_BACKUP_DATE=$(get_time_last_backup)
 pg_arman validate -B ${BACKUP_PATH} --quiet
 pgbench -p ${TEST_PGPORT} >> ${TEST_BASE}/pgbench.log 2>&1
-THIRD_BACKUP_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres --quiet
+THIRD_BACKUP_DATE=$(get_time_last_backup)
 pg_arman validate -B ${BACKUP_PATH} --quiet
-FOURTH_BACKUP_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
+FOURTH_BACKUP_DATE=$(get_time_last_backup)
 pg_arman validate -B ${BACKUP_PATH} --quiet
 
 echo "try to delete before third backup"

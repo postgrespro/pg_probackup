@@ -70,8 +70,8 @@ echo '###### Status DELETED ######'
 init_catalog
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
 pg_arman validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
-DELETE_DATE=`date +"%Y-%m-%d %H:%M:%S"`
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
+DELETE_DATE=$(get_time_last_backup)
 pg_arman validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
 pg_arman delete ${DELETE_DATE} -B ${BACKUP_PATH} > /dev/null 2>&1;echo $?
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-show.out 2>&1
