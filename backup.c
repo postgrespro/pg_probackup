@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -543,12 +544,25 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 static void
 pg_ptrack_clear(void)
 {
-	PGresult	   *res;
+	PGresult	*res_db, *res;
+	const char *old_dbname = dbname;
+	int i;
 
 	reconnect();
-	res = execute("select pg_ptrack_clear()", 0, NULL);
-	PQclear(res);
+	res_db = execute("SELECT datname FROM pg_database", 0, NULL);
 	disconnect();
+	for(i=0; i < PQntuples(res_db); i++)
+	{
+		dbname = PQgetvalue(res_db, i, 0);
+		if (strcmp(dbname, "template0"))
+			continue;
+		reconnect();
+		res = execute("SELECT pg_ptrack_clear()", 0, NULL);
+		PQclear(res);
+	}
+	PQclear(res_db);
+	disconnect();
+	dbname = old_dbname;
 }
 
 static void
