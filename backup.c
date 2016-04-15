@@ -554,7 +554,7 @@ pg_ptrack_clear(void)
 	for(i=0; i < PQntuples(res_db); i++)
 	{
 		dbname = PQgetvalue(res_db, i, 0);
-		if (strcmp(dbname, "template0"))
+		if (!strcmp(dbname, "template0"))
 			continue;
 		reconnect();
 		res = execute("SELECT pg_ptrack_clear()", 0, NULL);
