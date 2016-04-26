@@ -59,6 +59,14 @@ datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/%
 	rm -f $@ && $(LN_S) $< .
 datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/%
 	rm -f  && $(LN_S) $< .
+receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/%
+	rm -f  && $(LN_S) $< .
+receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/%
+	rm -f  && $(LN_S) $< .
+streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/%
+	rm -f  && $(LN_S) $< .
+streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/%
+	rm -f  && $(LN_S) $< .
 
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
