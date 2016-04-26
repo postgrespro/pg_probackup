@@ -245,6 +245,13 @@ backup_data_file(const char *from_root, const char *to_root,
 			file->write_size += sizeof(header) + read_len - header.hole_length;
 		}
 		pg_free(iter);
+		/*
+		 * If we have pagemap then file can't be a zero size.
+		 * Otherwise, we will clear the last file.
+		 * Increase read_size to delete after.
+		 */
+		if (file->read_size == 0)
+			file->read_size++;
 	}
 
 	/*
