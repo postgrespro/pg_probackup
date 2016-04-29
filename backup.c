@@ -110,6 +110,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 */
 	current.tli = get_current_timeline(false);
 
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
+		pg_ptrack_clear();
+
 	/*
 	 * In differential backup mode, check if there is an already-validated
 	 * full backup on current timeline.
@@ -314,7 +317,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	}
 
 	/* Clear ptrack files after backup */
-	pg_ptrack_clear();
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		pg_ptrack_clear();
 	/* Notify end of backup */
 	pg_stop_backup(&current);
 
