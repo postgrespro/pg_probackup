@@ -59,6 +59,7 @@ typedef struct pgFile
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
 	char	*path;			/* path of the file */
 	char	*ptrack_path;
+	int		segno;			/* Segment number for ptrack */
 	datapagemap_t pagemap;
 } pgFile;
 
@@ -80,6 +81,9 @@ typedef struct pgBackupRange
 	 (tm.tm_mday >= 1 && tm.tm_mday <= 31) && 	/* range check for tm_mday(1-31)  */ \
 	 (tm.tm_mon >= 0 && tm.tm_mon <= 11) && 	/* range check for tm_mon (0-23)  */ \
 	 (tm.tm_year + 1900 >= 1900)) 			/* range check for tm_year(70-)    */
+
+/* Effective data size */
+#define MAPSIZE (BLCKSZ - MAXALIGN(SizeOfPageHeaderData))
 
 /* Backup status */
 /* XXX re-order ? */

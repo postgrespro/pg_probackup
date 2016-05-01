@@ -170,6 +170,26 @@ psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches
 diff ${TEST_BASE}/TEST-0007-before.out ${TEST_BASE}/TEST-0007-after.out
 echo ''
 
+echo '###### RESTORE COMMAND TEST-0009 ######'
+echo '###### recovery to latest from full + ptrack backups with loads when full backup do ######'
+init_backup
+pgbench_objs 0009
+pgbench -p ${TEST_PGPORT} -d pgbench -c 4 -T 8 > /dev/null 2>&1 &
+PGBENCH_PID=$!
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0009-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0009-run.out 2>&1
+#kill $PGBENCH_PID 2> /dev/null
+sleep 12
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT count(*) FROM pgbench_history;" > ${TEST_BASE}/TEST-0009-count1.out
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -j 4 -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0009-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1
+pg_ctl stop -m immediate > /dev/null 2>&1
+pg_arman restore -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.out 2>&1;echo $?
+pg_ctl start -w -t 600 > /dev/null 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT count(*) FROM pgbench_history;" > ${TEST_BASE}/TEST-0009-count2.out
+diff ${TEST_BASE}/TEST-0009-count1.out ${TEST_BASE}/TEST-0009-count2.out
+echo ''
+
 echo '###### RESTORE COMMAND TEST-0008 ######'
 echo '###### recovery with target inclusive false ######'
 init_backup

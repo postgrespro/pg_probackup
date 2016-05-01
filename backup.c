@@ -110,9 +110,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 */
 	current.tli = get_current_timeline(false);
 
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
-		pg_ptrack_clear();
-
 	/*
 	 * In differential backup mode, check if there is an already-validated
 	 * full backup on current timeline.
@@ -148,6 +145,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		elog(ERROR, "backup_label does not exist in PGDATA.");
 	}
 
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
+		pg_ptrack_clear();
 	/*
 	 * List directories and symbolic links with the physical path to make
 	 * mkdirs.sh, then sort them in order of path. Omit $PGDATA.
@@ -915,18 +914,31 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		path_len = strlen(file->path);
 		if (path_len > 6 && strncmp(file->path+(path_len-6), "ptrack", 6) == 0)
 		{
-			pgFile tmp_file;
 			pgFile *search_file;
-			//elog(WARNING, "Remove ptrack file from backup %s", file->path);
-			tmp_file.path = pg_strdup(file->path);
-			tmp_file.path[path_len-7] = '\0';
-			search_file = *(pgFile **) parray_bsearch(list_file, &tmp_file, pgFileComparePath);
-			if (search_file != NULL)
-			{
-				//elog(WARNING, "Finded main fork for ptrak:%s", search_file->path);
-				search_file->ptrack_path = pg_strdup(file->path);
+			pgFile **pre_search_file;
+			int segno = 0;
+			while(true) {
+				pgFile tmp_file;
+				tmp_file.path = pg_strdup(file->path);
+				/* I hope segno not more than 999999 */
+				if (segno > 0)
+					sprintf(tmp_file.path+path_len-7, ".%d", segno);
+				else
+					tmp_file.path[path_len-7] = '\0';
+				pre_search_file = (pgFile **) parray_bsearch(list_file, &tmp_file, pgFileComparePath);
+				if (pre_search_file != NULL)
+				{
+					search_file = *pre_search_file;
+					search_file->ptrack_path = pg_strdup(file->path);
+					search_file->segno = segno;
+				} else {
+					pg_free(tmp_file.path);
+					break;
+				}
+				pg_free(tmp_file.path);
+				segno++;
 			}
-			free(tmp_file.path);
+
 			pgFileFree(file);
 			parray_remove(list_file, i);
 			i--;
@@ -1051,7 +1063,11 @@ void make_pagemap_from_ptrack(parray *files)
 		if (p->ptrack_path != NULL)
 		{
 			DataPage page;
+			char *flat_memory, *flat_mamory_cur;
+			size_t flat_size = 0;
+			size_t start_addr;
 			struct stat st;
+
 			FILE *ptrack_file = fopen(p->ptrack_path, "r");
 			if (ptrack_file == NULL)
 			{
@@ -1060,16 +1076,21 @@ void make_pagemap_from_ptrack(parray *files)
 			}
 
 			fstat(fileno(ptrack_file), &st);
-			p->pagemap.bitmapsize = st.st_size-(st.st_size/BLCKSZ)*MAXALIGN(SizeOfPageHeaderData);
-			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
+			flat_size = st.st_size-(st.st_size/BLCKSZ)*MAXALIGN(SizeOfPageHeaderData);
+			flat_mamory_cur = flat_memory = pg_malloc(flat_size);
 
-			elog(LOG, "Start copy bitmap from ptrack:%s size:%i", p->ptrack_path, p->pagemap.bitmapsize);
 			while(fread(page.data, BLCKSZ, 1, ptrack_file) == 1)
 			{
 				char *map = PageGetContents(page.data);
-				memcpy(p->pagemap.bitmap, map, BLCKSZ - MAXALIGN(SizeOfPageHeaderData));
+				memcpy(flat_memory, map, MAPSIZE);
+				flat_mamory_cur += MAPSIZE;
 			}
 			fclose(ptrack_file);
+			start_addr = (RELSEG_SIZE/8)*p->segno;
+			p->pagemap.bitmapsize = start_addr+RELSEG_SIZE/8 > flat_size ? flat_size - start_addr : RELSEG_SIZE/8;
+			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
+			memcpy(p->pagemap.bitmap, flat_memory+start_addr, p->pagemap.bitmapsize);
+			pg_free(flat_memory);
 		}
 	}
 }

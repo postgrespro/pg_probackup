@@ -213,8 +213,6 @@ backup_data_file(const char *from_root, const char *to_root,
 				return copy_file(from_root, to_root, file);
 			}
 
-			
-
 			/* if the page has not been modified since last backup, skip it */
 			if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
 				continue;
