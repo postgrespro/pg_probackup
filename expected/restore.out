@@ -32,24 +32,25 @@ OK: recovery-target-xid options works well.
 ###### RESTORE COMMAND TEST-0006 ######
 ###### recovery to latest from full + ptrack backups ######
 0
-0
+1
 0
 
 ###### RESTORE COMMAND TEST-0007 ######
 ###### recovery to latest from full + ptrack + ptrack backups ######
 0
+1
+1
 0
+
+###### RESTORE COMMAND TEST-0010 ######
+###### recovery to latest from full + page backups with loads when full backup do ######
 0
+1
 0
 
 ###### RESTORE COMMAND TEST-0009 ######
 ###### recovery to latest from full + ptrack backups with loads when full backup do ######
 0
-0
+1
 0
 
-###### RESTORE COMMAND TEST-0008 ######
-###### recovery with target inclusive false ######
-0
-0
-OK: recovery-target-inclusive=false works well.

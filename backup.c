@@ -129,6 +129,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 					"or validate existing one.");
 	}
 
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
+		pg_ptrack_clear();
+
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
 	strncat(label, " with pg_arman", lengthof(label));
@@ -148,8 +151,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		elog(ERROR, "backup_label does not exist in PGDATA.");
 	}
 
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
-		pg_ptrack_clear();
 	/*
 	 * List directories and symbolic links with the physical path to make
 	 * mkdirs.sh, then sort them in order of path. Omit $PGDATA.

@@ -172,18 +172,15 @@ echo ''
 
 
 echo '###### RESTORE COMMAND TEST-0010 ######'
-echo '###### recovery to latest from full + page backups with loads when full backup do ######'
+echo '###### recovery to latest from full + page backups with loads when ptrack backup do ######'
 init_backup
-pgbench_objs 0009
-pgbench -p ${TEST_PGPORT} -d pgbench -c 4 -T 8 > /dev/null 2>&1 &
-PGBENCH_PID=$!
+pgbench_objs 0010
 pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0010-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0010-run.out 2>&1
-#kill $PGBENCH_PID 2> /dev/null
-sleep 12
-#psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT count(*) FROM pgbench_history;" > ${TEST_BASE}/TEST-0010-count1.out
-pg_arman backup -B ${BACKUP_PATH} -b page -j 4 -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0010-run.out 2>&1;echo $?
+pgbench -p ${TEST_PGPORT} -d pgbench -c 4 -T 8 > /dev/null 2>&1 &
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -j 4 -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0010-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0010-run.out 2>&1
+sleep 12
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT sum(bbalance) FROM pgbench_branches;" > ${TEST_BASE}/TEST-0010-count1.out
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT sum(delta) FROM pgbench_history;" > ${TEST_BASE}/TEST-0010-count2.out
 diff ${TEST_BASE}/TEST-0010-count1.out ${TEST_BASE}/TEST-0010-count2.out
@@ -193,6 +190,7 @@ pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT sum(bbalance) FROM pgbench_branches;" > ${TEST_BASE}/TEST-0010-count1.out
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT sum(delta) FROM pgbench_history;" > ${TEST_BASE}/TEST-0010-count2.out
 diff ${TEST_BASE}/TEST-0010-count1.out ${TEST_BASE}/TEST-0010-count2.out
+
 echo ''
 
 
@@ -201,7 +199,7 @@ echo '###### recovery to latest from full + ptrack backups with loads when full 
 init_backup
 pgbench_objs 0009
 pgbench -p ${TEST_PGPORT} -d pgbench -c 4 -T 8 > /dev/null 2>&1 &
-PGBENCH_PID=$!
+#PGBENCH_PID=$!
 pg_arman backup -B ${BACKUP_PATH} -b full -j 4 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0009-run.out 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0009-run.out 2>&1
 #kill $PGBENCH_PID 2> /dev/null
