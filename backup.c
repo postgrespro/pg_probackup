@@ -59,7 +59,10 @@ static bool pg_is_standby(void);
 static void get_lsn(PGresult *res, XLogRecPtr *lsn);
 static void get_xid(PGresult *res, uint32 *xid);
 static void pg_ptrack_clear(void);
-
+static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
+									 Oid db_oid,
+									 Oid rel_oid,
+									 size_t *result_size);
 static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
 static void create_file_list(parray *files,
 							 const char *root,
@@ -315,9 +318,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pg_free(backup_threads_args[i]);
 	}
 
-	/* Clear ptrack files after backup */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
-		pg_ptrack_clear();
 	/* Notify end of backup */
 	pg_stop_backup(&current);
 
@@ -566,6 +566,38 @@ pg_ptrack_clear(void)
 	PQclear(res_db);
 	disconnect();
 	dbname = old_dbname;
+}
+
+static char *
+pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid, size_t *result_size)
+{
+	PGresult	*res_db, *res;
+	const char	*old_dbname = dbname;
+	char		*params[2];
+	char		*result;
+
+	reconnect();
+	params[0] = palloc(64);
+	params[1] = palloc(64);
+	sprintf(params[0], "%i", db_oid);
+	sprintf(params[1], "%i", rel_oid);
+	res_db = execute("SELECT datname FROM pg_database WHERE oid=$1", 1, (const char **)params);
+	disconnect();
+	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
+	PQclear(res_db);
+
+	reconnect();
+	sprintf(params[0], "%i", tablespace_oid);
+	res = execute("SELECT pg_ptrack_get_and_clear($1, $2)", 2,  (const char **)params);
+	result = (char *)PQunescapeBytea((unsigned char *)PQgetvalue(res, 0, 0), result_size);
+	PQclear(res);
+	pfree(params[0]);
+	pfree(params[1]);
+
+	pfree((char *)dbname);
+	dbname = old_dbname;
+
+	return result;
 }
 
 static void
@@ -907,7 +939,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		relative = file->path + strlen(root) + 1;
 		if (is_pgdata &&
 			!path_is_prefix_of_path("base", relative) &&
-			!path_is_prefix_of_path("global", relative) &&
+			/*!path_is_prefix_of_path("global", relative) &&*/
 			!path_is_prefix_of_path("pg_tblspc", relative))
 			continue;
 
@@ -1062,35 +1094,45 @@ void make_pagemap_from_ptrack(parray *files)
 		pgFile *p = (pgFile *) parray_get(files, i);
 		if (p->ptrack_path != NULL)
 		{
-			DataPage page;
-			char *flat_memory, *flat_mamory_cur;
+			char *flat_memory;
+			char *tmp_path = p->ptrack_path;
+			char *tablespace;
+			size_t path_length = strlen(p->ptrack_path);
 			size_t flat_size = 0;
 			size_t start_addr;
-			struct stat st;
+			Oid db_oid, rel_oid, tablespace_oid = 0;
+			int sep_iter, sep_count = 0;
+			tablespace = palloc0(64);
 
-			FILE *ptrack_file = fopen(p->ptrack_path, "r");
-			if (ptrack_file == NULL)
+			/* Find target path*/
+			for(sep_iter = (int)path_length; sep_iter >= 0; sep_iter--)
 			{
-				elog(ERROR, "cannot open ptrack file \"%s\": %s", p->ptrack_path,
-					strerror(errno));
+				if (IS_DIR_SEP(tmp_path[sep_iter]))
+				{
+					sep_count++;
+				}
+				if (sep_count == 3)
+				{
+					tmp_path += sep_iter + 1;
+					break;
+				}
 			}
+			/* For unix only now */
+			sscanf(tmp_path, "%[^/]/%u/%u_ptrack", tablespace, &db_oid, &rel_oid);
+			if (strcmp(tablespace, "base") != 0 && strcmp(tablespace, "global") != 0)
+				sscanf(tablespace, "%i", &tablespace_oid);
 
-			fstat(fileno(ptrack_file), &st);
-			flat_size = st.st_size-(st.st_size/BLCKSZ)*MAXALIGN(SizeOfPageHeaderData);
-			flat_mamory_cur = flat_memory = pg_malloc(flat_size);
+			flat_memory = pg_ptrack_get_and_clear(tablespace_oid,
+												  db_oid,
+												  rel_oid,
+												  &flat_size);
 
-			while(fread(page.data, BLCKSZ, 1, ptrack_file) == 1)
-			{
-				char *map = PageGetContents(page.data);
-				memcpy(flat_memory, map, MAPSIZE);
-				flat_mamory_cur += MAPSIZE;
-			}
-			fclose(ptrack_file);
 			start_addr = (RELSEG_SIZE/8)*p->segno;
 			p->pagemap.bitmapsize = start_addr+RELSEG_SIZE/8 > flat_size ? flat_size - start_addr : RELSEG_SIZE/8;
 			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
 			memcpy(p->pagemap.bitmap, flat_memory+start_addr, p->pagemap.bitmapsize);
 			pg_free(flat_memory);
+			pg_free(tablespace);
 		}
 	}
 }

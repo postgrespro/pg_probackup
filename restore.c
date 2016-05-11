@@ -476,6 +476,7 @@ create_recovery_conf(const char *target_time,
 			fprintf(fp, "recovery_target_xid = '%s'\n", target_xid);
 		if (target_inclusive)
 			fprintf(fp, "recovery_target_inclusive = '%s'\n", target_inclusive);
+		/*fprintf(fp, "recovery_target = 'immediate'\n");*/
 		fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
 
 		fclose(fp);
