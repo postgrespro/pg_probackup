@@ -238,7 +238,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		XLogRecPtr ptrack_lsn = get_last_ptrack_lsn();
-		if (ptrack_lsn < prev_backup->start_lsn || ptrack_lsn >= current.start_lsn)
+		if (ptrack_lsn > prev_backup->stop_lsn)
 			elog(ERROR, "Wrong ptrack lsn:%lx prev:%lx current:%lx",
 				ptrack_lsn,
 				prev_backup->start_lsn,

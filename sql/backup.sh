@@ -79,7 +79,7 @@ echo '###### ptrack backup mode ######'
 init_catalog
 pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0006-run.log 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0006-run.log 2>&1
-pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0006-run.log 2>&1;echo $?
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0006-run.log 2>&1;echo $?
 pg_arman validate -B ${BACKUP_PATH} >> ${TEST_BASE}/TEST-0006-run.log 2>&1
 pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0006.log 2>&1
 grep -c OK ${TEST_BASE}/TEST-0006.log
