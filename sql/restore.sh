@@ -170,6 +170,22 @@ psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches
 diff ${TEST_BASE}/TEST-0007-before.out ${TEST_BASE}/TEST-0007-after.out
 echo ''
 
+echo '###### RESTORE COMMAND TEST-0011 ######'
+echo '###### recovery in stream mode to latest from full + ptrack backups ######'
+init_backup
+pgbench_objs 0006
+pg_arman backup -B ${BACKUP_PATH} -b full -j 4 --stream -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0011-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0011-run.out 2>&1
+pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
+pg_arman backup -B ${BACKUP_PATH} -b ptrack -j 4 --stream -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0011-run.out 2>&1;echo $?
+pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0011-run.out 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0011-before.out
+pg_ctl stop -m immediate > /dev/null 2>&1
+pg_arman restore -B ${BACKUP_PATH} --stream --verbose >> ${TEST_BASE}/TEST-0011-run.out 2>&1;echo $?
+pg_ctl start -w -t 600 > /dev/null 2>&1
+psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0011-after.out
+diff ${TEST_BASE}/TEST-0011-before.out ${TEST_BASE}/TEST-0011-after.out
+echo ''
 
 echo '###### RESTORE COMMAND TEST-0010 ######'
 echo '###### recovery to latest from full + page backups with loads when ptrack backup do ######'

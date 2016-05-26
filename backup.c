@@ -23,14 +23,19 @@
 #include "pgut/pgut-port.h"
 #include "storage/bufpage.h"
 #include "datapagemap.h"
+#include "streamutil.h"
+#include "receivelog.h"
 
 /* wait 10 sec until WAL archive complete */
-#define TIMEOUT_ARCHIVE		10
+#define TIMEOUT_ARCHIVE 10
 
 /* Server version */
 static int server_version = 0;
 
-static bool		 in_backup = false;	/* TODO: more robust logic */
+static bool	in_backup = false;						/* TODO: more robust logic */
+static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
+static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
+const char *progname = "pg_arman";
 
 /* list of files contained in backup */
 parray			*backup_files_list;
@@ -71,6 +76,15 @@ static void create_file_list(parray *files,
 							 bool is_append);
 static void wait_for_archive(pgBackup *backup, const char *sql);
 static void make_pagemap_from_ptrack(parray *files);
+static void StreamLog(void *arg);
+
+
+#define disconnect_and_exit(code)				\
+	{											\
+	if (conn != NULL) PQfinish(conn);			\
+	exit(code);									\
+	}
+
 
 /*
  * Take a backup of database and return the list of files backed up.
@@ -82,12 +96,14 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
 	FILE	   *fp;
 	char		path[MAXPGPATH];
+	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr *lsn = NULL;
 	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup
 											 * list file */
 	bool		has_backup_label  = true;	/* flag if backup_label is there */
 	pthread_t	backup_threads[num_threads];
+	pthread_t	stream_thread;
 	backup_files_args *backup_threads_args[num_threads];
 
 	/* repack the options */
@@ -129,8 +145,18 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 					"or validate existing one.");
 	}
 
+	/* clear ptrack files for FULL and DIFF backup */
 	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
 		pg_ptrack_clear();
+
+	/* start stream replication */
+	if (stream_wal)
+	{
+		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+		join_path_components(dst_backup_path, path, "pg_xlog");
+		dir_create_dir(dst_backup_path, DIR_PERMISSION);
+		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
+	}
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
@@ -321,6 +347,35 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* Notify end of backup */
 	pg_stop_backup(&current);
+
+	if (stream_wal)
+	{
+		parray	*list_file;
+		char pg_xlog_path[MAXPGPATH];
+
+		/* We expect the completion of stream */
+		pthread_join(stream_thread, NULL);
+
+		/* Scan backup pg_xlog dir */
+		list_file = parray_new();
+		join_path_components(pg_xlog_path, path, "pg_xlog");
+		dir_list_file(list_file, pg_xlog_path, NULL, true, false);
+
+		/* Remove file path root prefix and calc meta */
+		for (i = 0; i < parray_num(list_file); i++)
+		{
+			pgFile *file = (pgFile *)parray_get(list_file, i);
+
+			calc_file(file);
+			if (strstr(file->path, path) == file->path)
+			{
+				char *ptr = file->path;
+				file->path = pstrdup(JoinPathEnd(ptr, path));
+				free(ptr);
+			}
+		}
+		parray_concat(backup_files_list, list_file);
+	}
 
 	/* Create file list */
 	create_file_list(backup_files_list, pgdata, DATABASE_FILE_LIST, NULL, false);
@@ -549,7 +604,7 @@ static void
 pg_ptrack_clear(void)
 {
 	PGresult	*res_db, *res;
-	const char *old_dbname = dbname;
+	const char *old_dbname = pgut_dbname;
 	int i;
 
 	reconnect();
@@ -557,8 +612,8 @@ pg_ptrack_clear(void)
 	disconnect();
 	for(i=0; i < PQntuples(res_db); i++)
 	{
-		dbname = PQgetvalue(res_db, i, 0);
-		if (!strcmp(dbname, "template0"))
+		pgut_dbname = PQgetvalue(res_db, i, 0);
+		if (!strcmp(pgut_dbname, "template0"))
 			continue;
 		reconnect();
 		res = execute("SELECT pg_ptrack_clear()", 0, NULL);
@@ -566,14 +621,14 @@ pg_ptrack_clear(void)
 	}
 	PQclear(res_db);
 	disconnect();
-	dbname = old_dbname;
+	pgut_dbname = old_dbname;
 }
 
 static char *
 pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid, size_t *result_size)
 {
 	PGresult	*res_db, *res;
-	const char	*old_dbname = dbname;
+	const char	*old_dbname = pgut_dbname;
 	char		*params[2];
 	char		*result;
 
@@ -584,7 +639,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid, size_t *res
 	sprintf(params[1], "%i", rel_oid);
 	res_db = execute("SELECT datname FROM pg_database WHERE oid=$1", 1, (const char **)params);
 	disconnect();
-	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
+	pgut_dbname = pstrdup(PQgetvalue(res_db, 0, 0));
 	PQclear(res_db);
 
 	reconnect();
@@ -595,8 +650,8 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid, size_t *res
 	pfree(params[0]);
 	pfree(params[1]);
 
-	pfree((char *)dbname);
-	dbname = old_dbname;
+	pfree((char *)pgut_dbname);
+	pgut_dbname = old_dbname;
 
 	return result;
 }
@@ -683,7 +738,52 @@ wait_for_archive(pgBackup *backup, const char *sql)
 static void
 pg_stop_backup(pgBackup *backup)
 {
-	wait_for_archive(backup,
+	if (stream_wal)
+	{
+		PGresult	*res;
+		TimeLineID	tli;
+
+		reconnect();
+
+		/* Remove annoying NOTICE messages generated by backend */
+		res = execute("SET client_min_messages = warning;", 0, NULL);
+		PQclear(res);
+
+		/* And execute the query wanted */
+		res = execute("SELECT * FROM pg_stop_backup()", 0, NULL);
+
+		/* Get LSN from execution result */
+		get_lsn(res, &stop_backup_lsn);
+		PQclear(res);
+
+		/*
+		 * Enforce TLI obtention if backup is not present as this code
+		 * path can be taken as a callback at exit.
+		 */
+		tli = get_current_timeline(false);
+
+		/* Fill in fields if backup exists */
+		if (backup != NULL)
+		{
+			backup->tli = tli;
+			backup->stop_lsn = stop_backup_lsn;
+			elog(LOG, "%s(): tli=%X lsn=%X/%08X",
+				 __FUNCTION__, backup->tli,
+				 (uint32) (backup->stop_lsn >> 32),
+				 (uint32) backup->stop_lsn);
+		}
+
+		res = execute(TXID_CURRENT_SQL, 0, NULL);
+		if (backup != NULL)
+		{
+			get_xid(res, &backup->recovery_xid);
+			backup->recovery_time = time(NULL);
+		}
+		PQclear(res);
+		disconnect();
+	}
+	else
+		wait_for_archive(backup,
 		"SELECT * FROM pg_stop_backup()");
 }
 
@@ -719,8 +819,8 @@ get_lsn(PGresult *res, XLogRecPtr *lsn)
 	 * Extract timeline and LSN from results of pg_stop_backup()
 	 * and friends.
 	 */
-	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
 
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
 	/* Calculate LSN */
 	*lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 }
@@ -1136,4 +1236,99 @@ void make_pagemap_from_ptrack(parray *files)
 			pg_free(tablespace);
 		}
 	}
+}
+
+
+static bool
+stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
+{
+	static uint32 prevtimeline = 0;
+	static XLogRecPtr prevpos = InvalidXLogRecPtr;
+
+	/* we assume that we get called once at the end of each segment */
+	if (verbose && segment_finished)
+		fprintf(stderr, _("%s: finished segment at %X/%X (timeline %u)\n"),
+				progname, (uint32) (xlogpos >> 32), (uint32) xlogpos,
+				timeline);
+
+	/*
+	 * Note that we report the previous, not current, position here. After a
+	 * timeline switch, xlogpos points to the beginning of the segment because
+	 * that's where we always begin streaming. Reporting the end of previous
+	 * timeline isn't totally accurate, because the next timeline can begin
+	 * slightly before the end of the WAL that we received on the previous
+	 * timeline, but it's close enough for reporting purposes.
+	 */
+	if (prevtimeline != 0 && prevtimeline != timeline)
+		fprintf(stderr, _("%s: switched to timeline %u at %X/%X\n"),
+				progname, timeline,
+				(uint32) (prevpos >> 32), (uint32) prevpos);
+
+	if (stop_backup_lsn != InvalidXLogRecPtr && xlogpos > stop_backup_lsn)
+		return true;
+
+	prevtimeline = timeline;
+	prevpos = xlogpos;
+
+	return false;
+}
+
+/*
+ * Start the log streaming
+ */
+static void
+StreamLog(void *arg)
+{
+	XLogRecPtr	startpos;
+	TimeLineID	starttli;
+	char *basedir = (char *)arg;
+
+	/*
+	 * Connect in replication mode to the server
+	 */
+	if (conn == NULL)
+		conn = GetConnection();
+	if (!conn)
+		/* Error message already written in GetConnection() */
+		return;
+
+	if (!CheckServerVersionForStreaming(conn))
+	{
+		/*
+		 * Error message already written in CheckServerVersionForStreaming().
+		 * There's no hope of recovering from a version mismatch, so don't
+		 * retry.
+		 */
+		disconnect_and_exit(1);
+	}
+
+	/*
+	 * Identify server, obtaining start LSN position and current timeline ID
+	 * at the same time, necessary if not valid data can be found in the
+	 * existing output directory.
+	 */
+	if (!RunIdentifySystem(conn, NULL, &starttli, &startpos, NULL))
+		disconnect_and_exit(1);
+
+
+	/*
+	 * Always start streaming at the beginning of a segment
+	 */
+	startpos -= startpos % XLOG_SEG_SIZE;
+
+	/*
+	 * Start the replication
+	 */
+	if (verbose)
+		fprintf(stderr,
+				_("%s: starting log streaming at %X/%X (timeline %u)\n"),
+				progname, (uint32) (startpos >> 32), (uint32) startpos,
+				starttli);
+
+	ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
+					  stop_streaming, standby_message_timeout, ".partial",
+					  false, false);
+
+	PQfinish(conn);
+	conn = NULL;
 }

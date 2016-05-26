@@ -44,3 +44,9 @@ page-level backup without validated full backup
 0
 2
 6
+###### BACKUP COMMAND TEST-0008 ######
+###### ptrack multi thread backup mode + stream ######
+0
+0
+2
+6

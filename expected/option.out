@@ -17,6 +17,7 @@ Common Options:
   -B, --backup-path=PATH    location of the backup storage area
   -c, --check               show what would have been done
   -j, --threads=NUM         num threads for backup and restore
+  --stream                  use stream for save/restore WAL during backup
 
 Backup options:
   -b, --backup-mode=MODE    full,page,ptrack

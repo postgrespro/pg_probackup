@@ -74,8 +74,14 @@ wal_log_hints = on
 archive_mode = on
 archive_command = 'cp %p ${ARCLOG_PATH}/%f'
 ptrack_enable = on
+max_wal_senders = 5
+wal_keep_segments = 32
 EOF
 
+	cat << EOF >> $PGDATA_PATH/pg_hba.conf
+local   replication     all                                trust
+host    replication     all        127.0.0.1/32            trust
+EOF
     # start PostgreSQL
     pg_ctl start -D ${PGDATA_PATH} -w -t 300 > /dev/null 2>&1
     pgbench -i -p ${TEST_PGPORT} -d postgres > ${TEST_BASE}/pgbench.log 2>&1

@@ -207,6 +207,7 @@ extern const char *pgdata_exclude[];
 extern parray *backup_files_list;
 
 extern int num_threads;
+extern bool stream_wal;
 
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);
@@ -290,6 +291,8 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
+
+extern bool calc_file(pgFile *file);
 
 /* parsexlog.c */
 extern void extractPageMap(const char *datadir, XLogRecPtr startpoint,

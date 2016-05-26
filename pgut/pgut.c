@@ -28,7 +28,7 @@
 
 const char *PROGRAM_NAME = NULL;
 
-const char	   *dbname = NULL;
+const char	   *pgut_dbname = NULL;
 const char	   *host = NULL;
 const char	   *port = NULL;
 const char	   *username = NULL;
@@ -61,7 +61,7 @@ static const char *get_username(void);
 
 static pgut_option default_options[] =
 {
-	{ 's', 'd', "dbname"	, &dbname },
+	{ 's', 'd', "dbname"	, &pgut_dbname },
 	{ 's', 'h', "host"		, &host },
 	{ 's', 'p', "port"		, &port },
 	{ 'b', 'q', "quiet"		, &quiet },
@@ -627,10 +627,10 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 
 	/* Read environment variables */
 	option_from_env(options);
-	(void) (dbname ||
-	(dbname = getenv("PGDATABASE")) ||
-	(dbname = getenv("PGUSER")) ||
-	(dbname = get_username()));
+	(void) (pgut_dbname ||
+	(pgut_dbname = getenv("PGDATABASE")) ||
+	(pgut_dbname = getenv("PGUSER")) ||
+	(pgut_dbname = get_username()));
 
 	init_cancel_handler();
 	atexit(on_cleanup);
@@ -897,7 +897,7 @@ pgut_connect(int elevel)
 	/* Start the connection. Loop until we have a password if requested by backend. */
 	for (;;)
 	{
-		conn = PQsetdbLogin(host, port, NULL, NULL, dbname, username, password);
+		conn = PQsetdbLogin(host, port, NULL, NULL, pgut_dbname, username, password);
 
 		if (PQstatus(conn) == CONNECTION_OK)
 			return conn;
@@ -910,7 +910,7 @@ pgut_connect(int elevel)
 			continue;
 		}
 #endif
-		elog(elevel, "could not connect to database %s: %s", dbname, PQerrorMessage(conn));
+		elog(elevel, "could not connect to database %s: %s", pgut_dbname, PQerrorMessage(conn));
 		PQfinish(conn);
 		return NULL;
 	}

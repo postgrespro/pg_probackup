@@ -42,6 +42,12 @@ OK: recovery-target-xid options works well.
 0
 0
 
+###### RESTORE COMMAND TEST-0011 ######
+###### recovery in stream mode to latest from full + ptrack backups ######
+0
+0
+0
+
 ###### RESTORE COMMAND TEST-0010 ######
 ###### recovery to latest from full + page backups with loads when ptrack backup do ######
 0

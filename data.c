@@ -542,3 +542,71 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 
 	return true;
 }
+
+bool
+calc_file(pgFile *file)
+{
+	FILE	   *in;
+	size_t		read_len = 0;
+	int			errno_tmp;
+	char		buf[8192];
+	struct stat	st;
+	pg_crc32	crc;
+
+	INIT_CRC32C(crc);
+
+	/* reset size summary */
+	file->read_size = 0;
+	file->write_size = 0;
+
+	/* open backup mode file for read */
+	in = fopen(file->path, "r");
+	if (in == NULL)
+	{
+		FIN_CRC32C(crc);
+		file->crc = crc;
+
+		/* maybe deleted, it's not error */
+		if (errno == ENOENT)
+			return false;
+
+		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
+			 strerror(errno));
+	}
+
+	/* stat source file to change mode of destination file */
+	if (fstat(fileno(in), &st) == -1)
+	{
+		fclose(in);
+		elog(ERROR, "cannot stat \"%s\": %s", file->path,
+			 strerror(errno));
+	}
+
+	for (;;)
+	{
+		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
+			break;
+
+		/* update CRC */
+		COMP_CRC32C(crc, buf, read_len);
+
+		file->write_size += sizeof(buf);
+		file->read_size += sizeof(buf);
+	}
+
+	errno_tmp = errno;
+	if (!feof(in))
+	{
+		fclose(in);
+		elog(ERROR, "cannot read backup mode file \"%s\": %s",
+			 file->path, strerror(errno_tmp));
+	}
+
+	/* finish CRC calculation and store into pgFile */
+	FIN_CRC32C(crc);
+	file->crc = crc;
+
+	fclose(in);
+
+	return true;
+}
