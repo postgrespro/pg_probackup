@@ -29,7 +29,7 @@ It proposes the following features:
   command
 - Recovery from backup with just one command, with customized targets
   to facilitate the use of PITR.
-- Support for full and differential backup
+- Support for full and differential backup + ptrack differential backup
 - Management of backups with integrated catalog
 
 ## COMMANDS 
@@ -79,9 +79,11 @@ LSN position of pg_start_backup is done and all the blocks touched are
 recorded and tracked as part of the backup. As the WAL segments scanned
 need to be located in the WAL archive, the last segment after pg_start_backup
 has been run needs to be forcibly switched.
+- ptrack differential backup, use bitmap ptrack file for detect changed pages.
+For use it you need set ptrack_enable option to "on".
 
 It is recommended to verify backup files as soon as possible after backup.
-Unverified backup cannot be used in restore and in differential backup.
+Unverified backup cannot be used in restore and in differential backups.
 
 ### RESTORE 
 
@@ -147,7 +149,7 @@ Start                Mode  Current TLI  Parent TLI  Time    Data   Backup   Stat
 The fields are:
 
 * Start: start time of backup
-* Mode: Mode of backup: FULL (full) or PAGE (page differential)
+* Mode: Mode of backup: FULL (full) or PAGE (page differential) or PTRACK (differential by ptrack)
 * Current TLI: current timeline of backup
 * Parent TLI: parent timeline of backup
 * Time: total time necessary to take this backup
@@ -238,6 +240,12 @@ absolute paths; relative paths are not allowed.
     --keep-data-days means days to be kept.
     Only files exceeded one of those settings are deleted.
 
+**-j**=NUMBER / **--threads**=NUMBER:
+    Number of threads for backup. 
+
+**--stream**:
+    Enable stream replication for save WAL during backup process. 
+
 ### RESTORE OPTIONS 
 
 The parameters whose name start are started with --recovery refer to
@@ -257,6 +265,14 @@ the same parameters as the ones in recovery.confin recovery.conf.
 
 **--recovery-target-inclusive**:  
     Specifies whether server pauses when recovery target is reached.
+
+**-j**=NUMBER / **--threads**=NUMBER:
+    Number of threads for restore. 
+
+**--stream**:
+    Restore without recovery.conf and use pg_xlog WALs. Before you need 
+    backup with **--stream** option. This option will disable all **--recovery-**
+    options. 
 
 ### CATALOG OPTIONS
 
@@ -341,7 +357,7 @@ line and configuration file for security reason.
 This utility, like most other PostgreSQL utilities, also uses the
 environment variables supported by libpq (see Environment Variables).
 
-## RESTRICTIONS ##
+## RESTRICTIONS
 
 pg_arman has the following restrictions.
 
@@ -354,7 +370,7 @@ pg_arman has the following restrictions.
   WAL directory or archived WAL directory, the backup or restore will fail
   depending on the backup mode selected.
 
-## DETAILS ##
+## DETAILS
 
 ### RECOVERY TO POINT-IN-TIME 
 pg_arman can recover to point-in-time if timeline, transaction ID, or
@@ -368,10 +384,13 @@ are required if the value contains whitespaces. Comments should start with
 "#" and are automatically ignored. Whitespaces and tabs are ignored
 excluding values.
 
-### Restrictions 
-In order to work, the PostgreSQL instance on which backups are taken need
-to have data checksums enabled or to enable wal_log_hints. pg_arman is
-aimed at working with PostgreSQL 9.5 and newer versions.
+### RESTRICTIONS
+* In order to work, the PostgreSQL instance on which backups are taken need
+to have data checksums enabled or to enable wal_log_hints.
+* pg_arman is aimed at working with PostgreSQL 9.5 and newer versions.
+* For ptrack feature you need special version of Postgres and set wal_level to
+archive or hot_standby and ptrack_enable.
+* For stream feature you need configure streaming replication in your postgres. 
 
 ### EXIT CODE 
 pg_arman returns exit codes for each error status.
@@ -387,5 +406,7 @@ Code    Name                    Description
 ## AUTHOR ##
 pg_arman is a fork of pg_arman that was originally written by NTT, now
 developed and maintained by Michael Paquier.
+Threads, WAL diff, ptrack diff, stream WAL and some other features developed by
+Yury Zhuravlev aka stalkerg from PostgresPro. 
 
-Please report bug reports at <https://github.com/michaelpq/pg_arman>.
+Please report bug reports at <https://github.com/stalkerg/pg_arman>.
