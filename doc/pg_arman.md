@@ -243,52 +243,52 @@ absolute paths; relative paths are not allowed.
 The parameters whose name start are started with --recovery refer to
 the same parameters as the ones in recovery.confin recovery.conf.
 
-*--recovery-target-timeline*=_TIMELINE_::
+**--recovery-target-timeline**=_TIMELINE_:  
     Specifies recovering into a particular timeline. If not specified,
     the current timeline is used.
 
-*--recovery-target-time*=_TIMESTAMP_::
+**--recovery-target-time**=TIMESTAMP:  
     This parameter specifies the timestamp up to which recovery will
     proceed.
 
-*--recovery-target-xid*=_XID::
+**--recovery-target-xid**=XID:  
     This parameter specifies the transaction ID up to which recovery
     will proceed.
 
-*--recovery-target-inclusive*::
+**--recovery-target-inclusive**:  
     Specifies whether server pauses when recovery target is reached.
 
-=== CATALOG OPTIONS ===
+### CATALOG OPTIONS
 
-*-a* / *--show-all*::
+**-a** / **--show-all**:  
     Show all existing backups, including the deleted ones.
 
 ### CONNECTION OPTIONS 
 Parameters to connect PostgreSQL server.
 
-*-d* _DBNAME_ / *--dbname*=_DBNAME_::
+**-d** DBNAME / **--dbname**=DBNAME:  
     The database name to execute pg_start_backup() and pg_stop_backup().
 
-*-h* _HOSTNAME_ / *--host*=_HOSTNAME_::
+**-h** HOSTNAME / **--host**=HOSTNAME:  
     Specifies the host name of the machine on which the server is running.
     If the value begins with a slash, it is used as the directory for the
     Unix domain socket.
 
-*-p* _PORT_ / *--port*=_PORT_::
+**-p** PORT / **--port**=PORT:  
     Specifies the TCP port or local Unix domain socket file extension on
     which the server is listening for connections.
 
-*-U* _USERNAME_ / *--username*=_USERNAME_::
+**-U** USERNAME / **--username**=USERNAME:  
     User name to connect as.
 
-*-w* / *--no-password*::
+**-w** / **--no-password**:  
     Never issue a password prompt. If the server requires password
     authentication and a password is not available by other means such as
     a .pgpass file, the connection attempt will fail. This option can be
     useful in batch jobs and scripts where no user is present to enter a
     password.
 
-*-W* / *--password*::
+**-W** / **--password**:  
     Force pg_arman to prompt for a password before connecting to a database.
     This option is never essential, since pg_arman will automatically
     prompt for a password if the server demands password authentication.
@@ -298,13 +298,13 @@ Parameters to connect PostgreSQL server.
 
 ### GLOBAL OPTIONS 
 
-*--help*::
+**--help**:  
     Print help, then exit.
 
-*-V* / *--version*::
+**-V** / **--version**:  
     Print version information, then exit.
 
-*-v* / *--verbose*::
+**-v** / **--verbose**:  
     If specified, pg_arman works in verbose mode.
 
 ## PARAMETERS 
@@ -377,11 +377,11 @@ aimed at working with PostgreSQL 9.5 and newer versions.
 pg_arman returns exit codes for each error status.
 
 ```
-Code	Name			Description
-0	SUCCESS			Operation succeeded.
-1	ERROR			Generic error
-2	FATAL			Exit because of repeated errors
-3	PANIC			Unknown critical condition
+Code    Name                    Description
+0       SUCCESS                 Operation succeeded.
+1       ERROR                   Generic error
+2       FATAL                   Exit because of repeated errors
+3       PANIC                   Unknown critical condition
 ```
 
 ## AUTHOR ##
