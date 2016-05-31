@@ -38,25 +38,7 @@ pg_arman has been tested on Linux and Unix-based platforms.
 Documentation
 -------------
 
-All the documentation is maintained in doc/ as text file, that is then
-fetched by asciidoc to generate automatically man pages and html
-documentation.
-
-In order to generate the documentation, the variables XMLTO and ASCIIDOC
-need to be set to proper values indicating where are located the binaries
-of respectively xmlto and asciidoc. An example of build is as follows:
-
-    make top_srcdir=<path to PostgreSQL source tree> \
-        ASCIIDOC=asciidoc XMLTO=xmlto
-
-They could as well be set as environment variables for development
-purposes.
-
-On OSX, it is necessary to set XML_CATALOG_FILES to point to the correct
-xml catalogs. In the case of an environment with Homebrew after having
-install xmlto and asciidoc:
-
-    export XML_CATALOG_FILES="/usr/local/etc/xml/catalog"
+All the documentation you can find [here](doc/pg_arman.md).
 
 Regression tests
 ----------------
