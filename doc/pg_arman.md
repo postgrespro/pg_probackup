@@ -37,23 +37,23 @@ It proposes the following features:
 pg_arman supports the following commands. See also **OPTIONS** for more
 details.
 
-**init**: 
+**init**:  
     Initialize a backup catalog.
 
-**backup**: 
+**backup**:  
     Take an online backup.
 
-**restore**: 
+**restore**:  
     Perform restore.
 
-**show**: 
+**show**:  
     Show backup history. The timeline option shows timeline of the backup
     and the parent's timeline for each backup.
 
-**validate**: 
+**validate**:  
     Validate backup files.
 
-**delete**: 
+**delete**:  
     Delete backup files.
 
 ### INITIALIZATION 
@@ -202,38 +202,38 @@ details.
 As a general rule, paths for data location need to be specified as
 absolute paths; relative paths are not allowed.
 
-**-D** *PATH* / **--pgdata**=*PATH*: 
+**-D** PATH / **--pgdata**=*PATH*:  
     The absolute path of database cluster. Required on backup and
     restore.
 
-**-A** *PATH* / **--arclog-path**=*PATH*: 
+**-A** PATH / **--arclog-path**=*PATH*:  
     The absolute path of archive WAL directory. Required for restore
     and show command.
 
-*-B* _PATH_ / *--backup-path*=_PATH_::
+**-B** PATH / **--backup-path**=*PATH*:  
     The absolute path of backup catalog. This option is mandatory.
 
-*-c* / *--check*::
+**-c** / **--check**:  
     If specifed, pg_arman doesn't perform actual jobs but only checks
     parameters and required resources. The option is typically used with
     --verbose option to verify the operation.
 
-=== BACKUP OPTIONS ===
+### BACKUP OPTIONS
 
-*-b* _BACKUPMODE_ / *--backup-mode*=_BACKUPMODE_::
+**-b** BACKUPMODE / **--backup-mode**=BACKUPMODE:  
     Specify backup target files. Available options are: "full",
     "page".
 
-*-C* / *--smooth-checkpoint*::
+**-C** / **--smooth-checkpoint**:  
     Checkpoint is performed on every backups. If the option is specified,
     do smooth checkpoint then. See also the second argument for
     pg_start_backup().
 
-*--validate*::
+**--validate**:  
     Validate a backup just after taking it. Other backups taken
     previously are ignored.
 
-*--keep-data-generations*=_NUMBER_ / *--keep-data-days*=_DAYS_::
+**--keep-data-generations**=NUMBER / **--keep-data-days**=DAYS:  
     Specify how long backuped data files will be kept.
     --keep-data-generations means number of backup generations.
     --keep-data-days means days to be kept.
@@ -312,27 +312,28 @@ Parameters to connect PostgreSQL server.
 
 Some of parameters can be specified as command line arguments, environment
 variables or in configuration file as follows:
-
-	Short	Long			Env			File
-	-h	--host			PGHOST			No
-	-p	--port			PGPORT			No
-	-d	--dbname		PGDATABASE		No
-	-U	--username		PGUSER			No
-					PGPASSWORD		No
-	-w	--password					No
-	-W	--no-password					No
-	-D	--pgdata		PGDATA			Yes
-	-B	--backup-path		BACKUP_PATH		Yes
-	-A	--arclog-path		ARCLOG_PATH		Yes
-	-b	--backup-mode		BACKUP_MODE		Yes
-	-C	--smooth-checkpoint	SMOOTH_CHECKPOINT	Yes
-		--validate	        VALIDATE		Yes
-		--keep-data-generations	KEEP_DATA_GENERATIONS	Yes
-		--keep-data-days	KEEP_DATA_DAYS		Yes
-		--recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes
-		--recovery-target-xid	RECOVERY_TARGET_XID	Yes
-		--recovery-target-time	RECOVERY_TARGET_TIME	Yes
-		--recovery-target-inclusive RECOVERY_TARGET_INCLUSIVE Yes
+```
+Short	Long			Env			File
+-h	--host			PGHOST			No
+-p	--port			PGPORT			No
+-d	--dbname		PGDATABASE		No
+-U	--username		PGUSER			No
+				PGPASSWORD		No
+-w	--password					No
+-W	--no-password					No
+-D	--pgdata		PGDATA			Yes
+-B	--backup-path		BACKUP_PATH		Yes
+-A	--arclog-path		ARCLOG_PATH		Yes
+-b	--backup-mode		BACKUP_MODE		Yes
+-C	--smooth-checkpoint	SMOOTH_CHECKPOINT	Yes
+	--validate	        VALIDATE		Yes
+	--keep-data-generations	KEEP_DATA_GENERATIONS	Yes
+	--keep-data-days	KEEP_DATA_DAYS		Yes
+	--recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes
+	--recovery-target-xid	RECOVERY_TARGET_XID	Yes
+	--recovery-target-time	RECOVERY_TARGET_TIME	Yes
+	--recovery-target-inclusive RECOVERY_TARGET_INCLUSIVE Yes
+```
 
 Variable names in configuration file are the same as long names or names
 of environment variables. The password can not be specified in command
@@ -376,11 +377,13 @@ aimed at working with PostgreSQL 9.5 and newer versions.
 ### EXIT CODE 
 pg_arman returns exit codes for each error status.
 
-	Code	Name			Description
-	0	SUCCESS			Operation succeeded.
-	1	ERROR			Generic error
-	2	FATAL			Exit because of repeated errors
-	3	PANIC			Unknown critical condition
+```
+Code	Name			Description
+0	SUCCESS			Operation succeeded.
+1	ERROR			Generic error
+2	FATAL			Exit because of repeated errors
+3	PANIC			Unknown critical condition
+```
 
 ## AUTHOR ##
 pg_arman is a fork of pg_arman that was originally written by NTT, now
