@@ -409,4 +409,4 @@ developed and maintained by Michael Paquier.
 Threads, WAL diff, ptrack diff, stream WAL and some other features developed by
 Yury Zhuravlev aka stalkerg from PostgresPro. 
 
-Please report bug reports at <https://github.com/stalkerg/pg_arman>.
+Please report bug reports at <https://github.com/postgrespro/pg_arman/issues>.
