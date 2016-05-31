@@ -1,10 +1,10 @@
-= pg_arman(1) =
+# pg_arman(1) 
 
-== NAME ==
+## NAME 
 
 pg_arman - Backup and recovery manager for PostgreSQL
 
-== SYNOPSIS ==
+## SYNOPSIS 
 
 pg_arman [ OPTIONS ]
     { init |
@@ -18,7 +18,7 @@ DATE is the start time of the target backup in ISO-format:
 (YYYY-MM-DD HH:MI:SS). Prefix match is used to compare DATE and backup
 files.
 
-== DESCRIPTION ==
+## DESCRIPTION 
 
 pg_arman is a utility program to backup and restore PostgreSQL database.
 
@@ -31,7 +31,7 @@ It proposes the following features:
 - Support for full and differential backup
 - Management of backups with integrated catalog
 
-== COMMANDS ==
+## COMMANDS 
 
 pg_arman supports the following commands. See also *OPTIONS* for more
 details.
@@ -55,7 +55,7 @@ details.
 *delete*::
     Delete backup files.
 
-=== INITIALIZATION ===
+### INITIALIZATION 
 
 First, you need to create "a backup catalog" to store backup files and
 their metadata. It is recommended to setup archive_mode and archive_command
@@ -66,7 +66,7 @@ specify it in PGDATA environmental variable or -D/--pgdata option.
 
 	$ pg_arman init -B /path/to/backup/
 
-=== BACKUP ===
+### BACKUP 
 
 Backup target can be one of the following types:
 
@@ -81,7 +81,7 @@ has been run needs to be forcibly switched.
 It is recommended to verify backup files as soon as possible after backup.
 Unverified backup cannot be used in restore and in differential backup.
 
-=== RESTORE ===
+### RESTORE 
 
 PostgreSQL server should be stopped before performing a restore. If database
 cluster still exists, restore command will save unarchived transaction log
@@ -99,7 +99,7 @@ target. If pg_control is not present, TimeLineID in the full backup used by
 the restore will be a restore target.
 
 
-== EXAMPLES ==
+### EXAMPLES 
 
 To reduce the number of command line arguments, you can set BACKUP_PATH,
 an environment variable, to the absolute path of the backup catalog and
@@ -111,7 +111,7 @@ write default configuration into ${BACKUP_PATH}/pg_arman.ini.
 	KEEP_DATA_GENERATIONS = 3
 	KEEP_DATA_DAYS = 120
 
-=== TAKE A BACKUP ===
+### TAKE A BACKUP 
 
 This example takes a full backup of the whole database. Then, it validates
 all unvalidated backups.
@@ -119,7 +119,7 @@ all unvalidated backups.
 	$ pg_arman backup --backup-mode=full
 	$ pg_arman validate
 
-=== RESTORE FROM A BACKUP ===
+### RESTORE FROM A BACKUP 
 
 Here are some commands to restore from a backup:
 
@@ -127,8 +127,8 @@ Here are some commands to restore from a backup:
 	$ pg_arman restore
 	$ pg_ctl start
 
-=== SHOW A BACKUP ===
-
+### SHOW A BACKUP 
+```
 	$ pg_arman show
 	===================================================================================
 	Start                Mode  Current TLI  Parent TLI  Time    Data   Backup   Status 
@@ -136,7 +136,7 @@ Here are some commands to restore from a backup:
 	2013-12-25 03:02:31  PAGE            1           0    0m   203kB     67MB   DONE
 	2013-12-25 03:02:31  PAGE            1           0    0m      0B       0B   ERROR
 	2013-12-25 03:02:25  FULL            1           0    0m    33MB    364MB   OK
-
+```
 The fields are:
 
 * Start: start time of backup
@@ -182,13 +182,13 @@ the specified date. This command also cleans up in the WAL archive the
 WAL segments that are no longer needed to restore from the remaining
 backups.
 
-== OPTIONS ==
+### OPTIONS 
 
 pg_arman accepts the following command line parameters. Some of them can
 be also specified as environment variables. See also *PARAMETERS* for the
 details.
 
-=== COMMON OPTIONS ===
+### COMMON OPTIONS 
 As a general rule, paths for data location need to be specified as
 absolute paths; relative paths are not allowed.
 
@@ -229,7 +229,7 @@ absolute paths; relative paths are not allowed.
     --keep-data-days means days to be kept.
     Only files exceeded one of those settings are deleted.
 
-=== RESTORE OPTIONS ===
+### RESTORE OPTIONS 
 
 The parameters whose name start are started with --recovery refer to
 the same parameters as the ones in recovery.confin recovery.conf.
@@ -254,7 +254,7 @@ the same parameters as the ones in recovery.confin recovery.conf.
 *-a* / *--show-all*::
     Show all existing backups, including the deleted ones.
 
-=== CONNECTION OPTIONS ===
+### CONNECTION OPTIONS 
 Parameters to connect PostgreSQL server.
 
 *-d* _DBNAME_ / *--dbname*=_DBNAME_::
@@ -287,7 +287,7 @@ Parameters to connect PostgreSQL server.
     if the server wants a password. In some cases it is worth typing -W
     to avoid the extra connection attempt.
 
-=== GLOBAL OPTIONS ===
+### GLOBAL OPTIONS 
 
 *--help*::
     Print help, then exit.
@@ -298,7 +298,7 @@ Parameters to connect PostgreSQL server.
 *-v* / *--verbose*::
     If specified, pg_arman works in verbose mode.
 
-== PARAMETERS ==
+## PARAMETERS 
 
 Some of parameters can be specified as command line arguments, environment
 variables or in configuration file as follows:
@@ -331,7 +331,7 @@ line and configuration file for security reason.
 This utility, like most other PostgreSQL utilities, also uses the
 environment variables supported by libpq (see Environment Variables).
 
-== RESTRICTIONS ==
+## RESTRICTIONS ##
 
 pg_arman has the following restrictions.
 
@@ -344,26 +344,26 @@ pg_arman has the following restrictions.
   WAL directory or archived WAL directory, the backup or restore will fail
   depending on the backup mode selected.
 
-== DETAILS ==
+## DETAILS ##
 
-=== RECOVERY TO POINT-IN-TIME ===
+### RECOVERY TO POINT-IN-TIME 
 pg_arman can recover to point-in-time if timeline, transaction ID, or
 timestamp is specified in recovery.conf. xlogdump is a contrib module of
 PostgreSQL core that allows checking in the content of WAL files and
 determine when to recover. This might help.
 
-=== CONFIGURATION FILE ===
+### CONFIGURATION FILE 
 Setting parameters in configuration file is done as "name=value". Quotes
 are required if the value contains whitespaces. Comments should start with
 "#" and are automatically ignored. Whitespaces and tabs are ignored
 excluding values.
 
-=== Restrictions ===
+### Restrictions 
 In order to work, the PostgreSQL instance on which backups are taken need
 to have data checksums enabled or to enable wal_log_hints. pg_arman is
 aimed at working with PostgreSQL 9.5 and newer versions.
 
-=== EXIT CODE ===
+### EXIT CODE 
 pg_arman returns exit codes for each error status.
 
 	Code	Name			Description
@@ -372,7 +372,7 @@ pg_arman returns exit codes for each error status.
 	2	FATAL			Exit because of repeated errors
 	3	PANIC			Unknown critical condition
 
-== AUTHOR ==
+## AUTHOR ##
 pg_arman is a fork of pg_arman that was originally written by NTT, now
 developed and maintained by Michael Paquier.
 
