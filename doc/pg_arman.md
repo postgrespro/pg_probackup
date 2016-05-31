@@ -37,24 +37,23 @@ It proposes the following features:
 pg_arman supports the following commands. See also **OPTIONS** for more
 details.
 
-**init**:  
-    Initialize a backup catalog.
+* **init**:  
+	Initialize a backup catalog.
 
-**backup**:  
-    Take an online backup.
+* **backup**:  
+	Take an online backup.
 
-**restore**:  
-    Perform restore.
+* **restore**:  
+	Perform restore.
 
-**show**:  
-    Show backup history. The timeline option shows timeline of the backup
-    and the parent's timeline for each backup.
+* **show**:  
+	Show backup history. The timeline option shows timeline of the backup and the parent's timeline for each backup.
 
-**validate**:  
+* **validate**:  
     Validate backup files.
 
-**delete**:  
-    Delete backup files.
+* **delete**:  
+	Delete backup files.
 
 ### INITIALIZATION 
 
@@ -156,13 +155,13 @@ The fields are:
 * Log: size of read server log files
 * Backup: size of backup (= written size)
 * Status: status of backup. Possible values are:
-- OK : backup is done and validated.
-- DONE : backup is done, but not validated yet.
-- RUNNING : backup is running
-- DELETING : backup is being deleted.
-- DELETED : backup has been deleted.
-- ERROR : backup is unavailable because some errors occur during backup.
-- CORRUPT : backup is unavailable because it is broken.
+	* OK : backup is done and validated.
+	* DONE : backup is done, but not validated yet.
+	* RUNNING : backup is running
+	* DELETING : backup is being deleted.
+	* DELETED : backup has been deleted.
+	* ERROR : backup is unavailable because some errors occur during backup.
+	* CORRUPT : backup is unavailable because it is broken.
 
 When a date is specified, more details about a backup is retrieved:
 
@@ -202,15 +201,15 @@ details.
 As a general rule, paths for data location need to be specified as
 absolute paths; relative paths are not allowed.
 
-**-D** PATH / **--pgdata**=*PATH*:  
+**-D** PATH / **--pgdata**=PATH:  
     The absolute path of database cluster. Required on backup and
     restore.
 
-**-A** PATH / **--arclog-path**=*PATH*:  
+**-A** PATH / **--arclog-path**=PATH:  
     The absolute path of archive WAL directory. Required for restore
     and show command.
 
-**-B** PATH / **--backup-path**=*PATH*:  
+**-B** PATH / **--backup-path**=PATH:  
     The absolute path of backup catalog. This option is mandatory.
 
 **-c** / **--check**:  
