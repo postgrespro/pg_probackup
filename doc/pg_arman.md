@@ -312,26 +312,26 @@ Parameters to connect PostgreSQL server.
 Some of parameters can be specified as command line arguments, environment
 variables or in configuration file as follows:
 ```
-Short	Long			Env			File
--h	--host			PGHOST			No
--p	--port			PGPORT			No
--d	--dbname		PGDATABASE		No
--U	--username		PGUSER			No
-				PGPASSWORD		No
--w	--password					No
--W	--no-password					No
--D	--pgdata		PGDATA			Yes
--B	--backup-path		BACKUP_PATH		Yes
--A	--arclog-path		ARCLOG_PATH		Yes
--b	--backup-mode		BACKUP_MODE		Yes
--C	--smooth-checkpoint	SMOOTH_CHECKPOINT	Yes
-	--validate	        VALIDATE		Yes
-	--keep-data-generations	KEEP_DATA_GENERATIONS	Yes
-	--keep-data-days	KEEP_DATA_DAYS		Yes
-	--recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes
-	--recovery-target-xid	RECOVERY_TARGET_XID	Yes
-	--recovery-target-time	RECOVERY_TARGET_TIME	Yes
-	--recovery-target-inclusive RECOVERY_TARGET_INCLUSIVE Yes
+Short   Long                    Env                     File
+-h      --host                  PGHOST                  No
+-p      --port                  PGPORT                  No
+-d      --dbname                PGDATABASE              No
+-U      --username              PGUSER                  No
+                                PGPASSWORD              No
+-w      --password                                      No
+-W      --no-password                                   No
+-D      --pgdata                PGDATA                  Yes
+-B      --backup-path           BACKUP_PATH             Yes
+-A      --arclog-path           ARCLOG_PATH             Yes
+-b      --backup-mode           BACKUP_MODE             Yes
+-C      --smooth-checkpoint     SMOOTH_CHECKPOINT       Yes
+        --validate              VALIDATE                Yes
+        --keep-data-generations KEEP_DATA_GENERATIONS   Yes
+        --keep-data-days        KEEP_DATA_DAYS          Yes
+        --recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes
+        --recovery-target-xid   RECOVERY_TARGET_XID     Yes
+        --recovery-target-time  RECOVERY_TARGET_TIME    Yes
+        --recovery-target-inclusive RECOVERY_TARGET_INCLUSIVE Yes
 ```
 
 Variable names in configuration file are the same as long names or names
