@@ -5,7 +5,7 @@
 pg_arman - Backup and recovery manager for PostgreSQL
 
 ## SYNOPSIS 
-
+```
 pg_arman [ OPTIONS ]
     { init |
       backup |
@@ -13,6 +13,7 @@ pg_arman [ OPTIONS ]
       show [ DATE | timeline ] |
       validate [ DATE ] |
       delete DATE }
+```
 
 DATE is the start time of the target backup in ISO-format:
 (YYYY-MM-DD HH:MI:SS). Prefix match is used to compare DATE and backup
@@ -33,26 +34,26 @@ It proposes the following features:
 
 ## COMMANDS 
 
-pg_arman supports the following commands. See also *OPTIONS* for more
+pg_arman supports the following commands. See also **OPTIONS** for more
 details.
 
-*init*::
+**init**: 
     Initialize a backup catalog.
 
-*backup*::
+**backup**: 
     Take an online backup.
 
-*restore*::
+**restore**: 
     Perform restore.
 
-*show*::
+**show**: 
     Show backup history. The timeline option shows timeline of the backup
     and the parent's timeline for each backup.
 
-*validate*::
+**validate**: 
     Validate backup files.
 
-*delete*::
+**delete**: 
     Delete backup files.
 
 ### INITIALIZATION 
@@ -64,7 +65,9 @@ are initialized, pg_arman can adjust the config file to the setting. In this
 case, you have to specify the database cluster path for PostgreSQL. Please
 specify it in PGDATA environmental variable or -D/--pgdata option.
 
-	$ pg_arman init -B /path/to/backup/
+```
+$ pg_arman init -B /path/to/backup/
+```
 
 ### BACKUP 
 
@@ -105,37 +108,42 @@ To reduce the number of command line arguments, you can set BACKUP_PATH,
 an environment variable, to the absolute path of the backup catalog and
 write default configuration into ${BACKUP_PATH}/pg_arman.ini.
 
-	$ cat $BACKUP_PATH/pg_arman.ini
-	ARCLOG_PATH = /home/postgres/arclog
-	BACKUP_MODE = FULL
-	KEEP_DATA_GENERATIONS = 3
-	KEEP_DATA_DAYS = 120
+```
+$ cat $BACKUP_PATH/pg_arman.ini
+ARCLOG_PATH = /home/postgres/arclog
+BACKUP_MODE = FULL
+KEEP_DATA_GENERATIONS = 3
+KEEP_DATA_DAYS = 120
+```
 
 ### TAKE A BACKUP 
 
 This example takes a full backup of the whole database. Then, it validates
 all unvalidated backups.
-
-	$ pg_arman backup --backup-mode=full
-	$ pg_arman validate
+```
+$ pg_arman backup --backup-mode=full
+$ pg_arman validate
+```
 
 ### RESTORE FROM A BACKUP 
 
 Here are some commands to restore from a backup:
 
-	$ pg_ctl stop -m immediate
-	$ pg_arman restore
-	$ pg_ctl start
+```
+$ pg_ctl stop -m immediate
+$ pg_arman restore
+$ pg_ctl start
+```
 
 ### SHOW A BACKUP 
 ```
-	$ pg_arman show
-	===================================================================================
-	Start                Mode  Current TLI  Parent TLI  Time    Data   Backup   Status 
-	===================================================================================
-	2013-12-25 03:02:31  PAGE            1           0    0m   203kB     67MB   DONE
-	2013-12-25 03:02:31  PAGE            1           0    0m      0B       0B   ERROR
-	2013-12-25 03:02:25  FULL            1           0    0m    33MB    364MB   OK
+$ pg_arman show
+===================================================================================
+Start                Mode  Current TLI  Parent TLI  Time    Data   Backup   Status 
+===================================================================================
+2013-12-25 03:02:31  PAGE            1           0    0m   203kB     67MB   DONE
+2013-12-25 03:02:31  PAGE            1           0    0m      0B       0B   ERROR
+2013-12-25 03:02:25  FULL            1           0    0m    33MB    364MB   OK
 ```
 The fields are:
 
@@ -158,21 +166,23 @@ The fields are:
 
 When a date is specified, more details about a backup is retrieved:
 
-	$ pg_arman show '2011-11-27 19:15:45'
-	# configuration
-	BACKUP_MODE=FULL
-	# result
-	TIMELINEID=1
-	START_LSN=0/08000020
-	STOP_LSN=0/080000a0
-	START_TIME='2011-11-27 19:15:45'
-	END_TIME='2011-11-27 19:19:02'
-	RECOVERY_XID=1759
-	RECOVERY_TIME='2011-11-27 19:15:53'
-	DATA_BYTES=25420184
-	BLOCK_SIZE=8192
-	XLOG_BLOCK_SIZE=8192
-	STATUS=OK
+```
+$ pg_arman show '2011-11-27 19:15:45'
+# configuration
+BACKUP_MODE=FULL
+# result
+TIMELINEID=1
+START_LSN=0/08000020
+STOP_LSN=0/080000a0
+START_TIME='2011-11-27 19:15:45'
+END_TIME='2011-11-27 19:19:02'
+RECOVERY_XID=1759
+RECOVERY_TIME='2011-11-27 19:15:53'
+DATA_BYTES=25420184
+BLOCK_SIZE=8192
+XLOG_BLOCK_SIZE=8192
+STATUS=OK
+```
 
 You can check the "RECOVERY_XID" and "RECOVERY_TIME" which are used for
 restore option "--recovery-target-xid", "--recovery-target-time".
@@ -192,11 +202,11 @@ details.
 As a general rule, paths for data location need to be specified as
 absolute paths; relative paths are not allowed.
 
-*-D* _PATH_ / *--pgdata*=_PATH_::
+**-D** *PATH* / **--pgdata**=*PATH*: 
     The absolute path of database cluster. Required on backup and
     restore.
 
-*-A* _PATH_ / *--arclog-path*=_PATH_::
+**-A** *PATH* / **--arclog-path**=*PATH*: 
     The absolute path of archive WAL directory. Required for restore
     and show command.
 
