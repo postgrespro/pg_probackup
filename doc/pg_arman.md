@@ -223,7 +223,7 @@ absolute paths; relative paths are not allowed.
 
 **-b** BACKUPMODE / **--backup-mode**=BACKUPMODE:  
     Specify backup target files. Available options are: "full",
-    "page".
+    "page", "ptrack".
 
 **-C** / **--smooth-checkpoint**:  
     Checkpoint is performed on every backups. If the option is specified,
