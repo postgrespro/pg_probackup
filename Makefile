@@ -29,7 +29,7 @@ PG_LIBS = $(libpq_pgport) ${PTHREAD_LIBS} ${PTHREAD_CFLAGS}
 
 REGRESS = init option show delete backup restore
 
-all: checksrcdir docs datapagemap.h receivelog.h streamutil.h pg_arman
+all: checksrcdir datapagemap.h receivelog.h streamutil.h pg_arman
 
 # This rule's only purpose is to give the user instructions on how to pass
 # the path to PostgreSQL source tree to the makefile.
