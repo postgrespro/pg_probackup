@@ -461,6 +461,7 @@ do_backup(pgBackupOption bkupopt)
 	current.wal_block_size = XLOG_BLCKSZ;
 	current.recovery_xid = 0;
 	current.recovery_time = (time_t) 0;
+	current.checksum_version = get_data_checksum_version(true);
 
 	/* create backup directory and backup.ini */
 	if (!check)

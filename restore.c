@@ -437,7 +437,7 @@ restore_files(void *arg)
 
 		/* restore file */
 		if (!check)
-			restore_data_file(from_root, pgdata, file);
+			restore_data_file(from_root, pgdata, file, arguments->backup);
 
 		/* print size of restored file */
 		if (!check)

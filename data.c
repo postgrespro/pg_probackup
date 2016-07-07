@@ -17,6 +17,7 @@
 #include "libpq/pqsignal.h"
 #include "storage/block.h"
 #include "storage/bufpage.h"
+#include "storage/checksum_impl.h"
 
 typedef struct BackupPageHeader
 {
@@ -299,7 +300,8 @@ backup_data_file(const char *from_root, const char *to_root,
 void
 restore_data_file(const char *from_root,
 				  const char *to_root,
-				  pgFile *file)
+				  pgFile *file,
+				  pgBackup *backup)
 {
 	char				to_path[MAXPGPATH];
 	FILE			   *in;
@@ -385,6 +387,10 @@ restore_data_file(const char *from_root,
 			elog(ERROR, "cannot read block %u of \"%s\": %s",
 				 blknum, file->path, strerror(errno));
 		}
+
+		/* update checksum because we are not save whole */
+		if(backup->checksum_version)
+			((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, header.block);
 
 		/*
 		 * Seek and write the restored page. Backup might have holes in

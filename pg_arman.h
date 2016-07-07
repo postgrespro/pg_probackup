@@ -23,6 +23,7 @@
 #include "datapagemap.h"
 #include "storage/bufpage.h"
 #include "storage/block.h"
+#include "storage/checksum.h"
 
 /* Query to fetch current transaction ID */
 #define TXID_CURRENT_SQL	"SELECT txid_current();"
@@ -140,6 +141,7 @@ typedef struct pgBackup
 	/* data/wal block size for compatibility check */
 	uint32		block_size;
 	uint32		wal_block_size;
+	uint32		checksum_version;
 } pgBackup;
 
 typedef struct pgBackupOption
@@ -288,7 +290,7 @@ extern int pgFileCompareMtimeDesc(const void *f1, const void *f2);
 extern bool backup_data_file(const char *from_root, const char *to_root,
 							 pgFile *file, const XLogRecPtr *lsn);
 extern void restore_data_file(const char *from_root, const char *to_root,
-							  pgFile *file);
+							  pgFile *file, pgBackup *backup);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
 
@@ -306,6 +308,7 @@ extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
 extern XLogRecPtr get_last_ptrack_lsn(void);
+extern uint32 get_data_checksum_version(bool safe);
 
 /* in status.c */
 extern bool is_pg_running(void);

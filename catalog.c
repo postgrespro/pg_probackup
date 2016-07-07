@@ -329,6 +329,7 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 				backup->data_bytes);
 	fprintf(out, "BLOCK_SIZE=%u\n", backup->block_size);
 	fprintf(out, "XLOG_BLOCK_SIZE=%u\n", backup->wal_block_size);
+	fprintf(out, "CHECKSUM_VERSION=%u\n", backup->checksum_version);
 
 	fprintf(out, "STATUS=%s\n", status2str(backup->status));
 }
@@ -383,6 +384,7 @@ catalog_read_ini(const char *path)
 		{ 'I', 0, "data-bytes"		, NULL, SOURCE_ENV },
 		{ 'u', 0, "block-size"			, NULL, SOURCE_ENV },
 		{ 'u', 0, "xlog-block-size"		, NULL, SOURCE_ENV },
+		{ 'u', 0, "checksum_version"		, NULL, SOURCE_ENV },
 		{ 's', 0, "status"				, NULL, SOURCE_ENV },
 		{ 0 }
 	};
@@ -405,6 +407,7 @@ catalog_read_ini(const char *path)
 	options[i++].var = &backup->data_bytes;
 	options[i++].var = &backup->block_size;
 	options[i++].var = &backup->wal_block_size;
+	options[i++].var = &backup->checksum_version;
 	options[i++].var = &status;
 	Assert(i == lengthof(options) - 1);
 
