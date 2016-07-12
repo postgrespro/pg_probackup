@@ -112,6 +112,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	/* confirm server version */
 	check_server_version();
 
+
 	/*
 	 * Read each page and write the page excluding hole. If it has been
 	 * determined that the page can be copied safely, but no page map
@@ -129,28 +130,53 @@ backup_data_file(const char *from_root, const char *to_root,
 			XLogRecPtr	page_lsn;
 			int		upper_offset;
 			int		upper_length;
+			int		try_checksum = 100;
 
 			header.block = blknum;
 
-			/*
-			 * If an invalid data page was found, fallback to simple copy to ensure
-			 * all pages in the file don't have BackupPageHeader.
-			 */
-			if (!parse_page(&page, &page_lsn,
-							&header.hole_offset, &header.hole_length))
+			while(try_checksum)
 			{
-				elog(LOG, "%s fall back to simple copy", file->path);
-				fclose(in);
-				fclose(out);
-				file->is_datafile = false;
-				return copy_file(from_root, to_root, file);
-			}
+				/*
+				 * If an invalid data page was found, fallback to simple copy to ensure
+				 * all pages in the file don't have BackupPageHeader.
+				 */
+				if (!parse_page(&page, &page_lsn,
+								&header.hole_offset, &header.hole_length))
+				{
+					elog(LOG, "%s fall back to simple copy", file->path);
+					fclose(in);
+					fclose(out);
+					file->is_datafile = false;
+					return copy_file(from_root, to_root, file);
+				}
 
-			file->read_size += read_len;
+				/* if the page has not been modified since last backup, skip it */
+				if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
+					break;
+
+				try_checksum--;
+				if(current.checksum_version &&
+				   pg_checksum_page(page.data, header.block) != ((PageHeader) page.data)->pd_checksum)
+				{
+					if (try_checksum)
+					{
+						elog(WARNING, "File: %s blknum %u have wrong checksum, try again", file->path, blknum);
+						fseek(in, -sizeof(page), SEEK_CUR);
+						fread(&page, 1, sizeof(page), in);
+					}
+					else
+						elog(ERROR, "File: %s blknum %u have wrong checksum.", file->path, blknum);
+				} else {
+					try_checksum = 0;
+				}
+			}
 
 			/* if the page has not been modified since last backup, skip it */
 			if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
 				continue;
+
+			file->read_size += read_len;
+
 
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
@@ -186,32 +212,55 @@ backup_data_file(const char *from_root, const char *to_root,
 			int		upper_offset;
 			int		upper_length;
 			int 	ret;
+			int		try_checksum = 100;
 
 			offset = blknum * BLCKSZ;
-			if (offset > 0)
+			while(try_checksum)
 			{
-				ret = fseek(in, offset, SEEK_SET);
-				if (ret != 0)
-					elog(ERROR,
-						 "Can't seek in file offset: %llu ret:%i\n",
-						 (long long unsigned int) offset, ret);
-			}
-			read_len = fread(&page, 1, sizeof(page), in);
+				if (offset > 0)
+				{
+					ret = fseek(in, offset, SEEK_SET);
+					if (ret != 0)
+						elog(ERROR,
+							 "Can't seek in file offset: %llu ret:%i\n",
+							 (long long unsigned int) offset, ret);
+				}
+				read_len = fread(&page, 1, sizeof(page), in);
 
-			header.block = blknum;
+				header.block = blknum;
 
-			/*
-			 * If an invalid data page was found, fallback to simple copy to ensure
-			 * all pages in the file don't have BackupPageHeader.
-			 */
-			if (!parse_page(&page, &page_lsn,
-							&header.hole_offset, &header.hole_length))
-			{
-				elog(LOG, "%s fall back to simple copy", file->path);
-				fclose(in);
-				fclose(out);
-				file->is_datafile = false;
-				return copy_file(from_root, to_root, file);
+				/*
+				 * If an invalid data page was found, fallback to simple copy to ensure
+				 * all pages in the file don't have BackupPageHeader.
+				 */
+				if (!parse_page(&page, &page_lsn,
+								&header.hole_offset, &header.hole_length))
+				{
+					elog(LOG, "%s fall back to simple copy", file->path);
+					fclose(in);
+					fclose(out);
+					file->is_datafile = false;
+					return copy_file(from_root, to_root, file);
+				}
+
+				/* if the page has not been modified since last backup, skip it */
+				if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
+					break;
+
+				try_checksum--;
+
+				if(current.checksum_version &&
+				   pg_checksum_page(page.data, header.block) != ((PageHeader) page.data)->pd_checksum)
+				{
+					if (try_checksum)
+						elog(WARNING, "File: %s blknum %u have wrong checksum, try again", file->path, blknum);
+					else
+						elog(ERROR, "File: %s blknum %u have wrong checksum.", file->path, blknum);
+				}
+				else
+				{
+					try_checksum = 0;
+				}
 			}
 
 			/* if the page has not been modified since last backup, skip it */
