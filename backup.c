@@ -1326,9 +1326,23 @@ StreamLog(void *arg)
 				progname, (uint32) (startpos >> 32), (uint32) startpos,
 				starttli);
 
+#if PG_VERSION_NUM >= 90600
+	StreamCtl ctl;
+	ctl.startpos = startpos;
+	ctl.timeline = starttli;
+	ctl.sysidentifier = NULL;
+	ctl.basedir = basedir;
+	ctl.stream_stop = stop_streaming;
+	ctl.standby_message_timeout = standby_message_timeout;
+	ctl.partial_suffix = ".partial";
+	ctl.synchronous = false;
+	ctl.mark_done = false;
+	ReceiveXlogStream(conn, &ctl);
+#else
 	ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
 					  stop_streaming, standby_message_timeout, ".partial",
 					  false, false);
+#endif
 
 	PQfinish(conn);
 	conn = NULL;

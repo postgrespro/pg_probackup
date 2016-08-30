@@ -50,6 +50,16 @@ static bool		in_cleanup = false;
 
 static bool parse_pair(const char buffer[], char key[], char value[]);
 
+typedef enum
+{
+	PG_DEBUG,
+	PG_PROGRESS,
+	PG_WARNING,
+	PG_FATAL
+} eLogType;
+
+void pg_log(eLogType type, const char *fmt,...) pg_attribute_printf(2, 3);
+
 /* Connection routines */
 static void init_cancel_handler(void);
 static void on_before_exec(PGconn *conn);
@@ -1200,6 +1210,45 @@ elog(int elevel, const char *fmt, ...)
 
 	if (elevel > 0)
 		exit_or_abort(elevel);
+}
+
+void pg_log(eLogType type, const char *fmt, ...)
+{
+	va_list		args;
+
+	if (!verbose && type <= PG_PROGRESS)
+		return;
+	if (quiet && type < PG_WARNING)
+		return;
+
+	switch (type)
+	{
+	case PG_DEBUG:
+		fputs("DEBUG: ", stderr);
+		break;
+	case PG_PROGRESS:
+		fputs("PROGRESS: ", stderr);
+		break;
+	case PG_WARNING:
+		fputs("WARNING: ", stderr);
+		break;
+	case PG_FATAL:
+		fputs("FATAL: ", stderr);
+		break;
+	default:
+		if (type >= PG_FATAL)
+			fputs("ERROR: ", stderr);
+		break;
+	}
+
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	fputc('\n', stderr);
+	fflush(stderr);
+	va_end(args);
+
+	if (type > 0)
+		exit_or_abort(type);
 }
 
 #ifdef WIN32
