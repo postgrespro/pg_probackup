@@ -42,8 +42,7 @@ parse_page(const DataPage *page,
 		page_data->pd_lower <= page_data->pd_upper &&
 		page_data->pd_upper <= page_data->pd_special &&
 		page_data->pd_special <= BLCKSZ &&
-		page_data->pd_special == MAXALIGN(page_data->pd_special) &&
-		!XLogRecPtrIsInvalid(*lsn))
+		page_data->pd_special == MAXALIGN(page_data->pd_special))
 	{
 		*offset = page_data->pd_lower;
 		*length = page_data->pd_upper - page_data->pd_lower;
@@ -65,10 +64,10 @@ backup_data_file(const char *from_root, const char *to_root,
 				 pgFile *file, const XLogRecPtr *lsn)
 {
 	char				to_path[MAXPGPATH];
-	FILE			   *in;
-	FILE			   *out;
+	FILE				*in;
+	FILE				*out;
 	BackupPageHeader	header;
-	DataPage			page;		/* used as read buffer */
+	DataPage			page; /* used as read buffer */
 	BlockNumber			blknum = 0;
 	size_t				read_len = 0;
 	pg_crc32			crc;
@@ -131,11 +130,13 @@ backup_data_file(const char *from_root, const char *to_root,
 			int		upper_offset;
 			int		upper_length;
 			int		try_checksum = 100;
+			bool	stop_backup = false;
 
 			header.block = blknum;
 
 			while(try_checksum)
 			{
+				try_checksum--;
 				/*
 				 * If an invalid data page was found, fallback to simple copy to ensure
 				 * all pages in the file don't have BackupPageHeader.
@@ -143,18 +144,47 @@ backup_data_file(const char *from_root, const char *to_root,
 				if (!parse_page(&page, &page_lsn,
 								&header.hole_offset, &header.hole_length))
 				{
-					elog(LOG, "%s fall back to simple copy", file->path);
-					fclose(in);
-					fclose(out);
-					file->is_datafile = false;
-					return copy_file(from_root, to_root, file);
+					struct stat st;
+					int i;
+
+					for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
+					if (i == BLCKSZ)
+					{
+						elog(WARNING, "File: %s blknum %u, empty page", file->path, blknum);
+						goto end_checks;
+					}
+
+					stat(file->path, &st);
+					elog(WARNING, "SIZE: %lu %lu pages:%lu pages:%lu i:%i", file->size, st.st_size, file->size/BLCKSZ, st.st_size/BLCKSZ, i);
+					if (st.st_size != file->size && blknum >= file->size/BLCKSZ-1)
+					{
+						stop_backup = true;
+						elog(WARNING, "File: %s blknum %u, file size has changed before backup start", file->path, blknum);
+						break;
+					}
+					if (blknum >= file->size/BLCKSZ-1)
+					{
+						stop_backup = true;
+						elog(WARNING, "File: %s blknum %u, the last page is empty, skip", file->path, blknum);
+						break;
+					}
+					if (st.st_size != file->size && blknum < file->size/BLCKSZ-1)
+					{
+						elog(WARNING, "File: %s blknum %u, file size has changed before backup start, it seems bad", file->path, blknum);
+						if (!try_checksum)
+							break;
+					}
+					if (try_checksum)
+					{
+						elog(WARNING, "File: %s blknum %u have wrong page header, try again", file->path, blknum);
+						fseek(in, -sizeof(page), SEEK_CUR);
+						fread(&page, 1, sizeof(page), in);
+						continue;
+					}
+					else
+						elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
 				}
 
-				/* if the page has not been modified since last backup, skip it */
-				if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
-					break;
-
-				try_checksum--;
 				if(current.checksum_version &&
 				   pg_checksum_page(page.data, header.block) != ((PageHeader) page.data)->pd_checksum)
 				{
@@ -171,12 +201,12 @@ backup_data_file(const char *from_root, const char *to_root,
 				}
 			}
 
-			/* if the page has not been modified since last backup, skip it */
-			if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
-				continue;
+			end_checks:
 
 			file->read_size += read_len;
 
+			if(stop_backup)
+				break;
 
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
@@ -213,6 +243,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			int		upper_length;
 			int 	ret;
 			int		try_checksum = 100;
+			bool	stop_backup = false;
 
 			offset = blknum * BLCKSZ;
 			while(try_checksum)
@@ -229,6 +260,8 @@ backup_data_file(const char *from_root, const char *to_root,
 
 				header.block = blknum;
 
+				try_checksum--;
+
 				/*
 				 * If an invalid data page was found, fallback to simple copy to ensure
 				 * all pages in the file don't have BackupPageHeader.
@@ -236,18 +269,42 @@ backup_data_file(const char *from_root, const char *to_root,
 				if (!parse_page(&page, &page_lsn,
 								&header.hole_offset, &header.hole_length))
 				{
-					elog(LOG, "%s fall back to simple copy", file->path);
-					fclose(in);
-					fclose(out);
-					file->is_datafile = false;
-					return copy_file(from_root, to_root, file);
+					struct stat st;
+					int i;
+
+					for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
+
+
+					if (i == BLCKSZ)
+					{
+						elog(WARNING, "File: %s blknum %u, empty page", file->path, blknum);
+						goto end_checks2;
+					}
+
+					stat(file->path, &st);
+					elog(WARNING, "PTRACK SIZE: %lu %lu pages:%lu pages:%lu i:%i", file->size, st.st_size, file->size/BLCKSZ, st.st_size/BLCKSZ, i);
+					if (st.st_size != file->size && blknum >= file->size/BLCKSZ-1)
+					{
+						stop_backup = true;
+						elog(WARNING, "File: %s blknum %u, file size has changed before backup start", file->path, blknum);
+						break;
+					}
+					if (st.st_size != file->size && blknum < file->size/BLCKSZ-1)
+					{
+						elog(WARNING, "File: %s blknum %u, file size has changed before backup start, it seems bad", file->path, blknum);
+						if (!try_checksum)
+							break;
+					}
+					if (try_checksum)
+					{
+						elog(WARNING, "File: %s blknum %u have wrong page header, try again", file->path, blknum);
+						fseek(in, -sizeof(page), SEEK_CUR);
+						fread(&page, 1, sizeof(page), in);
+						continue;
+					}
+					else
+						elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
 				}
-
-				/* if the page has not been modified since last backup, skip it */
-				if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
-					break;
-
-				try_checksum--;
 
 				if(current.checksum_version &&
 				   pg_checksum_page(page.data, header.block) != ((PageHeader) page.data)->pd_checksum)
@@ -263,11 +320,12 @@ backup_data_file(const char *from_root, const char *to_root,
 				}
 			}
 
-			/* if the page has not been modified since last backup, skip it */
-			if (lsn && !XLogRecPtrIsInvalid(page_lsn) && page_lsn < *lsn)
-				continue;
-
 			file->read_size += read_len;
+
+			if(stop_backup)
+				break;
+
+			end_checks2:
 			
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
@@ -439,7 +497,19 @@ restore_data_file(const char *from_root,
 
 		/* update checksum because we are not save whole */
 		if(backup->checksum_version)
+		{
+			/* skip calc checksum if zero page */
+			if(page.page_data.pd_upper == 0)
+			{
+				int i;
+				for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
+				if (i == BLCKSZ)
+					goto skip_checksum;
+			}
 			((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, header.block);
+		}
+
+		skip_checksum:
 
 		/*
 		 * Seek and write the restored page. Backup might have holes in
