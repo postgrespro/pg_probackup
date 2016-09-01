@@ -272,7 +272,10 @@ the same parameters as the ones in recovery.confin recovery.conf.
 **--stream**:
     Restore without recovery.conf and use pg_xlog WALs. Before you need 
     backup with **--stream** option. This option will disable all **--recovery-**
-    options. 
+	options.
+
+**--disable-ptrack-clear**:
+	Disable clear ptrack files for postgres without ptrack patch.
 
 ### CATALOG OPTIONS
 
