@@ -146,7 +146,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	}
 
 	/* clear ptrack files for FULL and DIFF backup */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && !disable_ptrack_clear)
 		pg_ptrack_clear();
 
 	/* start stream replication */

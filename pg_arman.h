@@ -210,6 +210,7 @@ extern parray *backup_files_list;
 
 extern int num_threads;
 extern bool stream_wal;
+extern bool disable_ptrack_clear;
 
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);
