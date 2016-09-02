@@ -18,7 +18,6 @@ Common Options:
   -c, --check               show what would have been done
   -j, --threads=NUM         num threads for backup and restore
   --stream                  use stream for save/restore WAL during backup
-  --disable-ptrack-clear    disable clear ptrack for postgres without ptrack
 
 Backup options:
   -b, --backup-mode=MODE    full,page,ptrack
@@ -26,6 +25,8 @@ Backup options:
   --validate                validate backup after taking it
   --keep-data-generations=N keep GENERATION of full data backup
   --keep-data-days=DAY      keep enough data backup to recover to DAY days age
+  --disable-ptrack-clear    disable clear ptrack for postgres without ptrack
+  --backup-pg-log           start backup pg_log directory
 
 Restore options:
   --recovery-target-time    time stamp up to which recovery will proceed

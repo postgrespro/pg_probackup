@@ -28,6 +28,7 @@ const char *pgdata_exclude[] =
 	NULL,			/* arclog_path will be set later */
 	NULL,			/* 'pg_tblspc' will be set later */
 	NULL,			/* sentinel */
+	NULL
 };
 
 static pgFile *pgFileNew(const char *path, bool omit_symlink);
