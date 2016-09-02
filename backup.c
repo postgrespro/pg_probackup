@@ -315,6 +315,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		{
 			total_files_num++;
 		}
+
+		__sync_lock_release(&file->lock);
 	}
 
 	if (num_threads < 1)
@@ -329,18 +331,10 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		backup_files_args *arg = pg_malloc(sizeof(backup_files_args));
 		arg->from_root = pgdata;
 		arg->to_root = path;
-		arg->files = parray_new();
+		arg->files = backup_files_list;
 		arg->prev_files = prev_files;
 		arg->lsn = lsn;
 		backup_threads_args[i] = arg;
-	}
-
-	/* balance load between threads */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		int cur_thread = i % num_threads;
-		parray_append(backup_threads_args[cur_thread]->files,
-					  parray_get(backup_files_list, i));
 	}
 
 	total_copy_files_increment = 0;
@@ -935,6 +929,8 @@ backup_files(void *arg)
 		struct stat	buf;
 
 		pgFile *file = (pgFile *) parray_get(arguments->files, i);
+		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+			continue;
 
 		/* If current time is rewinded, abort this backup. */
 		if (tv.tv_sec < file->mtime)

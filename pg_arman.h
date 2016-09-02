@@ -56,11 +56,12 @@ typedef struct pgFile
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
-	char   *linked;			/* path of the linked file */
+	char	*linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
 	char	*path;			/* path of the file */
 	char	*ptrack_path;
 	int		segno;			/* Segment number for ptrack */
+	volatile uint32 lock;
 	datapagemap_t pagemap;
 } pgFile;
 
