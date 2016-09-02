@@ -172,8 +172,8 @@ main(int argc, char *argv[])
 		elog(ERROR, "delete command needs ARCLOG_PATH (-A, --arclog-path) to be set");
 
 	/* setup exclusion list for file search */
-	for (i = 0; pgdata_exclude[i]; i++)		/* find first empty slot */
-		;
+	for (i = 0; pgdata_exclude[i]; i++);		/* find first empty slot */
+
 	if (arclog_path)
 		pgdata_exclude[i++] = arclog_path;
 

@@ -47,8 +47,6 @@ typedef struct
 	parray *files;
 	parray *prev_files;
 	const XLogRecPtr *lsn;
-	unsigned int start_file_idx;
-	unsigned int end_file_idx;
 } backup_files_args;
 
 /*
@@ -105,6 +103,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	pthread_t	backup_threads[num_threads];
 	pthread_t	stream_thread;
 	backup_files_args *backup_threads_args[num_threads];
+
 
 	/* repack the options */
 	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
@@ -315,27 +314,35 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	if (num_threads < 1)
 		num_threads = 1;
 
+	/* sort by size for load balancing */
+	parray_qsort(backup_files_list, pgFileCompareSize);
+
+	/* init thread args with own file lists */
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_args *arg = pg_malloc(sizeof(backup_files_args));
 		arg->from_root = pgdata;
 		arg->to_root = path;
-		arg->files = backup_files_list;
+		arg->files = parray_new();
 		arg->prev_files = prev_files;
 		arg->lsn = lsn;
-		arg->start_file_idx = i * (parray_num(backup_files_list)/num_threads);
-		if (i == num_threads - 1)
-			arg->end_file_idx = parray_num(backup_files_list);
-		else
-			arg->end_file_idx =  (i + 1) * (parray_num(backup_files_list)/num_threads);
-
-		if (verbose)
-			elog(WARNING, "Start thread for start_file_idx:%i end_file_idx:%i num:%li",
-				arg->start_file_idx,
-				arg->end_file_idx,
-				parray_num(backup_files_list));
 		backup_threads_args[i] = arg;
-		pthread_create(&backup_threads[i], NULL, (void *(*)(void *)) backup_files, arg);
+	}
+
+	/* balance load between threads */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		int cur_thread = i % num_threads;
+		parray_append(backup_threads_args[cur_thread]->files,
+					  parray_get(backup_files_list, i));
+	}
+
+	/* Run threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		if (verbose)
+			elog(WARNING, "Start thread num:%li", parray_num(backup_threads_args[i]->files));
+		pthread_create(&backup_threads[i], NULL, (void *(*)(void *)) backup_files, backup_threads_args[i]);
 	}
 
 	/* Wait theads */
@@ -911,7 +918,7 @@ backup_files(void *arg)
 	gettimeofday(&tv, NULL);
 
 	/* backup a file or create a directory */
-	for (i = arguments->start_file_idx; i < arguments->end_file_idx; i++)
+	for (i = 0; i < parray_num(arguments->files); i++)
 	{
 		int			ret;
 		struct stat	buf;

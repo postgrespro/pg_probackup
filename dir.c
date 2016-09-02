@@ -193,6 +193,21 @@ pgFileComparePathDesc(const void *f1, const void *f2)
 	return -pgFileComparePath(f1, f2);
 }
 
+/* Compare two pgFile with their size */
+int
+pgFileCompareSize(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	pgFile *f2p = *(pgFile **)f2;
+
+	if (f1p->size > f2p->size)
+		return 1;
+	else if (f1p->size < f2p->size)
+		return -1;
+	else
+		return 0;
+}
+
 /* Compare two pgFile with their modify timestamp. */
 int
 pgFileCompareMtime(const void *f1, const void *f2)

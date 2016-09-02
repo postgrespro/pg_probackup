@@ -284,6 +284,7 @@ extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(pgFile *file);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
+extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgFileCompareMtime(const void *f1, const void *f2);
 extern int pgFileCompareMtimeDesc(const void *f1, const void *f2);
 
