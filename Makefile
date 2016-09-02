@@ -21,7 +21,7 @@ OBJS = backup.o \
 	pgut/pgut.o \
 	pgut/pgut-port.o
 
-EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.h streamutil.h logging.h
+EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h streamutil.c streamutil.h logging.h
 
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS}
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) 
