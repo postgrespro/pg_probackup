@@ -38,7 +38,9 @@ static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
 const char *progname = "pg_arman";
 
 /* list of files contained in backup */
-parray			*backup_files_list;
+parray	*backup_files_list;
+static volatile uint32	total_copy_files_increment;
+static uint32 total_files_num;
 
 typedef struct
 {
@@ -309,6 +311,10 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 			if (!check)
 				dir_create_dir(dirpath, DIR_PERMISSION);
 		}
+		else
+		{
+			total_files_num++;
+		}
 	}
 
 	if (num_threads < 1)
@@ -337,6 +343,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 					  parray_get(backup_files_list, i));
 	}
 
+	total_copy_files_increment = 0;
+
 	/* Run threads */
 	for (i = 0; i < num_threads; i++)
 	{
@@ -351,6 +359,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pthread_join(backup_threads[i], NULL);
 		pg_free(backup_threads_args[i]);
 	}
+
+	if (progress)
+		fprintf(stderr, "\n");
 
 	/* Notify end of backup */
 	pg_stop_backup(&current);
@@ -1014,6 +1025,9 @@ backup_files(void *arg)
 		}
 		else
 			elog(LOG, "unexpected file type %d", buf.st_mode);
+		if (progress)
+			fprintf(stderr, "\rProgress %i/%u", total_copy_files_increment, total_files_num-1);
+		 __sync_fetch_and_add(&total_copy_files_increment, 1);
 	}
 }
 

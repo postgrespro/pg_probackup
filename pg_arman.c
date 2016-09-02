@@ -39,6 +39,7 @@ bool			stream_wal = false;
 bool			disable_ptrack_clear = false;
 static bool		backup_logs = false;
 static bool		backup_validate = false;
+bool			progress = false;
 
 /* restore configuration */
 static char		   *target_time;
@@ -62,6 +63,7 @@ static pgut_option options[] =
 	{ 'b', 'c', "check",		&check },
 	{ 'i', 'j', "threads",		&num_threads },
 	{ 'b', 8, "stream",			&stream_wal },
+	{ 'b', 11, "progress",		&progress },
 	/* backup options */
 	{ 'b', 9, "disable-ptrack-clear",	&disable_ptrack_clear },
 	{ 'b', 10, "backup-pg-log",			&backup_logs },
@@ -239,6 +241,7 @@ pgut_help(bool details)
 	printf(_("  -c, --check               show what would have been done\n"));
 	printf(_("  -j, --threads=NUM         num threads for backup and restore\n"));
 	printf(_("  --stream                  use stream for save/restore WAL during backup\n"));
+	printf(_("  --progress                show progress copy files\n"));
 	printf(_("\nBackup options:\n"));
 	printf(_("  -b, --backup-mode=MODE    full,page,ptrack\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));

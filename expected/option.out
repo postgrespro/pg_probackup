@@ -18,6 +18,7 @@ Common Options:
   -c, --check               show what would have been done
   -j, --threads=NUM         num threads for backup and restore
   --stream                  use stream for save/restore WAL during backup
+  --progress                show progress copy files
 
 Backup options:
   -b, --backup-mode=MODE    full,page,ptrack
