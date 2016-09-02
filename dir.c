@@ -260,9 +260,13 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 		fclose(black_list_file);
 		parray_qsort(black_list, BlackListCompare);
 		dir_list_file_internal(files, root, exclude, omit_symlink, add_root, black_list);
+		parray_qsort(files, pgFileComparePath);
 	}
 	else
+	{
 		dir_list_file_internal(files, root, exclude, omit_symlink, add_root, NULL);
+		parray_qsort(files, pgFileComparePath);
+	}
 }
 
 void
@@ -406,8 +410,6 @@ dir_list_file_internal(parray *files, const char *root, const char *exclude[],
 
 		break;	/* pseudo loop */
 	}
-
-	parray_qsort(files, pgFileComparePath);
 }
 
 /* print mkdirs.sh */
