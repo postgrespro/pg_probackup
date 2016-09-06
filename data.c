@@ -72,6 +72,8 @@ backup_data_file(const char *from_root, const char *to_root,
 	size_t				read_len = 0;
 	pg_crc32			crc;
 	off_t				offset;
+	char				write_buffer[sizeof(header)+BLCKSZ];
+	size_t				write_buffer_real_size;
 
 	INIT_CRC32C(crc);
 
@@ -212,10 +214,15 @@ backup_data_file(const char *from_root, const char *to_root,
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
 
+			write_buffer_real_size = sizeof(header)+header.hole_offset+upper_length;
+			memcpy(write_buffer, &header, sizeof(header));
+			if (header.hole_offset)
+				memcpy(write_buffer+sizeof(header), page.data, header.hole_offset);
+			if (upper_length)
+				memcpy(write_buffer+sizeof(header)+header.hole_offset, page.data + upper_offset, upper_length);
+
 			/* write data page excluding hole */
-			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header) ||
-				fwrite(page.data, 1, header.hole_offset, out) != header.hole_offset ||
-				fwrite(page.data + upper_offset, 1, upper_length, out) != upper_length)
+			if(fwrite(write_buffer, 1, write_buffer_real_size, out) != write_buffer_real_size)
 			{
 				int errno_tmp = errno;
 				/* oops */
@@ -331,10 +338,15 @@ backup_data_file(const char *from_root, const char *to_root,
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
 
+			write_buffer_real_size = sizeof(header)+header.hole_offset+upper_length;
+			memcpy(write_buffer, &header, sizeof(header));
+			if (header.hole_offset)
+				memcpy(write_buffer+sizeof(header), page.data, header.hole_offset);
+			if (upper_length)
+				memcpy(write_buffer+sizeof(header)+header.hole_offset, page.data + upper_offset, upper_length);
+
 			/* write data page excluding hole */
-			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header) ||
-				fwrite(page.data, 1, header.hole_offset, out) != header.hole_offset ||
-				fwrite(page.data + upper_offset, 1, upper_length, out) != upper_length)
+			if(fwrite(write_buffer, 1, write_buffer_real_size, out) != write_buffer_real_size)
 			{
 				int errno_tmp = errno;
 				/* oops */
