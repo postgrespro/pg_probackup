@@ -1106,6 +1106,20 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			continue;
 
 		file->is_datafile = true;
+		{
+			int find_dot;
+			char *text_segno;
+			for(find_dot = path_len-1; file->path[find_dot] != '.' && find_dot >= 0; find_dot--);
+			if (find_dot <= 0)
+				continue;
+
+			text_segno = file->path + find_dot + 1;
+			/* in future we will need check all chars */
+			if (!isdigit(text_segno[0]))
+				continue;
+
+			file->segno = (int) strtol(text_segno, NULL, 10);
+		}
 	}
 	parray_concat(files, list_file);
 }

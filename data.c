@@ -185,8 +185,9 @@ backup_data_file(const char *from_root, const char *to_root,
 						elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
 				}
 
+
 				if(current.checksum_version &&
-				   pg_checksum_page(page.data, header.block) != ((PageHeader) page.data)->pd_checksum)
+				   pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
 				{
 					if (try_checksum)
 					{
@@ -307,7 +308,7 @@ backup_data_file(const char *from_root, const char *to_root,
 				}
 
 				if(current.checksum_version &&
-				   pg_checksum_page(page.data, header.block) != ((PageHeader) page.data)->pd_checksum)
+				   pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
 				{
 					if (try_checksum)
 						elog(WARNING, "File: %s blknum %u have wrong checksum, try again", file->path, blknum);
