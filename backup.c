@@ -1351,13 +1351,13 @@ StreamLog(void *arg)
 	ctl.basedir = basedir;
 	ctl.stream_stop = stop_streaming;
 	ctl.standby_message_timeout = standby_message_timeout;
-	ctl.partial_suffix = ".partial";
+	ctl.partial_suffix = NULL;
 	ctl.synchronous = false;
 	ctl.mark_done = false;
 	ReceiveXlogStream(conn, &ctl);
 #else
 	ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
-					  stop_streaming, standby_message_timeout, ".partial",
+					  stop_streaming, standby_message_timeout, NULL,
 					  false, false);
 #endif
 

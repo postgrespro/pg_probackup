@@ -183,6 +183,7 @@ psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches
 pg_ctl stop -m immediate > /dev/null 2>&1
 pg_arman restore -B ${BACKUP_PATH} --stream --verbose >> ${TEST_BASE}/TEST-0011-run.out 2>&1;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
+sleep 5
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0011-after.out
 diff ${TEST_BASE}/TEST-0011-before.out ${TEST_BASE}/TEST-0011-after.out
 echo ''
