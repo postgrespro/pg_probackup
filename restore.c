@@ -21,8 +21,6 @@ typedef struct
 {
 	parray *files;
 	pgBackup *backup;
-	unsigned int start_file_idx;
-	unsigned int end_file_idx;
 } restore_files_args;
 
 static void backup_online_files(bool re_recovery);
@@ -317,23 +315,22 @@ restore_database(pgBackup *backup)
 	if (num_threads < 1)
 		num_threads = 1;
 
+	for (i = 0; i < parray_num(files); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(files, i);
+
+		__sync_lock_release(&file->lock);
+	}
+
 	/* restore files into $PGDATA */
 	for (i = 0; i < num_threads; i++)
 	{
 		restore_files_args *arg = pg_malloc(sizeof(restore_files_args));
 		arg->files = files;
 		arg->backup = backup;
-		arg->start_file_idx = i * (parray_num(files)/num_threads);
-		if (i == num_threads - 1)
-			arg->end_file_idx = parray_num(files);
-		else
-			arg->end_file_idx =  (i + 1) * (parray_num(files)/num_threads);
 
 		if (verbose)
-			elog(WARNING, "Start thread for start_file_idx:%i end_file_idx:%i num:%li",
-				arg->start_file_idx,
-				arg->end_file_idx,
-				parray_num(files));
+			elog(WARNING, "Start thread for num:%li", parray_num(files));
 
 		restore_threads_args[i] = arg;
 		pthread_create(&restore_threads[i], NULL, (void *(*)(void *)) restore_files, arg);
@@ -403,10 +400,12 @@ restore_files(void *arg)
 	restore_files_args *arguments = (restore_files_args *)arg;
 
 	/* restore files into $PGDATA */
-	for (i = arguments->start_file_idx; i < arguments->end_file_idx; i++)
+	for (i = 0; i < parray_num(arguments->files); i++)
 	{
 		char from_root[MAXPGPATH];
 		pgFile *file = (pgFile *) parray_get(arguments->files, i);
+		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+			continue;
 
 		pgBackupGetPath(arguments->backup, from_root, lengthof(from_root), DATABASE_DIR);
 
