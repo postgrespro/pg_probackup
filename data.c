@@ -194,6 +194,7 @@ backup_data_file(const char *from_root, const char *to_root,
 					if (try_checksum)
 					{
 						elog(WARNING, "File: %s blknum %u have wrong checksum, try again", file->path, blknum);
+						usleep(100);
 						fseek(in, -sizeof(page), SEEK_CUR);
 						fread(&page, 1, sizeof(page), in);
 					}
@@ -281,8 +282,6 @@ backup_data_file(const char *from_root, const char *to_root,
 					int i;
 
 					for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
-
-
 					if (i == BLCKSZ)
 					{
 						elog(WARNING, "File: %s blknum %u, empty page", file->path, blknum);
@@ -306,6 +305,7 @@ backup_data_file(const char *from_root, const char *to_root,
 					if (try_checksum)
 					{
 						elog(WARNING, "File: %s blknum %u have wrong page header, try again", file->path, blknum);
+						usleep(100);
 						fseek(in, -sizeof(page), SEEK_CUR);
 						fread(&page, 1, sizeof(page), in);
 						continue;
