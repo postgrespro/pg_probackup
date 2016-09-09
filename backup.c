@@ -1108,14 +1108,21 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		file->is_datafile = true;
 		{
 			int find_dot;
+			int check_digit;
 			char *text_segno;
 			for(find_dot = path_len-1; file->path[find_dot] != '.' && find_dot >= 0; find_dot--);
 			if (find_dot <= 0)
 				continue;
 
 			text_segno = file->path + find_dot + 1;
-			/* in future we will need check all chars */
-			if (!isdigit(text_segno[0]))
+			for(check_digit=0; text_segno[check_digit] != '\0'; check_digit++)
+				if (!isdigit(text_segno[check_digit]))
+				{
+					check_digit = -1;
+					break;
+				}
+
+			if (check_digit == -1)
 				continue;
 
 			file->segno = (int) strtol(text_segno, NULL, 10);
