@@ -43,6 +43,8 @@ ifndef top_srcdir
 	@exit 1
 endif
 else
+#TODO: fix me
+REGRESS =
 subdir=contrib/pg_arman
 top_builddir=../..
 include $(top_builddir)/src/Makefile.global
