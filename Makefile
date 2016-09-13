@@ -52,6 +52,10 @@ PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS}
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
+envtest:
+	: top_srcdir=$(top_srcdir)
+	: libpq_srcdir = $(libpq_srcdir)
+
 # This rule's only purpose is to give the user instructions on how to pass
 # the path to PostgreSQL source tree to the makefile.
 .PHONY: checksrcdir
