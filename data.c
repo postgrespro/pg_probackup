@@ -519,7 +519,7 @@ restore_data_file(const char *from_root,
 				if (i == BLCKSZ)
 					goto skip_checksum;
 			}
-			((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, header.block);
+			((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, file->segno * RELSEG_SIZE + header.block);
 		}
 
 		skip_checksum:

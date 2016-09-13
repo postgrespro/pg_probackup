@@ -547,7 +547,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		pg_crc32		crc;
 		unsigned int	mode;	/* bit length of mode_t depends on platforms */
 		struct tm		tm;
-		pgFile		   *file;
+		pgFile			*file;
 
 		memset(&tm, 0, sizeof(tm));
 		if (sscanf(buf, "%s %c %lu %u %o %d-%d-%d %d:%d:%d",
@@ -590,6 +590,30 @@ dir_read_file_list(const char *root, const char *file_txt)
 			strcpy(file->path, path);
 
 		parray_append(files, file);
+
+		if(file->is_datafile)
+		{
+			int find_dot;
+			int check_digit;
+			char *text_segno;
+			size_t path_len = strlen(file->path);
+			for(find_dot = path_len-1; file->path[find_dot] != '.' && find_dot >= 0; find_dot--);
+			if (find_dot <= 0)
+				continue;
+
+			text_segno = file->path + find_dot + 1;
+			for(check_digit=0; text_segno[check_digit] != '\0'; check_digit++)
+				if (!isdigit(text_segno[check_digit]))
+				{
+					check_digit = -1;
+					break;
+				}
+
+			if (check_digit == -1)
+				continue;
+
+			file->segno = (int) strtol(text_segno, NULL, 10);
+		}
 	}
 
 	fclose(fp);
