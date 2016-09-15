@@ -1,0 +1,7 @@
+sudo: required
+
+services:
+- docker
+
+script:
+- docker run -v $(pwd):/tests --rm centos:7 /tests/travis/backup_restore.sh
