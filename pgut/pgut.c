@@ -880,6 +880,16 @@ prompt_for_password(const char *username)
 		password = NULL;
 	}
 
+#if PG_VERSION_NUM >= 100000
+	if (username == NULL)
+		simple_prompt("Password: ", password, 100, false);
+	else
+	{
+		char	message[256];
+		snprintf(message, lengthof(message), "Password for user %s: ", username);
+		simple_prompt(message, password, 100, false);
+	}
+#else
 	if (username == NULL)
 		password = simple_prompt("Password: ", 100, false);
 	else
@@ -888,6 +898,7 @@ prompt_for_password(const char *username)
 		snprintf(message, lengthof(message), "Password for user %s: ", username);
 		password = simple_prompt(message, 100, false);
 	}
+#endif
 }
 #endif
 
