@@ -27,6 +27,7 @@
 
 /* Query to fetch current transaction ID */
 #define TXID_CURRENT_SQL	"SELECT txid_current();"
+#define TXID_CURRENT_IF_SQL	"SELECT txid_snapshot_xmax(txid_current_snapshot());"
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"
@@ -211,6 +212,7 @@ extern parray *backup_files_list;
 
 extern int num_threads;
 extern bool stream_wal;
+extern bool from_replica;
 extern bool disable_ptrack_clear;
 extern bool progress;
 

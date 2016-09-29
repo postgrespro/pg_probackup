@@ -13,6 +13,12 @@ server because of a reason or another. Its differential backup
 facility reduces the amount of data necessary to be taken between
 two consecutive backups.
 
+Main features:
+* incremental backup from WAL and PTRACK
+* backup from replica
+* multithreaded backup and restore
+* autonomous backup without archive command (will need slot replication)
+
 Download
 --------
 
