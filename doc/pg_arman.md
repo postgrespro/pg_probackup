@@ -240,17 +240,17 @@ absolute paths; relative paths are not allowed.
     --keep-data-days means days to be kept.
     Only files exceeded one of those settings are deleted.
 
-**-j**=NUMBER / **--threads**=NUMBER:
-	Number of threads for backup.
+**-j**=NUMBER / **--threads**=NUMBER:  
+    Number of threads for backup.
 
-**--stream**:
-	Enable stream replication for save WAL during backup process.
+**--stream**:  
+    Enable stream replication for save WAL during backup process.
 
-**--disable-ptrack-clear**:
-	Disable clear ptrack files for postgres without ptrack patch.
+**--disable-ptrack-clear**:  
+    Disable clear ptrack files for postgres without ptrack patch.
 
-**--from-replica**:
-	Use non exclusive start backup for replica. Only for 9.6 and higher.
+**--from-replica**:  
+    Use non exclusive start backup for replica. Only for 9.6 and higher.
 
 
 ### RESTORE OPTIONS 
@@ -273,10 +273,10 @@ the same parameters as the ones in recovery.confin recovery.conf.
 **--recovery-target-inclusive**:  
     Specifies whether server pauses when recovery target is reached.
 
-**-j**=NUMBER / **--threads**=NUMBER:
+**-j**=NUMBER / **--threads**=NUMBER: 
     Number of threads for restore. 
 
-**--stream**:
+**--stream**: 
     Restore without recovery.conf and use pg_xlog WALs. Before you need 
     backup with **--stream** option. This option will disable all **--recovery-**
 	options.
