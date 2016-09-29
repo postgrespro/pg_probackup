@@ -888,6 +888,7 @@ get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup)
 		char	path_backup_label[MAXPGPATH];
 		char	path_tablespace_map[MAXPGPATH];
 		FILE	*fp;
+		pgFile	*file;
 
 		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
 		snprintf(path_backup_label, lengthof(path_backup_label), "%s/backup_label", path);
@@ -900,6 +901,11 @@ get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup)
 
 		fwrite(PQgetvalue(res, 0, 1), 1, strlen(PQgetvalue(res, 0, 1)), fp);
 		fclose(fp);
+		file = pgFileNew(path_backup_label, true);
+		calc_file(file);
+		free(file->path);
+		file->path = strdup("backup_label");
+		parray_append(backup_files_list, file);
 		if (strlen(PQgetvalue(res, 0, 2)) == 0)
 			return;
 
@@ -910,6 +916,11 @@ get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup)
 
 		fwrite(PQgetvalue(res, 0, 2), 1, strlen(PQgetvalue(res, 0, 2)), fp);
 		fclose(fp);
+		file = pgFileNew(path_tablespace_map, true);
+		calc_file(file);
+		free(file->path);
+		file->path = strdup("tablespace_map");
+		parray_append(backup_files_list, file);
 	}
 }
 

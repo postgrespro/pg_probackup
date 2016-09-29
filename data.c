@@ -722,14 +722,16 @@ calc_file(pgFile *file)
 
 	for (;;)
 	{
-		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
+		read_len = fread(buf, 1, sizeof(buf), in);
+
+		if(read_len == 0)
 			break;
 
 		/* update CRC */
 		COMP_CRC32C(crc, buf, read_len);
 
-		file->write_size += sizeof(buf);
-		file->read_size += sizeof(buf);
+		file->write_size += read_len;
+		file->read_size += read_len;
 	}
 
 	errno_tmp = errno;

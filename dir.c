@@ -31,7 +31,7 @@ const char *pgdata_exclude[] =
 	NULL
 };
 
-static pgFile *pgFileNew(const char *path, bool omit_symlink);
+pgFile *pgFileNew(const char *path, bool omit_symlink);
 static int BlackListCompare(const void *str1, const void *str2);
 
 /* create directory, also create parent directories if necessary */
@@ -60,7 +60,7 @@ dir_create_dir(const char *dir, mode_t mode)
 	return 0;
 }
 
-static pgFile *
+pgFile *
 pgFileNew(const char *path, bool omit_symlink)
 {
 	struct stat		st;
