@@ -151,6 +151,11 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && !disable_ptrack_clear)
 		pg_ptrack_clear();
 
+	/* notify start of backup to PostgreSQL server */
+	time2iso(label, lengthof(label), current.start_time);
+	strncat(label, " with pg_arman", lengthof(label));
+	pg_start_backup(label, smooth_checkpoint, &current);
+
 	/* start stream replication */
 	if (stream_wal)
 	{
@@ -159,11 +164,6 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		dir_create_dir(dst_backup_path, DIR_PERMISSION);
 		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
 	}
-
-	/* notify start of backup to PostgreSQL server */
-	time2iso(label, lengthof(label), current.start_time);
-	strncat(label, " with pg_arman", lengthof(label));
-	pg_start_backup(label, smooth_checkpoint, &current);
 
 	if(!from_replica)
 	{
@@ -1435,10 +1435,15 @@ StreamLog(void *arg)
 	if (!RunIdentifySystem(conn, NULL, &starttli, &startpos, NULL))
 		disconnect_and_exit(1);
 
+	/*
+	 * We must use startpos as start_lsn from start_backup
+	 */
+	startpos = current.start_lsn;
 
 	/*
 	 * Always start streaming at the beginning of a segment
 	 */
+
 	startpos -= startpos % XLOG_SEG_SIZE;
 
 	/*
