@@ -16,8 +16,8 @@
 #include <sys/stat.h>
 
 const char *PROGRAM_VERSION	= "0.1";
-const char *PROGRAM_URL		= "https://github.com/michaelpq/pg_arman";
-const char *PROGRAM_EMAIL	= "https://github.com/michaelpq/pg_arman/issues";
+const char *PROGRAM_URL		= "https://github.com/stalkerg/pg_arman";
+const char *PROGRAM_EMAIL	= "https://github.com/stalkerg/pg_arman/issues";
 
 /* path configuration */
 char *backup_path;
@@ -109,8 +109,13 @@ main(int argc, char *argv[])
 	for (; i < argc; i++)
 	{
 		if (cmd == NULL)
+		{
 			cmd = argv[i];
-		else if (range1 == NULL)
+			if(strcmp(cmd, "show") != 0 &&
+			   strcmp(cmd, "validate") != 0 &&
+			   strcmp(cmd, "delete") != 0)
+				break;
+		} else if (range1 == NULL)
 			range1 = argv[i];
 		else if (range2 == NULL)
 			range2 = argv[i];
@@ -229,8 +234,8 @@ pgut_help(bool details)
 	printf(_("  %s OPTION init\n"), PROGRAM_NAME);
 	printf(_("  %s OPTION backup\n"), PROGRAM_NAME);
 	printf(_("  %s OPTION restore\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION show [DATE]\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION validate [DATE]\n"), PROGRAM_NAME);
+	printf(_("  %s OPTION show [DATE] [DATE]\n"), PROGRAM_NAME);
+	printf(_("  %s OPTION validate [DATE] [DATE]\n"), PROGRAM_NAME);
 	printf(_("  %s OPTION delete DATE\n"), PROGRAM_NAME);
 
 	if (!details)

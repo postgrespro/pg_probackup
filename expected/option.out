@@ -7,8 +7,8 @@ Usage:
   pg_arman OPTION init
   pg_arman OPTION backup
   pg_arman OPTION restore
-  pg_arman OPTION show [DATE]
-  pg_arman OPTION validate [DATE]
+  pg_arman OPTION show [DATE] [DATE]
+  pg_arman OPTION validate [DATE] [DATE]
   pg_arman OPTION delete DATE
 
 Common Options:
@@ -53,8 +53,8 @@ Generic options:
   --help                    show this help, then exit
   --version                 output version information, then exit
 
-Read the website for details. <https://github.com/michaelpq/pg_arman>
-Report bugs to <https://github.com/michaelpq/pg_arman/issues>.
+Read the website for details. <https://github.com/stalkerg/pg_arman>
+Report bugs to <https://github.com/stalkerg/pg_arman/issues>.
 1
 
 ###### COMMAND OPTION TEST-0002 ######
