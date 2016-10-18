@@ -26,7 +26,6 @@ Backup options:
   --validate                validate backup after taking it
   --keep-data-generations=N keep GENERATION of full data backup
   --keep-data-days=DAY      keep enough data backup to recover to DAY days age
-  --disable-ptrack-clear    disable clear ptrack for postgres without ptrack
   --backup-pg-log           start backup pg_log directory
   --from-replica            use non exclusive start backup for replica
 

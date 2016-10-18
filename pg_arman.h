@@ -213,7 +213,6 @@ extern parray *backup_files_list;
 extern int num_threads;
 extern bool stream_wal;
 extern bool from_replica;
-extern bool disable_ptrack_clear;
 extern bool progress;
 
 /* in backup.c */

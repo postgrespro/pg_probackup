@@ -65,6 +65,7 @@ static bool pg_is_standby(void);
 static void get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup);
 static void get_xid(PGresult *res, uint32 *xid);
 static void pg_ptrack_clear(void);
+static bool pg_ptrack_support(void);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
@@ -106,6 +107,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	pthread_t	backup_threads[num_threads];
 	pthread_t	stream_thread;
 	backup_files_args *backup_threads_args[num_threads];
+	bool		is_ptrack_support;
 
 
 	/* repack the options */
@@ -131,6 +133,10 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	 */
 	current.tli = get_current_timeline(false);
 
+	is_ptrack_support = pg_ptrack_support();
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_support)
+		elog(ERROR, "Current Postgres instance is not support ptrack");
+
 	/*
 	 * In differential backup mode, check if there is an already-validated
 	 * full backup on current timeline.
@@ -148,7 +154,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	}
 
 	/* clear ptrack files for FULL and DIFF backup */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && !disable_ptrack_clear)
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && is_ptrack_support)
 		pg_ptrack_clear();
 
 	/* notify start of backup to PostgreSQL server */
@@ -633,6 +639,21 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	if (backup != NULL)
 		get_lsn(start_stop_connect, res, &backup->start_lsn, false);
 	PQclear(res);
+}
+
+static bool
+pg_ptrack_support(void)
+{
+	PGresult	*res_db;
+	reconnect();
+	res_db = execute("SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'", 0, NULL);
+	if (PQntuples(res_db) == 0)
+	{
+		PQclear(res_db);
+		disconnect();
+		return false;
+	}
+	return true;
 }
 
 static void
