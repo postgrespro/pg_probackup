@@ -13,7 +13,6 @@ Usage:
 
 Common Options:
   -D, --pgdata=PATH         location of the database storage area
-  -A, --arclog-path=PATH    location of archive WAL storage area
   -B, --backup-path=PATH    location of the backup storage area
   -c, --check               show what would have been done
   -j, --threads=NUM         num threads for backup and restore
@@ -74,11 +73,6 @@ ERROR: Required parameter not specified: BACKUP_MODE (-b, --backup-mode)
 ###### COMMAND OPTION TEST-0005 ######
 ###### backup command failure with invalid backup mode option ######
 ERROR: invalid backup-mode "bad"
-1
-
-###### COMMAND OPTION TEST-0006 ######
-###### delete failure without archive path ######
-ERROR: delete command needs ARCLOG_PATH (-A, --arclog-path) to be set
 1
 
 ###### COMMAND OPTION TEST-0007 ######

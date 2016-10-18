@@ -22,7 +22,7 @@ const char *PROGRAM_EMAIL	= "https://github.com/stalkerg/pg_arman/issues";
 /* path configuration */
 char *backup_path;
 char *pgdata;
-char *arclog_path = NULL;
+char arclog_path[MAXPGPATH];
 
 /* common configuration */
 bool check = false;
@@ -57,7 +57,6 @@ static pgut_option options[] =
 {
 	/* directory options */
 	{ 's', 'D', "pgdata",		&pgdata,		SOURCE_ENV },
-	{ 's', 'A', "arclog-path",	&arclog_path,	SOURCE_ENV },
 	{ 's', 'B', "backup-path",	&backup_path,	SOURCE_ENV },
 	/* common options */
 	{ 'b', 'c', "check",		&check },
@@ -171,18 +170,13 @@ main(int argc, char *argv[])
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
-	if (arclog_path != NULL && !is_absolute_path(arclog_path))
-		elog(ERROR, "-A, --arclog-path must be an absolute path");
 
-	/* Sanity checks with commands */
-	if (pg_strcasecmp(cmd, "delete") == 0 && arclog_path == NULL)
-		elog(ERROR, "delete command needs ARCLOG_PATH (-A, --arclog-path) to be set");
+	join_path_components(arclog_path, backup_path, "wal");
 
 	/* setup exclusion list for file search */
 	for (i = 0; pgdata_exclude[i]; i++);		/* find first empty slot */
 
-	if (arclog_path)
-		pgdata_exclude[i++] = arclog_path;
+	pgdata_exclude[i++] = arclog_path;
 
 	if(!backup_logs)
 		pgdata_exclude[i++] = "pg_log";
@@ -241,7 +235,6 @@ pgut_help(bool details)
 
 	printf(_("\nCommon Options:\n"));
 	printf(_("  -D, --pgdata=PATH         location of the database storage area\n"));
-	printf(_("  -A, --arclog-path=PATH    location of archive WAL storage area\n"));
 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
 	printf(_("  -c, --check               show what would have been done\n"));
 	printf(_("  -j, --threads=NUM         num threads for backup and restore\n"));

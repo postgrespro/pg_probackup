@@ -68,9 +68,6 @@ do_restore(const char *target_time,
 	if (pgdata == NULL)
 		elog(ERROR,
 			 "required parameter not specified: PGDATA (-D, --pgdata)");
-	if (arclog_path == NULL)
-		elog(ERROR,
-			 "required parameter not specified: ARCLOG_PATH (-A, --arclog-path)");
 
 	elog(LOG, "========================================");
 	elog(LOG, "restore start");

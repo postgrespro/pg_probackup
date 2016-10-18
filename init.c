@@ -30,6 +30,7 @@ int
 do_init(void)
 {
 	char	path[MAXPGPATH];
+	char	arclog_path_dir[MAXPGPATH];
 	char   *log_directory = NULL;
 	char   *archive_command = NULL;
 	FILE   *fp;
@@ -66,51 +67,8 @@ do_init(void)
 	if (fp == NULL)
 		elog(ERROR, "cannot create pg_arman.ini: %s", strerror(errno));
 
-	/* set ARCLOG_PATH refered with log_directory */
-	if (arclog_path == NULL && archive_command && archive_command[0])
-	{
-		char *command = pgut_strdup(archive_command);
-		char *begin;
-		char *end;
-		char *fname;
-
-		/* example: 'cp "%p" /path/to/arclog/"%f"' */
-		for (begin = command; *begin;)
-		{
-			begin = begin + strspn(begin, " \n\r\t\v");
-			end = begin + strcspn(begin, " \n\r\t\v");
-			*end = '\0';
-
-			if ((fname = strstr(begin, "%f")) != NULL)
-			{
-				while (strchr(" \n\r\t\v\"'", *begin))
-					begin++;
-				fname--;
-				while (fname > begin && strchr(" \n\r\t\v\"'/", fname[-1]))
-					fname--;
-				*fname = '\0';
-
-				if (is_absolute_path(begin))
-					arclog_path = pgut_strdup(begin);
-				break;
-			}
-
-			begin = end + 1;
-		}
-
-		free(command);
-	}
-	if (arclog_path)
-	{
-		fprintf(fp, "ARCLOG_PATH='%s'\n", arclog_path);
-		elog(INFO, "ARCLOG_PATH is set to '%s'", arclog_path);
-	}
-	else if (archive_command && archive_command[0])
-		elog(WARNING, "ARCLOG_PATH is not set because failed to parse archive_command '%s'."
-				"Please set ARCLOG_PATH in pg_arman.ini or environmental variable", archive_command);
-	else
-		elog(WARNING, "ARCLOG_PATH is not set because archive_command is empty."
-				"Please set ARCLOG_PATH in pg_arman.ini or environmental variable");
+	join_path_components(arclog_path_dir, backup_path, "wal");
+	dir_create_dir(arclog_path_dir, DIR_PERMISSION);
 
 	fprintf(fp, "\n");
 	fclose(fp);

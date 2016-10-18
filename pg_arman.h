@@ -196,7 +196,7 @@ typedef union DataPage
 /* path configuration */
 extern char *backup_path;
 extern char *pgdata;
-extern char *arclog_path;
+extern char arclog_path[MAXPGPATH];
 
 /* common configuration */
 extern bool check;

@@ -11,7 +11,6 @@
 pg_ctl stop -m immediate > /dev/null 2>&1
 rm -fr ${PGDATA}
 rm -fr ${BACKUP_PATH}
-rm -fr ${ARCLOG_PATH} && mkdir -p ${ARCLOG_PATH}
 
 initdb --no-locale > /dev/null 2>&1
 cp ${PGDATA}/postgresql.conf ${PGDATA}/postgresql.conf_org

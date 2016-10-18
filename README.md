@@ -104,9 +104,6 @@ Example backup (assuming PostgreSQL is running):
 ```bash
 # Init pg_aramn backup folder
 pg_arman init -B /home/postgres/backup/pgarman
-cat << __EOF__ >> /home/postgres/backup/pgarman/pg_arman.ini
-ARCLOG_PATH = '/home/postgres/backup/arman/wal'
-__EOF__
 # Make full backup with 2 thread and verbose mode.
 pg_arman backup -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman -b full -v -j 2
 # Validate backup
@@ -142,9 +139,6 @@ Example backup (assuming PostgreSQL is running):
 ```bash
 # Init pg_aramn backup folder
 pg_arman init -B /home/postgres/backup/pgarman
-cat << __EOF__ >> /home/postgres/backup/pgarman/pg_arman.ini
-ARCLOG_PATH = '/home/postgres/backup/arman/wal'
-__EOF__
 # Make full backup with 2 thread and verbose mode.
 pg_arman backup -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman -b full -v -j 2 --stream
 # Validate backup

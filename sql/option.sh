@@ -21,27 +21,22 @@ echo ''
 
 echo '###### COMMAND OPTION TEST-0003 ######'
 echo '###### backup command failure without backup path option ######'
-pg_arman backup -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+pg_arman backup -b full -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0004 ######'
 echo '###### backup command failure without backup mode option ######'
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+pg_arman backup -B ${BACKUP_PATH} -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0005 ######'
 echo '###### backup command failure with invalid backup mode option ######'
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b bad -p ${TEST_PGPORT};echo $?
-echo ''
-
-echo '###### COMMAND OPTION TEST-0006 ######'
-echo '###### delete failure without archive path ######'
-pg_arman delete -B ${BACKUP_PATH};echo $?
+pg_arman backup -B ${BACKUP_PATH} -b bad -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0007 ######'
 echo '###### delete failure without DATE ######'
-pg_arman delete -B ${BACKUP_PATH} -A ${ARCLOG_PATH};echo $?
+pg_arman delete -B ${BACKUP_PATH};echo $?
 echo ''
 
 init_backup
@@ -49,35 +44,35 @@ init_backup
 echo '###### COMMAND OPTION TEST-0008 ######'
 echo '###### syntax error in pg_arman.ini ######'
 echo " = INFINITE" >> ${BACKUP_PATH}/pg_arman.ini
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+pg_arman backup -B ${BACKUP_PATH} -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0009 ######'
 echo '###### invalid value in pg_arman.ini ######'
 init_catalog
 echo "BACKUP_MODE=" >> ${BACKUP_PATH}/pg_arman.ini
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+pg_arman backup -B ${BACKUP_PATH} -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0010 ######'
 echo '###### invalid value in pg_arman.ini ######'
 init_catalog
 echo "KEEP_DATA_GENERATIONS=TRUE" >> ${BACKUP_PATH}/pg_arman.ini
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0011 ######'
 echo '###### invalid value in pg_arman.ini ######'
 init_catalog
 echo "SMOOTH_CHECKPOINT=FOO" >> ${BACKUP_PATH}/pg_arman.ini
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0012 ######'
 echo '###### invalid option in pg_arman.ini ######'
 init_catalog
 echo "TIMELINEID=1" >> ${BACKUP_PATH}/pg_arman.ini
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -b full -p ${TEST_PGPORT};echo $?
+pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT};echo $?
 echo ''
 
 echo '###### COMMAND OPTION TEST-0013 ######'
@@ -86,7 +81,7 @@ init_catalog
 mkdir -p ${BACKUP_PATH}/conf_path_a
 echo "BACKUP_MODE=ENV_PATH" > ${BACKUP_PATH}/pg_arman.ini
 echo "BACKUP_MODE=ENV_PATH_A" > ${BACKUP_PATH}/conf_path_a/pg_arman.ini
-pg_arman backup -B ${BACKUP_PATH} -A ${ARCLOG_PATH} -p ${TEST_PGPORT};echo $?
+pg_arman backup -B ${BACKUP_PATH} -p ${TEST_PGPORT};echo $?
 echo ''
 
 # clean up the temporal test data
