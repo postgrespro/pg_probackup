@@ -81,12 +81,14 @@ some overhead to PostgreSQL performance.  On our experiments it appears to be
 less than 3%.
 
 These two approaches were implemented in this fork of pg_arman.  The second
-approach requires [patch for PostgreSQL 9.5](https://gist.github.com/stalkerg/44703dbcbac1da08f448b7e6966646c0).
+approach requires [patch for PostgreSQL 9.5](https://gist.github.com/stalkerg/44703dbcbac1da08f448b7e6966646c0) or
+[patch for PostgreSQL 10](https://gist.github.com/stalkerg/ab833d94e2f64df241f1835651e06e4b).
 
 Testing block level incremental backup
 --------------------------------------
 
-You need build and install [PGPRO9_5 branch of PostgreSQL](https://github.com/postgrespro/postgrespro) or [apply this patch to PostgreSQL 9.5](https://gist.github.com/stalkerg/44703dbcbac1da08f448b7e6966646c0).
+You need build and install [PGPRO9_5 or PGPRO9_6 branch of PostgreSQL](https://github.com/postgrespro/postgrespro) or apply this patch to
+[PostgreSQL 9.5](https://gist.github.com/stalkerg/44703dbcbac1da08f448b7e6966646c0) or [PostgreSQL 10](https://gist.github.com/stalkerg/ab833d94e2f64df241f1835651e06e4b).
 
 ### Retrieving changed blocks from WAL archive
 

@@ -246,9 +246,6 @@ absolute paths; relative paths are not allowed.
 **--stream**:  
     Enable stream replication for save WAL during backup process.
 
-**--disable-ptrack-clear**:  
-    Disable clear ptrack files for postgres without ptrack patch.
-
 **--from-replica**:  
     Use non exclusive start backup for replica. Only for 9.6 and higher.
 
