@@ -1371,7 +1371,6 @@ void make_pagemap_from_ptrack(parray *files)
 			size_t start_addr;
 			Oid db_oid, rel_oid, tablespace_oid = 0;
 			int sep_iter, sep_count = 0;
-			tablespace = palloc0(64);
 
 			/* Find target path*/
 			for(sep_iter = (int)path_length; sep_iter >= 0; sep_iter--)
@@ -1380,16 +1379,17 @@ void make_pagemap_from_ptrack(parray *files)
 				{
 					sep_count++;
 				}
-				if (sep_count == 3)
+				if (sep_count == 2)
 				{
 					tmp_path += sep_iter + 1;
 					break;
 				}
 			}
 			/* For unix only now */
-			sscanf(tmp_path, "%[^/]/%u/%u_ptrack", tablespace, &db_oid, &rel_oid);
-			if (strcmp(tablespace, "base") != 0 && strcmp(tablespace, "global") != 0)
-				sscanf(tablespace, "%i", &tablespace_oid);
+			sscanf(tmp_path, "%u/%u_ptrack", &db_oid, &rel_oid);
+			tablespace = strstr(p->ptrack_path, "pg_tblspc");
+			if (tablespace != NULL)
+				sscanf(tablespace+10, "%i/", &tablespace_oid);
 
 			flat_memory = pg_ptrack_get_and_clear(tablespace_oid,
 												  db_oid,
@@ -1401,7 +1401,6 @@ void make_pagemap_from_ptrack(parray *files)
 			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
 			memcpy(p->pagemap.bitmap, flat_memory+start_addr, p->pagemap.bitmapsize);
 			pg_free(flat_memory);
-			pg_free(tablespace);
 		}
 	}
 }
