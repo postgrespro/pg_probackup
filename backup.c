@@ -1508,11 +1508,13 @@ StreamLog(void *arg)
 	ctl.partial_suffix = NULL;
 	ctl.synchronous = false;
 	ctl.mark_done = false;
-	ReceiveXlogStream(conn, &ctl);
+	if(ReceiveXlogStream(conn, &ctl) == false)
+		elog(ERROR, "Problem in recivexlog");
 #else
-	ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
+	if(ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
 					  stop_streaming, standby_message_timeout, NULL,
-					  false, false);
+					  false, false) == false)
+		elog(ERROR, "Problem in recivexlog");
 #endif
 
 	PQfinish(conn);

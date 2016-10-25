@@ -25,6 +25,7 @@ Backup options:
   --keep-data-generations=N keep GENERATION of full data backup
   --keep-data-days=DAY      keep enough data backup to recover to DAY days age
   --backup-pg-log           start backup pg_log directory
+  -S, --slot=SLOTNAME       replication slot to use
 
 Restore options:
   --recovery-target-time    time stamp up to which recovery will proceed

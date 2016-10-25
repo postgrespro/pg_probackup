@@ -66,6 +66,7 @@ static pgut_option options[] =
 	{ 'b', 10, "backup-pg-log",			&backup_logs },
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },
+	{ 's', 'S', "slot",					&replication_slot,		SOURCE_ENV },
 	/* options with only long name (keep-xxx) */
 	{ 'i',  1, "keep-data-generations", &keep_data_generations, SOURCE_ENV },
 	{ 'i',  2, "keep-data-days",		&keep_data_days,		SOURCE_ENV },
@@ -242,6 +243,7 @@ pgut_help(bool details)
 	printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
 	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));
 	printf(_("  --backup-pg-log           start backup pg_log directory\n"));
+	printf(_("  -S, --slot=SLOTNAME       replication slot to use\n"));
 	printf(_("\nRestore options:\n"));
 	printf(_("  --recovery-target-time    time stamp up to which recovery will proceed\n"));
 	printf(_("  --recovery-target-xid     transaction ID up to which recovery will proceed\n"));
