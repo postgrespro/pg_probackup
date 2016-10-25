@@ -66,6 +66,7 @@ static void get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_back
 static void get_xid(PGresult *res, uint32 *xid);
 static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
+static bool pg_is_in_recovery(void);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
@@ -115,6 +116,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	pgBackup   *prev_backup = NULL;
 
 	/* Block backup operations on a standby */
+	from_replica = pg_is_in_recovery();
 	if (pg_is_standby() && !from_replica)
 		elog(ERROR, "Backup cannot run on a standby.");
 
@@ -653,7 +655,27 @@ pg_ptrack_support(void)
 		disconnect();
 		return false;
 	}
+	PQclear(res_db);
+	disconnect();
 	return true;
+}
+
+static bool
+pg_is_in_recovery(void)
+{
+	PGresult	*res_db;
+	reconnect();
+	res_db = execute("SELECT pg_is_in_recovery()", 0, NULL);
+
+	if (PQgetvalue(res_db, 0, 0)[0] == 't')
+	{
+		PQclear(res_db);
+		disconnect();
+		return true;
+	}
+	PQclear(res_db);
+	disconnect();
+	return false;
 }
 
 static void
