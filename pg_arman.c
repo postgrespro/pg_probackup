@@ -38,7 +38,6 @@ int				num_threads = 1;
 bool			stream_wal = false;
 bool			from_replica = false;
 static bool		backup_logs = false;
-static bool		backup_validate = false;
 bool			progress = false;
 
 /* restore configuration */
@@ -75,7 +74,6 @@ static pgut_option options[] =
 	{ 's',  4, "recovery-target-xid",		&target_xid,		SOURCE_ENV },
 	{ 's',  5, "recovery-target-inclusive", &target_inclusive,	SOURCE_ENV },
 	{ 'u',  6, "recovery-target-timeline",	&target_tli,		SOURCE_ENV },
-	{ 'b',  7, "validate",					&backup_validate,	SOURCE_ENV },
 	/* catalog options */
 	{ 'b', 'a', "show-all",					&show_all },
 	{ 0 }
@@ -199,8 +197,7 @@ main(int argc, char *argv[])
 		/* If validation has been requested, do it */
 		range.begin = current.start_time;
 		range.end = current.start_time + 1;
-		if (backup_validate)
-			do_validate(&range);
+		do_validate(&range);
 	}
 	else if (pg_strcasecmp(cmd, "restore") == 0)
 		return do_restore(target_time, target_xid,
@@ -242,7 +239,6 @@ pgut_help(bool details)
 	printf(_("\nBackup options:\n"));
 	printf(_("  -b, --backup-mode=MODE    full,page,ptrack\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
-	printf(_("  --validate                validate backup after taking it\n"));
 	printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
 	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));
 	printf(_("  --backup-pg-log           start backup pg_log directory\n"));

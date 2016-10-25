@@ -106,8 +106,6 @@ Example backup (assuming PostgreSQL is running):
 pg_arman init -B /home/postgres/backup/pgarman
 # Make full backup with 2 thread and verbose mode.
 pg_arman backup -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman -b full -v -j 2
-# Validate backup
-pg_arman validate -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman
 # Show backups information
 pg_arman show -B /home/postgres/backup/pgarman
 
@@ -115,7 +113,6 @@ pg_arman show -B /home/postgres/backup/pgarman
 
 # Then start the incremental backup.
 pg_arman backup -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman -b page -v -j 2
-pg_arman validate -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman
 # You should see that increment is really small
 pg_arman show -B /home/postgres/backup/pgarman
 ```
@@ -141,8 +138,6 @@ Example backup (assuming PostgreSQL is running):
 pg_arman init -B /home/postgres/backup/pgarman
 # Make full backup with 2 thread and verbose mode.
 pg_arman backup -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman -b full -v -j 2 --stream
-# Validate backup
-pg_arman validate -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman
 # Show backups information
 pg_arman show -B /home/postgres/backup/pgarman
 
@@ -150,7 +145,6 @@ pg_arman show -B /home/postgres/backup/pgarman
 
 # Then start the incremental backup.
 pg_arman backup -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman -b ptrack -v -j 2 --stream
-pg_arman validate -B /home/postgres/backup/pgarman -D /home/postgres/pgdata/arman
 # You should see that increment is really small
 pg_arman show -B /home/postgres/backup/pgarman
 ```

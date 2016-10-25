@@ -22,7 +22,6 @@ Common Options:
 Backup options:
   -b, --backup-mode=MODE    full,page,ptrack
   -C, --smooth-checkpoint   do smooth checkpoint before backup
-  --validate                validate backup after taking it
   --keep-data-generations=N keep GENERATION of full data backup
   --keep-data-days=DAY      keep enough data backup to recover to DAY days age
   --backup-pg-log           start backup pg_log directory
