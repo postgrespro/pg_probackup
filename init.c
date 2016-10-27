@@ -50,9 +50,6 @@ do_init(void)
 	/* create directories for backup of online files */
 	join_path_components(path, backup_path, RESTORE_WORK_DIR);
 	dir_create_dir(path, DIR_PERMISSION);
-	snprintf(path, lengthof(path), "%s/%s/%s", backup_path, RESTORE_WORK_DIR,
-		PG_XLOG_DIR);
-	dir_create_dir(path, DIR_PERMISSION);
 
 	/* read postgresql.conf */
 	if (pgdata)
