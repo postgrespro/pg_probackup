@@ -166,7 +166,7 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 
 	/* show header */
 	fputs("===================================================================================\n", out);
-	fputs("ID       Stop                 Mode    Current TLI  Parent TLI  Time    Data  Status  \n", out);
+	fputs("ID       Recovery time        Mode    Current TLI  Parent TLI  Time    Data  Status  \n", out);
 	fputs("===================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -184,7 +184,7 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		if (backup->status == BACKUP_STATUS_DELETED && !show_all)
 			continue;
 
-		time2iso(timestamp, lengthof(timestamp), backup->end_time);
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 		if (backup->end_time != (time_t) 0)
 			snprintf(duration, lengthof(duration), "%lum",
 				(backup->end_time - backup->start_time) / 60);

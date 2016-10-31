@@ -10,14 +10,12 @@ pg_arman [ OPTIONS ]
     { init |
       backup |
       restore |
-      show [ DATE | timeline ] |
-      validate [ DATE ] |
-      delete DATE }
+	  show [ ID] |
+	  validate [ ID ] |
+	  delete ID }
 ```
 
-DATE is the start time of the target backup in ISO-format:
-(YYYY-MM-DD HH:MI:SS). Prefix match is used to compare DATE and backup
-files.
+ID is the base36 id from start time of the target backup.
 
 ## DESCRIPTION 
 
@@ -139,12 +137,12 @@ $ pg_ctl start
 ### SHOW A BACKUP 
 ```
 $ pg_arman show
-===================================================================================
-Start                Mode  Current TLI  Parent TLI  Time    Data   Backup   Status 
-===================================================================================
-2013-12-25 03:02:31  PAGE            1           0    0m   203kB     67MB   DONE
-2013-12-25 03:02:31  PAGE            1           0    0m      0B       0B   ERROR
-2013-12-25 03:02:25  FULL            1           0    0m    33MB    364MB   OK
+==========================================================================================
+ID       Recovery time        Mode  Current TLI  Parent TLI  Time    Data   Backup   Status
+==========================================================================================
+OFX1LH   2013-12-25 03:02:31  PAGE            1           0    0m   203kB     67MB   DONE
+OFX1KL   2013-12-25 03:02:31  PAGE            1           0    0m      0B       0B   ERROR
+OFX1KA   2013-12-25 03:02:25  FULL            1           0    0m    33MB    364MB   OK
 ```
 The fields are:
 
@@ -165,10 +163,10 @@ The fields are:
 	* ERROR : backup is unavailable because some errors occur during backup.
 	* CORRUPT : backup is unavailable because it is broken.
 
-When a date is specified, more details about a backup is retrieved:
+When a ID is specified, more details about a backup is retrieved:
 
 ```
-$ pg_arman show '2011-11-27 19:15:45'
+$ pg_arman show OFX1LH
 # configuration
 BACKUP_MODE=FULL
 # result
@@ -189,7 +187,7 @@ You can check the "RECOVERY_XID" and "RECOVERY_TIME" which are used for
 restore option "--recovery-target-xid", "--recovery-target-time".
 
 The delete command deletes backup files not required by recovery after
-the specified date. This command also cleans up in the WAL archive the
+the specified ID. This command also cleans up in the WAL archive the
 WAL segments that are no longer needed to restore from the remaining
 backups.
 

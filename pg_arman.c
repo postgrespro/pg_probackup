@@ -211,9 +211,9 @@ pgut_help(bool details)
 	printf(_("  %s OPTION init\n"), PROGRAM_NAME);
 	printf(_("  %s OPTION backup\n"), PROGRAM_NAME);
 	printf(_("  %s OPTION restore\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION show [DATE] [DATE]\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION validate [DATE] [DATE]\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION delete DATE\n"), PROGRAM_NAME);
+	printf(_("  %s OPTION show [ID]\n"), PROGRAM_NAME);
+	printf(_("  %s OPTION validate [ID]\n"), PROGRAM_NAME);
+	printf(_("  %s OPTION delete ID\n"), PROGRAM_NAME);
 
 	if (!details)
 		return;

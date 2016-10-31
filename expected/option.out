@@ -7,9 +7,9 @@ Usage:
   pg_arman OPTION init
   pg_arman OPTION backup
   pg_arman OPTION restore
-  pg_arman OPTION show [DATE] [DATE]
-  pg_arman OPTION validate [DATE] [DATE]
-  pg_arman OPTION delete DATE
+  pg_arman OPTION show [ID]
+  pg_arman OPTION validate [ID]
+  pg_arman OPTION delete ID
 
 Common Options:
   -D, --pgdata=PATH         location of the database storage area
