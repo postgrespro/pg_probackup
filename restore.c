@@ -89,7 +89,7 @@ do_restore(const char *target_time,
 		elog(ERROR, "cannot create recovery.conf. specified args are invalid.");
 
 	/* get list of backups. (index == 0) is the last backup */
-	backups = catalog_get_backup_list(NULL);
+	backups = catalog_get_backup_list(0);
 	if (!backups)
 		elog(ERROR, "cannot process any more.");
 

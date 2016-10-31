@@ -18,7 +18,7 @@ static bool pgBackupValidateFiles(parray *files, const char *root, bool size_onl
  * If any of files are corrupted, update its stutus to CORRUPT.
  */
 int
-do_validate(pgBackupRange *range)
+do_validate(time_t backup_id)
 {
 	int		i;
 	parray *backup_list;
@@ -30,7 +30,7 @@ do_validate(pgBackupRange *range)
 		another_pg_arman = true;
 
 	/* get backup list matches given range */
-	backup_list = catalog_get_backup_list(range);
+	backup_list = catalog_get_backup_list(backup_id);
 	if (!backup_list)
 		elog(ERROR, "cannot process any more.");
 

@@ -50,7 +50,6 @@ static TimeLineID	target_tli;
 static bool			show_all = false;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
-static void parse_range(pgBackupRange *range, const char *arg1, const char *arg2);
 
 static pgut_option options[] =
 {
@@ -87,9 +86,8 @@ int
 main(int argc, char *argv[])
 {
 	const char	   *cmd = NULL;
-	const char	   *range1 = NULL;
-	const char	   *range2 = NULL;
-	pgBackupRange	range;
+	const char	   *backup_id_string = NULL;
+	time_t			backup_id = 0;
 	int				i;
 
 	/* do not buffer progress messages */
@@ -110,10 +108,8 @@ main(int argc, char *argv[])
 			   strcmp(cmd, "validate") != 0 &&
 			   strcmp(cmd, "delete") != 0)
 				break;
-		} else if (range1 == NULL)
-			range1 = argv[i];
-		else if (range2 == NULL)
-			range2 = argv[i];
+		} else if (backup_id_string == NULL)
+			backup_id_string = argv[i];
 		else
 			elog(ERROR, "too many arguments");
 	}
@@ -125,13 +121,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	/* get object range argument if any */
-	if (range1 && range2)
-		parse_range(&range, range1, range2);
-	else if (range1)
-		parse_range(&range, range1, "");
-	else
-		range.begin = range.end = 0;
+	if (backup_id_string != NULL)
+		backup_id = base36dec(backup_id_string);
 
 	/* Read default configuration from file. */
 	if (backup_path)
@@ -195,20 +186,17 @@ main(int argc, char *argv[])
 		if (res != 0)
 			return res;
 
-		/* If validation has been requested, do it */
-		range.begin = current.start_time;
-		range.end = current.start_time + 1;
-		do_validate(&range);
+		do_validate(current.start_time);
 	}
 	else if (pg_strcasecmp(cmd, "restore") == 0)
 		return do_restore(target_time, target_xid,
 					target_inclusive, target_tli);
 	else if (pg_strcasecmp(cmd, "show") == 0)
-		return do_show(&range, show_all);
+		return do_show(backup_id, show_all);
 	else if (pg_strcasecmp(cmd, "validate") == 0)
-		return do_validate(&range);
+		return do_validate(backup_id);
 	else if (pg_strcasecmp(cmd, "delete") == 0)
-		return do_delete(&range);
+		return do_delete(backup_id);
 	else
 		elog(ERROR, "invalid command \"%s\"", cmd);
 
@@ -251,83 +239,6 @@ pgut_help(bool details)
 	printf(_("  --recovery-target-timeline  recovering into a particular timeline\n"));
 	printf(_("\nCatalog options:\n"));
 	printf(_("  -a, --show-all            show deleted backup too\n"));
-}
-
-/*
- * Create range object from one or two arguments.
- * All not-digit characters in the argument(s) are ignored.
- * Both arg1 and arg2 must be valid pointer.
- */
-static void
-parse_range(pgBackupRange *range, const char *arg1, const char *arg2)
-{
-	size_t		len = strlen(arg1) + strlen(arg2) + 1;
-	char	   *tmp;
-	int			num;
-	struct tm	tm;
-
-	tmp = pgut_malloc(len);
-	tmp[0] = '\0';
-	if (arg1 != NULL)
-		remove_not_digit(tmp, len, arg1);
-	if (arg2 != NULL)
-		remove_not_digit(tmp + strlen(tmp), len - strlen(tmp), arg2);
-
-	memset(&tm, 0, sizeof(tm));
-	tm.tm_year = 0;		/* tm_year is year - 1900 */
-	tm.tm_mon = 0;		/* tm_mon is 0 - 11 */
-	tm.tm_mday = 1;		/* tm_mday is 1 - 31 */
-	tm.tm_hour = 0;
-	tm.tm_min = 0;
-	tm.tm_sec = 0;
-	num = sscanf(tmp, "%04d %02d %02d %02d %02d %02d",
-		&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
-		&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
-
-	if (num < 1)
-	{
-		if (strcmp(tmp,"") != 0)
-			elog(ERROR, "supplied id(%s) is invalid", tmp);
-		else
-			elog(ERROR, "arguments are invalid. near \"%s\"", arg1);
-	}
-
-	free(tmp);
-
-	/* adjust year and month to convert to time_t */
-	tm.tm_year -= 1900;
-	if (num > 1)
-		tm.tm_mon -= 1;
-	tm.tm_isdst = -1;
-
-	if (!IsValidTime(tm))
-		elog(ERROR, "supplied time(%s) is invalid.", arg1);
-
-	range->begin = mktime(&tm);
-
-	switch (num)
-	{
-		case 1:
-			tm.tm_year++;
-			break;
-		case 2:
-			tm.tm_mon++;
-			break;
-		case 3:
-			tm.tm_mday++;
-			break;
-		case 4:
-			tm.tm_hour++;
-			break;
-		case 5:
-			tm.tm_min++;
-			break;
-		case 6:
-			tm.tm_sec++;
-			break;
-	}
-	range->end = mktime(&tm);
-	range->end--;
 }
 
 static void

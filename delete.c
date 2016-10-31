@@ -15,17 +15,17 @@
 static int pgBackupDeleteFiles(pgBackup *backup);
 
 int
-do_delete(pgBackupRange *range)
+do_delete(time_t backup_id)
 {
 	int			i;
 	int			ret;
-	parray	   *backup_list;
+	parray		*backup_list;
 	bool		do_delete = false;
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli;
 
 	/* DATE are always required */
-	if (!pgBackupRangeIsValid(range))
+	if (backup_id == 0)
 		elog(ERROR, "required delete range option not specified: delete DATE");
 
 	/* Lock backup catalog */
@@ -37,7 +37,7 @@ do_delete(pgBackupRange *range)
 			"another pg_arman is running, stop delete.");
 
 	/* Get complete list of backups */
-	backup_list = catalog_get_backup_list(NULL);
+	backup_list = catalog_get_backup_list(0);
 	if (!backup_list)
 		elog(ERROR, "No backup list found, can't process any more.");
 
@@ -60,7 +60,7 @@ do_delete(pgBackupRange *range)
 		/* Found the latest full backup */
 		if (backup->backup_mode >= BACKUP_MODE_FULL &&
 			backup->status == BACKUP_STATUS_OK &&
-			backup->start_time <= range->begin)
+			backup->start_time <= backup_id)
 		{
 			do_delete = true;
 			oldest_lsn = backup->start_lsn;
@@ -192,7 +192,7 @@ pgBackupDelete(int keep_generations, int keep_days)
 	}
 
 	/* Get a complete list of backups. */
-	backup_list = catalog_get_backup_list(NULL);
+	backup_list = catalog_get_backup_list(0);
 
 	/* Find target backups to be deleted */
 	backup_num = 0;

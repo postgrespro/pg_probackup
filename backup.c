@@ -497,7 +497,7 @@ do_backup(pgBackupOption bkupopt)
 	elog(LOG, "backup destination is initialized");
 
 	/* get list of backups already taken */
-	backup_list = catalog_get_backup_list(NULL);
+	backup_list = catalog_get_backup_list(0);
 	if (!backup_list)
 		elog(ERROR, "cannot process any more");
 

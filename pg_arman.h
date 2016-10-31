@@ -66,17 +66,6 @@ typedef struct pgFile
 	datapagemap_t pagemap;
 } pgFile;
 
-typedef struct pgBackupRange
-{
-	time_t	begin;
-	time_t	end;			/* begin +1 when one backup is target */
-} pgBackupRange;
-
-#define pgBackupRangeIsValid(range)	\
-	(((range)->begin != (time_t) 0) || ((range)->end != (time_t) 0))
-#define pgBackupRangeIsSingle(range) \
-	(pgBackupRangeIsValid(range) && (range)->begin == ((range)->end))
-
 #define IsValidTime(tm)	\
 	((tm.tm_sec >= 0 && tm.tm_sec <= 60) && 	/* range check for tm_sec (0-60)  */ \
 	 (tm.tm_min >= 0 && tm.tm_min <= 59) && 	/* range check for tm_min (0-59)  */ \
@@ -233,10 +222,10 @@ extern int do_restore(const char *target_time,
 extern int do_init(void);
 
 /* in show.c */
-extern int do_show(pgBackupRange *range, bool show_all);
+extern int do_show(time_t backup_id, bool show_all);
 
 /* in delete.c */
-extern int do_delete(pgBackupRange *range);
+extern int do_delete(time_t backup_id);
 extern void pgBackupDelete(int keep_generations, int keep_days);
 
 /* in fetch.c */
@@ -246,14 +235,14 @@ extern char *slurpFile(const char *datadir,
 					   bool safe);
 
 /* in validate.c */
-extern int do_validate(pgBackupRange *range);
+extern int do_validate(time_t backup_id);
 extern void pgBackupValidate(pgBackup *backup,
 							 bool size_only,
 							 bool for_get_timeline);
 
 /* in catalog.c */
 extern pgBackup *catalog_get_backup(time_t timestamp);
-extern parray *catalog_get_backup_list(const pgBackupRange *range);
+extern parray *catalog_get_backup_list(time_t backup_id);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 
@@ -315,6 +304,8 @@ extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
 extern XLogRecPtr get_last_ptrack_lsn(void);
 extern uint32 get_data_checksum_version(bool safe);
+extern char *base36enc(long unsigned int value);
+extern long unsigned int base36dec(const char *text);
 
 /* in status.c */
 extern bool is_pg_running(void);

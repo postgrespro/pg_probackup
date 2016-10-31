@@ -106,32 +106,14 @@ IsDir(const char *dirpath, const char *entry)
  * The list is sorted in order of descending start time.
  */
 parray *
-catalog_get_backup_list(const pgBackupRange *range)
+catalog_get_backup_list(time_t backup_id)
 {
-	const pgBackupRange range_all = { 0, 0 };
 	DIR			   *date_dir = NULL;
 	struct dirent  *date_ent = NULL;
 	DIR			   *time_dir = NULL;
-	struct dirent  *time_ent = NULL;
 	char			date_path[MAXPGPATH];
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
-	struct tm	   *tm;
-	char			begin_date[100];
-	char			begin_time[100];
-	char			end_date[100];
-	char			end_time[100];
-
-	if (range == NULL)
-		range = &range_all;
-
-	/* make date/time string */
-	tm = localtime(&range->begin);
-	strftime(begin_date, lengthof(begin_date), "%Y%m%d", tm);
-	strftime(begin_time, lengthof(begin_time), "%H%M%S", tm);
-	tm = localtime(&range->end);
-	strftime(end_date, lengthof(end_date), "%Y%m%d", tm);
-	strftime(end_time, lengthof(end_time), "%H%M%S", tm);
 
 	/* open backup root directory */
 	date_dir = opendir(backup_path);
@@ -146,6 +128,8 @@ catalog_get_backup_list(const pgBackupRange *range)
 	backups = parray_new();
 	for (; (date_ent = readdir(date_dir)) != NULL; errno = 0)
 	{
+		char ini_path[MAXPGPATH];
+
 		/* skip not-directory entries and hidden entries */
 		if (!IsDir(backup_path, date_ent->d_name) || date_ent->d_name[0] == '.')
 			continue;
@@ -154,46 +138,23 @@ catalog_get_backup_list(const pgBackupRange *range)
 		if (strcmp(date_ent->d_name, RESTORE_WORK_DIR) == 0)
 			continue;
 
-		/* If the date is out of range, skip it. */
-		if (pgBackupRangeIsValid(range) &&
-				(strcmp(begin_date, date_ent->d_name) > 0 ||
-								strcmp(end_date, date_ent->d_name) < 0))
-			continue;
-
 		/* open subdirectory (date directory) and search time directory */
 		join_path_components(date_path, backup_path, date_ent->d_name);
-		time_dir = opendir(date_path);
-		if (time_dir == NULL)
+
+		/* read backup information from backup.ini */
+		snprintf(ini_path, MAXPGPATH, "%s/%s", date_path, BACKUP_INI_FILE);
+		backup = catalog_read_ini(ini_path);
+
+		/* ignore corrupted backup */
+		if (backup)
 		{
-			elog(WARNING, "cannot open directory \"%s\": %s",
-				date_ent->d_name, strerror(errno));
-			goto err_proc;
-		}
-		for (; (time_ent = readdir(time_dir)) != NULL; errno = 0)
-		{
-			char ini_path[MAXPGPATH];
-
-			/* skip entries that are directories and hidden directories */
-			if (!IsDir(date_path, time_ent->d_name) || time_ent->d_name[0] == '.')
-				continue;
-
-			/* If the time is out of range, skip it. */
-			if (pgBackupRangeIsValid(range) &&
-				(strcmp(begin_time, time_ent->d_name) > 0 ||
-				 strcmp(end_time, time_ent->d_name) < 0))
-				continue;
-
-			/* read backup information from backup.ini */
-			snprintf(ini_path, MAXPGPATH, "%s/%s/%s", date_path,
-					 time_ent->d_name, BACKUP_INI_FILE);
-			backup = catalog_read_ini(ini_path);
-
-			/* ignore corrupted backup */
-			if (backup)
+			if (backup_id != 0 && backup_id != backup->start_time)
 			{
-				parray_append(backups, backup);
-				backup = NULL;
+				pgBackupFree(backup);
+				continue;
 			}
+			parray_append(backups, backup);
+			backup = NULL;
 		}
 		if (errno && errno != ENOENT)
 		{
@@ -201,8 +162,6 @@ catalog_get_backup_list(const pgBackupRange *range)
 				date_ent->d_name, strerror(errno));
 			goto err_proc;
 		}
-		closedir(time_dir);
-		time_dir = NULL;
 	}
 	if (errno)
 	{
@@ -526,16 +485,14 @@ pgBackupCompareIdDesc(const void *l, const void *r)
 void
 pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
 {
-	char		datetime[20];
-	struct tm  *tm;
+	char	*datetime;
 
-	/* generate $BACKUP_PATH/date/time path */
-	tm = localtime(&backup->start_time);
-	strftime(datetime, lengthof(datetime), "%Y%m%d/%H%M%S", tm);
+	datetime = base36enc(backup->start_time);
 	if (subdir)
 		snprintf(path, len, "%s/%s/%s", backup_path, datetime, subdir);
 	else
 		snprintf(path, len, "%s/%s", backup_path, datetime);
+	free(datetime);
 }
 
 void
