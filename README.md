@@ -19,6 +19,11 @@ Main features:
 * multithreaded backup and restore
 * autonomous backup without archive command (will need slot replication)
 
+Requirements:
+* >=PostgreSQL 9.5
+* >=gcc 4.4 or >=clang 3.6 or >= XLC 12.1
+* pthread
+
 Download
 --------
 
