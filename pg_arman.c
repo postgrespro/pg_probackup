@@ -223,11 +223,11 @@ pgut_help(bool details)
 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
 	printf(_("  -c, --check               show what would have been done\n"));
 	printf(_("  -j, --threads=NUM         num threads for backup and restore\n"));
-	printf(_("  --stream                  use stream for save/restore WAL during backup\n"));
 	printf(_("  --progress                show progress copy files\n"));
 	printf(_("\nBackup options:\n"));
 	printf(_("  -b, --backup-mode=MODE    full,page,ptrack\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
+	printf(_("  --stream                  use stream for save/restore WAL during backup\n"));
 	printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
 	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));
 	printf(_("  --backup-pg-log           start backup pg_log directory\n"));

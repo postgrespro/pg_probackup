@@ -23,7 +23,6 @@ typedef struct
 	pgBackup *backup;
 } restore_files_args;
 
-static void backup_online_files(bool re_recovery);
 static void restore_database(pgBackup *backup);
 static void create_recovery_conf(const char *target_time,
 								 const char *target_xid,
@@ -104,9 +103,6 @@ do_restore(const char *target_time,
 	elog(LOG, "latest full backup timeline ID = %u", backup_tli);
 	elog(LOG, "target timeline ID = %u", target_tli);
 
-	/* backup online WAL */
-	backup_online_files(cur_tli != 0 && cur_tli != backup_tli);
-
 	/*
 	 * Clear restore destination, but don't remove $PGDATA.
 	 * To remove symbolic link, get file list with "omit_symlink = false".
@@ -181,26 +177,22 @@ base_backup_found:
 			!satisfy_recovery_target(backup, rt))
 			continue;
 
-		print_backup_lsn(backup);
+		stream_wal = backup->stream;
 
+		print_backup_lsn(backup);
 		restore_database(backup);
 		last_restored_index = i;
 	}
 
-	for (i = last_restored_index; i >= 0; i--)
-	{
-		char	xlogpath[MAXPGPATH];
-		elog(LOG, "searching archived WAL...");
+	if (!stream_wal)
+		for (i = last_restored_index; i >= 0; i--)
+		{
+			elog(LOG, "searching archived WAL...");
 
-		search_next_wal(arclog_path, &need_lsn, timelines);
+			search_next_wal(arclog_path, &need_lsn, timelines);
 
-		elog(LOG, "searching online WAL...");
-
-		join_path_components(xlogpath, pgdata, PG_XLOG_DIR);
-		search_next_wal(xlogpath, &need_lsn, timelines);
-
-		elog(LOG, "all necessary files are found");
-	}
+			elog(LOG, "all necessary files are found");
+		}
 
 	/* create recovery.conf */
 	if (!stream_wal)
@@ -480,47 +472,6 @@ create_recovery_conf(const char *target_time,
 		fclose(fp);
 	}
 }
-
-static void
-backup_online_files(bool re_recovery)
-{
-	char work_path[MAXPGPATH];
-	char pg_xlog_path[MAXPGPATH];
-	bool files_exist;
-	parray *files;
-
-	if (!check)
-	{
-		elog(LOG, "----------------------------------------");
-		elog(LOG, "backup online WAL start");
-	}
-
-	/* get list of files in $BACKUP_PATH/backup/pg_xlog */
-	files = parray_new();
-	snprintf(work_path, lengthof(work_path), "%s/%s/%s", backup_path,
-		RESTORE_WORK_DIR, PG_XLOG_DIR);
-	dir_list_file(files, work_path, NULL, true, false);
-
-	files_exist = parray_num(files) > 0;
-
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-
-	/* If files exist in RESTORE_WORK_DIR and not re-recovery, use them. */
-	if (files_exist && !re_recovery)
-	{
-		elog(LOG, "online WALs have been already backed up, use them");
-		return;
-	}
-
-	/* backup online WAL */
-	snprintf(pg_xlog_path, lengthof(pg_xlog_path), "%s/pg_xlog", pgdata);
-	snprintf(work_path, lengthof(work_path), "%s/%s/%s", backup_path,
-		RESTORE_WORK_DIR, PG_XLOG_DIR);
-	dir_create_dir(work_path, DIR_PERMISSION);
-	dir_copy_files(pg_xlog_path, work_path);
-}
-
 
 /*
  * Try to read a timeline's history file.

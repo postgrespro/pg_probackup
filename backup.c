@@ -486,6 +486,7 @@ do_backup(pgBackupOption bkupopt)
 	current.recovery_xid = 0;
 	current.recovery_time = (time_t) 0;
 	current.checksum_version = get_data_checksum_version(true);
+	current.stream = stream_wal;
 
 	/* create backup directory and backup.ini */
 	if (!check)
