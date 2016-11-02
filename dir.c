@@ -440,11 +440,13 @@ dir_print_mkdirs_sh(FILE *out, const parray *files, const char *root)
 		pgFile *file = (pgFile *) parray_get(files, i);
 		if (S_ISDIR(file->mode))
 		{
-			if (strstr(file->path, root) == file->path) {
-				fprintf(out, "mkdir -m 700 -p %s\n", file->path + strlen(root)
-					+ 1);
+			if (strstr(file->path, root) == file->path &&
+				*(file->path + strlen(root)) == '/')
+			{
+				fprintf(out, "mkdir -m 700 -p %s\n", file->path + strlen(root) + 1);
 			}
-			else {
+			else
+			{
 				fprintf(out, "mkdir -m 700 -p %s\n", file->path);
 			}
 		}
