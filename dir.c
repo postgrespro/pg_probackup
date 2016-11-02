@@ -25,6 +25,7 @@ const char *pgdata_exclude[] =
 	"pg_xlog",
 	"pg_stat_tmp",
 	"pgsql_tmp",
+	"recovery.conf",
 	NULL,			/* arclog_path will be set later */
 	NULL,			/* 'pg_tblspc' will be set later */
 	NULL,			/* sentinel */
