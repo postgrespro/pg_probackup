@@ -45,7 +45,8 @@ static void restore_files(void *arg);
 
 
 int
-do_restore(const char *target_time,
+do_restore(time_t backup_id,
+		   const char *target_time,
 		   const char *target_xid,
 		   const char *target_inclusive,
 		   TimeLineID target_tli)
@@ -62,6 +63,7 @@ do_restore(const char *target_time,
 	parray *timelines;
 	pgRecoveryTarget *rt = NULL;
 	XLogRecPtr need_lsn;
+	bool backup_id_found = false;
 
 	/* PGDATA and ARCLOG_PATH are always required */
 	if (pgdata == NULL)
@@ -134,12 +136,21 @@ do_restore(const char *target_time,
 	{
 		base_backup = (pgBackup *) parray_get(backups, i);
 
+		if (backup_id && base_backup->start_time > backup_id)
+			continue;
+
+		if (backup_id == base_backup->start_time &&
+			base_backup->status == BACKUP_STATUS_OK
+		)
+			backup_id_found = true;
+
 		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
 			base_backup->status != BACKUP_STATUS_OK)
 			continue;
 
 		if (satisfy_timeline(timelines, base_backup) &&
-			satisfy_recovery_target(base_backup, rt))
+			satisfy_recovery_target(base_backup, rt) &&
+			(backup_id_found || backup_id == 0))
 			goto base_backup_found;
 	}
 	/* no full backup found, cannot restore */
@@ -166,6 +177,9 @@ base_backup_found:
 		if (backup->status != BACKUP_STATUS_OK ||
 			backup->tli != base_backup->tli)
 			continue;
+
+		if (backup->backup_mode == BACKUP_MODE_FULL)
+			break;
 
 		/* use database backup only */
 		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
@@ -462,11 +476,14 @@ create_recovery_conf(const char *target_time,
 
 		if (target_time)
 			fprintf(fp, "recovery_target_time = '%s'\n", target_time);
-		if (target_xid)
+		else if (target_xid)
 			fprintf(fp, "recovery_target_xid = '%s'\n", target_xid);
+		else
+			fprintf(fp, "recovery_target = 'immediate'\n");
+
 		if (target_inclusive)
 			fprintf(fp, "recovery_target_inclusive = '%s'\n", target_inclusive);
-		/*fprintf(fp, "recovery_target = 'immediate'\n");*/
+
 		fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
 
 		fclose(fp);

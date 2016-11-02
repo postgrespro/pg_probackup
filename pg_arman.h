@@ -32,13 +32,13 @@
 /* Directory/File names */
 #define DATABASE_DIR			"database"
 #define RESTORE_WORK_DIR		"backup"
-#define PG_XLOG_DIR			"pg_xlog"
+#define PG_XLOG_DIR				"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define BACKUP_INI_FILE			"backup.ini"
 #define PG_RMAN_INI_FILE		"pg_arman.ini"
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
-#define PG_BACKUP_LABEL_FILE		"backup_label"
+#define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
 
 /* Direcotry/File permission */
@@ -214,7 +214,8 @@ extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
 /* in restore.c */
-extern int do_restore(const char *target_time,
+extern int do_restore(time_t backup_id,
+					  const char *target_time,
 					  const char *target_xid,
 					  const char *target_inclusive,
 					  TimeLineID target_tli);

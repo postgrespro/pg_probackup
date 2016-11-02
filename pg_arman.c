@@ -106,7 +106,8 @@ main(int argc, char *argv[])
 			cmd = argv[i];
 			if(strcmp(cmd, "show") != 0 &&
 			   strcmp(cmd, "validate") != 0 &&
-			   strcmp(cmd, "delete") != 0)
+			   strcmp(cmd, "delete") != 0 &&
+			   strcmp(cmd, "restore") != 0)
 				break;
 		} else if (backup_id_string == NULL)
 			backup_id_string = argv[i];
@@ -122,7 +123,12 @@ main(int argc, char *argv[])
 	}
 
 	if (backup_id_string != NULL)
+	{
 		backup_id = base36dec(backup_id_string);
+		if (backup_id == 0) {
+			elog(ERROR, "wrong ID");
+		}
+	}
 
 	/* Read default configuration from file. */
 	if (backup_path)
@@ -189,7 +195,7 @@ main(int argc, char *argv[])
 		do_validate(current.start_time);
 	}
 	else if (pg_strcasecmp(cmd, "restore") == 0)
-		return do_restore(target_time, target_xid,
+		return do_restore(backup_id, target_time, target_xid,
 					target_inclusive, target_tli);
 	else if (pg_strcasecmp(cmd, "show") == 0)
 		return do_show(backup_id, show_all);
