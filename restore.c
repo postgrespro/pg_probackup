@@ -514,23 +514,13 @@ readTimeLineHistory(TimeLineID targetTLI)
 	/* search from arclog_path first */
 	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path,
 		targetTLI);
+
 	fd = fopen(path, "rt");
 	if (fd == NULL)
 	{
 		if (errno != ENOENT)
 			elog(ERROR, "could not open file \"%s\": %s", path,
 				strerror(errno));
-
-		/* search from restore work directory next */
-		snprintf(path, lengthof(path), "%s/%s/%s/%08X.history", backup_path,
-			RESTORE_WORK_DIR, PG_XLOG_DIR, targetTLI);
-		fd = fopen(path, "rt");
-		if (fd == NULL)
-		{
-			if (errno != ENOENT)
-				elog(ERROR, "could not open file \"%s\": %s", path,
-						strerror(errno));
-		}
 	}
 
 	/*

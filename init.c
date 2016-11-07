@@ -48,7 +48,7 @@ do_init(void)
 	dir_create_dir(backup_path, DIR_PERMISSION);
 
 	/* create directories for backup of online files */
-	join_path_components(path, backup_path, RESTORE_WORK_DIR);
+	join_path_components(path, backup_path, BACKUPS_DIR);
 	dir_create_dir(path, DIR_PERMISSION);
 
 	/* read postgresql.conf */

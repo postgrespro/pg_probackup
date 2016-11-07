@@ -31,7 +31,7 @@
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"
-#define RESTORE_WORK_DIR		"backup"
+#define BACKUPS_DIR				"backups"
 #define PG_XLOG_DIR				"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define BACKUP_INI_FILE			"backup.ini"

@@ -111,15 +111,17 @@ catalog_get_backup_list(time_t backup_id)
 	DIR			   *date_dir = NULL;
 	struct dirent  *date_ent = NULL;
 	DIR			   *time_dir = NULL;
+	char			backups_path[MAXPGPATH];
 	char			date_path[MAXPGPATH];
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
 
 	/* open backup root directory */
-	date_dir = opendir(backup_path);
+	join_path_components(backups_path, backup_path, BACKUPS_DIR);
+	date_dir = opendir(backups_path);
 	if (date_dir == NULL)
 	{
-		elog(WARNING, "cannot open directory \"%s\": %s", backup_path,
+		elog(WARNING, "cannot open directory \"%s\": %s", backups_path,
 			strerror(errno));
 		goto err_proc;
 	}
@@ -131,15 +133,11 @@ catalog_get_backup_list(time_t backup_id)
 		char ini_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_path, date_ent->d_name) || date_ent->d_name[0] == '.')
-			continue;
-
-		/* skip online WAL backup directory */
-		if (strcmp(date_ent->d_name, RESTORE_WORK_DIR) == 0)
+		if (!IsDir(backups_path, date_ent->d_name) || date_ent->d_name[0] == '.')
 			continue;
 
 		/* open subdirectory (date directory) and search time directory */
-		join_path_components(date_path, backup_path, date_ent->d_name);
+		join_path_components(date_path, backups_path, date_ent->d_name);
 
 		/* read backup information from backup.ini */
 		snprintf(ini_path, MAXPGPATH, "%s/%s", date_path, BACKUP_INI_FILE);
@@ -166,7 +164,7 @@ catalog_get_backup_list(time_t backup_id)
 	if (errno)
 	{
 		elog(WARNING, "cannot read backup root directory \"%s\": %s",
-			backup_path, strerror(errno));
+			backups_path, strerror(errno));
 		goto err_proc;
 	}
 
@@ -492,9 +490,9 @@ pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subd
 
 	datetime = base36enc(backup->start_time);
 	if (subdir)
-		snprintf(path, len, "%s/%s/%s", backup_path, datetime, subdir);
+		snprintf(path, len, "%s/%s/%s/%s", backup_path, BACKUPS_DIR, datetime, subdir);
 	else
-		snprintf(path, len, "%s/%s", backup_path, datetime);
+		snprintf(path, len, "%s/%s/%s", backup_path, BACKUPS_DIR, datetime);
 	free(datetime);
 }
 
