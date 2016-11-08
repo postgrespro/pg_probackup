@@ -161,6 +161,8 @@ base_backup_found:
 
 	print_backup_lsn(base_backup);
 
+	stream_wal = base_backup->stream;
+
 	/* restore base backup */
 	restore_database(base_backup);
 
@@ -181,6 +183,9 @@ base_backup_found:
 		if (backup->backup_mode == BACKUP_MODE_FULL)
 			break;
 
+		if (backup_id && backup->start_time > backup_id)
+			break;
+
 		/* use database backup only */
 		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
 			backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
@@ -198,7 +203,7 @@ base_backup_found:
 		last_restored_index = i;
 	}
 
-	if (!stream_wal)
+	if (!stream_wal || target_time != NULL || target_xid != NULL)
 		for (i = last_restored_index; i >= 0; i--)
 		{
 			elog(LOG, "searching archived WAL...");
@@ -209,7 +214,7 @@ base_backup_found:
 		}
 
 	/* create recovery.conf */
-	if (!stream_wal)
+	if (!stream_wal || target_time != NULL || target_xid != NULL)
 		create_recovery_conf(target_time, target_xid, target_inclusive, target_tli);
 
 	/* release catalog lock */

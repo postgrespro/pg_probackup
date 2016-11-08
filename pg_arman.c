@@ -176,6 +176,9 @@ main(int argc, char *argv[])
 	if(!backup_logs)
 		pgdata_exclude[i++] = "pg_log";
 
+	if (target_time != NULL && target_xid != NULL)
+		elog(ERROR, "You can't specify recovery-target-time and recovery-target-xid at the same time");
+
 	/* do actual operation */
 	if (pg_strcasecmp(cmd, "init") == 0)
 		return do_init();
