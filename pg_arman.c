@@ -39,6 +39,7 @@ bool			stream_wal = false;
 bool			from_replica = false;
 static bool		backup_logs = false;
 bool			progress = false;
+bool			delete_wal = false;
 
 /* restore configuration */
 static char		   *target_time;
@@ -76,6 +77,8 @@ static pgut_option options[] =
 	{ 'u',  6, "recovery-target-timeline",	&target_tli,		SOURCE_ENV },
 	/* catalog options */
 	{ 'b', 'a', "show-all",					&show_all },
+	/* delete options */
+	{ 'b', 12, "wal",						&delete_wal },
 	{ 0 }
 };
 
@@ -248,6 +251,8 @@ pgut_help(bool details)
 	printf(_("  --recovery-target-timeline  recovering into a particular timeline\n"));
 	printf(_("\nCatalog options:\n"));
 	printf(_("  -a, --show-all            show deleted backup too\n"));
+	printf(_("\nDelete options:\n"));
+	printf(_("  --wal                     remove unnecessary wal archives also\n"));
 }
 
 static void

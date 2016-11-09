@@ -24,7 +24,7 @@ OK. Let's try to test --keep-data-generations=1.
 9
 0
 Number of remaining full backups validated: 2
-Number of deleted backups : 2
+Number of deleted backups : 0
 6
 ###### BACKUP COMMAND TEST-0005 ######
 ###### switch backup mode from page to full ######

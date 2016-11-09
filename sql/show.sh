@@ -65,24 +65,6 @@ else
 fi
 echo ''
 
-echo '###### SHOW COMMAND TEST-0004 ######'
-echo '###### Status DELETED ######'
-init_catalog
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-pg_arman validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
-DELETE_DATE=$(get_time_last_backup)
-pg_arman validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
-pg_arman delete ${DELETE_DATE} -B ${BACKUP_PATH} > /dev/null 2>&1;echo $?
-pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-show.out 2>&1
-pg_arman show -a -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-show-all.out 2>&1
-if ! grep "DELETED" ${TEST_BASE}/TEST-0004-show.out > /dev/null && grep "DELETED" ${TEST_BASE}/TEST-0004-show-all.out > /dev/null ; then
-     echo 'OK: DELETED status is shown properly.'
-else
-     echo 'NG: DELETED status is not shown.'
-fi
-echo ''
-
 # clean up the temporal test data
 pg_ctl stop -D ${PGDATA_PATH} -m immediate > /dev/null 2>&1
 rm -fr ${PGDATA_PATH}

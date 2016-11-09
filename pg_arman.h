@@ -204,6 +204,7 @@ extern int num_threads;
 extern bool stream_wal;
 extern bool from_replica;
 extern bool progress;
+extern bool delete_wal;
 
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);

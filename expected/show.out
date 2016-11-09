@@ -17,12 +17,3 @@ remove a file from backup intentionally
 0
 NG: CORRUPT status is not shown.
 
-###### SHOW COMMAND TEST-0004 ######
-###### Status DELETED ######
-0
-0
-0
-0
-0
-OK: DELETED status is shown properly.
-

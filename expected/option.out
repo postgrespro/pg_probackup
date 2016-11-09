@@ -36,6 +36,9 @@ Restore options:
 Catalog options:
   -a, --show-all            show deleted backup too
 
+Delete options:
+  --wal                     remove unnecessary wal archives also
+
 Connection options:
   -d, --dbname=DBNAME       database to connect
   -h, --host=HOSTNAME       database server host or socket directory

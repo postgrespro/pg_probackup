@@ -3,11 +3,11 @@
 ###### delete full backups ######
 try to delete the oldest backup
 2
-1
-Number of deleted backups should be 1, is it so?: 1
+0
+Number of deleted backups should be 1, is it so?: 0
 ###### DELETE COMMAND TEST-0002 ######
 ###### keep backups which are necessary for recovery ######
 try to delete before third backup
 3
-1
-Number of deleted backups should be 1, is it so?: 1
+0
+Number of deleted backups should be 1, is it so?: 0
