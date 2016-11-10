@@ -311,6 +311,11 @@ Parameters to connect PostgreSQL server.
     if the server wants a password. In some cases it is worth typing -W
     to avoid the extra connection attempt.
 
+### DELETE OPTIONS
+
+**--wal**:
+	Remove unnecessary wal archives also.
+
 ### GLOBAL OPTIONS 
 
 **--help**:  

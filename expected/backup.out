@@ -14,18 +14,6 @@
 0
 1
 3
-###### BACKUP COMMAND TEST-0004 ######
-###### full backup with keep-data-generations and keep-data-days ######
-0
-0
-0
-The number of existing full backups validated is greater than 2.
-OK. Let's try to test --keep-data-generations=1.
-9
-0
-Number of remaining full backups validated: 2
-Number of deleted backups : 0
-6
 ###### BACKUP COMMAND TEST-0005 ######
 ###### switch backup mode from page to full ######
 page-level backup without validated full backup

@@ -34,35 +34,35 @@ pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0003.log 2>&1
 grep -c OK ${TEST_BASE}/TEST-0003.log
 grep OK ${TEST_BASE}/TEST-0003.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
 
-echo '###### BACKUP COMMAND TEST-0004 ######'
-echo '###### full backup with keep-data-generations and keep-data-days ######'
-init_catalog
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
-pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
-pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1
-pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-before.log 2>&1
-NUM_OF_FULL_BACKUPS_BEFORE=`grep OK ${TEST_BASE}/TEST-0004-before.log | grep FULL | wc -l | sed 's/^ *//'`
-if [ ${NUM_OF_FULL_BACKUPS_BEFORE} -gt 2 ] ; then
-	echo "The number of existing full backups validated is greater than 2."
-	echo "OK. Let's try to test --keep-data-generations=1."
-else
-	echo "The number of existing full backups validated is not greater than 2."
-	echo "NG. There was something wrong in preparation of this test."
-	pg_ctl stop -m immediate -D ${PGDATA_PATH} > /dev/null 2>&1
-	exit 1
-fi
-# The actual value of NUM_OF_FULL_BACKUPS_BEFORE can vary on env, so commented out as default.
-#echo "Number of existing full backups validated: ${NUM_OF_FULL_BACKUPS_BEFORE}"
-grep OK ${TEST_BASE}/TEST-0004-before.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
-pg_arman backup -B ${BACKUP_PATH} -b full --keep-data-days=-1 --keep-data-generations=1 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0005-run.log 2>&1;echo $?
-pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0005-run.log 2>&1
-pg_arman show --show-all -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-after.log 2>&1
-NUM_OF_FULL_BACKUPS_AFTER=`grep OK ${TEST_BASE}/TEST-0004-after.log | grep FULL | wc -l | sed 's/^ *//'`
-echo "Number of remaining full backups validated: ${NUM_OF_FULL_BACKUPS_AFTER}"
-NUM_OF_DELETED_BACKUPS=`grep DELETED ${TEST_BASE}/TEST-0004-after.log | wc -l | sed 's/^ *//'`
-echo "Number of deleted backups : ${NUM_OF_DELETED_BACKUPS}"
-grep OK ${TEST_BASE}/TEST-0004-after.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
+#echo '###### BACKUP COMMAND TEST-0004 ######'
+#echo '###### full backup with keep-data-generations and keep-data-days ######'
+#init_catalog
+#pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
+#pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
+#pg_arman backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1;echo $?
+#pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0004-run.log 2>&1
+#pg_arman show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-before.log 2>&1
+#NUM_OF_FULL_BACKUPS_BEFORE=`grep OK ${TEST_BASE}/TEST-0004-before.log | grep FULL | wc -l | sed 's/^ *//'`
+#if [ ${NUM_OF_FULL_BACKUPS_BEFORE} -gt 2 ] ; then
+#	echo "The number of existing full backups validated is greater than 2."
+#	echo "OK. Let's try to test --keep-data-generations=1."
+#else
+#	echo "The number of existing full backups validated is not greater than 2."
+#	echo "NG. There was something wrong in preparation of this test."
+#	pg_ctl stop -m immediate -D ${PGDATA_PATH} > /dev/null 2>&1
+#	exit 1
+#fi
+## The actual value of NUM_OF_FULL_BACKUPS_BEFORE can vary on env, so commented out as default.
+##echo "Number of existing full backups validated: ${NUM_OF_FULL_BACKUPS_BEFORE}"
+#grep OK ${TEST_BASE}/TEST-0004-before.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
+#pg_arman backup -B ${BACKUP_PATH} -b full --keep-data-days=-1 --keep-data-generations=1 -p ${TEST_PGPORT} -d postgres --verbose > ${TEST_BASE}/TEST-0005-run.log 2>&1;echo $?
+#pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0005-run.log 2>&1
+#pg_arman show --show-all -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0004-after.log 2>&1
+#NUM_OF_FULL_BACKUPS_AFTER=`grep OK ${TEST_BASE}/TEST-0004-after.log | grep FULL | wc -l | sed 's/^ *//'`
+#echo "Number of remaining full backups validated: ${NUM_OF_FULL_BACKUPS_AFTER}"
+#NUM_OF_DELETED_BACKUPS=`grep DELETED ${TEST_BASE}/TEST-0004-after.log | wc -l | sed 's/^ *//'`
+#echo "Number of deleted backups : ${NUM_OF_DELETED_BACKUPS}"
+#grep OK ${TEST_BASE}/TEST-0004-after.log | sed -e 's@[^-]@@g' | wc -c | sed 's/^ *//'
 
 echo '###### BACKUP COMMAND TEST-0005 ######'
 echo '###### switch backup mode from page to full ######'

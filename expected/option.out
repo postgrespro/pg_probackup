@@ -14,7 +14,6 @@ Usage:
 Common Options:
   -D, --pgdata=PATH         location of the database storage area
   -B, --backup-path=PATH    location of the backup storage area
-  -c, --check               show what would have been done
   -j, --threads=NUM         num threads for backup and restore
   --progress                show progress copy files
 
@@ -22,8 +21,6 @@ Backup options:
   -b, --backup-mode=MODE    full,page,ptrack
   -C, --smooth-checkpoint   do smooth checkpoint before backup
   --stream                  use stream for save/restore WAL during backup
-  --keep-data-generations=N keep GENERATION of full data backup
-  --keep-data-days=DAY      keep enough data backup to recover to DAY days age
   --backup-pg-log           start backup pg_log directory
   -S, --slot=SLOTNAME       replication slot to use
 
@@ -95,7 +92,7 @@ ERROR: invalid backup-mode ""
 
 ###### COMMAND OPTION TEST-0010 ######
 ###### invalid value in pg_arman.ini ######
-ERROR: option --keep-data-generations should be a 32bit signed integer: 'TRUE'
+ERROR: invalid option "KEEP_DATA_GENERATIONS"
 1
 
 ###### COMMAND OPTION TEST-0011 ######
