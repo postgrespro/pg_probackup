@@ -84,15 +84,6 @@ sanityChecks(void)
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
-	/*
-	 * Node work is done on need to use checksums or hint bit wal-logging
-	 * this to prevent from data corruption that could occur because of
-	 * hint bits.
-	 */
-	if (ControlFile.data_checksum_version != PG_DATA_CHECKSUM_VERSION &&
-		!ControlFile.wal_log_hints)
-		elog(ERROR,
-			 "target master need to use either data checksums or \"wal_log_hints = on\".");
 }
 
 XLogRecPtr

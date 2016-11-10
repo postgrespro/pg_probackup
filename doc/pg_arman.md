@@ -389,8 +389,6 @@ are required if the value contains whitespaces. Comments should start with
 excluding values.
 
 ### RESTRICTIONS
-* In order to work, the PostgreSQL instance on which backups are taken need
-to have data checksums enabled or to enable wal_log_hints.
 * pg_arman is aimed at working with PostgreSQL 9.5 and newer versions.
 * For ptrack feature you need special version of Postgres and set wal_level to
 archive or hot_standby and ptrack_enable.

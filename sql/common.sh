@@ -70,7 +70,7 @@ function init_backup()
 port = ${TEST_PGPORT}
 logging_collector = on
 wal_level = hot_standby
-wal_log_hints = on
+wal_log_hints = off
 archive_mode = on
 archive_command = 'cp %p ${ARCLOG_PATH}/%f'
 ptrack_enable = on
