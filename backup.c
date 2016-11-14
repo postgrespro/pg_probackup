@@ -42,6 +42,7 @@ parray	*backup_files_list;
 static volatile uint32	total_copy_files_increment;
 static uint32 total_files_num;
 static PGconn *start_stop_connect = NULL;
+static pthread_mutex_t check_stream_mut = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct
 {
@@ -170,7 +171,12 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
 		join_path_components(dst_backup_path, path, "pg_xlog");
 		dir_create_dir(dst_backup_path, DIR_PERMISSION);
+		pthread_mutex_lock(&check_stream_mut);
 		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
+		pthread_mutex_lock(&check_stream_mut);
+		if (conn == NULL)
+			elog(ERROR, "I can't continue work because stream connect has failed.");
+		pthread_mutex_unlock(&check_stream_mut);
 	}
 
 	if(!from_replica)
@@ -1457,8 +1463,11 @@ StreamLog(void *arg)
 	if (conn == NULL)
 		conn = GetConnection();
 	if (!conn)
+	{
+		pthread_mutex_unlock(&check_stream_mut);
 		/* Error message already written in GetConnection() */
 		return;
+	}
 
 	if (!CheckServerVersionForStreaming(conn))
 	{
@@ -1478,6 +1487,8 @@ StreamLog(void *arg)
 	if (!RunIdentifySystem(conn, NULL, &starttli, &startpos, NULL))
 		disconnect_and_exit(1);
 
+	/* Ok we have normal stream connect and main process can work again */
+	pthread_mutex_unlock(&check_stream_mut);
 	/*
 	 * We must use startpos as start_lsn from start_backup
 	 */
