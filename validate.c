@@ -79,7 +79,7 @@ pgBackupValidate(pgBackup *backup,
 	parray *files;
 	bool	corrupted = false;
 
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
+	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 	if (!for_get_timeline)
 	{
 		if (backup->backup_mode == BACKUP_MODE_FULL ||
