@@ -161,7 +161,8 @@ base_backup_found:
 
 	print_backup_lsn(base_backup);
 
-	stream_wal = base_backup->stream;
+	if (backup_id != 0)
+		stream_wal = base_backup->stream;
 
 	/* restore base backup */
 	restore_database(base_backup);
@@ -483,8 +484,8 @@ create_recovery_conf(const char *target_time,
 			fprintf(fp, "recovery_target_time = '%s'\n", target_time);
 		else if (target_xid)
 			fprintf(fp, "recovery_target_xid = '%s'\n", target_xid);
-		else
-			fprintf(fp, "recovery_target = 'immediate'\n");
+		/*else
+			fprintf(fp, "recovery_target = 'immediate'\n");*/
 
 		if (target_inclusive)
 			fprintf(fp, "recovery_target_inclusive = '%s'\n", target_inclusive);
