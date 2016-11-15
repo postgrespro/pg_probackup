@@ -663,6 +663,14 @@ pg_ptrack_support(void)
 		return false;
 	}
 	PQclear(res_db);
+	res_db = execute("show ptrack_enable", 0, NULL);
+	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
+	{
+		PQclear(res_db);
+		disconnect();
+		return false;
+	}
+	PQclear(res_db);
 	disconnect();
 	return true;
 }
