@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_arman.h"
+#include "pg_probackup.h"
 
 #include <unistd.h>
 #include <dirent.h>
@@ -58,11 +58,11 @@ do_init(void)
 		parse_postgresql_conf(path, &log_directory, &archive_command);
 	}
 
-	/* create pg_arman.ini */
+	/* create pg_probackup.conf */
 	join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
-		elog(ERROR, "cannot create pg_arman.ini: %s", strerror(errno));
+		elog(ERROR, "cannot create pg_probackup.conf: %s", strerror(errno));
 
 	join_path_components(arclog_path_dir, backup_path, "wal");
 	dir_create_dir(arclog_path_dir, DIR_PERMISSION);

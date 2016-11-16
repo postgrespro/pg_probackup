@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_arman.h"
+#include "pg_probackup.h"
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -28,7 +28,7 @@ static pgBackup *catalog_read_ini(const char *path);
 static int lock_fd = -1;
 
 /*
- * Lock of the catalog with pg_arman.ini file and return 0.
+ * Lock of the catalog with pg_probackup.conf file and return 0.
  * If the lock is held by another one, return 1 immediately.
  */
 int

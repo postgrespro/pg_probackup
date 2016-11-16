@@ -1,4 +1,4 @@
-PROGRAM = pg_arman
+PROGRAM = pg_probackup
 OBJS = backup.o \
 	catalog.o \
 	data.o \
@@ -7,7 +7,7 @@ OBJS = backup.o \
 	fetch.o \
 	init.o \
 	parray.o \
-	pg_arman.o \
+	pg_probackup.o \
 	restore.o \
 	show.o \
 	status.o \
@@ -25,7 +25,7 @@ EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h
 
 REGRESS = init option show delete backup restore
 
-all: checksrcdir datapagemap.h logging.h receivelog.h streamutil.h pg_arman
+all: checksrcdir datapagemap.h logging.h receivelog.h streamutil.h pg_probackup
 
 MAKE_GLOBAL="../../src/Makefile.global"
 TEST_GLOBAL:=$(shell test -e ../../src/Makefile.global)
@@ -45,7 +45,7 @@ endif
 else
 #TODO: fix me
 REGRESS =
-subdir=contrib/pg_arman
+subdir=contrib/pg_probackup
 top_builddir=../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk

@@ -21,7 +21,7 @@ yum install -y wget
 wget -k https://ftp.postgresql.org/pub/source/v$PGVERSION/postgresql-$PGVERSION.tar.gz -O postgresql.tar.gz
 tar xf postgresql.tar.gz
 
-# install pg_arman
+# install pg_probackup
 yum install -y https://download.postgresql.org/pub/repos/yum/9.5/redhat/rhel-7-x86_64/pgdg-centos95-9.5-2.noarch.rpm
 yum install -y postgresql95-devel make gcc readline-devel openssl-devel pam-devel libxml2-devel libxslt-devel
 make top_srcdir=postgresql-$PGVERSION
@@ -51,14 +51,14 @@ COUNT=$(psql -Atc "select count(*) from pgbench_accounts")
 pgbench -s $PGBENCH_SCALE -T $PGBENCH_TIME -j 2 -c 10 &
 
 # create backup
-pg_arman init
-pg_arman backup -b full --disable-ptrack-clear --stream -v
-pg_arman show
+pg_probackup init
+pg_probackup backup -b full --disable-ptrack-clear --stream -v
+pg_probackup show
 sleep $PGBENCH_TIME
 
 # restore from backup
 chown -R postgres:postgres $BACKUP_PATH
-su postgres -c "pg_arman restore -D $PGDATA2"
+su postgres -c "pg_probackup restore -D $PGDATA2"
 
 # start backup server
 su postgres -c "/usr/pgsql-9.5/bin/pg_ctl stop -w -D $PGDATA"

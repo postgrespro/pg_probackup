@@ -11,7 +11,7 @@
 
 #include "postgres_fe.h"
 
-#include "pg_arman.h"
+#include "pg_probackup.h"
 
 #include <unistd.h>
 

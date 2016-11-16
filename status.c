@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "pg_arman.h"
+#include "pg_probackup.h"
 
 /* PID can be negative for standalone backend */
 typedef long pgpid_t;

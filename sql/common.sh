@@ -6,7 +6,7 @@
 
 TEST_NAME=$1
 
-# Unset environment variables usable by both Postgres and pg_arman
+# Unset environment variables usable by both Postgres and pg_probackup
 unset PGUSER
 unset PGPORT
 unset PGDATABASE
@@ -55,7 +55,7 @@ function cleanup()
 function init_catalog()
 {
 	rm -fr ${BACKUP_PATH}
-	pg_arman init -B ${BACKUP_PATH} --quiet
+	pg_probackup init -B ${BACKUP_PATH} --quiet
 }
 
 function init_backup()
@@ -95,8 +95,8 @@ function get_time_last_backup()
 	name_os=`uname`
 	if [ "$name_os" == "SunOS" ]
 	then
-		pg_arman -B ${BACKUP_PATH} show | gtail -n +4 | head -n 1 | awk '{print($1)}'
+		pg_probackup -B ${BACKUP_PATH} show | gtail -n +4 | head -n 1 | awk '{print($1)}'
 	else
-		pg_arman -B ${BACKUP_PATH} show | tail -n +4 | head -n 1 | awk '{print($1)}'
+		pg_probackup -B ${BACKUP_PATH} show | tail -n +4 | head -n 1 | awk '{print($1)}'
 	fi
 }

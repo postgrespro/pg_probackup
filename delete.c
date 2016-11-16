@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_arman.h"
+#include "pg_probackup.h"
 
 #include <dirent.h>
 #include <unistd.h>
@@ -34,7 +34,7 @@ do_delete(time_t backup_id)
 		elog(ERROR, "can't lock backup catalog.");
 	else if (ret == 1)
 		elog(ERROR,
-			"another pg_arman is running, stop delete.");
+			"another pg_probackup is running, stop delete.");
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(0);
@@ -109,7 +109,7 @@ int do_deletewal(time_t backup_id, bool strict)
 		elog(ERROR, "can't lock backup catalog.");
 	else if (ret == 1)
 		elog(ERROR,
-			"another pg_arman is running, stop delete.");
+			"another pg_probackup is running, stop delete.");
 
 	backup_list = catalog_get_backup_list(0);
 	for (i = 0; i < parray_num(backup_list); i++)

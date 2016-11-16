@@ -19,7 +19,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "pg_arman.h"
+#include "pg_probackup.h"
 
 /*
  * Read a file into memory. The file to be read is <datadir>/<path>.

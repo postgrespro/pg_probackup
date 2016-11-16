@@ -4,21 +4,21 @@
 0
 results/init/backup/
 results/init/backup/backups/
-results/init/backup/pg_arman.ini
+results/init/backup/pg_probackup.conf
 results/init/backup/wal/
 ###### INIT COMMAND TEST-0002 ######
 ###### success with archive_command and log_directory ######
 0
 results/init/backup/
 results/init/backup/backups/
-results/init/backup/pg_arman.ini
+results/init/backup/pg_probackup.conf
 results/init/backup/wal/
 ###### INIT COMMAND TEST-0003 ######
 ###### success without archive_command ######
 0
 results/init/backup/
 results/init/backup/backups/
-results/init/backup/pg_arman.ini
+results/init/backup/pg_probackup.conf
 results/init/backup/wal/
 ###### INIT COMMAND TEST-0004 ######
 ###### failure with backup catalog already existed ######

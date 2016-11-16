@@ -7,7 +7,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_arman.h"
+#include "pg_probackup.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +35,7 @@ static int server_version = 0;
 static bool	in_backup = false;						/* TODO: more robust logic */
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
-const char *progname = "pg_arman";
+const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 parray	*backup_files_list;
@@ -161,7 +161,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
-	strncat(label, " with pg_arman", lengthof(label));
+	strncat(label, " with pg_probackup", lengthof(label));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
 	/* start stream replication */
@@ -476,7 +476,7 @@ do_backup(pgBackupOption bkupopt)
 		elog(ERROR, "cannot lock backup catalog");
 	else if (ret == 1)
 		elog(ERROR,
-			"another pg_arman is running, skipping this backup");
+			"another pg_probackup is running, skipping this backup");
 
 	/* initialize backup result */
 	current.status = BACKUP_STATUS_RUNNING;
