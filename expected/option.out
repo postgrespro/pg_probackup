@@ -4,38 +4,37 @@
 pg_probackup manage backup/recovery of PostgreSQL database.
 
 Usage:
-  pg_probackup OPTION init
-  pg_probackup OPTION backup
-  pg_probackup OPTION restore
-  pg_probackup OPTION show [ID]
-  pg_probackup OPTION validate [ID]
-  pg_probackup OPTION delete ID
-  pg_probackup OPTION delwal [ID]
+  pg_probackup [option...] init
+  pg_probackup [option...] backup
+  pg_probackup [option...] restore
+  pg_probackup [option...] show [backup-ID]
+  pg_probackup [option...] validate [backup-ID]
+  pg_probackup [option...] delete backup-ID
+  pg_probackup [option...] delwal [backup-ID]
 
 Common Options:
-  -D, --pgdata=PATH         location of the database storage area
   -B, --backup-path=PATH    location of the backup storage area
-  -j, --threads=NUM         num threads for backup and restore
-  --progress                show progress copy files
+  -D, --pgdata=PATH         location of the database storage area
 
 Backup options:
-  -b, --backup-mode=MODE    full,page,ptrack
+  -b, --backup-mode=MODE    backup mode (full, page, ptrack)
   -C, --smooth-checkpoint   do smooth checkpoint before backup
-  --stream                  use stream for save/restore WAL during backup
-  --backup-pg-log           start backup pg_log directory
+      --stream              stream the transaction log and include it in the backup
   -S, --slot=SLOTNAME       replication slot to use
+      --backup-pg-log       backup of pg_log directory
+  -j, --threads=NUM         number of parallel threads
+      --progress            show progress
 
 Restore options:
-  --time    time stamp up to which recovery will proceed
-  --xid     transaction ID up to which recovery will proceed
-  --inclusive whether we stop just after the recovery target
-  --timeline  recovering into a particular timeline
-
-Catalog options:
-  -a, --show-all            show deleted backup too
+      --time                time stamp up to which recovery will proceed
+      --xid                 transaction ID up to which recovery will proceed
+      --inclusive           whether we stop just after the recovery target
+      --timeline            recovering into a particular timeline
+  -j, --threads=NUM         number of parallel threads
+      --progress            show progress
 
 Delete options:
-  --wal                     remove unnecessary wal archives also
+      --wal                 remove unnecessary wal files
 
 Connection options:
   -d, --dbname=DBNAME       database to connect
@@ -48,8 +47,8 @@ Connection options:
 Generic options:
   -q, --quiet               don't write any messages
   -v, --verbose             verbose mode
-  --help                    show this help, then exit
-  --version                 output version information, then exit
+      --help                    show this help, then exit
+      --version                 output version information and exit
 
 Read the website for details. <https://github.com/postgrespro/pg_probackup>
 Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.

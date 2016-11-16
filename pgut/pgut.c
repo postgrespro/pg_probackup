@@ -1453,8 +1453,8 @@ help(bool details)
 		printf("  -q, --quiet               don't write any messages\n");
 		printf("  -v, --verbose             verbose mode\n");
 	}
-	printf("  --help                    show this help, then exit\n");
-	printf("  --version                 output version information, then exit\n");
+	printf("      --help                    show this help, then exit\n");
+	printf("      --version                 output version information and exit\n");
 
 	if (details && (PROGRAM_URL || PROGRAM_EMAIL))
 	{

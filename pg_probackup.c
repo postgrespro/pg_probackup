@@ -47,9 +47,6 @@ static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
 
-/* show configuration */
-static bool			show_all = false;
-
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 
 static pgut_option options[] =
@@ -75,8 +72,6 @@ static pgut_option options[] =
 	{ 's',  4, "xid",		&target_xid,		SOURCE_ENV },
 	{ 's',  5, "inclusive", &target_inclusive,	SOURCE_ENV },
 	{ 'u',  6, "timeline",	&target_tli,		SOURCE_ENV },
-	/* catalog options */
-	{ 'b', 'a', "show-all",					&show_all },
 	/* delete options */
 	{ 'b', 12, "wal",						&delete_wal },
 	{ 0 }
@@ -205,7 +200,7 @@ main(int argc, char *argv[])
 		return do_restore(backup_id, target_time, target_xid,
 					target_inclusive, target_tli);
 	else if (pg_strcasecmp(cmd, "show") == 0)
-		return do_show(backup_id, show_all);
+		return do_show(backup_id);
 	else if (pg_strcasecmp(cmd, "validate") == 0)
 		return do_validate(backup_id);
 	else if (pg_strcasecmp(cmd, "delete") == 0)
@@ -223,40 +218,40 @@ pgut_help(bool details)
 {
 	printf(_("%s manage backup/recovery of PostgreSQL database.\n\n"), PROGRAM_NAME);
 	printf(_("Usage:\n"));
-	printf(_("  %s OPTION init\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION backup\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION restore\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION show [ID]\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION validate [ID]\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION delete ID\n"), PROGRAM_NAME);
-	printf(_("  %s OPTION delwal [ID]\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] init\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] backup\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] restore\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] show [backup-ID]\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] validate [backup-ID]\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] delete backup-ID\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] delwal [backup-ID]\n"), PROGRAM_NAME);
 
 	if (!details)
 		return;
 
 	printf(_("\nCommon Options:\n"));
-	printf(_("  -D, --pgdata=PATH         location of the database storage area\n"));
 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
+	printf(_("  -D, --pgdata=PATH         location of the database storage area\n"));
 	/*printf(_("  -c, --check               show what would have been done\n"));*/
-	printf(_("  -j, --threads=NUM         num threads for backup and restore\n"));
-	printf(_("  --progress                show progress copy files\n"));
 	printf(_("\nBackup options:\n"));
-	printf(_("  -b, --backup-mode=MODE    full,page,ptrack\n"));
+	printf(_("  -b, --backup-mode=MODE    backup mode (full, page, ptrack)\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
-	printf(_("  --stream                  use stream for save/restore WAL during backup\n"));
+	printf(_("      --stream              stream the transaction log and include it in the backup\n"));
 	/*printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
 	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));*/
-	printf(_("  --backup-pg-log           start backup pg_log directory\n"));
 	printf(_("  -S, --slot=SLOTNAME       replication slot to use\n"));
+	printf(_("      --backup-pg-log       backup of pg_log directory\n"));
+	printf(_("  -j, --threads=NUM         number of parallel threads\n"));
+	printf(_("      --progress            show progress\n"));
 	printf(_("\nRestore options:\n"));
-	printf(_("  --time    time stamp up to which recovery will proceed\n"));
-	printf(_("  --xid     transaction ID up to which recovery will proceed\n"));
-	printf(_("  --inclusive whether we stop just after the recovery target\n"));
-	printf(_("  --timeline  recovering into a particular timeline\n"));
-	printf(_("\nCatalog options:\n"));
-	printf(_("  -a, --show-all            show deleted backup too\n"));
+	printf(_("      --time                time stamp up to which recovery will proceed\n"));
+	printf(_("      --xid                 transaction ID up to which recovery will proceed\n"));
+	printf(_("      --inclusive           whether we stop just after the recovery target\n"));
+	printf(_("      --timeline            recovering into a particular timeline\n"));
+	printf(_("  -j, --threads=NUM         number of parallel threads\n"));
+	printf(_("      --progress            show progress\n"));
 	printf(_("\nDelete options:\n"));
-	printf(_("  --wal                     remove unnecessary wal archives also\n"));
+	printf(_("      --wal                 remove unnecessary wal files\n"));
 }
 
 static void

@@ -9,7 +9,7 @@
 
 #include "pg_probackup.h"
 
-static void show_backup_list(FILE *out, parray *backup_list, bool show_all);
+static void show_backup_list(FILE *out, parray *backup_list);
 static void show_backup_detail(FILE *out, pgBackup *backup);
 
 /*
@@ -18,7 +18,7 @@ static void show_backup_detail(FILE *out, pgBackup *backup);
  * backup indicated by id.
  */
 int
-do_show(time_t backup_id, bool show_all)
+do_show(time_t backup_id)
 {
 	/*
 	 * Safety check for archive folder, this is necessary to fetch
@@ -52,7 +52,7 @@ do_show(time_t backup_id, bool show_all)
 		if (backup_list == NULL)
 			elog(ERROR, "can't process any more.");
 
-		show_backup_list(stdout, backup_list, show_all);
+		show_backup_list(stdout, backup_list);
 
 		/* cleanup */
 		parray_walk(backup_list, pgBackupFree);
@@ -160,7 +160,7 @@ get_parent_tli(TimeLineID child_tli)
 }
 
 static void
-show_backup_list(FILE *out, parray *backup_list, bool show_all)
+show_backup_list(FILE *out, parray *backup_list)
 {
 	int i;
 
@@ -179,10 +179,6 @@ show_backup_list(FILE *out, parray *backup_list, bool show_all)
 		char data_bytes_str[10] = "----";
 
 		backup = parray_get(backup_list, i);
-
-		/* skip deleted backup */
-		if (backup->status == BACKUP_STATUS_DELETED && !show_all)
-			continue;
 
 		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 		if (backup->end_time != (time_t) 0)

@@ -225,7 +225,7 @@ extern int do_restore(time_t backup_id,
 extern int do_init(void);
 
 /* in show.c */
-extern int do_show(time_t backup_id, bool show_all);
+extern int do_show(time_t backup_id);
 
 /* in delete.c */
 extern int do_delete(time_t backup_id);
