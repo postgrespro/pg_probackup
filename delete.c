@@ -27,7 +27,7 @@ do_delete(time_t backup_id)
 
 	/* DATE are always required */
 	if (backup_id == 0)
-		elog(ERROR, "required delete range option not specified: delete DATE");
+		elog(ERROR, "required backup ID not specified");
 
 	/* Lock backup catalog */
 	ret = catalog_lock();

@@ -24,7 +24,8 @@ typedef struct
 } restore_files_args;
 
 static void restore_database(pgBackup *backup);
-static void create_recovery_conf(const char *target_time,
+static void create_recovery_conf(time_t backup_id,
+								 const char *target_time,
 								 const char *target_xid,
 								 const char *target_inclusive,
 								 TimeLineID target_tli);
@@ -43,6 +44,9 @@ static void search_next_wal(const char *path,
 							parray *timelines);
 static void restore_files(void *arg);
 
+TimeLineID findNewestTimeLine(TimeLineID startTLI);
+bool existsTimeLineHistory(TimeLineID probeTLI);
+
 
 int
 do_restore(time_t backup_id,
@@ -57,6 +61,7 @@ do_restore(time_t backup_id,
 	int ret;
 	TimeLineID	cur_tli;
 	TimeLineID	backup_tli;
+	TimeLineID	newest_tli;
 	parray *backups;
 	pgBackup *base_backup = NULL;
 	parray *files;
@@ -95,13 +100,15 @@ do_restore(time_t backup_id,
 		elog(ERROR, "cannot process any more.");
 
 	cur_tli = get_current_timeline(true);
+	newest_tli = findNewestTimeLine(1);
 	backup_tli = get_fullbackup_timeline(backups, rt);
 
 	/* determine target timeline */
 	if (target_tli == 0)
-		target_tli = cur_tli != 0 ? cur_tli : backup_tli;
+		target_tli = newest_tli != 1 ? newest_tli : backup_tli;
 
-	elog(LOG, "current timeline ID = %u", cur_tli);
+	elog(LOG, "current instance timeline ID = %u", cur_tli);
+	elog(LOG, "newest timeline ID for wal dir = %u", newest_tli);
 	elog(LOG, "latest full backup timeline ID = %u", backup_tli);
 	elog(LOG, "target timeline ID = %u", target_tli);
 
@@ -216,7 +223,7 @@ base_backup_found:
 
 	/* create recovery.conf */
 	if (!stream_wal || target_time != NULL || target_xid != NULL)
-		create_recovery_conf(target_time, target_xid, target_inclusive, target_tli);
+		create_recovery_conf(backup_id, target_time, target_xid, target_inclusive, target_tli);
 
 	/* release catalog lock */
 	catalog_unlock();
@@ -454,7 +461,8 @@ restore_files(void *arg)
 }
 
 static void
-create_recovery_conf(const char *target_time,
+create_recovery_conf(time_t backup_id,
+					 const char *target_time,
 					 const char *target_xid,
 					 const char *target_inclusive,
 					 TimeLineID target_tli)
@@ -484,8 +492,11 @@ create_recovery_conf(const char *target_time,
 			fprintf(fp, "recovery_target_time = '%s'\n", target_time);
 		else if (target_xid)
 			fprintf(fp, "recovery_target_xid = '%s'\n", target_xid);
-		/*else
-			fprintf(fp, "recovery_target = 'immediate'\n");*/
+		else if (backup_id != 0)
+		{
+			fprintf(fp, "recovery_target = 'immediate'\n");
+			fprintf(fp, "recovery_target_action = 'promote'\n");
+		}
 
 		if (target_inclusive)
 			fprintf(fp, "recovery_target_inclusive = '%s'\n", target_inclusive);
@@ -796,4 +807,68 @@ checkIfCreateRecoveryConf(const char *target_time,
 
 	return rt;
 
+}
+
+
+/*
+ * Probe whether a timeline history file exists for the given timeline ID
+ */
+bool
+existsTimeLineHistory(TimeLineID probeTLI)
+{
+	char		path[MAXPGPATH];
+	FILE		*fd;
+
+	/* Timeline 1 does not have a history file, so no need to check */
+	if (probeTLI == 1)
+		return false;
+
+	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path, probeTLI);
+	fd = fopen(path, "r");
+	if (fd != NULL)
+	{
+		fclose(fd);
+		return true;
+	}
+	else
+	{
+		if (errno != ENOENT)
+			elog(ERROR, "Failed directory for path: %s", path);
+		return false;
+	}
+}
+
+/*
+ * Find the newest existing timeline, assuming that startTLI exists.
+ *
+ * Note: while this is somewhat heuristic, it does positively guarantee
+ * that (result + 1) is not a known timeline, and therefore it should
+ * be safe to assign that ID to a new timeline.
+ */
+TimeLineID
+findNewestTimeLine(TimeLineID startTLI)
+{
+	TimeLineID	newestTLI;
+	TimeLineID	probeTLI;
+
+	/*
+	 * The algorithm is just to probe for the existence of timeline history
+	 * files.  XXX is it useful to allow gaps in the sequence?
+	 */
+	newestTLI = startTLI;
+
+	for (probeTLI = startTLI + 1;; probeTLI++)
+	{
+		if (existsTimeLineHistory(probeTLI))
+		{
+			newestTLI = probeTLI;		/* probeTLI exists */
+		}
+		else
+		{
+			/* doesn't exist, assume we're done */
+			break;
+		}
+	}
+
+	return newestTLI;
 }

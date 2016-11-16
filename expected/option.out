@@ -76,7 +76,7 @@ ERROR: invalid backup-mode "bad"
 
 ###### COMMAND OPTION TEST-0007 ######
 ###### delete failure without DATE ######
-ERROR: required delete range option not specified: delete DATE
+ERROR: required backup ID not specified
 1
 
 ###### COMMAND OPTION TEST-0008 ######
