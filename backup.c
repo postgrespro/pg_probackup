@@ -151,9 +151,8 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
-			elog(ERROR, "Valid full backup not found for "
-					"differential backup. Either create a full backup "
-					"or validate existing one.");
+			elog(ERROR, "Timeline has changed since last full backup."
+						"Create new full backup before an incremental one.");
 	}
 
 	/* clear ptrack files for FULL and DIFF backup */
