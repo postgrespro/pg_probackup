@@ -152,7 +152,7 @@ backup_data_file(const char *from_root, const char *to_root,
 					for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
 					if (i == BLCKSZ)
 					{
-						elog(WARNING, "File: %s blknum %u, empty page", file->path, blknum);
+						elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
 						goto end_checks;
 					}
 
