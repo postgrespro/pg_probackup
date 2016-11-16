@@ -69,7 +69,7 @@ pg_arman restore -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0003-run.out 2
 pg_ctl start -w -t 600 > /dev/null 2>&1
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 pg_ctl stop -m immediate > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --recovery-target-timeline=${TARGET_TLI} --verbose >> ${TEST_BASE}/TEST-0003-run.out 2>&1;echo $?
+pg_arman restore -B ${BACKUP_PATH} --timeline=${TARGET_TLI} --verbose >> ${TEST_BASE}/TEST-0003-run.out 2>&1;echo $?
 echo "checking recovery.conf..."
 TARGET_TLI_IN_RECOVERY_CONF=`grep "recovery_target_timeline = " ${PGDATA_PATH}/recovery.conf | awk '{print $3}' | sed -e "s/'//g"`
 if [ ${TARGET_TLI} = ${TARGET_TLI_IN_RECOVERY_CONF} ]; then
@@ -95,7 +95,7 @@ pg_arman validate -B ${BACKUP_PATH} --verbose >> ${TEST_BASE}/TEST-0004-run.out 
 TARGET_TIME=`date +"%Y-%m-%d %H:%M:%S"`
 pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 pg_ctl stop -m immediate > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --recovery-target-time="${TARGET_TIME}" --verbose >> ${TEST_BASE}/TEST-0004-run.out 2>&1;echo $?
+pg_arman restore -B ${BACKUP_PATH} --time="${TARGET_TIME}" --verbose >> ${TEST_BASE}/TEST-0004-run.out 2>&1;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0004-after.out
 diff ${TEST_BASE}/TEST-0004-before.out ${TEST_BASE}/TEST-0004-after.out
@@ -118,15 +118,15 @@ pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c 'SELECT pg_switch_xlog()' > /dev/null 2>&1
 # Fast mode is used to ensure that the last segment is archived as well.
 pg_ctl stop -m fast > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --verbose >> ${TEST_BASE}/TEST-0005-run.out 2>&1;echo $?
+pg_arman restore -B ${BACKUP_PATH} --xid="${TARGET_XID}" --verbose >> ${TEST_BASE}/TEST-0005-run.out 2>&1;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0005-after.out
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM tbl0005;" > ${TEST_BASE}/TEST-0005-tbl.dump
 diff ${TEST_BASE}/TEST-0005-before.out ${TEST_BASE}/TEST-0005-after.out
 if grep "inserted" ${TEST_BASE}/TEST-0005-tbl.dump > /dev/null ; then
-	echo 'OK: recovery-target-xid options works well.'
+	echo 'OK: xid options works well.'
 else
-	echo 'NG: recovery-target-xid options does not work well.'
+	echo 'NG: xid options does not work well.'
 	pg_ctl stop -m immediate -D ${PGDATA_PATH} > /dev/null 2>&1
 	exit 1
 fi
@@ -252,15 +252,15 @@ pgbench -p ${TEST_PGPORT} -d pgbench > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c 'SELECT pg_switch_xlog()' > /dev/null 2>&1
 # Fast mode is used to ensure that the last segment is archived as well.
 pg_ctl stop -m fast > /dev/null 2>&1
-pg_arman restore -B ${BACKUP_PATH} --recovery-target-xid="${TARGET_XID}" --recovery-target-inclusive=false --verbose >> ${TEST_BASE}/TEST-0008-run.out 2>&1;echo $?
+pg_arman restore -B ${BACKUP_PATH} --xid="${TARGET_XID}" --inclusive=false --verbose >> ${TEST_BASE}/TEST-0008-run.out 2>&1;echo $?
 pg_ctl start -w -t 600 > /dev/null 2>&1
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM pgbench_branches;" > ${TEST_BASE}/TEST-0008-after.out
 psql --no-psqlrc -p ${TEST_PGPORT} -d pgbench -c "SELECT * FROM tbl0008;" > ${TEST_BASE}/TEST-0008-tbl.dump
 diff ${TEST_BASE}/TEST-0008-before.out ${TEST_BASE}/TEST-0008-after.out
 if grep "inserted" ${TEST_BASE}/TEST-0008-tbl.dump > /dev/null ; then
-	echo 'NG: recovery-target-inclusive=false does not work well.'
+	echo 'NG: inclusive=false does not work well.'
 else
-	echo 'OK: recovery-target-inclusive=false works well.'
+	echo 'OK: inclusive=false works well.'
 	pg_ctl stop -m immediate -D ${PGDATA_PATH} > /dev/null 2>&1
 	exit 1
 fi

@@ -26,10 +26,10 @@ Backup options:
   -S, --slot=SLOTNAME       replication slot to use
 
 Restore options:
-  --recovery-target-time    time stamp up to which recovery will proceed
-  --recovery-target-xid     transaction ID up to which recovery will proceed
-  --recovery-target-inclusive whether we stop just after the recovery target
-  --recovery-target-timeline  recovering into a particular timeline
+  --time    time stamp up to which recovery will proceed
+  --xid     transaction ID up to which recovery will proceed
+  --inclusive whether we stop just after the recovery target
+  --timeline  recovering into a particular timeline
 
 Catalog options:
   -a, --show-all            show deleted backup too

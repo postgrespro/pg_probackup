@@ -71,10 +71,10 @@ static pgut_option options[] =
 /*	{ 'i',  1, "keep-data-generations", &keep_data_generations, SOURCE_ENV },
 	{ 'i',  2, "keep-data-days",		&keep_data_days,		SOURCE_ENV },*/
 	/* restore options */
-	{ 's',  3, "recovery-target-time",		&target_time,		SOURCE_ENV },
-	{ 's',  4, "recovery-target-xid",		&target_xid,		SOURCE_ENV },
-	{ 's',  5, "recovery-target-inclusive", &target_inclusive,	SOURCE_ENV },
-	{ 'u',  6, "recovery-target-timeline",	&target_tli,		SOURCE_ENV },
+	{ 's',  3, "time",		&target_time,		SOURCE_ENV },
+	{ 's',  4, "xid",		&target_xid,		SOURCE_ENV },
+	{ 's',  5, "inclusive", &target_inclusive,	SOURCE_ENV },
+	{ 'u',  6, "timeline",	&target_tli,		SOURCE_ENV },
 	/* catalog options */
 	{ 'b', 'a', "show-all",					&show_all },
 	/* delete options */
@@ -249,10 +249,10 @@ pgut_help(bool details)
 	printf(_("  --backup-pg-log           start backup pg_log directory\n"));
 	printf(_("  -S, --slot=SLOTNAME       replication slot to use\n"));
 	printf(_("\nRestore options:\n"));
-	printf(_("  --recovery-target-time    time stamp up to which recovery will proceed\n"));
-	printf(_("  --recovery-target-xid     transaction ID up to which recovery will proceed\n"));
-	printf(_("  --recovery-target-inclusive whether we stop just after the recovery target\n"));
-	printf(_("  --recovery-target-timeline  recovering into a particular timeline\n"));
+	printf(_("  --time    time stamp up to which recovery will proceed\n"));
+	printf(_("  --xid     transaction ID up to which recovery will proceed\n"));
+	printf(_("  --inclusive whether we stop just after the recovery target\n"));
+	printf(_("  --timeline  recovering into a particular timeline\n"));
 	printf(_("\nCatalog options:\n"));
 	printf(_("  -a, --show-all            show deleted backup too\n"));
 	printf(_("\nDelete options:\n"));

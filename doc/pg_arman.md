@@ -95,7 +95,7 @@ the file manually.
 It is recommended to take a full backup as soon as possible after recovery
 has succeeded.
 
-If "--recovery-target-timeline" is not specifed, the last checkpoint's
+If "--timeline" is not specifed, the last checkpoint's
 TimeLineID in control file ($PGDATA/global/pg_control) will be the restore
 target. If pg_control is not present, TimeLineID in the full backup used by
 the restore will be a restore target.
@@ -184,7 +184,7 @@ STATUS=OK
 ```
 
 You can check the "RECOVERY_XID" and "RECOVERY_TIME" which are used for
-restore option "--recovery-target-xid", "--recovery-target-time".
+restore option "--xid", "--time".
 
 The delete command deletes backup files not required by recovery after
 the specified ID. This command also cleans up in the WAL archive the
@@ -250,19 +250,19 @@ absolute paths; relative paths are not allowed.
 The parameters whose name start are started with --recovery refer to
 the same parameters as the ones in recovery.confin recovery.conf.
 
-**--recovery-target-timeline**=_TIMELINE_:  
+**--timeline**=_TIMELINE_:
     Specifies recovering into a particular timeline. If not specified,
     the current timeline is used.
 
-**--recovery-target-time**=TIMESTAMP:  
+**--time**=TIMESTAMP:
     This parameter specifies the timestamp up to which recovery will
     proceed.
 
-**--recovery-target-xid**=XID:  
+**--xid**=XID:
     This parameter specifies the transaction ID up to which recovery
     will proceed.
 
-**--recovery-target-inclusive**:  
+**--inclusive**:
     Specifies whether server pauses when recovery target is reached.
 
 **-j**=NUMBER / **--threads**=NUMBER: 
@@ -348,10 +348,10 @@ Short   Long                    Env                     File
         --validate              VALIDATE                Yes
         --keep-data-generations KEEP_DATA_GENERATIONS   Yes
         --keep-data-days        KEEP_DATA_DAYS          Yes
-        --recovery-target-timeline RECOVERY_TARGET_TIMELINE Yes
-        --recovery-target-xid   RECOVERY_TARGET_XID     Yes
-        --recovery-target-time  RECOVERY_TARGET_TIME    Yes
-        --recovery-target-inclusive RECOVERY_TARGET_INCLUSIVE Yes
+		--timeline RECOVERY_TARGET_TIMELINE Yes
+		--xid   RECOVERY_TARGET_XID     Yes
+		--time  RECOVERY_TARGET_TIME    Yes
+		--inclusive RECOVERY_TARGET_INCLUSIVE Yes
 ```
 
 Variable names in configuration file are the same as long names or names
