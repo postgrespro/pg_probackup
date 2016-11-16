@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 static int pgBackupDeleteFiles(pgBackup *backup);
+int do_deletewal(time_t backup_id, bool strict);
 
 int
 do_delete(time_t backup_id)
@@ -21,8 +22,6 @@ do_delete(time_t backup_id)
 	int			b_index;
 	int			ret;
 	parray		*backup_list;
-	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
-	TimeLineID	oldest_tli;
 	pgBackup	*last_backup;
 
 	/* DATE are always required */
@@ -82,37 +81,58 @@ found_backup:
 	/* cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
+
+	if (delete_wal)
+		do_deletewal(backup_id, false);
+
+	return 0;
+}
+
+int do_deletewal(time_t backup_id, bool strict)
+{
+	int			i;
+	int			ret;
+	parray		*backup_list;
+	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
+	TimeLineID	oldest_tli;
+	pgBackup	*last_backup;
+	bool		backup_found = false;
+
 	/*
 	 * Delete in archive WAL segments that are not needed anymore. The oldest
 	 * segment to be kept is the first segment that the oldest full backup
 	 * found around needs to keep.
 	 */
-	if (delete_wal)
-	{
-		/* Lock backup catalog */
-		ret = catalog_lock();
-		if (ret == -1)
-			elog(ERROR, "can't lock backup catalog.");
-		else if (ret == 1)
-			elog(ERROR,
-				"another pg_arman is running, stop delete.");
+	/* Lock backup catalog */
+	ret = catalog_lock();
+	if (ret == -1)
+		elog(ERROR, "can't lock backup catalog.");
+	else if (ret == 1)
+		elog(ERROR,
+			"another pg_arman is running, stop delete.");
 
-		backup_list = catalog_get_backup_list(0);
-		for (i = 0; i < parray_num(backup_list); i++)
+	backup_list = catalog_get_backup_list(0);
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		last_backup = (pgBackup *) parray_get(backup_list, i);
+		if (last_backup->status == BACKUP_STATUS_OK)
 		{
-			last_backup = (pgBackup *) parray_get(backup_list, i);
-			if (last_backup->status == BACKUP_STATUS_OK)
+			oldest_lsn = last_backup->start_lsn;
+			oldest_tli = last_backup->tli;
+			if (strict && backup_id != 0 && backup_id >= last_backup->start_time)
 			{
-				oldest_lsn = last_backup->start_lsn;
-				oldest_tli = last_backup->tli;
+				backup_found = true;
+				break;
 			}
 		}
-		catalog_unlock();
-		parray_walk(backup_list, pgBackupFree);
-		parray_free(backup_list);
 	}
+	if (strict && backup_id != 0 && backup_found == false)
+		elog(ERROR, "not found backup for deletwal command");
+	catalog_unlock();
+	parray_walk(backup_list, pgBackupFree);
+	parray_free(backup_list);
 
-	if (delete_wal && !XLogRecPtrIsInvalid(oldest_lsn))
+	if (!XLogRecPtrIsInvalid(oldest_lsn))
 	{
 		XLogSegNo   targetSegNo;
 		char		oldestSegmentNeeded[MAXFNAMELEN];

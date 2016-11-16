@@ -10,6 +10,7 @@ Usage:
   pg_arman OPTION show [ID]
   pg_arman OPTION validate [ID]
   pg_arman OPTION delete ID
+  pg_arman OPTION delwal [ID]
 
 Common Options:
   -D, --pgdata=PATH         location of the database storage area

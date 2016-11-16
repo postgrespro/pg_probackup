@@ -230,6 +230,7 @@ extern int do_show(time_t backup_id, bool show_all);
 /* in delete.c */
 extern int do_delete(time_t backup_id);
 extern void pgBackupDelete(int keep_generations, int keep_days);
+extern int do_deletewal(time_t backup_id, bool strict);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,

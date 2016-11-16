@@ -110,7 +110,8 @@ main(int argc, char *argv[])
 			if(strcmp(cmd, "show") != 0 &&
 			   strcmp(cmd, "validate") != 0 &&
 			   strcmp(cmd, "delete") != 0 &&
-			   strcmp(cmd, "restore") != 0)
+			   strcmp(cmd, "restore") != 0 &&
+			   strcmp(cmd, "delwal") != 0)
 				break;
 		} else if (backup_id_string == NULL)
 			backup_id_string = argv[i];
@@ -209,6 +210,8 @@ main(int argc, char *argv[])
 		return do_validate(backup_id);
 	else if (pg_strcasecmp(cmd, "delete") == 0)
 		return do_delete(backup_id);
+	else if (pg_strcasecmp(cmd, "delwal") == 0)
+		return do_deletewal(backup_id, true);
 	else
 		elog(ERROR, "invalid command \"%s\"", cmd);
 
@@ -226,6 +229,7 @@ pgut_help(bool details)
 	printf(_("  %s OPTION show [ID]\n"), PROGRAM_NAME);
 	printf(_("  %s OPTION validate [ID]\n"), PROGRAM_NAME);
 	printf(_("  %s OPTION delete ID\n"), PROGRAM_NAME);
+	printf(_("  %s OPTION delwal [ID]\n"), PROGRAM_NAME);
 
 	if (!details)
 		return;
