@@ -166,7 +166,7 @@ show_backup_list(FILE *out, parray *backup_list)
 
 	/* show header */
 	fputs("=========================================================================================\n", out);
-	fputs("ID       Recovery time        Mode          Current TLI  Parent TLI  Time    Data  Status  \n", out);
+	fputs("ID       Recovery time        Mode          Current/Parent TLI  Time    Data  Status  \n", out);
 	fputs("=========================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -196,7 +196,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-8s %-19s  %-12s   %10d  %10d %5s  %6s  %s \n",
+		fprintf(out, "%-8s %-19s  %-12s %2d /%2d              %5s  %6s  %s \n",
 				base36enc(backup->start_time),
 				timestamp,
 				modes[backup->backup_mode*(backup->stream+1)],
