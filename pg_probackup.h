@@ -93,7 +93,7 @@ typedef enum BackupStatus
 
 typedef enum BackupMode
 {
-	BACKUP_MODE_INVALID,
+	BACKUP_MODE_INVALID = 0,
 	BACKUP_MODE_DIFF_PAGE,		/* differential page backup */
 	BACKUP_MODE_DIFF_PTRACK,	/* differential page backup with ptrack system*/
 	BACKUP_MODE_FULL			/* full backup */

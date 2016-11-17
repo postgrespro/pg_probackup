@@ -172,7 +172,7 @@ show_backup_list(FILE *out, parray *backup_list)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup *backup;
-		const char *modes[] = { "", "PAGE", "PTRACK", "FULL", "PAGE+STREAM", "PTRACK+STERAM", "FULL+STREAM"};
+		const char *modes[] = { "", "PAGE", "PTRACK", "FULL", "", "PAGE+STREAM", "PTRACK+STREAM", "FULL+STREAM"};
 		TimeLineID  parent_tli;
 		char timestamp[20];
 		char duration[20] = "----";
@@ -196,10 +196,10 @@ show_backup_list(FILE *out, parray *backup_list)
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-8s %-19s  %-12s %2d /%2d              %5s  %6s  %s \n",
+		fprintf(out, "%-8s %-19s  %-13s %2d /%2d              %5s  %6s  %s \n",
 				base36enc(backup->start_time),
 				timestamp,
-				modes[backup->backup_mode*(backup->stream+1)],
+				modes[backup->backup_mode + (BACKUP_MODE_FULL + 1)*backup->stream],
 				backup->tli,
 				parent_tli,
 				duration,
