@@ -112,6 +112,44 @@ do_restore(time_t backup_id,
 	elog(LOG, "latest full backup timeline ID = %u", backup_tli);
 	elog(LOG, "target timeline ID = %u", target_tli);
 
+
+	/* Read timeline history files from archives */
+	timelines = readTimeLineHistory(target_tli);
+
+	/* find last full backup which can be used as base backup. */
+	elog(LOG, "searching recent full backup");
+	for (i = 0; i < parray_num(backups); i++)
+	{
+		base_backup = (pgBackup *) parray_get(backups, i);
+
+		if (backup_id && base_backup->start_time > backup_id)
+			continue;
+
+		if (backup_id == base_backup->start_time &&
+			base_backup->status == BACKUP_STATUS_OK
+		)
+			backup_id_found = true;
+
+		if (backup_id == base_backup->start_time &&
+			base_backup->status != BACKUP_STATUS_OK
+		)
+			elog(ERROR, "given backup %s is %s", base36enc(backup_id), status2str(base_backup->status));
+
+		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
+			base_backup->status != BACKUP_STATUS_OK)
+			continue;
+
+		if (satisfy_timeline(timelines, base_backup) &&
+			satisfy_recovery_target(base_backup, rt) &&
+			(backup_id_found || backup_id == 0))
+			goto base_backup_found;
+	}
+	/* no full backup found, cannot restore */
+	elog(ERROR, "no full backup found, cannot restore.");
+
+base_backup_found:
+	base_index = i;
+
 	/*
 	 * Clear restore destination, but don't remove $PGDATA.
 	 * To remove symbolic link, get file list with "omit_symlink = false".
@@ -133,38 +171,6 @@ do_restore(time_t backup_id,
 		parray_walk(files, pgFileFree);
 		parray_free(files);
 	}
-
-	/* Read timeline history files from archives */
-	timelines = readTimeLineHistory(target_tli);
-
-	/* find last full backup which can be used as base backup. */
-	elog(LOG, "searching recent full backup");
-	for (i = 0; i < parray_num(backups); i++)
-	{
-		base_backup = (pgBackup *) parray_get(backups, i);
-
-		if (backup_id && base_backup->start_time > backup_id)
-			continue;
-
-		if (backup_id == base_backup->start_time &&
-			base_backup->status == BACKUP_STATUS_OK
-		)
-			backup_id_found = true;
-
-		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
-			base_backup->status != BACKUP_STATUS_OK)
-			continue;
-
-		if (satisfy_timeline(timelines, base_backup) &&
-			satisfy_recovery_target(base_backup, rt) &&
-			(backup_id_found || backup_id == 0))
-			goto base_backup_found;
-	}
-	/* no full backup found, cannot restore */
-	elog(ERROR, "no full backup found, cannot restore.");
-
-base_backup_found:
-	base_index = i;
 
 	print_backup_lsn(base_backup);
 
