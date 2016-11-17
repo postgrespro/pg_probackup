@@ -204,7 +204,8 @@ base_backup_found:
 			!satisfy_recovery_target(backup, rt))
 			continue;
 
-		stream_wal = backup->stream;
+		if (backup_id != 0)
+			stream_wal = backup->stream;
 
 		print_backup_lsn(backup);
 		restore_database(backup);
