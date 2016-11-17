@@ -52,28 +52,28 @@ static void opt_backup_mode(pgut_option *opt, const char *arg);
 static pgut_option options[] =
 {
 	/* directory options */
-	{ 's', 'D', "pgdata",		&pgdata,		SOURCE_ENV },
-	{ 's', 'B', "backup-path",	&backup_path,	SOURCE_ENV },
+	{ 's', 'D', "pgdata",				&pgdata,		SOURCE_ENV },
+	{ 's', 'B', "backup-path",			&backup_path,	SOURCE_ENV },
 	/* common options */
-/*	{ 'b', 'c', "check",		&check },*/
-	{ 'i', 'j', "threads",		&num_threads },
-	{ 'b', 8, "stream",			&stream_wal },
-	{ 'b', 11, "progress",		&progress },
+/*	{ 'b', 'c', "check",				&check },*/
+	{ 'i', 'j', "threads",				&num_threads },
+	{ 'b', 8, "stream",					&stream_wal },
+	{ 'b', 11, "progress",				&progress },
 	/* backup options */
 	{ 'b', 10, "backup-pg-log",			&backup_logs },
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },
-	{ 's', 'S', "slot",					&replication_slot,		SOURCE_ENV },
+	{ 's', 'S', "slot",					&replication_slot,		SOURCE_CMDLINE },
 	/* options with only long name (keep-xxx) */
 /*	{ 'i',  1, "keep-data-generations", &keep_data_generations, SOURCE_ENV },
 	{ 'i',  2, "keep-data-days",		&keep_data_days,		SOURCE_ENV },*/
 	/* restore options */
-	{ 's',  3, "time",		&target_time,		SOURCE_ENV },
-	{ 's',  4, "xid",		&target_xid,		SOURCE_ENV },
-	{ 's',  5, "inclusive", &target_inclusive,	SOURCE_ENV },
-	{ 'u',  6, "timeline",	&target_tli,		SOURCE_ENV },
+	{ 's',  3, "time",					&target_time,		SOURCE_CMDLINE },
+	{ 's',  4, "xid",					&target_xid,		SOURCE_CMDLINE },
+	{ 's',  5, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
+	{ 'u',  6, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	/* delete options */
-	{ 'b', 12, "wal",						&delete_wal },
+	{ 'b', 12, "wal",					&delete_wal },
 	{ 0 }
 };
 
