@@ -47,8 +47,8 @@ Connection options:
 Generic options:
   -q, --quiet               don't write any messages
   -v, --verbose             verbose mode
-      --help                    show this help, then exit
-      --version                 output version information and exit
+      --help                show this help, then exit
+      --version             output version information and exit
 
 Read the website for details. <https://github.com/postgrespro/pg_probackup>
 Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.
