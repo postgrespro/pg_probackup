@@ -139,9 +139,12 @@ int do_deletewal(time_t backup_id, bool strict)
 		DIR		   *arcdir;
 		struct dirent *arcde;
 		char		wal_file[MAXPGPATH];
+		char		max_wal_file[MAXPGPATH];
+		char		min_wal_file[MAXPGPATH];
 		int			rc;
-		int			i = 0;
 
+		max_wal_file[0] = '\0';
+		min_wal_file[0] = '\0';
 		XLByteToSeg(oldest_lsn, targetSegNo);
 		XLogFileName(oldestSegmentNeeded, oldest_tli, targetSegNo);
 		elog(LOG, "Removing segments older than %s", oldestSegmentNeeded);
@@ -188,17 +191,25 @@ int do_deletewal(time_t backup_id, bool strict)
 					}
 					if (verbose)
 						elog(LOG, "removed WAL segment \"%s\"", wal_file);
-					else
-					{
-						if (i==0)
-							elog(NOTICE, "removed WAL segment \"%s\"", wal_file);
 
+					if (max_wal_file[0] == '\0' ||
+						strcmp(max_wal_file + 8, arcde->d_name + 8) < 0)
+					{
+						strcpy(max_wal_file, arcde->d_name);
+					}
+
+					if (min_wal_file[0] == '\0' ||
+						strcmp(min_wal_file + 8, arcde->d_name + 8) > 0)
+					{
+						strcpy(min_wal_file, arcde->d_name);
 					}
 				}
-				i++;
 			}
-			if (!verbose && i != 0 && errno == 0)
-				elog(NOTICE, "removed WAL segment \"%s\"", wal_file);
+
+			if (!verbose && min_wal_file[0] != '\0')
+				elog(NOTICE, "removed min WAL segment \"%s\"", min_wal_file);
+			if (!verbose && max_wal_file[0] != '\0')
+				elog(NOTICE, "removed max WAL segment \"%s\"", max_wal_file);
 
 			if (errno)
 				elog(WARNING, "could not read archive location \"%s\": %s",
