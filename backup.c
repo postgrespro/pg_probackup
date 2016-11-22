@@ -67,6 +67,7 @@ static void get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_back
 static void get_xid(PGresult *res, uint32 *xid);
 static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
+static bool pg_ptrack_enable(void);
 static bool pg_is_in_recovery(void);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
@@ -138,8 +139,13 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 	is_ptrack_support = pg_ptrack_support();
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_support)
-		elog(ERROR, "Current Postgres instance is not support ptrack");
+		elog(ERROR, "Current Postgres instance does not support ptrack");
 
+	if(current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !pg_ptrack_enable())
+		elog(ERROR, "ptrack is disabled");
+
+	if (is_ptrack_support)
+		is_ptrack_support = pg_ptrack_enable();
 	/*
 	 * In differential backup mode, check if there is an already-validated
 	 * full backup on current timeline.
@@ -662,6 +668,15 @@ pg_ptrack_support(void)
 		return false;
 	}
 	PQclear(res_db);
+	disconnect();
+	return true;
+}
+
+static bool
+pg_ptrack_enable(void)
+{
+	PGresult	*res_db;
+	reconnect();
 	res_db = execute("show ptrack_enable", 0, NULL);
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
