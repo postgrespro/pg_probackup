@@ -1201,7 +1201,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 	dir_list_file(list_file, root, pgdata_exclude, true, add_root);
 
 	/* mark files that are possible datafile as 'datafile' */
-	for (i = 0; i < parray_num(list_file); i++)
+	for (i = 0; i < (int) parray_num(list_file); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(list_file, i);
 		char *relative;
@@ -1221,6 +1221,8 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			continue;
 
 		path_len = strlen(file->path);
+
+		/* Get link ptrack file to realations files */
 		if (path_len > 6 && strncmp(file->path+(path_len-6), "ptrack", 6) == 0)
 		{
 			pgFile *search_file;
@@ -1254,6 +1256,10 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			continue;
 		}
 
+		/* compress map file it is not data file */
+		if (path_len > 4 && strncmp(file->path+(path_len-4), ".cfm", 4) == 0)
+			continue;
+
 		/* name of data file start with digit */
 		fname = last_dir_separator(relative);
 		if (fname == NULL)
@@ -1284,6 +1290,27 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 				continue;
 
 			file->segno = (int) strtol(text_segno, NULL, 10);
+		}
+	}
+
+	/* mark cfs relations as not data */
+	for (i = 0; i < (int) parray_num(list_file); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(list_file, i);
+		int path_len = (int) strlen(file->path);
+
+		if (path_len > 4 && strncmp(file->path+(path_len-4), ".cfm", 4) == 0)
+		{
+			pgFile **pre_search_file;
+			pgFile tmp_file;
+			tmp_file.path = pg_strdup(file->path);
+			tmp_file.path[path_len-4] = '\0';
+			pre_search_file = (pgFile **) parray_bsearch(list_file, &tmp_file, pgFileComparePath);
+			if (pre_search_file != NULL)
+			{
+				(*pre_search_file)->is_datafile = false;
+			}
+			pg_free(tmp_file.path);
 		}
 	}
 	parray_concat(files, list_file);
