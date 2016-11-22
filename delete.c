@@ -22,7 +22,7 @@ do_delete(time_t backup_id)
 	int			b_index;
 	int			ret;
 	parray		*backup_list;
-	pgBackup	*last_backup;
+	pgBackup	*last_backup = NULL;
 
 	/* DATE are always required */
 	if (backup_id == 0)
@@ -45,9 +45,7 @@ do_delete(time_t backup_id)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		last_backup = (pgBackup *) parray_get(backup_list, i);
-		if (last_backup->status == BACKUP_STATUS_OK &&
-			last_backup->start_time == backup_id
-		)
+		if (last_backup->start_time == backup_id)
 			goto found_backup;
 	}
 
@@ -62,15 +60,17 @@ found_backup:
 	/* just do it */
 	pgBackupDeleteFiles(last_backup);
 
+	if (last_backup->status == BACKUP_STATUS_ERROR)
+		return 0;
+
 	/* remove all increments after removed backup */
 	for (i = b_index - 1; i >= 0; i--)
 	{
 		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
 		if (backup->backup_mode >= BACKUP_MODE_FULL)
 			break;
-		if (backup->status == BACKUP_STATUS_OK ||
-			backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
-			backup->backup_mode == BACKUP_MODE_DIFF_PTRACK
+		if ((backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_CORRUPT) &&
+			(backup->backup_mode == BACKUP_MODE_DIFF_PAGE || backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
 		)
 			pgBackupDeleteFiles(backup);
 	}
