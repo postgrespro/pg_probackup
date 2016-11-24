@@ -49,11 +49,18 @@ do_validate(time_t backup_id)
 		}
 
 		/* Validate completed backups only. */
-		if (backup->status != BACKUP_STATUS_DONE)
+		if (backup_id == 0 && backup->status != BACKUP_STATUS_DONE)
 			continue;
 
-		/* validate with CRC value and update status to OK */
-		pgBackupValidate(backup, false, false);
+		if (backup_id != 0 && backup->start_time == backup_id)
+		{
+			pgBackupValidate(backup, false, false);
+			break;
+		}
+		else
+			/* validate with CRC value and update status to OK */
+			pgBackupValidate(backup, false, false);
+
 	}
 
 	/* cleanup */
