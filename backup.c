@@ -80,6 +80,7 @@ static void create_file_list(parray *files,
 							 const char *prefix,
 							 bool is_append);
 static void wait_for_archive(PGconn *conn, pgBackup *backup, const char *sql, bool stop_backup);
+static void wait_archive_lsn(XLogRecPtr lsn, bool last_segno);
 static void make_pagemap_from_ptrack(parray *files);
 static void StreamLog(void *arg);
 
@@ -651,7 +652,12 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 						   ERROR);
 
 	if (backup != NULL)
+	{
 		get_lsn(start_stop_connect, res, &backup->start_lsn, false);
+		if (!stream_wal && !from_replica)
+			wait_archive_lsn(backup->start_lsn, true);
+	}
+
 	PQclear(res);
 }
 
@@ -840,6 +846,42 @@ wait_for_archive(PGconn *conn, pgBackup *backup, const char *sql, bool stop_back
 				TIMEOUT_ARCHIVE);
 	}
 	elog(LOG, "%s() .ready deleted in %d try", __FUNCTION__, try_count);
+}
+
+static void
+wait_archive_lsn(XLogRecPtr lsn, bool last_segno)
+{
+	TimeLineID	tli;
+	XLogSegNo	targetSegNo;
+	char		ready_path[MAXPGPATH];
+	char		file_name[MAXFNAMELEN];
+	int			try_count;
+
+	tli = get_current_timeline(false);
+
+	/* As well as WAL file name */
+	XLByteToSeg(lsn, targetSegNo);
+	if (last_segno)
+		targetSegNo--;
+	XLogFileName(file_name, tli, targetSegNo);
+
+	snprintf(ready_path, lengthof(ready_path),
+		"%s/%s", arclog_path, file_name);
+	elog(LOG, "%s() wait for lsn:%li %s", __FUNCTION__, lsn, ready_path);
+	/* wait until switched WAL is archived */
+	try_count = 0;
+	while (!fileExists(ready_path))
+	{
+		sleep(1);
+		if (interrupted)
+			elog(ERROR,
+				"interrupted during waiting for WAL archiving");
+		try_count++;
+		if (try_count > TIMEOUT_ARCHIVE)
+			elog(ERROR,
+				"switched WAL could not be archived in %d seconds",
+				TIMEOUT_ARCHIVE);
+	}
 }
 
 /*
