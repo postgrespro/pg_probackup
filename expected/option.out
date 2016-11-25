@@ -8,7 +8,7 @@ Usage:
   pg_probackup [option...] backup
   pg_probackup [option...] restore
   pg_probackup [option...] show [backup-ID]
-  pg_probackup [option...] validate [backup-ID]
+  pg_probackup [option...] validate backup-ID
   pg_probackup [option...] delete backup-ID
   pg_probackup [option...] delwal [backup-ID]
 

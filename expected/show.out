@@ -3,7 +3,6 @@
 ###### Status DONE and OK ######
 0
 NG: DONE status is not shown.
-0
 OK: OK status is shown properly.
 
 ###### SHOW COMMAND TEST-0002 ######
@@ -14,6 +13,5 @@ OK: RUNNING status is shown properly.
 ###### Status CORRUPT ######
 0
 remove a file from backup intentionally
-0
 NG: CORRUPT status is not shown.
 

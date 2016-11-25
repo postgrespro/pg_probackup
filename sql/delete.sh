@@ -18,7 +18,6 @@ SECOND_BACKUP_DATE=$(get_time_last_backup)
 pgbench -p ${TEST_PGPORT} >> ${TEST_BASE}/pgbench.log 2>&1
 pg_probackup backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
 THIRD_BACKUP_DATE=$(get_time_last_backup)
-pg_probackup validate -B ${BACKUP_PATH} --quiet
 
 echo "try to delete the oldest backup"
 pg_probackup -B ${BACKUP_PATH} delete ${SECOND_BACKUP_DATE} > /dev/null 2>&1
@@ -37,14 +36,11 @@ FIRST_BACKUP_DATE=$(get_time_last_backup)
 pgbench -p ${TEST_PGPORT} >> ${TEST_BASE}/pgbench.log 2>&1
 pg_probackup backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
 SECOND_BACKUP_DATE=$(get_time_last_backup)
-pg_probackup validate -B ${BACKUP_PATH} --quiet
 pgbench -p ${TEST_PGPORT} >> ${TEST_BASE}/pgbench.log 2>&1
 pg_probackup backup -B ${BACKUP_PATH} -b page -p ${TEST_PGPORT} -d postgres --quiet
 THIRD_BACKUP_DATE=$(get_time_last_backup)
-pg_probackup validate -B ${BACKUP_PATH} --quiet
 pg_probackup backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet
 FOURTH_BACKUP_DATE=$(get_time_last_backup)
-pg_probackup validate -B ${BACKUP_PATH} --quiet
 
 echo "try to delete before third backup"
 pg_probackup delete -B ${BACKUP_PATH} ${THIRD_BACKUP_DATE} > /dev/null 2>&1

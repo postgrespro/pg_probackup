@@ -18,7 +18,7 @@ if grep "DONE" ${TEST_BASE}/TEST-0001-show.out.1 > /dev/null ; then
 else
      echo 'NG: DONE status is not shown.'
 fi
-pg_probackup validate -B ${BACKUP_PATH} --quiet;echo $?
+
 pg_probackup show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0001-show.out.2 2>&1
 if grep "OK" ${TEST_BASE}/TEST-0001-show.out.2 > /dev/null ; then
      echo 'OK: OK status is shown properly.'
@@ -56,7 +56,7 @@ init_catalog
 pg_probackup backup -B ${BACKUP_PATH} -b full -p ${TEST_PGPORT} -d postgres --quiet;echo $?
 echo 'remove a file from backup intentionally'
 rm -f `find ${BACKUP_PATH} -name postgresql.conf`
-pg_probackup validate -B ${BACKUP_PATH} --quiet > /dev/null 2>&1;echo $?
+
 pg_probackup show -B ${BACKUP_PATH} > ${TEST_BASE}/TEST-0003-show.out 2>&1
 if grep "CORRUPT" ${TEST_BASE}/TEST-0003-show.out > /dev/null ; then
      echo 'OK: CORRUPT status is shown properly.'
