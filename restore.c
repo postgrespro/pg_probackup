@@ -335,9 +335,6 @@ restore_database(pgBackup *backup)
 			pgFileFree(parray_remove(files, i));
 	}
 
-	if (num_threads < 1)
-		num_threads = 1;
-
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
