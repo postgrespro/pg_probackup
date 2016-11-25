@@ -40,6 +40,7 @@ bool			from_replica = false;
 static bool		backup_logs = false;
 bool			progress = false;
 bool			delete_wal = false;
+uint64			system_identifier = 0;
 
 /* restore configuration */
 static char		   *target_time;
@@ -74,6 +75,8 @@ static pgut_option options[] =
 	{ 'u',  6, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 12, "wal",					&delete_wal },
+	/* other */
+	{ 'U', 13, "system-identifier",		&system_identifier,	SOURCE_FILE },
 	{ 0 }
 };
 
@@ -188,9 +191,15 @@ main(int argc, char *argv[])
 	{
 		pgBackupOption bkupopt;
 		int res;
+		uint64 _system_identifier;
 		bkupopt.smooth_checkpoint = smooth_checkpoint;
 		bkupopt.keep_data_generations = keep_data_generations;
 		bkupopt.keep_data_days = keep_data_days;
+
+		_system_identifier = get_system_identifier(true);
+		if (_system_identifier != system_identifier)
+			elog(ERROR, "Backup directory was initialized for system id = %ld, but target system id = %ld",
+				 system_identifier, _system_identifier);
 
 		/* Do the backup */
 		res = do_backup(bkupopt);

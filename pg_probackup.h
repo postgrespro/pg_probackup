@@ -205,6 +205,7 @@ extern bool stream_wal;
 extern bool from_replica;
 extern bool progress;
 extern bool delete_wal;
+extern uint64 system_identifier;
 
 /* in backup.c */
 extern int do_backup(pgBackupOption bkupopt);
@@ -310,6 +311,7 @@ extern XLogRecPtr get_last_ptrack_lsn(void);
 extern uint32 get_data_checksum_version(bool safe);
 extern char *base36enc(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
+extern uint64 get_system_identifier(bool safe);
 
 /* in status.c */
 extern bool is_pg_running(void);

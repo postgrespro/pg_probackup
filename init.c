@@ -34,6 +34,7 @@ do_init(void)
 	char   *log_directory = NULL;
 	char   *archive_command = NULL;
 	FILE   *fp;
+	uint64 _system_identifier;
 
 	struct dirent **dp;
 	int results;
@@ -58,6 +59,7 @@ do_init(void)
 		parse_postgresql_conf(path, &log_directory, &archive_command);
 	}
 
+	_system_identifier = get_system_identifier(false);
 	/* create pg_probackup.conf */
 	join_path_components(path, backup_path, PG_RMAN_INI_FILE);
 	fp = fopen(path, "wt");
@@ -67,6 +69,7 @@ do_init(void)
 	join_path_components(arclog_path_dir, backup_path, "wal");
 	dir_create_dir(arclog_path_dir, DIR_PERMISSION);
 
+	fprintf(fp, "system-identifier = %li\n", _system_identifier);
 	fprintf(fp, "\n");
 	fclose(fp);
 

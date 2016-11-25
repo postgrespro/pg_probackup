@@ -122,6 +122,23 @@ get_current_timeline(bool safe)
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
 
+uint64
+get_system_identifier(bool safe)
+{
+	ControlFileData ControlFile;
+	char       *buffer;
+	size_t      size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
+	if (buffer == NULL)
+		return 0;
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.system_identifier;
+}
+
 uint32
 get_data_checksum_version(bool safe)
 {
