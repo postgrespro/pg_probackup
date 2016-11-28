@@ -325,20 +325,20 @@ Options for pg\_probackup utility can be specified in command line (such options
 
 Common options:
 
--B _directory_
---backup-path=_directory_
+-B _directory_  
+--backup-path=_directory_  
 BACKUP\_PATH
 
 Absolute path to the backup directory. In this directory backups and WAL archive are stored.
 
--D _directory_
---pgdata=directory _directory_
-PGDATA
+-D _directory_  
+--pgdata=directory _directory_  
+PGDATA  
 pgdata
 
 Absolute path to database cluster's data directory.
 
--j _num\_threads_
+-j _num\_threads_  
 --threads=_num\_threads_
 
 Number of parallel threads for backup, recovery, and backup validation.
@@ -347,12 +347,12 @@ Number of parallel threads for backup, recovery, and backup validation.
 
 Shows progress of operations.
 
--q
+-q  
 --quiet
 
 Do not write any messages.
 
--v
+-v  
 --verbose
 
 Show detailed messages.
@@ -367,9 +367,9 @@ Show version information.
 
 Backup options:
 
--b _mode_
---backup-mode=_mode_
-BACKUP\_MODE
+-b _mode_  
+--backup-mode=_mode_  
+BACKUP\_MODE  
 backup\_mode
 
 Backup mode. Supported modes are: FULL (full backup), PAGE (incremental backup, tracking changes by scanning WAL files), PTRACK (incremental backup, tracking changes on-the-fly). The last mode requires Postgres Pro database server.
@@ -378,14 +378,14 @@ Backup mode. Supported modes are: FULL (full backup), PAGE (incremental backup, 
 
 Makes an autonomous backup that includes all necessary WAL files, by streaming them from database server via replication protocol.
 
--S _slot\_name_
+-S _slot\_name_  
 --slot=_slot\_name_
 
 This option causes the WAL streaming to use the specified replication slot, and is used together with --stream.
 
--C
---smooth-checkpoint
-SMOOTH\_CHECKPOINT
+-C  
+--smooth-checkpoint  
+SMOOTH\_CHECKPOINT  
 smooth\_checkpoint
 
 Causes checkpoint to be spread out over a period of time (default is to complete checkpoint as soon as possible).
@@ -396,36 +396,36 @@ Includes pg\_log directory (where logging is usually pointed to) in the backup. 
 
 Connection options for backup:
 
-d db\_name
---dbname=db\_name
+d db\_name  
+--dbname=db\_name  
 PGDATABASE
 
 Specifies the name of the database to connect to (any one will do).
 
--h host
---host=host
+-h host  
+--host=host  
 PGHOST
 
 Specifies the host name of the machine on which the server is running. If the value begins with a slash, it is used as the directory for the Unix-domain socket.
 
--p port
---port=port
+-p port  
+--port=port  
 PGPORT
 
 Specifies the TCP port or local Unix domain socket file extension on which the server is listening for connections.
 
--U user\_name
---username=user\_name
+-U user\_name  
+--username=user\_name  
 PGUSER
 
 User name to connect as.
 
--w
+-w  
 --no-password
 
 Never issue a password prompt. If the server requires password authentication and a password is not available by other means such as a .pgpass file, the connection attempt will fail. This option can be useful in batch jobs and scripts where no user is present to enter a password.
 
--W
+-W  
 --password
 
 Force pg\_probackup to prompt for a password before connecting to a database.
