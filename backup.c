@@ -1262,8 +1262,19 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			!path_is_prefix_of_path("pg_tblspc", relative))
 			continue;
 
-		path_len = strlen(file->path);
+		/* Get file name from path */
+		fname = last_dir_separator(relative);
 
+		/* Remove temp tables */
+		if (fname[0] == 't' && isdigit(fname[1]))
+		{
+			pgFileFree(file);
+			parray_remove(list_file, i);
+			i--;
+			continue;
+		}
+
+		path_len = strlen(file->path);
 		/* Get link ptrack file to realations files */
 		if (path_len > 6 && strncmp(file->path+(path_len-6), "ptrack", 6) == 0)
 		{
@@ -1308,7 +1319,6 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		}
 
 		/* name of data file start with digit */
-		fname = last_dir_separator(relative);
 		if (fname == NULL)
 			fname = relative;
 		else
