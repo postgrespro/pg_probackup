@@ -22,7 +22,7 @@ results/init/backup/pg_probackup.conf
 results/init/backup/wal/
 ###### INIT COMMAND TEST-0004 ######
 ###### failure with backup catalog already existed ######
-ERROR: backup catalog already exist. and it's not empty
+ERROR: backup catalog already exist and it's not empty
 1
 
 ###### INIT COMMAND TEST-0005 ######
