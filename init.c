@@ -42,7 +42,7 @@ do_init(void)
 	{
 		results = scandir(backup_path, &dp, selects, NULL);
 		if (results != 0)
-			elog(ERROR, "backup catalog already exist. and it's not empty");
+			elog(ERROR, "backup catalog already exist and it's not empty");
 	}
 
 	/* create backup catalog root directory */
