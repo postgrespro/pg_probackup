@@ -143,6 +143,8 @@ do_restore(time_t backup_id,
 			satisfy_recovery_target(base_backup, rt) &&
 			(backup_id_found || backup_id == 0))
 			goto base_backup_found;
+		else
+			backup_id_found = false;
 	}
 	/* no full backup found, cannot restore */
 	elog(ERROR, "no full backup found, cannot restore.");
