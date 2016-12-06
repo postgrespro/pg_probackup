@@ -13,6 +13,7 @@
 #include <pthread.h>
 
 static void pgBackupValidateFiles(void *arg);
+void do_validate_last(void);
 
 typedef struct
 {
@@ -22,24 +23,19 @@ typedef struct
 	bool corrupted;
 } validate_files_args;
 
-/*
- * Validate files in the backup and update its status to OK.
- * If any of files are corrupted, update its stutus to CORRUPT.
- */
-int
-do_validate(time_t backup_id)
+void do_validate_last(void)
 {
 	int		i;
-	parray *backup_list;
-	int ret;
-	bool another_pg_probackup = false;
+	int		ret;
+	parray	*backup_list;
+	bool	another_pg_probackup = false;
 
 	ret = catalog_lock();
 	if (ret == 1)
 		another_pg_probackup = true;
 
 	/* get backup list matches given range */
-	backup_list = catalog_get_backup_list(backup_id);
+	backup_list = catalog_get_backup_list(0);
 	if (!backup_list)
 		elog(ERROR, "cannot process any more.");
 
@@ -58,18 +54,11 @@ do_validate(time_t backup_id)
 		}
 
 		/* Validate completed backups only. */
-		if (backup_id == 0 && backup->status != BACKUP_STATUS_DONE)
+		if (backup->status != BACKUP_STATUS_DONE)
 			continue;
 
-		if (backup_id != 0 && backup->start_time == backup_id)
-		{
-			pgBackupValidate(backup, false, false);
-			break;
-		}
-		else
-			/* validate with CRC value and update status to OK */
-			pgBackupValidate(backup, false, false);
-
+		/* validate with CRC value and update status to OK */
+		pgBackupValidate(backup, false, false);
 	}
 
 	/* cleanup */
@@ -77,6 +66,140 @@ do_validate(time_t backup_id)
 	parray_free(backup_list);
 
 	catalog_unlock();
+}
+
+int do_validate(time_t backup_id,
+				const char *target_time,
+				const char *target_xid,
+				const char *target_inclusive,
+				TimeLineID target_tli)
+{
+	int		i;
+	int base_index;				/* index of base (full) backup */
+	int last_restored_index;	/* index of last restored database backup */
+	int ret;
+	TimeLineID	cur_tli;
+	TimeLineID	backup_tli;
+	TimeLineID	newest_tli;
+	parray *timelines;
+	parray *backups;
+	pgRecoveryTarget *rt = NULL;
+	pgBackup *base_backup = NULL;
+	bool another_pg_probackup = false;
+	bool backup_id_found = false;
+
+	ret = catalog_lock();
+	if (ret == 1)
+		another_pg_probackup = true;
+
+	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
+	if (rt == NULL)
+		elog(ERROR, "cannot create recovery.conf. specified args are invalid.");
+
+	/* get list of backups. (index == 0) is the last backup */
+	backups = catalog_get_backup_list(0);
+	if (!backups)
+		elog(ERROR, "cannot process any more.");
+
+	cur_tli = get_current_timeline(true);
+	newest_tli = findNewestTimeLine(1);
+	backup_tli = get_fullbackup_timeline(backups, rt);
+
+	/* determine target timeline */
+	if (target_tli == 0)
+		target_tli = newest_tli != 1 ? newest_tli : backup_tli;
+
+	/* Read timeline history files from archives */
+	timelines = readTimeLineHistory(target_tli);
+
+	/* find last full backup which can be used as base backup. */
+	elog(LOG, "searching recent full backup");
+	for (i = 0; i < parray_num(backups); i++)
+	{
+		base_backup = (pgBackup *) parray_get(backups, i);
+
+		if (backup_id && base_backup->start_time > backup_id)
+			continue;
+
+		if (backup_id == base_backup->start_time &&
+			(base_backup->status == BACKUP_STATUS_OK || base_backup->status == BACKUP_STATUS_CORRUPT)
+		)
+			backup_id_found = true;
+
+		if (backup_id == base_backup->start_time &&
+			(base_backup->status != BACKUP_STATUS_OK && base_backup->status != BACKUP_STATUS_CORRUPT)
+		)
+			elog(ERROR, "given backup %s is %s", base36enc(backup_id), status2str(base_backup->status));
+
+		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
+			(base_backup->status != BACKUP_STATUS_OK && base_backup->status != BACKUP_STATUS_CORRUPT)
+		)
+			continue;
+
+		if (satisfy_timeline(timelines, base_backup) &&
+			satisfy_recovery_target(base_backup, rt) &&
+			(backup_id_found || backup_id == 0))
+			goto base_backup_found;
+		else
+			backup_id_found = false;
+	}
+	/* no full backup found, cannot restore */
+	elog(ERROR, "no full backup found, cannot validate.");
+
+base_backup_found:
+	base_index = i;
+
+	if (backup_id != 0)
+		stream_wal = base_backup->stream;
+
+	/* validate base backup */
+	pgBackupValidate(base_backup, false, false);
+
+	last_restored_index = base_index;
+
+	/* restore following differential backup */
+	elog(LOG, "searching differential backup...");
+
+	for (i = base_index - 1; i >= 0; i--)
+	{
+		pgBackup *backup = (pgBackup *) parray_get(backups, i);
+
+		/* don't use incomplete nor different timeline backup */
+		if ((backup->status != BACKUP_STATUS_OK && backup->status != BACKUP_STATUS_CORRUPT) ||
+			backup->tli != base_backup->tli)
+			continue;
+
+		if (backup->backup_mode == BACKUP_MODE_FULL)
+			break;
+
+		if (backup_id && backup->start_time > backup_id)
+			break;
+
+		/* use database backup only */
+		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
+			backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
+			continue;
+
+		/* is the backup is necessary for restore to target timeline ? */
+		if (!satisfy_timeline(timelines, backup) ||
+			!satisfy_recovery_target(backup, rt))
+			continue;
+
+		if (backup_id != 0)
+			stream_wal = backup->stream;
+
+		pgBackupValidate(backup, false, false);
+		last_restored_index = i;
+	}
+
+	/* and now we must check WALs */
+
+	/* release catalog lock */
+	catalog_unlock();
+
+	/* cleanup */
+	parray_walk(backups, pgBackupFree);
+	parray_free(backups);
 
 	return 0;
 }
@@ -89,7 +212,7 @@ pgBackupValidate(pgBackup *backup,
 				 bool size_only,
 				 bool for_get_timeline)
 {
-	char	timestamp[100];
+	char	*backup_id_string;
 	char	base_path[MAXPGPATH];
 	char	path[MAXPGPATH];
 	parray *files;
@@ -97,14 +220,14 @@ pgBackupValidate(pgBackup *backup,
 	pthread_t	validate_threads[num_threads];
 	validate_files_args *validate_threads_args[num_threads];
 
-	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+	backup_id_string = base36enc(backup->start_time);
 	if (!for_get_timeline)
 	{
 		if (backup->backup_mode == BACKUP_MODE_FULL ||
 			backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
 			backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
 			elog(INFO, "validate: %s backup and archive log files by %s",
-				 timestamp, (size_only ? "SIZE" : "CRC"));
+				 backup_id_string, (size_only ? "SIZE" : "CRC"));
 	}
 
 	if (!check)
@@ -160,9 +283,9 @@ pgBackupValidate(pgBackup *backup,
 		pgBackupWriteIni(backup);
 
 		if (corrupted)
-			elog(WARNING, "backup %s is corrupted", timestamp);
+			elog(WARNING, "backup %s is corrupted", backup_id_string);
 		else
-			elog(LOG, "backup %s is valid", timestamp);
+			elog(LOG, "backup %s is valid", backup_id_string);
 	}
 }
 

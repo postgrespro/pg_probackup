@@ -29,22 +29,13 @@ static void create_recovery_conf(time_t backup_id,
 								 const char *target_xid,
 								 const char *target_inclusive,
 								 TimeLineID target_tli);
-static pgRecoveryTarget *checkIfCreateRecoveryConf(const char *target_time,
-								 const char *target_xid,
-								 const char *target_inclusive);
-static parray * readTimeLineHistory(TimeLineID targetTLI);
-static bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
-static bool satisfy_recovery_target(const pgBackup *backup,
-									const pgRecoveryTarget *rt);
-static TimeLineID get_fullbackup_timeline(parray *backups,
-										  const pgRecoveryTarget *rt);
 static void print_backup_lsn(const pgBackup *backup);
 static void search_next_wal(const char *path,
 							XLogRecPtr *need_lsn,
 							parray *timelines);
 static void restore_files(void *arg);
 
-TimeLineID findNewestTimeLine(TimeLineID startTLI);
+
 bool existsTimeLineHistory(TimeLineID probeTLI);
 
 
@@ -63,9 +54,11 @@ do_restore(time_t backup_id,
 	TimeLineID	backup_tli;
 	TimeLineID	newest_tli;
 	parray *backups;
-	pgBackup *base_backup = NULL;
+
 	parray *files;
 	parray *timelines;
+	pgBackup *base_backup = NULL;
+	pgBackup *dest_backup = NULL;
 	pgRecoveryTarget *rt = NULL;
 	XLogRecPtr need_lsn;
 	bool backup_id_found = false;
@@ -126,14 +119,24 @@ do_restore(time_t backup_id,
 			continue;
 
 		if (backup_id == base_backup->start_time &&
-			base_backup->status == BACKUP_STATUS_OK
-		)
+			base_backup->status == BACKUP_STATUS_OK)
+		{
 			backup_id_found = true;
+			dest_backup = base_backup;
+		}
 
 		if (backup_id == base_backup->start_time &&
 			base_backup->status != BACKUP_STATUS_OK
 		)
 			elog(ERROR, "given backup %s is %s", base36enc(backup_id), status2str(base_backup->status));
+
+		if (dest_backup != NULL &&
+			base_backup->backup_mode == BACKUP_MODE_FULL &&
+			base_backup->status != BACKUP_STATUS_OK)
+			elog(ERROR, "base backup %s for given backup %s is %s",
+				 base36enc(base_backup->start_time),
+				 base36enc(dest_backup->start_time),
+				 status2str(base_backup->status));
 
 		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
 			base_backup->status != BACKUP_STATUS_OK)
@@ -522,7 +525,7 @@ create_recovery_conf(time_t backup_id,
  * specified timeline ID.
  * based on readTimeLineHistory() in xlog.c
  */
-static parray *
+parray *
 readTimeLineHistory(TimeLineID targetTLI)
 {
 	parray	   *result;
@@ -632,7 +635,7 @@ readTimeLineHistory(TimeLineID targetTLI)
 	return result;
 }
 
-static bool
+bool
 satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 {
 	if (rt->xid_specified)
@@ -644,7 +647,7 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 	return true;
 }
 
-static bool
+bool
 satisfy_timeline(const parray *timelines, const pgBackup *backup)
 {
 	int i;
@@ -659,7 +662,7 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 }
 
 /* get TLI of the latest full backup */
-static TimeLineID
+TimeLineID
 get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt)
 {
 	int			i;
@@ -769,7 +772,7 @@ search_next_wal(const char *path, XLogRecPtr *need_lsn, parray *timelines)
 	}
 }
 
-static pgRecoveryTarget *
+pgRecoveryTarget *
 checkIfCreateRecoveryConf(const char *target_time,
                    const char *target_xid,
                    const char *target_inclusive)

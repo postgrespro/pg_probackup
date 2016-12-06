@@ -206,18 +206,25 @@ main(int argc, char *argv[])
 		if (res != 0)
 			return res;
 
-		do_validate(current.start_time);
+		do_validate_last();
 	}
 	else if (pg_strcasecmp(cmd, "restore") == 0)
-		return do_restore(backup_id, target_time, target_xid,
-					target_inclusive, target_tli);
+		return do_restore(backup_id,
+						  target_time,
+						  target_xid,
+						  target_inclusive,
+						  target_tli);
 	else if (pg_strcasecmp(cmd, "show") == 0)
 		return do_show(backup_id);
 	else if (pg_strcasecmp(cmd, "validate") == 0)
 	{
 		if (backup_id == 0)
 			elog(ERROR, "you must specify backup-ID for this command");
-		return do_validate(backup_id);
+		return do_validate(backup_id,
+						   target_time,
+						   target_xid,
+						   target_inclusive,
+						   target_tli);
 	}
 	else if (pg_strcasecmp(cmd, "delete") == 0)
 		return do_delete(backup_id);

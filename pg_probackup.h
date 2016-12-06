@@ -221,6 +221,17 @@ extern int do_restore(time_t backup_id,
 					  const char *target_xid,
 					  const char *target_inclusive,
 					  TimeLineID target_tli);
+extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
+extern bool satisfy_recovery_target(const pgBackup *backup,
+									const pgRecoveryTarget *rt);
+extern TimeLineID get_fullbackup_timeline(parray *backups,
+										  const pgRecoveryTarget *rt);
+extern TimeLineID findNewestTimeLine(TimeLineID startTLI);
+extern parray * readTimeLineHistory(TimeLineID targetTLI);
+extern pgRecoveryTarget *checkIfCreateRecoveryConf(
+	const char *target_time,
+	const char *target_xid,
+	const char *target_inclusive);
 
 /* in init.c */
 extern int do_init(void);
@@ -240,7 +251,12 @@ extern char *slurpFile(const char *datadir,
 					   bool safe);
 
 /* in validate.c */
-extern int do_validate(time_t backup_id);
+extern int do_validate(time_t backup_id,
+					   const char *target_time,
+					   const char *target_xid,
+					   const char *target_inclusive,
+					   TimeLineID target_tli);
+extern void do_validate_last(void);
 extern void pgBackupValidate(pgBackup *backup,
 							 bool size_only,
 							 bool for_get_timeline);
@@ -315,5 +331,47 @@ extern uint64 get_system_identifier(bool safe);
 
 /* in status.c */
 extern bool is_pg_running(void);
+
+/* some from access/xact.h */
+/*
+ * XLOG allows to store some information in high 4 bits of log record xl_info
+ * field. We use 3 for the opcode, and one about an optional flag variable.
+ */
+#define XLOG_XACT_COMMIT			0x00
+#define XLOG_XACT_PREPARE			0x10
+#define XLOG_XACT_ABORT				0x20
+#define XLOG_XACT_COMMIT_PREPARED	0x30
+#define XLOG_XACT_ABORT_PREPARED	0x40
+#define XLOG_XACT_ASSIGNMENT		0x50
+/* free opcode 0x60 */
+/* free opcode 0x70 */
+
+/* mask for filtering opcodes out of xl_info */
+#define XLOG_XACT_OPMASK			0x70
+
+typedef struct xl_xact_commit
+{
+	TimestampTz xact_time;		/* time of commit */
+
+	/* xl_xact_xinfo follows if XLOG_XACT_HAS_INFO */
+	/* xl_xact_dbinfo follows if XINFO_HAS_DBINFO */
+	/* xl_xact_subxacts follows if XINFO_HAS_SUBXACT */
+	/* xl_xact_relfilenodes follows if XINFO_HAS_RELFILENODES */
+	/* xl_xact_invals follows if XINFO_HAS_INVALS */
+	/* xl_xact_twophase follows if XINFO_HAS_TWOPHASE */
+	/* xl_xact_origin follows if XINFO_HAS_ORIGIN, stored unaligned! */
+} xl_xact_commit;
+
+typedef struct xl_xact_abort
+{
+	TimestampTz xact_time;		/* time of abort */
+
+	/* xl_xact_xinfo follows if XLOG_XACT_HAS_INFO */
+	/* No db_info required */
+	/* xl_xact_subxacts follows if HAS_SUBXACT */
+	/* xl_xact_relfilenodes follows if HAS_RELFILENODES */
+	/* No invalidation messages needed. */
+	/* xl_xact_twophase follows if XINFO_HAS_TWOPHASE */
+} xl_xact_abort;
 
 #endif /* PG_PROBACKUP_H */
