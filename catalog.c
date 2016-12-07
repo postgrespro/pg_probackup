@@ -337,7 +337,7 @@ catalog_read_ini(const char *path)
 		{ 's', 0, "stop-lsn"			, NULL, SOURCE_ENV },
 		{ 't', 0, "start-time"			, NULL, SOURCE_ENV },
 		{ 't', 0, "end-time"			, NULL, SOURCE_ENV },
-		{ 'u', 0, "recovery-xid"				, NULL, SOURCE_ENV },
+		{ 'U', 0, "recovery-xid"				, NULL, SOURCE_ENV },
 		{ 't', 0, "recovery-time"				, NULL, SOURCE_ENV },
 		{ 'I', 0, "data-bytes"		, NULL, SOURCE_ENV },
 		{ 'u', 0, "block-size"			, NULL, SOURCE_ENV },

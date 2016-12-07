@@ -45,6 +45,10 @@
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
 
+#ifndef PGPRO_EE
+#define XID_FMT "%u"
+#endif
+
 /* backup mode file */
 typedef struct pgFile
 {
@@ -119,7 +123,7 @@ typedef struct pgBackup
 	time_t		start_time;
 	time_t		end_time;
 	time_t		recovery_time;
-	uint32		recovery_xid;
+	TransactionId		recovery_xid;
 
 	/* Different sizes (-1 means nothing was backed up) */
 	/*
@@ -159,7 +163,7 @@ typedef struct pgRecoveryTarget
 	bool		time_specified;
 	time_t		recovery_target_time;
 	bool		xid_specified;
-	unsigned int	recovery_target_xid;
+	TransactionId	recovery_target_xid;
 	bool		recovery_target_inclusive;
 } pgRecoveryTarget;
 

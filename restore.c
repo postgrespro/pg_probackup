@@ -775,7 +775,7 @@ checkIfCreateRecoveryConf(const char *target_time,
                    const char *target_inclusive)
 {
 	time_t		dummy_time;
-	unsigned int	dummy_xid;
+	TransactionId	dummy_xid;
 	bool		dummy_bool;
 	pgRecoveryTarget *rt;
 
@@ -798,7 +798,11 @@ checkIfCreateRecoveryConf(const char *target_time,
 	if (target_xid)
 	{
 		rt->xid_specified = true;
-		if (parse_uint32(target_xid, &dummy_xid))
+#ifdef PGPRO_EE
+				if (parse_uint64(target_xid, &dummy_xid))
+#else
+				if (parse_uint32(target_xid, &dummy_xid))
+#endif
 			rt->recovery_target_xid = dummy_xid;
 		else
 			elog(ERROR, "cannot create recovery.conf with %s", target_xid);

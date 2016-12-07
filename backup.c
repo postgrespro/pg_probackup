@@ -64,7 +64,7 @@ static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
 static bool pg_is_standby(void);
 static void get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup);
-static void get_xid(PGresult *res, uint32 *xid);
+static void get_xid(PGresult *res, TransactionId *xid);
 static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
 static bool pg_ptrack_enable(void);
@@ -1042,14 +1042,14 @@ get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup)
  * Get XID from result of txid_current() after pg_stop_backup().
  */
 static void
-get_xid(PGresult *res, uint32 *xid)
+get_xid(PGresult *res, TransactionId *xid)
 {
 	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR,
 			"result of txid_current() is invalid: %s",
 			PQerrorMessage(connection));
 
-	if (sscanf(PQgetvalue(res, 0, 0), "%u", xid) != 1)
+	if (sscanf(PQgetvalue(res, 0, 0), XID_FMT, xid) != 1)
 	{
 		elog(ERROR,
 			"result of txid_current() is invalid: %s",
