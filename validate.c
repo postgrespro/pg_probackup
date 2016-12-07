@@ -193,6 +193,15 @@ base_backup_found:
 	}
 
 	/* and now we must check WALs */
+	{
+		pgBackup *backup = (pgBackup *) parray_get(backups, last_restored_index);
+		validate_wal(backup,
+					 arclog_path,
+					 backup->start_lsn,
+					 rt->recovery_target_time,
+					 rt->recovery_target_xid,
+					 target_tli);
+	}
 
 	/* release catalog lock */
 	catalog_unlock();

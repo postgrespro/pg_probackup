@@ -45,6 +45,10 @@
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
 
+#ifndef PGPRO_EE
+#define XID_FMT "%u"
+#endif
+
 /* backup mode file */
 typedef struct pgFile
 {
@@ -107,19 +111,19 @@ typedef enum BackupMode
 typedef struct pgBackup
 {
 	/* Backup Level */
-	BackupMode	backup_mode;
+	BackupMode		backup_mode;
 
 	/* Status - one of BACKUP_STATUS_xxx */
 	BackupStatus	status;
 
 	/* Timestamp, etc. */
-	TimeLineID	tli;
-	XLogRecPtr	start_lsn;
-	XLogRecPtr	stop_lsn;
-	time_t		start_time;
-	time_t		end_time;
-	time_t		recovery_time;
-	uint32		recovery_xid;
+	TimeLineID		tli;
+	XLogRecPtr		start_lsn;
+	XLogRecPtr		stop_lsn;
+	time_t			start_time;
+	time_t			end_time;
+	time_t			recovery_time;
+	TransactionId	recovery_xid;
 
 	/* Different sizes (-1 means nothing was backed up) */
 	/*
@@ -127,13 +131,13 @@ typedef struct pgBackup
 	 * data while for a differential backup this is just the difference
 	 * of data taken.
 	 */
-	int64		data_bytes;
+	int64			data_bytes;
 
 	/* data/wal block size for compatibility check */
-	uint32		block_size;
-	uint32		wal_block_size;
-	uint32		checksum_version;
-	bool		stream;
+	uint32			block_size;
+	uint32			wal_block_size;
+	uint32			checksum_version;
+	bool			stream;
 } pgBackup;
 
 typedef struct pgBackupOption
@@ -156,11 +160,11 @@ typedef struct pgTimeLine
 
 typedef struct pgRecoveryTarget
 {
-	bool		time_specified;
-	time_t		recovery_target_time;
-	bool		xid_specified;
-	unsigned int	recovery_target_xid;
-	bool		recovery_target_inclusive;
+	bool			time_specified;
+	time_t			recovery_target_time;
+	bool			xid_specified;
+	TransactionId	recovery_target_xid;
+	bool			recovery_target_inclusive;
 } pgRecoveryTarget;
 
 typedef union DataPage
@@ -313,8 +317,16 @@ extern bool copy_file(const char *from_root, const char *to_root,
 extern bool calc_file(pgFile *file);
 
 /* parsexlog.c */
-extern void extractPageMap(const char *datadir, XLogRecPtr startpoint,
-						   TimeLineID tli, XLogRecPtr endpoint);
+extern void extractPageMap(const char *datadir,
+						   XLogRecPtr startpoint,
+						   TimeLineID tli,
+						   XLogRecPtr endpoint);
+extern void validate_wal(pgBackup *backup,
+						 const char *archivedir,
+						 XLogRecPtr startpoint,
+						 time_t target_time,
+						 TransactionId recovery_target_xid,
+						 TimeLineID tli);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
@@ -328,6 +340,7 @@ extern uint32 get_data_checksum_version(bool safe);
 extern char *base36enc(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
 extern uint64 get_system_identifier(bool safe);
+extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 
 /* in status.c */
 extern bool is_pg_running(void);

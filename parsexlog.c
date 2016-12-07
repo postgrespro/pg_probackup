@@ -17,6 +17,7 @@
 
 #include "commands/dbcommands_xlog.h"
 #include "catalog/storage_xlog.h"
+#include "access/transam.h"
 
 /*
  * RmgrNames is an array of resource manager names, to make error messages
@@ -100,6 +101,85 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	}
 }
 
+void
+validate_wal(pgBackup *backup,
+			 const char *archivedir,
+			 XLogRecPtr startpoint,
+			 time_t target_time,
+			 TransactionId recovery_target_xid,
+			 TimeLineID tli)
+{
+	XLogRecord *record;
+	XLogReaderState *xlogreader;
+	char	   *errormsg;
+	XLogPageReadPrivate private;
+	TransactionId last_xid = InvalidTransactionId;
+	TimestampTz last_time = 0;
+	char	timestamp[100];
+
+	private.archivedir = archivedir;
+	private.tli = tli;
+	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
+	if (xlogreader == NULL)
+		elog(ERROR, "out of memory");
+
+	while (true)
+	{
+		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+		bool timestamp_record;
+		if (record == NULL)
+		{
+			XLogRecPtr	errptr;
+
+			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
+			if (recovery_target_xid == InvalidTransactionId && target_time == 0)
+			{
+				break;
+			}
+
+			if (errormsg)
+				elog(ERROR, "stop check WALs because could not read WAL record at %X/%X: %s\nend time:%s end xid:" XID_FMT,
+						 (uint32) (errptr >> 32), (uint32) (errptr),
+						 errormsg,
+						 timestamp,
+						 last_xid);
+			else
+				elog(ERROR, "could not read WAL record at %X/%X\nend time:%s end xid:" XID_FMT,
+						 (uint32) (errptr >> 32),
+						 (uint32) (errptr),
+						 timestamp,
+						 last_xid);
+		}
+
+		timestamp_record = getRecordTimestamp(xlogreader, &last_time);
+		last_xid = XLogRecGetXid(xlogreader);
+		if (recovery_target_xid != InvalidTransactionId && recovery_target_xid == last_xid)
+			break;
+
+		if (target_time != 0 && timestamp_record && timestamptz_to_time_t(last_time) >= target_time)
+			break;
+
+		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
+	}
+
+	if (last_time > 0)
+		time2iso(timestamp, lengthof(timestamp), timestamptz_to_time_t(last_time));
+	else
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+	if (last_xid == InvalidTransactionId)
+		last_xid = backup->recovery_xid;
+
+	elog(INFO, "Validate WAL stoped on %s time and xid:" XID_FMT, timestamp, last_xid);
+
+	/* clean */
+	XLogReaderFree(xlogreader);
+	if (xlogreadfd != -1)
+	{
+		close(xlogreadfd);
+		xlogreadfd = -1;
+	}
+}
+
 /* XLogreader callback function, to read a WAL page */
 static int
 SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
@@ -138,7 +218,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		if (xlogreadfd < 0)
 		{
-			elog(WARNING, "could not open WAL segment \"%s\": %s",
+			elog(INFO, "could not open WAL segment \"%s\": %s",
 				 xlogfpath, strerror(errno));
 			return -1;
 		}

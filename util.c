@@ -168,6 +168,22 @@ time2iso(char *buf, size_t len, time_t time)
 	strftime(buf, len, "%Y-%m-%d %H:%M:%S", tm);
 }
 
+/* copied from timestamp.c */
+pg_time_t
+timestamptz_to_time_t(TimestampTz t)
+{
+	pg_time_t	result;
+
+#ifdef HAVE_INT64_TIMESTAMP
+	result = (pg_time_t) (t / USECS_PER_SEC +
+				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
+#else
+	result = (pg_time_t) (t +
+				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
+#endif
+	return result;
+}
+
 const char *
 status2str(BackupStatus status)
 {

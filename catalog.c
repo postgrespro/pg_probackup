@@ -331,21 +331,21 @@ catalog_read_ini(const char *path)
 
 	pgut_option options[] =
 	{
-		{ 's', 0, "backup-mode"			, NULL, SOURCE_ENV },
-		{ 'u', 0, "timelineid"			, NULL, SOURCE_ENV },
-		{ 's', 0, "start-lsn"			, NULL, SOURCE_ENV },
-		{ 's', 0, "stop-lsn"			, NULL, SOURCE_ENV },
-		{ 't', 0, "start-time"			, NULL, SOURCE_ENV },
-		{ 't', 0, "end-time"			, NULL, SOURCE_ENV },
-		{ 'u', 0, "recovery-xid"				, NULL, SOURCE_ENV },
-		{ 't', 0, "recovery-time"				, NULL, SOURCE_ENV },
-		{ 'I', 0, "data-bytes"		, NULL, SOURCE_ENV },
-		{ 'u', 0, "block-size"			, NULL, SOURCE_ENV },
-		{ 'u', 0, "xlog-block-size"		, NULL, SOURCE_ENV },
-		{ 'u', 0, "checksum_version"		, NULL, SOURCE_ENV },
-		{ 'u', 0, "stream"				, NULL, SOURCE_ENV },
-		{ 's', 0, "status"				, NULL, SOURCE_ENV },
-		{ 0 }
+		{'s', 0, "backup-mode",			NULL, SOURCE_ENV},
+		{'u', 0, "timelineid",			NULL, SOURCE_ENV},
+		{'s', 0, "start-lsn",			NULL, SOURCE_ENV},
+		{'s', 0, "stop-lsn",			NULL, SOURCE_ENV},
+		{'t', 0, "start-time",			NULL, SOURCE_ENV},
+		{'t', 0, "end-time",			NULL, SOURCE_ENV},
+		{'U', 0, "recovery-xid",		NULL, SOURCE_ENV},
+		{'t', 0, "recovery-time",		NULL, SOURCE_ENV},
+		{'I', 0, "data-bytes",			NULL, SOURCE_ENV},
+		{'u', 0, "block-size",			NULL, SOURCE_ENV},
+		{'u', 0, "xlog-block-size",		NULL, SOURCE_ENV},
+		{'u', 0, "checksum_version",	NULL, SOURCE_ENV},
+		{'u', 0, "stream",				NULL, SOURCE_ENV},
+		{'s', 0, "status",				NULL, SOURCE_ENV},
+		{0}
 	};
 
 	if (access(path, F_OK) != 0)
