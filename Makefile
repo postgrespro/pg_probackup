@@ -70,6 +70,10 @@ ifndef top_srcdir
 	@exit 1
 endif
 
+ifeq ($(PORTNAME), aix)
+	CC=xlc_r
+endif
+
 # Those files are symlinked from the PostgreSQL sources.
 xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/%
 	rm -f $@ && $(LN_S) $< .
