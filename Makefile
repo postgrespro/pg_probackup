@@ -55,6 +55,10 @@ PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS}
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
+ifeq ($(PORTNAME), aix)
+	CC=xlc_r
+endif
+
 envtest:
 	: top_srcdir=$(top_srcdir)
 	: libpq_srcdir = $(libpq_srcdir)
@@ -68,10 +72,6 @@ ifndef top_srcdir
 	@echo "Pass the path to the PostgreSQL source tree to make, in the top_srcdir"
 	@echo "variable: \"make top_srcdir=<path to PostgreSQL source tree>\""
 	@exit 1
-endif
-
-ifeq ($(PORTNAME), aix)
-	CC=xlc_r
 endif
 
 # Those files are symlinked from the PostgreSQL sources.
