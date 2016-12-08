@@ -43,7 +43,11 @@ catalog_lock(void)
 		elog(errno == ENOENT ? ERROR : ERROR,
 			"cannot open file \"%s\": %s", id_path, strerror(errno));
 
+#ifdef __IBMC__
+	ret = lockf(lock_fd, LOCK_EX | LOCK_NB, 0);	/* non-blocking */
+#else
 	ret = flock(lock_fd, LOCK_EX | LOCK_NB);	/* non-blocking */
+#endif
 	if (ret == -1)
 	{
 		if (errno == EWOULDBLOCK)
