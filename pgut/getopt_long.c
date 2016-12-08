@@ -51,11 +51,22 @@
 
 #include <sys/cdefs.h>
 
-#include <err.h>
 #include <errno.h>
 #include "getopt.h"
 #include <stdlib.h>
 #include <string.h>
+
+#define LOG			(-4)
+#define INFO		(-3)
+#define NOTICE		(-2)
+#define WARNING		(-1)
+#define ERROR		1
+#define FATAL		2
+#define PANIC		3
+
+extern void
+elog(int elevel, const char *fmt, ...)
+__attribute__((format(printf, 2, 3)));
 
 #define GNU_COMPATIBLE		/* Be more compatible, configure's use us! */
 
@@ -245,7 +256,7 @@ parse_long_options(char * const *nargv, const char *options,
 	if (!exact_match && second_partial_match) {
 		/* ambiguous abbreviation */
 		if (PRINT_ERROR)
-			warnx(ambig,
+			elog(WARNING, ambig,
 #ifdef GNU_COMPATIBLE
 			     current_dash,
 #endif
@@ -258,7 +269,7 @@ parse_long_options(char * const *nargv, const char *options,
 		if (long_options[match].has_arg == no_argument
 		    && has_equal) {
 			if (PRINT_ERROR)
-				warnx(noarg,
+				elog(WARNING, noarg,
 #ifdef GNU_COMPATIBLE
 				     current_dash,
 #endif
@@ -296,7 +307,7 @@ parse_long_options(char * const *nargv, const char *options,
 			 * should be generated.
 			 */
 			if (PRINT_ERROR)
-				warnx(recargstring,
+				elog(WARNING, recargstring,
 #ifdef GNU_COMPATIBLE
 				    current_dash,
 #endif
@@ -317,7 +328,7 @@ parse_long_options(char * const *nargv, const char *options,
 			return (-1);
 		}
 		if (PRINT_ERROR)
-			warnx(illoptstring,
+			elog(WARNING, illoptstring,
 #ifdef GNU_COMPATIBLE
 			      current_dash,
 #endif
@@ -494,11 +505,11 @@ start:
 			++optind;
 #ifdef GNU_COMPATIBLE
 		if (PRINT_ERROR)
-			warnx(posixly_correct ? illoptchar : gnuoptchar,
+			elog(WARNING, posixly_correct ? illoptchar : gnuoptchar,
 			      optchar);
 #else
 		if (PRINT_ERROR)
-			warnx(illoptchar, optchar);
+			elog(WARNING, illoptchar, optchar);
 #endif
 		optopt = optchar;
 		return (BADCH);
@@ -510,7 +521,7 @@ start:
 		else if (++optind >= nargc) {	/* no arg */
 			place = EMSG;
 			if (PRINT_ERROR)
-				warnx(recargchar, optchar);
+				elog(WARNING, recargchar, optchar);
 			optopt = optchar;
 			return (BADARG);
 		} else				/* white space */
@@ -534,7 +545,7 @@ start:
 			if (++optind >= nargc) {	/* no arg */
 				place = EMSG;
 				if (PRINT_ERROR)
-					warnx(recargchar, optchar);
+					elog(WARNING, recargchar, optchar);
 				optopt = optchar;
 				return (BADARG);
 			} else
