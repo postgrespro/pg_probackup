@@ -827,7 +827,7 @@ parse_pair(const char buffer[], char key[], char value[])
 	if (end - start <= 0)
 	{
 		if (*start == '=')
-			elog(WARNING, "syntax error in \"%s\"", buffer);
+			elog(ERROR, "syntax error in \"%s\"", buffer);
 		return false;
 	}
 
@@ -841,7 +841,7 @@ parse_pair(const char buffer[], char key[], char value[])
 
 	if (*start != '=')
 	{
-		elog(WARNING, "syntax error in \"%s\"", buffer);
+		elog(ERROR, "syntax error in \"%s\"", buffer);
 		return false;
 	}
 
@@ -858,7 +858,7 @@ parse_pair(const char buffer[], char key[], char value[])
 
 	if (*start != '\0' && *start != '#')
 	{
-		elog(WARNING, "syntax error in \"%s\"", buffer);
+		elog(ERROR, "syntax error in \"%s\"", buffer);
 		return false;
 	}
 
