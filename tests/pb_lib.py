@@ -17,6 +17,21 @@ def dir_files(base_dir):
 	return out_list
 
 
+class ShowBackup(object):
+	def __init__(self, split_line):
+		self.id = split_line[0]
+		# TODO: parse to datetime
+		self.recovery_time = "%s %s" % (split_line[1], split_line[2])
+		self.mode = split_line[3]
+		self.cur_tli = split_line[4]
+		self.parent_tli = split_line[6]
+		# TODO: parse to interval
+		self.time = split_line[7]
+		# TODO: maybe rename to size?
+		self.data = split_line[8]
+		self.status = split_line[9]
+
+
 class ProbackupTest(object):
 	def __init__(self, *args, **kwargs):
 		super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -36,13 +51,10 @@ class ProbackupTest(object):
 	def backup_dir(self, node):
 		return os.path.abspath("%s/backup" % node.base_dir)
 
-	def make_bnode(self, name, base_dir=None):
-		node = get_new_node('test', base_dir=path.join(self.dir_path, base_dir))
-		try:
-			node.cleanup()
-		except:
-			pass
-		shutil.rmtree(self.backup_dir(node), ignore_errors=True)
+	def make_bnode(self, name, base_dir=None, options={}):
+		real_base_dir = path.join(self.dir_path, base_dir)
+		shutil.rmtree(real_base_dir, ignore_errors=True)
+		node = get_new_node('test', base_dir=real_base_dir)
 		node.init()
 
 		node.append_conf("postgresql.conf", "wal_level = hot_standby")
@@ -51,6 +63,10 @@ class ProbackupTest(object):
 			"postgresql.conf",
 			"""archive_command = 'cp "%%p" "%s/%%f"'""" % os.path.abspath(self.arcwal_dir(node))
 		)
+
+		for key, value in six.iteritems(options):
+			node.append_conf("postgresql.conf", "%s = %s" % (key, value))
+
 		return node
 
 	def run_pb(self, command):
@@ -86,7 +102,7 @@ class ProbackupTest(object):
 		# print(cmd_list)
 		return self.run_pb(cmd_list + options)
 
-	def show_pb(self, node, id=None, options=[]):
+	def show_pb(self, node, id=None, options=[], as_text=False):
 		cmd_list = [
 			"-B", self.backup_dir(node),
 			"show",
@@ -95,12 +111,26 @@ class ProbackupTest(object):
 			cmd_list += [id]
 
 		# print(cmd_list)
-		return self.run_pb(options + cmd_list)
+		if as_text:
+			return self.run_pb(options + cmd_list)
+		else:
+			return [ShowBackup(line.split()) for line in self.run_pb(options + cmd_list).splitlines()[3:]]
 
-	def validate_pb(self, node, id=None, options=[]):
+	def validate_pb(self, node, id, options=[]):
 		cmd_list = [
 			"-B", self.backup_dir(node),
 			"validate",
+		]
+		if id:
+			cmd_list += [id]
+
+		# print(cmd_list)
+		return self.run_pb(options + cmd_list)
+
+	def delete_pb(self, node, id=None, options=[]):
+		cmd_list = [
+			"-B", self.backup_dir(node),
+			"delete",
 		]
 		if id:
 			cmd_list += [id]

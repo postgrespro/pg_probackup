@@ -25,7 +25,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 			self.backup_pb(node, options=["--quiet"]),
 			six.b("")
 		)
-		self.assertIn(six.b("OK"), self.show_pb(node))
+		self.assertIn(six.b("OK"), self.show_pb(node, as_text=True))
 
 		node.stop()
 
@@ -40,10 +40,10 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 			six.b("")
 		)
 
-		id_backup = self.show_pb(node).splitlines()[3].split()[0]
+		id_backup = self.show_pb(node)[0].id
 		os.remove(path.join(self.backup_dir(node), "backups", id_backup.decode("utf-8"), "database", "postgresql.conf"))
 
 		self.validate_pb(node, id_backup)
-		self.assertIn(six.b("CORRUPT"), self.show_pb(node))
+		self.assertIn(six.b("CORRUPT"), self.show_pb(node, as_text=True))
 
 		node.stop()
