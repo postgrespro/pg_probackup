@@ -35,6 +35,31 @@ class ShowBackup(object):
 class ProbackupTest(object):
 	def __init__(self, *args, **kwargs):
 		super(ProbackupTest, self).__init__(*args, **kwargs)
+		self.test_env = os.environ.copy()
+		envs_list = [
+			"LANGUAGE",
+			"LC_ALL",
+			"PGCONNECT_TIMEOUT",
+			"PGDATA",
+			"PGDATABASE",
+			"PGHOSTADDR",
+			"PGREQUIRESSL",
+			"PGSERVICE",
+			"PGSSLMODE",
+			"PGUSER",
+			"PGPORT",
+			"PGHOST"
+		]
+
+		for e in envs_list:
+			try:
+				del self.test_env[e]
+			except:
+				pass
+
+		self.test_env["LC_MESSAGES"] = "C"
+		self.test_env["LC_TIME"] = "C"
+
 		self.dir_path = path.dirname(os.path.realpath(__file__))
 		try:
 			os.makedirs(path.join(self.dir_path, "tmp_dirs"))
@@ -73,7 +98,8 @@ class ProbackupTest(object):
 		try:
 			return subprocess.check_output(
 				[self.probackup_path] + command,
-				stderr=subprocess.STDOUT
+				stderr=subprocess.STDOUT,
+				env=self.test_env
 			)
 		except subprocess.CalledProcessError as err:
 			return err.output
@@ -98,6 +124,18 @@ class ProbackupTest(object):
 		]
 		if backup_type:
 			cmd_list += ["-b", backup_type]
+
+		# print(cmd_list)
+		return self.run_pb(cmd_list + options)
+
+	def restore_pb(self, node, id=None, options=[]):
+		cmd_list = [
+			"-D", node.data_dir,
+			"-B", self.backup_dir(node),
+			"restore"
+		]
+		if id:
+			cmd_list.append(id)
 
 		# print(cmd_list)
 		return self.run_pb(cmd_list + options)
@@ -137,3 +175,28 @@ class ProbackupTest(object):
 
 		# print(cmd_list)
 		return self.run_pb(options + cmd_list)
+
+	def get_control_data(self, node):
+		pg_controldata = node.get_bin_path("pg_controldata")
+		out_data = {}
+		lines = subprocess.check_output(
+			[pg_controldata] + ["-D", node.data_dir],
+			stderr=subprocess.STDOUT,
+			env=self.test_env
+		).splitlines()
+		for l in lines:
+			key, value = l.split(b":", maxsplit=1)
+			out_data[key.strip()] = value.strip()
+		return out_data
+
+	def get_recovery_conf(self, node):
+		out_dict = {}
+		with open(path.join(node.data_dir, "recovery.conf"), "r") as recovery_conf:
+			for line in recovery_conf:
+				try:
+					key, value = line.split("=")
+				except:
+					continue
+				out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
+
+		return out_dict
