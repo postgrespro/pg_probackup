@@ -1,6 +1,6 @@
 import unittest
 
-from . import init_test, option_test, show_test, backup_test, delete_test, restore_test
+from . import init_test, option_test, show_test, backup_test, delete_test, restore_test, validate_test
 
 
 def load_tests(loader, tests, pattern):
@@ -11,5 +11,6 @@ def load_tests(loader, tests, pattern):
 	suite.addTests(loader.loadTestsFromModule(backup_test))
 	suite.addTests(loader.loadTestsFromModule(delete_test))
 	suite.addTests(loader.loadTestsFromModule(restore_test))
+	suite.addTests(loader.loadTestsFromModule(validate_test))
 
 	return suite

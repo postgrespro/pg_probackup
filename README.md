@@ -55,10 +55,28 @@ All the documentation you can find [here](doc/pg_probackup.md).
 Regression tests
 ----------------
 
-The test suite of pg_probackup is available in the code tree and can be
-launched in a way similar to common PostgreSQL extensions and modules:
+For tests you must have python 2.7 or python 3.3 and higher. Also good idea
+is make virtual enviroment by `virtualenv`.   
+First of all you need to install `testgres` python module which contains useful
+functions to start postgres clusters and make queries:
 
-    make installcheck
+```
+pip install testgres
+```
+
+To run tests execute:
+
+```
+python -m unittest tests
+```
+
+from current (root of project) directory. If you want to run a specific postgres build then
+you should specify the path to your pg_config executable by setting PG_CONFIG
+environment variable:
+```
+export PG_CONFIG=/path/to/pg_config
+```
+
 
 Block level incremental backup
 ------------------------------
