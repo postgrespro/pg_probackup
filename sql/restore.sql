@@ -1,2 +1,0 @@
-\! bash sql/restore.sh
-

@@ -24,8 +24,6 @@ OBJS = backup.o \
 
 EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h streamutil.c streamutil.h logging.h
 
-REGRESS = init option show delete backup restore
-
 all: checksrcdir datapagemap.h logging.h receivelog.h streamutil.h pg_probackup
 
 MAKE_GLOBAL="../../src/Makefile.global"

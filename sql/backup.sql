@@ -1,2 +1,0 @@
-\! bash sql/backup.sh
-

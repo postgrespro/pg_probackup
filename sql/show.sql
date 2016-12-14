@@ -1,1 +1,0 @@
-\! bash sql/show.sh
