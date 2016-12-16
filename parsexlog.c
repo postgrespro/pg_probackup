@@ -152,7 +152,8 @@ validate_wal(pgBackup *backup,
 		}
 
 		timestamp_record = getRecordTimestamp(xlogreader, &last_time);
-		last_xid = XLogRecGetXid(xlogreader);
+		if (XLogRecGetXid(xlogreader) != InvalidTransactionId)
+			last_xid = XLogRecGetXid(xlogreader);
 		if (recovery_target_xid != InvalidTransactionId && recovery_target_xid == last_xid)
 			break;
 
