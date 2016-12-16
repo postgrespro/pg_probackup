@@ -116,6 +116,7 @@ You need to enable WAL archive by adding following lines to postgresql.conf:
 
 ```
 wal_level = archive
+archive_mode = on
 archive_command = 'test ! -f /home/postgres/backup/wal/%f && cp %p /home/postgres/backup/wal/%f'
 ```
 
