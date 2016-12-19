@@ -294,6 +294,12 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 	fprintf(out, "STREAM=%u\n", backup->stream);
 
 	fprintf(out, "STATUS=%s\n", status2str(backup->status));
+	if (backup->parent_backup != 0)
+	{
+		char *parent_backup = base36enc(backup->parent_backup);
+		fprintf(out, "PARENT_BACKUP='%s'\n", parent_backup);
+		free(parent_backup);
+	}
 }
 
 /* create backup.ini */
@@ -331,6 +337,7 @@ catalog_read_ini(const char *path)
 	char	   *start_lsn = NULL;
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
+	char	   *parent_backup = NULL;
 	int			i;
 
 	pgut_option options[] =
@@ -349,6 +356,7 @@ catalog_read_ini(const char *path)
 		{'u', 0, "checksum_version",	NULL, SOURCE_ENV},
 		{'u', 0, "stream",				NULL, SOURCE_ENV},
 		{'s', 0, "status",				NULL, SOURCE_ENV},
+		{'s', 0, "parent_backup",		NULL, SOURCE_ENV},
 		{0}
 	};
 
@@ -373,6 +381,7 @@ catalog_read_ini(const char *path)
 	options[i++].var = &backup->checksum_version;
 	options[i++].var = &backup->stream;
 	options[i++].var = &status;
+	options[i++].var = &parent_backup;
 	Assert(i == lengthof(options) - 1);
 
 	pgut_readopt(path, options, ERROR);
@@ -426,6 +435,12 @@ catalog_read_ini(const char *path)
 		else
 			elog(WARNING, "invalid STATUS \"%s\"", status);
 		free(status);
+	}
+
+	if (parent_backup)
+	{
+		backup->parent_backup = base36dec(parent_backup);
+		free(parent_backup);
 	}
 
 	return backup;
@@ -514,4 +529,5 @@ catalog_init_config(pgBackup *backup)
 	backup->recovery_time = (time_t) 0;
 	backup->data_bytes = BYTES_INVALID;
 	backup->stream = false;
+	backup->parent_backup = 0;
 }

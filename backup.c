@@ -247,6 +247,9 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 		lsn = &prev_backup->start_lsn;
 		elog(LOG, "backup only the page that there was of the update from LSN(%X/%08X)",
 			 (uint32) (*lsn >> 32), (uint32) *lsn);
+
+		current.parent_backup = prev_backup->start_time;
+		pgBackupWriteIni(&current);
 	}
 
 	/* initialize backup list */

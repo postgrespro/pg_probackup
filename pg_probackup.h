@@ -138,6 +138,7 @@ typedef struct pgBackup
 	uint32			wal_block_size;
 	uint32			checksum_version;
 	bool			stream;
+	time_t			parent_backup;
 } pgBackup;
 
 typedef struct pgBackupOption
