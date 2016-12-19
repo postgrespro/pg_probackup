@@ -31,6 +31,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 			backup_log.write(self.backup_pb(node, options=["--verbose"]))
 
 		show_backup = self.show_pb(node)[0]
+		full_backup_id = show_backup.id
 		self.assertEqual(show_backup.status, six.b("OK"))
 		self.assertEqual(show_backup.mode, six.b("FULL"))
 
@@ -41,6 +42,12 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 		show_backup = self.show_pb(node)[0]
 		self.assertEqual(show_backup.status, six.b("OK"))
 		self.assertEqual(show_backup.mode, six.b("PAGE"))
+
+		# Check parent backup
+		self.assertEqual(
+			full_backup_id,
+			self.show_pb(node, show_backup.id)[six.b("PARENT_BACKUP")].strip(six.b(" '"))
+		)
 
 		# ptrack backup mode
 		if len(is_ptrack):

@@ -151,8 +151,14 @@ class ProbackupTest(object):
 		# print(cmd_list)
 		if as_text:
 			return self.run_pb(options + cmd_list)
-		else:
+		elif id is None:
 			return [ShowBackup(line.split()) for line in self.run_pb(options + cmd_list).splitlines()[3:]]
+		else:
+			return dict([
+				line.split(six.b("="))
+				for line in self.run_pb(options + cmd_list).splitlines()
+				if line[0] != six.b("#")[0]
+			])
 
 	def validate_pb(self, node, id, options=[]):
 		cmd_list = [
