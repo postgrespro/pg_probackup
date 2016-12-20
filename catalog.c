@@ -274,7 +274,7 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 		time2iso(timestamp, lengthof(timestamp), backup->end_time);
 		fprintf(out, "END_TIME='%s'\n", timestamp);
 	}
-	fprintf(out, "RECOVERY_XID=%u\n", backup->recovery_xid);
+	fprintf(out, "RECOVERY_XID=" XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
