@@ -81,6 +81,11 @@ class ProbackupTest(object):
 		shutil.rmtree(real_base_dir, ignore_errors=True)
 		node = get_new_node('test', base_dir=real_base_dir)
 		node.init()
+		# node.init(initdb_params=[
+		# 	"-x", "0x123456789ABCDEF0",
+		# 	"-m", "0x23456789ABCDEF01",
+		# 	"-o", "0x3456789ABCDEF012"
+		# ])
 
 		node.append_conf("postgresql.conf", "wal_level = hot_standby")
 		node.append_conf("postgresql.conf", "archive_mode = on")
