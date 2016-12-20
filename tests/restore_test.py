@@ -325,6 +325,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		node = self.make_bnode('restore_full_ptrack_under_load_9', base_dir="tmp_dirs/restore/full_ptrack_under_load_9")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
+		wal_segment_size = self.guc_wal_segment_size(node)
 		node.pgbench_init(scale=2)
 		is_ptrack = node.execute("postgres", "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'")
 		if not is_ptrack:
@@ -356,8 +357,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
 
 		self.assertEqual(bbalance, delta)
-
 		node.stop({"-m": "immediate"})
+
+		self.wrong_wal_clean(node, wal_segment_size)
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
@@ -376,6 +378,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		node = self.make_bnode('estore_full_under_load_ptrack_10', base_dir="tmp_dirs/restore/full_under_load_ptrack_10")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
+		wal_segment_size = self.guc_wal_segment_size(node)
 		node.pgbench_init(scale=2)
 		is_ptrack = node.execute("postgres", "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'")
 		if not is_ptrack:
@@ -409,6 +412,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		self.assertEqual(bbalance, delta)
 
 		node.stop({"-m": "immediate"})
+		self.wrong_wal_clean(node, wal_segment_size)
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))

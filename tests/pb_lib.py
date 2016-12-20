@@ -1,5 +1,5 @@
 import os
-from os import path
+from os import path, listdir
 import subprocess
 import shutil
 import six
@@ -206,3 +206,19 @@ class ProbackupTest(object):
 				out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
 
 		return out_dict
+
+	def wrong_wal_clean(self, node, wal_size):
+		wals_dir = path.join(self.backup_dir(node), "wal")
+		wals = [f for f in listdir(wals_dir) if path.isfile(path.join(wals_dir, f))]
+		wals.sort()
+		file_path = path.join(wals_dir, wals[-1])
+		if path.getsize(file_path) != wal_size:
+			os.remove(file_path)
+
+	def guc_wal_segment_size(self, node):
+		var = node.execute("postgres", "select setting from pg_settings where name = 'wal_segment_size'")
+		return int(var[0][0]) * self.guc_wal_block_size(node)
+
+	def guc_wal_block_size(self, node):
+		var = node.execute("postgres", "select setting from pg_settings where name = 'wal_block_size'")
+		return int(var[0][0])
