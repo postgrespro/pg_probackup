@@ -47,12 +47,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 			target_xid = res[0][0]
 
 		node.execute("postgres", "SELECT pg_switch_xlog()")
-
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		wals_dir = path.join(self.backup_dir(node), "wal")
 		wals = [f for f in listdir(wals_dir) if path.isfile(path.join(wals_dir, f))]

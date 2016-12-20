@@ -29,20 +29,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
 			backup_log.write(self.backup_pb(node, options=["--verbose"]))
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -68,20 +60,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -101,20 +85,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
 
 		target_tli = int(self.get_control_data(node)[six.b("Latest checkpoint's TimeLineID")])
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 		pgbench.wait()
@@ -123,11 +99,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
 			backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_2.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(
@@ -138,11 +110,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		recovery_target_timeline = self.get_recovery_conf(node)["recovery_target_timeline"]
 		self.assertEqual(int(recovery_target_timeline), target_tli)
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -166,11 +134,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		pgbench.wait()
 		pgbench.stdout.close()
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(
@@ -178,11 +142,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 				options=["-j", "4", "--verbose", '--time="%s"' % target_time]
 			))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -221,11 +181,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		# been archived up to the xmin point saved earlier without that.
 		node.execute("postgres", "SELECT pg_switch_xlog()")
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "fast"
-		})
+		node.stop({"-m": "fast"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(
@@ -233,11 +189,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 				options=["-j", "4", "--verbose", '--xid=%s' % target_xid]
 			))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -271,20 +223,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -325,20 +269,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -372,20 +308,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
@@ -429,20 +357,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		self.assertEqual(bbalance, delta)
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
 		delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
@@ -488,20 +408,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		self.assertEqual(bbalance, delta)
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "immediate"
-		})
+		node.stop({"-m": "immediate"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
 		delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
@@ -542,11 +454,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		# been archived up to the xmin point saved earlier without that.
 		node.execute("postgres", "SELECT pg_switch_xlog()")
 
-		node.pg_ctl("stop", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-m": "fast"
-		})
+		node.stop({"-m": "fast"})
 
 		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
 			restore_log.write(self.restore_pb(
@@ -559,11 +467,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 				]
 			))
 
-		node.pg_ctl("start", {
-			"-D": node.data_dir,
-			"-w": None,
-			"-t": "600"
-		})
+		node.start({"-t": "600"})
 
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
