@@ -77,20 +77,15 @@ int do_validate(time_t backup_id,
 	int		i;
 	int base_index;				/* index of base (full) backup */
 	int last_restored_index;	/* index of last restored database backup */
-	int ret;
-	TimeLineID	cur_tli;
 	TimeLineID	backup_tli;
 	TimeLineID	newest_tli;
 	parray *timelines;
 	parray *backups;
 	pgRecoveryTarget *rt = NULL;
 	pgBackup *base_backup = NULL;
-	bool another_pg_probackup = false;
 	bool backup_id_found = false;
 
-	ret = catalog_lock();
-	if (ret == 1)
-		another_pg_probackup = true;
+	catalog_lock();
 
 	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
 	if (rt == NULL)
@@ -101,7 +96,6 @@ int do_validate(time_t backup_id,
 	if (!backups)
 		elog(ERROR, "cannot process any more.");
 
-	cur_tli = get_current_timeline(true);
 	newest_tli = findNewestTimeLine(1);
 	backup_tli = get_fullbackup_timeline(backups, rt);
 

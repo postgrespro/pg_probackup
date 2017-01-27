@@ -125,8 +125,9 @@ validate_wal(pgBackup *backup,
 
 	while (true)
 	{
-		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
 		bool timestamp_record;
+
+		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
 		if (record == NULL)
 		{
 			XLogRecPtr	errptr;
