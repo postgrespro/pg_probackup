@@ -38,6 +38,12 @@ do_init(void)
 
 	struct dirent **dp;
 	int results;
+
+	/* PGDATA is always required */
+	if (pgdata == NULL)
+		elog(ERROR, "Required parameter not specified: PGDATA "
+						 "(-D, --pgdata)");
+
 	if (access(backup_path, F_OK) == 0)
 	{
 		results = scandir(backup_path, &dp, selects, NULL);
