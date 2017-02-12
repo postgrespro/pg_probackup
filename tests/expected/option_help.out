@@ -3,11 +3,12 @@ pg_probackup manage backup/recovery of PostgreSQL database.
 Usage:
   pg_probackup [option...] init
   pg_probackup [option...] backup
-  pg_probackup [option...] restore
+  pg_probackup [option...] restore [backup-ID]
   pg_probackup [option...] show [backup-ID]
   pg_probackup [option...] validate backup-ID
   pg_probackup [option...] delete backup-ID
   pg_probackup [option...] delwal [backup-ID]
+  pg_probackup [option...] retention show|purge
 
 Common Options:
   -B, --backup-path=PATH    location of the backup storage area
@@ -32,6 +33,10 @@ Restore options:
 
 Delete options:
       --wal                 remove unnecessary wal files
+
+Retention options:
+      --redundancy          specifies how many full backups purge command should keep
+      --window              specifies the number of days of recoverability
 
 Connection options:
   -d, --dbname=DBNAME       database to connect

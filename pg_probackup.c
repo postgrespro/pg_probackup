@@ -32,15 +32,12 @@ pgBackup	current;
 
 /* backup configuration */
 static bool		smooth_checkpoint;
-static int		keep_data_generations = KEEP_INFINITE;
-static int		keep_data_days = KEEP_INFINITE;
 int				num_threads = 1;
 bool			stream_wal = false;
 bool			from_replica = false;
 static bool		backup_logs = false;
 bool			progress = false;
 bool			delete_wal = false;
-uint64			system_identifier = 0;
 
 /* restore configuration */
 static char		   *target_time;
@@ -48,26 +45,30 @@ static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
 
+uint64			system_identifier = 0;
+
+/* retention configuration */
+uint32			retention_redundancy = 0;
+uint32			retention_window = 0;
+
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 
 static pgut_option options[] =
 {
 	/* directory options */
-	{ 's', 'D', "pgdata",				&pgdata,		SOURCE_ENV },
-	{ 's', 'B', "backup-path",			&backup_path,	SOURCE_ENV },
+	{ 's', 'D', "pgdata",				&pgdata,		SOURCE_CMDLINE },
+	{ 's', 'B', "backup-path",			&backup_path,	SOURCE_CMDLINE },
 	/* common options */
 /*	{ 'b', 'c', "check",				&check },*/
-	{ 'i', 'j', "threads",				&num_threads },
-	{ 'b', 8, "stream",					&stream_wal },
-	{ 'b', 11, "progress",				&progress },
+	{ 'u', 'j', "threads",				&num_threads,	SOURCE_CMDLINE },
+	{ 'b', 8, "stream",					&stream_wal,	SOURCE_CMDLINE },
+	{ 'b', 11, "progress",				&progress,		SOURCE_CMDLINE },
 	/* backup options */
-	{ 'b', 10, "backup-pg-log",			&backup_logs },
-	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_ENV },
-	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_ENV },
+	{ 'b', 10, "backup-pg-log",			&backup_logs,	SOURCE_CMDLINE },
+	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_CMDLINE },
+	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_CMDLINE },
 	{ 's', 'S', "slot",					&replication_slot,		SOURCE_CMDLINE },
 	/* options with only long name (keep-xxx) */
-/*	{ 'i',  1, "keep-data-generations", &keep_data_generations, SOURCE_ENV },
-	{ 'i',  2, "keep-data-days",		&keep_data_days,		SOURCE_ENV },*/
 	/* restore options */
 	{ 's',  3, "time",					&target_time,		SOURCE_CMDLINE },
 	{ 's',  4, "xid",					&target_xid,		SOURCE_CMDLINE },
@@ -75,8 +76,11 @@ static pgut_option options[] =
 	{ 'u',  6, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 12, "wal",					&delete_wal },
+	/* retention options */
+	{ 'u', 13, "redundancy",			&retention_redundancy,	SOURCE_CMDLINE },
+	{ 'u', 14, "window",				&retention_window,		SOURCE_CMDLINE },
 	/* other */
-	{ 'U', 13, "system-identifier",		&system_identifier,	SOURCE_FILE },
+	{ 'U', 15, "system-identifier",		&system_identifier,		SOURCE_FILE_STRICT },
 	{ 0 }
 };
 
@@ -86,7 +90,8 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
-	const char	   *cmd = NULL;
+	const char	   *cmd = NULL,
+				   *subcmd = NULL;
 	const char	   *backup_id_string = NULL;
 	time_t			backup_id = 0;
 	int				i;
@@ -95,7 +100,7 @@ main(int argc, char *argv[])
 	setvbuf(stdout, 0, _IONBF, 0);	/* TODO: remove this */
 
 	/* initialize configuration */
-	catalog_init_config(&current);
+	init_backup(&current);
 
 	/* overwrite configuration with command line arguments */
 	i = pgut_getopt(argc, argv, options);
@@ -103,15 +108,15 @@ main(int argc, char *argv[])
 	for (; i < argc; i++)
 	{
 		if (cmd == NULL)
-		{
 			cmd = argv[i];
-			if(strcmp(cmd, "show") != 0 &&
-			   strcmp(cmd, "validate") != 0 &&
-			   strcmp(cmd, "delete") != 0 &&
-			   strcmp(cmd, "restore") != 0 &&
-			   strcmp(cmd, "delwal") != 0)
-				break;
-		} else if (backup_id_string == NULL)
+		else if (strcmp(cmd, "retention") == 0)
+			subcmd = argv[i];
+		else if (backup_id_string == NULL &&
+				 (strcmp(cmd, "show") == 0 ||
+				 strcmp(cmd, "validate") == 0 ||
+				 strcmp(cmd, "delete") == 0 ||
+				 strcmp(cmd, "restore") == 0 ||
+				 strcmp(cmd, "delwal") == 0))
 			backup_id_string = argv[i];
 		else
 			elog(ERROR, "too many arguments");
@@ -132,38 +137,36 @@ main(int argc, char *argv[])
 		}
 	}
 
-	/* Read default configuration from file. */
-	if (backup_path)
+	/* BACKUP_PATH is always required */
+	if (backup_path == NULL)
+		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+	else
 	{
-		char	path[MAXPGPATH];
+		char		path[MAXPGPATH];
 		/* Check if backup_path is directory. */
 		struct stat stat_buf;
-		int rc = stat(backup_path, &stat_buf);
+		int			rc = stat(backup_path, &stat_buf);
 
 		/* If rc == -1,  there is no file or directory. So it's OK. */
 		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 			elog(ERROR, "-B, --backup-path must be a path to directory");
 
-		join_path_components(path, backup_path, PG_RMAN_INI_FILE);
+		join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
 		pgut_readopt(path, options, ERROR);
-
-		/* setup stream options */
-		if (pgut_dbname != NULL)
-			dbname = pstrdup(pgut_dbname);
-		if (host != NULL)
-			dbhost = pstrdup(host);
-		if (port != NULL)
-			dbport = pstrdup(port);
-		if (username != NULL)
-			dbuser = pstrdup(username);
 	}
 
-	/* BACKUP_PATH is always required */
-	if (backup_path == NULL)
-		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+	/* setup stream options */
+	if (pgut_dbname != NULL)
+		dbname = pstrdup(pgut_dbname);
+	if (host != NULL)
+		dbhost = pstrdup(host);
+	if (port != NULL)
+		dbport = pstrdup(port);
+	if (username != NULL)
+		dbuser = pstrdup(username);
 
 	/* path must be absolute */
-	if (backup_path != NULL && !is_absolute_path(backup_path))
+	if (!is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
@@ -189,20 +192,10 @@ main(int argc, char *argv[])
 		return do_init();
 	else if (pg_strcasecmp(cmd, "backup") == 0)
 	{
-		pgBackupOption bkupopt;
-		int res;
-		uint64 _system_identifier;
-		bkupopt.smooth_checkpoint = smooth_checkpoint;
-		bkupopt.keep_data_generations = keep_data_generations;
-		bkupopt.keep_data_days = keep_data_days;
-
-		_system_identifier = get_system_identifier(true);
-		if (_system_identifier != system_identifier)
-			elog(ERROR, "Backup directory was initialized for system id = %ld, but target system id = %ld",
-				 system_identifier, _system_identifier);
+		int			res;
 
 		/* Do the backup */
-		res = do_backup(bkupopt);
+		res = do_backup(smooth_checkpoint);
 		if (res != 0)
 			return res;
 
@@ -230,6 +223,15 @@ main(int argc, char *argv[])
 		return do_delete(backup_id);
 	else if (pg_strcasecmp(cmd, "delwal") == 0)
 		return do_deletewal(backup_id, true);
+	else if (pg_strcasecmp(cmd, "retention") == 0)
+	{
+		if (subcmd == NULL)
+			elog(ERROR, "you must specify retention command");
+		else if (pg_strcasecmp(subcmd, "show") == 0)
+			return do_retention_show();
+		else if (pg_strcasecmp(subcmd, "purge") == 0)
+			return do_retention_purge();
+	}
 	else
 		elog(ERROR, "invalid command \"%s\"", cmd);
 
@@ -243,11 +245,12 @@ pgut_help(bool details)
 	printf(_("Usage:\n"));
 	printf(_("  %s [option...] init\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] backup\n"), PROGRAM_NAME);
-	printf(_("  %s [option...] restore\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] restore [backup-ID]\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] show [backup-ID]\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] validate backup-ID\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] delete backup-ID\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] delwal [backup-ID]\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] retention show|purge\n"), PROGRAM_NAME);
 
 	if (!details)
 		return;
@@ -260,8 +263,6 @@ pgut_help(bool details)
 	printf(_("  -b, --backup-mode=MODE    backup mode (full, page, ptrack)\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
 	printf(_("      --stream              stream the transaction log and include it in the backup\n"));
-	/*printf(_("  --keep-data-generations=N keep GENERATION of full data backup\n"));
-	printf(_("  --keep-data-days=DAY      keep enough data backup to recover to DAY days age\n"));*/
 	printf(_("  -S, --slot=SLOTNAME       replication slot to use\n"));
 	printf(_("      --backup-pg-log       backup of pg_log directory\n"));
 	printf(_("  -j, --threads=NUM         number of parallel threads\n"));
@@ -275,6 +276,9 @@ pgut_help(bool details)
 	printf(_("      --progress            show progress\n"));
 	printf(_("\nDelete options:\n"));
 	printf(_("      --wal                 remove unnecessary wal files\n"));
+	printf(_("\nRetention options:\n"));
+	printf(_("      --redundancy          specifies how many full backups purge command should keep\n"));
+	printf(_("      --window              specifies the number of days of recoverability\n"));
 }
 
 static void

@@ -29,7 +29,7 @@ do_show(time_t backup_id)
 	{
 		pgBackup *backup;
 
-		backup = catalog_get_backup(backup_id);
+		backup = read_backup(backup_id);
 		if (backup == NULL)
 		{
 			char timestamp[100];
@@ -58,6 +58,21 @@ do_show(time_t backup_id)
 		parray_walk(backup_list, pgBackupFree);
 		parray_free(backup_list);
 	}
+
+	return 0;
+}
+
+/*
+ * Show backup catalog retention policy configuration.
+ */
+int
+do_retention_show(void)
+{
+	fprintf(stdout, "# retention policy\n");
+	if (retention_redundancy > 0)
+		fprintf(stdout, "REDUNDANCY=%u\n", retention_redundancy);
+	if (retention_window > 0)
+		fprintf(stdout, "WINDOW=%u\n", retention_window);
 
 	return 0;
 }

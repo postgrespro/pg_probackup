@@ -58,7 +58,7 @@ typedef struct
  */
 static void backup_cleanup(bool fatal, void *userdata);
 static void backup_files(void *arg);
-static parray *do_backup_database(parray *backup_list, pgBackupOption bkupopt);
+static parray *do_backup_database(parray *backup_list, bool smooth_checkpoint);
 static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
@@ -96,7 +96,7 @@ static void StreamLog(void *arg);
  * Take a backup of database and return the list of files backed up.
  */
 static parray *
-do_backup_database(parray *backup_list, pgBackupOption bkupopt)
+do_backup_database(parray *backup_list, bool smooth_checkpoint)
 {
 	int			i;
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
@@ -113,9 +113,7 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 	backup_files_args *backup_threads_args[num_threads];
 	bool		is_ptrack_support;
 
-
 	/* repack the options */
-	bool	smooth_checkpoint = bkupopt.smooth_checkpoint;
 	pgBackup   *prev_backup = NULL;
 
 	/* Block backup operations on a standby */
@@ -446,15 +444,11 @@ do_backup_database(parray *backup_list, pgBackupOption bkupopt)
 
 
 int
-do_backup(pgBackupOption bkupopt)
+do_backup(bool smooth_checkpoint)
 {
-	parray *backup_list;
-	parray *files_database;
-	int		ret;
-
-	/* repack the necessary options */
-	int keep_data_generations = bkupopt.keep_data_generations;
-	int keep_data_days        = bkupopt.keep_data_days;
+	int			ret;
+	parray	   *backup_list;
+	parray	   *files_database;
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
@@ -481,12 +475,12 @@ do_backup(pgBackupOption bkupopt)
 	elog(LOG, "----------------------------------------");
 
 	/* get exclusive lock of backup catalog */
-	ret = catalog_lock();
+	ret = catalog_lock(true);
 	if (ret == -1)
 		elog(ERROR, "cannot lock backup catalog");
 	else if (ret == 1)
 		elog(ERROR,
-			"another pg_probackup is running, skipping this backup");
+			 "another pg_probackup is running, skipping this backup");
 
 	/* initialize backup result */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -521,7 +515,7 @@ do_backup(pgBackupOption bkupopt)
 	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
-	files_database = do_backup_database(backup_list, bkupopt);
+	files_database = do_backup_database(backup_list, smooth_checkpoint);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* update backup status to DONE */
@@ -549,10 +543,6 @@ do_backup(pgBackupOption bkupopt)
 				 total_read, current.data_bytes);
 		elog(LOG, "========================================");
 	}
-
-
-	/* Delete old backup files after all backup operation. */
-	pgBackupDelete(keep_data_generations, keep_data_days);
 
 	/* Cleanup backup mode file list */
 	if (files_database)

@@ -11,6 +11,7 @@ pg_probackup [option...] validate backup_ID
 pg_probackup [option...] show    [backup_ID]
 pg_probackup [option...] delete   backup_ID
 pg_probackup [option...] delwal  [backup_ID]
+pg_probackup [option...] retention show|purge
 ```
 
 ## Description
@@ -294,6 +295,34 @@ The same backup directory can be used for pg\_probackup on both servers, primary
 
 A backup can be used to restore primary database server as well as standby. It depends on the server on which pg\_probackup is executed with restore command. Note that recovered PostgreSQL will always run as primary server if started right after the pg\_probackup. To run it as standby, edit recovery.conf file created by pg\_probackup: at least delete every parameter that specify recovery target (recovery\_target, recovery\_target\_time, and recovery\_target\_xid), change target timeline to 'latest', and add standby\_mode = 'on'. Probably primary\_conninfo should be added too for streaming replication, and hot\_standby = 'on' in database configuration parameters for hot standby mode.
 
+### Backup Retention Policy
+
+It is possible to configure the backup retention policy. The retention policy
+specifies specifies which backups must be kept to meet data recoverability
+requirements. The policy can be configured using two parameters: redundancy and
+window.
+
+Redundancy parameter specifies how many full backups purge command should keep.
+For example, you make a full backup on Sunday and an incremental backup every day.
+If redundancy is 1, then this backup will become obsolete on next Sunday and will
+be deleted with all its incremental backups when next full backup will be created.
+
+Window parameter specifies the number of days of data recoverability. If window
+is 14, then all full backups older than 14 days will be deleted with their
+incremental backups.
+
+This parameters can be used together. Backups are obsolete if they don't
+meet both parameters. For example, you have retention is 1, window is 14 and
+two full backups are made 3 and 7 days ago. In this situation both backups aren't
+obsolete and will be kept 14 days.
+
+To delete obsolete backups execute the following command:
+```
+pg_probackup retention purge
+```
+Redundancy and window parameters values will be taken from command line options
+or from pg_probackup.conf configuration file.
+
 ## Additional Features
 
 ### Parallel Execution
@@ -319,11 +348,11 @@ Pages are packed before going to backup, leaving unused parts of pages behind (s
 
 Whether page checksums are enabled or not, pg\_probackup calculates checksums for each file in a backup. Checksums are checked immediately after backup is taken and right before restore, to timely detect possible backup corruptions.
 
-##Options
+## Options
 
 Options for pg\_probackup utility can be specified in command line (such options are shown below starting from either one or two minus signs). If not given in command line, values for some options are derived from environmental variables (names of environmental variables are in uppercase). Otherwise values for some options are taken from pg\_probackup.conf configuration file, located in the backup directory (such option names are in lowercase).
 
-Common options:
+### Common options:
 
 -B _directory_  
 --backup-path=_directory_  
@@ -365,7 +394,7 @@ Show quick help on command line options.
 
 Show version information.
 
-Backup options:
+### Backup options:
 
 -b _mode_  
 --backup-mode=_mode_  
@@ -430,7 +459,7 @@ Never issue a password prompt. If the server requires password authentication an
 
 Force pg\_probackup to prompt for a password before connecting to a database.
 
-Restore options:
+### Restore options:
 
 --time
 
@@ -448,11 +477,21 @@ Specifies whether to stop just after the specified recovery target (true), or ju
 
 Specifies recovering into a particular timeline.
 
-Delete options:
+### Delete options:
 
 --wal
 
 Delete WAL files that are no longer necessary to restore from any of existing backups.
+
+### Retention policy options:
+
+--redundancy
+
+Specifies how many full backups purge command should keep.
+
+--window
+
+Specifies the number of days of recoverability.
 
 ## Restrictions
 

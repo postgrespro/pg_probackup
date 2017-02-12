@@ -30,9 +30,6 @@ static void create_recovery_conf(time_t backup_id,
 								 const char *target_inclusive,
 								 TimeLineID target_tli);
 static void print_backup_lsn(const pgBackup *backup);
-static void search_next_wal(const char *path,
-							XLogRecPtr *need_lsn,
-							parray *timelines);
 static void restore_files(void *arg);
 
 
@@ -48,7 +45,6 @@ do_restore(time_t backup_id,
 {
 	int i;
 	int base_index;				/* index of base (full) backup */
-	int last_restored_index;	/* index of last restored database backup */
 	int ret;
 	TimeLineID	cur_tli;
 	TimeLineID	backup_tli;
@@ -60,7 +56,6 @@ do_restore(time_t backup_id,
 	pgBackup *base_backup = NULL;
 	pgBackup *dest_backup = NULL;
 	pgRecoveryTarget *rt = NULL;
-	XLogRecPtr need_lsn;
 	bool backup_id_found = false;
 
 	/* PGDATA and ARCLOG_PATH are always required */
@@ -72,12 +67,12 @@ do_restore(time_t backup_id,
 	elog(LOG, "restore start");
 
 	/* get exclusive lock of backup catalog */
-	ret = catalog_lock();
+	ret = catalog_lock(false);
 	if (ret == -1)
 		elog(ERROR, "cannot lock backup catalog.");
 	else if (ret == 1)
 		elog(ERROR,
-			"another pg_probackup is running, stop restore.");
+			 "another pg_probackup is running, stop restore.");
 
 	/* confirm the PostgreSQL server is not running */
 	if (is_pg_running())
@@ -185,8 +180,6 @@ base_backup_found:
 	/* restore base backup */
 	restore_database(base_backup);
 
-	last_restored_index = base_index;
-
 	/* restore following differential backup */
 	elog(LOG, "searching differential backup...");
 
@@ -220,18 +213,7 @@ base_backup_found:
 
 		print_backup_lsn(backup);
 		restore_database(backup);
-		last_restored_index = i;
 	}
-
-	if (!stream_wal || target_time != NULL || target_xid != NULL)
-		for (i = last_restored_index; i >= 0; i--)
-		{
-			elog(LOG, "searching archived WAL...");
-
-			search_next_wal(arclog_path, &need_lsn, timelines);
-
-			elog(LOG, "all necessary files are found");
-		}
 
 	/* create recovery.conf */
 	if (!stream_wal || target_time != NULL || target_xid != NULL)
@@ -711,65 +693,6 @@ print_backup_lsn(const pgBackup *backup)
 		 timestamp,
 		 (uint32) (backup->stop_lsn >> 32),
 		 (uint32) backup->stop_lsn);
-}
-
-static void
-search_next_wal(const char *path, XLogRecPtr *need_lsn, parray *timelines)
-{
-	int		i;
-	int		j;
-	int		count;
-	char	xlogfname[MAXFNAMELEN];
-	char	pre_xlogfname[MAXFNAMELEN];
-	char	xlogpath[MAXPGPATH];
-	struct stat	st;
-
-	count = 0;
-	for (;;)
-	{
-		for (i = 0; i < parray_num(timelines); i++)
-		{
-			pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
-			XLogSegNo	targetSegNo;
-
-			XLByteToSeg(*need_lsn, targetSegNo);
-			XLogFileName(xlogfname, timeline->tli, targetSegNo);
-			join_path_components(xlogpath, path, xlogfname);
-
-			if (stat(xlogpath, &st) == 0)
-				break;
-		}
-
-		/* not found */
-		if (i == parray_num(timelines))
-		{
-			if (count == 1)
-				elog(LOG, "\n");
-			else if (count > 1)
-				elog(LOG, " - %s", pre_xlogfname);
-
-			return;
-		}
-
-		count++;
-		if (count == 1)
-			elog(LOG, "%s", xlogfname);
-
-		strcpy(pre_xlogfname, xlogfname);
-
-		/* delete old TLI */
-		for (j = i + 1; j < parray_num(timelines); j++)
-			parray_remove(timelines, i + 1);
-		/* XXX: should we add a linebreak when we find a timeline? */
-
-		/*
-		 * Move to next xlog segment. Note that we need to increment
-		 * by XLogSegSize to jump directly to the next WAL segment file
-		 * and as this value is used to generate the WAL file name with
-		 * the current timeline of backup.
-		 */
-		*need_lsn += XLogSegSize;
-	}
 }
 
 pgRecoveryTarget *

@@ -40,6 +40,7 @@ typedef enum YesNo
 typedef enum pgut_optsrc
 {
 	SOURCE_DEFAULT,
+	SOURCE_FILE_STRICT,
 	SOURCE_ENV,
 	SOURCE_FILE,
 	SOURCE_CMDLINE,

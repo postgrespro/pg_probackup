@@ -30,7 +30,7 @@ void do_validate_last(void)
 	parray	*backup_list;
 	bool	another_pg_probackup = false;
 
-	ret = catalog_lock();
+	ret = catalog_lock(false);
 	if (ret == 1)
 		another_pg_probackup = true;
 
@@ -85,7 +85,7 @@ int do_validate(time_t backup_id,
 	pgBackup *base_backup = NULL;
 	bool backup_id_found = false;
 
-	catalog_lock();
+	catalog_lock(false);
 
 	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
 	if (rt == NULL)

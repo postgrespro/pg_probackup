@@ -25,6 +25,9 @@
 /regression.diffs
 /regression.out
 /results
+/env
+/tests/__pycache__/
+/tests/tmp_dirs/
 
 # Extra files
 /datapagemap.c

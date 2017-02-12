@@ -21,7 +21,7 @@
 
 #include "pgut/pgut-port.h"
 
-static pgBackup *catalog_read_ini(const char *path);
+static pgBackup *read_backup_from_file(const char *path);
 
 #define BOOL_TO_STR(val)	((val) ? "true" : "false")
 
@@ -32,17 +32,16 @@ static int lock_fd = -1;
  * If the lock is held by another one, return 1 immediately.
  */
 int
-catalog_lock(void)
+catalog_lock(bool check_catalog)
 {
-	int		ret;
-	char	id_path[MAXPGPATH];
+	int			ret;
+	char		id_path[MAXPGPATH];
 
-	join_path_components(id_path, backup_path, PG_RMAN_INI_FILE);
+	join_path_components(id_path, backup_path, BACKUP_CATALOG_CONF_FILE);
 	lock_fd = open(id_path, O_RDWR);
 	if (lock_fd == -1)
 		elog(errno == ENOENT ? ERROR : ERROR,
 			"cannot open file \"%s\": %s", id_path, strerror(errno));
-
 #ifdef __IBMC__
 	ret = lockf(lock_fd, LOCK_EX | LOCK_NB, 0);	/* non-blocking */
 #else
@@ -64,6 +63,19 @@ catalog_lock(void)
 		}
 	}
 
+	if (check_catalog)
+	{
+		uint64		id;
+
+		Assert(pgdata);
+
+		/* Check system-identifier */
+		id = get_system_identifier(true);
+		if (id != system_identifier)
+			elog(ERROR, "Backup directory was initialized for system id = %ld, but target system id = %ld",
+				 system_identifier, id);
+	}
+
 	return 0;
 }
 
@@ -82,15 +94,15 @@ catalog_unlock(void)
  * If no backup matches, return NULL.
  */
 pgBackup *
-catalog_get_backup(time_t timestamp)
+read_backup(time_t timestamp)
 {
 	pgBackup	tmp;
-	char		ini_path[MAXPGPATH];
+	char		conf_path[MAXPGPATH];
 
 	tmp.start_time = timestamp;
-	pgBackupGetPath(&tmp, ini_path, lengthof(ini_path), BACKUP_INI_FILE);
+	pgBackupGetPath(&tmp, conf_path, lengthof(conf_path), BACKUP_CONF_FILE);
 
-	return catalog_read_ini(ini_path);
+	return read_backup_from_file(conf_path);
 }
 
 static bool
@@ -144,8 +156,8 @@ catalog_get_backup_list(time_t backup_id)
 		join_path_components(date_path, backups_path, date_ent->d_name);
 
 		/* read backup information from backup.ini */
-		snprintf(ini_path, MAXPGPATH, "%s/%s", date_path, BACKUP_INI_FILE);
-		backup = catalog_read_ini(ini_path);
+		snprintf(ini_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONF_FILE);
+		backup = read_backup_from_file(ini_path);
 
 		/* ignore corrupted backup */
 		if (backup)
@@ -309,7 +321,7 @@ pgBackupWriteIni(pgBackup *backup)
 	FILE   *fp = NULL;
 	char	ini_path[MAXPGPATH];
 
-	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_INI_FILE);
+	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_CONF_FILE);
 	fp = fopen(ini_path, "wt");
 	if (fp == NULL)
 		elog(ERROR, "cannot open INI file \"%s\": %s", ini_path,
@@ -330,7 +342,7 @@ pgBackupWriteIni(pgBackup *backup)
  *  - Do not care section.
  */
 static pgBackup *
-catalog_read_ini(const char *path)
+read_backup_from_file(const char *path)
 {
 	pgBackup   *backup;
 	char	   *backup_mode = NULL;
@@ -342,21 +354,21 @@ catalog_read_ini(const char *path)
 
 	pgut_option options[] =
 	{
-		{'s', 0, "backup-mode",			NULL, SOURCE_ENV},
-		{'u', 0, "timelineid",			NULL, SOURCE_ENV},
-		{'s', 0, "start-lsn",			NULL, SOURCE_ENV},
-		{'s', 0, "stop-lsn",			NULL, SOURCE_ENV},
-		{'t', 0, "start-time",			NULL, SOURCE_ENV},
-		{'t', 0, "end-time",			NULL, SOURCE_ENV},
-		{'U', 0, "recovery-xid",		NULL, SOURCE_ENV},
-		{'t', 0, "recovery-time",		NULL, SOURCE_ENV},
-		{'I', 0, "data-bytes",			NULL, SOURCE_ENV},
-		{'u', 0, "block-size",			NULL, SOURCE_ENV},
-		{'u', 0, "xlog-block-size",		NULL, SOURCE_ENV},
-		{'u', 0, "checksum_version",	NULL, SOURCE_ENV},
-		{'u', 0, "stream",				NULL, SOURCE_ENV},
-		{'s', 0, "status",				NULL, SOURCE_ENV},
-		{'s', 0, "parent_backup",		NULL, SOURCE_ENV},
+		{'s', 0, "backup-mode",			NULL, SOURCE_FILE_STRICT},
+		{'u', 0, "timelineid",			NULL, SOURCE_FILE_STRICT},
+		{'s', 0, "start-lsn",			NULL, SOURCE_FILE_STRICT},
+		{'s', 0, "stop-lsn",			NULL, SOURCE_FILE_STRICT},
+		{'t', 0, "start-time",			NULL, SOURCE_FILE_STRICT},
+		{'t', 0, "end-time",			NULL, SOURCE_FILE_STRICT},
+		{'U', 0, "recovery-xid",		NULL, SOURCE_FILE_STRICT},
+		{'t', 0, "recovery-time",		NULL, SOURCE_FILE_STRICT},
+		{'I', 0, "data-bytes",			NULL, SOURCE_FILE_STRICT},
+		{'u', 0, "block-size",			NULL, SOURCE_FILE_STRICT},
+		{'u', 0, "xlog-block-size",		NULL, SOURCE_FILE_STRICT},
+		{'u', 0, "checksum_version",	NULL, SOURCE_FILE_STRICT},
+		{'u', 0, "stream",				NULL, SOURCE_FILE_STRICT},
+		{'s', 0, "status",				NULL, SOURCE_FILE_STRICT},
+		{'s', 0, "parent_backup",		NULL, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -364,7 +376,7 @@ catalog_read_ini(const char *path)
 		return NULL;
 
 	backup = pgut_new(pgBackup);
-	catalog_init_config(backup);
+	init_backup(backup);
 
 	i = 0;
 	options[i++].var = &backup_mode;
@@ -516,7 +528,7 @@ pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subd
 }
 
 void
-catalog_init_config(pgBackup *backup)
+init_backup(pgBackup *backup)
 {
 	backup->backup_mode = BACKUP_MODE_INVALID;
 	backup->status = BACKUP_STATUS_INVALID;

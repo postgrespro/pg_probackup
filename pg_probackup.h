@@ -34,8 +34,8 @@
 #define BACKUPS_DIR				"backups"
 #define PG_XLOG_DIR				"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
-#define BACKUP_INI_FILE			"backup.conf"
-#define PG_RMAN_INI_FILE		"pg_probackup.conf"
+#define BACKUP_CONF_FILE		"backup.conf"
+#define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
@@ -141,14 +141,6 @@ typedef struct pgBackup
 	time_t			parent_backup;
 } pgBackup;
 
-typedef struct pgBackupOption
-{
-	bool smooth_checkpoint;
-	int  keep_data_generations;
-	int  keep_data_days;
-} pgBackupOption;
-
-
 /* special values of pgBackup */
 #define KEEP_INFINITE			(INT_MAX)
 #define BYTES_INVALID			(-1)
@@ -210,10 +202,15 @@ extern bool stream_wal;
 extern bool from_replica;
 extern bool progress;
 extern bool delete_wal;
+
 extern uint64 system_identifier;
 
+/* retention configuration */
+extern uint32 retention_redundancy;
+extern uint32 retention_window;
+
 /* in backup.c */
-extern int do_backup(pgBackupOption bkupopt);
+extern int do_backup(bool smooth_checkpoint);
 extern BackupMode parse_backup_mode(const char *value);
 extern void check_server_version(void);
 extern bool fileExists(const char *path);
@@ -243,11 +240,12 @@ extern int do_init(void);
 
 /* in show.c */
 extern int do_show(time_t backup_id);
+extern int do_retention_show(void);
 
 /* in delete.c */
 extern int do_delete(time_t backup_id);
-extern void pgBackupDelete(int keep_generations, int keep_days);
 extern int do_deletewal(time_t backup_id, bool strict);
+extern int do_retention_purge(void);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -266,16 +264,15 @@ extern void pgBackupValidate(pgBackup *backup,
 							 bool size_only,
 							 bool for_get_timeline);
 
-/* in catalog.c */
-extern pgBackup *catalog_get_backup(time_t timestamp);
+extern pgBackup *read_backup(time_t timestamp);
+extern void init_backup(pgBackup *backup);
+
 extern parray *catalog_get_backup_list(time_t backup_id);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 
-extern int catalog_lock(void);
+extern int catalog_lock(bool check_catalog);
 extern void catalog_unlock(void);
-
-extern void catalog_init_config(pgBackup *backup);
 
 extern void pgBackupWriteConfigSection(FILE *out, pgBackup *backup);
 extern void pgBackupWriteResultSection(FILE *out, pgBackup *backup);
