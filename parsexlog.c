@@ -83,8 +83,8 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 						 errormsg);
 			else
 				elog(ERROR, "could not read WAL record at %X/%X",
-						 (uint32) (startpoint >> 32),
-						 (uint32) (startpoint));
+						 (uint32) (errptr >> 32),
+						 (uint32) (errptr));
 		}
 
 		extractPageInfo(xlogreader);
@@ -139,17 +139,13 @@ validate_wal(pgBackup *backup,
 			}
 
 			if (errormsg)
-				elog(ERROR, "stop check WALs because could not read WAL record at %X/%X: %s\nend time:%s end xid:" XID_FMT,
+				elog(ERROR, "could not read WAL record at %X/%X: %s",
 						 (uint32) (errptr >> 32), (uint32) (errptr),
-						 errormsg,
-						 timestamp,
-						 last_xid);
+						 errormsg);
 			else
-				elog(ERROR, "could not read WAL record at %X/%X\nend time:%s end xid:" XID_FMT,
+				elog(ERROR, "could not read WAL record at %X/%X",
 						 (uint32) (errptr >> 32),
-						 (uint32) (errptr),
-						 timestamp,
-						 last_xid);
+						 (uint32) (errptr));
 		}
 
 		timestamp_record = getRecordTimestamp(xlogreader, &last_time);
@@ -214,15 +210,19 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		XLogFileName(xlogfname, private->tli, xlogreadsegno);
 		snprintf(xlogfpath, MAXPGPATH, "%s/%s", private->archivedir,
 				 xlogfname);
-		elog(LOG, "opening WAL segment \"%s\"", xlogfpath);
 
-		xlogreadfd = open(xlogfpath, O_RDONLY | PG_BINARY, 0);
-
-		if (xlogreadfd < 0)
+		if (fileExists(xlogfpath))
 		{
-			elog(INFO, "could not open WAL segment \"%s\": %s",
-				 xlogfpath, strerror(errno));
-			return -1;
+			elog(LOG, "opening WAL segment \"%s\"", xlogfpath);
+
+			xlogreadfd = open(xlogfpath, O_RDONLY | PG_BINARY, 0);
+
+			if (xlogreadfd < 0)
+			{
+				elog(INFO, "could not open WAL segment \"%s\": %s",
+					 xlogfpath, strerror(errno));
+				return -1;
+			}
 		}
 	}
 
