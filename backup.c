@@ -1415,12 +1415,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 
 		/* compress map file it is not data file */
 		if (path_len > 4 && strncmp(file->path+(path_len-4), ".cfm", 4) == 0)
-		{
-			if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
-				elog(ERROR, "You can't use PAGE mode backup with compressed tablespace.\n"
-							"Try FULL or PTRACK mode instead.");
 			continue;
-		}
 
 		/* name of data file start with digit */
 		if (fname == NULL)
