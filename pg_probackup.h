@@ -25,6 +25,10 @@
 #include "storage/block.h"
 #include "storage/checksum.h"
 
+#ifndef WIN32
+#include <sys/mman.h>
+#endif
+
 /* Query to fetch current transaction ID */
 #define TXID_CURRENT_SQL	"SELECT txid_current();"
 #define TXID_CURRENT_IF_SQL	"SELECT txid_snapshot_xmax(txid_current_snapshot());"
@@ -66,6 +70,10 @@ typedef struct pgFile
 	char	*path;			/* path of the file */
 	char	*ptrack_path;
 	int		segno;			/* Segment number for ptrack */
+	int		generation;		/* Generation of compressed file.
+							 * -1 for non-compressed files */
+	int	is_partial_copy; /* for compressed files.
+						  * 1 if backed up via copy_file_partly()  */
 	volatile uint32 lock;
 	datapagemap_t pagemap;
 } pgFile;
@@ -165,6 +173,26 @@ typedef union DataPage
 	PageHeaderData	page_data;
 	char			data[BLCKSZ];
 } DataPage;
+
+
+/*
+ * This struct definition mirrors one from cfs.h,
+ * but doesn't use atomic variables, since they are not allowed in
+ * frontend code.
+ */
+typedef struct
+{
+	uint32 physSize;
+	uint32 virtSize;
+	uint32 usedSize;
+	uint32 lock;
+	pid_t	postmasterPid;
+	uint64	generation;
+	uint64	inodes[RELSEG_SIZE];
+} FileMap;
+
+extern FileMap* cfs_mmap(int md);
+extern int cfs_munmap(FileMap* map);
 
 /*
  * return pointer that exceeds the length of prefix from character string.
@@ -309,8 +337,14 @@ extern bool backup_data_file(const char *from_root, const char *to_root,
 							 pgFile *file, const XLogRecPtr *lsn);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
+extern bool is_compressed_data_file(pgFile *file);
+extern bool backup_compressed_file_partially(pgFile *file,
+											 void *arg,
+											 size_t *skip_size);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
+extern bool copy_file_partly(const char *from_root, const char *to_root,
+				 pgFile *file, size_t skip_size);
 
 extern bool calc_file(pgFile *file);
 

@@ -113,7 +113,6 @@ backup_data_file(const char *from_root, const char *to_root,
 	/* confirm server version */
 	check_server_version();
 
-
 	/*
 	 * Read each page and write the page excluding hole. If it has been
 	 * determined that the page can be copied safely, but no page map
@@ -414,6 +413,120 @@ backup_data_file(const char *from_root, const char *to_root,
 }
 
 /*
+ * Restore compressed file that was backed up partly.
+ * 
+ */
+static void
+restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
+{
+	FILE	   *in;
+	FILE	   *out;
+	size_t		read_len = 0;
+	int			errno_tmp;
+	struct stat	st;
+	char		to_path[MAXPGPATH];
+	char		buf[8192];
+	size_t write_size = 0;
+
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	/* open backup mode file for read */
+	in = fopen(file->path, "r");
+	if (in == NULL)
+	{
+		elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
+			strerror(errno));
+	}
+	out = fopen(to_path, "r+");
+
+	/* stat source file to change mode of destination file */
+	if (fstat(fileno(in), &st) == -1)
+	{
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot stat \"%s\": %s", file->path,
+			 strerror(errno));
+	}
+
+	if (fseek(out, 0, SEEK_END) < 0)
+		elog(ERROR, "cannot seek END of \"%s\": %s",
+				to_path, strerror(errno));
+
+	/* copy everything from backup to the end of the file */
+	for (;;)
+	{
+		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
+			break;
+
+		if (fwrite(buf, 1, read_len, out) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR, "cannot write to \"%s\": %s", to_path,
+				 strerror(errno_tmp));
+		}
+		write_size += read_len;
+	}
+
+	errno_tmp = errno;
+	if (!feof(in))
+	{
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot read backup mode file \"%s\": %s",
+			 file->path, strerror(errno_tmp));
+	}
+
+	/* copy odd part. */
+	if (read_len > 0)
+	{
+		if (fwrite(buf, 1, read_len, out) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR, "cannot write to \"%s\": %s", to_path,
+				 strerror(errno_tmp));
+		}
+
+		write_size += read_len;
+	}
+
+// 	elog(LOG, "restore_file_partly(). %s write_size %lu, file->write_size %lu",
+// 			   file->path, write_size, file->write_size);
+
+	/* update file permission */
+	if (chmod(to_path, file->mode) == -1)
+	{
+		int errno_tmp = errno;
+
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
+			strerror(errno_tmp));
+	}
+
+	fclose(in);
+	fclose(out);
+}
+
+static void
+restore_compressed_file(const char *from_root,
+						const char *to_root,
+						pgFile *file)
+{
+	if (file->is_partial_copy == 0)
+		copy_file(from_root, to_root, file);
+	else if (file->is_partial_copy == 1)
+		restore_file_partly(from_root, to_root, file);
+	else
+		elog(ERROR, "restore_compressed_file(). Unknown is_partial_copy value %d",
+					file->is_partial_copy);
+}
+
+/*
  * Restore files in the from_root directory to the to_root directory with
  * same relative path.
  */
@@ -429,10 +542,17 @@ restore_data_file(const char *from_root,
 	BackupPageHeader	header;
 	BlockNumber			blknum;
 
-	/* If the file is not a datafile, just copy it. */
 	if (!file->is_datafile)
 	{
-		copy_file(from_root, to_root, file);
+		/*
+		 * If the file is not a datafile and not compressed file,
+		 * just copy it.
+		 */
+		if (file->generation == -1)
+			copy_file(from_root, to_root, file);
+		else
+			restore_compressed_file(from_root, to_root, file);
+
 		return;
 	}
 
@@ -550,6 +670,16 @@ restore_data_file(const char *from_root,
 
 	fclose(in);
 	fclose(out);
+}
+
+/* If someone's want to use this function before correct
+ * generation values is set, he can look up for corresponding
+ * .cfm file in the file_list
+ */
+bool
+is_compressed_data_file(pgFile *file)
+{
+	return (file->generation != -1);
 }
 
 bool
@@ -671,6 +801,140 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
 	}
+
+	fclose(in);
+	fclose(out);
+
+	if (check)
+		remove(to_path);
+
+	return true;
+}
+
+/*
+ * Save part of the file into backup.
+ * skip_size - size of the file in previous backup. We can skip it
+ *			   and copy just remaining part of the file
+ */
+bool
+copy_file_partly(const char *from_root, const char *to_root,
+				 pgFile *file, size_t skip_size)
+{
+	char		to_path[MAXPGPATH];
+	FILE	   *in;
+	FILE	   *out;
+	size_t		read_len = 0;
+	int			errno_tmp;
+	struct stat	st;
+	char		buf[8192];
+
+	/* reset size summary */
+	file->read_size = 0;
+	file->write_size = 0;
+
+	/* open backup mode file for read */
+	in = fopen(file->path, "r");
+	if (in == NULL)
+	{
+		/* maybe deleted, it's not error */
+		if (errno == ENOENT)
+			return false;
+
+		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
+			 strerror(errno));
+	}
+
+	/* open backup file for write  */
+	if (check)
+		snprintf(to_path, lengthof(to_path), "%s/tmp", backup_path);
+	else
+		join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+
+	out = fopen(to_path, "w");
+	if (out == NULL)
+	{
+		int errno_tmp = errno;
+		fclose(in);
+		elog(ERROR, "cannot open destination file \"%s\": %s",
+			 to_path, strerror(errno_tmp));
+	}
+
+	/* stat source file to change mode of destination file */
+	if (fstat(fileno(in), &st) == -1)
+	{
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot stat \"%s\": %s", file->path,
+			 strerror(errno));
+	}
+
+	if (fseek(in, skip_size, SEEK_SET) < 0)
+		elog(ERROR, "cannot seek %lu of \"%s\": %s",
+				skip_size, file->path, strerror(errno));
+
+	/*
+	 * copy content
+	 * NOTE: Now CRC is not computed for compressed files now.
+	 */
+	for (;;)
+	{
+		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
+			break;
+
+		if (fwrite(buf, 1, read_len, out) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR, "cannot write to \"%s\": %s", to_path,
+				 strerror(errno_tmp));
+		}
+
+		file->write_size += sizeof(buf);
+		file->read_size += sizeof(buf);
+	}
+
+	errno_tmp = errno;
+	if (!feof(in))
+	{
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot read backup mode file \"%s\": %s",
+			 file->path, strerror(errno_tmp));
+	}
+
+	/* copy odd part. */
+	if (read_len > 0)
+	{
+		if (fwrite(buf, 1, read_len, out) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR, "cannot write to \"%s\": %s", to_path,
+				 strerror(errno_tmp));
+		}
+
+		file->write_size += read_len;
+		file->read_size += read_len;
+	}
+
+	/* update file permission */
+	if (chmod(to_path, st.st_mode) == -1)
+	{
+		errno_tmp = errno;
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
+			 strerror(errno_tmp));
+	}
+
+	/* add meta information needed for recovery */
+	file->is_partial_copy = 1;
+
+//	elog(LOG, "copy_file_partly(). %s file->write_size %lu", to_path, file->write_size);
 
 	fclose(in);
 	fclose(out);
