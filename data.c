@@ -185,9 +185,14 @@ backup_data_file(const char *from_root, const char *to_root,
 	}
 	stat(file->path, &st);
 
-	if (st.st_size != file->size
-		|| file->size % BLCKSZ != 0)
-		elog(ERROR, "File: %s, file size %lu is incorrect", file->path, file->size);
+	if (st.st_size < file->size)
+		elog(ERROR, "File: %s, file was truncated after backup start. Expected size %lu",
+					 file->path, file->size);
+
+	if (file->size % BLCKSZ != 0)
+		elog(ERROR, "File: %s, file size %lu is incorrect",
+					 file->path, file->size);
+
 	nblocks = file->size/BLCKSZ;
 
 	/* open backup file for write  */
