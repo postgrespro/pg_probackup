@@ -22,13 +22,10 @@
 typedef struct BackupPageHeader
 {
 	BlockNumber	block;			/* block number */
-	uint16		hole_offset;	/* number of bytes before "hole" */
-	uint16		hole_length;	/* number of bytes in "hole" */
 } BackupPageHeader;
 
 static bool
-parse_page(const DataPage *page,
-		   XLogRecPtr *lsn, uint16 *offset, uint16 *length)
+parse_page(const DataPage *page, XLogRecPtr *lsn)
 {
 	const PageHeaderData *page_data = &page->page_data;
 
@@ -43,13 +40,8 @@ parse_page(const DataPage *page,
 		page_data->pd_upper <= page_data->pd_special &&
 		page_data->pd_special <= BLCKSZ &&
 		page_data->pd_special == MAXALIGN(page_data->pd_special))
-	{
-		*offset = page_data->pd_lower;
-		*length = page_data->pd_upper - page_data->pd_lower;
 		return true;
-	}
 
-	*offset = *length = 0;
 	return false;
 }
 
@@ -87,8 +79,7 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 			* If an invalid data page was found, fallback to simple copy to ensure
 			* all pages in the file don't have BackupPageHeader.
 			*/
-		if (!parse_page(&page, &page_lsn,
-						&header.hole_offset, &header.hole_length))
+		if (!parse_page(&page, &page_lsn))
 		{
 			int i;
 			/* Check if the page is zeroed. */
@@ -467,50 +458,39 @@ restore_data_file(const char *from_root,
 			if (read_len == 0 && feof(in))
 				break;		/* EOF found */
 			else if (read_len != 0 && feof(in))
-			{
 				elog(ERROR,
 					 "odd size page found at block %u of \"%s\"",
 					 blknum, file->path);
-			}
 			else
-			{
 				elog(ERROR, "cannot read block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno_tmp));
-			}
 		}
 
-		if (header.block < blknum || header.hole_offset > BLCKSZ ||
-			(int) header.hole_offset + (int) header.hole_length > BLCKSZ)
-		{
+		if (header.block < blknum)
 			elog(ERROR, "backup is broken at block %u",
 				 blknum);
-		}
 
-		upper_offset = header.hole_offset + header.hole_length;
-		upper_length = BLCKSZ - upper_offset;
 
-		/* read lower/upper into page.data and restore hole */
-		memset(page.data + header.hole_offset, 0, header.hole_length);
-
-		if (fread(page.data, 1, header.hole_offset, in) != header.hole_offset ||
-			fread(page.data + upper_offset, 1, upper_length, in) != upper_length)
-		{
+		if (fread(page.data, 1, BLCKSZ, in) != BLCKSZ)
 			elog(ERROR, "cannot read block %u of \"%s\": %s",
 				 blknum, file->path, strerror(errno));
-		}
 
 		/* update checksum because we are not save whole */
 		if(backup->checksum_version)
 		{
-			/* skip calc checksum if zero page */
+			bool is_zero_page = false;
+
 			if(page.page_data.pd_upper == 0)
 			{
 				int i;
-				for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
+				for(i = 0; i < BLCKSZ && page.data[i] == 0; i++);
 				if (i == BLCKSZ)
-					goto skip_checksum;
+					is_zero_page = true;
 			}
-			((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, file->segno * RELSEG_SIZE + header.block);
+
+			/* skip calc checksum if zero page */
+			if (!is_zero_page)
+				((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, file->segno * RELSEG_SIZE + header.block);
 		}
 
 		skip_checksum:
