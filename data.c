@@ -53,6 +53,107 @@ parse_page(const DataPage *page,
 	return false;
 }
 
+static void
+backup_data_page(pgFile *file, const XLogRecPtr *lsn,
+				BlockNumber blknum, FILE *in, FILE *out,
+				pg_crc32 *crc)
+{
+	BackupPageHeader	header;
+	off_t				offset;
+	DataPage			page; /* used as read buffer */
+	size_t				write_buffer_size = sizeof(header) + BLCKSZ;
+	char				write_buffer[write_buffer_size];
+	size_t				read_len = 0;
+	XLogRecPtr	page_lsn;
+	int 	ret;
+	int		try_checksum = 100;
+
+	header.block = blknum;
+	offset = blknum * BLCKSZ;
+
+	while(try_checksum--)
+	{
+		ret = fseek(in, offset, SEEK_SET);
+		if (ret != 0)
+			elog(ERROR, "Can't seek in file offset: %llu ret:%i\n",
+			(long long unsigned int) offset, ret);
+
+		read_len = fread(&page, 1, sizeof(page), in);
+		if (read_len != sizeof(page))
+			elog(ERROR, "File: %s, block size of block %u is incorrect %lu",
+						file->path, blknum, read_len);
+
+		/*
+			* If an invalid data page was found, fallback to simple copy to ensure
+			* all pages in the file don't have BackupPageHeader.
+			*/
+		if (!parse_page(&page, &page_lsn,
+						&header.hole_offset, &header.hole_length))
+		{
+			int i;
+			/* Check if the page is zeroed. */
+			for(i = 0; i < BLCKSZ && page.data[i] == 0; i++);
+			if (i == BLCKSZ)
+			{
+				// FIXME Fix this hell.
+				elog(ERROR, "File: %s blknum %u, empty page", file->path, blknum);
+			}
+
+			/* Try to read and verify this page again several times. */
+			if (try_checksum)
+			{
+				elog(WARNING, "File: %s blknum %u have wrong page header, try again",
+								file->path, blknum);
+				usleep(100);
+				continue;
+			}
+			else
+				elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
+		}
+
+		/*
+		 * Verify checksum.
+		 * If it's wrong, sleep a bit and then try again
+		 * several times. If it didn't help, throw error.
+		 */
+		if(current.checksum_version &&
+			pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
+		{
+			if (try_checksum)
+			{
+				elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
+								file->path, blknum);
+				usleep(100);
+			}
+			else
+				elog(ERROR, "File: %s blknum %u have wrong checksum.",
+								file->path, blknum);
+		}
+		else
+			try_checksum = 0;
+	}
+
+	file->read_size += read_len;
+
+	memcpy(write_buffer, &header, sizeof(header));
+	memcpy(write_buffer + sizeof(header), page.data, BLCKSZ);
+	/* write data page excluding hole */
+	if(fwrite(write_buffer, 1, write_buffer_size, out) != write_buffer_size)
+	{
+		int errno_tmp = errno;
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "File: %s, cannot write backup at block %u : %s",
+				file->path, blknum, strerror(errno_tmp));
+	}
+
+	/* update CRC */
+	COMP_CRC32C(*crc, &header, sizeof(header));
+	COMP_CRC32C(*crc, page.data, BLCKSZ);
+
+	file->write_size += write_buffer_size;
+}
+
 /*
  * Backup data file in the from_root directory to the to_root directory with
  * same relative path.
@@ -66,14 +167,10 @@ backup_data_file(const char *from_root, const char *to_root,
 	char				to_path[MAXPGPATH];
 	FILE				*in;
 	FILE				*out;
-	BackupPageHeader	header;
-	DataPage			page; /* used as read buffer */
 	BlockNumber			blknum = 0;
-	size_t				read_len = 0;
+	BlockNumber			nblocks = 0;
 	pg_crc32			crc;
-	off_t				offset;
-	char				write_buffer[sizeof(header)+BLCKSZ];
-	size_t				write_buffer_real_size;
+	struct stat 		st;
 
 	INIT_CRC32C(crc);
 
@@ -95,6 +192,12 @@ backup_data_file(const char *from_root, const char *to_root,
 		elog(ERROR, "cannot open backup mode file \"%s\": %s",
 			 file->path, strerror(errno));
 	}
+	stat(file->path, &st);
+
+	if (st.st_size != file->size
+		|| file->read_size % BLCKSZ != 0)
+		elog(ERROR, "File: %s, file size is incorrect", file->path);
+	nblocks = file->size/BLCKSZ;
 
 	/* open backup file for write  */
 	if (check)
@@ -123,251 +226,16 @@ backup_data_file(const char *from_root, const char *to_root,
 	 */
 	if (file->pagemap.bitmapsize == 0)
 	{
-		for (blknum = 0;
-			 (read_len = fread(&page, 1, sizeof(page), in)) == sizeof(page);
-			 ++blknum)
-		{
-			XLogRecPtr	page_lsn;
-			int		upper_offset;
-			int		upper_length;
-			int		try_checksum = 100;
-			bool	stop_backup = false;
-
-			header.block = blknum;
-
-			while(try_checksum)
-			{
-				try_checksum--;
-				/*
-				 * If an invalid data page was found, fallback to simple copy to ensure
-				 * all pages in the file don't have BackupPageHeader.
-				 */
-				if (!parse_page(&page, &page_lsn,
-								&header.hole_offset, &header.hole_length))
-				{
-					struct stat st;
-					int i;
-
-					for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
-					if (i == BLCKSZ)
-					{
-						elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
-						goto end_checks;
-					}
-
-					stat(file->path, &st);
-					elog(WARNING, "SIZE: %lu %lu pages:%lu pages:%lu i:%i", file->size, st.st_size, file->size/BLCKSZ, st.st_size/BLCKSZ, i);
-					if (st.st_size != file->size && blknum >= file->size/BLCKSZ-1)
-					{
-						stop_backup = true;
-						elog(WARNING, "File: %s blknum %u, file size has changed before backup start", file->path, blknum);
-						break;
-					}
-					if (blknum >= file->size/BLCKSZ-1)
-					{
-						stop_backup = true;
-						elog(WARNING, "File: %s blknum %u, the last page is empty, skip", file->path, blknum);
-						break;
-					}
-					if (st.st_size != file->size && blknum < file->size/BLCKSZ-1)
-					{
-						elog(WARNING, "File: %s blknum %u, file size has changed before backup start, it seems bad", file->path, blknum);
-						if (!try_checksum)
-							break;
-					}
-					if (try_checksum)
-					{
-						elog(WARNING, "File: %s blknum %u have wrong page header, try again", file->path, blknum);
-						fseek(in, -sizeof(page), SEEK_CUR);
-						fread(&page, 1, sizeof(page), in);
-						continue;
-					}
-					else
-						elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
-				}
-
-
-				if(current.checksum_version &&
-				   pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
-				{
-					if (try_checksum)
-					{
-						elog(WARNING, "File: %s blknum %u have wrong checksum, try again", file->path, blknum);
-						usleep(100);
-						fseek(in, -sizeof(page), SEEK_CUR);
-						fread(&page, 1, sizeof(page), in);
-					}
-					else
-						elog(ERROR, "File: %s blknum %u have wrong checksum.", file->path, blknum);
-				} else {
-					try_checksum = 0;
-				}
-			}
-
-			end_checks:
-
-			file->read_size += read_len;
-
-			if(stop_backup)
-				break;
-
-			/* Disable page cut */
-			header.hole_length = header.hole_offset = 0;
-
-			upper_offset = header.hole_offset + header.hole_length;
-			upper_length = BLCKSZ - upper_offset;
-
-			write_buffer_real_size = sizeof(header)+header.hole_offset+upper_length;
-			memcpy(write_buffer, &header, sizeof(header));
-			if (header.hole_offset)
-				memcpy(write_buffer+sizeof(header), page.data, header.hole_offset);
-			if (upper_length)
-				memcpy(write_buffer+sizeof(header)+header.hole_offset, page.data + upper_offset, upper_length);
-
-			/* write data page excluding hole */
-			if(fwrite(write_buffer, 1, write_buffer_real_size, out) != write_buffer_real_size)
-			{
-				int errno_tmp = errno;
-				/* oops */
-				fclose(in);
-				fclose(out);
-				elog(ERROR, "cannot write at block %u of \"%s\": %s",
-					 blknum, to_path, strerror(errno_tmp));
-			}
-
-			/* update CRC */
-			COMP_CRC32C(crc, &header, sizeof(header));
-			COMP_CRC32C(crc, page.data, header.hole_offset);
-			COMP_CRC32C(crc, page.data + upper_offset, upper_length);
-
-			file->write_size += sizeof(header) + read_len - header.hole_length;
-		}
+		for (blknum = 0; blknum < nblocks; blknum++)
+			backup_data_page(file, lsn, blknum, in, out, &crc);
 	}
 	else
 	{
 		datapagemap_iterator_t *iter;
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
-		{
-			XLogRecPtr	page_lsn;
-			int		upper_offset;
-			int		upper_length;
-			int 	ret;
-			int		try_checksum = 100;
-			bool	stop_backup = false;
+			backup_data_page(file, lsn, blknum, in, out, &crc);
 
-			offset = blknum * BLCKSZ;
-			while(try_checksum)
-			{
-				if (offset > 0)
-				{
-					ret = fseek(in, offset, SEEK_SET);
-					if (ret != 0)
-						elog(ERROR,
-							 "Can't seek in file offset: %llu ret:%i\n",
-							 (long long unsigned int) offset, ret);
-				}
-				read_len = fread(&page, 1, sizeof(page), in);
-
-				header.block = blknum;
-
-				try_checksum--;
-
-				/*
-				 * If an invalid data page was found, fallback to simple copy to ensure
-				 * all pages in the file don't have BackupPageHeader.
-				 */
-				if (!parse_page(&page, &page_lsn,
-								&header.hole_offset, &header.hole_length))
-				{
-					struct stat st;
-					int i;
-
-					for(i=0; i<BLCKSZ && page.data[i] == 0; i++);
-					if (i == BLCKSZ)
-					{
-						elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
-						goto end_checks2;
-					}
-
-					stat(file->path, &st);
-					elog(WARNING, "PTRACK SIZE: %lu %lu pages:%lu pages:%lu i:%i", file->size, st.st_size, file->size/BLCKSZ, st.st_size/BLCKSZ, i);
-					if (st.st_size != file->size && blknum >= file->size/BLCKSZ-1)
-					{
-						stop_backup = true;
-						elog(WARNING, "File: %s blknum %u, file size has changed before backup start", file->path, blknum);
-						break;
-					}
-					if (st.st_size != file->size && blknum < file->size/BLCKSZ-1)
-					{
-						elog(WARNING, "File: %s blknum %u, file size has changed before backup start, it seems bad", file->path, blknum);
-						if (!try_checksum)
-							break;
-					}
-					if (try_checksum)
-					{
-						elog(WARNING, "File: %s blknum %u have wrong page header, try again", file->path, blknum);
-						usleep(100);
-						fseek(in, -sizeof(page), SEEK_CUR);
-						fread(&page, 1, sizeof(page), in);
-						continue;
-					}
-					else
-						elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
-				}
-
-				if(current.checksum_version &&
-				   pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
-				{
-					if (try_checksum)
-						elog(LOG, "File: %s blknum %u have wrong checksum, try again", file->path, blknum);
-					else
-						elog(ERROR, "File: %s blknum %u have wrong checksum.", file->path, blknum);
-				}
-				else
-				{
-					try_checksum = 0;
-				}
-			}
-
-			file->read_size += read_len;
-
-			if(stop_backup)
-				break;
-
-			end_checks2:
-
-			/* Disable page cut */
-			header.hole_length = header.hole_offset = 0;
-
-			upper_offset = header.hole_offset + header.hole_length;
-			upper_length = BLCKSZ - upper_offset;
-
-			write_buffer_real_size = sizeof(header)+header.hole_offset+upper_length;
-			memcpy(write_buffer, &header, sizeof(header));
-			if (header.hole_offset)
-				memcpy(write_buffer+sizeof(header), page.data, header.hole_offset);
-			if (upper_length)
-				memcpy(write_buffer+sizeof(header)+header.hole_offset, page.data + upper_offset, upper_length);
-
-			/* write data page excluding hole */
-			if(fwrite(write_buffer, 1, write_buffer_real_size, out) != write_buffer_real_size)
-			{
-				int errno_tmp = errno;
-				/* oops */
-				fclose(in);
-				fclose(out);
-				elog(ERROR, "cannot write at block %u of \"%s\": %s",
-					 blknum, to_path, strerror(errno_tmp));
-			}
-
-			/* update CRC */
-			COMP_CRC32C(crc, &header, sizeof(header));
-			COMP_CRC32C(crc, page.data, header.hole_offset);
-			COMP_CRC32C(crc, page.data + upper_offset, upper_length);
-
-			file->write_size += sizeof(header) + read_len - header.hole_length;
-		}
 		pg_free(iter);
 		/*
 		 * If we have pagemap then file can't be a zero size.
@@ -378,10 +246,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			file->read_size++;
 	}
 
-	/*
-	 * update file permission
-	 * FIXME: Should set permission on open?
-	 */
+	/* update file permission */
 	if (!check && chmod(to_path, FILE_PERMISSION) == -1)
 	{
 		int errno_tmp = errno;
