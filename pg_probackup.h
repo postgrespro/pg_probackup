@@ -192,7 +192,7 @@ extern bool check;
 extern pgBackup current;
 
 /* exclude directory list for $PGDATA file listing */
-extern const char *pgdata_exclude[];
+extern const char *pgdata_exclude_dir[];
 
 /* backup file list from non-snapshot */
 extern parray *backup_files_list;
@@ -284,9 +284,10 @@ extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 
 /* in dir.c */
-extern void dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_symlink, bool add_root);
-extern void dir_list_file_internal(parray *files, const char *root, const char *exclude[],
-					bool omit_symlink, bool add_root, parray *black_list);
+extern void dir_list_file(parray *files, const char *root, bool exclude,
+						  bool omit_symlink, bool add_root);
+extern void dir_list_file_internal(parray *files, const char *root, bool exclude,
+						  bool omit_symlink, bool add_root, parray *black_list);
 extern void dir_print_mkdirs_sh(FILE *out, const parray *files, const char *root);
 extern void dir_print_file_list(FILE *out, const parray *files, const char *root, const char *prefix);
 extern parray *dir_read_file_list(const char *root, const char *file_txt);

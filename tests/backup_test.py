@@ -1,5 +1,5 @@
 import unittest
-from os import path
+from os import path, listdir
 import six
 from .pb_lib import ProbackupTest
 from testgres import stop_all
@@ -34,6 +34,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 		full_backup_id = show_backup.id
 		self.assertEqual(show_backup.status, six.b("OK"))
 		self.assertEqual(show_backup.mode, six.b("FULL"))
+
+		# postmaster.pid and postmaster.opts shouldn't be copied
+		excluded = True
+		backups_dir = path.join(self.backup_dir(node), "backups")
+		for backup in listdir(backups_dir):
+			db_dir = path.join(backups_dir, backup, "database")
+			for f in listdir(db_dir):
+				if path.isfile(path.join(db_dir, f)) and \
+					(f == "postmaster.pid" or f == "postmaster.opts"):
+					excluded = False
+		self.assertEqual(excluded, True)
 
 		# page backup mode
 		with open(path.join(node.logs_dir, "backup_page.log"), "wb") as backup_log:

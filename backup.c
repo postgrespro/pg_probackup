@@ -205,7 +205,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	 * mkdirs.sh, then sort them in order of path. Omit $PGDATA.
 	 */
 	backup_files_list = parray_new();
-	dir_list_file(backup_files_list, pgdata, NULL, false, false);
+	dir_list_file(backup_files_list, pgdata, false, false, false);
 
 	if (!check)
 	{
@@ -396,7 +396,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 		/* Scan backup pg_xlog dir */
 		list_file = parray_new();
 		join_path_components(pg_xlog_path, path, "pg_xlog");
-		dir_list_file(list_file, pg_xlog_path, NULL, true, false);
+		dir_list_file(list_file, pg_xlog_path, false, true, false);
 
 		/* Remove file path root prefix and calc meta */
 		for (i = 0; i < parray_num(list_file); i++)
@@ -1233,7 +1233,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 	list_file = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(list_file, root, pgdata_exclude, true, add_root);
+	dir_list_file(list_file, root, true, true, add_root);
 
 	/* mark files that are possible datafile as 'datafile' */
 	for (i = 0; i < (int) parray_num(list_file); i++)

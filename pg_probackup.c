@@ -174,12 +174,12 @@ main(int argc, char *argv[])
 	join_path_components(arclog_path, backup_path, "wal");
 
 	/* setup exclusion list for file search */
-	for (i = 0; pgdata_exclude[i]; i++);		/* find first empty slot */
+	for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
 
-	pgdata_exclude[i++] = arclog_path;
+	pgdata_exclude_dir[i++] = arclog_path;
 
 	if(!backup_logs)
-		pgdata_exclude[i++] = "pg_log";
+		pgdata_exclude_dir[i++] = "pg_log";
 
 	if (target_time != NULL && target_xid != NULL)
 		elog(ERROR, "You can't specify recovery-target-time and recovery-target-xid at the same time");

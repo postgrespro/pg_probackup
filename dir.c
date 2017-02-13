@@ -20,16 +20,21 @@
 #include "datapagemap.h"
 
 /* directory exclusion list for backup mode listing */
-const char *pgdata_exclude[] =
+const char *pgdata_exclude_dir[] =
 {
 	"pg_xlog",
 	"pg_stat_tmp",
 	"pgsql_tmp",
+	NULL,			/* arclog_path will be set later */
+	NULL,			/* pg_log will be set later */
+	NULL
+};
+
+static char *pgdata_exclude_files[] =
+{
 	"recovery.conf",
 	"postmaster.pid",
 	"postmaster.opts",
-	NULL,			/* arclog_path will be set later */
-	NULL,			/* pg_log will be set later */
 	NULL
 };
 
@@ -249,7 +254,8 @@ BlackListCompare(const void *str1, const void *str2)
  * directory llnked to will be listed.
  */
 void
-dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_symlink, bool add_root)
+dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
+			  bool add_root)
 {
 	char path[MAXPGPATH];
 	char buf[MAXPGPATH * 2];
@@ -288,8 +294,8 @@ dir_list_file(parray *files, const char *root, const char *exclude[], bool omit_
 }
 
 void
-dir_list_file_internal(parray *files, const char *root, const char *exclude[],
-			bool omit_symlink, bool add_root, parray *black_list)
+dir_list_file_internal(parray *files, const char *root, bool exclude,
+					   bool omit_symlink, bool add_root, parray *black_list)
 {
 	pgFile *file;
 
@@ -305,7 +311,33 @@ dir_list_file_internal(parray *files, const char *root, const char *exclude[],
 	}
 
 	if (add_root)
+	{
+		/* Skip files */
+		if (!S_ISDIR(file->mode) && exclude)
+		{
+			char	    *file_name;
+			int			i;
+
+			/* Extract file name */
+			file_name = strrchr(file->path, '/');
+			if (file_name == NULL)
+				file_name = file->path;
+			else
+				file_name++;
+
+			/*
+			 * If the item in the exclude list starts with '/', compare to the
+			 * absolute path of the directory. Otherwise compare to the directory
+			 * name portion.
+			 */
+			for (i = 0; pgdata_exclude_files[i]; i++)
+				if (strcmp(file_name, pgdata_exclude_files[i]) == 0)
+					/* Skip */
+					return;
+		}
+
 		parray_append(files, file);
+	}
 
 	/* chase symbolic link chain and find regular file or directory */
 	while (S_ISLNK(file->mode))
@@ -351,45 +383,49 @@ dir_list_file_internal(parray *files, const char *root, const char *exclude[],
 	 */
 	while (S_ISDIR(file->mode))
 	{
-		int				i;
 		bool			skip = false;
 		DIR			    *dir;
 		struct dirent   *dent;
-		char		    *dirname;
 
-		/* skip entry which matches exclude list */
-	   	dirname = strrchr(file->path, '/');
-		if (dirname == NULL)
-			dirname = file->path;
-		else
-			dirname++;
-
-		/*
-		 * If the item in the exclude list starts with '/', compare to the
-		 * absolute path of the directory. Otherwise compare to the directory
-		 * name portion.
-		 */
-		for (i = 0; exclude && exclude[i]; i++)
+		if (exclude)
 		{
-			if (exclude[i][0] == '/')
-			{
-				if (strcmp(file->path, exclude[i]) == 0)
-				{
-					skip = true;
-					break;
-				}
-			}
+			int			i;
+			char	    *dirname;
+
+			/* skip entry which matches exclude list */
+			dirname = strrchr(file->path, '/');
+			if (dirname == NULL)
+				dirname = file->path;
 			else
+				dirname++;
+
+			/*
+			 * If the item in the exclude list starts with '/', compare to the
+			 * absolute path of the directory. Otherwise compare to the directory
+			 * name portion.
+			 */
+			for (i = 0; exclude && pgdata_exclude_dir[i]; i++)
 			{
-				if (strcmp(dirname, exclude[i]) == 0)
+				if (pgdata_exclude_dir[i][0] == '/')
 				{
-					skip = true;
-					break;
+					if (strcmp(file->path, pgdata_exclude_dir[i]) == 0)
+					{
+						skip = true;
+						break;
+					}
+				}
+				else
+				{
+					if (strcmp(dirname, pgdata_exclude_dir[i]) == 0)
+					{
+						skip = true;
+						break;
+					}
 				}
 			}
+			if (skip)
+				break;
 		}
-		if (skip)
-			break;
 
 		/* open directory and list contents */
 		dir = opendir(file->path);
@@ -636,7 +672,7 @@ dir_copy_files(const char *from_root, const char *to_root)
 	parray *files = parray_new();
 
 	/* don't copy root directory */
-	dir_list_file(files, from_root, NULL, true, false);
+	dir_list_file(files, from_root, false, true, false);
 
 	for (i = 0; i < parray_num(files); i++)
 	{

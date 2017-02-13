@@ -160,7 +160,7 @@ base_backup_found:
 		elog(LOG, "clearing restore destination");
 
 		files = parray_new();
-		dir_list_file(files, pgdata, NULL, false, false);
+		dir_list_file(files, pgdata, false, false, false);
 		parray_qsort(files, pgFileComparePathDesc);	/* delete from leaf */
 
 		for (i = 0; i < parray_num(files); i++)
@@ -364,7 +364,7 @@ restore_database(pgBackup *backup)
 
 		/* get list of files restored to pgdata */
 		files_now = parray_new();
-		dir_list_file(files_now, pgdata, pgdata_exclude, true, false);
+		dir_list_file(files_now, pgdata, true, true, false);
 		/* to delete from leaf, sort in reversed order */
 		parray_qsort(files_now, pgFileComparePathDesc);
 
