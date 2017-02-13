@@ -211,6 +211,9 @@ backup_data_file(const char *from_root, const char *to_root,
 			if(stop_backup)
 				break;
 
+			/* Disable page cut */
+			header.hole_length = header.hole_offset = 0;
+
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
 
@@ -333,7 +336,10 @@ backup_data_file(const char *from_root, const char *to_root,
 				break;
 
 			end_checks2:
-			
+
+			/* Disable page cut */
+			header.hole_length = header.hole_offset = 0;
+
 			upper_offset = header.hole_offset + header.hole_length;
 			upper_length = BLCKSZ - upper_offset;
 
