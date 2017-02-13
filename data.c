@@ -47,7 +47,8 @@ parse_page(const DataPage *page, XLogRecPtr *lsn)
 
 static void
 backup_data_page(pgFile *file, const XLogRecPtr *lsn,
-				BlockNumber blknum, FILE *in, FILE *out,
+				BlockNumber blknum, BlockNumber nblocks,
+				FILE *in, FILE *out,
 				pg_crc32 *crc)
 {
 	BackupPageHeader	header;
@@ -72,8 +73,8 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 
 		read_len = fread(&page, 1, sizeof(page), in);
 		if (read_len != sizeof(page))
-			elog(ERROR, "File: %s, block size of block %u is incorrect %lu",
-						file->path, blknum, read_len);
+			elog(ERROR, "File: %s, block size of block %u of nblocks %u is incorrect %lu",
+						file->path, blknum, nblocks, read_len);
 
 		/*
 			* If an invalid data page was found, fallback to simple copy to ensure
@@ -223,14 +224,14 @@ backup_data_file(const char *from_root, const char *to_root,
 	if (file->pagemap.bitmapsize == 0)
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
-			backup_data_page(file, lsn, blknum, in, out, &crc);
+			backup_data_page(file, lsn, blknum, nblocks, in, out, &crc);
 	}
 	else
 	{
 		datapagemap_iterator_t *iter;
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
-			backup_data_page(file, lsn, blknum, in, out, &crc);
+			backup_data_page(file, lsn, blknum, nblocks, in, out, &crc);
 
 		pg_free(iter);
 		/*
