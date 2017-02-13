@@ -26,9 +26,10 @@ const char *pgdata_exclude[] =
 	"pg_stat_tmp",
 	"pgsql_tmp",
 	"recovery.conf",
+	"postmaster.pid",
+	"postmaster.opts",
 	NULL,			/* arclog_path will be set later */
-	NULL,			/* 'pg_tblspc' will be set later */
-	NULL,			/* sentinel */
+	NULL,			/* pg_log will be set later */
 	NULL
 };
 
