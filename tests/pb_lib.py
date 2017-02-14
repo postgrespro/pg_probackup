@@ -19,17 +19,30 @@ def dir_files(base_dir):
 
 class ShowBackup(object):
 	def __init__(self, split_line):
-		self.id = split_line[0]
+		self.counter = 0
+
+		self.id = self.get_inc(split_line)
 		# TODO: parse to datetime
-		self.recovery_time = "%s %s" % (split_line[1], split_line[2])
-		self.mode = split_line[3]
-		self.cur_tli = split_line[4]
-		self.parent_tli = split_line[6]
+		if len(split_line) == 10:
+			self.recovery_time = "%s %s" % (self.get_inc(split_line),
+				self.get_inc(split_line))
+		# if recovery time is '----'
+		else:
+			self.recovery_time = self.get_inc(split_line)
+		self.mode = self.get_inc(split_line)
+		self.cur_tli = self.get_inc(split_line)
+		# slash
+		self.counter += 1
+		self.parent_tli = self.get_inc(split_line)
 		# TODO: parse to interval
-		self.time = split_line[7]
+		self.time = self.get_inc(split_line)
 		# TODO: maybe rename to size?
-		self.data = split_line[8]
-		self.status = split_line[9]
+		self.data = self.get_inc(split_line)
+		self.status = self.get_inc(split_line)
+
+	def get_inc(self, split_line):
+		self.counter += 1
+		return split_line[self.counter - 1]
 
 
 class ProbackupTest(object):

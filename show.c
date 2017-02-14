@@ -189,13 +189,14 @@ show_backup_list(FILE *out, parray *backup_list)
 		pgBackup *backup;
 		const char *modes[] = { "", "PAGE", "PTRACK", "FULL", "", "PAGE+STREAM", "PTRACK+STREAM", "FULL+STREAM"};
 		TimeLineID  parent_tli;
-		char timestamp[20];
+		char timestamp[20] = "----";
 		char duration[20] = "----";
 		char data_bytes_str[10] = "----";
 
 		backup = parray_get(backup_list, i);
 
-		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		if (backup->recovery_time != (time_t) 0)
+			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 		if (backup->end_time != (time_t) 0)
 			snprintf(duration, lengthof(duration), "%lum",
 				(backup->end_time - backup->start_time) / 60);
