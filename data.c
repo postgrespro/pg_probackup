@@ -60,6 +60,7 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 	XLogRecPtr	page_lsn;
 	int 	ret;
 	int		try_checksum = 100;
+	struct stat 		st;
 
 	header.block = blknum;
 	offset = blknum * BLCKSZ;
@@ -72,9 +73,22 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 			(long long unsigned int) offset, ret);
 
 		read_len = fread(&page, 1, sizeof(page), in);
+
 		if (read_len != sizeof(page))
-			elog(ERROR, "File: %s, block size of block %u of nblocks %u is incorrect %lu",
+		{
+			stat(file->path, &st);
+
+			if (st.st_size/BLCKSZ <= blknum)
+			{
+				elog(WARNING, "File: %s, file was truncated after backup start."
+							"Expected nblocks %u. Real nblocks %ld. Cannot read block %u ",
+							file->path, nblocks, st.st_size/BLCKSZ, blknum);
+				return;
+			}
+			else
+				elog(ERROR, "File: %s, block size of block %u of nblocks %u is incorrect %lu",
 						file->path, blknum, nblocks, read_len);
+		}
 
 		/*
 			* If an invalid data page was found, fallback to simple copy to ensure
@@ -187,7 +201,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	stat(file->path, &st);
 
 	if (st.st_size < file->size)
-		elog(ERROR, "File: %s, file was truncated after backup start. Expected size %lu",
+		elog(WARNING, "File: %s, file was truncated after backup start. Expected size %lu",
 					 file->path, file->size);
 
 	if (file->size % BLCKSZ != 0)
@@ -456,8 +470,6 @@ restore_data_file(const char *from_root,
 	{
 		size_t		read_len;
 		DataPage	page;		/* used as read buffer */
-		int			upper_offset;
-		int			upper_length;
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -501,8 +513,6 @@ restore_data_file(const char *from_root,
 			if (!is_zero_page)
 				((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, file->segno * RELSEG_SIZE + header.block);
 		}
-
-		skip_checksum:
 
 		/*
 		 * Seek and write the restored page. Backup might have holes in
