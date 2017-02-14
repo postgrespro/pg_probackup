@@ -89,7 +89,21 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 		self.clean_pb(node)
 		self.assertEqual(self.init_pb(node), six.b(""))
 
-		# TODO: keep data generations
+		# Command line parameters should override file values
+		self.init_pb(node)
+		with open(path.join(self.backup_dir(node), "pg_probackup.conf"), "a") as conf:
+			conf.write("REDUNDANCY=1\n")
+
+		self.assertEqual(
+			self.retention_show(node, ["--redundancy", "2"]),
+			six.b("# retention policy\nREDUNDANCY=2\n")
+		)
+
+		# User cannot send --system-identifier parameter via command line
+		self.assertEqual(
+			self.backup_pb(node, options=["--system-identifier", "123"]),
+			six.b("ERROR: option system-identifier cannot be specified in command line\n")
+		)
 
 		# invalid value in pg_probackup.conf
 		with open(path.join(self.backup_dir(node), "pg_probackup.conf"), "a") as conf:

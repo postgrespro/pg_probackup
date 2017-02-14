@@ -349,12 +349,10 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 			 * they were originally written, in case this worries you.
 			 */
 			if (IsXLogFileName(arcde->d_name) ||
-				IsPartialXLogFileName(arcde->d_name) ||
-				IsBackupHistoryFileName(arcde->d_name))
+				IsPartialXLogFileName(arcde->d_name))
 			{
 				if (XLogRecPtrIsInvalid(oldest_lsn) ||
-					strncmp(arcde->d_name, oldestSegmentNeeded,
-							XLOG_FNAME_LEN) < 0)
+					strcmp(arcde->d_name + 8, oldestSegmentNeeded + 8) < 0)
 				{
 					/*
 					 * Use the original file name again now, including any

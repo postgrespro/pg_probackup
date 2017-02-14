@@ -195,6 +195,14 @@ class ProbackupTest(object):
 
 		return self.run_pb(options + cmd_list)
 
+	def retention_show(self, node, options=[]):
+		cmd_list = [
+			"-B", self.backup_dir(node),
+			"retention", "show",
+		]
+
+		return self.run_pb(options + cmd_list)
+
 	def get_control_data(self, node):
 		pg_controldata = node.get_bin_path("pg_controldata")
 		out_data = {}
