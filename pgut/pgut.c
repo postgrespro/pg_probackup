@@ -631,9 +631,10 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)
 	{
 		opt = option_find(c, default_options, options);
-		if (opt->allowed < SOURCE_CMDLINE)
+		if (opt && opt->allowed < SOURCE_CMDLINE)
 			elog(ERROR, "option %s cannot be specified in command line",
 				 opt->lname);
+		/* Check 'opt == NULL' is performed in assign_option() */
 		assign_option(opt, optarg, SOURCE_CMDLINE);
 	}
 

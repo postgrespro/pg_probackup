@@ -75,7 +75,7 @@ static pgut_option options[] =
 	{ 's',  5, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
 	{ 'u',  6, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	/* delete options */
-	{ 'b', 12, "wal",					&delete_wal },
+	{ 'b', 12, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	/* retention options */
 	{ 'u', 13, "redundancy",			&retention_redundancy,	SOURCE_CMDLINE },
 	{ 'u', 14, "window",				&retention_window,		SOURCE_CMDLINE },
