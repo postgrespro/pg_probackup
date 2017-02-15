@@ -106,36 +106,44 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 				elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
 			}
 
-			/* Try to read and verify this page again several times. */
-			if (try_checksum)
+			/*
+			 * If page is not completely empty and we couldn't parse it,
+			 * try again several times. If it didn't help, throw error
+			 */
+			if (!is_zero_page)
 			{
-				elog(WARNING, "File: %s blknum %u have wrong page header, try again",
-								file->path, blknum);
-				usleep(100);
-				continue;
+				/* Try to read and verify this page again several times. */
+				if (try_checksum)
+				{
+					elog(WARNING, "File: %s blknum %u have wrong page header, try again",
+									file->path, blknum);
+					usleep(100);
+					continue;
+				}
+				else
+					elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
 			}
-			else
-				elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
 		}
 
-		/*
-		 * Verify checksum.
-		 * If it's wrong, sleep a bit and then try again
-		 * several times. If it didn't help, throw error.
-		 */
-		if(!is_zero_page &&
-			current.checksum_version &&
-			pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
+		/* Verify checksum */
+		if(current.checksum_version && !is_zero_page)
 		{
-			if (try_checksum)
+			/*
+			 * If checksum is wrong, sleep a bit and then try again
+			 * several times. If it didn't help, throw error
+			 */
+			if (pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
 			{
-				elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
-								file->path, blknum);
-				usleep(100);
+				if (try_checksum)
+				{
+					elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
+									file->path, blknum);
+					usleep(100);
+				}
+				else
+					elog(ERROR, "File: %s blknum %u have wrong checksum.",
+									file->path, blknum);
 			}
-			else
-				elog(ERROR, "File: %s blknum %u have wrong checksum.",
-								file->path, blknum);
 		}
 		else
 			try_checksum = 0;
