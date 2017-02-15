@@ -1105,6 +1105,75 @@ backup_cleanup(bool fatal, void *userdata)
 	}
 }
 
+/* Count bytes in file */
+static long
+file_size(const char *file)
+{
+	long		r;
+	FILE	   *f = fopen(file, "r");
+
+	if (!f)
+	{
+		elog(ERROR, "pg_probackup: could not open file \"%s\" for reading: %s\n",
+				file, strerror(errno));
+		return -1;
+	}
+	fseek(f, 0, SEEK_END);
+	r = ftell(f);
+	fclose(f);
+	return r;
+}
+
+/*
+ * Find corresponding file in previous backup.
+ * Compare generations and return true if we don't need full copy
+ * of the file, but just part of it.
+ *
+ * skip_size - size of the file in previous backup. We can skip it
+ *			   and copy just remaining part of the file.
+ */
+bool
+backup_compressed_file_partially(pgFile *file, void *arg, size_t *skip_size)
+{
+	bool result = false;
+	pgFile *prev_file = NULL;
+	size_t current_file_size;
+	backup_files_args *arguments = (backup_files_args *) arg;
+
+	if (arguments->prev_files)
+	{
+		pgFile **p = (pgFile **) parray_bsearch(arguments->prev_files,
+												file, pgFileComparePath);
+		if (p)
+			prev_file = *p;
+
+		/* If file's gc generation has changed since last backup, just copy it*/
+		if (prev_file && prev_file->generation == file->generation)
+		{
+			current_file_size = file_size(file->path);
+
+			if (prev_file->write_size == BYTES_INVALID)
+				return false;
+
+			*skip_size = prev_file->write_size;
+
+			if (current_file_size >= prev_file->write_size)
+			{
+				elog(LOG, "Backup file %s partially: prev_size %lu, current_size  %lu",
+					 file->path, prev_file->write_size, current_file_size);
+				result = true;
+			}
+			else
+				elog(ERROR, "Something is wrong with %s. current_file_size %lu, prev %lu",
+					file->path, current_file_size, prev_file->write_size);
+		}
+		else
+			elog(LOG, "Copy full %s.", file->path);
+	}
+
+	return result;
+}
+
 /*
  * Take differential backup at page level.
  */
@@ -1203,9 +1272,47 @@ backup_files(void *arg)
 			}
 
 			/* copy the file into backup */
-			if (!(file->is_datafile
-					? backup_data_file(arguments->from_root, arguments->to_root, file, arguments->lsn)
-					: copy_file(arguments->from_root, arguments->to_root, file)))
+			if (file->is_datafile)
+			{
+				if (!backup_data_file(arguments->from_root,
+									  arguments->to_root, file,
+									  arguments->lsn))
+				{
+					/* record as skipped file in file_xxx.txt */
+					file->write_size = BYTES_INVALID;
+					elog(LOG, "skip");
+					continue;
+				}
+			}
+			else if (is_compressed_data_file(file))
+			{
+				size_t skip_size = 0;
+				if (backup_compressed_file_partially(file, arguments, &skip_size))
+				{
+					/* backup cfs segment partly */
+					if (!copy_file_partly(arguments->from_root,
+							   arguments->to_root,
+							   file, skip_size))
+					{
+						/* record as skipped file in file_xxx.txt */
+						file->write_size = BYTES_INVALID;
+						elog(LOG, "skip");
+						continue;
+					}
+				}
+				else if (!copy_file(arguments->from_root,
+							   arguments->to_root,
+							   file))
+				{
+					/* record as skipped file in file_xxx.txt */
+					file->write_size = BYTES_INVALID;
+					elog(LOG, "skip");
+					continue;
+				}
+			}
+			else if (!copy_file(arguments->from_root,
+							   arguments->to_root,
+							   file))
 			{
 				/* record as skipped file in file_xxx.txt */
 				file->write_size = BYTES_INVALID;
@@ -1254,14 +1361,14 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		relative = file->path + strlen(root) + 1;
 		if (is_pgdata &&
 			!path_is_prefix_of_path("base", relative) &&
-			/*!path_is_prefix_of_path("global", relative) &&*/
+			/*!path_is_prefix_of_path("global", relative) &&*/ //TODO What's wrong with this line?
 			!path_is_prefix_of_path("pg_tblspc", relative))
 			continue;
 
 		/* Get file name from path */
 		fname = last_dir_separator(relative);
 
-		/* Remove temp tables */
+		/* Remove temp tables from the list */
 		if (fname[0] == 't' && isdigit(fname[1]))
 		{
 			pgFileFree(file);
@@ -1271,7 +1378,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		}
 
 		path_len = strlen(file->path);
-		/* Get link ptrack file to realations files */
+		/* Get link ptrack file to relations files */
 		if (path_len > 6 && strncmp(file->path+(path_len-6), "ptrack", 6) == 0)
 		{
 			pgFile *search_file;
@@ -1280,12 +1387,15 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			while(true) {
 				pgFile tmp_file;
 				tmp_file.path = pg_strdup(file->path);
-				/* I hope segno not more than 999999 */
+
+				/* Segno fits into 6 digits since it is not more than 4000 */
 				if (segno > 0)
 					sprintf(tmp_file.path+path_len-7, ".%d", segno);
 				else
 					tmp_file.path[path_len-7] = '\0';
+
 				pre_search_file = (pgFile **) parray_bsearch(list_file, &tmp_file, pgFileComparePath);
+
 				if (pre_search_file != NULL)
 				{
 					search_file = *pre_search_file;
@@ -1299,6 +1409,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 				segno++;
 			}
 
+			/* Remove ptrack file itself from backup list */
 			pgFileFree(file);
 			parray_remove(list_file, i);
 			i--;
@@ -1307,12 +1418,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 
 		/* compress map file it is not data file */
 		if (path_len > 4 && strncmp(file->path+(path_len-4), ".cfm", 4) == 0)
-		{
-			if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-				current.backup_mode == BACKUP_MODE_DIFF_PAGE)
-				elog(ERROR, "You can't use incremental backup with compress tablespace");
 			continue;
-		}
 
 		/* name of data file start with digit */
 		if (fname == NULL)
@@ -1358,11 +1464,34 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			pgFile tmp_file;
 			tmp_file.path = pg_strdup(file->path);
 			tmp_file.path[path_len-4] = '\0';
-			pre_search_file = (pgFile **) parray_bsearch(list_file, &tmp_file, pgFileComparePath);
+			pre_search_file = (pgFile **) parray_bsearch(list_file,
+														 &tmp_file, pgFileComparePath);
 			if (pre_search_file != NULL)
 			{
+				FileMap* map;
+				int md = open(file->path, O_RDWR|PG_BINARY, 0);
+				if (md < 0)
+					elog(ERROR, "add_files(). cannot open cfm file '%s'", file->path);
+
+				map = cfs_mmap(md);
+				if (map == MAP_FAILED)
+				{
+					elog(LOG, "add_files(). cfs_compression_ration failed to map file %s: %m", file->path);
+					close(md);
+					break;
+				}
+
+				(*pre_search_file)->generation = map->generation;
 				(*pre_search_file)->is_datafile = false;
+
+				if (cfs_munmap(map) < 0)
+					elog(LOG, "add_files(). CFS failed to unmap file %s: %m", file->path);
+				if (close(md) < 0)
+					elog(LOG, "add_files(). CFS failed to close file %s: %m", file->path);
 			}
+			else
+				elog(ERROR, "corresponding segment '%s' is not found", tmp_file.path);
+
 			pg_free(tmp_file.path);
 		}
 	}
@@ -1635,4 +1764,35 @@ StreamLog(void *arg)
 
 	PQfinish(conn);
 	conn = NULL;
+}
+
+
+FileMap* cfs_mmap(int md)
+{
+	FileMap* map;
+#ifdef WIN32
+    HANDLE mh = CreateFileMapping(_get_osfhandle(md), NULL, PAGE_READWRITE,
+								  0, (DWORD)sizeof(FileMap), NULL);
+    if (mh == NULL)
+        return (FileMap*)MAP_FAILED;
+
+    map = (FileMap*)MapViewOfFile(mh, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+	CloseHandle(mh);
+    if (map == NULL)
+        return (FileMap*)MAP_FAILED;
+
+#else
+	map = (FileMap*)mmap(NULL, sizeof(FileMap),
+						 PROT_WRITE | PROT_READ, MAP_SHARED, md, 0);
+#endif
+	return map;
+}
+
+int cfs_munmap(FileMap* map)
+{
+#ifdef WIN32
+	return UnmapViewOfFile(map) ? 0 : -1;
+#else
+	return munmap(map, sizeof(FileMap));
+#endif
 }
