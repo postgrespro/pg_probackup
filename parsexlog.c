@@ -167,7 +167,7 @@ validate_wal(pgBackup *backup,
 	if (last_xid == InvalidTransactionId)
 		last_xid = backup->recovery_xid;
 
-	elog(INFO, "Validate WAL stoped on %s time and xid:" XID_FMT, timestamp, last_xid);
+	elog(INFO, "Backup validation stopped on %s time and xid:" XID_FMT, timestamp, last_xid);
 
 	/* clean */
 	XLogReaderFree(xlogreader);
