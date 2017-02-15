@@ -92,9 +92,9 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 		}
 
 		/*
-			* If an invalid data page was found, fallback to simple copy to ensure
-			* all pages in the file don't have BackupPageHeader.
-			*/
+		* If an invalid data page was found, fallback to simple copy to ensure
+		* all pages in the file don't have BackupPageHeader.
+		*/
 		if (!parse_page(&page, &page_lsn))
 		{
 			int i;
@@ -233,9 +233,6 @@ backup_data_file(const char *from_root, const char *to_root,
 		elog(ERROR, "cannot open backup file \"%s\": %s",
 			 to_path, strerror(errno_tmp));
 	}
-
-	/* confirm server version */
-	check_server_version();
 
 	/*
 	 * Read each page, verify checksum and write it to backup.

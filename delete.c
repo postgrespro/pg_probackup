@@ -139,7 +139,7 @@ do_deletewal(time_t backup_id, bool strict)
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
 
-	delete_walfiles(oldest_lsn, oldest_tli, false);
+	delete_walfiles(oldest_lsn, oldest_tli, true);
 
 	return 0;
 }
@@ -349,10 +349,11 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 			 * they were originally written, in case this worries you.
 			 */
 			if (IsXLogFileName(arcde->d_name) ||
-				IsPartialXLogFileName(arcde->d_name))
+				IsPartialXLogFileName(arcde->d_name) ||
+				IsBackupHistoryFileName(arcde->d_name))
 			{
 				if (XLogRecPtrIsInvalid(oldest_lsn) ||
-					strcmp(arcde->d_name + 8, oldestSegmentNeeded + 8) < 0)
+					strncmp(arcde->d_name + 8, oldestSegmentNeeded + 8, 16) < 0)
 				{
 					/*
 					 * Use the original file name again now, including any
