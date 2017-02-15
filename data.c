@@ -81,9 +81,10 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 
 			if (st.st_size/BLCKSZ <= blknum)
 			{
-				elog(WARNING, "File: %s, file was truncated after backup start."
-							"Expected nblocks %u. Real nblocks %ld. Cannot read block %u ",
-							file->path, nblocks, st.st_size/BLCKSZ, blknum);
+				if (verbose)
+					elog(LOG, "File: %s, file was truncated after backup start."
+							  "Expected nblocks %u. Real nblocks %ld. Cannot read block %u ",
+							  file->path, nblocks, st.st_size/BLCKSZ, blknum);
 				return;
 			}
 			else
