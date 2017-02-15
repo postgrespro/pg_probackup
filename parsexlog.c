@@ -224,6 +224,9 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				return -1;
 			}
 		}
+		/* Exit without error if WAL segment doesn't exist */
+		else
+			return -1;
 	}
 
 	/*
