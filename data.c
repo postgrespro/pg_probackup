@@ -92,9 +92,9 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 		}
 
 		/*
-			* If an invalid data page was found, fallback to simple copy to ensure
-			* all pages in the file don't have BackupPageHeader.
-			*/
+		* If an invalid data page was found, fallback to simple copy to ensure
+		* all pages in the file don't have BackupPageHeader.
+		*/
 		if (!parse_page(&page, &page_lsn))
 		{
 			int i;
@@ -226,9 +226,6 @@ backup_data_file(const char *from_root, const char *to_root,
 			 to_path, strerror(errno_tmp));
 	}
 
-	/* confirm server version */
-	check_server_version();
-
 	/*
 	 * Read each page, verify checksum and write it to backup.
 	 * If page map is not empty we scan only these blocks, otherwise
@@ -244,10 +241,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		datapagemap_iterator_t *iter;
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
-		{
-			elog(WARNING, "Iter bitmap. blknum %u, nblocks %u", blknum, nblocks);
 			backup_data_page(file, lsn, blknum, nblocks, in, out, &crc);
-		}
 
 		pg_free(iter);
 		/*
