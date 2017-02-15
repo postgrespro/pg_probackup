@@ -252,10 +252,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		datapagemap_iterator_t *iter;
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
-		{
-			elog(WARNING, "Iter bitmap. blknum %u, nblocks %u", blknum, nblocks);
 			backup_data_page(file, lsn, blknum, nblocks, in, out, &crc);
-		}
 
 		pg_free(iter);
 		/*
