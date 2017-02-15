@@ -68,6 +68,12 @@ do_show(time_t backup_id)
 int
 do_retention_show(void)
 {
+	if (retention_redundancy == 0 && retention_window == 0)
+	{
+		fprintf(stdout, "No retention policy is set\n");
+		return 0;
+	}
+
 	fprintf(stdout, "# retention policy\n");
 	if (retention_redundancy > 0)
 		fprintf(stdout, "REDUNDANCY=%u\n", retention_redundancy);
