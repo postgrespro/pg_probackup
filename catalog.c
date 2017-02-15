@@ -314,7 +314,7 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 	}
 }
 
-/* create backup.ini */
+/* create backup.conf */
 void
 pgBackupWriteIni(pgBackup *backup)
 {
@@ -324,7 +324,7 @@ pgBackupWriteIni(pgBackup *backup)
 	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_CONF_FILE);
 	fp = fopen(ini_path, "wt");
 	if (fp == NULL)
-		elog(ERROR, "cannot open INI file \"%s\": %s", ini_path,
+		elog(ERROR, "cannot open configuration file \"%s\": %s", ini_path,
 			strerror(errno));
 
 	/* configuration section */

@@ -58,4 +58,4 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 		id_backup = self.show_pb(node)[0].id
 		res = self.validate_pb(node, id_backup, options=['--xid=%s' % target_xid])
-		self.assertIn(six.b("could not read WAL record at"), res)
+		self.assertIn(six.b("there are not WAL records to xid"), res)

@@ -74,16 +74,16 @@ int do_validate(time_t backup_id,
 				const char *target_inclusive,
 				TimeLineID target_tli)
 {
-	int		i;
-	int base_index;				/* index of base (full) backup */
-	int last_restored_index;	/* index of last restored database backup */
+	int			i;
+	int			base_index;				/* index of base (full) backup */
+	int			last_restored_index;	/* index of last restored database backup */
 	TimeLineID	backup_tli;
 	TimeLineID	newest_tli;
-	parray *timelines;
-	parray *backups;
+	parray	   *timelines;
+	parray	   *backups;
 	pgRecoveryTarget *rt = NULL;
-	pgBackup *base_backup = NULL;
-	bool backup_id_found = false;
+	pgBackup   *base_backup = NULL;
+	bool		backup_id_found = false;
 
 	catalog_lock(false);
 
@@ -187,15 +187,12 @@ base_backup_found:
 	}
 
 	/* and now we must check WALs */
-	{
-		pgBackup *backup = (pgBackup *) parray_get(backups, last_restored_index);
-		validate_wal(backup,
+	if (!stream_wal)
+		validate_wal((pgBackup *) parray_get(backups, last_restored_index),
 					 arclog_path,
-					 backup->start_lsn,
 					 rt->recovery_target_time,
 					 rt->recovery_target_xid,
 					 target_tli);
-	}
 
 	/* release catalog lock */
 	catalog_unlock();

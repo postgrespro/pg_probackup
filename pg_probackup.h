@@ -356,9 +356,8 @@ extern void extractPageMap(const char *datadir,
 						   XLogRecPtr endpoint);
 extern void validate_wal(pgBackup *backup,
 						 const char *archivedir,
-						 XLogRecPtr startpoint,
 						 time_t target_time,
-						 TransactionId recovery_target_xid,
+						 TransactionId target_xid,
 						 TimeLineID tli);
 
 /* in util.c */

@@ -158,6 +158,7 @@ do_retention_purge(void)
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli;
 	int			ret;
+	bool		keep_next_backup = true; /* Do not delete first full backup */
 
 	if (retention_redundancy > 0)
 		elog(LOG, "REDUNDANCY=%u", retention_redundancy);
@@ -190,6 +191,10 @@ do_retention_purge(void)
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 		uint32		backup_num_evaluate = backup_num;
 
+		/* Consider only validated and correct backups */
+		if (backup->status != BACKUP_STATUS_OK)
+			continue;
+
 		/*
 		 * When a validate full backup was found, we can delete the
 		 * backup that is older than it using the number of generations.
@@ -198,12 +203,24 @@ do_retention_purge(void)
 			backup_num++;
 
 		/* Evaluate if this backup is eligible for removal */
-		if (backup_num_evaluate + 1 <= retention_redundancy ||
-			(retention_window > 0 && backup->start_time >= days_threshold))
+		if (keep_next_backup ||
+			backup_num_evaluate + 1 <= retention_redundancy ||
+			(retention_window > 0 && backup->recovery_time >= days_threshold))
 		{
 			/* Save LSN and Timeline to remove unnecessary WAL segments */
 			oldest_lsn = backup->start_lsn;
 			oldest_tli = backup->tli;
+
+			/* Save parent backup of this incremental backup */
+			if (backup->backup_mode != BACKUP_MODE_FULL)
+				keep_next_backup = true;
+			/*
+			 * Previous incremental backup was kept or this is first backup
+			 * so do not delete this backup.
+			 */
+			else
+				keep_next_backup = false;
+
 			continue;
 		}
 

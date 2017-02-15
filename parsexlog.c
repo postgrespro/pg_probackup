@@ -104,18 +104,20 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 void
 validate_wal(pgBackup *backup,
 			 const char *archivedir,
-			 XLogRecPtr startpoint,
 			 time_t target_time,
-			 TransactionId recovery_target_xid,
+			 TransactionId target_xid,
 			 TimeLineID tli)
 {
+	XLogRecPtr	startpoint = backup->start_lsn;
 	XLogRecord *record;
 	XLogReaderState *xlogreader;
 	char	   *errormsg;
 	XLogPageReadPrivate private;
 	TransactionId last_xid = InvalidTransactionId;
 	TimestampTz last_time = 0;
-	char	timestamp[100];
+	char		timestamp[100];
+	bool		all_wal = false,
+				got_endpoint = false;
 
 	private.archivedir = archivedir;
 	private.tli = tli;
@@ -130,32 +132,39 @@ validate_wal(pgBackup *backup,
 		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
 		if (record == NULL)
 		{
-			XLogRecPtr	errptr;
-
-			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
-			if (recovery_target_xid == InvalidTransactionId && target_time == 0)
-			{
-				break;
-			}
-
 			if (errormsg)
-				elog(ERROR, "could not read WAL record at %X/%X: %s",
-						 (uint32) (errptr >> 32), (uint32) (errptr),
-						 errormsg);
-			else
-				elog(ERROR, "could not read WAL record at %X/%X",
-						 (uint32) (errptr >> 32),
-						 (uint32) (errptr));
+				elog(WARNING, "%s", errormsg);
+
+			break;
 		}
+
+		/* Got WAL record at stop_lsn */
+		if (xlogreader->ReadRecPtr == backup->stop_lsn)
+			got_endpoint = true;
 
 		timestamp_record = getRecordTimestamp(xlogreader, &last_time);
 		if (XLogRecGetXid(xlogreader) != InvalidTransactionId)
 			last_xid = XLogRecGetXid(xlogreader);
-		if (recovery_target_xid != InvalidTransactionId && recovery_target_xid == last_xid)
-			break;
 
-		if (target_time != 0 && timestamp_record && timestamptz_to_time_t(last_time) >= target_time)
+		/* Check target xid */
+		if (TransactionIdIsValid(target_xid) && target_xid == last_xid)
+		{
+			all_wal = true;
 			break;
+		}
+		/* Check target time */
+		else if (target_time != 0 && timestamp_record && timestamptz_to_time_t(last_time) >= target_time)
+		{
+			all_wal = true;
+			break;
+		}
+		/* Stop if there are no target xid and target time */
+		else if (!TransactionIdIsValid(target_xid) && target_time == 0 &&
+			xlogreader->ReadRecPtr == backup->stop_lsn)
+		{
+			all_wal = true;
+			break;
+		}
 
 		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
 	}
@@ -167,7 +176,39 @@ validate_wal(pgBackup *backup,
 	if (last_xid == InvalidTransactionId)
 		last_xid = backup->recovery_xid;
 
-	elog(INFO, "Backup validation stopped on %s time and xid:" XID_FMT, timestamp, last_xid);
+	/* There are all need WAL records */
+	if (all_wal)
+		elog(INFO, "Backup validation stopped on %s time and xid:" XID_FMT,
+			 timestamp, last_xid);
+	/* There are not need WAL records */
+	else
+	{
+		if (!got_endpoint)
+			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
+				 (uint32) (backup->start_lsn >> 32),
+				 (uint32) (backup->start_lsn),
+				 (uint32) (backup->stop_lsn >> 32),
+				 (uint32) (backup->stop_lsn));
+		else
+		{
+			if (target_time > 0)
+				time2iso(timestamp, lengthof(timestamp),
+						 timestamptz_to_time_t(target_time));
+
+			if (TransactionIdIsValid(target_xid) && target_time != 0)
+				elog(WARNING, "there are not WAL records to time %s and xid " XID_FMT,
+					 timestamp, target_xid);
+			else if (TransactionIdIsValid(target_xid))
+				elog(WARNING, "there are not WAL records to xid " XID_FMT,
+					 target_xid);
+			else if (target_time != 0)
+				elog(WARNING, "there are not WAL records to time %s ",
+					 timestamp);
+
+			elog(WARNING, "recovery can be done to time %s and xid " XID_FMT,
+				 timestamp, last_xid);
+		}
+	}
 
 	/* clean */
 	XLogReaderFree(xlogreader);
