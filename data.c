@@ -60,6 +60,7 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 	XLogRecPtr	page_lsn;
 	int 	ret;
 	int		try_checksum = 100;
+	bool	is_zero_page = false;
 	struct stat 		st;
 
 	header.block = blknum;
@@ -101,8 +102,8 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 			for(i = 0; i < BLCKSZ && page.data[i] == 0; i++);
 			if (i == BLCKSZ)
 			{
-				// FIXME Fix this hell.
-				elog(ERROR, "File: %s blknum %u, empty page", file->path, blknum);
+				is_zero_page = true;
+				elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
 			}
 
 			/* Try to read and verify this page again several times. */
@@ -122,7 +123,8 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 		 * If it's wrong, sleep a bit and then try again
 		 * several times. If it didn't help, throw error.
 		 */
-		if(current.checksum_version &&
+		if(!is_zero_page &&
+			current.checksum_version &&
 			pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
 		{
 			if (try_checksum)
@@ -143,7 +145,7 @@ backup_data_page(pgFile *file, const XLogRecPtr *lsn,
 
 	memcpy(write_buffer, &header, sizeof(header));
 	memcpy(write_buffer + sizeof(header), page.data, BLCKSZ);
-	/* write data page excluding hole */
+	/* write data page */
 	if(fwrite(write_buffer, 1, write_buffer_size, out) != write_buffer_size)
 	{
 		int errno_tmp = errno;
@@ -228,12 +230,9 @@ backup_data_file(const char *from_root, const char *to_root,
 	check_server_version();
 
 	/*
-	 * Read each page and write the page excluding hole. If it has been
-	 * determined that the page can be copied safely, but no page map
-	 * has been built, it means that we are in presence of a relation
-	 * file that needs to be completely scanned. If a page map is present
-	 * only scan the blocks needed. In each case, pages are copied without
-	 * their hole to ensure some basic level of compression.
+	 * Read each page, verify checksum and write it to backup.
+	 * If page map is not empty we scan only these blocks, otherwise
+	 * backup all pages of the relation.
 	 */
 	if (file->pagemap.bitmapsize == 0)
 	{
