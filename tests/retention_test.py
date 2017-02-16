@@ -63,18 +63,29 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 		self.init_pb(node)
 		with open(path.join(self.backup_dir(node), "pg_probackup.conf"), "a") as conf:
 			conf.write("REDUNDANCY=1\n")
-			conf.write("WINDOW=2\n")
+			conf.write("WINDOW=1\n")
 
-		# All backups will be keeped
+		# Make backups to be purged
 		self.backup_pb(node)
 		self.backup_pb(node, backup_type="page")
+		# Make backup to be keeped
 		self.backup_pb(node)
+
+		backups = path.join(self.backup_dir(node), "backups")
+		days_delta = 5
+		for backup in listdir(backups):
+			with open(path.join(backups, backup, "backup.conf"), "a") as conf:
+				conf.write("RECOVERY_TIME='{:%Y-%m-%d %H:%M:%S}'\n".format(
+					datetime.now() - timedelta(days=days_delta)))
+				days_delta -= 1
+
+		# Make backup to be keeped
 		self.backup_pb(node, backup_type="page")		
 
 		self.assertEqual(len(self.show_pb(node)), 4)
 
 		# Purge backups
 		self.retention_purge_pb(node)
-		self.assertEqual(len(self.show_pb(node)), 4)
+		self.assertEqual(len(self.show_pb(node)), 2)
 
 		node.stop()

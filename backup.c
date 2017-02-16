@@ -126,9 +126,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	/* Initialize size summary */
 	current.data_bytes = 0;
 
-	/* do some checks on the node */
-	sanityChecks();
-
 	/*
 	 * Obtain current timeline by scanning control file, theh LSN
 	 * obtained at output of pg_start_backup or pg_stop_backup does
@@ -152,11 +149,9 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		pgBackup   *prev_backup;
-
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
-			elog(ERROR, "Timeline has changed since last full backup."
+			elog(ERROR, "Timeline has changed since last full backup. "
 						"Create new full backup before an incremental one.");
 	}
 
@@ -233,8 +228,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		/* find last completed database backup */
-		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
+		Assert(prev_backup);
 		pgBackupGetPath(prev_backup, prev_file_txt, lengthof(prev_file_txt),
 			DATABASE_FILE_LIST);
 		prev_files = dir_read_file_list(pgdata, prev_file_txt);
@@ -1337,8 +1331,8 @@ backup_files(void *arg)
 static void
 add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 {
-	parray	*list_file;
-	int		 i;
+	parray	   *list_file;
+	size_t		i;
 
 	list_file = parray_new();
 
@@ -1346,12 +1340,12 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 	dir_list_file(list_file, root, true, true, add_root);
 
 	/* mark files that are possible datafile as 'datafile' */
-	for (i = 0; i < (int) parray_num(list_file); i++)
+	for (i = 0; i < parray_num(list_file); i++)
 	{
-		pgFile *file = (pgFile *) parray_get(list_file, i);
-		char *relative;
-		char *fname;
-		int path_len;
+		pgFile	   *file = (pgFile *) parray_get(list_file, i);
+		char	   *relative;
+		char	   *fname;
+		size_t		path_len;
 
 		/* data file must be a regular file */
 		if (!S_ISREG(file->mode))
@@ -1367,6 +1361,10 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 
 		/* Get file name from path */
 		fname = last_dir_separator(relative);
+		if (fname == NULL)
+			fname = relative;
+		else
+			fname++;
 
 		/* Remove temp tables from the list */
 		if (fname[0] == 't' && isdigit(fname[1]))
@@ -1379,32 +1377,41 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 
 		path_len = strlen(file->path);
 		/* Get link ptrack file to relations files */
-		if (path_len > 6 && strncmp(file->path+(path_len-6), "ptrack", 6) == 0)
+		if (path_len > 6 &&
+			strncmp(file->path + (path_len - 6), "ptrack", 6) == 0)
 		{
-			pgFile *search_file;
-			pgFile **pre_search_file;
-			int segno = 0;
-			while(true) {
-				pgFile tmp_file;
+			pgFile	   *search_file;
+			pgFile	  **pre_search_file;
+			int			segno = 0;
+
+			while (true)
+			{
+				pgFile		tmp_file;
+
 				tmp_file.path = pg_strdup(file->path);
 
 				/* Segno fits into 6 digits since it is not more than 4000 */
 				if (segno > 0)
-					sprintf(tmp_file.path+path_len-7, ".%d", segno);
+					sprintf(tmp_file.path + path_len - 7, ".%d", segno);
 				else
-					tmp_file.path[path_len-7] = '\0';
+					tmp_file.path[path_len - 7] = '\0';
 
-				pre_search_file = (pgFile **) parray_bsearch(list_file, &tmp_file, pgFileComparePath);
+				pre_search_file = (pgFile **) parray_bsearch(list_file,
+															 &tmp_file,
+															 pgFileComparePath);
 
 				if (pre_search_file != NULL)
 				{
 					search_file = *pre_search_file;
 					search_file->ptrack_path = pg_strdup(file->path);
 					search_file->segno = segno;
-				} else {
+				}
+				else
+				{
 					pg_free(tmp_file.path);
 					break;
 				}
+
 				pg_free(tmp_file.path);
 				segno++;
 			}
@@ -1413,63 +1420,24 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 			pgFileFree(file);
 			parray_remove(list_file, i);
 			i--;
-			continue;
 		}
-
 		/* compress map file it is not data file */
-		if (path_len > 4 && strncmp(file->path+(path_len-4), ".cfm", 4) == 0)
-			continue;
-
-		/* name of data file start with digit */
-		if (fname == NULL)
-			fname = relative;
-		else
-			fname++;
-		if (!isdigit(fname[0]))
-			continue;
-
-		file->is_datafile = true;
+		else if (path_len > 4 &&
+				 strncmp(file->path + (path_len - 4), ".cfm", 4) == 0)
 		{
-			int find_dot;
-			int check_digit;
-			char *text_segno;
-			for(find_dot = path_len-1; file->path[find_dot] != '.' && find_dot >= 0; find_dot--);
-			if (find_dot <= 0)
-				continue;
+			pgFile	   **pre_search_file;
+			pgFile		tmp_file;
 
-			text_segno = file->path + find_dot + 1;
-			for(check_digit=0; text_segno[check_digit] != '\0'; check_digit++)
-				if (!isdigit(text_segno[check_digit]))
-				{
-					check_digit = -1;
-					break;
-				}
-
-			if (check_digit == -1)
-				continue;
-
-			file->segno = (int) strtol(text_segno, NULL, 10);
-		}
-	}
-
-	/* mark cfs relations as not data */
-	for (i = 0; i < (int) parray_num(list_file); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(list_file, i);
-		int path_len = (int) strlen(file->path);
-
-		if (path_len > 4 && strncmp(file->path+(path_len-4), ".cfm", 4) == 0)
-		{
-			pgFile **pre_search_file;
-			pgFile tmp_file;
 			tmp_file.path = pg_strdup(file->path);
-			tmp_file.path[path_len-4] = '\0';
+			tmp_file.path[path_len - 4] = '\0';
 			pre_search_file = (pgFile **) parray_bsearch(list_file,
-														 &tmp_file, pgFileComparePath);
+														 &tmp_file,
+														 pgFileComparePath);
 			if (pre_search_file != NULL)
 			{
-				FileMap* map;
-				int md = open(file->path, O_RDWR|PG_BINARY, 0);
+				FileMap	   *map;
+				int			md = open(file->path, O_RDWR|PG_BINARY, 0);
+
 				if (md < 0)
 					elog(ERROR, "add_files(). cannot open cfm file '%s'", file->path);
 
@@ -1485,16 +1453,51 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 				(*pre_search_file)->is_datafile = false;
 
 				if (cfs_munmap(map) < 0)
-					elog(LOG, "add_files(). CFS failed to unmap file %s: %m", file->path);
+					elog(LOG, "add_files(). CFS failed to unmap file %s: %m",
+						 file->path);
 				if (close(md) < 0)
-					elog(LOG, "add_files(). CFS failed to close file %s: %m", file->path);
+					elog(LOG, "add_files(). CFS failed to close file %s: %m",
+						 file->path);
 			}
 			else
-				elog(ERROR, "corresponding segment '%s' is not found", tmp_file.path);
+				elog(ERROR, "corresponding segment '%s' is not found",
+					 tmp_file.path);
 
 			pg_free(tmp_file.path);
 		}
+		/* name of data file start with digit */
+		else if (isdigit(fname[0]))
+		{
+			int			find_dot;
+			int			check_digit;
+			char	   *text_segno;
+
+			file->is_datafile = true;
+
+			/*
+			 * Find segment number.
+			 */
+
+			for (find_dot = (int) path_len - 1;
+				 file->path[find_dot] != '.' && find_dot >= 0;
+				 find_dot--);
+			/* There is not segment number */
+			if (find_dot <= 0)
+				continue;
+
+			text_segno = file->path + find_dot + 1;
+			for (check_digit = 0; text_segno[check_digit] != '\0'; check_digit++)
+				if (!isdigit(text_segno[check_digit]))
+				{
+					check_digit = -1;
+					break;
+				}
+
+			if (check_digit != -1)
+				file->segno = (int) strtol(text_segno, NULL, 10);
+		}
 	}
+
 	parray_concat(files, list_file);
 }
 

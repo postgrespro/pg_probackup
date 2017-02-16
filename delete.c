@@ -283,7 +283,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 	parray_qsort(files, pgFileComparePathDesc);
 	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile *file = (pgFile *) parray_get(files, i);
+		pgFile	   *file = (pgFile *) parray_get(files, i);
 
 		/* print progress */
 		elog(LOG, "delete file(%zd/%lu) \"%s\"", i + 1,

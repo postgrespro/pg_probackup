@@ -72,20 +72,6 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 	checkControlFile(ControlFile);
 }
 
-void
-sanityChecks(void)
-{
-	ControlFileData	ControlFile;
-	char		   *buffer;
-	size_t			size;
-
-	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size, false);
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
-
-}
-
 XLogRecPtr
 get_last_ptrack_lsn(void)
 {
@@ -114,8 +100,9 @@ get_current_timeline(bool safe)
 
 	/* First fetch file... */
 	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
-	if (buffer == NULL)
+	if (safe && buffer == NULL)
 		return 0;
+
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 

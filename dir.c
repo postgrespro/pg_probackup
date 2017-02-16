@@ -249,9 +249,6 @@ BlackListCompare(const void *str1, const void *str2)
  * List files, symbolic links and directories in the directory "root" and add
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
  *
- * If the sub-directory name is in "exclude" list, the sub-directory itself is
- * listed but the contents of the sub-directory is ignored.
- *
  * When omit_symlink is true, symbolic link is ignored and only file or
  * directory llnked to will be listed.
  */
@@ -259,40 +256,43 @@ void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 			  bool add_root)
 {
-	char path[MAXPGPATH];
-	char buf[MAXPGPATH * 2];
-	char black_item[MAXPGPATH * 2];
-	parray *black_list = NULL;
+	parray	   *black_list = NULL;
+	char		path[MAXPGPATH];
 
 	join_path_components(path, backup_path, PG_BLACK_LIST);
-	if (root && pgdata && strcmp(root, pgdata) == 0 &&
-	    fileExists(path))
+	/* List files with black list */
+	if (root && pgdata && strcmp(root, pgdata) == 0 && fileExists(path))
 	{
-		FILE *black_list_file = NULL;
+		FILE	   *black_list_file = NULL;
+		char		buf[MAXPGPATH * 2];
+		char		black_item[MAXPGPATH * 2];
+
 		black_list = parray_new();
 		black_list_file = fopen(path, "r");
+
 		if (black_list_file == NULL)
-			elog(ERROR, "cannot open black_list: %s",
-				strerror(errno));
+			elog(ERROR, "cannot open black_list: %s", strerror(errno));
+
 		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
 		{
 			join_path_components(black_item, pgdata, buf);
+
 			if (black_item[strlen(black_item) - 1] == '\n')
 				black_item[strlen(black_item) - 1] = '\0';
+
 			if (black_item[0] == '#' || black_item[0] == '\0')
 				continue;
+
 			parray_append(black_list, black_item);
 		}
+
 		fclose(black_list_file);
 		parray_qsort(black_list, BlackListCompare);
-		dir_list_file_internal(files, root, exclude, omit_symlink, add_root, black_list);
-		parray_qsort(files, pgFileComparePath);
 	}
-	else
-	{
-		dir_list_file_internal(files, root, exclude, omit_symlink, add_root, NULL);
-		parray_qsort(files, pgFileComparePath);
-	}
+
+	dir_list_file_internal(files, root, exclude, omit_symlink, add_root,
+						   black_list);
+	parray_qsort(files, pgFileComparePath);
 }
 
 void
@@ -561,7 +561,8 @@ dir_print_file_list(FILE *out, const parray *files, const char *root, const char
 			fprintf(out, " %s", timestamp);
 		}
 
-		fprintf(out, " %d %d\n", file->generation, file->is_partial_copy);
+		fprintf(out, " " UINT64_FORMAT " %d\n",
+				file->generation, file->is_partial_copy);
 	}
 }
 
@@ -681,30 +682,34 @@ dir_read_file_list(const char *root, const char *file_txt)
 	return files;
 }
 
-/* copy contents of directory from_root into to_root */
+/*
+ * Copy contents of directory from_root into to_root.
+ */
 void
 dir_copy_files(const char *from_root, const char *to_root)
 {
-	int		i;
-	parray *files = parray_new();
+	size_t		i;
+	parray	   *files = parray_new();
 
 	/* don't copy root directory */
 	dir_list_file(files, from_root, false, true, false);
 
 	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile *file = (pgFile *) parray_get(files, i);
+		pgFile	   *file = (pgFile *) parray_get(files, i);
 
 		if (S_ISDIR(file->mode))
 		{
-			char to_path[MAXPGPATH];
-			join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+			char		to_path[MAXPGPATH];
+
+			join_path_components(to_path, to_root,
+								 file->path + strlen(from_root) + 1);
+
 			if (verbose && !check)
 				elog(LOG, "creating directory \"%s\"",
 					 file->path + strlen(from_root) + 1);
 			if (!check)
 				dir_create_dir(to_path, DIR_PERMISSION);
-			continue;
 		}
 		else if (S_ISREG(file->mode))
 		{

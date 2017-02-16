@@ -70,10 +70,10 @@ typedef struct pgFile
 	char	*path;			/* path of the file */
 	char	*ptrack_path;
 	int		segno;			/* Segment number for ptrack */
-	int		generation;		/* Generation of compressed file.
+	uint64	generation;		/* Generation of compressed file.
 							 * -1 for non-compressed files */
-	int	is_partial_copy; /* for compressed files.
-						  * 1 if backed up via copy_file_partly()  */
+	int		is_partial_copy; /* for compressed files.
+							  * 1 if backed up via copy_file_partly()  */
 	volatile uint32 lock;
 	datapagemap_t pagemap;
 } pgFile;
