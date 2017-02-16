@@ -36,6 +36,7 @@ static bool getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime
 static int	xlogreadfd = -1;
 static XLogSegNo xlogreadsegno = -1;
 static char xlogfpath[MAXPGPATH];
+static bool xlogexists = false;
 
 typedef struct XLogPageReadPrivate
 {
@@ -98,6 +99,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	{
 		close(xlogreadfd);
 		xlogreadfd = -1;
+		xlogexists = false;
 	}
 }
 
@@ -192,9 +194,9 @@ validate_wal(pgBackup *backup,
 		if (xlogfpath[0] != 0)
 		{
 			/* XLOG reader couldnt read WAL segment */
-			if (xlogreadfd < 0)
+			if (!xlogexists)
 				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
-			else
+			else if (xlogreadfd != -1)
 				elog(WARNING, "error was occured during reading WAL segment \"%s\"",
 					 xlogfpath);
 		}
@@ -232,6 +234,7 @@ validate_wal(pgBackup *backup,
 	{
 		close(xlogreadfd);
 		xlogreadfd = -1;
+		xlogexists = false;
 	}
 }
 
@@ -256,6 +259,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	{
 		close(xlogreadfd);
 		xlogreadfd = -1;
+		xlogexists = false;
 	}
 
 	XLByteToSeg(targetPagePtr, xlogreadsegno);
@@ -272,11 +276,12 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		{
 			elog(LOG, "opening WAL segment \"%s\"", xlogfpath);
 
+			xlogexists = true;
 			xlogreadfd = open(xlogfpath, O_RDONLY | PG_BINARY, 0);
 
 			if (xlogreadfd < 0)
 			{
-				elog(INFO, "could not open WAL segment \"%s\": %s",
+				elog(WARNING, "could not open WAL segment \"%s\": %s",
 					 xlogfpath, strerror(errno));
 				return -1;
 			}
