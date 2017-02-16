@@ -210,15 +210,11 @@ main(int argc, char *argv[])
 	else if (pg_strcasecmp(cmd, "show") == 0)
 		return do_show(backup_id);
 	else if (pg_strcasecmp(cmd, "validate") == 0)
-	{
-		if (backup_id == 0)
-			elog(ERROR, "you must specify backup-ID for this command");
 		return do_validate(backup_id,
 						   target_time,
 						   target_xid,
 						   target_inclusive,
 						   target_tli);
-	}
 	else if (pg_strcasecmp(cmd, "delete") == 0)
 		return do_delete(backup_id);
 	else if (pg_strcasecmp(cmd, "delwal") == 0)
@@ -247,7 +243,7 @@ pgut_help(bool details)
 	printf(_("  %s [option...] backup\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] restore [backup-ID]\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] show [backup-ID]\n"), PROGRAM_NAME);
-	printf(_("  %s [option...] validate backup-ID\n"), PROGRAM_NAME);
+	printf(_("  %s [option...] validate [backup-ID]\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] delete backup-ID\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] delwal [backup-ID]\n"), PROGRAM_NAME);
 	printf(_("  %s [option...] retention show|purge\n"), PROGRAM_NAME);

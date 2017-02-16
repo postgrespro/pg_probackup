@@ -7,7 +7,7 @@ pg_probackup — backup and recovery manager for PostgreSQL.
 pg_probackup [option...] init
 pg_probackup [option...] backup
 pg_probackup [option...] restore [backup_ID]
-pg_probackup [option...] validate backup_ID
+pg_probackup [option...] validate [backup_ID]
 pg_probackup [option...] show    [backup_ID]
 pg_probackup [option...] delete   backup_ID
 pg_probackup [option...] delwal  [backup_ID]

@@ -115,7 +115,8 @@ validate_wal(pgBackup *backup,
 	XLogPageReadPrivate private;
 	TransactionId last_xid = InvalidTransactionId;
 	TimestampTz last_time = 0;
-	char		timestamp[100];
+	char		last_timestamp[100],
+				target_timestamp[100];
 	bool		all_wal = false,
 				got_endpoint = false;
 
@@ -124,6 +125,9 @@ validate_wal(pgBackup *backup,
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
 	if (xlogreader == NULL)
 		elog(ERROR, "out of memory");
+
+	/* We will check it in the end */
+	xlogfpath[0] = '\0';
 
 	while (true)
 	{
@@ -170,19 +174,31 @@ validate_wal(pgBackup *backup,
 	}
 
 	if (last_time > 0)
-		time2iso(timestamp, lengthof(timestamp), timestamptz_to_time_t(last_time));
+		time2iso(last_timestamp, lengthof(last_timestamp),
+				 timestamptz_to_time_t(last_time));
 	else
-		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		time2iso(last_timestamp, lengthof(last_timestamp),
+				 backup->recovery_time);
 	if (last_xid == InvalidTransactionId)
 		last_xid = backup->recovery_xid;
 
 	/* There are all need WAL records */
 	if (all_wal)
 		elog(INFO, "Backup validation stopped on %s time and xid:" XID_FMT,
-			 timestamp, last_xid);
+			 last_timestamp, last_xid);
 	/* There are not need WAL records */
 	else
 	{
+		if (xlogfpath[0] != 0)
+		{
+			/* XLOG reader couldnt read WAL segment */
+			if (xlogreadfd < 0)
+				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
+			else
+				elog(WARNING, "error was occured during reading WAL segment \"%s\"",
+					 xlogfpath);
+		}
+
 		if (!got_endpoint)
 			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
 				 (uint32) (backup->start_lsn >> 32),
@@ -192,21 +208,21 @@ validate_wal(pgBackup *backup,
 		else
 		{
 			if (target_time > 0)
-				time2iso(timestamp, lengthof(timestamp),
-						 timestamptz_to_time_t(target_time));
-
-			if (TransactionIdIsValid(target_xid) && target_time != 0)
-				elog(WARNING, "there are not WAL records to time %s and xid " XID_FMT,
-					 timestamp, target_xid);
-			else if (TransactionIdIsValid(target_xid))
-				elog(WARNING, "there are not WAL records to xid " XID_FMT,
-					 target_xid);
-			else if (target_time != 0)
-				elog(WARNING, "there are not WAL records to time %s ",
-					 timestamp);
+				time2iso(target_timestamp, lengthof(target_timestamp),
+						 target_time);
 
 			elog(WARNING, "recovery can be done to time %s and xid " XID_FMT,
-				 timestamp, last_xid);
+				 last_timestamp, last_xid);
+
+			if (TransactionIdIsValid(target_xid) && target_time != 0)
+				elog(ERROR, "there are not WAL records to time %s and xid " XID_FMT,
+					 target_timestamp, target_xid);
+			else if (TransactionIdIsValid(target_xid))
+				elog(ERROR, "there are not WAL records to xid " XID_FMT,
+					 target_xid);
+			else if (target_time != 0)
+				elog(ERROR, "there are not WAL records to time %s ",
+					 target_timestamp);
 		}
 	}
 

@@ -68,17 +68,16 @@ void do_validate_last(void)
 	catalog_unlock();
 }
 
-int do_validate(time_t backup_id,
-				const char *target_time,
-				const char *target_xid,
-				const char *target_inclusive,
-				TimeLineID target_tli)
+int
+do_validate(time_t backup_id,
+			const char *target_time,
+			const char *target_xid,
+			const char *target_inclusive,
+			TimeLineID target_tli)
 {
 	int			i;
 	int			base_index;				/* index of base (full) backup */
 	int			last_restored_index;	/* index of last restored database backup */
-	TimeLineID	backup_tli;
-	TimeLineID	newest_tli;
 	parray	   *timelines;
 	parray	   *backups;
 	pgRecoveryTarget *rt = NULL;
@@ -96,15 +95,9 @@ int do_validate(time_t backup_id,
 	if (!backups)
 		elog(ERROR, "cannot process any more.");
 
-	newest_tli = findNewestTimeLine(1);
-	backup_tli = get_fullbackup_timeline(backups, rt);
-
-	/* determine target timeline */
-	if (target_tli == 0)
-		target_tli = newest_tli != 1 ? newest_tli : backup_tli;
-
 	/* Read timeline history files from archives */
-	timelines = readTimeLineHistory(target_tli);
+	if (target_tli)
+		timelines = readTimeLineHistory(target_tli);
 
 	/* find last full backup which can be used as base backup. */
 	elog(LOG, "searching recent full backup");
@@ -116,26 +109,33 @@ int do_validate(time_t backup_id,
 			continue;
 
 		if (backup_id == base_backup->start_time &&
-			(base_backup->status == BACKUP_STATUS_OK || base_backup->status == BACKUP_STATUS_CORRUPT)
-		)
+			(base_backup->status == BACKUP_STATUS_OK ||
+			 base_backup->status == BACKUP_STATUS_CORRUPT))
 			backup_id_found = true;
 
 		if (backup_id == base_backup->start_time &&
-			(base_backup->status != BACKUP_STATUS_OK && base_backup->status != BACKUP_STATUS_CORRUPT)
-		)
+			(base_backup->status != BACKUP_STATUS_OK &&
+			 base_backup->status != BACKUP_STATUS_CORRUPT))
 			elog(ERROR, "given backup %s is %s", base36enc(backup_id), status2str(base_backup->status));
 
 		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
-			(base_backup->status != BACKUP_STATUS_OK && base_backup->status != BACKUP_STATUS_CORRUPT)
-		)
+			(base_backup->status != BACKUP_STATUS_OK &&
+			 base_backup->status != BACKUP_STATUS_CORRUPT))
 			continue;
 
-		if (satisfy_timeline(timelines, base_backup) &&
-			satisfy_recovery_target(base_backup, rt) &&
-			(backup_id_found || backup_id == 0))
-			goto base_backup_found;
+		if (target_tli)
+		{
+			if (satisfy_timeline(timelines, base_backup) &&
+				satisfy_recovery_target(base_backup, rt) &&
+				(backup_id_found || backup_id == 0))
+				goto base_backup_found;
+		}
 		else
-			backup_id_found = false;
+			if (satisfy_recovery_target(base_backup, rt) &&
+				(backup_id_found || backup_id == 0))
+				goto base_backup_found;
+
+		backup_id_found = false;
 	}
 	/* no full backup found, cannot restore */
 	elog(ERROR, "no full backup found, cannot validate.");
@@ -159,7 +159,8 @@ base_backup_found:
 		pgBackup *backup = (pgBackup *) parray_get(backups, i);
 
 		/* don't use incomplete nor different timeline backup */
-		if ((backup->status != BACKUP_STATUS_OK && backup->status != BACKUP_STATUS_CORRUPT) ||
+		if ((backup->status != BACKUP_STATUS_OK &&
+			 backup->status != BACKUP_STATUS_CORRUPT) ||
 			backup->tli != base_backup->tli)
 			continue;
 
@@ -175,9 +176,15 @@ base_backup_found:
 			continue;
 
 		/* is the backup is necessary for restore to target timeline ? */
-		if (!satisfy_timeline(timelines, backup) ||
-			!satisfy_recovery_target(backup, rt))
-			continue;
+		if (target_tli)
+		{
+			if (!satisfy_timeline(timelines, backup) ||
+				!satisfy_recovery_target(backup, rt))
+				continue;
+		}
+		else
+			if (!satisfy_recovery_target(backup, rt))
+				continue;
 
 		if (backup_id != 0)
 			stream_wal = backup->stream;
@@ -187,12 +194,12 @@ base_backup_found:
 	}
 
 	/* and now we must check WALs */
-	if (!stream_wal)
+	if (!stream_wal || rt->time_specified || rt->xid_specified)
 		validate_wal((pgBackup *) parray_get(backups, last_restored_index),
 					 arclog_path,
 					 rt->recovery_target_time,
 					 rt->recovery_target_xid,
-					 target_tli);
+					 base_backup->tli);
 
 	/* release catalog lock */
 	catalog_unlock();
