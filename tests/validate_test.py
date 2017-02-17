@@ -2,6 +2,7 @@ import unittest
 from os import path, listdir
 import six
 from .pb_lib import ProbackupTest
+from datetime import datetime, timedelta
 from testgres import stop_all
 import subprocess
 
@@ -18,9 +19,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 		except:
 			pass
 
-	def test_validate_broke_wal_1(self):
+	def test_validate_wal_1(self):
 		"""recovery to latest from full backup"""
-		node = self.make_bnode('test_validate_broke_wal_1', base_dir="tmp_dirs/validate/broke_wal_1")
+		node = self.make_bnode('test_validate_wal_1', base_dir="tmp_dirs/validate/wal_1")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -40,6 +41,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 		pgbench.wait()
 		pgbench.stdout.close()
 
+		# Save time to validate
+		target_time = datetime.now()
+
 		target_xid = None
 		with node.connect("postgres") as con:
 			res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
@@ -49,6 +53,36 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 		node.execute("postgres", "SELECT pg_switch_xlog()")
 		node.stop({"-m": "immediate"})
 
+		id_backup = self.show_pb(node)[0].id
+
+		# Validate to real time
+		self.assertIn(six.b("INFO: Backup validation stopped on"),
+			self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
+				target_time)]))
+
+		# Validate to unreal time
+		self.assertIn(six.b("ERROR: no full backup found, cannot validate."),
+			self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
+				target_time - timedelta(days=2))]))
+
+		# Validate to unreal time #2
+		self.assertIn(six.b("ERROR: there are no WAL records to time"),
+			self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
+				target_time + timedelta(days=2))]))
+
+		# Validate to real xid
+		self.assertIn(six.b("INFO: Backup validation stopped on"),
+			self.validate_pb(node, options=["--xid=%s" % target_xid]))
+
+		# Validate to unreal xid
+		self.assertIn(six.b("ERROR: there are no WAL records to xid"),
+			self.validate_pb(node, options=["--xid=%d" % (int(target_xid) + 1000)]))
+		
+		# Validate with backup ID
+		self.assertIn(six.b("INFO: Backup validation stopped on"),
+			self.validate_pb(node, id_backup))
+
+		# Validate broken WAL
 		wals_dir = path.join(self.backup_dir(node), "wal")
 		wals = [f for f in listdir(wals_dir) if path.isfile(path.join(wals_dir, f))]
 		wals.sort()
@@ -56,6 +90,5 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 			f.seek(256)
 			f.write(six.b("blablabla"))
 
-		id_backup = self.show_pb(node)[0].id
 		res = self.validate_pb(node, id_backup, options=['--xid=%s' % target_xid])
-		self.assertIn(six.b("there are not WAL records to xid"), res)
+		self.assertIn(six.b("there are no WAL records to xid"), res)

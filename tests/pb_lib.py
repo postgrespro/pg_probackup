@@ -178,7 +178,7 @@ class ProbackupTest(object):
 				if line[0] != six.b("#")[0]
 			])
 
-	def validate_pb(self, node, id, options=[]):
+	def validate_pb(self, node, id=None, options=[]):
 		cmd_list = [
 			"-B", self.backup_dir(node),
 			"validate",
