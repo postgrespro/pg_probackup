@@ -164,12 +164,12 @@ validate_wal(pgBackup *backup,
 			all_wal = true;
 			break;
 		}
-		/* Stop if there are no target xid and target time */
+		/* If there are no target xid and target time */
 		else if (!TransactionIdIsValid(target_xid) && target_time == 0 &&
 			xlogreader->ReadRecPtr == backup->stop_lsn)
 		{
 			all_wal = true;
-			break;
+			/* We don't stop here. We want to get last_xid and last_time */
 		}
 
 		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
@@ -217,13 +217,13 @@ validate_wal(pgBackup *backup,
 				 last_timestamp, last_xid);
 
 			if (TransactionIdIsValid(target_xid) && target_time != 0)
-				elog(ERROR, "there are not WAL records to time %s and xid " XID_FMT,
+				elog(ERROR, "there are no WAL records to time %s and xid " XID_FMT,
 					 target_timestamp, target_xid);
 			else if (TransactionIdIsValid(target_xid))
-				elog(ERROR, "there are not WAL records to xid " XID_FMT,
+				elog(ERROR, "there are no WAL records to xid " XID_FMT,
 					 target_xid);
 			else if (target_time != 0)
-				elog(ERROR, "there are not WAL records to time %s ",
+				elog(ERROR, "there are no WAL records to time %s ",
 					 target_timestamp);
 		}
 	}
