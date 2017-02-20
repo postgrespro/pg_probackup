@@ -33,8 +33,6 @@
 #ifndef _GETOPT_H_
 #define _GETOPT_H_
 
-#include <sys/cdefs.h>
-
 /*
  * GNU-like getopt_long()/getopt_long_only() with 4.4BSD optreset extension.
  * getopt() is declared here too for GNU programs.

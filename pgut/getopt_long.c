@@ -49,8 +49,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-
 #include <errno.h>
 #include "getopt.h"
 #include <stdlib.h>
