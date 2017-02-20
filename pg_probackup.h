@@ -322,6 +322,7 @@ extern parray *dir_read_file_list(const char *root, const char *file_txt);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern void dir_copy_files(const char *from_root, const char *to_root);
+extern bool dir_is_empty(const char *path);
 
 extern pgFile *pgFileNew(const char *path, bool omit_symlink);
 extern void pgFileDelete(pgFile *file);

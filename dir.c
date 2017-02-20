@@ -725,3 +725,41 @@ dir_copy_files(const char *from_root, const char *to_root)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 }
+
+/*
+ * Check if directory empty.
+ */
+bool
+dir_is_empty(const char *path)
+{
+	DIR		   *dir;
+	struct dirent *dir_ent;
+
+	dir = opendir(path);
+	if (dir == NULL)
+	{
+		/* Directory in path doesn't exist */
+		if (errno == ENOENT)
+			return true;
+		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
+	}
+
+	errno = 0;
+	while ((dir_ent = readdir(dir)))
+	{
+		/* Skip entries point current dir or parent dir */
+		if (strcmp(dir_ent->d_name, ".") == 0 ||
+			strcmp(dir_ent->d_name, "..") == 0)
+			continue;
+
+		/* Directory is not empty */
+		closedir(dir);
+		return false;
+	}
+	if (errno)
+		elog(ERROR, "cannot read directory \"%s\": %s", path, strerror(errno));
+
+	closedir(dir);
+
+	return true;
+}

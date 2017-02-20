@@ -46,10 +46,8 @@ do_restore(time_t backup_id,
 	int			i;
 	int			base_index;				/* index of base (full) backup */
 	int			ret;
-	TimeLineID	cur_tli;
 	parray	   *backups;
 
-	parray	   *files;
 	parray	   *timelines;
 	pgBackup   *base_backup = NULL;
 	pgBackup   *dest_backup = NULL;
@@ -84,9 +82,6 @@ do_restore(time_t backup_id,
 	backups = catalog_get_backup_list(0);
 	if (!backups)
 		elog(ERROR, "cannot process any more.");
-
-	cur_tli = get_current_timeline(true);
-	elog(LOG, "current instance timeline ID = %u", cur_tli);
 
 	if (target_tli)
 	{
@@ -148,27 +143,9 @@ do_restore(time_t backup_id,
 base_backup_found:
 	base_index = i;
 
-	/*
-	 * Clear restore destination, but don't remove $PGDATA.
-	 * To remove symbolic link, get file list with "omit_symlink = false".
-	 */
-	if (!check)
-	{
-		elog(LOG, "----------------------------------------");
-		elog(LOG, "clearing restore destination");
-
-		files = parray_new();
-		dir_list_file(files, pgdata, false, false, false);
-		parray_qsort(files, pgFileComparePathDesc);	/* delete from leaf */
-
-		for (i = 0; i < parray_num(files); i++)
-		{
-			pgFile *file = (pgFile *) parray_get(files, i);
-			pgFileDelete(file);
-		}
-		parray_walk(files, pgFileFree);
-		parray_free(files);
-	}
+	/* Check if restore destination empty */
+	if (!dir_is_empty(pgdata))
+		elog(ERROR, "restore destination is not empty");
 
 	print_backup_lsn(base_backup);
 
