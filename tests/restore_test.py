@@ -30,9 +30,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			backup_log.write(self.backup_pb(node, options=["--verbose"]))
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
 		node.start({"-t": "600"})
 
@@ -61,9 +62,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]));
 
 		node.start({"-t": "600"})
 
@@ -86,9 +88,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		target_tli = int(self.get_control_data(node)[six.b("Latest checkpoint's TimeLineID")])
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
 		node.start({"-t": "600"})
 
@@ -100,12 +103,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_2.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(
-				node,
-				options=["-j", "4", "--verbose", "--timeline=%i" % target_tli]
-			))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node,
+				options=["-j", "4", "--verbose", "--timeline=%i" % target_tli]))
 
 		recovery_target_timeline = self.get_recovery_conf(node)["recovery_target_timeline"]
 		self.assertEqual(int(recovery_target_timeline), target_tli)
@@ -135,12 +137,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		pgbench.stdout.close()
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(
-				node,
-				options=["-j", "4", "--verbose", '--time="%s"' % target_time]
-			))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node,
+				options=["-j", "4", "--verbose", '--time="%s"' % target_time]))
 
 		node.start({"-t": "600"})
 
@@ -182,12 +183,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		node.execute("postgres", "SELECT pg_switch_xlog()")
 
 		node.stop({"-m": "fast"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(
-				node,
-				options=["-j", "4", "--verbose", '--xid=%s' % target_xid]
-			))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node,
+				options=["-j", "4", "--verbose", '--xid=%s' % target_xid]))
 
 		node.start({"-t": "600"})
 
@@ -224,9 +224,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
 		node.start({"-t": "600"})
 
@@ -270,9 +271,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
 		node.start({"-t": "600"})
 
@@ -293,7 +295,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			self.skipTest("ptrack not supported")
 			return
 
+		node.append_conf("pg_hba.conf", "local replication all trust")
+		node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
 		node.append_conf("postgresql.conf", "ptrack_enable = on")
+		node.append_conf("postgresql.conf", "max_wal_senders = 1")
 		node.restart()
 
 		with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
@@ -309,9 +314,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
 		node.start({"-t": "600"})
 
@@ -333,7 +339,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			self.skipTest("ptrack not supported")
 			return
 
+		node.append_conf("pg_hba.conf", "local replication all trust")
+		node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
 		node.append_conf("postgresql.conf", "ptrack_enable = on")
+		node.append_conf("postgresql.conf", "max_wal_senders = 1")
 		node.restart()
 
 		with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
@@ -358,11 +367,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		self.assertEqual(bbalance, delta)
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 
 		self.wrong_wal_clean(node, wal_segment_size)
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
 		node.start({"-t": "600"})
 
@@ -386,7 +396,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			self.skipTest("ptrack not supported")
 			return
 
+		node.append_conf("pg_hba.conf", "local replication all trust")
+		node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
 		node.append_conf("postgresql.conf", "ptrack_enable = on")
+		node.append_conf("postgresql.conf", "max_wal_senders = 1")
 		node.restart()
 
 		pgbench = node.pgbench(
@@ -412,10 +425,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		self.assertEqual(bbalance, delta)
 
 		node.stop({"-m": "immediate"})
+		node.cleanup()
 		self.wrong_wal_clean(node, wal_segment_size)
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(node, options=["-j", "4", "--verbose"]))
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node, options=["-j", "4", "--verbose"]))
 
 		node.start({"-t": "600"})
 
@@ -459,17 +473,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		node.execute("postgres", "SELECT pg_switch_xlog()")
 
 		node.stop({"-m": "fast"})
+		node.cleanup()
 
-		with open(path.join(node.logs_dir, "restore_1.log"), "wb") as restore_log:
-			restore_log.write(self.restore_pb(
-				node,
+		self.assertIn(six.b("INFO: restore complete"),
+			self.restore_pb(node,
 				options=[
 					"-j", "4",
 					"--verbose",
 					'--xid=%s' % target_xid,
-					"--inclusive=false"
-				]
-			))
+					"--inclusive=false"]))
 
 		node.start({"-t": "600"})
 
