@@ -1,4 +1,5 @@
 import unittest
+import os
 from os import path
 import six
 from .pb_lib import ProbackupTest
@@ -385,7 +386,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_full_under_load_ptrack_10(self):
 		"""recovery to latest from full + page backups with loads when full backup do"""
-		node = self.make_bnode('estore_full_under_load_ptrack_10', base_dir="tmp_dirs/restore/full_under_load_ptrack_10")
+		node = self.make_bnode('restore_full_under_load_ptrack_10', base_dir="tmp_dirs/restore/full_under_load_ptrack_10")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		wal_segment_size = self.guc_wal_segment_size(node)
@@ -442,7 +443,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_to_xid_inclusive_11(self):
 		"""recovery with target inclusive false"""
-		node = self.make_bnode('estore_to_xid_inclusive_11', base_dir="tmp_dirs/restore/restore_to_xid_inclusive_11")
+		node = self.make_bnode('restore_to_xid_inclusive_11', base_dir="tmp_dirs/restore/restore_to_xid_inclusive_11")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -488,5 +489,70 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		after = node.execute("postgres", "SELECT * FROM pgbench_branches")
 		self.assertEqual(before, after)
 		self.assertEqual(len(node.execute("postgres", "SELECT * FROM tbl0005")), 0)
+
+		node.stop()
+
+	def test_restore_with_tablespace_mapping_12(self):
+		"""recovery using tablespace-mapping option"""
+		node = self.make_bnode('restore_with_tablespace_mapping_12',
+			base_dir="tmp_dirs/restore/restore_with_tablespace_mapping_12")
+		node.start()
+		self.assertEqual(self.init_pb(node), six.b(""))
+
+		# Create tablespace
+		tblspc_path = path.join(node.base_dir, "tblspc")
+		os.makedirs(tblspc_path)
+		with node.connect("postgres") as con:
+			con.connection.autocommit = True
+			con.execute("CREATE TABLESPACE tblspc LOCATION '%s'" % tblspc_path)
+			con.connection.autocommit = False
+			con.execute("CREATE TABLE test (id int) TABLESPACE tblspc")
+			con.execute("INSERT INTO test VALUES (1)")
+			con.commit()
+
+		self.backup_pb(node)
+		self.assertEqual(self.show_pb(node)[0].status, six.b("OK"))
+
+		# 1 - Try to restore to existing directory
+		node.stop()
+		self.assertEqual(six.b("ERROR: restore destination is not empty\n"),
+			self.restore_pb(node))
+
+		# 2 - Try to restore to existing tablespace directory
+		node.cleanup()
+		self.assertIn(six.b("ERROR: restore destination is not empty"),
+			self.restore_pb(node))
+
+		# 3 - Restore using tablespace-mapping
+		tblspc_path_new = path.join(node.base_dir, "tblspc_new")
+		self.assertIn(six.b("INFO: restore complete."),
+			self.restore_pb(node,
+				options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]))
+
+		node.start()
+		id = node.execute("postgres", "SELECT id FROM test")
+		self.assertEqual(id[0][0], 1)
+
+		# 4 - Restore using tablespace-mapping using page backup
+		self.backup_pb(node)
+		with node.connect("postgres") as con:
+			con.execute("INSERT INTO test VALUES (2)")
+			con.commit()
+		self.backup_pb(node, backup_type="page")
+
+		show_pb = self.show_pb(node)
+		self.assertEqual(show_pb[1].status, six.b("OK"))
+		self.assertEqual(show_pb[2].status, six.b("OK"))
+
+		node.stop()
+		node.cleanup()
+		tblspc_path_page = path.join(node.base_dir, "tblspc_page")
+		self.assertIn(six.b("INFO: restore complete."),
+			self.restore_pb(node,
+				options=["-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)]))
+
+		node.start()
+		id = node.execute("postgres", "SELECT id FROM test OFFSET 1")
+		self.assertEqual(id[0][0], 2)
 
 		node.stop()

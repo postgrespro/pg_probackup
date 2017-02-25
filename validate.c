@@ -13,7 +13,6 @@
 #include <pthread.h>
 
 static void pgBackupValidateFiles(void *arg);
-void do_validate_last(void);
 
 typedef struct
 {
@@ -22,51 +21,6 @@ typedef struct
 	bool size_only;
 	bool corrupted;
 } validate_files_args;
-
-void do_validate_last(void)
-{
-	int		i;
-	int		ret;
-	parray	*backup_list;
-	bool	another_pg_probackup = false;
-
-	ret = catalog_lock(false);
-	if (ret == 1)
-		another_pg_probackup = true;
-
-	/* get backup list matches given range */
-	backup_list = catalog_get_backup_list(0);
-	if (!backup_list)
-		elog(ERROR, "cannot process any more.");
-
-	parray_qsort(backup_list, pgBackupCompareId);
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		pgBackup *backup = (pgBackup *)parray_get(backup_list, i);
-
-		/* clean extra backups (switch STATUS to ERROR) */
-		if (!another_pg_probackup &&
-			(backup->status == BACKUP_STATUS_RUNNING ||
-			 backup->status == BACKUP_STATUS_DELETING))
-		{
-			backup->status = BACKUP_STATUS_ERROR;
-			pgBackupWriteIni(backup);
-		}
-
-		/* Validate completed backups only. */
-		if (backup->status != BACKUP_STATUS_DONE)
-			continue;
-
-		/* validate with CRC value and update status to OK */
-		pgBackupValidate(backup, false, false);
-	}
-
-	/* cleanup */
-	parray_walk(backup_list, pgBackupFree);
-	parray_free(backup_list);
-
-	catalog_unlock();
-}
 
 int
 do_validate(time_t backup_id,

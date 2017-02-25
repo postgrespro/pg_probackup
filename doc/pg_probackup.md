@@ -477,6 +477,12 @@ Specifies whether to stop just after the specified recovery target (true), or ju
 
 Specifies recovering into a particular timeline.
 
+-T
+--tablespace-mapping=OLDDIR=NEWDIR
+
+Relocate the tablespace in directory `OLDDIR` to `NEWDIR` during restore. Both
+`OLDDIR` and `NEWDIR` must be absolute paths.
+
 ### Delete options:
 
 --wal

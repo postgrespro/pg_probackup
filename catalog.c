@@ -242,6 +242,10 @@ pgBackupCreateDir(pgBackup *backup)
 	char   *subdirs[] = { DATABASE_DIR, NULL };
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
+
+	if (!dir_is_empty(path))
+		elog(ERROR, "backup destination is not empty \"%s\"", path);
+
 	dir_create_dir(path, DIR_PERMISSION);
 
 	/* create directories for actual backup files */
@@ -525,6 +529,8 @@ pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subd
 	else
 		snprintf(path, len, "%s/%s/%s", backup_path, BACKUPS_DIR, datetime);
 	free(datetime);
+
+	make_native_path(path);
 }
 
 void

@@ -168,9 +168,9 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 		/* high prior value has been set already. */
 		return;
 	}
-	else if (src >= SOURCE_CMDLINE && opt->source >= src)
+	/* Allow duplicate entries for function option */
+	else if (src >= SOURCE_CMDLINE && opt->source >= src && opt->type != 'f')
 	{
-		/* duplicated option in command line */
 		message = "specified only once";
 	}
 	else

@@ -38,7 +38,7 @@ static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
 const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
-parray	*backup_files_list;
+static parray *backup_files_list = NULL;
 static volatile uint32	total_copy_files_increment;
 static uint32 total_files_num;
 static PGconn *start_stop_connect = NULL;
@@ -73,12 +73,8 @@ static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
 									 size_t *result_size);
-static void add_files(parray *files, const char *root, bool add_root, bool is_pgdata);
-static void create_file_list(parray *files,
-							 const char *root,
-							 const char *subdir,
-							 const char *prefix,
-							 bool is_append);
+static void add_pgdata_files(parray *files, const char *root);
+static void create_file_list(parray *files, const char *root, bool is_append);
 static void wait_for_archive(PGconn *conn, pgBackup *backup, const char *sql, bool stop_backup);
 static void wait_archive_lsn(XLogRecPtr lsn, bool last_segno);
 static void make_pagemap_from_ptrack(parray *files);
@@ -98,16 +94,15 @@ static void StreamLog(void *arg);
 static parray *
 do_backup_database(parray *backup_list, bool smooth_checkpoint)
 {
-	int			i;
+	size_t		i;
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
-	FILE	   *fp;
-	char		path[MAXPGPATH];
+	char		current_path[MAXPGPATH];
+	char		database_path[MAXPGPATH];
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr *lsn = NULL;
 	char		prev_file_txt[MAXPGPATH];	/* path of the previous backup
 											 * list file */
-	bool		has_backup_label  = true;	/* flag if backup_label is there */
 	pthread_t	backup_threads[num_threads];
 	pthread_t	stream_thread;
 	backup_files_args *backup_threads_args[num_threads];
@@ -164,30 +159,33 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	strncat(label, " with pg_probackup", lengthof(label));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
+
 	/* start stream replication */
 	if (stream_wal)
 	{
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-		join_path_components(dst_backup_path, path, "pg_xlog");
+		join_path_components(dst_backup_path, database_path, "pg_xlog");
 		dir_create_dir(dst_backup_path, DIR_PERMISSION);
+
 		pthread_mutex_lock(&check_stream_mut);
 		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
 		pthread_mutex_lock(&check_stream_mut);
 		if (conn == NULL)
 			elog(ERROR, "I can't continue work because stream connect has failed.");
+
 		pthread_mutex_unlock(&check_stream_mut);
 	}
 
 	if(!from_replica)
 	{
+		char		label_path[MAXPGPATH];
+
 		/* If backup_label does not exist in $PGDATA, stop taking backup */
-		snprintf(path, lengthof(path), "%s/backup_label", pgdata);
-		make_native_path(path);
-		if (!fileExists(path))
-			has_backup_label = false;
+		join_path_components(label_path, pgdata, "backup_label");
 
 		/* Leave if no backup file */
-		if (!has_backup_label)
+		if (!fileExists(label_path))
 		{
 			elog(LOG, "backup_label does not exist, stopping backup");
 			pg_stop_backup(NULL);
@@ -195,31 +193,10 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 		}
 	}
 
-	/*
-	 * List directories and symbolic links with the physical path to make
-	 * mkdirs.sh, then sort them in order of path. Omit $PGDATA.
-	 */
-	backup_files_list = parray_new();
-	dir_list_file(backup_files_list, pgdata, false, false, false);
-
-	if (!check)
-	{
-		pgBackupGetPath(&current, path, lengthof(path), MKDIRS_SH_FILE);
-		fp = fopen(path, "wt");
-		if (fp == NULL)
-			elog(ERROR, "can't open make directory script \"%s\": %s",
-				path, strerror(errno));
-		dir_print_mkdirs_sh(fp, backup_files_list, pgdata);
-		fclose(fp);
-		if (chmod(path, DIR_PERMISSION) == -1)
-			elog(ERROR, "can't change mode of \"%s\": %s", path,
-				strerror(errno));
-	}
-
-	/* clear directory list */
-	parray_walk(backup_files_list, pgFileFree);
-	parray_free(backup_files_list);
-	backup_files_list = NULL;
+	pgBackupGetPath(&current, current_path, lengthof(current_path), NULL);
+	/* Make tablespace_map.txt file on standby */
+	if (from_replica)
+		create_tablespace_map(pgdata, current_path);
 
 	/*
 	 * To take differential backup, the file list of the last completed database
@@ -230,7 +207,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	{
 		Assert(prev_backup);
 		pgBackupGetPath(prev_backup, prev_file_txt, lengthof(prev_file_txt),
-			DATABASE_FILE_LIST);
+						DATABASE_FILE_LIST);
 		prev_files = dir_read_file_list(pgdata, prev_file_txt);
 
 		/*
@@ -248,10 +225,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	add_files(backup_files_list, pgdata, false, true);
-
-	/* backup files */
-	pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+	add_pgdata_files(backup_files_list, pgdata);
 
 	/*
 	 * Build page mapping in differential mode. When using this mode, the
@@ -302,36 +276,18 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	/* make dirs before backup */
 	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
-		int ret;
-		struct stat buf;
-		pgFile *file = (pgFile *) parray_get(backup_files_list, i);
+		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
 
-		ret = stat(file->path, &buf);
-		if (ret == -1)
-		{
-			if (errno == ENOENT)
-			{
-				/* record as skipped file in file_xxx.txt */
-				file->write_size = BYTES_INVALID;
-				elog(LOG, "skip");
-				continue;
-			}
-			else
-			{
-				elog(ERROR,
-					"can't stat backup mode. \"%s\": %s",
-					file->path, strerror(errno));
-			}
-		}
 		/* if the entry was a directory, create it in the backup */
-		if (S_ISDIR(buf.st_mode))
+		if (S_ISDIR(file->mode))
 		{
-			char dirpath[MAXPGPATH];
+			char		dirpath[MAXPGPATH];
+			char	   *dir_name = JoinPathEnd(file->path, pgdata);
+
 			if (verbose)
-				elog(LOG, "Make dir %s",  file->path + strlen(pgdata) + 1);
-			join_path_components(dirpath, path, JoinPathEnd(file->path, pgdata));
-			if (!check)
-				dir_create_dir(dirpath, DIR_PERMISSION);
+				elog(LOG, "make directory \"%s\"", dir_name);
+			join_path_components(dirpath, database_path, dir_name);
+			dir_create_dir(dirpath, DIR_PERMISSION);
 		}
 		else
 		{
@@ -351,8 +307,9 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_args *arg = pg_malloc(sizeof(backup_files_args));
+
 		arg->from_root = pgdata;
-		arg->to_root = path;
+		arg->to_root = database_path;
 		arg->files = backup_files_list;
 		arg->prev_files = prev_files;
 		arg->lsn = lsn;
@@ -376,6 +333,13 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 		pg_free(backup_threads_args[i]);
 	}
 
+	/* clean previous backup file list */
+	if (prev_files)
+	{
+		parray_walk(prev_files, pgFileFree);
+		parray_free(prev_files);
+	}
+
 	if (progress)
 		fprintf(stderr, "\n");
 
@@ -384,40 +348,42 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 
 	if (stream_wal)
 	{
-		parray	*list_file;
-		char pg_xlog_path[MAXPGPATH];
+		parray	   *list_file;
+		char		pg_xlog_path[MAXPGPATH];
 
 		/* We expect the completion of stream */
 		pthread_join(stream_thread, NULL);
 
 		/* Scan backup pg_xlog dir */
 		list_file = parray_new();
-		join_path_components(pg_xlog_path, path, "pg_xlog");
+		join_path_components(pg_xlog_path, database_path, "pg_xlog");
 		dir_list_file(list_file, pg_xlog_path, false, true, false);
 
 		/* Remove file path root prefix and calc meta */
 		for (i = 0; i < parray_num(list_file); i++)
 		{
-			pgFile *file = (pgFile *)parray_get(list_file, i);
+			pgFile	   *file = (pgFile *) parray_get(list_file, i);
 
 			calc_file(file);
-			if (strstr(file->path, path) == file->path)
+			if (strstr(file->path, database_path) == file->path)
 			{
-				char *ptr = file->path;
-				file->path = pstrdup(JoinPathEnd(ptr, path));
+				char	   *ptr = file->path;
+				file->path = pstrdup(JoinPathEnd(ptr, database_path));
 				free(ptr);
 			}
 		}
 		parray_concat(backup_files_list, list_file);
+		parray_free(list_file);
 	}
 
 	/* Create file list */
-	create_file_list(backup_files_list, pgdata, DATABASE_FILE_LIST, NULL, false);
+	create_file_list(backup_files_list, pgdata, false);
 
 	/* Print summary of size of backup mode files */
 	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
-		pgFile *file = (pgFile *) parray_get(backup_files_list, i);
+		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+
 		if (!S_ISREG(file->mode))
 			continue;
 		/*
@@ -524,7 +490,7 @@ do_backup(bool smooth_checkpoint)
 	/* Calculate the total data read */
 	if (verbose)
 	{
-		int64 total_read = 0;
+		int64		total_read = 0;
 
 		/* Database data */
 		if (current.backup_mode == BACKUP_MODE_FULL ||
@@ -545,6 +511,8 @@ do_backup(bool smooth_checkpoint)
 	if (files_database)
 		parray_walk(files_database, pgFileFree);
 	parray_free(files_database);
+
+	pgBackupValidate(&current, false, false);
 
 	/* release catalog lock */
 	catalog_unlock();
@@ -1329,20 +1297,17 @@ backup_files(void *arg)
  * Append files to the backup list array.
  */
 static void
-add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
+add_pgdata_files(parray *files, const char *root)
 {
-	parray	   *list_file;
 	size_t		i;
 
-	list_file = parray_new();
-
 	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(list_file, root, true, true, add_root);
+	dir_list_file(files, root, true, true, false);
 
 	/* mark files that are possible datafile as 'datafile' */
-	for (i = 0; i < parray_num(list_file); i++)
+	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile	   *file = (pgFile *) parray_get(list_file, i);
+		pgFile	   *file = (pgFile *) parray_get(files, i);
 		char	   *relative;
 		char	   *fname;
 		size_t		path_len;
@@ -1353,8 +1318,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 
 		/* data files are under "base", "global", or "pg_tblspc" */
 		relative = file->path + strlen(root) + 1;
-		if (is_pgdata &&
-			!path_is_prefix_of_path("base", relative) &&
+		if (!path_is_prefix_of_path("base", relative) &&
 			/*!path_is_prefix_of_path("global", relative) &&*/ //TODO What's wrong with this line?
 			!path_is_prefix_of_path("pg_tblspc", relative))
 			continue;
@@ -1370,7 +1334,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 		if (fname[0] == 't' && isdigit(fname[1]))
 		{
 			pgFileFree(file);
-			parray_remove(list_file, i);
+			parray_remove(files, i);
 			i--;
 			continue;
 		}
@@ -1396,7 +1360,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 				else
 					tmp_file.path[path_len - 7] = '\0';
 
-				pre_search_file = (pgFile **) parray_bsearch(list_file,
+				pre_search_file = (pgFile **) parray_bsearch(files,
 															 &tmp_file,
 															 pgFileComparePath);
 
@@ -1418,7 +1382,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 
 			/* Remove ptrack file itself from backup list */
 			pgFileFree(file);
-			parray_remove(list_file, i);
+			parray_remove(files, i);
 			i--;
 		}
 		/* compress map file it is not data file */
@@ -1430,7 +1394,7 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 
 			tmp_file.path = pg_strdup(file->path);
 			tmp_file.path[path_len - 4] = '\0';
-			pre_search_file = (pgFile **) parray_bsearch(list_file,
+			pre_search_file = (pgFile **) parray_bsearch(files,
 														 &tmp_file,
 														 pgFileComparePath);
 			if (pre_search_file != NULL)
@@ -1439,12 +1403,12 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 				int			md = open(file->path, O_RDWR|PG_BINARY, 0);
 
 				if (md < 0)
-					elog(ERROR, "add_files(). cannot open cfm file '%s'", file->path);
+					elog(ERROR, "cannot open cfm file '%s'", file->path);
 
 				map = cfs_mmap(md);
 				if (map == MAP_FAILED)
 				{
-					elog(LOG, "add_files(). cfs_compression_ration failed to map file %s: %m", file->path);
+					elog(LOG, "cfs_compression_ration failed to map file %s: %m", file->path);
 					close(md);
 					break;
 				}
@@ -1453,10 +1417,10 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 				(*pre_search_file)->is_datafile = false;
 
 				if (cfs_munmap(map) < 0)
-					elog(LOG, "add_files(). CFS failed to unmap file %s: %m",
+					elog(LOG, "CFS failed to unmap file %s: %m",
 						 file->path);
 				if (close(md) < 0)
-					elog(LOG, "add_files(). CFS failed to close file %s: %m",
+					elog(LOG, "CFS failed to close file %s: %m",
 						 file->path);
 			}
 			else
@@ -1497,32 +1461,27 @@ add_files(parray *files, const char *root, bool add_root, bool is_pgdata)
 				file->segno = (int) strtol(text_segno, NULL, 10);
 		}
 	}
-
-	parray_concat(files, list_file);
 }
 
 /*
  * Output the list of files to backup catalog
  */
 static void
-create_file_list(parray *files,
-				 const char *root,
-				 const char *subdir,
-				 const char *prefix,
-				 bool is_append)
+create_file_list(parray *files, const char *root, bool is_append)
 {
-	FILE	*fp;
-	char	 path[MAXPGPATH];
+	FILE	   *fp;
+	char		path[MAXPGPATH];
 
 	if (!check)
 	{
 		/* output path is '$BACKUP_PATH/file_database.txt' */
-		pgBackupGetPath(&current, path, lengthof(path), subdir);
+		pgBackupGetPath(&current, path, lengthof(path), DATABASE_FILE_LIST);
+
 		fp = fopen(path, is_append ? "at" : "wt");
 		if (fp == NULL)
-			elog(ERROR, "can't open file list \"%s\": %s", path,
+			elog(ERROR, "cannot open file list \"%s\": %s", path,
 				strerror(errno));
-		dir_print_file_list(fp, files, root, prefix);
+		print_file_list(fp, files, root);
 		fclose(fp);
 	}
 }
@@ -1596,7 +1555,8 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	pg_free(rel_path);
 }
 
-void make_pagemap_from_ptrack(parray *files)
+static void
+make_pagemap_from_ptrack(parray *files)
 {
 	int i;
 	for (i = 0; i < parray_num(files); i++)

@@ -28,6 +28,8 @@ Restore options:
       --xid                 transaction ID up to which recovery will proceed
       --inclusive           whether we stop just after the recovery target
       --timeline            recovering into a particular timeline
+  -T, --tablespace-mapping=OLDDIR=NEWDIR
+                            relocate the tablespace in directory OLDDIR to NEWDIR
   -j, --threads=NUM         number of parallel threads
       --progress            show progress
 

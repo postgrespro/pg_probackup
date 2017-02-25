@@ -51,7 +51,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 			target_xid = res[0][0]
 
 		node.execute("postgres", "SELECT pg_switch_xlog()")
-		node.stop({"-m": "immediate"})
+		node.stop({"-m": "smart"})
 
 		id_backup = self.show_pb(node)[0].id
 

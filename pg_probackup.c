@@ -74,6 +74,7 @@ static pgut_option options[] =
 	{ 's',  4, "xid",					&target_xid,		SOURCE_CMDLINE },
 	{ 's',  5, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
 	{ 'u',  6, "timeline",				&target_tli,		SOURCE_CMDLINE },
+	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 12, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	/* retention options */
@@ -176,8 +177,6 @@ main(int argc, char *argv[])
 	/* setup exclusion list for file search */
 	for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
 
-	pgdata_exclude_dir[i++] = arclog_path;
-
 	if(!backup_logs)
 		pgdata_exclude_dir[i++] = "pg_log";
 
@@ -191,16 +190,7 @@ main(int argc, char *argv[])
 	if (pg_strcasecmp(cmd, "init") == 0)
 		return do_init();
 	else if (pg_strcasecmp(cmd, "backup") == 0)
-	{
-		int			res;
-
-		/* Do the backup */
-		res = do_backup(smooth_checkpoint);
-		if (res != 0)
-			return res;
-
-		do_validate_last();
-	}
+		return do_backup(smooth_checkpoint);
 	else if (pg_strcasecmp(cmd, "restore") == 0)
 		return do_restore(backup_id,
 						  target_time,
@@ -268,6 +258,8 @@ pgut_help(bool details)
 	printf(_("      --xid                 transaction ID up to which recovery will proceed\n"));
 	printf(_("      --inclusive           whether we stop just after the recovery target\n"));
 	printf(_("      --timeline            recovering into a particular timeline\n"));
+	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                            relocate the tablespace in directory OLDDIR to NEWDIR\n"));
 	printf(_("  -j, --threads=NUM         number of parallel threads\n"));
 	printf(_("      --progress            show progress\n"));
 	printf(_("\nDelete options:\n"));
