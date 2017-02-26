@@ -410,6 +410,8 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 	list_data_directories(dirs, backup_database_dir, true, false);
 	read_tablespace_map(links, backup_dir);
 
+	elog(LOG, "restore directories and symlinks...");
+
 	for (i = 0; i < parray_num(dirs); i++)
 	{
 		pgFile	   *dir = (pgFile *) parray_get(dirs, i);
@@ -473,6 +475,14 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 					elog(ERROR, "restore destination is not empty \"%s\"",
 						 linked_path);
 
+				if (link_sep)
+					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
+						 linked_path,
+						 (int) (link_sep -  relative_ptr), relative_ptr);
+				else
+					elog(LOG, "create directory \"%s\" and symbolic link \"%s\"",
+						 linked_path, relative_ptr);
+
 				/* Firstly, create linked directory */
 				dir_create_dir(linked_path, DIR_PERMISSION);
 				/* Create rest of directories */
@@ -498,6 +508,8 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 				continue;
 			}
 		}
+
+		elog(LOG, "create directory \"%s\"", relative_ptr);
 
 		/* This is not symlink, create directory */
 		join_path_components(to_path, pg_data_dir, relative_ptr);
