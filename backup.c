@@ -96,7 +96,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 {
 	size_t		i;
 	parray	   *prev_files = NULL;	/* file list of previous database backup */
-	char		current_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
@@ -192,11 +191,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 			elog(ERROR, "backup_label does not exist in PGDATA.");
 		}
 	}
-
-	pgBackupGetPath(&current, current_path, lengthof(current_path), NULL);
-	/* Make tablespace_map.txt file on standby */
-	if (from_replica)
-		create_tablespace_map(pgdata, current_path);
 
 	/*
 	 * To take differential backup, the file list of the last completed database

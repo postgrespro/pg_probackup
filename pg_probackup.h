@@ -42,7 +42,6 @@
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
 #define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
-#define TABLESPACE_MAP_FILE		"tablespace_map.txt"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
 
@@ -317,7 +316,6 @@ extern void dir_list_file(parray *files, const char *root, bool exclude,
 extern void list_data_directories(parray *files, const char *path,
 								  bool is_root, bool exclude);
 
-extern void create_tablespace_map(const char *pg_data, const char *backup_dir);
 extern void read_tablespace_map(parray *files, const char *backup_dir);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root);

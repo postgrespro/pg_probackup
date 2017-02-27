@@ -551,80 +551,6 @@ list_data_directories(parray *files, const char *path, bool is_root,
 }
 
 /*
- * List symlinks of tablespaces. Symlinks locate on pg_tblspc directory.
- */
-void
-create_tablespace_map(const char *pg_data, const char *backup_dir)
-{
-	char		path[MAXPGPATH];
-	FILE	   *fp = NULL;
-	DIR		    *dir;
-	struct dirent *dent;
-	int			prev_errno;
-
-	join_path_components(path, pg_data, PG_TBLSPC_DIR);
-
-	dir = opendir(path);
-	if (dir == NULL)
-		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
-
-	errno = 0;
-	while ((dent = readdir(dir)))
-	{
-		char		child[MAXPGPATH];
-		struct stat st;
-
-		/* skip entries point current dir or parent dir */
-		if (strcmp(dent->d_name, ".") == 0 ||
-			strcmp(dent->d_name, "..") == 0)
-			continue;
-
-		join_path_components(child, path, dent->d_name);
-
-		/* Check if file is symlink */
-		if (lstat(child, &st) == -1)
-			elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
-
-		if (S_ISLNK(st.st_mode))
-		{
-			ssize_t		len;
-			char		linked[MAXPGPATH];
-
-			len = readlink(child, linked, sizeof(linked));
-			if (len < 0)
-				elog(ERROR, "cannot read link \"%s\": %s", child,
-					strerror(errno));
-			if (len >= sizeof(linked))
-				elog(ERROR, "symbolic link \"%s\" target is too long\n", child);
-
-			linked[len] = '\0';
-
-			/* Open file if this is first symlink */
-			if (fp == NULL)
-			{
-				char		map_path[MAXPGPATH];
-
-				join_path_components(map_path, backup_dir, TABLESPACE_MAP_FILE);
-				fp = pgut_fopen(map_path, "wt", false);
-			}
-
-			fprintf(fp, "%s %s", dent->d_name, linked);
-		}
-	}
-
-	prev_errno = errno;
-
-	closedir(dir);
-	if (fp)
-		fclose(fp);
-
-	/* If we had error during readdir() */
-	if (prev_errno && prev_errno != ENOENT)
-		elog(ERROR, "cannot read directory \"%s\": %s",
-			 path, strerror(prev_errno));
-}
-
-/*
  * Read names of symbolik names of tablespaces with links to directories from
  * tablespace_map or tablespace_map.txt.
  */
@@ -639,12 +565,11 @@ read_tablespace_map(parray *files, const char *backup_dir)
 	join_path_components(db_path, backup_dir, DATABASE_DIR);
 	join_path_components(map_path, db_path, "tablespace_map");
 
-	/* Exit if database/tablespace_map and tablespace_map.txt don't exists */
+	/* Exit if database/tablespace_map don't exists */
 	if (!fileExists(map_path))
 	{
-		join_path_components(map_path, backup_dir, TABLESPACE_MAP_FILE);
-		if (!fileExists(map_path))
-			return;
+		elog(LOG, "there is no file tablespace_map");
+		return;
 	}
 
 	fp = fopen(map_path, "rt");

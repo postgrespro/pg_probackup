@@ -524,6 +524,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			self.restore_pb(node))
 
 		# 3 - Restore using tablespace-mapping
+		node.cleanup()
 		tblspc_path_new = path.join(node.base_dir, "tblspc_new")
 		self.assertIn(six.b("INFO: restore complete."),
 			self.restore_pb(node,
