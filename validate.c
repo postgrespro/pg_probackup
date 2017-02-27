@@ -36,7 +36,8 @@ do_validate(time_t backup_id,
 	parray	   *backups;
 	pgRecoveryTarget *rt = NULL;
 	pgBackup   *base_backup = NULL;
-	bool		backup_id_found = false;
+	bool		backup_id_found = false,
+				success_validate;
 
 	catalog_lock(false);
 
@@ -101,7 +102,7 @@ base_backup_found:
 		stream_wal = base_backup->stream;
 
 	/* validate base backup */
-	pgBackupValidate(base_backup, false, false);
+	success_validate = pgBackupValidate(base_backup, false, false);
 
 	last_restored_index = base_index;
 
@@ -143,7 +144,8 @@ base_backup_found:
 		if (backup_id != 0)
 			stream_wal = backup->stream;
 
-		pgBackupValidate(backup, false, false);
+		success_validate = success_validate &&
+			pgBackupValidate(backup, false, false);
 		last_restored_index = i;
 	}
 
@@ -154,6 +156,8 @@ base_backup_found:
 					 rt->recovery_target_time,
 					 rt->recovery_target_xid,
 					 base_backup->tli);
+	else if (success_validate)
+		elog(INFO, "backup validation stopped successfully");
 
 	/* release catalog lock */
 	catalog_unlock();
@@ -168,7 +172,7 @@ base_backup_found:
 /*
  * Validate each files in the backup with its size.
  */
-void
+bool
 pgBackupValidate(pgBackup *backup,
 				 bool size_only,
 				 bool for_get_timeline)
@@ -248,6 +252,8 @@ pgBackupValidate(pgBackup *backup,
 		else
 			elog(LOG, "backup %s is valid", backup_id_string);
 	}
+
+	return !corrupted;
 }
 
 static const char *

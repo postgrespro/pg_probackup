@@ -186,7 +186,7 @@ validate_wal(pgBackup *backup,
 
 	/* There are all need WAL records */
 	if (all_wal)
-		elog(INFO, "Backup validation stopped on %s time and xid:" XID_FMT,
+		elog(INFO, "backup validation stopped on time %s and xid " XID_FMT,
 			 last_timestamp, last_xid);
 	/* There are not need WAL records */
 	else
@@ -223,7 +223,7 @@ validate_wal(pgBackup *backup,
 				elog(ERROR, "there are no WAL records to xid " XID_FMT,
 					 target_xid);
 			else if (target_time != 0)
-				elog(ERROR, "there are no WAL records to time %s ",
+				elog(ERROR, "there are no WAL records to time %s",
 					 target_timestamp);
 		}
 	}

@@ -287,7 +287,7 @@ extern int do_validate(time_t backup_id,
 					   const char *target_inclusive,
 					   TimeLineID target_tli);
 extern void do_validate_last(void);
-extern void pgBackupValidate(pgBackup *backup,
+extern bool pgBackupValidate(pgBackup *backup,
 							 bool size_only,
 							 bool for_get_timeline);
 
