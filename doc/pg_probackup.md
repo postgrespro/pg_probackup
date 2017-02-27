@@ -492,10 +492,12 @@ Delete WAL files that are no longer necessary to restore from any of existing ba
 ### Retention policy options:
 
 --redundancy
+redundancy
 
 Specifies how many full backups purge command should keep.
 
 --window
+window
 
 Specifies the number of days of recoverability.
 
