@@ -186,7 +186,7 @@ validate_wal(pgBackup *backup,
 
 	/* There are all need WAL records */
 	if (all_wal)
-		elog(INFO, "backup validation stopped on time %s and xid " XID_FMT,
+		elog(INFO, "backup validation completed successfully on time %s and xid " XID_FMT,
 			 last_timestamp, last_xid);
 	/* There are not need WAL records */
 	else
@@ -213,17 +213,17 @@ validate_wal(pgBackup *backup,
 				time2iso(target_timestamp, lengthof(target_timestamp),
 						 target_time);
 
-			elog(WARNING, "recovery can be done to time %s and xid " XID_FMT,
+			elog(WARNING, "recovery can be done up to time %s and xid " XID_FMT,
 				 last_timestamp, last_xid);
 
 			if (TransactionIdIsValid(target_xid) && target_time != 0)
-				elog(ERROR, "there are no WAL records to time %s and xid " XID_FMT,
+				elog(ERROR, "not enough WAL records to time %s and xid " XID_FMT,
 					 target_timestamp, target_xid);
 			else if (TransactionIdIsValid(target_xid))
-				elog(ERROR, "there are no WAL records to xid " XID_FMT,
+				elog(ERROR, "not enough WAL records to xid " XID_FMT,
 					 target_xid);
 			else if (target_time != 0)
-				elog(ERROR, "there are no WAL records to time %s",
+				elog(ERROR, "not enough WAL records to time %s",
 					 target_timestamp);
 		}
 	}
