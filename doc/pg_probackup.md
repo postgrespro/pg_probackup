@@ -6,12 +6,12 @@ pg_probackup — backup and recovery manager for PostgreSQL.
 ```
 pg_probackup [option...] init
 pg_probackup [option...] backup
-pg_probackup [option...] restore [backup_ID]
-pg_probackup [option...] validate [backup_ID]
-pg_probackup [option...] show    [backup_ID]
-pg_probackup [option...] delete   backup_ID
-pg_probackup [option...] delwal  [backup_ID]
-pg_probackup [option...] retention show|purge
+pg_probackup [option...] restore   [backup_ID]
+pg_probackup [option...] validate  [backup_ID]
+pg_probackup [option...] show      [backup_ID]
+pg_probackup [option...] delete     backup_ID
+pg_probackup [option...] delwal    [backup_ID]
+pg_probackup [option...] retention  show|purge
 ```
 
 ## Description
@@ -40,6 +40,10 @@ some network file system should be used.
 The same backup directory can be used simultaneously by several PostgreSQL servers with replication
 configured between them. Backups can be made from either primary or standby server, and managed in a
 single backup strategy.
+
+`pg_probackup` can restore data files from user tablespaces to their original directories
+using symbolic links and `tablespace_map` file. You can change path to this directories
+during restore using [`tablespace-mapping`](#restore-options) option.
 
 ## Usage
 
@@ -299,20 +303,19 @@ A backup can be used to restore primary database server as well as standby. It d
 
 It is possible to configure the backup retention policy. The retention policy
 specifies specifies which backups must be kept to meet data recoverability
-requirements. The policy can be configured using two parameters: redundancy and
-window.
+requirements. The policy can be configured using two parameters: `redundancy` and
+`window`.
 
 Redundancy parameter specifies how many full backups purge command should keep.
 For example, you make a full backup on Sunday and an incremental backup every day.
 If redundancy is 1, then this backup will become obsolete on next Sunday and will
 be deleted with all its incremental backups when next full backup will be created.
 
-Window parameter specifies the number of days of data recoverability. If window
-is 14, then all full backups older than 14 days will be deleted with their
-incremental backups.
+Window parameter specifies the number of days of data recoverability. That is, 
+the earliest time to which you can recover your data.
 
 This parameters can be used together. Backups are obsolete if they don't
-meet both parameters. For example, you have retention is 1, window is 14 and
+meet both parameters. For example, you have retention is 2, window is 14 and
 two full backups are made 3 and 7 days ago. In this situation both backups aren't
 obsolete and will be kept 14 days.
 
@@ -321,7 +324,7 @@ To delete obsolete backups execute the following command:
 pg_probackup retention purge
 ```
 Redundancy and window parameters values will be taken from command line options
-or from pg_probackup.conf configuration file.
+or from `pg_probackup.conf` configuration file.
 
 ## Additional Features
 
@@ -509,7 +512,6 @@ Currently pg\_probackup has the following restrictions:
 * PostgreSQL 9.5 or higher versions are supported.
 * Windows operating system is not supported.
 * Incremental backups in PTRACK mode can be taken only on Postgres Pro server.
-* Data files from user tablespaces are restored to the same absolute paths as they were during backup.
 * Configuration files outside PostgreSQL data directory are not included in backup and should be backed up separately.
 * Only full backups are supported when using [compressed tablespaces](https://postgrespro.com/docs/postgresproee/current/cfs.html) (Postgres Pro Enterprise feature).
 
@@ -525,4 +527,4 @@ pg\_probackup utility is based on pg\_arman, that was originally written by NTT 
 
 Features like parallel execution, incremental and autonomous backups are developed in Postgres Professional by Yury Zhuravlev (aka stalkerg).
 
-Please report bugs and requests at https://github.com/postgrespro/pg\_probackup/issues .
+Please report bugs and requests at https://github.com/postgrespro/pg_probackup/issues .
