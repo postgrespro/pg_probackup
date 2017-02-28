@@ -31,13 +31,14 @@ do_validate(time_t backup_id,
 {
 	int			i;
 	int			base_index;				/* index of base (full) backup */
-	int			last_restored_index;	/* index of last restored database backup */
+	int			last_diff_index = -1;	/* index of last differential backup */
 	parray	   *timelines;
 	parray	   *backups;
 	pgRecoveryTarget *rt = NULL;
 	pgBackup   *base_backup = NULL;
-	bool		backup_id_found = false,
-				success_validate;
+	pgBackup   *dest_backup = NULL;
+	bool		success_validate,
+				need_validate_wal = false;
 
 	catalog_lock(false);
 
@@ -58,100 +59,93 @@ do_validate(time_t backup_id,
 	elog(LOG, "searching recent full backup");
 	for (i = 0; i < parray_num(backups); i++)
 	{
+		bool		satisfied = false;
+
 		base_backup = (pgBackup *) parray_get(backups, i);
 
 		if (backup_id && base_backup->start_time > backup_id)
 			continue;
 
-		if (backup_id == base_backup->start_time &&
-			(base_backup->status == BACKUP_STATUS_OK ||
-			 base_backup->status == BACKUP_STATUS_CORRUPT))
-			backup_id_found = true;
+		if (backup_id == base_backup->start_time)
+		{
+			/* Checks for target backup */
+			if (base_backup->status != BACKUP_STATUS_OK &&
+				base_backup->status != BACKUP_STATUS_CORRUPT)
+				elog(ERROR, "given backup %s is in %s status",
+					 base36enc(backup_id), status2str(base_backup->status));
 
-		if (backup_id == base_backup->start_time &&
-			(base_backup->status != BACKUP_STATUS_OK &&
-			 base_backup->status != BACKUP_STATUS_CORRUPT))
-			elog(ERROR, "given backup %s is %s", base36enc(backup_id), status2str(base_backup->status));
+			dest_backup = base_backup;
+		}
 
-		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
-			(base_backup->status != BACKUP_STATUS_OK &&
-			 base_backup->status != BACKUP_STATUS_CORRUPT))
+		if (dest_backup != NULL &&
+			base_backup->backup_mode == BACKUP_MODE_FULL &&
+			base_backup->status != BACKUP_STATUS_OK)
+			elog(ERROR, "base backup %s for given backup %s is in %s status",
+				 base36enc(base_backup->start_time),
+				 base36enc(dest_backup->start_time),
+				 status2str(base_backup->status));
+
+		/* Dont check error backups */
+		if ((base_backup->status != BACKUP_STATUS_OK &&
+			 base_backup->status != BACKUP_STATUS_CORRUPT) ||
+			/* Dont check differential backups if we found latest */
+			(last_diff_index >= 0 && base_backup->backup_mode != BACKUP_MODE_FULL))
 			continue;
 
 		if (target_tli)
 		{
 			if (satisfy_timeline(timelines, base_backup) &&
 				satisfy_recovery_target(base_backup, rt) &&
-				(backup_id_found || backup_id == 0))
-				goto base_backup_found;
+				(dest_backup || backup_id == 0))
+				satisfied = true;
 		}
 		else
 			if (satisfy_recovery_target(base_backup, rt) &&
-				(backup_id_found || backup_id == 0))
-				goto base_backup_found;
+				(dest_backup || backup_id == 0))
+				satisfied = true;
 
-		backup_id_found = false;
+		/* Target backup should satisfy validate options */
+		if (backup_id == base_backup->start_time && !satisfied)
+			elog(ERROR, "backup %s does not satisfy validate options",
+				 base36enc(base_backup->start_time));
+
+		if (satisfied)
+		{
+			if (base_backup->backup_mode != BACKUP_MODE_FULL)
+				last_diff_index = i;
+			else
+				goto base_backup_found;
+		}
 	}
 	/* no full backup found, cannot restore */
 	elog(ERROR, "no full backup found, cannot validate.");
 
 base_backup_found:
 	base_index = i;
+	if (last_diff_index == -1)
+		last_diff_index = base_index;
 
-	if (backup_id != 0)
-		stream_wal = base_backup->stream;
+	Assert(last_diff_index <= base_index);
 
-	/* validate base backup */
-	success_validate = pgBackupValidate(base_backup, false, false);
-
-	last_restored_index = base_index;
-
-	/* restore following differential backup */
-	elog(LOG, "searching differential backup...");
-
-	for (i = base_index - 1; i >= 0; i--)
+	/* Validate backups from base_index to last_diff_index */
+	need_validate_wal = target_time != NULL || target_xid != NULL;
+	for (i = base_index; i >= last_diff_index; i--)
 	{
-		pgBackup *backup = (pgBackup *) parray_get(backups, i);
+		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 
-		/* don't use incomplete nor different timeline backup */
-		if ((backup->status != BACKUP_STATUS_OK &&
-			 backup->status != BACKUP_STATUS_CORRUPT) ||
-			backup->tli != base_backup->tli)
-			continue;
-
-		if (backup->backup_mode == BACKUP_MODE_FULL)
-			break;
-
-		if (backup_id && backup->start_time > backup_id)
-			break;
-
-		/* use database backup only */
-		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
-			backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
-			continue;
-
-		/* is the backup is necessary for restore to target timeline ? */
-		if (target_tli)
+		if (backup->status == BACKUP_STATUS_OK ||
+			backup->status == BACKUP_STATUS_CORRUPT)
 		{
-			if (!satisfy_timeline(timelines, backup) ||
-				!satisfy_recovery_target(backup, rt))
-				continue;
+			need_validate_wal = need_validate_wal || !backup->stream;
+
+			success_validate = pgBackupValidate(backup, false, false) &&
+				success_validate;
 		}
-		else
-			if (!satisfy_recovery_target(backup, rt))
-				continue;
-
-		if (backup_id != 0)
-			stream_wal = backup->stream;
-
-		success_validate = success_validate &&
-			pgBackupValidate(backup, false, false);
-		last_restored_index = i;
 	}
 
 	/* and now we must check WALs */
-	if (!stream_wal || rt->time_specified || rt->xid_specified)
-		validate_wal((pgBackup *) parray_get(backups, last_restored_index),
+	if (need_validate_wal)
+		validate_wal((pgBackup *) parray_get(backups, last_diff_index),
 					 arclog_path,
 					 rt->recovery_target_time,
 					 rt->recovery_target_xid,

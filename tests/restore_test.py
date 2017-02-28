@@ -515,7 +515,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		# 1 - Try to restore to existing directory
 		node.stop()
-		self.assertEqual(six.b("ERROR: restore destination is not empty\n"),
+		self.assertIn(six.b("ERROR: restore destination is not empty"),
 			self.restore_pb(node))
 
 		# 2 - Try to restore to existing tablespace directory
@@ -524,7 +524,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 			self.restore_pb(node))
 
 		# 3 - Restore using tablespace-mapping
-		node.cleanup()
 		tblspc_path_new = path.join(node.base_dir, "tblspc_new")
 		self.assertIn(six.b("INFO: restore complete."),
 			self.restore_pb(node,

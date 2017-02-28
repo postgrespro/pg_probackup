@@ -30,6 +30,8 @@ typedef struct TablespaceListCell
 	struct TablespaceListCell *next;
 	char		old_dir[MAXPGPATH];
 	char		new_dir[MAXPGPATH];
+	bool		checked;				/* If this mapping was checked during
+										   restore */
 } TablespaceListCell;
 
 typedef struct TablespaceList
@@ -54,6 +56,7 @@ typedef struct TablespaceCreatedList
 static void restore_database(pgBackup *backup);
 static void restore_directories(const char *pg_data_dir,
 								const char *backup_dir);
+static void check_tablespace_mapping(pgBackup *backup);
 static void create_recovery_conf(time_t backup_id,
 								 const char *target_time,
 								 const char *target_xid,
@@ -82,6 +85,7 @@ do_restore(time_t backup_id,
 {
 	int			i;
 	int			base_index;				/* index of base (full) backup */
+	int			last_diff_index = -1;	/* index of last differential backup */
 	int			ret;
 	parray	   *backups;
 
@@ -89,12 +93,16 @@ do_restore(time_t backup_id,
 	pgBackup   *base_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgRecoveryTarget *rt = NULL;
-	bool		backup_id_found = false;
+	bool		need_recovery_conf = false;
 
 	/* PGDATA and ARCLOG_PATH are always required */
 	if (pgdata == NULL)
 		elog(ERROR,
 			 "required parameter not specified: PGDATA (-D, --pgdata)");
+
+	/* Check if restore destination empty */
+	if (!dir_is_empty(pgdata))
+		elog(ERROR, "restore destination is not empty: \"%s\"", pgdata);
 
 	elog(LOG, "========================================");
 	elog(LOG, "restore start");
@@ -131,110 +139,91 @@ do_restore(time_t backup_id,
 	elog(LOG, "searching recent full backup");
 	for (i = 0; i < parray_num(backups); i++)
 	{
+		bool		satisfied = false;
+
 		base_backup = (pgBackup *) parray_get(backups, i);
 
 		if (backup_id && base_backup->start_time > backup_id)
 			continue;
 
-		if (backup_id == base_backup->start_time &&
-			base_backup->status == BACKUP_STATUS_OK)
+		if (backup_id == base_backup->start_time)
 		{
-			backup_id_found = true;
+			/* Checks for target backup */
+			if (base_backup->status != BACKUP_STATUS_OK)
+				elog(ERROR, "given backup %s is in %s status",
+					 base36enc(backup_id), status2str(base_backup->status));
+
 			dest_backup = base_backup;
 		}
-
-		if (backup_id == base_backup->start_time &&
-			base_backup->status != BACKUP_STATUS_OK)
-			elog(ERROR, "given backup %s is %s", base36enc(backup_id),
-				 status2str(base_backup->status));
 
 		if (dest_backup != NULL &&
 			base_backup->backup_mode == BACKUP_MODE_FULL &&
 			base_backup->status != BACKUP_STATUS_OK)
-			elog(ERROR, "base backup %s for given backup %s is %s",
+			elog(ERROR, "base backup %s for given backup %s is in %s status",
 				 base36enc(base_backup->start_time),
 				 base36enc(dest_backup->start_time),
 				 status2str(base_backup->status));
 
-		if (base_backup->backup_mode < BACKUP_MODE_FULL ||
-			base_backup->status != BACKUP_STATUS_OK)
+		/* Dont check error backups */
+		if (base_backup->status != BACKUP_STATUS_OK ||
+			/* Dont check differential backups if we found latest */
+			(last_diff_index >= 0 && base_backup->backup_mode != BACKUP_MODE_FULL))
 			continue;
 
 		if (target_tli)
 		{
 			if (satisfy_timeline(timelines, base_backup) &&
 				satisfy_recovery_target(base_backup, rt) &&
-				(backup_id_found || backup_id == 0))
-				goto base_backup_found;
+				(dest_backup || backup_id == 0))
+				satisfied = true;
 		}
 		else
 			if (satisfy_recovery_target(base_backup, rt) &&
-				(backup_id_found || backup_id == 0))
-				goto base_backup_found;
+				(dest_backup || backup_id == 0))
+				satisfied = true;
 
-		backup_id_found = false;
+		/* Target backup should satisfy restore options */
+		if (backup_id == base_backup->start_time && !satisfied)
+			elog(ERROR, "backup %s does not satisfy restore options",
+				 base36enc(base_backup->start_time));
+
+		if (satisfied)
+		{
+			if (base_backup->backup_mode != BACKUP_MODE_FULL)
+				last_diff_index = i;
+			else
+				goto base_backup_found;
+		}
 	}
 	/* no full backup found, cannot restore */
-	elog(ERROR, "no full backup found, cannot restore.");
+	elog(ERROR, "no full backup found, cannot restore");
 
 base_backup_found:
 	base_index = i;
+	if (last_diff_index == -1)
+		last_diff_index = base_index;
 
-	/* Check if restore destination empty */
-	if (!dir_is_empty(pgdata))
-		elog(ERROR, "restore destination is not empty");
+	Assert(last_diff_index <= base_index);
+	/* Tablespace directories checking */
+	check_tablespace_mapping((pgBackup *) parray_get(backups, last_diff_index));
 
-	print_backup_lsn(base_backup);
-
-	if (backup_id != 0)
-		stream_wal = base_backup->stream;
-
-	/* restore base backup */
-	restore_database(base_backup);
-
-	/* restore following differential backup */
-	elog(LOG, "searching differential backup...");
-
-	for (i = base_index - 1; i >= 0; i--)
+	/* Restore backups from base_index to last_diff_index */
+	need_recovery_conf = target_time != NULL || target_xid != NULL;
+	for (i = base_index; i >= last_diff_index; i--)
 	{
-		pgBackup *backup = (pgBackup *) parray_get(backups, i);
+		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 
-		/* don't use incomplete nor different timeline backup */
-		if (backup->status != BACKUP_STATUS_OK ||
-			backup->tli != base_backup->tli)
-			continue;
-
-		if (backup->backup_mode == BACKUP_MODE_FULL)
-			break;
-
-		if (backup_id && backup->start_time > backup_id)
-			break;
-
-		/* use database backup only */
-		if (backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
-			backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
-			continue;
-
-		/* is the backup is necessary for restore to target timeline ? */
-		if (target_tli)
+		if (backup->status == BACKUP_STATUS_OK)
 		{
-			if (!satisfy_timeline(timelines, backup) ||
-				!satisfy_recovery_target(backup, rt))
-				continue;
+			need_recovery_conf = need_recovery_conf || !backup->stream;
+
+			print_backup_lsn(backup);
+			restore_database(backup);
 		}
-		else
-			if (!satisfy_recovery_target(backup, rt))
-				continue;
-
-		if (backup_id != 0)
-			stream_wal = backup->stream;
-
-		print_backup_lsn(backup);
-		restore_database(backup);
 	}
 
 	/* create recovery.conf */
-	if (!stream_wal || target_time != NULL || target_xid != NULL)
+	if (need_recovery_conf)
 		create_recovery_conf(backup_id, target_time, target_xid,
 							 target_inclusive, base_backup->tli);
 
@@ -470,9 +459,12 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 							 linked_path, dir_created, link_name);
 				}
 
-				/* Check if restore destination empty */
+				/*
+				 * This check was done in check_tablespace_mapping(). But do
+				 * it again.
+				 */
 				if (!dir_is_empty(linked_path))
-					elog(ERROR, "restore destination is not empty \"%s\"",
+					elog(ERROR, "restore destination is not empty: \"%s\"",
 						 linked_path);
 
 				if (link_sep)
@@ -521,6 +513,65 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 
 	parray_walk(dirs, pgBackupFree);
 	parray_free(dirs);
+}
+
+/*
+ * Check that all tablespace mapping entries have correct linked directory
+ * paths. Linked directories should be empty or do not exist.
+ *
+ * If tablespace-mapping option is supplied all OLDDIR entries should have
+ * entries in tablespace_map file.
+ */
+static void
+check_tablespace_mapping(pgBackup *backup)
+{
+	char		backup_path[MAXPGPATH];
+	parray	   *links;
+	size_t		i;
+	TablespaceListCell *cell;
+
+	links = parray_new();
+
+	pgBackupGetPath(backup, backup_path, lengthof(backup_path), NULL);
+	read_tablespace_map(links, backup_path);
+
+	elog(LOG, "check tablespace directories...");
+
+	/* 1 - all linked directories should be empty */
+	for (i = 0; i < parray_num(links); i++)
+	{
+		pgFile	   *link = (pgFile *) parray_get(links, i);
+		const char *linked_path = link->linked;
+		TablespaceListCell *cell;
+
+		for (cell = tablespace_dirs.head; cell; cell = cell->next)
+			if (strcmp(link->linked, cell->old_dir) == 0)
+			{
+				linked_path = cell->new_dir;
+				cell->checked = true;
+				break;
+			}
+
+		if (!is_absolute_path(linked_path))
+			elog(ERROR, "tablespace directory is not an absolute path: %s\n",
+				 linked_path);
+
+		if (!dir_is_empty(linked_path))
+			elog(ERROR, "restore destination is not empty: \"%s\"",
+				 linked_path);
+	}
+
+	/* 2 - OLDDIR should has an entry in links */
+	for (cell = tablespace_dirs.head; cell; cell = cell->next)
+	{
+		if (!cell->checked)
+			elog(ERROR, "--tablespace-mapping option's old directory "
+				 "has not an entry in tablespace_map file: \"%s\"",
+				 cell->old_dir);
+	}
+
+	parray_walk(links, pgBackupFree);
+	parray_free(links);
 }
 
 /*
@@ -997,6 +1048,8 @@ opt_tablespace_map(pgut_option *opt, const char *arg)
 	if (!is_absolute_path(cell->new_dir))
 		elog(ERROR, "new directory is not an absolute path in tablespace mapping: %s\n",
 			 cell->new_dir);
+
+	cell->checked = false;
 
 	if (tablespace_dirs.tail)
 		tablespace_dirs.tail->next = cell;
