@@ -154,9 +154,6 @@ base_backup_found:
 	else if (success_validate)
 		elog(INFO, "backup validation stopped successfully");
 
-	/* release catalog lock */
-	catalog_unlock();
-
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);

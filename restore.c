@@ -85,7 +85,6 @@ do_restore(time_t backup_id,
 	int			i;
 	int			base_index;				/* index of base (full) backup */
 	int			last_diff_index = -1;	/* index of last differential backup */
-	int			ret;
 	parray	   *backups;
 
 	parray	   *timelines;
@@ -107,12 +106,7 @@ do_restore(time_t backup_id,
 	elog(LOG, "restore start");
 
 	/* get exclusive lock of backup catalog */
-	ret = catalog_lock(false);
-	if (ret == -1)
-		elog(ERROR, "cannot lock backup catalog.");
-	else if (ret == 1)
-		elog(ERROR,
-			 "another pg_probackup is running, stop restore.");
+	catalog_lock(false);
 
 	/* confirm the PostgreSQL server is not running */
 	if (is_pg_running())
@@ -225,9 +219,6 @@ base_backup_found:
 	if (need_recovery_conf)
 		create_recovery_conf(backup_id, target_time, target_xid,
 							 target_inclusive, base_backup->tli);
-
-	/* release catalog lock */
-	catalog_unlock();
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);

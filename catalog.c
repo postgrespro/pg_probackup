@@ -13,6 +13,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -26,42 +27,185 @@ static pgBackup *read_backup_from_file(const char *path);
 
 #define BOOL_TO_STR(val)	((val) ? "true" : "false")
 
-static int lock_fd = -1;
+static bool exit_hook_registered = false;
+static char lock_file[MAXPGPATH];
+
+static void
+unlink_lock_atexit(void)
+{
+	int			res;
+	res = unlink(lock_file);
+	if (res != 0 && res != ENOENT)
+		elog(WARNING, "%s: %s", lock_file, strerror(errno));
+}
 
 /*
- * Lock of the catalog with pg_probackup.conf file and return 0.
- * If the lock is held by another one, return 1 immediately.
+ * Create a lockfile.
  */
 int
 catalog_lock(bool check_catalog)
 {
-	int			ret;
-	char		id_path[MAXPGPATH];
+	int			fd;
+	char		buffer[MAXPGPATH * 2 + 256];
+	int			ntries;
+	int			len;
+	int			encoded_pid;
+	pid_t		my_pid,
+				my_p_pid;
 
-	join_path_components(id_path, backup_path, BACKUP_CATALOG_CONF_FILE);
-	lock_fd = open(id_path, O_RDWR);
-	if (lock_fd == -1)
-		elog(errno == ENOENT ? ERROR : ERROR,
-			"cannot open file \"%s\": %s", id_path, strerror(errno));
-#ifdef __IBMC__
-	ret = lockf(lock_fd, LOCK_EX | LOCK_NB, 0);	/* non-blocking */
+	join_path_components(lock_file, backup_path, BACKUP_CATALOG_PID);
+
+	/*
+	 * If the PID in the lockfile is our own PID or our parent's or
+	 * grandparent's PID, then the file must be stale (probably left over from
+	 * a previous system boot cycle).  We need to check this because of the
+	 * likelihood that a reboot will assign exactly the same PID as we had in
+	 * the previous reboot, or one that's only one or two counts larger and
+	 * hence the lockfile's PID now refers to an ancestor shell process.  We
+	 * allow pg_ctl to pass down its parent shell PID (our grandparent PID)
+	 * via the environment variable PG_GRANDPARENT_PID; this is so that
+	 * launching the postmaster via pg_ctl can be just as reliable as
+	 * launching it directly.  There is no provision for detecting
+	 * further-removed ancestor processes, but if the init script is written
+	 * carefully then all but the immediate parent shell will be root-owned
+	 * processes and so the kill test will fail with EPERM.  Note that we
+	 * cannot get a false negative this way, because an existing postmaster
+	 * would surely never launch a competing postmaster or pg_ctl process
+	 * directly.
+	 */
+	my_pid = getpid();
+#ifndef WIN32
+	my_p_pid = getppid();
 #else
-	ret = flock(lock_fd, LOCK_EX | LOCK_NB);	/* non-blocking */
+
+	/*
+	 * Windows hasn't got getppid(), but doesn't need it since it's not using
+	 * real kill() either...
+	 */
+	my_p_pid = 0;
 #endif
-	if (ret == -1)
+
+	/*
+	 * We need a loop here because of race conditions.  But don't loop forever
+	 * (for example, a non-writable $backup_path directory might cause a failure
+	 * that won't go away).  100 tries seems like plenty.
+	 */
+	for (ntries = 0;; ntries++)
 	{
-		if (errno == EWOULDBLOCK)
+		/*
+		 * Try to create the lock file --- O_EXCL makes this atomic.
+		 *
+		 * Think not to make the file protection weaker than 0600.  See
+		 * comments below.
+		 */
+		fd = open(lock_file, O_RDWR | O_CREAT | O_EXCL, 0600);
+		if (fd >= 0)
+			break;				/* Success; exit the retry loop */
+
+		/*
+		 * Couldn't create the pid file. Probably it already exists.
+		 */
+		if ((errno != EEXIST && errno != EACCES) || ntries > 100)
+			elog(ERROR, "could not create lock file \"%s\": %s",
+				 lock_file, strerror(errno));
+
+		/*
+		 * Read the file to get the old owner's PID.  Note race condition
+		 * here: file might have been deleted since we tried to create it.
+		 */
+		fd = open(lock_file, O_RDONLY, 0600);
+		if (fd < 0)
 		{
-			close(lock_fd);
-			return 1;
+			if (errno == ENOENT)
+				continue;		/* race condition; try again */
+			elog(ERROR, "could not open lock file \"%s\": %s",
+				 lock_file, strerror(errno));
 		}
-		else
+		if ((len = read(fd, buffer, sizeof(buffer) - 1)) < 0)
+			elog(ERROR, "could not read lock file \"%s\": %s",
+				 lock_file, strerror(errno));
+		close(fd);
+
+		if (len == 0)
+			elog(ERROR, "lock file \"%s\" is empty", lock_file);
+
+		buffer[len] = '\0';
+		encoded_pid = atoi(buffer);
+
+		if (encoded_pid <= 0)
+			elog(ERROR, "bogus data in lock file \"%s\": \"%s\"",
+				 lock_file, buffer);
+
+		/*
+		 * Check to see if the other process still exists
+		 *
+		 * Per discussion above, my_pid, my_p_pid can be
+		 * ignored as false matches.
+		 *
+		 * Normally kill() will fail with ESRCH if the given PID doesn't
+		 * exist.
+		 */
+		if (encoded_pid != my_pid && encoded_pid != my_p_pid)
 		{
-			int errno_tmp = errno;
-			close(lock_fd);
-			elog(ERROR, "cannot lock file \"%s\": %s", id_path,
-				strerror(errno_tmp));
+			if (kill(encoded_pid, 0) == 0 ||
+				(errno != ESRCH && errno != EPERM))
+				elog(ERROR, "lock file \"%s\" already exists", lock_file);
 		}
+
+		/*
+		 * Looks like nobody's home.  Unlink the file and try again to create
+		 * it.  Need a loop because of possible race condition against other
+		 * would-be creators.
+		 */
+		if (unlink(lock_file) < 0)
+			elog(ERROR, "could not remove old lock file \"%s\": %s",
+				 lock_file, strerror(errno));
+	}
+
+	/*
+	 * Successfully created the file, now fill it.
+	 */
+	snprintf(buffer, sizeof(buffer), "%d\n", my_pid);
+
+	errno = 0;
+	if (write(fd, buffer, strlen(buffer)) != strlen(buffer))
+	{
+		int			save_errno = errno;
+
+		close(fd);
+		unlink(lock_file);
+		/* if write didn't set errno, assume problem is no disk space */
+		errno = save_errno ? save_errno : ENOSPC;
+		elog(ERROR, "could not write lock file \"%s\": %s",
+			 lock_file, strerror(errno));
+	}
+	if (fsync(fd) != 0)
+	{
+		int			save_errno = errno;
+
+		close(fd);
+		unlink(lock_file);
+		errno = save_errno;
+		elog(ERROR, "could not write lock file \"%s\": %s",
+			 lock_file, strerror(errno));
+	}
+	if (close(fd) != 0)
+	{
+		int			save_errno = errno;
+
+		unlink(lock_file);
+		errno = save_errno;
+		elog(ERROR, "could not write lock file \"%s\": %s",
+			 lock_file, strerror(errno));
+	}
+
+	/*
+	 * Arrange to unlink the lock file(s) at proc_exit.
+	 */
+	if (!exit_hook_registered)
+	{
+		atexit(unlink_lock_atexit);
+		exit_hook_registered = true;
 	}
 
 	if (check_catalog)
@@ -78,16 +222,6 @@ catalog_lock(bool check_catalog)
 	}
 
 	return 0;
-}
-
-/*
- * Release catalog lock.
- */
-void
-catalog_unlock(void)
-{
-	close(lock_fd);
-	lock_fd = -1;
 }
 
 /*

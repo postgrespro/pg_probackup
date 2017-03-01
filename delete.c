@@ -23,7 +23,6 @@ do_delete(time_t backup_id)
 {
 	int			i;
 	int			b_index;
-	int			ret;
 	parray		*backup_list;
 	pgBackup	*last_backup = NULL;
 
@@ -32,12 +31,7 @@ do_delete(time_t backup_id)
 		elog(ERROR, "required backup ID not specified");
 
 	/* Lock backup catalog */
-	ret = catalog_lock(false);
-	if (ret == -1)
-		elog(ERROR, "can't lock backup catalog.");
-	else if (ret == 1)
-		elog(ERROR,
-			 "another pg_probackup is running, stop delete.");
+	catalog_lock(false);
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(0);
@@ -78,15 +72,12 @@ found_backup:
 			pgBackupDeleteFiles(backup);
 	}
 
-	/* release catalog lock */
-	catalog_unlock();
-
 	/* cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
 
 	if (delete_wal)
-		do_deletewal(backup_id, false);
+		do_deletewal(backup_id, false, false);
 
 	return 0;
 }
@@ -97,22 +88,17 @@ found_backup:
  * found around needs to keep.
  */
 int
-do_deletewal(time_t backup_id, bool strict)
+do_deletewal(time_t backup_id, bool strict, bool need_catalog_lock)
 {
 	size_t		i;
-	int			ret;
 	parray		*backup_list;
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli;
 	bool		backup_found = false;
 
 	/* Lock backup catalog */
-	ret = catalog_lock(false);
-	if (ret == -1)
-		elog(ERROR, "can't lock backup catalog.");
-	else if (ret == 1)
-		elog(ERROR,
-			 "another pg_probackup is running, stop delete.");
+	if (need_catalog_lock)
+		catalog_lock(false);
 
 	/* Find oldest LSN, used by backups */
 	backup_list = catalog_get_backup_list(0);
@@ -136,7 +122,6 @@ do_deletewal(time_t backup_id, bool strict)
 	if (strict && backup_id != 0 && backup_found == false)
 		elog(ERROR, "not found backup for deletwal command");
 
-	catalog_unlock();
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
 
@@ -158,7 +143,6 @@ do_retention_purge(void)
 	time_t		days_threshold = time(NULL) - (retention_window * 60 * 60 * 24);
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli;
-	int			ret;
 	bool		keep_next_backup = true; /* Do not delete first full backup */
 
 	if (retention_redundancy > 0)
@@ -170,10 +154,7 @@ do_retention_purge(void)
 		elog(ERROR, "retention policy is not set");
 
 	/* Lock backup catalog */
-	ret = catalog_lock(false);
-	if (ret == 1)
-		elog(ERROR,
-			 "cannot lock backup catalog, another pg_probackup is running");
+	catalog_lock(false);
 
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(0);
@@ -181,7 +162,6 @@ do_retention_purge(void)
 	{
 		elog(INFO, "backup list is empty");
 		elog(INFO, "exit");
-		catalog_unlock();
 		return 0;
 	}
 
@@ -235,8 +215,6 @@ do_retention_purge(void)
 	/* Cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
-
-	catalog_unlock();
 
 	elog(INFO, "purging is finished");
 

@@ -209,7 +209,7 @@ main(int argc, char *argv[])
 	else if (pg_strcasecmp(cmd, "delete") == 0)
 		return do_delete(backup_id);
 	else if (pg_strcasecmp(cmd, "delwal") == 0)
-		return do_deletewal(backup_id, true);
+		return do_deletewal(backup_id, true, true);
 	else if (pg_strcasecmp(cmd, "retention") == 0)
 	{
 		if (subcmd == NULL)
