@@ -206,6 +206,16 @@ pgFileComparePathDesc(const void *f1, const void *f2)
 	return -pgFileComparePath(f1, f2);
 }
 
+/* Compare two pgFile with their linked directory path. */
+int
+pgFileCompareLinked(const void *f1, const void *f2)
+{
+	pgFile	   *f1p = *(pgFile **)f1;
+	pgFile	   *f2p = *(pgFile **)f2;
+
+	return strcmp(f1p->linked, f2p->linked);
+}
+
 /* Compare two pgFile with their size */
 int
 pgFileCompareSize(const void *f1, const void *f2)

@@ -30,8 +30,6 @@ typedef struct TablespaceListCell
 	struct TablespaceListCell *next;
 	char		old_dir[MAXPGPATH];
 	char		new_dir[MAXPGPATH];
-	bool		checked;				/* If this mapping was checked during
-										   restore */
 } TablespaceListCell;
 
 typedef struct TablespaceList
@@ -508,10 +506,10 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 		dir_create_dir(to_path, DIR_PERMISSION);
 	}
 
-	parray_walk(links, pgBackupFree);
+	parray_walk(links, pgFileFree);
 	parray_free(links);
 
-	parray_walk(dirs, pgBackupFree);
+	parray_walk(dirs, pgFileFree);
 	parray_free(dirs);
 }
 
@@ -529,6 +527,7 @@ check_tablespace_mapping(pgBackup *backup)
 	parray	   *links;
 	size_t		i;
 	TablespaceListCell *cell;
+	pgFile	   *tmp_file = pgut_new(pgFile);
 
 	links = parray_new();
 
@@ -537,7 +536,18 @@ check_tablespace_mapping(pgBackup *backup)
 
 	elog(LOG, "check tablespace directories...");
 
-	/* 1 - all linked directories should be empty */
+	/* 1 - OLDDIR should has an entry in links */
+	for (cell = tablespace_dirs.head; cell; cell = cell->next)
+	{
+		tmp_file->linked = cell->old_dir;
+
+		if (parray_bsearch(links, tmp_file, pgFileCompareLinked) == NULL)
+			elog(ERROR, "--tablespace-mapping option's old directory "
+				 "has not an entry in tablespace_map file: \"%s\"",
+				 cell->old_dir);
+	}
+
+	/* 2 - all linked directories should be empty */
 	for (i = 0; i < parray_num(links); i++)
 	{
 		pgFile	   *link = (pgFile *) parray_get(links, i);
@@ -548,7 +558,6 @@ check_tablespace_mapping(pgBackup *backup)
 			if (strcmp(link->linked, cell->old_dir) == 0)
 			{
 				linked_path = cell->new_dir;
-				cell->checked = true;
 				break;
 			}
 
@@ -561,16 +570,8 @@ check_tablespace_mapping(pgBackup *backup)
 				 linked_path);
 	}
 
-	/* 2 - OLDDIR should has an entry in links */
-	for (cell = tablespace_dirs.head; cell; cell = cell->next)
-	{
-		if (!cell->checked)
-			elog(ERROR, "--tablespace-mapping option's old directory "
-				 "has not an entry in tablespace_map file: \"%s\"",
-				 cell->old_dir);
-	}
-
-	parray_walk(links, pgBackupFree);
+	free(tmp_file);
+	parray_walk(links, pgFileFree);
 	parray_free(links);
 }
 
@@ -1048,8 +1049,6 @@ opt_tablespace_map(pgut_option *opt, const char *arg)
 	if (!is_absolute_path(cell->new_dir))
 		elog(ERROR, "new directory is not an absolute path in tablespace mapping: %s\n",
 			 cell->new_dir);
-
-	cell->checked = false;
 
 	if (tablespace_dirs.tail)
 		tablespace_dirs.tail->next = cell;
