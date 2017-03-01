@@ -2,7 +2,8 @@
  *
  * pg_probackup.c: Backup/Recovery manager for PostgreSQL.
  *
- * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2015-2017, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -15,7 +16,7 @@
 #include <time.h>
 #include <sys/stat.h>
 
-const char *PROGRAM_VERSION	= "1.0";
+const char *PROGRAM_VERSION	= "1.0.1";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 

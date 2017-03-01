@@ -2,7 +2,8 @@
  *
  * init.c: manage backup catalog.
  *
- * Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2015-2017, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

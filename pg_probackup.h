@@ -2,7 +2,8 @@
  *
  * pg_probackup.h: Backup/Recovery manager for PostgreSQL.
  *
- * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2015-2017, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

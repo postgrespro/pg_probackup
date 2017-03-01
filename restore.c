@@ -2,7 +2,8 @@
  *
  * restore.c: restore DB cluster and archived WAL.
  *
- * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2015-2017, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
