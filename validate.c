@@ -39,7 +39,7 @@ do_validate(time_t backup_id,
 	pgBackup   *base_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	bool		success_validate,
-				need_validate_wal = false;
+				need_validate_wal = true;
 
 	catalog_lock(false);
 
@@ -128,20 +128,18 @@ base_backup_found:
 
 	Assert(last_diff_index <= base_index);
 
+	if (dest_backup && dest_backup->stream)
+		need_validate_wal = target_time != NULL || target_xid != NULL;
+
 	/* Validate backups from base_index to last_diff_index */
-	need_validate_wal = target_time != NULL || target_xid != NULL;
 	for (i = base_index; i >= last_diff_index; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 
 		if (backup->status == BACKUP_STATUS_OK ||
 			backup->status == BACKUP_STATUS_CORRUPT)
-		{
-			need_validate_wal = need_validate_wal || !backup->stream;
-
 			success_validate = pgBackupValidate(backup, false, false) &&
 				success_validate;
-		}
 	}
 
 	/* and now we must check WALs */

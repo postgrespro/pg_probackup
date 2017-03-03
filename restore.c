@@ -91,7 +91,7 @@ do_restore(time_t backup_id,
 	pgBackup   *base_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgRecoveryTarget *rt = NULL;
-	bool		need_recovery_conf = false;
+	bool		need_recovery_conf = true;
 
 	/* PGDATA and ARCLOG_PATH are always required */
 	if (pgdata == NULL)
@@ -200,16 +200,16 @@ base_backup_found:
 	/* Tablespace directories checking */
 	check_tablespace_mapping((pgBackup *) parray_get(backups, last_diff_index));
 
+	if (dest_backup && dest_backup->stream)
+		need_recovery_conf = target_time != NULL || target_xid != NULL;
+
 	/* Restore backups from base_index to last_diff_index */
-	need_recovery_conf = target_time != NULL || target_xid != NULL;
 	for (i = base_index; i >= last_diff_index; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 
 		if (backup->status == BACKUP_STATUS_OK)
 		{
-			need_recovery_conf = need_recovery_conf || !backup->stream;
-
 			print_backup_lsn(backup);
 			restore_database(backup);
 		}
