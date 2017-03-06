@@ -42,17 +42,6 @@ do_show(time_t backup_id)
 			return 0;
 		}
 
-		/* Fix backup status */
-		if (backup->status == BACKUP_STATUS_RUNNING)
-		{
-			catalog_lock(false, &run_pid);
-			if (run_pid == 0)
-			{
-				backup->status = BACKUP_STATUS_ERROR;
-				pgBackupWriteIni(backup);
-			}
-		}
-
 		show_backup_detail(stdout, backup);
 
 		/* cleanup */
@@ -198,7 +187,6 @@ static void
 show_backup_list(FILE *out, parray *backup_list)
 {
 	int			i;
-	pid_t		run_pid = -1;
 
 	/* show header */
 	fputs("=========================================================================================\n", out);
@@ -213,19 +201,6 @@ show_backup_list(FILE *out, parray *backup_list)
 		char		timestamp[20] = "----";
 		char		duration[20] = "----";
 		char		data_bytes_str[10] = "----";
-
-		/* Fix backup status */
-		if (backup->status == BACKUP_STATUS_RUNNING)
-		{
-			if (run_pid == -1)
-				catalog_lock(false, &run_pid);
-
-			if (run_pid == 0 || i + 1 < parray_num(backup_list))
-				backup->status = BACKUP_STATUS_ERROR;
-
-			if (run_pid == 0)
-				pgBackupWriteIni(backup);
-		}
 
 		if (backup->recovery_time != (time_t) 0)
 			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);

@@ -41,7 +41,7 @@ do_validate(time_t backup_id,
 	bool		success_validate,
 				need_validate_wal = true;
 
-	catalog_lock(false, NULL);
+	catalog_lock(false);
 
 	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
 	if (rt == NULL)

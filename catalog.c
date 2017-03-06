@@ -43,7 +43,7 @@ unlink_lock_atexit(void)
  * Create a lockfile.
  */
 void
-catalog_lock(bool check_catalog, pid_t *run_pid)
+catalog_lock(bool check_catalog)
 {
 	int			fd;
 	char		buffer[MAXPGPATH * 2 + 256];
@@ -52,9 +52,6 @@ catalog_lock(bool check_catalog, pid_t *run_pid)
 	int			encoded_pid;
 	pid_t		my_pid,
 				my_p_pid;
-
-	if (run_pid)
-		*run_pid = 0;
 
 	join_path_components(lock_file, backup_path, BACKUP_CATALOG_PID);
 
@@ -152,16 +149,7 @@ catalog_lock(bool check_catalog, pid_t *run_pid)
 		{
 			if (kill(encoded_pid, 0) == 0 ||
 				(errno != ESRCH && errno != EPERM))
-			{
-				/* If run_pid was specified just return encoded_pid */
-				if (run_pid)
-				{
-					*run_pid = encoded_pid;
-					return;
-				}
-				else
-					elog(ERROR, "lock file \"%s\" already exists", lock_file);
-			}
+				elog(ERROR, "lock file \"%s\" already exists", lock_file);
 		}
 
 		/*

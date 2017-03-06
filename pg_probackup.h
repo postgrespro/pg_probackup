@@ -300,7 +300,7 @@ extern parray *catalog_get_backup_list(time_t backup_id);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 
-extern void catalog_lock(bool check_catalog, pid_t *run_pid);
+extern void catalog_lock(bool check_catalog);
 
 extern void pgBackupWriteConfigSection(FILE *out, pgBackup *backup);
 extern void pgBackupWriteResultSection(FILE *out, pgBackup *backup);

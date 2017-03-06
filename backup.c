@@ -432,7 +432,7 @@ do_backup(bool smooth_checkpoint)
 	elog(LOG, "----------------------------------------");
 
 	/* get exclusive lock of backup catalog */
-	catalog_lock(true, NULL);
+	catalog_lock(true);
 
 	/* initialize backup result */
 	current.status = BACKUP_STATUS_RUNNING;
