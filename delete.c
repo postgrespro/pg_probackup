@@ -31,7 +31,7 @@ do_delete(time_t backup_id)
 		elog(ERROR, "required backup ID not specified");
 
 	/* Lock backup catalog */
-	catalog_lock(false);
+	catalog_lock(false, NULL);
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(0);
@@ -98,7 +98,7 @@ do_deletewal(time_t backup_id, bool strict, bool need_catalog_lock)
 
 	/* Lock backup catalog */
 	if (need_catalog_lock)
-		catalog_lock(false);
+		catalog_lock(false, NULL);
 
 	/* Find oldest LSN, used by backups */
 	backup_list = catalog_get_backup_list(0);
@@ -154,7 +154,7 @@ do_retention_purge(void)
 		elog(ERROR, "retention policy is not set");
 
 	/* Lock backup catalog */
-	catalog_lock(false);
+	catalog_lock(false, NULL);
 
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(0);

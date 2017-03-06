@@ -33,8 +33,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		node.stop({"-m": "immediate"})
 		node.cleanup()
 
+		# 1 - Test recovery from latest
 		self.assertIn(six.b("INFO: restore complete"),
 			self.restore_pb(node, options=["-j", "4", "--verbose"]))
+
+		# 2 - Test that recovery.conf was created
+		recovery_conf = path.join(node.data_dir, "recovery.conf")
+		self.assertEqual(path.isfile(recovery_conf), True)
 
 		node.start({"-t": "600"})
 
@@ -554,5 +559,62 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 		node.start()
 		id = node.execute("postgres", "SELECT id FROM test OFFSET 1")
 		self.assertEqual(id[0][0], 2)
+
+		node.stop()
+
+	def test_restore_with_tablespace_mapping_13(self):
+		"""recovery using tablespace-mapping option and page backup"""
+		node = self.make_bnode('restore_with_tablespace_mapping_13',
+			base_dir="tmp_dirs/restore/restore_with_tablespace_mapping_13")
+		node.start()
+		self.assertEqual(self.init_pb(node), six.b(""))
+
+		# Full backup
+		self.backup_pb(node)
+		self.assertEqual(self.show_pb(node)[0].status, six.b("OK"))
+
+		# Create tablespace
+		tblspc_path = path.join(node.base_dir, "tblspc")
+		os.makedirs(tblspc_path)
+		with node.connect("postgres") as con:
+			con.connection.autocommit = True
+			con.execute("CREATE TABLESPACE tblspc LOCATION '%s'" % tblspc_path)
+			con.connection.autocommit = False
+			con.execute("CREATE TABLE tbl AS SELECT * FROM generate_series(0,3) AS integer")
+			con.commit()
+
+		# First page backup
+		self.backup_pb(node, backup_type="page")
+		self.assertEqual(self.show_pb(node)[1].status, six.b("OK"))
+
+		# Create tablespace table
+		with node.connect("postgres") as con:
+			con.connection.autocommit = True
+			con.execute("CHECKPOINT")
+			con.connection.autocommit = False
+			con.execute("CREATE TABLE tbl1 (a int) TABLESPACE tblspc")
+			con.execute("INSERT INTO tbl1 SELECT * FROM generate_series(0,3) AS integer")
+			con.commit()
+
+		# Second page backup
+		self.backup_pb(node, backup_type="page")
+		self.assertEqual(self.show_pb(node)[2].status, six.b("OK"))
+
+		node.stop()
+		node.cleanup()
+
+		tblspc_path_new = path.join(node.base_dir, "tblspc_new")
+		self.assertIn(six.b("INFO: restore complete."),
+			self.restore_pb(node,
+				options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]))
+
+		# Check tables
+		node.start()
+
+		count = node.execute("postgres", "SELECT count(*) FROM tbl")
+		self.assertEqual(count[0][0], 4)
+
+		count = node.execute("postgres", "SELECT count(*) FROM tbl1")
+		self.assertEqual(count[0][0], 4)
 
 		node.stop()

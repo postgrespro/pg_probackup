@@ -28,7 +28,8 @@ do_show(time_t backup_id)
 	 */
 	if (backup_id != 0)
 	{
-		pgBackup *backup;
+		pgBackup   *backup;
+		pid_t		run_pid;
 
 		backup = read_backup(backup_id);
 		if (backup == NULL)
@@ -40,6 +41,18 @@ do_show(time_t backup_id)
 			/* This is not error case */
 			return 0;
 		}
+
+		/* Fix backup status */
+		if (backup->status == BACKUP_STATUS_RUNNING)
+		{
+			catalog_lock(false, &run_pid);
+			if (run_pid == 0)
+			{
+				backup->status = BACKUP_STATUS_ERROR;
+				pgBackupWriteIni(backup);
+			}
+		}
+
 		show_backup_detail(stdout, backup);
 
 		/* cleanup */
@@ -184,7 +197,8 @@ get_parent_tli(TimeLineID child_tli)
 static void
 show_backup_list(FILE *out, parray *backup_list)
 {
-	int i;
+	int			i;
+	pid_t		run_pid = -1;
 
 	/* show header */
 	fputs("=========================================================================================\n", out);
@@ -193,14 +207,25 @@ show_backup_list(FILE *out, parray *backup_list)
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		pgBackup *backup;
-		const char *modes[] = { "", "PAGE", "PTRACK", "FULL", "", "PAGE+STREAM", "PTRACK+STREAM", "FULL+STREAM"};
-		TimeLineID  parent_tli;
-		char timestamp[20] = "----";
-		char duration[20] = "----";
-		char data_bytes_str[10] = "----";
+		pgBackup   *backup = parray_get(backup_list, i);
+		const char *modes[] = {"", "PAGE", "PTRACK", "FULL", "", "PAGE+STREAM", "PTRACK+STREAM", "FULL+STREAM"};
+		TimeLineID	parent_tli;
+		char		timestamp[20] = "----";
+		char		duration[20] = "----";
+		char		data_bytes_str[10] = "----";
 
-		backup = parray_get(backup_list, i);
+		/* Fix backup status */
+		if (backup->status == BACKUP_STATUS_RUNNING)
+		{
+			if (run_pid == -1)
+				catalog_lock(false, &run_pid);
+
+			if (run_pid == 0 || i + 1 < parray_num(backup_list))
+				backup->status = BACKUP_STATUS_ERROR;
+
+			if (run_pid == 0)
+				pgBackupWriteIni(backup);
+		}
 
 		if (backup->recovery_time != (time_t) 0)
 			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);

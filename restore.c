@@ -106,7 +106,7 @@ do_restore(time_t backup_id,
 	elog(LOG, "restore start");
 
 	/* get exclusive lock of backup catalog */
-	catalog_lock(false);
+	catalog_lock(false, NULL);
 
 	/* confirm the PostgreSQL server is not running */
 	if (is_pg_running())
