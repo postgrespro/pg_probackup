@@ -515,13 +515,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 			elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
 
 		if (!S_ISDIR(st.st_mode))
-		{
-			/* Stop reading the directory if we met file */
-			if (!is_root)
-				break;
-			else
-				continue;
-		}
+			continue;
 
 		/* Check for exclude for the first level of listing */
 		if (is_root && exclude)

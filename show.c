@@ -29,7 +29,6 @@ do_show(time_t backup_id)
 	if (backup_id != 0)
 	{
 		pgBackup   *backup;
-		pid_t		run_pid;
 
 		backup = read_backup(backup_id);
 		if (backup == NULL)
