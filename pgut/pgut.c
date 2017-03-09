@@ -614,12 +614,12 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 		if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0)
 		{
 			help(true);
-			exit_or_abort(1);
+			exit_or_abort(0);
 		}
 		if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0)
 		{
 			fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
-			exit_or_abort(1);
+			exit_or_abort(0);
 		}
 	}
 
