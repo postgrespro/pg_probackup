@@ -77,7 +77,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 		# Validate to unreal xid
 		self.assertIn(six.b("ERROR: not enough WAL records to xid"),
 			self.validate_pb(node, options=["--xid=%d" % (int(target_xid) + 1000)]))
-		
+
 		# Validate with backup ID
 		self.assertIn(six.b("INFO: backup validation completed successfully on"),
 			self.validate_pb(node, id_backup))

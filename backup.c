@@ -111,11 +111,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	/* repack the options */
 	pgBackup   *prev_backup = NULL;
 
-	/* Block backup operations on a standby */
-	from_replica = pg_is_in_recovery();
-	if (pg_is_standby() && !from_replica)
-		elog(ERROR, "Backup cannot run on a standby.");
-
 	elog(LOG, "database backup start");
 
 	/* Initialize size summary */
@@ -422,6 +417,15 @@ do_backup(bool smooth_checkpoint)
 
 	/* setup cleanup callback function */
 	in_backup = true;
+
+	/* Block backup operations on a standby */
+	from_replica = pg_is_in_recovery();
+	if (pg_is_standby() && !from_replica)
+		elog(ERROR, "backup is not allowed for standby");
+
+	/* Page backup is not allowed for replica instance */
+	if (from_replica && current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+		elog(ERROR, "page backup is not allowed for standby");
 
 	/* show configuration actually used */
 	elog(LOG, "========================================");

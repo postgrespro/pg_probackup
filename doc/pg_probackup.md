@@ -291,13 +291,13 @@ This mode should be used with caution as it allows to delete WAL files required 
 
 ### Backup from Standby
 
-If replication is in use, starting with PostgreSQL 9.6 a backup can be taken not only from primary server, but also from standby. Backup taken from standby is absolutely interchangeable with backup taken from primary (bearing in mind possible replication delay).
+If replication is in use, starting with PostgreSQL 9.6 a backup can be taken not only from primary server, but also from standby. Backup taken from standby is absolutely interchangeable with backup taken from primary (bearing in mind possible replication delay). Page-level incremental backups are not allowed to perform from standby.
 
-Currently it is required for primary database server to have full\_page\_writes turned on (in future this requirement may be relaxed in the case checksums are enabled on data pages).
+Currently it is required for primary database server to have `full_page_writes` turned `on` (in future this requirement may be relaxed in the case checksums are enabled on data pages).
 
-The same backup directory can be used for pg\_probackup on both servers, primary and standby, as long as it is accessible in both server's file systems. This way all backups, taken from either primary or standby, are shown together and could be managed from one server or from the other.
+The same backup directory can be used for `pg_probackup` on both servers, primary and standby, as long as it is accessible in both server's file systems. This way all backups, taken from either primary or standby, are shown together and could be managed from one server or from the other.
 
-A backup can be used to restore primary database server as well as standby. It depends on the server on which pg\_probackup is executed with restore command. Note that recovered PostgreSQL will always run as primary server if started right after the pg\_probackup. To run it as standby, edit recovery.conf file created by pg\_probackup: at least delete every parameter that specify recovery target (recovery\_target, recovery\_target\_time, and recovery\_target\_xid), change target timeline to 'latest', and add standby\_mode = 'on'. Probably primary\_conninfo should be added too for streaming replication, and hot\_standby = 'on' in database configuration parameters for hot standby mode.
+A backup can be used to restore primary database server as well as standby. It depends on the server on which `pg_probackup` is executed with restore command. Note that recovered PostgreSQL will always run as primary server if started right after the `pg_probackup`. To run it as standby, edit `recovery.conf` file created by `pg_probackup`: at least delete every parameter that specify recovery target (`recovery_target`, `recovery_target_time`, and `recovery_target_xid`), change target timeline to `latest`, and add `standby_mode = on`. Probably `primary_conninfo` should be added too for streaming replication, and `hot_standby = on` in database configuration parameters for hot standby mode.
 
 ### Backup Retention Policy
 
@@ -480,11 +480,11 @@ Specifies whether to stop just after the specified recovery target (true), or ju
 
 Specifies recovering into a particular timeline.
 
--T OLDDIR=NEWDIR  
---tablespace-mapping=OLDDIR=NEWDIR
+-T olddir=newdir
+--tablespace-mapping=olddir=newdir
 
-Relocate the tablespace in directory `OLDDIR` to `NEWDIR` during restore. Both
-`OLDDIR` and `NEWDIR` must be absolute paths.
+Relocate the tablespace in directory `olddir` to `newdir` during restore. Both
+`olddir` and `newdir` must be absolute paths.
 
 ### Delete options:
 
