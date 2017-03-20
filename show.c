@@ -188,9 +188,9 @@ show_backup_list(FILE *out, parray *backup_list)
 	int			i;
 
 	/* show header */
-	fputs("=========================================================================================\n", out);
-	fputs("ID       Recovery time        Mode          Current/Parent TLI  Time    Data  Status  \n", out);
-	fputs("=========================================================================================\n", out);
+	fputs("=========================================================================================================\n", out);
+	fputs("ID       Recovery time        Mode          Current/Parent TLI  Time    Data  start_lsn  stop_lsn Status  \n", out);
+	fputs("=========================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -218,7 +218,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-8s %-19s  %-13s %2d /%2d              %5s  %6s  %s \n",
+		fprintf(out, "%-8s %-19s  %-13s %2d /%2d              %5s  %6s %X/%X %X/%X %s \n",
 				base36enc(backup->start_time),
 				timestamp,
 				modes[backup->backup_mode + (BACKUP_MODE_FULL + 1)*backup->stream],
@@ -226,6 +226,10 @@ show_backup_list(FILE *out, parray *backup_list)
 				parent_tli,
 				duration,
 				data_bytes_str,
+				(uint32) (backup->start_lsn >> 32),
+				(uint32) backup->start_lsn,
+				(uint32) (backup->stop_lsn >> 32),
+				(uint32) backup->stop_lsn,
 				status2str(backup->status));
 	}
 }
