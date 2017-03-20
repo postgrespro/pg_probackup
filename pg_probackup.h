@@ -51,6 +51,7 @@
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
 
+/* 64-bit xid support for PGPRO_EE */
 #ifndef PGPRO_EE
 #define XID_FMT "%u"
 #endif
@@ -67,32 +68,24 @@ typedef struct pgFile
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
-	char	*linked;			/* path of the linked file */
+	char	*linked;		/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
 	char	*path;			/* path of the file */
-	char	*ptrack_path;
+	char	*ptrack_path;	/* path of the ptrack fork of the relation */
 	int		segno;			/* Segment number for ptrack */
-	uint64	generation;		/* Generation of compressed file.
-							 * -1 for non-compressed files */
-	int		is_partial_copy; /* for compressed files.
-							  * 1 if backed up via copy_file_partly()  */
-	volatile uint32 lock;
-	datapagemap_t pagemap;
+	uint64	generation;		/* Generation of the compressed file. Set to '-1'
+							 * for non-compressed files. If generation has changed,
+							 we cannot backup compressed file partially. */
+	int		is_partial_copy; /* for compressed files. Set to '1' if backed up
+							  * via copy_file_partly() */
+	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
+	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
-
-#define IsValidTime(tm)	\
-	((tm.tm_sec >= 0 && tm.tm_sec <= 60) && 	/* range check for tm_sec (0-60)  */ \
-	 (tm.tm_min >= 0 && tm.tm_min <= 59) && 	/* range check for tm_min (0-59)  */ \
-	 (tm.tm_hour >= 0 && tm.tm_hour <= 23) && 	/* range check for tm_hour(0-23)  */ \
-	 (tm.tm_mday >= 1 && tm.tm_mday <= 31) && 	/* range check for tm_mday(1-31)  */ \
-	 (tm.tm_mon >= 0 && tm.tm_mon <= 11) && 	/* range check for tm_mon (0-23)  */ \
-	 (tm.tm_year + 1900 >= 1900)) 			/* range check for tm_year(70-)    */
 
 /* Effective data size */
 #define MAPSIZE (BLCKSZ - MAXALIGN(SizeOfPageHeaderData))
 
 /* Backup status */
-/* XXX re-order ? */
 typedef enum BackupStatus
 {
 	BACKUP_STATUS_INVALID,		/* the pgBackup is invalid */
@@ -113,33 +106,35 @@ typedef enum BackupMode
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
 
-/*
- * pg_probackup takes backup into the directroy $BACKUP_PATH/<date>/<time>.
- *
- * status == -1 indicates the pgBackup is invalid.
- */
+
+/* special values of pgBackup fields */
+#define KEEP_INFINITE			(INT_MAX)
+#define BYTES_INVALID			(-1)
+
 typedef struct pgBackup
 {
-	/* Backup Level */
+	/* Mode - one of BACKUP_MODE_xxx above*/
 	BackupMode		backup_mode;
 
-	/* Status - one of BACKUP_STATUS_xxx */
+	/* Status - one of BACKUP_STATUS_xxx above*/
 	BackupStatus	status;
 
 	/* Timestamp, etc. */
-	TimeLineID		tli;
-	XLogRecPtr		start_lsn;
-	XLogRecPtr		stop_lsn;
-	time_t			start_time;
-	time_t			end_time;
-	time_t			recovery_time;
-	TransactionId	recovery_xid;
+	TimeLineID		tli; 		/* timeline of start and stop baskup lsns */
+	XLogRecPtr		start_lsn;	/* backup's starting transaction log location */
+	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
+	time_t			start_time;	/* since this moment backup has status
+								 * BACKUP_STATUS_RUNNING  */
+	time_t			end_time;	/* the moment when backup was finished, or the moment
+								 * when we realized that backup is broken*/
+	time_t			recovery_time; /* FIXME */
+	TransactionId	recovery_xid; /* FIXME  */
 
-	/* Different sizes (-1 means nothing was backed up) */
 	/*
 	 * Amount of raw data. For a full backup, this is the total amount of
 	 * data while for a differential backup this is just the difference
 	 * of data taken.
+	 * BYTES_INVALID means nothing was backed up.
 	 */
 	int64			data_bytes;
 
@@ -147,13 +142,14 @@ typedef struct pgBackup
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
+
+	/* TODO review the code below. */
 	bool			stream;
+	/* Identifier of the previous backup.
+	 * Which is basic backup for current incremental backup. */
 	time_t			parent_backup;
 } pgBackup;
 
-/* special values of pgBackup */
-#define KEEP_INFINITE			(INT_MAX)
-#define BYTES_INVALID			(-1)
 
 typedef struct pgTimeLine
 {
