@@ -41,7 +41,6 @@ YesNo	prompt_password = DEFAULT;
 #endif
 
 /* Database connections */
-PGconn	   *connection = NULL;
 static PGcancel *volatile cancel_conn = NULL;
 
 /* Interrupted by SIGINT (Ctrl+C) ? */
@@ -906,7 +905,7 @@ prompt_for_password(const char *username)
 #endif
 
 PGconn *
-pgut_connect(int elevel)
+pgut_connect(const char *dbname)
 {
 	PGconn	   *conn;
 
@@ -921,7 +920,7 @@ pgut_connect(int elevel)
 	/* Start the connection. Loop until we have a password if requested by backend. */
 	for (;;)
 	{
-		conn = PQsetdbLogin(host, port, NULL, NULL, pgut_dbname, username, password);
+		conn = PQsetdbLogin(host, port, NULL, NULL, dbname, username, password);
 
 		if (PQstatus(conn) == CONNECTION_OK)
 			return conn;
@@ -934,7 +933,9 @@ pgut_connect(int elevel)
 			continue;
 		}
 #endif
-		elog(elevel, "could not connect to database %s: %s", pgut_dbname, PQerrorMessage(conn));
+		elog(ERROR, "could not connect to database %s: %s",
+			 dbname, PQerrorMessage(conn));
+
 		PQfinish(conn);
 		return NULL;
 	}
@@ -944,37 +945,7 @@ void
 pgut_disconnect(PGconn *conn)
 {
 	if (conn)
-	{
 		PQfinish(conn);
-		if (conn == connection)
-			connection = NULL;
-	}
-}
-
-/*
- * the result is also available with the global variable 'connection'.
- */
-PGconn *
-reconnect_elevel(int elevel)
-{
-	disconnect();
-	return connection = pgut_connect(elevel);
-}
-
-void
-reconnect(void)
-{
-	reconnect_elevel(ERROR);
-}
-
-void
-disconnect(void)
-{
-	if (connection)
-	{
-		PQfinish(connection);
-		connection = NULL;
-	}
 }
 
 /*  set/get host and port for connecting standby server */
@@ -1003,7 +974,7 @@ pgut_set_port(const char *new_port)
 }
 
 PGresult *
-pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, int elevel)
+pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
 {
 	PGresult   *res;
 
@@ -1025,7 +996,7 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, 
 
 	if (conn == NULL)
 	{
-		elog(elevel, "not connected");
+		elog(ERROR, "not connected");
 		return NULL;
 	}
 
@@ -1043,18 +1014,12 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, 
 		case PGRES_COPY_IN:
 			break;
 		default:
-			elog(elevel, "query failed: %squery was: %s",
-				PQerrorMessage(conn), query);
+			elog(ERROR, "query failed: %squery was: %s",
+				 PQerrorMessage(conn), query);
 			break;
 	}
 
 	return res;
-}
-
-void
-pgut_command(PGconn* conn, const char *query, int nParams, const char **params, int elevel)
-{
-	PQclear(pgut_execute(conn, query, nParams, params, elevel));
 }
 
 bool
@@ -1151,30 +1116,6 @@ pgut_wait(int num, PGconn *connections[], struct timeval *timeout)
 
 	errno = EINTR;
 	return -1;
-}
-
-PGresult *
-execute_elevel(const char *query, int nParams, const char **params, int elevel)
-{
-	return pgut_execute(connection, query, nParams, params, elevel);
-}
-
-/*
- * execute - Execute a SQL and return the result, or exit_or_abort() if failed.
- */
-PGresult *
-execute(const char *query, int nParams, const char **params)
-{
-	return execute_elevel(query, nParams, params, ERROR);
-}
-
-/*
- * command - Execute a SQL and discard the result, or exit_or_abort() if failed.
- */
-void
-command(const char *query, int nParams, const char **params)
-{
-	PQclear(execute(query, nParams, params));
 }
 
 /*
@@ -1413,7 +1354,6 @@ on_cleanup(void)
 	in_cleanup = true;
 	interrupted = false;
 	call_atexit_callbacks(false);
-	disconnect();
 }
 
 static void

@@ -235,7 +235,6 @@ extern uint32 retention_window;
 /* in backup.c */
 extern int do_backup(bool smooth_checkpoint);
 extern BackupMode parse_backup_mode(const char *value);
-extern void check_server_version(void);
 extern bool fileExists(const char *path);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);

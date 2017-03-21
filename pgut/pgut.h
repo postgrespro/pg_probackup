@@ -99,7 +99,6 @@ extern bool			quiet;
 extern YesNo	prompt_password;
 #endif
 
-extern PGconn	   *connection;
 extern bool			interrupted;
 
 extern void help(bool details);
@@ -111,26 +110,16 @@ extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
 /*
  * Database connections
  */
-extern PGconn *pgut_connect(int elevel);
+extern PGconn *pgut_connect(const char *dbname);
 extern void pgut_disconnect(PGconn *conn);
-extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, int elevel);
-extern void pgut_command(PGconn* conn, const char *query, int nParams, const char **params, int elevel);
+extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams, const char **params);
 extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int elevel);
 extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);
-
-extern PGconn *reconnect_elevel(int elevel);
-extern void reconnect(void);
-extern void disconnect(void);
 
 extern const char *pgut_get_host(void);
 extern const char *pgut_get_port(void);
 extern void pgut_set_host(const char *new_host);
 extern void pgut_set_port(const char *new_port);
-
-
-extern PGresult *execute_elevel(const char *query, int nParams, const char **params, int elevel);
-extern PGresult *execute(const char *query, int nParams, const char **params);
-extern void command(const char *query, int nParams, const char **params);
 
 /*
  * memory allocators

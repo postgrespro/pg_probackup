@@ -42,8 +42,10 @@ const char *progname = "pg_probackup";
 static parray *backup_files_list = NULL;
 static volatile uint32	total_copy_files_increment;
 static uint32 total_files_num;
-static PGconn *start_stop_connect = NULL;
 static pthread_mutex_t check_stream_mut = PTHREAD_MUTEX_INITIALIZER;
+
+/* Backup connection */
+static PGconn *backup_conn = NULL;
 
 typedef struct
 {
@@ -58,14 +60,24 @@ typedef struct
  * Backup routines
  */
 static void backup_cleanup(bool fatal, void *userdata);
+static void backup_disconnect(bool fatal, void *userdata);
+
 static void backup_files(void *arg);
 static parray *do_backup_database(parray *backup_list, bool smooth_checkpoint);
-static void confirm_block_size(const char *name, int blcksz);
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_stop_backup(pgBackup *backup);
 static bool pg_is_standby(void);
 static void get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup);
 static void get_xid(PGresult *res, TransactionId *xid);
+static void add_pgdata_files(parray *files, const char *root);
+static void create_file_list(parray *files, const char *root, bool is_append);
+static void wait_for_archive(pgBackup *backup, const char *sql,
+							 bool stop_backup);
+static void wait_archive_lsn(XLogRecPtr lsn, bool last_segno);
+static void make_pagemap_from_ptrack(parray *files);
+static void StreamLog(void *arg);
+
+/* Ptrack functions */
 static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
 static bool pg_ptrack_enable(void);
@@ -74,12 +86,10 @@ static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
 									 size_t *result_size);
-static void add_pgdata_files(parray *files, const char *root);
-static void create_file_list(parray *files, const char *root, bool is_append);
-static void wait_for_archive(PGconn *conn, pgBackup *backup, const char *sql, bool stop_backup);
-static void wait_archive_lsn(XLogRecPtr lsn, bool last_segno);
-static void make_pagemap_from_ptrack(parray *files);
-static void StreamLog(void *arg);
+
+/* Check functions */
+static void check_server_version(void);
+static void confirm_block_size(const char *name, int blcksz);
 
 
 #define disconnect_and_exit(code)				\
@@ -229,7 +239,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
 		/* Enforce archiving of last segment and wait for it to be here */
-		wait_for_archive(connection, &current, "SELECT * FROM pg_switch_xlog()", false);
+		wait_for_archive(&current, "SELECT * FROM pg_switch_xlog()", false);
 
 		/* Now build the page map */
 		parray_qsort(backup_files_list, pgFileComparePathDesc);
@@ -412,6 +422,10 @@ do_backup(bool smooth_checkpoint)
 		elog(ERROR, "Required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
+	/* Create connection for PostgreSQL */
+	backup_conn = pgut_connect(pgut_dbname);
+	pgut_atexit_push(backup_disconnect, NULL);
+
 	/* Confirm data block size and xlog block size are compatible */
 	check_server_version();
 
@@ -511,34 +525,24 @@ do_backup(bool smooth_checkpoint)
 }
 
 /*
- * get server version and confirm block sizes.
+ * Get server version and confirm block sizes.
  */
-void
+static void
 check_server_version(void)
 {
-	bool		my_conn;
-
-	/* Leave if server has already been checked */
-	if (server_version > 0)
-		return;
-
-	my_conn = (connection == NULL);
-
-	if (my_conn)
-		reconnect();
-
 	/* confirm server version */
-	server_version = PQserverVersion(connection);
+	server_version = PQserverVersion(backup_conn);
+
 	if (server_version < 90500)
 		elog(ERROR,
-			"server version is %d.%d.%d, must be %s or higher.",
+			 "server version is %d.%d.%d, must be %s or higher",
 			 server_version / 10000,
 			 (server_version / 100) % 100,
 			 server_version % 100, "9.5");
 
 	if (from_replica && server_version < 90600)
 		elog(ERROR,
-			"server version is %d.%d.%d, must be %s or higher for backup from replica.",
+			 "server version is %d.%d.%d, must be %s or higher for backup from replica",
 			 server_version / 10000,
 			 (server_version / 100) % 100,
 			 server_version % 100, "9.6");
@@ -546,9 +550,6 @@ check_server_version(void)
 	/* confirm block_size (BLCKSZ) and wal_block_size (XLOG_BLCKSZ) */
 	confirm_block_size("block_size", BLCKSZ);
 	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
-
-	if (my_conn)
-		disconnect();
 }
 
 static void
@@ -558,16 +559,17 @@ confirm_block_size(const char *name, int blcksz)
 	char	   *endp;
 	int			block_size;
 
-	res = execute("SELECT current_setting($1)", 1, &name);
+	res = pgut_execute(backup_conn, "SELECT current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
-		elog(ERROR, "cannot get %s: %s",
-			name, PQerrorMessage(connection));
+		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
+
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
 	PQclear(res);
+
 	if ((endp && *endp) || block_size != blcksz)
 		elog(ERROR,
-			"%s(%d) is not compatible(%d expected)",
-			name, block_size, blcksz);
+			 "%s(%d) is not compatible(%d expected)",
+			 name, block_size, blcksz);
 }
 
 /*
@@ -581,27 +583,22 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 
 	params[0] = label;
 
-	if (start_stop_connect == NULL)
-		start_stop_connect = pgut_connect(ERROR);
-
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
 	if (from_replica)
-		res = pgut_execute(start_stop_connect,
+		res = pgut_execute(backup_conn,
 						   "SELECT pg_start_backup($1, $2, false)",
 						   2,
-						   params,
-						   ERROR);
+						   params);
 	else
-		res = pgut_execute(start_stop_connect,
+		res = pgut_execute(backup_conn,
 						   "SELECT pg_start_backup($1, $2)",
 						   2,
-						   params,
-						   ERROR);
+						   params);
 
 	if (backup != NULL)
 	{
-		get_lsn(start_stop_connect, res, &backup->start_lsn, false);
+		get_lsn(backup_conn, res, &backup->start_lsn, false);
 		if (!stream_wal && !from_replica)
 			wait_archive_lsn(backup->start_lsn, true);
 	}
@@ -612,113 +609,126 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 static bool
 pg_ptrack_support(void)
 {
-	PGresult	*res_db;
-	reconnect();
-	res_db = execute("SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'", 0, NULL);
+	PGresult   *res_db;
+
+	res_db = pgut_execute(backup_conn,
+						  "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'",
+						  0, NULL);
+
 	if (PQntuples(res_db) == 0)
 	{
 		PQclear(res_db);
-		disconnect();
 		return false;
 	}
 	PQclear(res_db);
-	disconnect();
+
 	return true;
 }
 
 static bool
 pg_ptrack_enable(void)
 {
-	PGresult	*res_db;
-	reconnect();
-	res_db = execute("show ptrack_enable", 0, NULL);
+	PGresult   *res_db;
+
+	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL);
+
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
 		PQclear(res_db);
-		disconnect();
 		return false;
 	}
 	PQclear(res_db);
-	disconnect();
 	return true;
 }
 
 static bool
 pg_is_in_recovery(void)
 {
-	PGresult	*res_db;
-	reconnect();
-	res_db = execute("SELECT pg_is_in_recovery()", 0, NULL);
+	PGresult   *res_db;
+
+	res_db = pgut_execute(backup_conn, "SELECT pg_is_in_recovery()", 0, NULL);
 
 	if (PQgetvalue(res_db, 0, 0)[0] == 't')
 	{
 		PQclear(res_db);
-		disconnect();
 		return true;
 	}
 	PQclear(res_db);
-	disconnect();
 	return false;
 }
 
 static void
 pg_ptrack_clear(void)
 {
-	PGresult	*res_db, *res;
-	const char *old_dbname = pgut_dbname;
-	int i;
+	PGresult   *res_db,
+			   *res;
+	const char *dbname;
+	int			i;
 
-	reconnect();
-	res_db = execute("SELECT datname FROM pg_database", 0, NULL);
-	disconnect();
+	res_db = pgut_execute(backup_conn, "SELECT datname FROM pg_database",
+						  0, NULL);
+
 	for(i=0; i < PQntuples(res_db); i++)
 	{
-		pgut_dbname = PQgetvalue(res_db, i, 0);
-		if (!strcmp(pgut_dbname, "template0"))
+		PGconn	   *tmp_conn;
+
+		dbname = PQgetvalue(res_db, i, 0);
+		if (!strcmp(dbname, "template0"))
 			continue;
-		reconnect();
-		res = execute("SELECT pg_ptrack_clear()", 0, NULL);
+
+		tmp_conn = pgut_connect(dbname);
+		res = pgut_execute(tmp_conn, "SELECT pg_ptrack_clear()", 0, NULL);
 		PQclear(res);
+
+		pgut_disconnect(tmp_conn);
 	}
+
 	PQclear(res_db);
-	disconnect();
-	pgut_dbname = old_dbname;
 }
 
 static char *
-pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid, size_t *result_size)
+pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
+						size_t *result_size)
 {
-	PGresult	*res_db, *res;
-	const char	*old_dbname = pgut_dbname;
-	char		*params[2];
-	char		*result;
+	PGconn	   *tmp_conn;
+	PGresult   *res_db,
+			   *res;
+	char	   *dbname;
+	char	   *params[2];
+	char	   *result;
 
-	reconnect();
 	params[0] = palloc(64);
 	params[1] = palloc(64);
 	sprintf(params[0], "%i", db_oid);
 	sprintf(params[1], "%i", rel_oid);
-	res_db = execute("SELECT datname FROM pg_database WHERE oid=$1", 1, (const char **)params);
-	disconnect();
-	pgut_dbname = pstrdup(PQgetvalue(res_db, 0, 0));
+
+	res_db = pgut_execute(backup_conn,
+						  "SELECT datname FROM pg_database WHERE oid=$1",
+						  1, (const char **) params);
+
+	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
 	PQclear(res_db);
 
-	reconnect();
+	tmp_conn = pgut_connect(dbname);
 	sprintf(params[0], "%i", tablespace_oid);
-	res = execute("SELECT pg_ptrack_get_and_clear($1, $2)", 2,  (const char **)params);
-	result = (char *)PQunescapeBytea((unsigned char *)PQgetvalue(res, 0, 0), result_size);
+
+	res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
+					   2, (const char **)params);
+	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
+									  result_size);
 	PQclear(res);
+
+	pgut_disconnect(tmp_conn);
+
 	pfree(params[0]);
 	pfree(params[1]);
-
-	pfree((char *)pgut_dbname);
-	pgut_dbname = old_dbname;
+	pfree(dbname);
 
 	return result;
 }
 
 static void
-wait_for_archive(PGconn *conn, pgBackup *backup, const char *sql, bool stop_backup)
+wait_for_archive(pgBackup *backup, const char *sql, bool stop_backup)
 {
 	PGresult	   *res;
 	char			ready_path[MAXPGPATH];
@@ -728,18 +738,16 @@ wait_for_archive(PGconn *conn, pgBackup *backup, const char *sql, bool stop_back
 	TimeLineID		tli;
 	XLogSegNo	targetSegNo;
 
-	if (conn == NULL)
-		conn = pgut_connect(ERROR);
-
 	/* Remove annoying NOTICE messages generated by backend */
-	res = pgut_execute(conn, "SET client_min_messages = warning;", 0, NULL, ERROR);
+	res = pgut_execute(backup_conn, "SET client_min_messages = warning;", 0,
+					   NULL);
 	PQclear(res);
 
 	/* And execute the query wanted */
-	res = pgut_execute(conn, sql, 0, NULL, ERROR);
+	res = pgut_execute(backup_conn, sql, 0, NULL);
 
 	/* Get LSN from execution result */
-	get_lsn(conn, res, &lsn, stop_backup);
+	get_lsn(backup_conn, res, &lsn, stop_backup);
 
 	/*
 	 * Enforce TLI obtention if backup is not present as this code
@@ -770,9 +778,9 @@ wait_for_archive(PGconn *conn, pgBackup *backup, const char *sql, bool stop_back
 	PQclear(res);
 
 	if (from_replica)
-		res = pgut_execute(conn, TXID_CURRENT_IF_SQL, 0, NULL, ERROR);
+		res = pgut_execute(backup_conn, TXID_CURRENT_IF_SQL, 0, NULL);
 	else
-		res = pgut_execute(conn, TXID_CURRENT_SQL, 0, NULL, ERROR);
+		res = pgut_execute(backup_conn, TXID_CURRENT_SQL, 0, NULL);
 	if (backup != NULL)
 	{
 		get_xid(res, &backup->recovery_xid);
@@ -801,9 +809,9 @@ wait_archive_lsn(XLogRecPtr lsn, bool last_segno)
 {
 	TimeLineID	tli;
 	XLogSegNo	targetSegNo;
-	char		ready_path[MAXPGPATH];
-	char		file_name[MAXFNAMELEN];
-	int			try_count;
+	char		wal_path[MAXPGPATH];
+	char		wal_file[MAXFNAMELEN];
+	int			try_count = 0;
 
 	tli = get_current_timeline(false);
 
@@ -811,24 +819,22 @@ wait_archive_lsn(XLogRecPtr lsn, bool last_segno)
 	XLByteToSeg(lsn, targetSegNo);
 	if (last_segno)
 		targetSegNo--;
-	XLogFileName(file_name, tli, targetSegNo);
+	XLogFileName(wal_file, tli, targetSegNo);
 
-	snprintf(ready_path, lengthof(ready_path),
-		"%s/%s", arclog_path, file_name);
-	elog(LOG, "%s() wait for lsn:%li %s", __FUNCTION__, lsn, ready_path);
-	/* wait until switched WAL is archived */
-	try_count = 0;
-	while (!fileExists(ready_path))
+	join_path_components(wal_path, arclog_path, wal_file);
+	elog(LOG, "wait for lsn %li in archived WAL segment %s", lsn, wal_path);
+
+	/* Wait until switched WAL is archived */
+	while (!fileExists(wal_path))
 	{
 		sleep(1);
 		if (interrupted)
-			elog(ERROR,
-				"interrupted during waiting for WAL archiving");
+			elog(ERROR, "interrupted during waiting for WAL archiving");
 		try_count++;
 		if (try_count > TIMEOUT_ARCHIVE)
 			elog(ERROR,
-				"switched WAL could not be archived in %d seconds",
-				TIMEOUT_ARCHIVE);
+				 "switched WAL could not be archived in %d seconds",
+				 TIMEOUT_ARCHIVE);
 	}
 }
 
@@ -843,22 +849,21 @@ pg_stop_backup(pgBackup *backup)
 		PGresult	*res;
 		TimeLineID	tli;
 
-		//reconnect();
-		if (start_stop_connect == NULL)
-			start_stop_connect = pgut_connect(ERROR);
-
 		/* Remove annoying NOTICE messages generated by backend */
-		res = pgut_execute(start_stop_connect, "SET client_min_messages = warning;", 0, NULL, ERROR);
+		res = pgut_execute(backup_conn, "SET client_min_messages = warning;",
+						   0, NULL);
 		PQclear(res);
 
 		/* And execute the query wanted */
 		if (from_replica)
-			res = pgut_execute(start_stop_connect,"SELECT * FROM pg_stop_backup(false)", 0, NULL, ERROR);
+			res = pgut_execute(backup_conn,
+							   "SELECT * FROM pg_stop_backup(false)", 0, NULL);
 		else
-			res = pgut_execute(start_stop_connect,"SELECT * FROM pg_stop_backup()", 0, NULL, ERROR);
+			res = pgut_execute(backup_conn,
+							   "SELECT * FROM pg_stop_backup()", 0, NULL);
 
 		/* Get LSN from execution result */
-		get_lsn(start_stop_connect, res, &stop_backup_lsn, true);
+		get_lsn(backup_conn, res, &stop_backup_lsn, true);
 		PQclear(res);
 
 		/*
@@ -879,31 +884,27 @@ pg_stop_backup(pgBackup *backup)
 		}
 
 		if (from_replica)
-			res = pgut_execute(start_stop_connect, TXID_CURRENT_IF_SQL, 0, NULL, ERROR);
+			res = pgut_execute(backup_conn, TXID_CURRENT_IF_SQL, 0, NULL);
 		else
-			res = pgut_execute(start_stop_connect, TXID_CURRENT_SQL, 0, NULL, ERROR);
+			res = pgut_execute(backup_conn, TXID_CURRENT_SQL, 0, NULL);
 		if (backup != NULL)
 		{
 			get_xid(res, &backup->recovery_xid);
 			backup->recovery_time = time(NULL);
 		}
+
 		PQclear(res);
-		//disconnect();
-		pgut_disconnect(start_stop_connect);
 	}
 	else
 	{
 		if (from_replica)
-			wait_for_archive(start_stop_connect,
-							 backup,
+			wait_for_archive(backup,
 							 "SELECT * FROM pg_stop_backup(false)",
 							 true);
 		else
-			wait_for_archive(start_stop_connect,
-							 backup,
+			wait_for_archive(backup,
 							 "SELECT * FROM pg_stop_backup()",
 							 true);
-		pgut_disconnect(start_stop_connect);
 	}
 }
 
@@ -927,13 +928,14 @@ pg_is_standby(void)
 static void
 get_lsn(PGconn *conn, PGresult *res, XLogRecPtr *lsn, bool stop_backup)
 {
-	uint32	xlogid;
-	uint32	xrecoff;
+	uint32		xlogid;
+	uint32		xrecoff;
 
-	if (res == NULL || PQntuples(res) != 1 || (PQnfields(res) != 1 && PQnfields(res) != 3))
+	if (res == NULL || PQntuples(res) != 1 ||
+		(PQnfields(res) != 1 && PQnfields(res) != 3))
 		elog(ERROR,
-			"result of backup command is invalid: %s",
-			PQerrorMessage(conn));
+			 "result of backup command is invalid: %s",
+			 PQerrorMessage(conn));
 
 	/*
 	 * Extract timeline and LSN from results of pg_stop_backup()
@@ -994,14 +996,14 @@ get_xid(PGresult *res, TransactionId *xid)
 {
 	if (res == NULL || PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR,
-			"result of txid_current() is invalid: %s",
-			PQerrorMessage(connection));
+			 "result of txid_current() is invalid: %s",
+			 PQerrorMessage(backup_conn));
 
 	if (sscanf(PQgetvalue(res, 0, 0), XID_FMT, xid) != 1)
 	{
 		elog(ERROR,
-			"result of txid_current() is invalid: %s",
-			PQerrorMessage(connection));
+			 "result of txid_current() is invalid: %s",
+			 PQerrorMessage(backup_conn));
 	}
 	elog(LOG, "%s():%s", __FUNCTION__, PQgetvalue(res, 0, 0));
 }
@@ -1055,6 +1057,15 @@ backup_cleanup(bool fatal, void *userdata)
 		current.status = BACKUP_STATUS_ERROR;
 		pgBackupWriteIni(&current);
 	}
+}
+
+/*
+ * Disconnect backup connection during quit pg_probackup.
+ */
+static void
+backup_disconnect(bool fatal, void *userdata)
+{
+	pgut_disconnect(backup_conn);
 }
 
 /* Count bytes in file */
