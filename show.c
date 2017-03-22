@@ -9,6 +9,7 @@
  */
 
 #include "pg_probackup.h"
+#include <time.h>
 
 static void show_backup_list(FILE *out, parray *backup_list);
 static void show_backup_detail(FILE *out, pgBackup *backup);
@@ -188,9 +189,9 @@ show_backup_list(FILE *out, parray *backup_list)
 	int			i;
 
 	/* show header */
-	fputs("=========================================================================================================\n", out);
-	fputs("ID       Recovery time        Mode          Current/Parent TLI  Time    Data  start_lsn  stop_lsn Status  \n", out);
-	fputs("=========================================================================================================\n", out);
+	fputs("=============================================================================================================\n", out);
+	fputs("ID       Recovery time        Mode          Current/Parent TLI  Time         Data  start_lsn  stop_lsn Status  \n", out);
+	fputs("=============================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -204,8 +205,8 @@ show_backup_list(FILE *out, parray *backup_list)
 		if (backup->recovery_time != (time_t) 0)
 			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 		if (backup->end_time != (time_t) 0)
-			snprintf(duration, lengthof(duration), "%lum",
-				(backup->end_time - backup->start_time) / 60);
+			snprintf(duration, lengthof(duration), "%.*lf s",  0,
+					 difftime(backup->end_time, backup->start_time));
 
 		/*
 		 * Calculate Data field, in the case of full backup this shows the
@@ -218,7 +219,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-8s %-19s  %-13s %2d /%2d              %5s  %6s %X/%X %X/%X %s \n",
+		fprintf(out, "%-8s %-19s  %-13s %2d /%2d              %-10s  %6s %X/%X %X/%X %s \n",
 				base36enc(backup->start_time),
 				timestamp,
 				modes[backup->backup_mode + (BACKUP_MODE_FULL + 1)*backup->stream],
