@@ -205,7 +205,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		if (backup->recovery_time != (time_t) 0)
 			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 		if (backup->end_time != (time_t) 0)
-			snprintf(duration, lengthof(duration), "%.*lf s",  0,
+			snprintf(duration, lengthof(duration), "%.*lfs",  0,
 					 difftime(backup->end_time, backup->start_time));
 
 		/*
