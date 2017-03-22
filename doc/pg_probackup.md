@@ -291,7 +291,7 @@ This mode should be used with caution as it allows to delete WAL files required 
 
 ### Backup from Standby
 
-If replication is in use, starting with PostgreSQL 9.6 a backup can be taken not only from primary server, but also from standby. Backup taken from standby is absolutely interchangeable with backup taken from primary (bearing in mind possible replication delay). Page-level incremental backups are not allowed to perform from standby.
+If replication is in use, starting with PostgreSQL 9.6 a backup can be taken not only from primary server, but also from standby. Backup taken from standby is absolutely interchangeable with backup taken from primary (bearing in mind possible replication delay).
 
 Currently it is required for primary database server to have `full_page_writes` turned `on` (in future this requirement may be relaxed in the case checksums are enabled on data pages).
 

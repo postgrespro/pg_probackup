@@ -437,10 +437,6 @@ do_backup(bool smooth_checkpoint)
 	if (pg_is_standby() && !from_replica)
 		elog(ERROR, "backup is not allowed for standby");
 
-	/* Page backup is not allowed for replica instance */
-	if (from_replica && current.backup_mode == BACKUP_MODE_DIFF_PAGE)
-		elog(ERROR, "page backup is not allowed for standby");
-
 	/* show configuration actually used */
 	elog(LOG, "========================================");
 	elog(LOG, "backup start");
