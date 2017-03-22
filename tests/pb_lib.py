@@ -23,7 +23,7 @@ class ShowBackup(object):
 
 		self.id = self.get_inc(split_line)
 		# TODO: parse to datetime
-		if len(split_line) == 10:
+		if len(split_line) == 12:
 			self.recovery_time = "%s %s" % (self.get_inc(split_line),
 				self.get_inc(split_line))
 		# if recovery time is '----'
@@ -38,6 +38,8 @@ class ShowBackup(object):
 		self.time = self.get_inc(split_line)
 		# TODO: maybe rename to size?
 		self.data = self.get_inc(split_line)
+		self.start_lsn = self.get_inc(split_line)
+		self.stop_lsn = self.get_inc(split_line)
 		self.status = self.get_inc(split_line)
 
 	def get_inc(self, split_line):
