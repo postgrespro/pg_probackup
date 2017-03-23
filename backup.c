@@ -72,7 +72,7 @@ static void pg_switch_xlog(void);
 static bool pg_is_standby(void);
 static void add_pgdata_files(parray *files, const char *root);
 static void create_file_list(parray *files, const char *root, bool is_append);
-static void wait_archive_lsn(XLogRecPtr lsn, bool last_segno);
+static void wait_archive_lsn(XLogRecPtr lsn, bool prev_segno);
 static void make_pagemap_from_ptrack(parray *files);
 static void StreamLog(void *arg);
 
@@ -230,17 +230,9 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	 * Build page mapping in differential mode. When using this mode, the
 	 * list of blocks to be taken is known by scanning the WAL segments
 	 * present in archives up to the point where start backup has begun.
-	 * However, normally this segment is not yet available in the archives,
-	 * leading to failures when building the page map. Hence before doing
-	 * anything and in order to ensure that all the segments needed for the
-	 * scan are here, for a switch of the last segment with pg_switch_xlog.
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
-		/* Enforce archiving of last segment and wait for it to be here */
-		if (!from_replica)
-			pg_switch_xlog();
-
 		/* Now build the page map */
 		parray_qsort(backup_files_list, pgFileComparePathDesc);
 		elog(LOG, "extractPageMap");
@@ -252,7 +244,12 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 			 (uint32) (current.start_lsn >> 32),
 			 (uint32) (current.start_lsn));
 		extractPageMap(arclog_path, prev_backup->start_lsn, current.tli,
-					   current.start_lsn);
+					   current.start_lsn,
+					   /*
+						* For backup from master wait for previous segment.
+						* For backup from replica wait for current segment.
+						*/
+					   !from_replica);
 	}
 	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -602,7 +599,12 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	backup->start_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 
 	if (!stream_wal)
-		wait_archive_lsn(backup->start_lsn, true);
+		wait_archive_lsn(backup->start_lsn,
+						 /*
+						  * For backup from master wait for previous segment.
+						  * For backup from replica wait for current segment.
+						  */
+						 !from_replica);
 
 	PQclear(res);
 }
@@ -729,7 +731,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
 }
 
 static void
-wait_archive_lsn(XLogRecPtr lsn, bool last_segno)
+wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 {
 	TimeLineID	tli;
 	XLogSegNo	targetSegNo;
@@ -741,7 +743,7 @@ wait_archive_lsn(XLogRecPtr lsn, bool last_segno)
 
 	/* As well as WAL file name */
 	XLByteToSeg(lsn, targetSegNo);
-	if (last_segno)
+	if (prev_segno)
 		targetSegNo--;
 	XLogFileName(wal_file, tli, targetSegNo);
 
@@ -844,6 +846,9 @@ pg_stop_backup(pgBackup *backup)
 
 	PQclear(res);
 
+	if (!stream_wal)
+		wait_archive_lsn(stop_backup_lsn, false);
+
 	/* Fill in fields if backup exists */
 	if (backup != NULL)
 	{
@@ -868,9 +873,6 @@ pg_stop_backup(pgBackup *backup)
 
 		PQclear(res);
 	}
-
-	if (!stream_wal)
-		wait_archive_lsn(stop_backup_lsn, false);
 }
 
 /*

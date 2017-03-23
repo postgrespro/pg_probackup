@@ -351,7 +351,7 @@ extern bool calc_file(pgFile *file);
 extern void extractPageMap(const char *datadir,
 						   XLogRecPtr startpoint,
 						   TimeLineID tli,
-						   XLogRecPtr endpoint);
+						   XLogRecPtr endpoint, bool prev_segno);
 extern void validate_wal(pgBackup *backup,
 						 const char *archivedir,
 						 time_t target_time,

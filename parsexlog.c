@@ -54,21 +54,30 @@ static int SimpleXLogPageRead(XLogReaderState *xlogreader,
  * Read WAL from the archive directory, starting from 'startpoint' on the
  * given timeline, until 'endpoint'. Make note of the data blocks touched
  * by the WAL records, and return them in a page map.
+ *
+ * If **prev_segno** is true then read all segments up to **endpoint** segment
+ * minus one. Else read all segments up to **endpoint** segment.
  */
 void
 extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
-			   XLogRecPtr endpoint)
+			   XLogRecPtr endpoint, bool prev_segno)
 {
 	XLogRecord *record;
 	XLogReaderState *xlogreader;
 	char	   *errormsg;
 	XLogPageReadPrivate private;
+	XLogSegNo	endSegNo,
+				nextSegNo = 0;
 
 	private.archivedir = archivedir;
 	private.tli = tli;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
 	if (xlogreader == NULL)
 		elog(ERROR, "out of memory");
+
+	XLByteToSeg(endpoint, endSegNo);
+	if (prev_segno)
+		endSegNo--;
 
 	do
 	{
@@ -93,7 +102,9 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 
 		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
 
-	} while (xlogreader->ReadRecPtr != endpoint);
+		XLByteToSeg(xlogreader->EndRecPtr, nextSegNo);
+
+	} while (nextSegNo <= endSegNo && xlogreader->EndRecPtr != endpoint);
 
 	XLogReaderFree(xlogreader);
 	if (xlogreadfd != -1)
