@@ -123,11 +123,15 @@ typedef struct pgBackup
 	XLogRecPtr		start_lsn;	/* backup's starting transaction log location */
 	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
 	time_t			start_time;	/* since this moment backup has status
-								 * BACKUP_STATUS_RUNNING  */
+								 * BACKUP_STATUS_RUNNING */
 	time_t			end_time;	/* the moment when backup was finished, or the moment
 								 * when we realized that backup is broken*/
-	time_t			recovery_time; /* FIXME */
-	TransactionId	recovery_xid; /* FIXME  */
+	time_t			recovery_time;	/* Earliest moment for which you can restore
+									 * the state of the database cluster using
+									 * this backup */
+	TransactionId	recovery_xid;	/* Earliest xid for which you can restore
+									 * the state of the database cluster using
+									 * this backup */
 
 	/*
 	 * Amount of raw data. For a full backup, this is the total amount of
