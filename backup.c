@@ -27,11 +27,11 @@
 #include "streamutil.h"
 #include "receivelog.h"
 
-/* wait 10 sec until WAL archive complete */
-#define TIMEOUT_ARCHIVE 10
-
 /* Server version */
 static int server_version = 0;
+
+/* Wait timeout for WAL segment archiving */
+uint32 archive_timeout = 0;
 
 static bool	in_backup = false;						/* TODO: more robust logic */
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
@@ -737,7 +737,7 @@ wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 	XLogSegNo	targetSegNo;
 	char		wal_path[MAXPGPATH];
 	char		wal_file[MAXFNAMELEN];
-	int			try_count = 0;
+	uint32		try_count = 0;
 
 	tli = get_current_timeline(false);
 
@@ -748,7 +748,6 @@ wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 	XLogFileName(wal_file, tli, targetSegNo);
 
 	join_path_components(wal_path, arclog_path, wal_file);
-	elog(LOG, "wait for lsn %li in archived WAL segment %s", lsn, wal_path);
 
 	/* Wait until switched WAL is archived */
 	while (!fileExists(wal_path))
@@ -757,10 +756,16 @@ wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 		if (interrupted)
 			elog(ERROR, "interrupted during waiting for WAL archiving");
 		try_count++;
-		if (try_count > TIMEOUT_ARCHIVE)
+
+		/* Inform user if WAL segment is absent in first attempt */
+		if (try_count == 1)
+			elog(INFO, "wait for lsn %X/%X in archived WAL segment %s",
+				 (uint32) (lsn >> 32), (uint32) lsn, wal_path);
+
+		if (archive_timeout > 0 && try_count > archive_timeout)
 			elog(ERROR,
 				 "switched WAL could not be archived in %d seconds",
-				 TIMEOUT_ARCHIVE);
+				 archive_timeout);
 	}
 }
 

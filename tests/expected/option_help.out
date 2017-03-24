@@ -18,6 +18,7 @@ Backup options:
   -b, --backup-mode=MODE    backup mode (full, page, ptrack)
   -C, --smooth-checkpoint   do smooth checkpoint before backup
       --stream              stream the transaction log and include it in the backup
+      --archive-timeout     wait timeout for WAL segment archiving
   -S, --slot=SLOTNAME       replication slot to use
       --backup-pg-log       backup of pg_log directory
   -j, --threads=NUM         number of parallel threads

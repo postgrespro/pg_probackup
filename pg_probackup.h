@@ -225,6 +225,7 @@ extern bool stream_wal;
 extern bool from_replica;
 extern bool progress;
 extern bool delete_wal;
+extern uint32 archive_timeout;
 
 extern uint64 system_identifier;
 

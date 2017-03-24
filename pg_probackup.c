@@ -16,7 +16,7 @@
 #include <time.h>
 #include <sys/stat.h>
 
-const char *PROGRAM_VERSION	= "1.1.1";
+const char *PROGRAM_VERSION	= "1.1.2";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -69,6 +69,7 @@ static pgut_option options[] =
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_CMDLINE },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_CMDLINE },
 	{ 's', 'S', "slot",					&replication_slot,		SOURCE_CMDLINE },
+	{ 'u',  2, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE },
 	/* options with only long name (keep-xxx) */
 	/* restore options */
 	{ 's',  3, "time",					&target_time,		SOURCE_CMDLINE },
@@ -250,6 +251,7 @@ pgut_help(bool details)
 	printf(_("  -b, --backup-mode=MODE    backup mode (full, page, ptrack)\n"));
 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
 	printf(_("      --stream              stream the transaction log and include it in the backup\n"));
+	printf(_("      --archive-timeout     wait timeout for WAL segment archiving\n"));
 	printf(_("  -S, --slot=SLOTNAME       replication slot to use\n"));
 	printf(_("      --backup-pg-log       backup of pg_log directory\n"));
 	printf(_("  -j, --threads=NUM         number of parallel threads\n"));

@@ -410,6 +410,10 @@ Backup mode. Supported modes are: FULL (full backup), PAGE (incremental backup, 
 
 Makes an autonomous backup that includes all necessary WAL files, by streaming them from database server via replication protocol.
 
+--archive-timeout
+
+Wait timeout for WAL segment archiving. `pg_probackup` waits after `pg_start_backup()` and `pg_stop_backup()` executing when WAL segments with necessary LSN will be archived. For backup from master WAL segment will be archived fast, because master instance switch WAL segment during backup. For backup from standby `pg_probackup` will wait a long time, because standby instance cannot switch WAL segment. By default timeout is infinite.
+
 -S _slot\_name_  
 --slot=_slot\_name_
 
