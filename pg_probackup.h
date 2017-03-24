@@ -42,7 +42,6 @@
 #define BACKUP_CONF_FILE		"backup.conf"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
 #define BACKUP_CATALOG_PID		"pg_probackup.pid"
-#define MKDIRS_SH_FILE			"mkdirs.sh"
 #define DATABASE_FILE_LIST		"file_database.txt"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
@@ -358,6 +357,10 @@ extern void validate_wal(pgBackup *backup,
 						 time_t target_time,
 						 TransactionId target_xid,
 						 TimeLineID tli);
+extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
+							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
+							   time_t *recovery_time,
+							   TransactionId *recovery_xid);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);

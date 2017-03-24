@@ -38,8 +38,7 @@ do_validate(time_t backup_id,
 	pgRecoveryTarget *rt = NULL;
 	pgBackup   *base_backup = NULL;
 	pgBackup   *dest_backup = NULL;
-	bool		success_validate,
-				need_validate_wal = true;
+	bool		success_validate;
 
 	catalog_lock(false);
 
@@ -128,9 +127,6 @@ base_backup_found:
 
 	Assert(last_diff_index <= base_index);
 
-	if (dest_backup && dest_backup->stream)
-		need_validate_wal = target_time != NULL || target_xid != NULL;
-
 	/* Validate backups from base_index to last_diff_index */
 	for (i = base_index; i >= last_diff_index; i--)
 	{
@@ -142,9 +138,10 @@ base_backup_found:
 				success_validate;
 	}
 
-	/* and now we must check WALs */
-	if (need_validate_wal)
-		validate_wal((pgBackup *) parray_get(backups, last_diff_index),
+	/* And now we must check WALs */
+	dest_backup = (pgBackup *) parray_get(backups, last_diff_index);
+	if (!dest_backup->stream || (target_time != NULL || target_xid != NULL))
+		validate_wal(dest_backup,
 					 arclog_path,
 					 rt->recovery_target_time,
 					 rt->recovery_target_xid,

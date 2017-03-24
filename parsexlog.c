@@ -90,12 +90,11 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 
 			if (errormsg)
 				elog(ERROR, "could not read WAL record at %X/%X: %s",
-						 (uint32) (errptr >> 32), (uint32) (errptr),
-						 errormsg);
+					 (uint32) (errptr >> 32), (uint32) (errptr),
+					 errormsg);
 			else
 				elog(ERROR, "could not read WAL record at %X/%X",
-						 (uint32) (errptr >> 32),
-						 (uint32) (errptr));
+					 (uint32) (errptr >> 32), (uint32) (errptr));
 		}
 
 		extractPageInfo(xlogreader);
@@ -145,7 +144,7 @@ validate_wal(pgBackup *backup,
 
 	while (true)
 	{
-		bool timestamp_record;
+		bool		timestamp_record;
 
 		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
 		if (record == NULL)
@@ -248,6 +247,66 @@ validate_wal(pgBackup *backup,
 		xlogreadfd = -1;
 		xlogexists = false;
 	}
+}
+
+/*
+ * Read from archived WAL segments latest recovery time and xid. All necessary
+ * segments present at archive folder. We waited **stop_lsn** in
+ * pg_stop_backup().
+ */
+bool
+read_recovery_info(const char *archivedir, TimeLineID tli,
+				   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
+				   time_t *recovery_time, TransactionId *recovery_xid)
+{
+	XLogRecPtr	startpoint = stop_lsn;
+	XLogReaderState *xlogreader;
+	XLogPageReadPrivate private;
+
+	private.archivedir = archivedir;
+	private.tli = tli;
+
+	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
+	if (xlogreader == NULL)
+		elog(ERROR, "out of memory");
+
+	/* Read records from stop_lsn down to start_lsn */
+	do
+	{
+		XLogRecord *record;
+		TimestampTz last_time = 0;
+		char	   *errormsg;
+
+		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+		if (record == NULL)
+		{
+			XLogRecPtr	errptr;
+
+			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
+
+			if (errormsg)
+				elog(ERROR, "could not read WAL record at %X/%X: %s",
+					 (uint32) (errptr >> 32), (uint32) (errptr),
+					 errormsg);
+			else
+				elog(ERROR, "could not read WAL record at %X/%X",
+					 (uint32) (errptr >> 32), (uint32) (errptr));
+		}
+
+		/* Read previous record */
+		startpoint = record->xl_prev;
+
+		if (getRecordTimestamp(xlogreader, &last_time))
+		{
+			*recovery_time = timestamptz_to_time_t(last_time);
+			*recovery_xid = XLogRecGetXid(xlogreader);
+
+			return true;
+		}
+	} while (startpoint >= start_lsn);
+
+	/* Didn't find timestamp from WAL records between start_lsn and stop_lsn */
+	return false;
 }
 
 /* XLogreader callback function, to read a WAL page */
@@ -421,18 +480,19 @@ getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime)
 		*recordXtime = ((xl_restore_point *) XLogRecGetData(record))->rp_time;
 		return true;
 	}
-	if (rmid == RM_XACT_ID && (xact_info == XLOG_XACT_COMMIT ||
+	else if (rmid == RM_XACT_ID && (xact_info == XLOG_XACT_COMMIT ||
 							   xact_info == XLOG_XACT_COMMIT_PREPARED))
 	{
 		*recordXtime = ((xl_xact_commit *) XLogRecGetData(record))->xact_time;
 		return true;
 	}
-	if (rmid == RM_XACT_ID && (xact_info == XLOG_XACT_ABORT ||
+	else if (rmid == RM_XACT_ID && (xact_info == XLOG_XACT_ABORT ||
 							   xact_info == XLOG_XACT_ABORT_PREPARED))
 	{
 		*recordXtime = ((xl_xact_abort *) XLogRecGetData(record))->xact_time;
 		return true;
 	}
+
 	return false;
 }
 

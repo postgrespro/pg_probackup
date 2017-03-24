@@ -63,7 +63,8 @@ do_init(void)
 	join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
-		elog(ERROR, "cannot create pg_probackup.conf: %s", strerror(errno));
+		elog(ERROR, "cannot create %s: %s",
+			 BACKUP_CATALOG_CONF_FILE, strerror(errno));
 
 	fprintf(fp, "system-identifier = %li\n", _system_identifier);
 	fprintf(fp, "\n");

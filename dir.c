@@ -27,43 +27,43 @@
  */
 const char *pgdata_exclude_dir[] =
 {
-		"pg_xlog",
-       /*
-        * Skip temporary statistics files. PG_STAT_TMP_DIR must be skipped even
-        * when stats_temp_directory is set because PGSS_TEXT_FILE is always created
-        * there.
-        */
-        "pg_stat_tmp",
-        "pgsql_tmp",
+	PG_XLOG_DIR,
+	/*
+	 * Skip temporary statistics files. PG_STAT_TMP_DIR must be skipped even
+	 * when stats_temp_directory is set because PGSS_TEXT_FILE is always created
+	 * there.
+	 */
+	"pg_stat_tmp",
+	"pgsql_tmp",
 
-       /*
-        * It is generally not useful to backup the contents of this directory even
-        * if the intention is to restore to another master. See backup.sgml for a
-        * more detailed description.
-        */
-       "pg_replslot",
+	/*
+	 * It is generally not useful to backup the contents of this directory even
+	 * if the intention is to restore to another master. See backup.sgml for a
+	 * more detailed description.
+	 */
+	"pg_replslot",
 
-       /* Contents removed on startup, see dsm_cleanup_for_mmap(). */
-       "pg_dynshmem",
+	/* Contents removed on startup, see dsm_cleanup_for_mmap(). */
+	"pg_dynshmem",
 
-       /* Contents removed on startup, see AsyncShmemInit(). */
-       "pg_notify",
+	/* Contents removed on startup, see AsyncShmemInit(). */
+	"pg_notify",
 
-       /*
-        * Old contents are loaded for possible debugging but are not required for
-        * normal operation, see OldSerXidInit().
-        */
-       "pg_serial",
+	/*
+	 * Old contents are loaded for possible debugging but are not required for
+	 * normal operation, see OldSerXidInit().
+	 */
+	"pg_serial",
 
-       /* Contents removed on startup, see DeleteAllExportedSnapshotFiles(). */
-       "pg_snapshots",
+	/* Contents removed on startup, see DeleteAllExportedSnapshotFiles(). */
+	"pg_snapshots",
 
-       /* Contents zeroed on startup, see StartupSUBTRANS(). */
-       "pg_subtrans",
+	/* Contents zeroed on startup, see StartupSUBTRANS(). */
+	"pg_subtrans",
 
-       /* end of list */
-        NULL,                   /* pg_log will be set later */
-        NULL
+	/* end of list */
+	NULL,				/* pg_log will be set later */
+	NULL
 };
 
 static char *pgdata_exclude_files[] =
