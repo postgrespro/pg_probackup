@@ -779,6 +779,11 @@ pg_stop_backup(pgBackup *backup)
 	PGresult   *res;
 	uint32		xlogid;
 	uint32		xrecoff;
+
+	/*
+	 * We will use this values if there are no transactions between start_lsn
+	 * and stop_lsn.
+	 */
 	time_t		recovery_time;
 	TransactionId recovery_xid;
 
@@ -789,18 +794,16 @@ pg_stop_backup(pgBackup *backup)
 
 	if (from_replica)
 		res = pgut_execute(backup_conn,
-						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()) FROM pg_stop_backup(false)",
+						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
+						   " current_timestamp(0)::timestamp"
+						   " FROM pg_stop_backup(false)",
 						   0, NULL);
 	else
 		res = pgut_execute(backup_conn,
-						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()) FROM pg_stop_backup()",
+						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
+						   " current_timestamp(0)::timestamp"
+						   " FROM pg_stop_backup()",
 						   0, NULL);
-
-	/*
-	 * We will use this value if there are no transactions between start_lsn
-	 * and stop_lsn.
-	 */
-	recovery_time = time(NULL);
 
 	/*
 	 * Extract timeline and LSN from results of pg_stop_backup()
@@ -817,7 +820,7 @@ pg_stop_backup(pgBackup *backup)
 		FILE	   *fp;
 		pgFile	   *file;
 
-		Assert(PQnfields(res) >= 3);
+		Assert(PQnfields(res) >= 5);
 
 		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
 		join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
@@ -863,12 +866,22 @@ pg_stop_backup(pgBackup *backup)
 			elog(ERROR,
 				 "result of txid_snapshot_xmax() is invalid: %s",
 				 PQerrorMessage(backup_conn));
+		if (!parse_time(PQgetvalue(res, 0, 4), &recovery_time))
+			elog(ERROR,
+				 "result of current_timestamp is invalid: %s",
+				 PQerrorMessage(backup_conn));
 	}
 	else
+	{
 		if (sscanf(PQgetvalue(res, 0, 1), XID_FMT, &recovery_xid) != 1)
 			elog(ERROR,
 				 "result of txid_snapshot_xmax() is invalid: %s",
 				 PQerrorMessage(backup_conn));
+		if (!parse_time(PQgetvalue(res, 0, 2), &recovery_time))
+			elog(ERROR,
+				 "result of current_timestamp is invalid: %s",
+				 PQerrorMessage(backup_conn));
+	}
 
 	PQclear(res);
 
