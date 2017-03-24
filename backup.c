@@ -31,7 +31,7 @@
 static int server_version = 0;
 
 /* Wait timeout for WAL segment archiving */
-uint32 archive_timeout = 0;
+uint32 archive_timeout = 300;
 
 static bool	in_backup = false;						/* TODO: more robust logic */
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
