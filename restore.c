@@ -212,8 +212,10 @@ base_backup_found:
 	}
 
 	/* create recovery.conf */
-	create_recovery_conf(backup_id, target_time, target_xid,
-						 target_inclusive, base_backup->tli);
+	dest_backup = (pgBackup *) parray_get(backups, last_diff_index);
+	if (!dest_backup->stream || (target_time != NULL || target_xid != NULL))
+		create_recovery_conf(backup_id, target_time, target_xid,
+							 target_inclusive, base_backup->tli);
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);

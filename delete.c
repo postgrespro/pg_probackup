@@ -36,7 +36,7 @@ do_delete(time_t backup_id)
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(0);
 	if (!backup_list)
-		elog(ERROR, "No backup list found, can't process any more.");
+		elog(ERROR, "no backup list found, can't process any more");
 
 	/* Find backup to be deleted */
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -143,7 +143,8 @@ do_retention_purge(void)
 	time_t		days_threshold = time(NULL) - (retention_window * 60 * 60 * 24);
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli;
-	bool		keep_next_backup = true; /* Do not delete first full backup */
+	bool		keep_next_backup = true;	/* Do not delete first full backup */
+	bool		backup_deleted = false;		/* At least one backup was deleted */
 
 	if (retention_redundancy > 0)
 		elog(LOG, "REDUNDANCY=%u", retention_redundancy);
@@ -160,8 +161,7 @@ do_retention_purge(void)
 	backup_list = catalog_get_backup_list(0);
 	if (parray_num(backup_list) == 0)
 	{
-		elog(INFO, "backup list is empty");
-		elog(INFO, "exit");
+		elog(INFO, "backup list is empty, purging won't be executed");
 		return 0;
 	}
 
@@ -207,6 +207,7 @@ do_retention_purge(void)
 
 		/* Delete backup and update status to DELETED */
 		pgBackupDeleteFiles(backup);
+		backup_deleted = true;
 	}
 
 	/* Purge WAL files */
@@ -216,7 +217,10 @@ do_retention_purge(void)
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
 
-	elog(INFO, "purging is finished");
+	if (backup_deleted)
+		elog(INFO, "purging finished");
+	else
+		elog(INFO, "no one backup was deleted by retention policy");
 
 	return 0;
 }
