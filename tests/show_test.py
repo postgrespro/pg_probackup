@@ -17,7 +17,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
 	def test_ok_1(self):
 		"""Status DONE and OK"""
-		node = self.make_bnode('done_ok', base_dir="tmp_dirs/show/ok_1")
+		node = self.make_bnode(base_dir="tmp_dirs/show/ok_1")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 
@@ -31,7 +31,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
 	def test_corrupt_2(self):
 		"""Status DONE and OK"""
-		node = self.make_bnode('corrupt', base_dir="tmp_dirs/show/corrupt_2")
+		node = self.make_bnode(base_dir="tmp_dirs/show/corrupt_2")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 

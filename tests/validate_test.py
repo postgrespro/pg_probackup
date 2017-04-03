@@ -21,7 +21,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 	def test_validate_wal_1(self):
 		"""recovery to latest from full backup"""
-		node = self.make_bnode('test_validate_wal_1', base_dir="tmp_dirs/validate/wal_1")
+		node = self.make_bnode(base_dir="tmp_dirs/validate/wal_1")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)

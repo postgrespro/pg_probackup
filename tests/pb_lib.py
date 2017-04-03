@@ -91,18 +91,15 @@ class ProbackupTest(object):
 	def backup_dir(self, node):
 		return os.path.abspath("%s/backup" % node.base_dir)
 
-	def make_bnode(self, name, base_dir=None, options={}):
+	def make_bnode(self, base_dir=None, allows_streaming=False, options={}):
 		real_base_dir = path.join(self.dir_path, base_dir)
 		shutil.rmtree(real_base_dir, ignore_errors=True)
-		node = get_new_node('test', base_dir=real_base_dir)
-		node.init()
-		# node.init(initdb_params=[
-		# 	"-x", "0x123456789ABCDEF0",
-		# 	"-m", "0x23456789ABCDEF01",
-		# 	"-o", "0x3456789ABCDEF012"
-		# ])
 
-		node.append_conf("postgresql.conf", "wal_level = hot_standby")
+		node = get_new_node('test', base_dir=real_base_dir)
+		node.init(allows_streaming=allows_streaming)
+
+		if not allows_streaming:
+			node.append_conf("postgresql.conf", "wal_level = hot_standby")
 		node.append_conf("postgresql.conf", "archive_mode = on")
 		node.append_conf(
 			"postgresql.conf",
@@ -113,6 +110,33 @@ class ProbackupTest(object):
 			node.append_conf("postgresql.conf", "%s = %s" % (key, value))
 
 		return node
+
+	def make_bnode_replica(self, root_node, base_dir=None, options={}):
+		real_base_dir = path.join(self.dir_path, base_dir)
+		shutil.rmtree(real_base_dir, ignore_errors=True)
+
+		root_node.backup("basebackup")
+
+		replica = get_new_node("replica", base_dir=real_base_dir)
+		# replica.init_from_backup(root_node, "data_replica", has_streaming=True)
+
+		# Move data from backup
+		backup_path = os.path.join(root_node.base_dir, "basebackup")
+		shutil.move(backup_path, replica.data_dir)
+		os.chmod(replica.data_dir, 0o0700)
+
+		# Change port in config file
+		replica.append_conf(
+			"postgresql.conf",
+			"port = {}".format(replica.port)
+		)
+		# Enable streaming
+		replica.enable_streaming(root_node)
+
+		for key, value in six.iteritems(options):
+			replica.append_conf("postgresql.conf", "%s = %s" % (key, value))
+
+		return replica
 
 	def run_pb(self, command):
 		try:
@@ -145,8 +169,28 @@ class ProbackupTest(object):
 		if backup_type:
 			cmd_list += ["-b", backup_type]
 
-		# print(cmd_list)
 		return self.run_pb(cmd_list + options)
+
+	def backup_pb_proc(self, node, backup_dir, backup_type="full",
+		stdout=None, stderr=None, options=[]):
+		cmd_list = [
+			self.probackup_path,
+			"backup",
+			"-D", node.data_dir,
+			"-B", backup_dir,
+			"-p", "%i" % (node.port),
+			"-d", "postgres"
+		]
+		if backup_type:
+			cmd_list += ["-b", backup_type]
+
+		proc = subprocess.Popen(
+			cmd_list + options,
+			stdout=stdout,
+			stderr=stderr
+		)
+
+		return proc
 
 	def restore_pb(self, node, id=None, options=[]):
 		cmd_list = [

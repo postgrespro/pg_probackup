@@ -17,8 +17,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
 	def test_retention_redundancy_1(self):
 		"""purge backups using redundancy-based retention policy"""
-		node = self.make_bnode('retention_redundancy_1',
-			base_dir="tmp_dirs/retention/retention_redundancy_1")
+		node = self.make_bnode(base_dir="tmp_dirs/retention/retention_redundancy_1")
 		node.start()
 
 		self.init_pb(node)
@@ -56,8 +55,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
 	def test_retention_window_2(self):
 		"""purge backups using window-based retention policy"""
-		node = self.make_bnode('retention_window_2',
-			base_dir="tmp_dirs/retention/retention_window_2")
+		node = self.make_bnode(base_dir="tmp_dirs/retention/retention_window_2")
 		node.start()
 
 		self.init_pb(node)

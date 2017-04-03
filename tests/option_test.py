@@ -38,7 +38,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 		)
 
 	def test_options_4(self):
-		node = self.make_bnode('test_options_4', base_dir="tmp_dirs/option/option_common")
+		node = self.make_bnode(base_dir="tmp_dirs/option/option_common")
 		try:
 			node.stop()
 		except:

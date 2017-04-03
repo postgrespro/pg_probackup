@@ -17,7 +17,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
 	def test_delete_full_backups_1(self):
 		"""delete full backups"""
-		node = self.make_bnode('delete_full_backups_1', base_dir="tmp_dirs/delete/delete_full_backups_1")
+		node = self.make_bnode(base_dir="tmp_dirs/delete/delete_full_backups_1")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init()
@@ -52,7 +52,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
 	def test_delete_increment_2(self):
 		"""delete increment and all after him"""
-		node = self.make_bnode('delete_increment_2', base_dir="tmp_dirs/delete/delete_increment_2")
+		node = self.make_bnode(base_dir="tmp_dirs/delete/delete_increment_2")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 

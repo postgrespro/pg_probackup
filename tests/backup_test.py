@@ -16,7 +16,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
 	def test_backup_modes_1(self):
 		"""standart backup modes"""
-		node = self.make_bnode('backup_modes_', base_dir="tmp_dirs/backup/backup_modes_1")
+		node = self.make_bnode(base_dir="tmp_dirs/backup/backup_modes_1")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 
@@ -73,7 +73,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
 	def test_smooth_checkpoint_2(self):
 		"""full backup with smooth checkpoint"""
-		node = self.make_bnode('smooth_checkpoint_2', base_dir="tmp_dirs/backup/smooth_checkpoint_2")
+		node = self.make_bnode(base_dir="tmp_dirs/backup/smooth_checkpoint_2")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 
@@ -86,7 +86,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
 	def test_page_backup_without_full_3(self):
 		"""page-level backup without validated full backup"""
-		node = self.make_bnode('without_full_3', base_dir="tmp_dirs/backup/without_full_3")
+		node = self.make_bnode(base_dir="tmp_dirs/backup/without_full_3")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 
@@ -100,7 +100,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 	def test_ptrack_threads_4(self):
 		"""ptrack multi thread backup mode"""
 		node = self.make_bnode(
-			'ptrack_threads_4',
 			base_dir="tmp_dirs/backup/ptrack_threads_4",
 			options={"ptrack_enable": "on"}
 		)
@@ -122,7 +121,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 	def test_ptrack_threads_stream_5(self):
 		"""ptrack multi thread backup mode and stream"""
 		node = self.make_bnode(
-			'ptrack_threads_stream_5',
 			base_dir="tmp_dirs/backup/ptrack_threads_stream_5",
 			options={
 				"ptrack_enable": "on",

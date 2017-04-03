@@ -19,7 +19,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_to_latest_1(self):
 		"""recovery to latest from full backup"""
-		node = self.make_bnode('restore_to_latest_1', base_dir="tmp_dirs/restore/restore_to_latest_1")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_to_latest_1")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -50,7 +50,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_to_latest_2(self):
 		"""recovery to latest from full + page backups"""
-		node = self.make_bnode('restore_to_latest_2', base_dir="tmp_dirs/restore/restore_to_latest_2")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_to_latest_2")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -82,7 +82,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_to_timeline_3(self):
 		"""recovery to target timeline"""
-		node = self.make_bnode('restore_to_timeline_3', base_dir="tmp_dirs/restore/restore_to_timeline_3")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_to_timeline_3")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -127,7 +127,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_to_time_4(self):
 		"""recovery to target timeline"""
-		node = self.make_bnode('restore_to_time_4', base_dir="tmp_dirs/restore/restore_to_time_4")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_to_time_4")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -158,7 +158,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_to_xid_5(self):
 		"""recovery to target xid"""
-		node = self.make_bnode('restore_to_xid_5', base_dir="tmp_dirs/restore/restore_to_xid_5")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_to_xid_5")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -204,7 +204,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_full_ptrack_6(self):
 		"""recovery to latest from full + ptrack backups"""
-		node = self.make_bnode('restore_full_ptrack_6', base_dir="tmp_dirs/restore/full_ptrack_6")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/full_ptrack_6")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -244,7 +244,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_full_ptrack_ptrack_7(self):
 		"""recovery to latest from full + ptrack + ptrack backups"""
-		node = self.make_bnode('restore_full_ptrack_ptrack_7', base_dir="tmp_dirs/restore/full_ptrack_ptrack_7")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/full_ptrack_ptrack_7")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -291,7 +291,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_full_ptrack_stream_8(self):
 		"""recovery in stream mode to latest from full + ptrack backups"""
-		node = self.make_bnode('restore_full_ptrack_stream_8', base_dir="tmp_dirs/restore/full_ptrack_stream_8")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/full_ptrack_stream_8")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -334,7 +334,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_full_ptrack_under_load_9(self):
 		"""recovery to latest from full + page backups with loads when ptrack backup do"""
-		node = self.make_bnode('restore_full_ptrack_under_load_9', base_dir="tmp_dirs/restore/full_ptrack_under_load_9")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/full_ptrack_under_load_9")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		wal_segment_size = self.guc_wal_segment_size(node)
@@ -391,7 +391,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_full_under_load_ptrack_10(self):
 		"""recovery to latest from full + page backups with loads when full backup do"""
-		node = self.make_bnode('restore_full_under_load_ptrack_10', base_dir="tmp_dirs/restore/full_under_load_ptrack_10")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/full_under_load_ptrack_10")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		wal_segment_size = self.guc_wal_segment_size(node)
@@ -448,7 +448,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_to_xid_inclusive_11(self):
 		"""recovery with target inclusive false"""
-		node = self.make_bnode('restore_to_xid_inclusive_11', base_dir="tmp_dirs/restore/restore_to_xid_inclusive_11")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_to_xid_inclusive_11")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 		node.pgbench_init(scale=2)
@@ -499,8 +499,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_with_tablespace_mapping_12(self):
 		"""recovery using tablespace-mapping option"""
-		node = self.make_bnode('restore_with_tablespace_mapping_12',
-			base_dir="tmp_dirs/restore/restore_with_tablespace_mapping_12")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_with_tablespace_mapping_12")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 
@@ -564,8 +563,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 	def test_restore_with_tablespace_mapping_13(self):
 		"""recovery using tablespace-mapping option and page backup"""
-		node = self.make_bnode('restore_with_tablespace_mapping_13',
-			base_dir="tmp_dirs/restore/restore_with_tablespace_mapping_13")
+		node = self.make_bnode(base_dir="tmp_dirs/restore/restore_with_tablespace_mapping_13")
 		node.start()
 		self.assertEqual(self.init_pb(node), six.b(""))
 
