@@ -44,6 +44,8 @@ static volatile uint32	total_copy_files_increment;
 static uint32 total_files_num;
 static pthread_mutex_t check_stream_mut = PTHREAD_MUTEX_INITIALIZER;
 
+static int is_ptrack_enable = false;
+
 /* Backup connection */
 static PGconn *backup_conn = NULL;
 
@@ -87,6 +89,7 @@ static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 
 /* Check functions */
 static void check_server_version(void);
+static void check_system_identifier(void);
 static void confirm_block_size(const char *name, int blcksz);
 
 
@@ -114,7 +117,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	pthread_t	backup_threads[num_threads];
 	pthread_t	stream_thread;
 	backup_files_args *backup_threads_args[num_threads];
-	bool		is_ptrack_support;
 
 	/* repack the options */
 	pgBackup   *prev_backup = NULL;
@@ -131,15 +133,6 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 	 */
 	current.tli = get_current_timeline(false);
 
-	is_ptrack_support = pg_ptrack_support();
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_support)
-		elog(ERROR, "Current Postgres instance does not support ptrack");
-
-	if(current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !pg_ptrack_enable())
-		elog(ERROR, "ptrack is disabled");
-
-	if (is_ptrack_support)
-		is_ptrack_support = pg_ptrack_enable();
 	/*
 	 * In differential backup mode, check if there is an already-validated
 	 * full backup on current timeline.
@@ -153,8 +146,8 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 						"Create new full backup before an incremental one.");
 	}
 
-	/* clear ptrack files for FULL and DIFF backup */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && is_ptrack_support)
+	/* Clear ptrack files for FULL and DIFF backup */
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && is_ptrack_enable)
 		pg_ptrack_clear();
 
 	/* notify start of backup to PostgreSQL server */
@@ -410,12 +403,12 @@ do_backup(bool smooth_checkpoint)
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
-		elog(ERROR, "Required parameter not specified: PGDATA "
+		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
 	/* A backup mode is needed */
 	if (current.backup_mode == BACKUP_MODE_INVALID)
-		elog(ERROR, "Required parameter not specified: BACKUP_MODE "
+		elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
 	/* Create connection for PostgreSQL */
@@ -433,7 +426,20 @@ do_backup(bool smooth_checkpoint)
 	if (pg_is_standby() && !from_replica)
 		elog(ERROR, "backup is not allowed for standby");
 
-	/* show configuration actually used */
+	/* ptrack backup checks */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !pg_ptrack_support())
+		elog(ERROR, "current Postgres instance does not support ptrack");
+
+	is_ptrack_enable = pg_ptrack_enable();
+	if(current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_enable)
+		elog(ERROR, "ptrack is disabled");
+
+	/* Get exclusive lock of backup catalog */
+	catalog_lock(true);
+
+	check_system_identifier();
+
+	/* Show configuration actually used */
 	elog(LOG, "========================================");
 	elog(LOG, "backup start");
 	elog(LOG, "----------------------------------------");
@@ -441,10 +447,7 @@ do_backup(bool smooth_checkpoint)
 		pgBackupWriteConfigSection(stderr, &current);
 	elog(LOG, "----------------------------------------");
 
-	/* get exclusive lock of backup catalog */
-	catalog_lock(true);
-
-	/* initialize backup result */
+	/* Initialize backup result */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.tli = 0;		/* get from result of pg_start_backup() */
 	current.start_lsn = 0;
@@ -459,7 +462,7 @@ do_backup(bool smooth_checkpoint)
 	current.checksum_version = get_data_checksum_version(true);
 	current.stream = stream_wal;
 
-	/* create backup directory and backup.ini */
+	/* Create backup directory and backup.ini */
 	if (!check)
 	{
 		if (pgBackupCreateDir(&current))
@@ -542,6 +545,30 @@ check_server_version(void)
 	/* confirm block_size (BLCKSZ) and wal_block_size (XLOG_BLCKSZ) */
 	confirm_block_size("block_size", BLCKSZ);
 	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
+}
+
+/*
+ * Compare system_identifier of PGDATA with system_identifier of backup_conn.
+ */
+static void
+check_system_identifier(void)
+{
+	PGresult   *res;
+	uint64		id;
+	char	   *val;
+
+	res = pgut_execute(backup_conn,
+					   "SELECT system_identifier FROM pg_control_system()",
+					   0, NULL);
+	val = PQgetvalue(res, 0, 0);
+	PQclear(res);
+
+	if (!parse_uint64(val, &id))
+		elog(ERROR, "%s is not system_identifier", val);
+
+	if (id != system_identifier)
+		elog(ERROR, "target data directory was initialized for system id %ld, but connected instance system id is %ld",
+			 system_identifier, id);
 }
 
 static void

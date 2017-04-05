@@ -457,7 +457,7 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 				 * it again.
 				 */
 				if (!dir_is_empty(linked_path))
-					elog(ERROR, "restore destination is not empty: \"%s\"",
+					elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
 						 linked_path);
 
 				if (link_sep)
@@ -560,7 +560,7 @@ check_tablespace_mapping(pgBackup *backup)
 				 linked_path);
 
 		if (!dir_is_empty(linked_path))
-			elog(ERROR, "restore destination is not empty: \"%s\"",
+			elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
 				 linked_path);
 	}
 
@@ -1071,7 +1071,7 @@ get_tablespace_mapping(const char *dir)
 
 /*
  * Save create directory path into memory. We can use it in next page restore to
- * not raise the error "restore destination is not empty" in
+ * not raise the error "restore tablespace destination is not empty" in
  * restore_directories().
  */
 static void

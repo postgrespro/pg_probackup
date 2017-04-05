@@ -524,7 +524,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
 		# 2 - Try to restore to existing tablespace directory
 		node.cleanup()
-		self.assertIn(six.b("ERROR: restore destination is not empty"),
+		self.assertIn(six.b("ERROR: restore tablespace destination is not empty"),
 			self.restore_pb(node))
 
 		# 3 - Restore using tablespace-mapping

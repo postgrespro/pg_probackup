@@ -18,7 +18,7 @@
  */
 static int selects(const struct dirent *dir)
 {
-  return dir->d_name[0] != '.';
+	return dir->d_name[0] != '.';
 }
 
 /*
@@ -27,10 +27,10 @@ static int selects(const struct dirent *dir)
 int
 do_init(void)
 {
-	char	path[MAXPGPATH];
-	char	arclog_path_dir[MAXPGPATH];
-	FILE   *fp;
-	uint64 _system_identifier;
+	char		path[MAXPGPATH];
+	char		arclog_path_dir[MAXPGPATH];
+	FILE	   *fp;
+	uint64		id;
 
 	struct dirent **dp;
 	int results;
@@ -47,6 +47,9 @@ do_init(void)
 			elog(ERROR, "backup catalog already exist and it's not empty");
 	}
 
+	/* Read system_identifier from PGDATA */
+	id = get_system_identifier(false);
+
 	/* create backup catalog root directory */
 	dir_create_dir(backup_path, DIR_PERMISSION);
 
@@ -58,7 +61,6 @@ do_init(void)
 	join_path_components(arclog_path_dir, backup_path, "wal");
 	dir_create_dir(arclog_path_dir, DIR_PERMISSION);
 
-	_system_identifier = get_system_identifier(false);
 	/* create pg_probackup.conf */
 	join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
 	fp = fopen(path, "wt");
@@ -66,7 +68,7 @@ do_init(void)
 		elog(ERROR, "cannot create %s: %s",
 			 BACKUP_CATALOG_CONF_FILE, strerror(errno));
 
-	fprintf(fp, "system-identifier = %li\n", _system_identifier);
+	fprintf(fp, "system-identifier = %li\n", id);
 	fprintf(fp, "\n");
 	fclose(fp);
 

@@ -48,7 +48,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 		# backup command failure without backup mode option
 		self.assertEqual(
 			self.run_pb(["backup", "-B", self.backup_dir(node), "-D", node.data_dir]),
-			six.b("ERROR: Required parameter not specified: BACKUP_MODE (-b, --backup-mode)\n")
+			six.b("ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)\n")
 		)
 
 		# backup command failure with invalid backup mode option

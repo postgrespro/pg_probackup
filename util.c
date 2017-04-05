@@ -114,8 +114,8 @@ uint64
 get_system_identifier(bool safe)
 {
 	ControlFileData ControlFile;
-	char       *buffer;
-	size_t      size;
+	char	   *buffer;
+	size_t		size;
 
 	/* First fetch file... */
 	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);

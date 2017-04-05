@@ -215,9 +215,9 @@ catalog_lock(bool check_catalog)
 		Assert(pgdata);
 
 		/* Check system-identifier */
-		id = get_system_identifier(true);
+		id = get_system_identifier(false);
 		if (id != system_identifier)
-			elog(ERROR, "Backup directory was initialized for system id = %ld, but target system id = %ld",
+			elog(ERROR, "backup directory was initialized for system id %ld, but target system id is %ld",
 				 system_identifier, id);
 	}
 }
