@@ -68,12 +68,21 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 		with open(path.join(node.logs_dir, "backup_3.log"), "wb") as backup_log:
 			backup_log.write(self.backup_pb(node, backup_type="page", options=["--verbose"]))
 
+		# full backup mode
+		self.backup_pb(node)
+
 		show_backups = self.show_pb(node)
-		self.assertEqual(len(show_backups), 3)
-		self.delete_pb(node, show_backups[1].id)
+		self.assertEqual(len(show_backups), 4)
+
+		# delete first page backup
+		self.delete_pb(node, show_backups[2].id)
+
 		show_backups = self.show_pb(node)
-		self.assertEqual(len(show_backups), 1)
+		self.assertEqual(len(show_backups), 2)
+
 		self.assertEqual(show_backups[0].mode, six.b("FULL"))
 		self.assertEqual(show_backups[0].status, six.b("OK"))
+		self.assertEqual(show_backups[1].mode, six.b("FULL"))
+		self.assertEqual(show_backups[1].status, six.b("OK"))
 
 		node.stop()
