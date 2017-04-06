@@ -22,9 +22,9 @@ int
 do_delete(time_t backup_id)
 {
 	int			i;
-	int			b_index;
-	parray		*backup_list;
-	pgBackup	*last_backup = NULL;
+	int			last_index;
+	parray	   *backup_list;
+	pgBackup   *last_backup = NULL;
 
 	/* DATE are always required */
 	if (backup_id == 0)
@@ -49,7 +49,7 @@ do_delete(time_t backup_id)
 	elog(ERROR, "no backup found, cannot delete.");
 
 found_backup:
-	b_index = i;
+	last_index = i;
 	/* check for interrupt */
 	if (interrupted)
 		elog(ERROR, "interrupted during delete backup");
@@ -57,19 +57,25 @@ found_backup:
 	/* just do it */
 	pgBackupDeleteFiles(last_backup);
 
-	if (last_backup->status == BACKUP_STATUS_ERROR)
+	/*
+	 * Do not remove next backups, if current backup is not full backup and
+	 * was finished incorrectly.
+	 */
+	if (last_backup->status != BACKUP_STATUS_OK &&
+		last_backup->status != BACKUP_STATUS_CORRUPT &&
+		last_backup->backup_mode != BACKUP_MODE_FULL)
 		return 0;
 
-	/* remove all increments after removed backup */
-	for (i = b_index - 1; i >= 0; i--)
+	/* Remove all increments after removed backup */
+	for (i = last_index - 1; i >= 0; i--)
 	{
-		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* Stop removing increments */
 		if (backup->backup_mode >= BACKUP_MODE_FULL)
 			break;
-		if ((backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_CORRUPT) &&
-			(backup->backup_mode == BACKUP_MODE_DIFF_PAGE || backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
-		)
-			pgBackupDeleteFiles(backup);
+
+		pgBackupDeleteFiles(backup);
 	}
 
 	/* cleanup */
