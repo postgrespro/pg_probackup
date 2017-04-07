@@ -215,7 +215,7 @@ base_backup_found:
 	dest_backup = (pgBackup *) parray_get(backups, last_diff_index);
 	if (!dest_backup->stream || (target_time != NULL || target_xid != NULL))
 		create_recovery_conf(backup_id, target_time, target_xid,
-							 target_inclusive, base_backup->tli);
+							 target_inclusive, target_tli);
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
@@ -676,7 +676,8 @@ create_recovery_conf(time_t backup_id,
 		if (target_inclusive)
 			fprintf(fp, "recovery_target_inclusive = '%s'\n", target_inclusive);
 
-		fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
+		if (target_tli)
+			fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
 
 		fclose(fp);
 	}
