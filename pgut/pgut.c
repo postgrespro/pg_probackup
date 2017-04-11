@@ -10,7 +10,7 @@
 #include "postgres_fe.h"
 #include "libpq/pqsignal.h"
 
-#include "getopt.h"
+#include "getopt_long.h"
 #include <limits.h>
 #include <time.h>
 #include <unistd.h>
