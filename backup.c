@@ -400,6 +400,7 @@ do_backup(bool smooth_checkpoint)
 {
 	parray	   *backup_list;
 	parray	   *files_database;
+	bool		is_ptrack_support;
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
@@ -427,12 +428,16 @@ do_backup(bool smooth_checkpoint)
 		elog(ERROR, "backup is not allowed for standby");
 
 	/* ptrack backup checks */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !pg_ptrack_support())
+	is_ptrack_support = pg_ptrack_support();
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_support)
 		elog(ERROR, "current Postgres instance does not support ptrack");
 
-	is_ptrack_enable = pg_ptrack_enable();
-	if(current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_enable)
-		elog(ERROR, "ptrack is disabled");
+	if (is_ptrack_support)
+	{
+		is_ptrack_enable = pg_ptrack_enable();
+		if(current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_enable)
+			elog(ERROR, "ptrack is disabled");
+	}
 
 	/* Get exclusive lock of backup catalog */
 	catalog_lock(true);
