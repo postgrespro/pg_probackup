@@ -19,7 +19,6 @@ OBJS = backup.o \
 	streamutil.o \
 	receivelog.o \
 	pgut/pgut.o \
-	pgut/pgut-port.o \
 	pgut/getopt_long.o
 
 EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h streamutil.c streamutil.h logging.h

@@ -21,8 +21,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "pgut/pgut-port.h"
-
 static pgBackup *read_backup_from_file(const char *path);
 
 #define BOOL_TO_STR(val)	((val) ? "true" : "false")

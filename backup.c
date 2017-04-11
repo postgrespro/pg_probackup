@@ -21,7 +21,6 @@
 #include <pthread.h>
 
 #include "libpq/pqsignal.h"
-#include "pgut/pgut-port.h"
 #include "storage/bufpage.h"
 #include "datapagemap.h"
 #include "streamutil.h"
