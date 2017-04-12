@@ -523,6 +523,9 @@ option_from_env(pgut_option options[])
 		if (opt->source > SOURCE_ENV || opt->allowed < SOURCE_ENV)
 			continue;
 
+		if (strcmp(opt->lname, "backup-path") == 0)
+			value = getenv("BACKUP_PATH");
+
 		if (strcmp(opt->lname, "pgdata") == 0)
 			value = getenv("PGDATA");
 		if (strcmp(opt->lname, "port") == 0)

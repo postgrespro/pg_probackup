@@ -36,7 +36,11 @@ bool			stream_wal = false;
 bool			from_replica = false;
 static bool		backup_logs = false;
 bool			progress = false;
+/* delete options */
 bool			delete_wal = false;
+bool			delete_expired = false;
+bool			apply_to_all = false;
+bool			force_delete = false;
 
 /* restore configuration */
 static char		   *target_time;
@@ -64,11 +68,11 @@ static pgut_option options[] =
 	{ 's', 'i', "backup-id",			&backup_id_string_param, SOURCE_CMDLINE },
 	/* backup options */
 	{ 'b', 10, "backup-pg-log",			&backup_logs,	SOURCE_CMDLINE },
-	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_CMDLINE },
-	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,		SOURCE_CMDLINE },
-	{ 's', 'S', "slot",					&replication_slot,		SOURCE_CMDLINE },
+	{ 'f', 'b', "backup-mode",			opt_backup_mode,	SOURCE_CMDLINE },
+	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,	SOURCE_CMDLINE },
+	{ 's', 'S', "slot",					&replication_slot,	SOURCE_CMDLINE },
 	{ 'u',  2, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE },
-	/* options with only long name (keep-xxx) */
+	{ 'b',  19, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
 	/* restore options */
 	{ 's',  3, "time",					&target_time,		SOURCE_CMDLINE },
 	{ 's',  4, "xid",					&target_xid,		SOURCE_CMDLINE },
@@ -77,9 +81,12 @@ static pgut_option options[] =
 	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 12, "wal",					&delete_wal,		SOURCE_CMDLINE },
-	/* retention options */
-	{ 'u', 13, "redundancy",			&retention_redundancy,	SOURCE_CMDLINE },
-	{ 'u', 14, "window",				&retention_window,		SOURCE_CMDLINE },
+	{ 'b', 16, "expired",				&delete_expired,	SOURCE_CMDLINE },
+	{ 'b', 17, "all",					&apply_to_all,		SOURCE_CMDLINE },
+	{ 'b', 18, "force",					&force_delete,		SOURCE_CMDLINE },
+	/* configure options */
+	{ 'u', 13, "set-retention-redundancy",			&retention_redundancy,	SOURCE_CMDLINE },
+	{ 'u', 14, "set-retention-window",				&retention_window,		SOURCE_CMDLINE },
 	/* other */
 	{ 'U', 15, "system-identifier",		&system_identifier,		SOURCE_FILE_STRICT },
 
