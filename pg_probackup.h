@@ -105,6 +105,17 @@ typedef enum BackupMode
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
 
+typedef enum ProbackupSubcmd
+{
+	INIT = 0,
+	BACKUP,
+	RESTORE,
+	VALIDATE,
+	SHOW,
+	DELETE,
+	CONFIGURE
+} ProbackupSubcmd;
+
 
 /* special values of pgBackup fields */
 #define KEEP_INFINITE			(INT_MAX)

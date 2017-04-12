@@ -85,6 +85,7 @@ extern const char  *username;
 extern char		   *password;
 extern bool			verbose;
 extern bool			quiet;
+extern bool			prompt_password;
 
 extern bool			interrupted;
 

@@ -65,18 +65,6 @@ static void on_cleanup(void);
 static void exit_or_abort(int exitcode);
 static const char *get_username(void);
 
-static pgut_option default_options[] =
-{
-	{ 's', 'd', "dbname"	, &pgut_dbname, SOURCE_CMDLINE },
-	{ 's', 'h', "host"		, &host, SOURCE_CMDLINE },
-	{ 's', 'p', "port"		, &port, SOURCE_CMDLINE },
-	{ 'b', 'q', "quiet"		, &quiet, SOURCE_CMDLINE },
-	{ 's', 'U', "username"	, &username, SOURCE_CMDLINE },
-	{ 'b', 'v', "verbose"	, &verbose, SOURCE_CMDLINE },
-	{ 'B', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
-	{ 0 }
-};
-
 static size_t
 option_length(const pgut_option opts[])
 {
@@ -112,33 +100,14 @@ option_copy(struct option dst[], const pgut_option opts[], size_t len)
 	}
 }
 
-static struct option *
-option_merge(const pgut_option opts1[], const pgut_option opts2[])
-{
-	struct option *result;
-	size_t	len1 = option_length(opts1);
-	size_t	len2 = option_length(opts2);
-	size_t	n = len1 + len2;
-
-	result = pgut_newarray(struct option, n + 1);
-	option_copy(result, opts1, len1);
-	option_copy(result + len1, opts2, len2);
-	memset(&result[n], 0, sizeof(pgut_option));
-
-	return result;
-}
-
 static pgut_option *
-option_find(int c, pgut_option opts1[], pgut_option opts2[])
+option_find(int c, pgut_option opts1[])
 {
 	size_t	i;
 
 	for (i = 0; opts1 && opts1[i].type; i++)
 		if (opts1[i].sname == c)
 			return &opts1[i];
-	for (i = 0; opts2 && opts2[i].type; i++)
-		if (opts2[i].sname == c)
-			return &opts2[i];
 
 	return NULL;	/* not found */
 }
@@ -572,38 +541,20 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	int					c;
 	int					optindex = 0;
 	char			   *optstring;
-	struct option	   *longopts;
 	pgut_option		   *opt;
+	struct option *longopts;
+	size_t	len1;
 
-	if (PROGRAM_NAME == NULL)
-	{
-		PROGRAM_NAME = get_progname(argv[0]);
-		set_pglocale_pgservice(argv[0], "pgscripts");
-	}
+	len1 = option_length(options);
+	longopts = pgut_newarray(struct option, len1 + 1);
+	option_copy(longopts, options, len1);
 
-	/* Help message and version are handled at first. */
-	if (argc > 1)
-	{
-		if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0)
-		{
-			help(true);
-			exit_or_abort(0);
-		}
-		if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0)
-		{
-			fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
-			exit_or_abort(0);
-		}
-	}
-
-	/* Merge default and user options. */
-	longopts = option_merge(default_options, options);
 	optstring = longopts_to_optstring(longopts);
 
 	/* Assign named options */
 	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)
 	{
-		opt = option_find(c, default_options, options);
+		opt = option_find(c, options);
 		if (opt && opt->allowed < SOURCE_CMDLINE)
 			elog(ERROR, "option %s cannot be specified in command line",
 				 opt->lname);

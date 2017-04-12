@@ -84,6 +84,14 @@ static pgut_option options[] =
 	{ 'u', 14, "window",				&retention_window,		SOURCE_CMDLINE },
 	/* other */
 	{ 'U', 15, "system-identifier",		&system_identifier,		SOURCE_FILE_STRICT },
+
+	{ 's', 'd', "dbname"	, &pgut_dbname, SOURCE_CMDLINE },
+	{ 's', 'h', "host"		, &host, SOURCE_CMDLINE },
+	{ 's', 'p', "port"		, &port, SOURCE_CMDLINE },
+	{ 'b', 'q', "quiet"		, &quiet, SOURCE_CMDLINE },
+	{ 's', 'U', "username"	, &username, SOURCE_CMDLINE },
+	{ 'b', 'v', "verbose"	, &verbose, SOURCE_CMDLINE },
+	{ 'B', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -93,52 +101,49 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
-	const char	   *cmd = NULL,
-				   *subcmd = NULL;
-	const char	   *backup_id_string = NULL;
+	ProbackupSubcmd	backup_subcmd;
 	time_t			backup_id = 0;
 	int				i;
-
-	/* do not buffer progress messages */
-	setvbuf(stdout, 0, _IONBF, 0);	/* TODO: remove this */
 
 	/* initialize configuration */
 	init_backup(&current);
 
-	/* overwrite configuration with command line arguments */
-	i = pgut_getopt(argc, argv, options);
+	PROGRAM_NAME = get_progname(argv[0]);
+	set_pglocale_pgservice(argv[0], "pgscripts");
 
-	for (; i < argc; i++)
+	/* Parse subcommands and non-subcommand options */
+	if (argc > 1)
 	{
-		if (cmd == NULL)
-			cmd = argv[i];
-		else if (strcmp(cmd, "retention") == 0)
-			subcmd = argv[i];
-		else if (backup_id_string == NULL &&
-				 (strcmp(cmd, "show") == 0 ||
-				 strcmp(cmd, "validate") == 0 ||
-				 strcmp(cmd, "delete") == 0 ||
-				 strcmp(cmd, "restore") == 0 ||
-				 strcmp(cmd, "delwal") == 0))
-			backup_id_string = argv[i];
-		else
-			elog(ERROR, "too many arguments");
-	}
-
-	/* command argument (backup/restore/show/...) is required. */
-	if (cmd == NULL)
-	{
-		help(false);
-		return 1;
-	}
-
-	if (backup_id_string != NULL)
-	{
-		backup_id = base36dec(backup_id_string);
-		if (backup_id == 0) {
-			elog(ERROR, "wrong ID");
+		if (strcmp(argv[1], "init") == 0)
+			backup_subcmd = INIT;
+		else if (strcmp(argv[1], "backup") == 0)
+			backup_subcmd = BACKUP;
+		else if (strcmp(argv[1], "restore") == 0)
+			backup_subcmd = RESTORE;
+		else if (strcmp(argv[1], "validate") == 0)
+			backup_subcmd = VALIDATE;
+		else if (strcmp(argv[1], "show") == 0)
+			backup_subcmd = SHOW;
+		else if (strcmp(argv[1], "delete") == 0)
+			backup_subcmd = DELETE;
+		else if (strcmp(argv[1], "configure") == 0)
+			backup_subcmd = CONFIGURE;
+		else if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0)
+		{
+			help(true);
+			exit(0);
 		}
+		else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0)
+		{
+			fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
+			exit(0);
+		}
+		else
+			elog(ERROR, "Invalid subcommand");
 	}
+
+	/* Parse command line arguments */
+	i = pgut_getopt(argc, argv, options);
 
 	/* BACKUP_PATH is always required */
 	if (backup_path == NULL)
@@ -189,39 +194,41 @@ main(int argc, char *argv[])
 		num_threads = 1;
 
 	/* do actual operation */
-	if (pg_strcasecmp(cmd, "init") == 0)
-		return do_init();
-	else if (pg_strcasecmp(cmd, "backup") == 0)
-		return do_backup(smooth_checkpoint);
-	else if (pg_strcasecmp(cmd, "restore") == 0)
-		return do_restore(backup_id,
+	switch (backup_subcmd)
+	{
+		case INIT:
+			return do_init();
+		case BACKUP:
+			return do_backup(smooth_checkpoint);
+		case RESTORE:
+			return do_restore(backup_id,
 						  target_time,
 						  target_xid,
 						  target_inclusive,
 						  target_tli);
-	else if (pg_strcasecmp(cmd, "show") == 0)
-		return do_show(backup_id);
-	else if (pg_strcasecmp(cmd, "validate") == 0)
-		return do_validate(backup_id,
+		case VALIDATE:
+			return do_validate(backup_id,
 						   target_time,
 						   target_xid,
 						   target_inclusive,
 						   target_tli);
-	else if (pg_strcasecmp(cmd, "delete") == 0)
-		return do_delete(backup_id);
-	else if (pg_strcasecmp(cmd, "delwal") == 0)
-		return do_deletewal(backup_id, true, true);
-	else if (pg_strcasecmp(cmd, "retention") == 0)
-	{
-		if (subcmd == NULL)
-			elog(ERROR, "you must specify retention command");
-		else if (pg_strcasecmp(subcmd, "show") == 0)
-			return do_retention_show();
-		else if (pg_strcasecmp(subcmd, "purge") == 0)
-			return do_retention_purge();
+		case SHOW:
+			return do_show(backup_id);
+		case DELETE:
+			return do_delete(backup_id);
+		case CONFIGURE:
+			elog(ERROR, "not implemented yet");
 	}
-	else
-		elog(ERROR, "invalid command \"%s\"", cmd);
+
+// 	if (pg_strcasecmp(cmd, "retention") == 0)
+// 	{
+// 		if (subcmd == NULL)
+// 			elog(ERROR, "you must specify retention command");
+// 		else if (pg_strcasecmp(subcmd, "show") == 0)
+// 			return do_retention_show();
+// 		else if (pg_strcasecmp(subcmd, "purge") == 0)
+// 			return do_retention_purge();
+// 	}
 
 	return 0;
 }
