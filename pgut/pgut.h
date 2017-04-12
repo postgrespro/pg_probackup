@@ -86,8 +86,6 @@ extern char		   *password;
 extern bool			verbose;
 extern bool			quiet;
 
-extern bool	prompt_password;
-
 extern bool			interrupted;
 
 extern void help(bool details);

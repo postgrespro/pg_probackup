@@ -35,8 +35,7 @@ const char	   *username = NULL;
 char		   *password = NULL;
 bool			verbose = false;
 bool			quiet = false;
-
-bool	prompt_password = false;
+bool			prompt_password = true;
 
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
@@ -75,7 +74,6 @@ static pgut_option default_options[] =
 	{ 's', 'U', "username"	, &username, SOURCE_CMDLINE },
 	{ 'b', 'v', "verbose"	, &verbose, SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
-	{ 'b', 'W', "password"		, &prompt_password, SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -882,12 +880,8 @@ PGconn *
 pgut_connect(const char *dbname)
 {
 	PGconn	   *conn;
-
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
-
-	if (prompt_password)
-		prompt_for_password(username);
 
 	/* Start the connection. Loop until we have a password if requested by backend. */
 	for (;;)

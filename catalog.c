@@ -479,58 +479,37 @@ pgBackupWriteIni(pgBackup *backup)
 static pgBackup *
 read_backup_from_file(const char *path)
 {
-	pgBackup   *backup;
+	pgBackup   *backup = pgut_new(pgBackup);
 	char	   *backup_mode = NULL;
 	char	   *start_lsn = NULL;
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
-	int			i;
 
 	pgut_option options[] =
 	{
-		{'s', 0, "backup-mode",			NULL, SOURCE_FILE_STRICT},
-		{'u', 0, "timelineid",			NULL, SOURCE_FILE_STRICT},
-		{'s', 0, "start-lsn",			NULL, SOURCE_FILE_STRICT},
-		{'s', 0, "stop-lsn",			NULL, SOURCE_FILE_STRICT},
-		{'t', 0, "start-time",			NULL, SOURCE_FILE_STRICT},
-		{'t', 0, "end-time",			NULL, SOURCE_FILE_STRICT},
-		{'U', 0, "recovery-xid",		NULL, SOURCE_FILE_STRICT},
-		{'t', 0, "recovery-time",		NULL, SOURCE_FILE_STRICT},
-		{'I', 0, "data-bytes",			NULL, SOURCE_FILE_STRICT},
-		{'u', 0, "block-size",			NULL, SOURCE_FILE_STRICT},
-		{'u', 0, "xlog-block-size",		NULL, SOURCE_FILE_STRICT},
-		{'u', 0, "checksum_version",	NULL, SOURCE_FILE_STRICT},
-		{'u', 0, "stream",				NULL, SOURCE_FILE_STRICT},
-		{'s', 0, "status",				NULL, SOURCE_FILE_STRICT},
-		{'s', 0, "parent_backup",		NULL, SOURCE_FILE_STRICT},
+		{'s', 0, "backup-mode",			&backup_mode, SOURCE_FILE_STRICT},
+		{'u', 0, "timelineid",			&backup->tli, SOURCE_FILE_STRICT},
+		{'s', 0, "start-lsn",			&start_lsn, SOURCE_FILE_STRICT},
+		{'s', 0, "stop-lsn",			&stop_lsn, SOURCE_FILE_STRICT},
+		{'t', 0, "start-time",			&backup->start_time, SOURCE_FILE_STRICT},
+		{'t', 0, "end-time",			&backup->end_time, SOURCE_FILE_STRICT},
+		{'U', 0, "recovery-xid",		&backup->recovery_xid, SOURCE_FILE_STRICT},
+		{'t', 0, "recovery-time",		&backup->recovery_time, SOURCE_FILE_STRICT},
+		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
+		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
+		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
+		{'u', 0, "checksum_version",	&backup->checksum_version, SOURCE_FILE_STRICT},
+		{'u', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
+		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
+		{'s', 0, "parent_backup",		&parent_backup, SOURCE_FILE_STRICT},
 		{0}
 	};
 
 	if (access(path, F_OK) != 0)
 		return NULL;
 
-	backup = pgut_new(pgBackup);
 	init_backup(backup);
-
-	i = 0;
-	options[i++].var = &backup_mode;
-	options[i++].var = &backup->tli;
-	options[i++].var = &start_lsn;
-	options[i++].var = &stop_lsn;
-	options[i++].var = &backup->start_time;
-	options[i++].var = &backup->end_time;
-	options[i++].var = &backup->recovery_xid;
-	options[i++].var = &backup->recovery_time;
-	options[i++].var = &backup->data_bytes;
-	options[i++].var = &backup->block_size;
-	options[i++].var = &backup->wal_block_size;
-	options[i++].var = &backup->checksum_version;
-	options[i++].var = &backup->stream;
-	options[i++].var = &status;
-	options[i++].var = &parent_backup;
-	Assert(i == lengthof(options) - 1);
-
 	pgut_readopt(path, options, ERROR);
 
 	if (backup_mode)
