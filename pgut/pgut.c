@@ -36,9 +36,7 @@ char		   *password = NULL;
 bool			verbose = false;
 bool			quiet = false;
 
-#ifndef PGUT_NO_PROMPT
-YesNo	prompt_password = DEFAULT;
-#endif
+bool	prompt_password = false;
 
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
@@ -76,10 +74,8 @@ static pgut_option default_options[] =
 	{ 'b', 'q', "quiet"		, &quiet, SOURCE_CMDLINE },
 	{ 's', 'U', "username"	, &username, SOURCE_CMDLINE },
 	{ 'b', 'v', "verbose"	, &verbose, SOURCE_CMDLINE },
-#ifndef PGUT_NO_PROMPT
-	{ 'Y', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
-	{ 'y', 'W', "password"		, &prompt_password, SOURCE_CMDLINE },
-#endif
+	{ 'B', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
+	{ 'b', 'W', "password"		, &prompt_password, SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -98,8 +94,6 @@ option_has_arg(char type)
 	{
 		case 'b':
 		case 'B':
-		case 'y':
-		case 'Y':
 			return no_argument;
 		default:
 			return required_argument;
@@ -224,24 +218,6 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				if (parse_time(optarg, opt->var))
 					return;
 				message = "a time";
-				break;
-			case 'y':
-			case 'Y':
-				if (optarg == NULL)
-				{
-					*(YesNo *) opt->var = (opt->type == 'y' ? YES : NO);
-					return;
-				}
-				else
-				{
-					bool	value;
-					if (parse_bool(optarg, &value))
-					{
-						*(YesNo *) opt->var = (value ? YES : NO);
-						return;
-					}
-				}
-				message = "a boolean";
 				break;
 			default:
 				elog(ERROR, "invalid option type: %c", opt->type);
@@ -867,7 +843,6 @@ parse_pair(const char buffer[], char key[], char value[])
 	return true;
 }
 
-#ifndef PGUT_NO_PROMPT
 /*
  * Ask the user for a password; 'username' is the username the
  * password is for, if one has been explicitly specified.
@@ -902,7 +877,6 @@ prompt_for_password(const char *username)
 	}
 #endif
 }
-#endif
 
 PGconn *
 pgut_connect(const char *dbname)
@@ -912,10 +886,8 @@ pgut_connect(const char *dbname)
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
 
-#ifndef PGUT_NO_PROMPT
-	if (prompt_password == YES)
+	if (prompt_password)
 		prompt_for_password(username);
-#endif
 
 	/* Start the connection. Loop until we have a password if requested by backend. */
 	for (;;)
@@ -925,14 +897,12 @@ pgut_connect(const char *dbname)
 		if (PQstatus(conn) == CONNECTION_OK)
 			return conn;
 
-#ifndef PGUT_NO_PROMPT
-		if (conn && PQconnectionNeedsPassword(conn) && prompt_password != NO)
+		if (conn && PQconnectionNeedsPassword(conn) && prompt_password)
 		{
 			PQfinish(conn);
 			prompt_for_password(username);
 			continue;
 		}
-#endif
 		elog(ERROR, "could not connect to database %s: %s",
 			 dbname, PQerrorMessage(conn));
 
@@ -1384,10 +1354,8 @@ help(bool details)
 		printf("  -h, --host=HOSTNAME       database server host or socket directory\n");
 		printf("  -p, --port=PORT           database server port\n");
 		printf("  -U, --username=USERNAME   user name to connect as\n");
-#ifndef PGUT_NO_PROMPT
 		printf("  -w, --no-password         never prompt for password\n");
 		printf("  -W, --password            force password prompt\n");
-#endif
 	}
 
 	printf("\nGeneric options:\n");

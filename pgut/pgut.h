@@ -30,13 +30,6 @@ typedef char bool;
 
 #define INFINITE_STR		"INFINITE"
 
-typedef enum YesNo
-{
-	DEFAULT,
-	NO,
-	YES
-} YesNo;
-
 typedef enum pgut_optsrc
 {
 	SOURCE_DEFAULT,
@@ -58,8 +51,6 @@ typedef enum pgut_optsrc
  *	U: 64bit unsigned integer
  *	s: string
  *  t: time_t
- *	y: YesNo (YES)
- *	Y: YesNo (NO)
  */
 typedef struct pgut_option
 {
@@ -95,9 +86,7 @@ extern char		   *password;
 extern bool			verbose;
 extern bool			quiet;
 
-#ifndef PGUT_NO_PROMPT
-extern YesNo	prompt_password;
-#endif
+extern bool	prompt_password;
 
 extern bool			interrupted;
 
