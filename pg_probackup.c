@@ -25,6 +25,7 @@ char *backup_path;
 char *pgdata;
 char arclog_path[MAXPGPATH];
 
+char *backup_id_string_param = NULL;
 /* directory configuration */
 pgBackup	current;
 
@@ -60,6 +61,7 @@ static pgut_option options[] =
 	{ 'u', 'j', "threads",				&num_threads,	SOURCE_CMDLINE },
 	{ 'b', 8, "stream",					&stream_wal,	SOURCE_CMDLINE },
 	{ 'b', 11, "progress",				&progress,		SOURCE_CMDLINE },
+	{ 's', 'i', "backup-id",			&backup_id_string_param, SOURCE_CMDLINE },
 	/* backup options */
 	{ 'b', 10, "backup-pg-log",			&backup_logs,	SOURCE_CMDLINE },
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,		SOURCE_CMDLINE },
@@ -157,6 +159,13 @@ main(int argc, char *argv[])
 
 		join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
 		pgut_readopt(path, options, ERROR);
+	}
+
+	if (backup_id_string_param != NULL)
+	{
+		backup_id = base36dec(backup_id_string_param);
+		if (backup_id == 0)
+			elog(ERROR, "Invalid backup-id");
 	}
 
 	/* setup stream options */
