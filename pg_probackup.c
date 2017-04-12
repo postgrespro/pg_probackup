@@ -84,8 +84,8 @@ static pgut_option options[] =
 	{ 's', 'd', "dbname"	, &pgut_dbname, SOURCE_CMDLINE },
 	{ 's', 'h', "host"		, &host, SOURCE_CMDLINE },
 	{ 's', 'p', "port"		, &port, SOURCE_CMDLINE },
-	{ 'b', 'q', "quiet"		, &quiet, SOURCE_CMDLINE },
 	{ 's', 'U', "username"	, &username, SOURCE_CMDLINE },
+	{ 'b', 'q', "quiet"		, &quiet, SOURCE_CMDLINE },
 	{ 'b', 'v', "verbose"	, &verbose, SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
 	{ 0 }

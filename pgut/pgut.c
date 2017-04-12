@@ -505,6 +505,10 @@ longopts_to_optstring(const struct option opts[])
 	return result;
 }
 
+/*
+ * Read options from environmental variables.
+ * Do not overwrite in option was already set via command line option.
+ */
 static void
 option_from_env(pgut_option options[])
 {
@@ -513,24 +517,30 @@ option_from_env(pgut_option options[])
 	for (i = 0; options && options[i].type; i++)
 	{
 		pgut_option	   *opt = &options[i];
-		char			name[256];
-		size_t			j;
-		const char	   *s;
-		const char	   *value;
+		const char	   *value = NULL;
 
+		/* If option was already set do not check env */
 		if (opt->source > SOURCE_ENV || opt->allowed < SOURCE_ENV)
 			continue;
 
-		for (s = opt->lname, j = 0; *s && j < lengthof(name) - 1; s++, j++)
+		if (strcmp(opt->lname, "pgdata") == 0)
+			value = getenv("PGDATA");
+		if (strcmp(opt->lname, "port") == 0)
+			value = getenv("PGPORT");
+		if (strcmp(opt->lname, "host") == 0)
+			value = getenv("PGHOST");
+		if (strcmp(opt->lname, "username") == 0)
+			value = getenv("PGUSER");
+		if (strcmp(opt->lname, "dbname") == 0)
 		{
-			if (strchr("-_ ", *s))
-				name[j] = '_';	/* - to _ */
-			else
-				name[j] = toupper(*s);
+			value = getenv("PGDATABASE");
+			if (value == NULL)
+				value = getenv("PGUSER");
+			if (value == NULL)
+				value = get_username();
 		}
-		name[j] = '\0';
 
-		if ((value = getenv(name)) != NULL)
+		if (value)
 			assign_option(opt, value, SOURCE_ENV);
 	}
 }
@@ -564,10 +574,6 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 
 	/* Read environment variables */
 	option_from_env(options);
-	(void) (pgut_dbname ||
-	(pgut_dbname = getenv("PGDATABASE")) ||
-	(pgut_dbname = getenv("PGUSER")) ||
-	(pgut_dbname = get_username()));
 
 	init_cancel_handler();
 	atexit(on_cleanup);
