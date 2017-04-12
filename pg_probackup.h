@@ -225,9 +225,6 @@ extern char *backup_path;
 extern char *pgdata;
 extern char arclog_path[MAXPGPATH];
 
-/* common configuration */
-extern bool check;
-
 /* current settings */
 extern pgBackup current;
 

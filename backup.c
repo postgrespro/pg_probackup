@@ -467,12 +467,11 @@ do_backup(bool smooth_checkpoint)
 	current.stream = stream_wal;
 
 	/* Create backup directory and backup.ini */
-	if (!check)
-	{
-		if (pgBackupCreateDir(&current))
-			elog(ERROR, "cannot create backup directory");
-		pgBackupWriteIni(&current);
-	}
+
+	if (pgBackupCreateDir(&current))
+		elog(ERROR, "cannot create backup directory");
+	pgBackupWriteIni(&current);
+
 	elog(LOG, "backup destination is initialized");
 
 	/* get list of backups already taken */
@@ -490,8 +489,7 @@ do_backup(bool smooth_checkpoint)
 	/* update backup status to DONE */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
-	if (!check)
-		pgBackupWriteIni(&current);
+	pgBackupWriteIni(&current);
 
 	/* Calculate the total data read */
 	if (verbose)
@@ -1423,18 +1421,15 @@ create_file_list(parray *files, const char *root, bool is_append)
 	FILE	   *fp;
 	char		path[MAXPGPATH];
 
-	if (!check)
-	{
-		/* output path is '$BACKUP_PATH/file_database.txt' */
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_FILE_LIST);
+	/* output path is '$BACKUP_PATH/file_database.txt' */
+	pgBackupGetPath(&current, path, lengthof(path), DATABASE_FILE_LIST);
 
-		fp = fopen(path, is_append ? "at" : "wt");
-		if (fp == NULL)
-			elog(ERROR, "cannot open file list \"%s\": %s", path,
-				strerror(errno));
-		print_file_list(fp, files, root);
-		fclose(fp);
-	}
+	fp = fopen(path, is_append ? "at" : "wt");
+	if (fp == NULL)
+		elog(ERROR, "cannot open file list \"%s\": %s", path,
+			strerror(errno));
+	print_file_list(fp, files, root);
+	fclose(fp);
 }
 
 /*

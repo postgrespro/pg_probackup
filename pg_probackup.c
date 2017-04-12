@@ -25,9 +25,6 @@ char *backup_path;
 char *pgdata;
 char arclog_path[MAXPGPATH];
 
-/* common configuration */
-bool check = false;
-
 /* directory configuration */
 pgBackup	current;
 
@@ -60,7 +57,6 @@ static pgut_option options[] =
 	{ 's', 'D', "pgdata",				&pgdata,		SOURCE_CMDLINE },
 	{ 's', 'B', "backup-path",			&backup_path,	SOURCE_CMDLINE },
 	/* common options */
-/*	{ 'b', 'c', "check",				&check },*/
 	{ 'u', 'j', "threads",				&num_threads,	SOURCE_CMDLINE },
 	{ 'b', 8, "stream",					&stream_wal,	SOURCE_CMDLINE },
 	{ 'b', 11, "progress",				&progress,		SOURCE_CMDLINE },

@@ -270,11 +270,8 @@ pgBackupDeleteFiles(pgBackup *backup)
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
-	if (!check)
-	{
-		backup->status = BACKUP_STATUS_DELETING;
-		pgBackupWriteIni(backup);
-	}
+	backup->status = BACKUP_STATUS_DELETING;
+	pgBackupWriteIni(backup);
 
 	/* list files to be deleted */
 	files = parray_new();
@@ -291,18 +288,14 @@ pgBackupDeleteFiles(pgBackup *backup)
 		elog(LOG, "delete file(%zd/%lu) \"%s\"", i + 1,
 				(unsigned long) parray_num(files), file->path);
 
-		/* skip actual deletion in check mode */
-		if (!check)
+		if (remove(file->path))
 		{
-			if (remove(file->path))
-			{
-				elog(WARNING, "can't remove \"%s\": %s", file->path,
-					strerror(errno));
-				parray_walk(files, pgFileFree);
-				parray_free(files);
+			elog(WARNING, "can't remove \"%s\": %s", file->path,
+				strerror(errno));
+			parray_walk(files, pgFileFree);
+			parray_free(files);
 
-				return 1;
-			}
+			return 1;
 		}
 	}
 

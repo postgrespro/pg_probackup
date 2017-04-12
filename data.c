@@ -223,10 +223,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	nblocks = file->size/BLCKSZ;
 
 	/* open backup file for write  */
-	if (check)
-		snprintf(to_path, lengthof(to_path), "%s/tmp", backup_path);
-	else
-		join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	out = fopen(to_path, "w");
 	if (out == NULL)
 	{
@@ -264,7 +261,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	}
 
 	/* update file permission */
-	if (!check && chmod(to_path, FILE_PERMISSION) == -1)
+	if (chmod(to_path, FILE_PERMISSION) == -1)
 	{
 		int errno_tmp = errno;
 		fclose(in);
@@ -292,10 +289,6 @@ backup_data_file(const char *from_root, const char *to_root,
 				 strerror(errno));
 		return false;
 	}
-
-	/* remove $BACKUP_PATH/tmp created during check */
-	if (check)
-		remove(to_path);
 
 	return true;
 }
@@ -589,10 +582,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	}
 
 	/* open backup file for write  */
-	if (check)
-		snprintf(to_path, lengthof(to_path), "%s/tmp", backup_path);
-	else
-		join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	out = fopen(to_path, "w");
 	if (out == NULL)
 	{
@@ -678,9 +668,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	fclose(in);
 	fclose(out);
 
-	if (check)
-		remove(to_path);
-
 	return true;
 }
 
@@ -718,10 +705,7 @@ copy_file_partly(const char *from_root, const char *to_root,
 	}
 
 	/* open backup file for write  */
-	if (check)
-		snprintf(to_path, lengthof(to_path), "%s/tmp", backup_path);
-	else
-		join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 
 	out = fopen(to_path, "w");
 	if (out == NULL)
@@ -811,9 +795,6 @@ copy_file_partly(const char *from_root, const char *to_root,
 
 	fclose(in);
 	fclose(out);
-
-	if (check)
-		remove(to_path);
 
 	return true;
 }

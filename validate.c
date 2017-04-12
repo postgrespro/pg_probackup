@@ -182,63 +182,60 @@ pgBackupValidate(pgBackup *backup,
 				 backup_id_string, (size_only ? "SIZE" : "CRC"));
 	}
 
-	if (!check)
+	if (backup->backup_mode == BACKUP_MODE_FULL ||
+		backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
+		backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		if (backup->backup_mode == BACKUP_MODE_FULL ||
-			backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
-			backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		int i;
+		elog(LOG, "database files...");
+		pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
+		pgBackupGetPath(backup, path, lengthof(path),
+			DATABASE_FILE_LIST);
+		files = dir_read_file_list(base_path, path);
+
+		/* setup threads */
+		for (i = 0; i < parray_num(files); i++)
 		{
-			int i;
-			elog(LOG, "database files...");
-			pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
-			pgBackupGetPath(backup, path, lengthof(path),
-				DATABASE_FILE_LIST);
-			files = dir_read_file_list(base_path, path);
-
-			/* setup threads */
-			for (i = 0; i < parray_num(files); i++)
-			{
-				pgFile *file = (pgFile *) parray_get(files, i);
-				__sync_lock_release(&file->lock);
-			}
-
-			/* restore files into $PGDATA */
-			for (i = 0; i < num_threads; i++)
-			{
-				validate_files_args *arg = pg_malloc(sizeof(validate_files_args));
-				arg->files = files;
-				arg->root = base_path;
-				arg->size_only = size_only;
-				arg->corrupted = false;
-
-				validate_threads_args[i] = arg;
-				pthread_create(&validate_threads[i], NULL, (void *(*)(void *)) pgBackupValidateFiles, arg);
-			}
-
-			/* Wait theads */
-			for (i = 0; i < num_threads; i++)
-			{
-				pthread_join(validate_threads[i], NULL);
-				if (validate_threads_args[i]->corrupted)
-					corrupted = true;
-				pg_free(validate_threads_args[i]);
-			}
-			parray_walk(files, pgFileFree);
-			parray_free(files);
+			pgFile *file = (pgFile *) parray_get(files, i);
+			__sync_lock_release(&file->lock);
 		}
 
-		/* update status to OK */
-		if (corrupted)
-			backup->status = BACKUP_STATUS_CORRUPT;
-		else
-			backup->status = BACKUP_STATUS_OK;
-		pgBackupWriteIni(backup);
+		/* restore files into $PGDATA */
+		for (i = 0; i < num_threads; i++)
+		{
+			validate_files_args *arg = pg_malloc(sizeof(validate_files_args));
+			arg->files = files;
+			arg->root = base_path;
+			arg->size_only = size_only;
+			arg->corrupted = false;
 
-		if (corrupted)
-			elog(WARNING, "backup %s is corrupted", backup_id_string);
-		else
-			elog(LOG, "backup %s is valid", backup_id_string);
+			validate_threads_args[i] = arg;
+			pthread_create(&validate_threads[i], NULL, (void *(*)(void *)) pgBackupValidateFiles, arg);
+		}
+
+		/* Wait theads */
+		for (i = 0; i < num_threads; i++)
+		{
+			pthread_join(validate_threads[i], NULL);
+			if (validate_threads_args[i]->corrupted)
+				corrupted = true;
+			pg_free(validate_threads_args[i]);
+		}
+		parray_walk(files, pgFileFree);
+		parray_free(files);
 	}
+
+	/* update status to OK */
+	if (corrupted)
+		backup->status = BACKUP_STATUS_CORRUPT;
+	else
+		backup->status = BACKUP_STATUS_OK;
+	pgBackupWriteIni(backup);
+
+	if (corrupted)
+		elog(WARNING, "backup %s is corrupted", backup_id_string);
+	else
+		elog(LOG, "backup %s is valid", backup_id_string);
 
 	return !corrupted;
 }
