@@ -107,7 +107,6 @@ int
 main(int argc, char *argv[])
 {
 	ProbackupSubcmd	backup_subcmd;
-	time_t			backup_id = 0;
 	int				i;
 
 	/* initialize configuration */
@@ -170,8 +169,8 @@ main(int argc, char *argv[])
 
 	if (backup_id_string_param != NULL)
 	{
-		backup_id = base36dec(backup_id_string_param);
-		if (backup_id == 0)
+		current.backup_id = base36dec(backup_id_string_param);
+		if (current.backup_id == 0)
 			elog(ERROR, "Invalid backup-id");
 	}
 
@@ -213,21 +212,19 @@ main(int argc, char *argv[])
 		case BACKUP:
 			return do_backup(smooth_checkpoint);
 		case RESTORE:
-			return do_restore(backup_id,
-						  target_time,
-						  target_xid,
-						  target_inclusive,
-						  target_tli);
+			return do_restore_or_validate(current.backup_id,
+						  target_time, target_xid,
+						  target_inclusive, target_tli,
+						  true);
 		case VALIDATE:
-			return do_validate(backup_id,
-						   target_time,
-						   target_xid,
-						   target_inclusive,
-						   target_tli);
+			return do_restore_or_validate(current.backup_id,
+						  target_time, target_xid,
+						  target_inclusive, target_tli,
+						  false);
 		case SHOW:
-			return do_show(backup_id);
+			return do_show(current.backup_id);
 		case DELETE:
-			return do_delete(backup_id);
+			return do_delete(current.backup_id);
 		case CONFIGURE:
 			elog(ERROR, "not implemented yet");
 	}

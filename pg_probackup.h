@@ -25,6 +25,7 @@
 #include "storage/bufpage.h"
 #include "storage/block.h"
 #include "storage/checksum.h"
+#include "access/timeline.h"
 
 #ifndef WIN32
 #include <sys/mman.h>
@@ -116,6 +117,8 @@ typedef enum ProbackupSubcmd
 	CONFIGURE
 } ProbackupSubcmd;
 
+#define INVALID_BACKUP_ID 0
+
 
 /* special values of pgBackup fields */
 #define KEEP_INFINITE			(INT_MAX)
@@ -123,6 +126,7 @@ typedef enum ProbackupSubcmd
 
 typedef struct pgBackup
 {
+	time_t			backup_id;
 	/* Mode - one of BACKUP_MODE_xxx above*/
 	BackupMode		backup_mode;
 
@@ -163,13 +167,6 @@ typedef struct pgBackup
 	 * Which is basic backup for current incremental backup. */
 	time_t			parent_backup;
 } pgBackup;
-
-
-typedef struct pgTimeLine
-{
-	TimeLineID	tli;
-	XLogRecPtr	end;
-} pgTimeLine;
 
 typedef struct pgRecoveryTarget
 {
@@ -252,18 +249,18 @@ extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
 /* in restore.c */
-extern int do_restore(time_t backup_id,
+extern int do_restore_or_validate(time_t target_backup_id,
 					  const char *target_time,
 					  const char *target_xid,
 					  const char *target_inclusive,
-					  TimeLineID target_tli);
+					  TimeLineID target_tli,
+					  bool is_restore);
 extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
-extern TimeLineID get_fullbackup_timeline(parray *backups,
-										  const pgRecoveryTarget *rt);
-extern TimeLineID findNewestTimeLine(TimeLineID startTLI);
-extern parray * readTimeLineHistory(TimeLineID targetTLI);
+// extern TimeLineID get_fullbackup_timeline(parray *backups,
+// 										  const pgRecoveryTarget *rt);
+extern parray * readTimeLineHistory_probackup(TimeLineID targetTLI);
 extern pgRecoveryTarget *checkIfCreateRecoveryConf(
 	const char *target_time,
 	const char *target_xid,
@@ -275,8 +272,7 @@ extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 extern int do_init(void);
 
 /* in show.c */
-extern int do_show(time_t backup_id);
-extern int do_retention_show(void);
+extern int do_show(time_t requested_backup_id);
 
 /* in delete.c */
 extern int do_delete(time_t backup_id);
@@ -290,12 +286,6 @@ extern char *slurpFile(const char *datadir,
 					   bool safe);
 
 /* in validate.c */
-extern int do_validate(time_t backup_id,
-					   const char *target_time,
-					   const char *target_xid,
-					   const char *target_inclusive,
-					   TimeLineID target_tli);
-extern void do_validate_last(void);
 extern bool pgBackupValidate(pgBackup *backup,
 							 bool size_only,
 							 bool for_get_timeline);
@@ -303,7 +293,7 @@ extern bool pgBackupValidate(pgBackup *backup,
 extern pgBackup *read_backup(time_t timestamp);
 extern void init_backup(pgBackup *backup);
 
-extern parray *catalog_get_backup_list(time_t backup_id);
+extern parray *catalog_get_backup_list(time_t requested_backup_id);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 
@@ -311,7 +301,7 @@ extern void catalog_lock(bool check_catalog);
 
 extern void pgBackupWriteConfigSection(FILE *out, pgBackup *backup);
 extern void pgBackupWriteResultSection(FILE *out, pgBackup *backup);
-extern void pgBackupWriteIni(pgBackup *backup);
+extern void pgBackupWriteConf(pgBackup *backup);
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir);
 extern int pgBackupCreateDir(pgBackup *backup);
 extern void pgBackupFree(void *backup);

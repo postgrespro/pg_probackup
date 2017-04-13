@@ -61,10 +61,8 @@ static void create_recovery_conf(time_t backup_id,
 								 const char *target_xid,
 								 const char *target_inclusive,
 								 TimeLineID target_tli);
-static void print_backup_lsn(const pgBackup *backup);
+// static void print_backup_lsn(const pgBackup *backup);
 static void restore_files(void *arg);
-
-static bool existsTimeLineHistory(TimeLineID probeTLI);
 
 static const char *get_tablespace_mapping(const char *dir);
 static void set_tablespace_created(const char *link, const char *dir);
@@ -76,156 +74,169 @@ static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
 
 
 int
-do_restore(time_t backup_id,
+do_restore_or_validate(time_t target_backup_id,
 		   const char *target_time,
 		   const char *target_xid,
 		   const char *target_inclusive,
-		   TimeLineID target_tli)
+		   TimeLineID target_tli,
+		   bool is_restore)
 {
 	int			i;
-	int			base_index;				/* index of base (full) backup */
-	int			last_diff_index = -1;	/* index of last differential backup */
 	parray	   *backups;
-
 	parray	   *timelines;
-	pgBackup   *base_backup = NULL;
-	pgBackup   *dest_backup = NULL;
 	pgRecoveryTarget *rt = NULL;
+	pgBackup   *current_backup = NULL;
+	pgBackup   *dest_backup = NULL;
+	pgBackup   *base_full_backup = NULL;
+	int			dest_backup_index;
+	int			base_full_backup_index;
+	char 	   *action = is_restore ? "Restore":"Validate";
 
-	/* PGDATA and ARCLOG_PATH are always required */
-	if (pgdata == NULL)
-		elog(ERROR,
-			 "required parameter not specified: PGDATA (-D, --pgdata)");
+	if (is_restore)
+	{
+		if (pgdata == NULL)
+			elog(ERROR,
+				"required parameter not specified: PGDATA (-D, --pgdata)");
+		/* Check if restore destination empty */
+		if (!dir_is_empty(pgdata))
+			elog(ERROR, "restore destination is not empty: \"%s\"", pgdata);
+	}
 
-	/* Check if restore destination empty */
-	if (!dir_is_empty(pgdata))
-		elog(ERROR, "restore destination is not empty: \"%s\"", pgdata);
-
-	elog(LOG, "========================================");
-	elog(LOG, "restore start");
+	elog(LOG, "%s begin.", action);
 
 	/* get exclusive lock of backup catalog */
 	catalog_lock(false);
 
-	/* confirm the PostgreSQL server is not running */
-	if (is_pg_running())
-		elog(ERROR, "PostgreSQL server is running");
-
 	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
+	/* TODO check if we need it for validate */
 	if (rt == NULL)
 		elog(ERROR, "cannot create recovery.conf. specified args are invalid.");
 
-	/* get list of backups. (index == 0) is the last backup */
-	backups = catalog_get_backup_list(0);
-	if (!backups)
-		elog(ERROR, "cannot process any more.");
+	/* Get list of all backups sorted in order of descending start time */
+	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
+	if (backups == NULL)
+		elog(ERROR, "Failed to get backup list.");
 
 	if (target_tli)
 	{
 		elog(LOG, "target timeline ID = %u", target_tli);
 		/* Read timeline history files from archives */
-		timelines = readTimeLineHistory(target_tli);
+		timelines = readTimeLineHistory_probackup(target_tli);
 	}
 
-	/* find last full backup which can be used as base backup. */
-	elog(LOG, "searching recent full backup");
+	/* Find backup range we should restore. */
 	for (i = 0; i < parray_num(backups); i++)
 	{
-		bool		satisfied = false;
+		current_backup = (pgBackup *) parray_get(backups, i);
 
-		base_backup = (pgBackup *) parray_get(backups, i);
-
-		if (backup_id && base_backup->start_time > backup_id)
+		/* Skip all backups which started after target backup */
+		if (target_backup_id && current_backup->start_time > target_backup_id)
 			continue;
 
-		if (backup_id == base_backup->start_time)
+		/*
+		 * We found target backup. Check its status and
+		 * ensure that it satisfies recovery target.
+		 */
+		if (target_backup_id == current_backup->start_time
+			|| target_backup_id == INVALID_BACKUP_ID)
 		{
-			/* Checks for target backup */
-			if (base_backup->status != BACKUP_STATUS_OK)
+			if (current_backup->status != BACKUP_STATUS_OK)
 				elog(ERROR, "given backup %s is in %s status",
-					 base36enc(backup_id), status2str(base_backup->status));
+					 base36enc(target_backup_id), status2str(current_backup->status));
 
-			dest_backup = base_backup;
+			if (target_tli)
+			{
+				if (!satisfy_timeline(timelines, current_backup))
+				{
+					if (target_backup_id != INVALID_BACKUP_ID)
+						elog(ERROR, "target backup %s does not satisfy target timeline",
+							 base36enc(target_backup_id));
+					else
+						/* Try to find another backup that satisfies target timeline */
+						continue;
+				}
+			}
+
+			if (!satisfy_recovery_target(current_backup, rt))
+			{
+				if (target_backup_id != INVALID_BACKUP_ID)
+					elog(ERROR, "target backup %s does not satisfy restore options",
+							base36enc(target_backup_id));
+				else
+					/* Try to find another backup that satisfies target options */
+					continue;
+			}
+
+			/*
+			 * Backup is fine and satisfies all recovery options.
+			 * Save it as dest_backup
+			 */
+			dest_backup = current_backup;
+			dest_backup_index = i;
 		}
 
-		if (dest_backup != NULL &&
-			base_backup->backup_mode == BACKUP_MODE_FULL &&
-			base_backup->status != BACKUP_STATUS_OK)
-			elog(ERROR, "base backup %s for given backup %s is in %s status",
-				 base36enc(base_backup->start_time),
-				 base36enc(dest_backup->start_time),
-				 status2str(base_backup->status));
-
-		/* Dont check error backups */
-		if (base_backup->status != BACKUP_STATUS_OK ||
-			/* Dont check differential backups if we found latest */
-			(last_diff_index >= 0 && base_backup->backup_mode != BACKUP_MODE_FULL))
-			continue;
-
-		if (target_tli)
+		/* If we already found dest_backup, look for full backup. */
+		if (dest_backup)
 		{
-			if (satisfy_timeline(timelines, base_backup) &&
-				satisfy_recovery_target(base_backup, rt) &&
-				(dest_backup || backup_id == 0))
-				satisfied = true;
-		}
-		else
-			if (satisfy_recovery_target(base_backup, rt) &&
-				(dest_backup || backup_id == 0))
-				satisfied = true;
-
-		/* Target backup should satisfy restore options */
-		if (backup_id == base_backup->start_time && !satisfied)
-			elog(ERROR, "backup %s does not satisfy restore options",
-				 base36enc(base_backup->start_time));
-
-		if (satisfied)
-		{
-			if (base_backup->backup_mode != BACKUP_MODE_FULL)
-				last_diff_index = i;
+			if (current_backup->backup_mode == BACKUP_MODE_FULL)
+			{
+				if (current_backup->status != BACKUP_STATUS_OK)
+					elog(ERROR, "base backup %s for given backup %s is in %s status",
+						 base36enc(current_backup->start_time),
+						 base36enc(dest_backup->start_time),
+						 status2str(current_backup->status));
+				else
+				{
+					/* We found both dest and base backups. */
+					base_full_backup = current_backup;
+					base_full_backup_index = i;
+					break;
+				}
+			}
 			else
-				goto base_backup_found;
+				/* Skip differential backups are ok */
+				continue;
 		}
 	}
-	/* no full backup found, cannot restore */
-	elog(ERROR, "no full backup found, cannot restore");
 
-base_backup_found:
-	base_index = i;
-	if (last_diff_index == -1)
-		last_diff_index = base_index;
+	if (base_full_backup == NULL)
+		elog(ERROR, "Full backup satisfying target options is not found.");
 
-	Assert(last_diff_index <= base_index);
-	/* Tablespace directories checking */
-	check_tablespace_mapping((pgBackup *) parray_get(backups, last_diff_index));
+	if (is_restore)
+		/* Tablespace directories checking. TODO What is that? */
+		check_tablespace_mapping(dest_backup);
 
-	/* Restore backups from base_index to last_diff_index */
-	for (i = base_index; i >= last_diff_index; i--)
+	/* Restore or validate backups from base_full_backup to dest_backup */
+	for (i = base_full_backup_index; i >= dest_backup_index; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 
-		if (backup->status == BACKUP_STATUS_OK)
+		if (backup->status == BACKUP_STATUS_OK);
 		{
-			print_backup_lsn(backup);
-			restore_database(backup);
+			/* TODO fix second argument */
+			pgBackupValidate(backup, is_restore, false);
+
+			if (is_restore)
+				restore_database(backup);
 		}
 	}
 
-	/* create recovery.conf */
-	dest_backup = (pgBackup *) parray_get(backups, last_diff_index);
-	if (!dest_backup->stream || (target_time != NULL || target_xid != NULL))
-		create_recovery_conf(backup_id, target_time, target_xid,
-							 target_inclusive, target_tli);
+	if (!dest_backup->stream
+		|| (target_time != NULL || target_xid != NULL))
+	{
+		if (is_restore)
+			create_recovery_conf(target_backup_id, target_time, target_xid,
+								target_inclusive, target_tli);
+		else
+			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
+						 rt->recovery_target_xid, base_full_backup->tli);
+	}
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
 
-	/* print restore complete message */
-	elog(LOG, "all restore completed");
-	elog(LOG, "========================================");
-	elog(INFO, "restore complete. Recovery starts automatically when the PostgreSQL server is started.");
-
+	elog(LOG, "%s completed.", action);
 	return 0;
 }
 
@@ -258,12 +269,6 @@ restore_database(pgBackup *backup)
 
 	elog(LOG, "----------------------------------------");
 	elog(LOG, "restoring database from backup %s", timestamp);
-
-	/*
-	 * Validate backup files with its size, because load of CRC calculation is
-	 * not right.
-	 */
-	pgBackupValidate(backup, true, false);
 
 	/*
 	 * Restore backup directories.
@@ -650,6 +655,7 @@ create_recovery_conf(time_t backup_id,
 		fprintf(fp, "recovery_target_xid = '%s'\n", target_xid);
 	else if (backup_id != 0)
 	{
+		/* TODO Why does it depend on backup_id? */
 		fprintf(fp, "recovery_target = 'immediate'\n");
 		fprintf(fp, "recovery_target_action = 'promote'\n");
 	}
@@ -666,25 +672,23 @@ create_recovery_conf(time_t backup_id,
 /*
  * Try to read a timeline's history file.
  *
- * If successful, return the list of component pgTimeLine (the ancestor
- * timelines followed by target timeline).	If we cannot find the history file,
+ * If successful, return the list of component TLIs (the ancestor
+ * timelines followed by target timeline). If we cannot find the history file,
  * assume that the timeline has no parents, and return a list of just the
  * specified timeline ID.
- * based on readTimeLineHistory() in xlog.c
+ * based on readTimeLineHistory() in timeline.c
  */
 parray *
-readTimeLineHistory(TimeLineID targetTLI)
+readTimeLineHistory_probackup(TimeLineID targetTLI)
 {
 	parray	   *result;
 	char		path[MAXPGPATH];
 	char		fline[MAXPGPATH];
 	FILE	   *fd;
-	pgTimeLine *timeline;
-	pgTimeLine *last_timeline = NULL;
+	TimeLineHistoryEntry *entry;
+	TimeLineHistoryEntry *last_timeline = NULL;
 
-	result = parray_new();
-
-	/* search from arclog_path first */
+	/* Look for timeline history file in archlog_path */
 	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path,
 		targetTLI);
 
@@ -696,10 +700,12 @@ readTimeLineHistory(TimeLineID targetTLI)
 				strerror(errno));
 	}
 
+	result = parray_new();
+
 	/*
 	 * Parse the file...
 	 */
-	while (fd && fgets(fline, sizeof(fline), fd) != NULL)
+	while (fgets(fline, sizeof(fline), fd) != NULL)
 	{
 		char	   *ptr;
 		TimeLineID	tli;
@@ -715,15 +721,7 @@ readTimeLineHistory(TimeLineID targetTLI)
 		if (*ptr == '\0' || *ptr == '#')
 			continue;
 
-		/* Parse one entry... */
 		nfields = sscanf(fline, "%u\t%X/%X", &tli, &switchpoint_hi, &switchpoint_lo);
-
-		timeline = pgut_new(pgTimeLine);
-		timeline->tli = 0;
-		timeline->end = 0;
-
-		/* expect a numeric timeline ID as first field of line */
-		timeline->tli = tli;
 
 		if (nfields < 1)
 		{
@@ -737,17 +735,19 @@ readTimeLineHistory(TimeLineID targetTLI)
 				 "syntax error in history file: %s. Expected a transaction log switchpoint location.",
 				   fline);
 
-		if (last_timeline && timeline->tli <= last_timeline->tli)
+		if (last_timeline && tli <= last_timeline->tli)
 			elog(ERROR,
 				   "Timeline IDs must be in increasing sequence.");
 
-		/* Build list with newest item first */
-		parray_insert(result, 0, timeline);
-		last_timeline = timeline;
+		entry = pgut_new(TimeLineHistoryEntry);
+		entry->tli = tli;
+		entry->end = ((uint64) switchpoint_hi << 32) | switchpoint_lo;
 
-		/* Calculate the end lsn finally */
-		timeline->end = (XLogRecPtr)
-			((uint64) switchpoint_hi << 32) | switchpoint_lo;
+		last_timeline = entry;
+		/* Build list with newest item first */
+		parray_insert(result, 0, entry);
+
+		/* we ignore the remainder of each line */
 	}
 
 	if (fd)
@@ -758,26 +758,11 @@ readTimeLineHistory(TimeLineID targetTLI)
 			"Timeline IDs must be less than child timeline's ID.");
 
 	/* append target timeline */
-	timeline = pgut_new(pgTimeLine);
-	timeline->tli = targetTLI;
+	entry = pgut_new(TimeLineHistoryEntry);
+	entry->tli = targetTLI;
 	/* lsn in target timeline is valid */
-	timeline->end = (uint32) (-1UL << 32) | -1UL;
-	parray_insert(result, 0, timeline);
-
-	/* dump timeline branches in verbose mode */
-	if (verbose)
-	{
-		int i;
-
-		for (i = 0; i < parray_num(result); i++)
-		{
-			pgTimeLine *timeline = parray_get(result, i);
-			elog(LOG, "%s() result[%d]: %08X/%08X/%08X", __FUNCTION__, i,
-				timeline->tli,
-				 (uint32) (timeline->end >> 32),
-				 (uint32) timeline->end);
-		}
-	}
+	entry->end = (uint32) (-1UL << 32) | -1UL;
+	parray_insert(result, 0, entry);
 
 	return result;
 }
@@ -800,7 +785,7 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 	int i;
 	for (i = 0; i < parray_num(timelines); i++)
 	{
-		pgTimeLine *timeline = (pgTimeLine *) parray_get(timelines, i);
+		TimeLineHistoryEntry *timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
 			backup->stop_lsn < timeline->end)
 			return true;
@@ -808,57 +793,55 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 	return false;
 }
 
-/* get TLI of the latest full backup */
-TimeLineID
-get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt)
-{
-	int			i;
-	pgBackup   *base_backup = NULL;
-	TimeLineID	ret;
+// /* get TLI of the latest full backup */
+// TimeLineID
+// get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt)
+// {
+// 	int			i;
+// 	pgBackup   *base_backup = NULL;
+// 	TimeLineID	ret;
+// 
+// 	for (i = 0; i < parray_num(backups); i++)
+// 	{
+// 		base_backup = (pgBackup *) parray_get(backups, i);
+// 
+// 		if (base_backup->backup_mode >= BACKUP_MODE_FULL)
+// 		{
+// 			/*
+// 			 * Validate backup files with its size, because load of CRC
+// 			 * calculation is not right.
+// 			 */
+// 			if (base_backup->status == BACKUP_STATUS_DONE)
+// 				pgBackupValidate(base_backup, true, true);
+// 
+// 			if (!satisfy_recovery_target(base_backup, rt))
+// 				continue;
+// 
+// 			if (base_backup->status == BACKUP_STATUS_OK)
+// 				break;
+// 		}
+// 	}
+// 	/* no full backup found, cannot restore */
+// 	if (i == parray_num(backups))
+// 		elog(ERROR, "no full backup found, cannot restore.");
+// 
+// 	ret = base_backup->tli;
+// 
+// 	return ret;
+// }
 
-	for (i = 0; i < parray_num(backups); i++)
-	{
-		base_backup = (pgBackup *) parray_get(backups, i);
-
-		if (base_backup->backup_mode >= BACKUP_MODE_FULL)
-		{
-			/*
-			 * Validate backup files with its size, because load of CRC
-			 * calculation is not right.
-			 */
-			if (base_backup->status == BACKUP_STATUS_DONE)
-				pgBackupValidate(base_backup, true, true);
-
-			if (!satisfy_recovery_target(base_backup, rt))
-				continue;
-
-			if (base_backup->status == BACKUP_STATUS_OK)
-				break;
-		}
-	}
-	/* no full backup found, cannot restore */
-	if (i == parray_num(backups))
-		elog(ERROR, "no full backup found, cannot restore.");
-
-	ret = base_backup->tli;
-
-	return ret;
-}
-
-static void
-print_backup_lsn(const pgBackup *backup)
-{
-	char timestamp[100];
-
-	if (!verbose)
-		return;
-
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	elog(LOG, "  %s (%X/%08X)",
-		 timestamp,
-		 (uint32) (backup->stop_lsn >> 32),
-		 (uint32) backup->stop_lsn);
-}
+// static void
+// print_backup_lsn(const pgBackup *backup)
+// {
+// 	char timestamp[100];
+// 
+// 	if (!verbose)
+// 		return;
+// 
+// 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
+// 	elog(LOG, "  %s (%X/%08X)", timestamp,
+// 		 (uint32) (backup->stop_lsn >> 32), (uint32) backup->stop_lsn);
+// }
 
 pgRecoveryTarget *
 checkIfCreateRecoveryConf(const char *target_time,
@@ -908,70 +891,6 @@ checkIfCreateRecoveryConf(const char *target_time,
 
 	return rt;
 
-}
-
-
-/*
- * Probe whether a timeline history file exists for the given timeline ID
- */
-static bool
-existsTimeLineHistory(TimeLineID probeTLI)
-{
-	char		path[MAXPGPATH];
-	FILE		*fd;
-
-	/* Timeline 1 does not have a history file, so no need to check */
-	if (probeTLI == 1)
-		return false;
-
-	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path, probeTLI);
-	fd = fopen(path, "r");
-	if (fd != NULL)
-	{
-		fclose(fd);
-		return true;
-	}
-	else
-	{
-		if (errno != ENOENT)
-			elog(ERROR, "Failed directory for path: %s", path);
-		return false;
-	}
-}
-
-/*
- * Find the newest existing timeline, assuming that startTLI exists.
- *
- * Note: while this is somewhat heuristic, it does positively guarantee
- * that (result + 1) is not a known timeline, and therefore it should
- * be safe to assign that ID to a new timeline.
- */
-TimeLineID
-findNewestTimeLine(TimeLineID startTLI)
-{
-	TimeLineID	newestTLI;
-	TimeLineID	probeTLI;
-
-	/*
-	 * The algorithm is just to probe for the existence of timeline history
-	 * files.  XXX is it useful to allow gaps in the sequence?
-	 */
-	newestTLI = startTLI;
-
-	for (probeTLI = startTLI + 1;; probeTLI++)
-	{
-		if (existsTimeLineHistory(probeTLI))
-		{
-			newestTLI = probeTLI;		/* probeTLI exists */
-		}
-		else
-		{
-			/* doesn't exist, assume we're done */
-			break;
-		}
-	}
-
-	return newestTLI;
 }
 
 /*

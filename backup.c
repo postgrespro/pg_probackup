@@ -208,7 +208,7 @@ do_backup_database(parray *backup_list, bool smooth_checkpoint)
 			 (uint32) (*lsn >> 32), (uint32) *lsn);
 
 		current.parent_backup = prev_backup->start_time;
-		pgBackupWriteIni(&current);
+		pgBackupWriteConf(&current);
 	}
 
 	/* initialize backup list */
@@ -466,18 +466,18 @@ do_backup(bool smooth_checkpoint)
 	current.checksum_version = get_data_checksum_version(true);
 	current.stream = stream_wal;
 
-	/* Create backup directory and backup.ini */
+	/* Create backup directory and BACKUP_CONF_FILE */
 
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "cannot create backup directory");
-	pgBackupWriteIni(&current);
+	pgBackupWriteConf(&current);
 
 	elog(LOG, "backup destination is initialized");
 
 	/* get list of backups already taken */
-	backup_list = catalog_get_backup_list(0);
-	if (!backup_list)
-		elog(ERROR, "cannot process any more");
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	if (backup_list == NULL)
+		elog(ERROR, "Failed to get backup list.");
 
 	/* set the error processing function for the backup process */
 	pgut_atexit_push(backup_cleanup, NULL);
@@ -489,7 +489,7 @@ do_backup(bool smooth_checkpoint)
 	/* update backup status to DONE */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
-	pgBackupWriteIni(&current);
+	pgBackupWriteConf(&current);
 
 	/* Calculate the total data read */
 	if (verbose)
@@ -995,15 +995,15 @@ backup_cleanup(bool fatal, void *userdata)
 	}
 
 	/*
-	 * Update status of backup.ini to ERROR.
+	 * Update status of backup in BACKUP_CONF_FILE to ERROR.
 	 * end_time != 0 means backup finished
 	 */
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
 	{
-		elog(LOG, "backup is running, update its status to ERROR");
+		elog(LOG, "Backup is running, update its status to ERROR");
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
-		pgBackupWriteIni(&current);
+		pgBackupWriteConf(&current);
 	}
 }
 

@@ -35,9 +35,9 @@ do_delete(time_t backup_id)
 	catalog_lock(false);
 
 	/* Get complete list of backups */
-	backup_list = catalog_get_backup_list(0);
-	if (!backup_list)
-		elog(ERROR, "no backup list found, can't process any more");
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	if (backup_list == NULL)
+		elog(ERROR, "Failed to get backup list.");
 
 	delete_list = parray_new();
 
@@ -120,7 +120,7 @@ do_deletewal(time_t backup_id, bool strict, bool need_catalog_lock)
 		catalog_lock(false);
 
 	/* Find oldest LSN, used by backups */
-	backup_list = catalog_get_backup_list(0);
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *last_backup = (pgBackup *) parray_get(backup_list, i);
@@ -177,7 +177,7 @@ do_retention_purge(void)
 	catalog_lock(false);
 
 	/* Get a complete list of backups. */
-	backup_list = catalog_get_backup_list(0);
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 	if (parray_num(backup_list) == 0)
 	{
 		elog(INFO, "backup list is empty, purging won't be executed");
@@ -271,7 +271,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 	 * the error occurs before deleting all backup files.
 	 */
 	backup->status = BACKUP_STATUS_DELETING;
-	pgBackupWriteIni(backup);
+	pgBackupWriteConf(backup);
 
 	/* list files to be deleted */
 	files = parray_new();

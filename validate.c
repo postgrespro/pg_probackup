@@ -23,141 +23,10 @@ typedef struct
 	bool corrupted;
 } validate_files_args;
 
-int
-do_validate(time_t backup_id,
-			const char *target_time,
-			const char *target_xid,
-			const char *target_inclusive,
-			TimeLineID target_tli)
-{
-	int			i;
-	int			base_index;				/* index of base (full) backup */
-	int			last_diff_index = -1;	/* index of last differential backup */
-	parray	   *timelines;
-	parray	   *backups;
-	pgRecoveryTarget *rt = NULL;
-	pgBackup   *base_backup = NULL;
-	pgBackup   *dest_backup = NULL;
-	bool		success_validate;
-
-	catalog_lock(false);
-
-	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
-	if (rt == NULL)
-		elog(ERROR, "cannot create recovery.conf. specified args are invalid.");
-
-	/* get list of backups. (index == 0) is the last backup */
-	backups = catalog_get_backup_list(0);
-	if (!backups)
-		elog(ERROR, "cannot process any more.");
-
-	/* Read timeline history files from archives */
-	if (target_tli)
-		timelines = readTimeLineHistory(target_tli);
-
-	/* find last full backup which can be used as base backup. */
-	elog(LOG, "searching recent full backup");
-	for (i = 0; i < parray_num(backups); i++)
-	{
-		bool		satisfied = false;
-
-		base_backup = (pgBackup *) parray_get(backups, i);
-
-		if (backup_id && base_backup->start_time > backup_id)
-			continue;
-
-		if (backup_id == base_backup->start_time)
-		{
-			/* Checks for target backup */
-			if (base_backup->status != BACKUP_STATUS_OK &&
-				base_backup->status != BACKUP_STATUS_CORRUPT)
-				elog(ERROR, "given backup %s is in %s status",
-					 base36enc(backup_id), status2str(base_backup->status));
-
-			dest_backup = base_backup;
-		}
-
-		if (dest_backup != NULL &&
-			base_backup->backup_mode == BACKUP_MODE_FULL &&
-			base_backup->status != BACKUP_STATUS_OK)
-			elog(ERROR, "base backup %s for given backup %s is in %s status",
-				 base36enc(base_backup->start_time),
-				 base36enc(dest_backup->start_time),
-				 status2str(base_backup->status));
-
-		/* Dont check error backups */
-		if ((base_backup->status != BACKUP_STATUS_OK &&
-			 base_backup->status != BACKUP_STATUS_CORRUPT) ||
-			/* Dont check differential backups if we found latest */
-			(last_diff_index >= 0 && base_backup->backup_mode != BACKUP_MODE_FULL))
-			continue;
-
-		if (target_tli)
-		{
-			if (satisfy_timeline(timelines, base_backup) &&
-				satisfy_recovery_target(base_backup, rt) &&
-				(dest_backup || backup_id == 0))
-				satisfied = true;
-		}
-		else
-			if (satisfy_recovery_target(base_backup, rt) &&
-				(dest_backup || backup_id == 0))
-				satisfied = true;
-
-		/* Target backup should satisfy validate options */
-		if (backup_id == base_backup->start_time && !satisfied)
-			elog(ERROR, "backup %s does not satisfy validate options",
-				 base36enc(base_backup->start_time));
-
-		if (satisfied)
-		{
-			if (base_backup->backup_mode != BACKUP_MODE_FULL)
-				last_diff_index = i;
-			else
-				goto base_backup_found;
-		}
-	}
-	/* no full backup found, cannot restore */
-	elog(ERROR, "no full backup found, cannot validate.");
-
-base_backup_found:
-	base_index = i;
-	if (last_diff_index == -1)
-		last_diff_index = base_index;
-
-	Assert(last_diff_index <= base_index);
-
-	/* Validate backups from base_index to last_diff_index */
-	for (i = base_index; i >= last_diff_index; i--)
-	{
-		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
-
-		if (backup->status == BACKUP_STATUS_OK ||
-			backup->status == BACKUP_STATUS_CORRUPT)
-			success_validate = pgBackupValidate(backup, false, false) &&
-				success_validate;
-	}
-
-	/* And now we must check WALs */
-	dest_backup = (pgBackup *) parray_get(backups, last_diff_index);
-	if (!dest_backup->stream || (target_time != NULL || target_xid != NULL))
-		validate_wal(dest_backup,
-					 arclog_path,
-					 rt->recovery_target_time,
-					 rt->recovery_target_xid,
-					 base_backup->tli);
-	else if (success_validate)
-		elog(INFO, "backup validation stopped successfully");
-
-	/* cleanup */
-	parray_walk(backups, pgBackupFree);
-	parray_free(backups);
-
-	return 0;
-}
-
 /*
  * Validate each files in the backup with its size.
+ * TODO: change from bool to void
+ * TODO: understand and probably fix second argument
  */
 bool
 pgBackupValidate(pgBackup *backup,
@@ -230,7 +99,7 @@ pgBackupValidate(pgBackup *backup,
 		backup->status = BACKUP_STATUS_CORRUPT;
 	else
 		backup->status = BACKUP_STATUS_OK;
-	pgBackupWriteIni(backup);
+	pgBackupWriteConf(backup);
 
 	if (corrupted)
 		elog(WARNING, "backup %s is corrupted", backup_id_string);

@@ -248,18 +248,17 @@ IsDir(const char *dirpath, const char *entry)
 }
 
 /*
- * Create list fo backups started between begin and end from backup catalog.
- * If range was NULL, all of backup are listed.
+ * Create list of backups.
+ * If 'requested_backup_id' is INVALID_BACKUP_ID, return list of all backups.
  * The list is sorted in order of descending start time.
+ * If valid backup id is passed only matching backup will be added to the list.
  */
 parray *
-catalog_get_backup_list(time_t backup_id)
+catalog_get_backup_list(time_t requested_backup_id)
 {
 	DIR			   *date_dir = NULL;
 	struct dirent  *date_ent = NULL;
-	DIR			   *time_dir = NULL;
 	char			backups_path[MAXPGPATH];
-	char			date_path[MAXPGPATH];
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
 
@@ -273,27 +272,30 @@ catalog_get_backup_list(time_t backup_id)
 		goto err_proc;
 	}
 
-	/* scan date/time directories and list backups in the range */
+	/* scan the directory and list backups */
 	backups = parray_new();
 	for (; (date_ent = readdir(date_dir)) != NULL; errno = 0)
 	{
-		char ini_path[MAXPGPATH];
+		char backup_conf_path[MAXPGPATH];
+		char date_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backups_path, date_ent->d_name) || date_ent->d_name[0] == '.')
+		if (!IsDir(backups_path, date_ent->d_name)
+			|| date_ent->d_name[0] == '.')
 			continue;
 
-		/* open subdirectory (date directory) and search time directory */
+		/* open subdirectory of specific backup */
 		join_path_components(date_path, backups_path, date_ent->d_name);
 
-		/* read backup information from backup.ini */
-		snprintf(ini_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONF_FILE);
-		backup = read_backup_from_file(ini_path);
+		/* read backup information from BACKUP_CONF_FILE */
+		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONF_FILE);
+		backup = read_backup_from_file(backup_conf_path);
 
-		/* ignore corrupted backup */
+		/* ignore corrupted backups */
 		if (backup)
 		{
-			if (backup_id != 0 && backup_id != backup->start_time)
+			if (requested_backup_id != INVALID_BACKUP_ID
+				&& requested_backup_id != backup->start_time)
 			{
 				pgBackupFree(backup);
 				continue;
@@ -301,10 +303,11 @@ catalog_get_backup_list(time_t backup_id)
 			parray_append(backups, backup);
 			backup = NULL;
 		}
+
 		if (errno && errno != ENOENT)
 		{
 			elog(WARNING, "cannot read date directory \"%s\": %s",
-				date_ent->d_name, strerror(errno));
+				 date_ent->d_name, strerror(errno));
 			goto err_proc;
 		}
 	}
@@ -323,8 +326,6 @@ catalog_get_backup_list(time_t backup_id)
 	return backups;
 
 err_proc:
-	if (time_dir)
-		closedir(time_dir);
 	if (date_dir)
 		closedir(date_dir);
 	if (backup)
@@ -449,9 +450,9 @@ pgBackupWriteResultSection(FILE *out, pgBackup *backup)
 	}
 }
 
-/* create backup.conf */
+/* create BACKUP_CONF_FILE */
 void
-pgBackupWriteIni(pgBackup *backup)
+pgBackupWriteConf(pgBackup *backup)
 {
 	FILE   *fp = NULL;
 	char	ini_path[MAXPGPATH];
@@ -472,7 +473,7 @@ pgBackupWriteIni(pgBackup *backup)
 }
 
 /*
- * Read backup.ini and create pgBackup.
+ * Read BACKUP_CONF_FILE and create pgBackup.
  *  - Comment starts with ';'.
  *  - Do not care section.
  */
@@ -646,6 +647,7 @@ pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subd
 void
 init_backup(pgBackup *backup)
 {
+	backup->backup_id = INVALID_BACKUP_ID;
 	backup->backup_mode = BACKUP_MODE_INVALID;
 	backup->status = BACKUP_STATUS_INVALID;
 	backup->tli = 0;
