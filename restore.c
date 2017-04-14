@@ -213,8 +213,7 @@ do_restore_or_validate(time_t target_backup_id,
 
 		if (backup->status == BACKUP_STATUS_OK);
 		{
-			/* TODO fix second argument */
-			pgBackupValidate(backup, is_restore, false);
+			pgBackupValidate(backup);
 
 			if (is_restore)
 				restore_database(backup);

@@ -224,6 +224,7 @@ extern char arclog_path[MAXPGPATH];
 
 /* current settings */
 extern pgBackup current;
+extern ProbackupSubcmd	backup_subcmd;
 
 /* exclude directory list for $PGDATA file listing */
 extern const char *pgdata_exclude_dir[];
@@ -286,9 +287,7 @@ extern char *slurpFile(const char *datadir,
 					   bool safe);
 
 /* in validate.c */
-extern bool pgBackupValidate(pgBackup *backup,
-							 bool size_only,
-							 bool for_get_timeline);
+extern void pgBackupValidate(pgBackup* backup);
 
 extern pgBackup *read_backup(time_t timestamp);
 extern void init_backup(pgBackup *backup);

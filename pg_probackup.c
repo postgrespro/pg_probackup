@@ -28,6 +28,7 @@ char arclog_path[MAXPGPATH];
 char *backup_id_string_param = NULL;
 /* directory configuration */
 pgBackup	current;
+ProbackupSubcmd	backup_subcmd;
 
 /* backup configuration */
 static bool		smooth_checkpoint;
@@ -106,7 +107,6 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
-	ProbackupSubcmd	backup_subcmd;
 	int				i;
 
 	/* initialize configuration */

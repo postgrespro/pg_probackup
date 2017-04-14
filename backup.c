@@ -516,7 +516,7 @@ do_backup(bool smooth_checkpoint)
 		parray_walk(files_database, pgFileFree);
 	parray_free(files_database);
 
-	pgBackupValidate(&current, false, false);
+	pgBackupValidate(&current);
 
 	return 0;
 }
