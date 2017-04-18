@@ -215,7 +215,7 @@ do_restore_or_validate(time_t target_backup_id,
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 
-		if (backup->status == BACKUP_STATUS_OK);
+		if (backup->status == BACKUP_STATUS_OK)
 		{
 			pgBackupValidate(backup);
 
