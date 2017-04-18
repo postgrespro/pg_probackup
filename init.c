@@ -15,6 +15,7 @@
 
 /*
  * selects function for scandir.
+ * Select all files except hidden.
  */
 static int selects(const struct dirent *dir)
 {
@@ -48,7 +49,7 @@ do_init(void)
 	}
 
 	/* Read system_identifier from PGDATA */
-	id = get_system_identifier(false);
+	id = get_system_identifier();
 
 	/* create backup catalog root directory */
 	dir_create_dir(backup_path, DIR_PERMISSION);
@@ -61,7 +62,7 @@ do_init(void)
 	join_path_components(arclog_path_dir, backup_path, "wal");
 	dir_create_dir(arclog_path_dir, DIR_PERMISSION);
 
-	/* create pg_probackup.conf */
+	/* create BACKUP_CATALOG_CONF_FILE */
 	join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)

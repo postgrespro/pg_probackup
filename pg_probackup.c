@@ -25,35 +25,34 @@ char *backup_path;
 char *pgdata;
 char arclog_path[MAXPGPATH];
 
-char *backup_id_string_param = NULL;
 /* directory configuration */
 pgBackup	current;
 ProbackupSubcmd	backup_subcmd;
 
-/* backup configuration */
-static bool		smooth_checkpoint;
-int				num_threads = 1;
-bool			stream_wal = false;
-bool			from_replica = false;
-static bool		backup_logs = false;
-bool			progress = false;
-/* delete options */
-bool			delete_wal = false;
-bool			delete_expired = false;
-bool			apply_to_all = false;
-bool			force_delete = false;
+char 	*backup_id_string_param = NULL;
+bool	backup_logs = false;
+
+bool	smooth_checkpoint;
+int		num_threads = 1;
+bool	stream_wal = false;
+bool	from_replica = false;
+bool	progress = false;
+bool	delete_wal = false;
+bool	delete_expired = false;
+bool	apply_to_all = false;
+bool	force_delete = false;
+uint32  archive_timeout = 300; /* Wait timeout for WAL segment archiving */
+
+uint64	system_identifier = 0;
+
+uint32	retention_redundancy = 0;
+uint32	retention_window = 0;
 
 /* restore configuration */
 static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
-
-uint64			system_identifier = 0;
-
-/* retention configuration */
-uint32			retention_redundancy = 0;
-uint32			retention_window = 0;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 
@@ -86,8 +85,8 @@ static pgut_option options[] =
 	{ 'b', 17, "all",					&apply_to_all,		SOURCE_CMDLINE },
 	{ 'b', 18, "force",					&force_delete,		SOURCE_CMDLINE },
 	/* configure options */
-	{ 'u', 13, "set-retention-redundancy",			&retention_redundancy,	SOURCE_CMDLINE },
-	{ 'u', 14, "set-retention-window",				&retention_window,		SOURCE_CMDLINE },
+	{ 'u', 13, "set-retention-redundancy", &retention_redundancy,	SOURCE_CMDLINE },
+	{ 'u', 14, "set-retention-window",	&retention_window,		SOURCE_CMDLINE },
 	/* other */
 	{ 'U', 15, "system-identifier",		&system_identifier,		SOURCE_FILE_STRICT },
 
@@ -110,7 +109,7 @@ main(int argc, char *argv[])
 	int				i;
 
 	/* initialize configuration */
-	init_backup(&current);
+	pgBackup_init(&current);
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], "pgscripts");
@@ -210,7 +209,7 @@ main(int argc, char *argv[])
 		case INIT:
 			return do_init();
 		case BACKUP:
-			return do_backup(smooth_checkpoint);
+			return do_backup();
 		case RESTORE:
 			return do_restore_or_validate(current.backup_id,
 						  target_time, target_xid,
@@ -242,6 +241,7 @@ main(int argc, char *argv[])
 	return 0;
 }
 
+/* TODO Update help in accordance with new options */
 void
 pgut_help(bool details)
 {

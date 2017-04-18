@@ -130,7 +130,6 @@ pgFileNew(const char *path, bool omit_symlink)
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
-	file->mtime = st.st_mtime;
 	file->size = st.st_size;
 	file->read_size = 0;
 	file->write_size = 0;
@@ -270,28 +269,6 @@ pgFileCompareSize(const void *f1, const void *f2)
 		return -1;
 	else
 		return 0;
-}
-
-/* Compare two pgFile with their modify timestamp. */
-int
-pgFileCompareMtime(const void *f1, const void *f2)
-{
-	pgFile *f1p = *(pgFile **)f1;
-	pgFile *f2p = *(pgFile **)f2;
-
-	if (f1p->mtime > f2p->mtime)
-		return 1;
-	else if (f1p->mtime < f2p->mtime)
-		return -1;
-	else
-		return 0;
-}
-
-/* Compare two pgFile with their modify timestamp in descending order. */
-int
-pgFileCompareMtimeDesc(const void *f1, const void *f2)
-{
-	return -pgFileCompareMtime(f1, f2);
 }
 
 static int
@@ -608,7 +585,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 	char		buf[MAXPGPATH * 2];
 
 	join_path_components(db_path, backup_dir, DATABASE_DIR);
-	join_path_components(map_path, db_path, "tablespace_map");
+	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
 	/* Exit if database/tablespace_map don't exists */
 	if (!fileExists(map_path))
@@ -647,6 +624,8 @@ read_tablespace_map(parray *files, const char *backup_dir)
 
 /*
  * Print file list.
+ * TODO review
+ * TODO invent more convenient format?
  */
 void
 print_file_list(FILE *out, const parray *files, const char *root)
@@ -662,8 +641,9 @@ print_file_list(FILE *out, const parray *files, const char *root)
 
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
-			path = JoinPathEnd(path, root);
+			path = GetRelativePath(path, root);
 
+		/* TODO create an enum for file mode constants */
 		if (S_ISREG(file->mode) && file->is_datafile)
 			type = 'F';
 		else if (S_ISREG(file->mode) && !file->is_datafile)
@@ -681,13 +661,6 @@ print_file_list(FILE *out, const parray *files, const char *root)
 
 		if (S_ISLNK(file->mode))
 			fprintf(out, " %s", file->linked);
-		else
-		{
-			char		timestamp[20];
-
-			time2iso(timestamp, 20, file->mtime);
-			fprintf(out, " %s", timestamp);
-		}
 
 		fprintf(out, " " UINT64_FORMAT " %d\n",
 				file->generation, file->is_partial_copy);
@@ -721,25 +694,14 @@ dir_read_file_list(const char *root, const char *file_txt)
 		unsigned long	write_size;
 		pg_crc32		crc;
 		unsigned int	mode;	/* bit length of mode_t depends on platforms */
-		struct tm		tm;
 		pgFile			*file;
 
-		memset(&tm, 0, sizeof(tm));
-		if (sscanf(buf, "%s %c %lu %u %o %d-%d-%d %d:%d:%d %d %d",
+		if (sscanf(buf, "%s %c %lu %u %o %d %d",
 			path, &type, &write_size, &crc, &mode,
-			&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
-			&tm.tm_hour, &tm.tm_min, &tm.tm_sec,
-			&generation, &is_partial_copy) != 13)
+			&generation, &is_partial_copy) != 8)
 		{
-			/* Maybe the file_list we're trying to recovery is in old format */
-			if (sscanf(buf, "%s %c %lu %u %o %d-%d-%d %d:%d:%d",
-				path, &type, &write_size, &crc, &mode,
-				&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
-				&tm.tm_hour, &tm.tm_min, &tm.tm_sec) != 11)
-			{
-				elog(ERROR, "invalid format found in \"%s\"",
-					file_txt);
-			}
+			elog(ERROR, "invalid format found in \"%s\"",
+				file_txt);
 		}
 
 		if (type != 'f' && type != 'F' && type != 'd' && type != 'l')
@@ -747,7 +709,6 @@ dir_read_file_list(const char *root, const char *file_txt)
 			elog(ERROR, "invalid type '%c' found in \"%s\"",
 				type, file_txt);
 		}
-		tm.tm_isdst = -1;
 
 		file = (pgFile *) pgut_malloc(sizeof(pgFile));
 		file->path = pgut_malloc((root ? strlen(root) + 1 : 0) + strlen(path) + 1);
@@ -756,9 +717,6 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file->pagemap.bitmap = NULL;
 		file->pagemap.bitmapsize = 0;
 
-		tm.tm_year -= 1900;
-		tm.tm_mon -= 1;
-		file->mtime = mktime(&tm);
 		file->mode = mode |
 			((type == 'f' || type == 'F') ? S_IFREG :
 			 type == 'd' ? S_IFDIR : type == 'l' ? S_IFLNK : 0);

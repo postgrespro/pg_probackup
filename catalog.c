@@ -41,7 +41,7 @@ unlink_lock_atexit(void)
  * Create a lockfile.
  */
 void
-catalog_lock(bool check_catalog)
+catalog_lock(void)
 {
 	int			fd;
 	char		buffer[MAXPGPATH * 2 + 256];
@@ -205,23 +205,10 @@ catalog_lock(bool check_catalog)
 		atexit(unlink_lock_atexit);
 		exit_hook_registered = true;
 	}
-
-	if (check_catalog)
-	{
-		uint64		id;
-
-		Assert(pgdata);
-
-		/* Check system-identifier */
-		id = get_system_identifier(false);
-		if (id != system_identifier)
-			elog(ERROR, "backup directory was initialized for system id %ld, but target system id is %ld",
-				 system_identifier, id);
-	}
 }
 
 /*
- * Create a pgBackup which taken at timestamp.
+ * Read backup meta information from BACKUP_CONF_FILE.
  * If no backup matches, return NULL.
  */
 pgBackup *
@@ -337,7 +324,7 @@ err_proc:
 }
 
 /*
- * Find the last completed database backup from the backup list.
+ * Find the last completed backup on given timeline
  */
 pgBackup *
 catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
@@ -350,15 +337,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 	{
 		backup = (pgBackup *) parray_get(backup_list, i);
 
-		/*
-		 * We need completed database backup in the case of a full or
-		 * differential backup on current timeline.
-		 */
-		if (backup->status == BACKUP_STATUS_OK &&
-			backup->tli == tli &&
-			(backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
-			 backup->backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-			 backup->backup_mode == BACKUP_MODE_FULL))
+		if (backup->status == BACKUP_STATUS_OK && backup->tli == tli)
 			return backup;
 	}
 
@@ -510,7 +489,7 @@ read_backup_from_file(const char *path)
 	if (access(path, F_OK) != 0)
 		return NULL;
 
-	init_backup(backup);
+	pgBackup_init(backup);
 	pgut_readopt(path, options, ERROR);
 
 	if (backup_mode)
@@ -642,22 +621,4 @@ pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subd
 	free(datetime);
 
 	make_native_path(path);
-}
-
-void
-init_backup(pgBackup *backup)
-{
-	backup->backup_id = INVALID_BACKUP_ID;
-	backup->backup_mode = BACKUP_MODE_INVALID;
-	backup->status = BACKUP_STATUS_INVALID;
-	backup->tli = 0;
-	backup->start_lsn = 0;
-	backup->stop_lsn = 0;
-	backup->start_time = (time_t) 0;
-	backup->end_time = (time_t) 0;
-	backup->recovery_xid = 0;
-	backup->recovery_time = (time_t) 0;
-	backup->data_bytes = BYTES_INVALID;
-	backup->stream = false;
-	backup->parent_backup = 0;
 }

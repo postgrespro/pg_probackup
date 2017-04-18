@@ -52,7 +52,7 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
-static void restore_database(pgBackup *backup);
+static void restore_backup(pgBackup *backup);
 static void restore_directories(const char *pg_data_dir,
 								const char *backup_dir);
 static void check_tablespace_mapping(pgBackup *backup);
@@ -61,9 +61,8 @@ static void create_recovery_conf(time_t backup_id,
 								 const char *target_xid,
 								 const char *target_inclusive,
 								 TimeLineID target_tli);
-// static void print_backup_lsn(const pgBackup *backup);
 static void restore_files(void *arg);
-
+static void remove_deleted_files(pgBackup *backup);
 static const char *get_tablespace_mapping(const char *dir);
 static void set_tablespace_created(const char *link, const char *dir);
 static const char *get_tablespace_created(const char *link);
@@ -73,6 +72,9 @@ static TablespaceList tablespace_dirs = {NULL, NULL};
 static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
 
 
+/*
+ * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
+ */
 int
 do_restore_or_validate(time_t target_backup_id,
 		   const char *target_time,
@@ -102,16 +104,12 @@ do_restore_or_validate(time_t target_backup_id,
 			elog(ERROR, "restore destination is not empty: \"%s\"", pgdata);
 	}
 
+	rt = parseRecoveryTargetOptions(target_time, target_xid, target_inclusive);
+
 	elog(LOG, "%s begin.", action);
 
-	/* get exclusive lock of backup catalog */
-	catalog_lock(false);
-
-	rt = checkIfCreateRecoveryConf(target_time, target_xid, target_inclusive);
-	/* TODO check if we need it for validate */
-	if (rt == NULL)
-		elog(ERROR, "cannot create recovery.conf. specified args are invalid.");
-
+	/* Get exclusive lock of backup catalog */
+	catalog_lock();
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 	if (backups == NULL)
@@ -202,11 +200,17 @@ do_restore_or_validate(time_t target_backup_id,
 	if (base_full_backup == NULL)
 		elog(ERROR, "Full backup satisfying target options is not found.");
 
+	/*
+	 * Ensure that directories provided in tablespace mapping are valid
+	 * i.e. empty or not exist.
+	 */
 	if (is_restore)
-		/* Tablespace directories checking. TODO What is that? */
 		check_tablespace_mapping(dest_backup);
 
-	/* Restore or validate backups from base_full_backup to dest_backup */
+	/*
+	 * Validate backups from base_full_backup to dest_backup.
+	 * And restore if subcommand is RESTORE.
+	 */
 	for (i = base_full_backup_index; i >= dest_backup_index; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
@@ -216,8 +220,19 @@ do_restore_or_validate(time_t target_backup_id,
 			pgBackupValidate(backup);
 
 			if (is_restore)
-				restore_database(backup);
+				restore_backup(backup);
 		}
+	}
+
+	/*
+	 * Delete files which are not in dest backup file list. Files which were
+	 * deleted between previous and current backup are not in the list.
+	 */
+	if (is_restore)
+	{
+		pgBackup   *dest_backup = (pgBackup *) parray_get(backups, dest_backup_index);
+		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
+			remove_deleted_files(dest_backup);
 	}
 
 	if (!dest_backup->stream
@@ -240,10 +255,10 @@ do_restore_or_validate(time_t target_backup_id,
 }
 
 /*
- * Validate and restore backup.
+ * Restore one backup.
  */
 void
-restore_database(pgBackup *backup)
+restore_backup(pgBackup *backup)
 {
 	char		timestamp[100];
 	char		backup_path[MAXPGPATH];
@@ -265,8 +280,6 @@ restore_database(pgBackup *backup)
 			backup->wal_block_size, XLOG_BLCKSZ);
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-
-	elog(LOG, "----------------------------------------");
 	elog(LOG, "restoring database from backup %s", timestamp);
 
 	/*
@@ -285,19 +298,22 @@ restore_database(pgBackup *backup)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
 
-		/* Remove files which are not backed up */
+		/*
+		 * Remove files which haven't changed since previous backup
+		 * and was not backed up
+		 */
 		if (file->write_size == BYTES_INVALID)
 			pgFileFree(parray_remove(files, i));
 	}
 
+	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
-
 		__sync_lock_release(&file->lock);
 	}
 
-	/* Restore files into $PGDATA */
+	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
 	{
 		restore_files_args *arg = pg_malloc(sizeof(restore_files_args));
@@ -305,7 +321,7 @@ restore_database(pgBackup *backup)
 		arg->backup = backup;
 
 		if (verbose)
-			elog(WARNING, "Start thread for num:%li", parray_num(files));
+			elog(LOG, "Start thread for num:%li", parray_num(files));
 
 		restore_threads_args[i] = arg;
 		pthread_create(&restore_threads[i], NULL, (void *(*)(void *)) restore_files, arg);
@@ -318,44 +334,59 @@ restore_database(pgBackup *backup)
 		pg_free(restore_threads_args[i]);
 	}
 
-	/* Delete files which are not in file list. */
+	/* cleanup */
+	parray_walk(files, pgFileFree);
+	parray_free(files);
+
+	/* TODO print backup name */
+	elog(LOG, "restore backup completed");
+}
+
+/*
+ * Delete files which are not in backup's file list from target pgdata.
+ * It is necessary to restore incremental backup correctly.
+ * Files which were deleted between previous and current backup
+ * are not in the backup's filelist.
+ */
+static void
+remove_deleted_files(pgBackup *backup)
+{
+	parray	   *files;
+	parray	   *files_restored;
+	char		database_path[MAXPGPATH];
+	char		filelist_path[MAXPGPATH];
+	int 		i;
+
+	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
+	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
+	/* Read backup's filelist using target database path as base path */
+	files = dir_read_file_list(pgdata, filelist_path);
+	parray_qsort(files, pgFileComparePathDesc);
+
+	/* Get list of files actually existing in target database */
+	files_restored = parray_new();
+	dir_list_file(files_restored, pgdata, true, true, false);
+	/* To delete from leaf, sort in reversed order */
+	parray_qsort(files_restored, pgFileComparePathDesc);
+
+	for (i = 0; i < parray_num(files_restored); i++)
 	{
-		parray	   *files_now;
+		pgFile	   *file = (pgFile *) parray_get(files_restored, i);
 
-		parray_walk(files, pgFileFree);
-		parray_free(files);
-
-		/* re-read file list to change base path to $PGDATA */
-		files = dir_read_file_list(pgdata, list_path);
-		parray_qsort(files, pgFileComparePathDesc);
-
-		/* get list of files restored to pgdata */
-		files_now = parray_new();
-		dir_list_file(files_now, pgdata, true, true, false);
-		/* to delete from leaf, sort in reversed order */
-		parray_qsort(files_now, pgFileComparePathDesc);
-
-		for (i = 0; i < parray_num(files_now); i++)
+		/* If the file is not in the file list, delete it */
+		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
-			pgFile	   *file = (pgFile *) parray_get(files_now, i);
-
-			/* If the file is not in the file list, delete it */
-			if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
-			{
-				elog(LOG, "deleted %s", file->path + strlen(pgdata) + 1);
-				pgFileDelete(file);
-			}
+			pgFileDelete(file);
+			if (verbose)
+				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
 		}
-
-		parray_walk(files_now, pgFileFree);
-		parray_free(files_now);
 	}
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
 	parray_free(files);
-
-	elog(LOG, "restore backup completed");
+	parray_walk(files_restored, pgFileFree);
+	parray_free(files_restored);
 }
 
 /*
@@ -368,8 +399,7 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 {
 	parray	   *dirs,
 			   *links;
-	size_t		i,
-				db_path_len;
+	size_t		i;
 	char		backup_database_dir[MAXPGPATH],
 				to_path[MAXPGPATH];
 
@@ -377,7 +407,6 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 	links = parray_new();
 
 	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
-	db_path_len = strlen(backup_database_dir);
 
 	list_data_directories(dirs, backup_database_dir, true, false);
 	read_tablespace_map(links, backup_dir);
@@ -387,14 +416,14 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 	for (i = 0; i < parray_num(dirs); i++)
 	{
 		pgFile	   *dir = (pgFile *) parray_get(dirs, i);
-		char	   *relative_ptr = dir->path + db_path_len + 1;
+		char	   *relative_ptr = GetRelativePath(dir->path, backup_database_dir);
 
 		Assert(S_ISDIR(dir->mode));
 
 		/* First try to create symlink and linked directory */
 		if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative_ptr))
 		{
-			char	   *link_ptr = relative_ptr + strlen(PG_TBLSPC_DIR) + 1,
+			char	   *link_ptr = GetRelativePath(relative_ptr, PG_TBLSPC_DIR),
 					   *link_sep,
 					   *tmp_ptr;
 			char		link_name[MAXPGPATH];
@@ -509,6 +538,7 @@ create_directory:
  *
  * If tablespace-mapping option is supplied all OLDDIR entries should have
  * entries in tablespace_map file.
+ * TODO review
  */
 static void
 check_tablespace_mapping(pgBackup *backup)
@@ -572,7 +602,6 @@ static void
 restore_files(void *arg)
 {
 	int			i;
-
 	restore_files_args *arguments = (restore_files_args *)arg;
 
 	for (i = 0; i < parray_num(arguments->files); i++)
@@ -584,17 +613,19 @@ restore_files(void *arg)
 		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
 			continue;
 
-		pgBackupGetPath(arguments->backup, from_root, lengthof(from_root), DATABASE_DIR);
+		pgBackupGetPath(arguments->backup, from_root,
+						lengthof(from_root), DATABASE_DIR);
 
 		/* check for interrupt */
 		if (interrupted)
 			elog(ERROR, "interrupted during restore database");
 
-		rel_path = file->path + strlen(from_root) + 1;
+		rel_path = GetRelativePath(file->path,from_root);
 
-		/* print progress */
-		elog(LOG, "(%d/%lu) %s ", i + 1, (unsigned long) parray_num(arguments->files),
-				 rel_path);
+		if (progress)
+			elog(LOG, "Progress: (%d/%lu). Process file %s ",
+				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
+
 
 		/* Directories are created before */
 		if (S_ISDIR(file->mode))
@@ -611,7 +642,7 @@ restore_files(void *arg)
 		}
 
 		/* Do not restore tablespace_map file */
-		if (path_is_prefix_of_path("tablespace_map", rel_path))
+		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, rel_path))
 		{
 			elog(LOG, "skip tablespace_map");
 			continue;
@@ -792,58 +823,13 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 	return false;
 }
 
-// /* get TLI of the latest full backup */
-// TimeLineID
-// get_fullbackup_timeline(parray *backups, const pgRecoveryTarget *rt)
-// {
-// 	int			i;
-// 	pgBackup   *base_backup = NULL;
-// 	TimeLineID	ret;
-// 
-// 	for (i = 0; i < parray_num(backups); i++)
-// 	{
-// 		base_backup = (pgBackup *) parray_get(backups, i);
-// 
-// 		if (base_backup->backup_mode >= BACKUP_MODE_FULL)
-// 		{
-// 			/*
-// 			 * Validate backup files with its size, because load of CRC
-// 			 * calculation is not right.
-// 			 */
-// 			if (base_backup->status == BACKUP_STATUS_DONE)
-// 				pgBackupValidate(base_backup, true, true);
-// 
-// 			if (!satisfy_recovery_target(base_backup, rt))
-// 				continue;
-// 
-// 			if (base_backup->status == BACKUP_STATUS_OK)
-// 				break;
-// 		}
-// 	}
-// 	/* no full backup found, cannot restore */
-// 	if (i == parray_num(backups))
-// 		elog(ERROR, "no full backup found, cannot restore.");
-// 
-// 	ret = base_backup->tli;
-// 
-// 	return ret;
-// }
-
-// static void
-// print_backup_lsn(const pgBackup *backup)
-// {
-// 	char timestamp[100];
-// 
-// 	if (!verbose)
-// 		return;
-// 
-// 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-// 	elog(LOG, "  %s (%X/%08X)", timestamp,
-// 		 (uint32) (backup->stop_lsn >> 32), (uint32) backup->stop_lsn);
-// }
-
+/*
+ * Get recovery options in the string format, parse them
+ * and fill up the pgRecoveryTarget structure.
+ * TODO move arguments parsing and validation to getopt.
+ */
 pgRecoveryTarget *
-checkIfCreateRecoveryConf(const char *target_time,
+parseRecoveryTargetOptions(const char *target_time,
                    const char *target_xid,
                    const char *target_inclusive)
 {
@@ -866,7 +852,7 @@ checkIfCreateRecoveryConf(const char *target_time,
 		if (parse_time(target_time, &dummy_time))
 			rt->recovery_target_time = dummy_time;
 		else
-			elog(ERROR, "cannot create recovery.conf with %s", target_time);
+			elog(ERROR, "Invalid value of --time option %s", target_time);
 	}
 	if (target_xid)
 	{
@@ -878,18 +864,17 @@ checkIfCreateRecoveryConf(const char *target_time,
 #endif
 			rt->recovery_target_xid = dummy_xid;
 		else
-			elog(ERROR, "cannot create recovery.conf with %s", target_xid);
+			elog(ERROR, "Invalid value of --xid option %s", target_xid);
 	}
 	if (target_inclusive)
 	{
 		if (parse_bool(target_inclusive, &dummy_bool))
 			rt->recovery_target_inclusive = dummy_bool;
 		else
-			elog(ERROR, "cannot create recovery.conf with %s", target_inclusive);
+			elog(ERROR, "Invalid value of --inclusive option %s", target_inclusive);
 	}
 
 	return rt;
-
 }
 
 /*

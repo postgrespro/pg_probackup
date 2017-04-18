@@ -31,6 +31,48 @@ static const char *RmgrNames[RM_MAX_ID + 1] = {
 #include "access/rmgrlist.h"
 };
 
+/* some from access/xact.h */
+/*
+ * XLOG allows to store some information in high 4 bits of log record xl_info
+ * field. We use 3 for the opcode, and one about an optional flag variable.
+ */
+#define XLOG_XACT_COMMIT			0x00
+#define XLOG_XACT_PREPARE			0x10
+#define XLOG_XACT_ABORT				0x20
+#define XLOG_XACT_COMMIT_PREPARED	0x30
+#define XLOG_XACT_ABORT_PREPARED	0x40
+#define XLOG_XACT_ASSIGNMENT		0x50
+/* free opcode 0x60 */
+/* free opcode 0x70 */
+
+/* mask for filtering opcodes out of xl_info */
+#define XLOG_XACT_OPMASK			0x70
+
+typedef struct xl_xact_commit
+{
+	TimestampTz xact_time;		/* time of commit */
+
+	/* xl_xact_xinfo follows if XLOG_XACT_HAS_INFO */
+	/* xl_xact_dbinfo follows if XINFO_HAS_DBINFO */
+	/* xl_xact_subxacts follows if XINFO_HAS_SUBXACT */
+	/* xl_xact_relfilenodes follows if XINFO_HAS_RELFILENODES */
+	/* xl_xact_invals follows if XINFO_HAS_INVALS */
+	/* xl_xact_twophase follows if XINFO_HAS_TWOPHASE */
+	/* xl_xact_origin follows if XINFO_HAS_ORIGIN, stored unaligned! */
+} xl_xact_commit;
+
+typedef struct xl_xact_abort
+{
+	TimestampTz xact_time;		/* time of abort */
+
+	/* xl_xact_xinfo follows if XLOG_XACT_HAS_INFO */
+	/* No db_info required */
+	/* xl_xact_subxacts follows if HAS_SUBXACT */
+	/* xl_xact_relfilenodes follows if HAS_RELFILENODES */
+	/* No invalidation messages needed. */
+	/* xl_xact_twophase follows if XINFO_HAS_TWOPHASE */
+} xl_xact_abort;
+
 static void extractPageInfo(XLogReaderState *record);
 static bool getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime);
 
@@ -51,9 +93,8 @@ static int SimpleXLogPageRead(XLogReaderState *xlogreader,
 				   TimeLineID *pageTLI);
 
 /*
- * Read WAL from the archive directory, starting from 'startpoint' on the
- * given timeline, until 'endpoint'. Make note of the data blocks touched
- * by the WAL records, and return them in a page map.
+ * Read WAL from the archive directory, from 'startpoint' to 'endpoint' on the
+ * given timeline. Collect data blocks touched by the WAL records into a page map.
  *
  * If **prev_segno** is true then read all segments up to **endpoint** segment
  * minus one. Else read all segments up to **endpoint** segment.
@@ -389,7 +430,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 }
 
 /*
- * Extract information on which blocks the current record modifies.
+ * Extract information about blocks modified in this record.
  */
 static void
 extractPageInfo(XLogReaderState *record)
