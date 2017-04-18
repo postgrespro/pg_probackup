@@ -39,7 +39,7 @@
 #define BACKUP_CONF_FILE		"backup.conf"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
 #define BACKUP_CATALOG_PID		"pg_probackup.pid"
-#define DATABASE_FILE_LIST		"file_database.txt"
+#define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"

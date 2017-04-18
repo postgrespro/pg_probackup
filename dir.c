@@ -327,6 +327,10 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	parray_qsort(files, pgFileComparePath);
 }
 
+/*
+ * TODO Add comment, review
+ * TODO if met file of unusual format throw a WARNING and don't add to list.
+ */
 static void
 dir_list_file_internal(parray *files, const char *root, bool exclude,
 					   bool omit_symlink, bool add_root, parray *black_list)
@@ -623,9 +627,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 }
 
 /*
- * Print file list.
- * TODO review
- * TODO invent more convenient format?
+ * Print backup content list.
  */
 void
 print_file_list(FILE *out, const parray *files, const char *root)
@@ -637,38 +639,33 @@ print_file_list(FILE *out, const parray *files, const char *root)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 		char	   *path = file->path;
-		char		type;
 
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
 
-		/* TODO create an enum for file mode constants */
-		if (S_ISREG(file->mode) && file->is_datafile)
-			type = 'F';
-		else if (S_ISREG(file->mode) && !file->is_datafile)
-			type = 'f';
-		else if (S_ISDIR(file->mode))
-			type = 'd';
-		else if (S_ISLNK(file->mode))
-			type = 'l';
-		else
-			type = '?';
+		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
+					 "\"is_datafile\":\"%u\" \"crc\":\"%u\"",
+				path, (unsigned long) file->write_size, file->mode,
+				file->is_datafile?1:0, file->crc);
 
-		fprintf(out, "%s %c %lu %u 0%o", path, type,
-				(unsigned long) file->write_size,
-				file->crc, file->mode & (S_IRWXU | S_IRWXG | S_IRWXO));
+		if (file->is_datafile)
+			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
+		/* TODO What for do we write it to file? */
 		if (S_ISLNK(file->mode))
-			fprintf(out, " %s", file->linked);
+			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
-		fprintf(out, " " UINT64_FORMAT " %d\n",
+#ifdef PGPRO_EE
+		fprintf(out, ",\"CFS_generation\":\"" UINT64_FORMAT "\",\"is_partial_copy\":\"%d\"",
 				file->generation, file->is_partial_copy);
+#endif
+		fprintf(out, "}\n");
 	}
 }
 
 /*
- * Construct parray of pgFile from the file list.
+ * Construct parray of pgFile from the backup content list.
  * If root is not NULL, path will be absolute path.
  */
 parray *
@@ -688,83 +685,61 @@ dir_read_file_list(const char *root, const char *file_txt)
 	while (fgets(buf, lengthof(buf), fp))
 	{
 		char			path[MAXPGPATH];
-		char			type;
-		int				generation = -1;
+		char			filepath[MAXPGPATH];
+		char			linked[MAXPGPATH];
+		uint64			generation = -1;
 		int				is_partial_copy = 0;
 		unsigned long	write_size;
 		pg_crc32		crc;
 		unsigned int	mode;	/* bit length of mode_t depends on platforms */
 		pgFile			*file;
+		char 			*ptr;
+		unsigned int	is_datafile;
+		int 			segno = 0;
 
-		if (sscanf(buf, "%s %c %lu %u %o %d %d",
-			path, &type, &write_size, &crc, &mode,
-			&generation, &is_partial_copy) != 8)
-		{
-			elog(ERROR, "invalid format found in \"%s\"",
-				file_txt);
-		}
+		ptr = strstr(buf,"path");
+		sscanf(buf, "path:%s", path);
+		ptr = strstr(buf,"size");
+		sscanf(buf, "size:%lu", &write_size);
+		ptr = strstr(buf,"mode");
+		sscanf(buf, "mode:%u", &mode);
+		ptr = strstr(buf,"is_datafile");
+		sscanf(buf, "is_datafile:%u", &is_datafile);
+		ptr = strstr(buf,"crc");
+		sscanf(buf, "crc:%u", &crc);
+		/* optional fields */
+		ptr = strstr(buf,"linked");
+		if (ptr)
+			sscanf(buf, "linked:%s", linked);
+		ptr = strstr(buf,"segno");
+		if (ptr)
+			sscanf(buf, "linked:%s", linked);
+#ifdef PGPRO_EE
+		ptr = strstr(buf,"CFS_generation");
+		sscanf(buf, "CFS_generation:%lu", &generation);
+		ptr = strstr(buf,"is_partial_copy");
+		sscanf(buf, "is_partial_copy:%d", &is_partial_copy);
+#endif
+		if (root)
+			sprintf(filepath, "%s/%s", root, path);
+		else
+			strcpy(filepath, path);
 
-		if (type != 'f' && type != 'F' && type != 'd' && type != 'l')
-		{
-			elog(ERROR, "invalid type '%c' found in \"%s\"",
-				type, file_txt);
-		}
+		file = pgFileNew(filepath, false);
 
-		file = (pgFile *) pgut_malloc(sizeof(pgFile));
-		file->path = pgut_malloc((root ? strlen(root) + 1 : 0) + strlen(path) + 1);
-		file->ptrack_path = NULL;
-		file->segno = 0;
-		file->pagemap.bitmap = NULL;
-		file->pagemap.bitmapsize = 0;
-
-		file->mode = mode |
-			((type == 'f' || type == 'F') ? S_IFREG :
-			 type == 'd' ? S_IFDIR : type == 'l' ? S_IFLNK : 0);
+		file->write_size = write_size;
+		file->mode = mode;
+		file->is_datafile = is_datafile ? true : false;
+		file->crc = crc;
+		file->linked = NULL; /* TODO Why don't read it? */
+		file->segno = segno;
 		file->generation = generation;
 		file->is_partial_copy = is_partial_copy;
-		file->size = 0;
-		file->read_size = 0;
-		file->write_size = write_size;
-		file->crc = crc;
-		file->is_datafile = (type == 'F' ? true : false);
-		file->linked = NULL;
-		if (root)
-			sprintf(file->path, "%s/%s", root, path);
-		else
-			strcpy(file->path, path);
 
 		parray_append(files, file);
-
-		if(file->is_datafile)
-		{
-			int find_dot;
-			int check_digit;
-			char *text_segno;
-			size_t path_len = strlen(file->path);
-			for(find_dot = path_len-1; file->path[find_dot] != '.' && find_dot >= 0; find_dot--);
-			if (find_dot <= 0)
-				continue;
-
-			text_segno = file->path + find_dot + 1;
-			for(check_digit=0; text_segno[check_digit] != '\0'; check_digit++)
-				if (!isdigit(text_segno[check_digit]))
-				{
-					check_digit = -1;
-					break;
-				}
-
-			if (check_digit == -1)
-				continue;
-
-			file->segno = (int) strtol(text_segno, NULL, 10);
-		}
 	}
 
 	fclose(fp);
-
-	/* file.txt is sorted, so this qsort is redundant */
-	parray_qsort(files, pgFileComparePath);
-
 	return files;
 }
 
