@@ -68,7 +68,8 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "PGPORT = %s\n", config->pgport);
 	if (config->pguser)
 		fprintf(out, "PGUSER = %s\n", config->pguser);
-		fprintf(out, "#Retention parameters:\n");
+
+	fprintf(out, "#Retention parameters:\n");
 	if (config->retention_redundancy)
 		fprintf(out, "retention-redundancy = %u\n", config->retention_redundancy);
 	if (config->retention_window)
