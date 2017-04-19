@@ -114,6 +114,19 @@ typedef enum ProbackupSubcmd
 #define INVALID_BACKUP_ID	 0
 #define BYTES_INVALID		(-1)
 
+typedef struct pgBackupConfig
+{
+	uint64		system_identifier;
+	char		*pgdata;
+	const char	*pgdatabase;
+	const char	*pghost;
+	const char	*pgport;
+	const char	*pguser;
+
+	uint32		retention_redundancy;
+	uint32		retention_window;
+} pgBackupConfig;
+
 /* Information about single backup stored in backup.conf */
 typedef struct pgBackup
 {
@@ -261,6 +274,13 @@ extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 
 /* in init.c */
 extern int do_init(void);
+
+/* in configure.c */
+extern int do_configure(bool show_only);
+extern void pgBackupConfigInit(pgBackupConfig *config);
+extern void writeBackupCatalogConfig(FILE *out, pgBackupConfig *config);
+extern void writeBackupCatalogConfigFile(pgBackupConfig *config);
+extern pgBackupConfig* readBackupCatalogConfigFile(void);
 
 /* in show.c */
 extern int do_show(time_t requested_backup_id);

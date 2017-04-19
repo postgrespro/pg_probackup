@@ -505,12 +505,8 @@ longopts_to_optstring(const struct option opts[])
 	return result;
 }
 
-/*
- * Read options from environmental variables.
- * Do not overwrite in option was already set via command line option.
- */
-static void
-option_from_env(pgut_option options[])
+void
+pgut_getopt_env(pgut_option options[])
 {
 	size_t	i;
 
@@ -523,9 +519,6 @@ option_from_env(pgut_option options[])
 		if (opt->source > SOURCE_ENV || opt->allowed < SOURCE_ENV)
 			continue;
 
-		if (strcmp(opt->lname, "backup-path") == 0)
-			value = getenv("BACKUP_PATH");
-
 		if (strcmp(opt->lname, "pgdata") == 0)
 			value = getenv("PGDATA");
 		if (strcmp(opt->lname, "port") == 0)
@@ -534,7 +527,7 @@ option_from_env(pgut_option options[])
 			value = getenv("PGHOST");
 		if (strcmp(opt->lname, "username") == 0)
 			value = getenv("PGUSER");
-		if (strcmp(opt->lname, "dbname") == 0)
+		if (strcmp(opt->lname, "pgdatabase") == 0)
 		{
 			value = getenv("PGDATABASE");
 			if (value == NULL)
@@ -574,9 +567,6 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 		/* Check 'opt == NULL' is performed in assign_option() */
 		assign_option(opt, optarg, SOURCE_CMDLINE);
 	}
-
-	/* Read environment variables */
-	option_from_env(options);
 
 	init_cancel_handler();
 	atexit(on_cleanup);

@@ -92,6 +92,7 @@ extern bool			interrupted;
 extern void help(bool details);
 extern int pgut_getopt(int argc, char **argv, pgut_option options[]);
 extern void pgut_readopt(const char *path, pgut_option options[], int elevel);
+extern void pgut_getopt_env(pgut_option options[]);
 extern void pgut_atexit_push(pgut_atexit_callback callback, void *userdata);
 extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
 

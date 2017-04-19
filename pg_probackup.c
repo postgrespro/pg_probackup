@@ -90,10 +90,10 @@ static pgut_option options[] =
 	/* other */
 	{ 'U', 15, "system-identifier",		&system_identifier,		SOURCE_FILE_STRICT },
 
-	{ 's', 'd', "dbname"	, &pgut_dbname, SOURCE_CMDLINE },
-	{ 's', 'h', "host"		, &host, SOURCE_CMDLINE },
-	{ 's', 'p', "port"		, &port, SOURCE_CMDLINE },
-	{ 's', 'U', "username"	, &username, SOURCE_CMDLINE },
+	{ 's', 'd', "pgdatabase"	, &pgut_dbname, SOURCE_CMDLINE },
+	{ 's', 'h', "pghost"		, &host, SOURCE_CMDLINE },
+	{ 's', 'p', "pgport"		, &port, SOURCE_CMDLINE },
+	{ 's', 'U', "pguser"	, &username, SOURCE_CMDLINE },
 	{ 'b', 'q', "quiet"		, &quiet, SOURCE_CMDLINE },
 	{ 'b', 'v', "verbose"	, &verbose, SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
@@ -148,9 +148,13 @@ main(int argc, char *argv[])
 	/* Parse command line arguments */
 	i = pgut_getopt(argc, argv, options);
 
-	/* BACKUP_PATH is always required */
 	if (backup_path == NULL)
-		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+	{
+		/* Try to read BACKUP_PATH from environment variable */
+		backup_path = getenv("BACKUP_PATH");
+		if (backup_path == NULL)
+			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+	}
 	else
 	{
 		char		path[MAXPGPATH];
@@ -162,8 +166,16 @@ main(int argc, char *argv[])
 		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 			elog(ERROR, "-B, --backup-path must be a path to directory");
 
-		join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
-		pgut_readopt(path, options, ERROR);
+		/* Do not read options from file or env if we're going to set them */
+		if (backup_subcmd != CONFIGURE)
+		{
+			/* Read options from configuration file */
+			join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
+			pgut_readopt(path, options, ERROR);
+
+			/* Read environment variables */
+			pgut_getopt_env(options);
+		}
 	}
 
 	if (backup_id_string_param != NULL)
@@ -225,18 +237,12 @@ main(int argc, char *argv[])
 		case DELETE:
 			return do_delete(current.backup_id);
 		case CONFIGURE:
-			elog(ERROR, "not implemented yet");
+			/* TODO fixit */
+			if (argc == 4)
+				return do_configure(true);
+			else
+				return do_configure(false);
 	}
-
-// 	if (pg_strcasecmp(cmd, "retention") == 0)
-// 	{
-// 		if (subcmd == NULL)
-// 			elog(ERROR, "you must specify retention command");
-// 		else if (pg_strcasecmp(subcmd, "show") == 0)
-// 			return do_retention_show();
-// 		else if (pg_strcasecmp(subcmd, "purge") == 0)
-// 			return do_retention_purge();
-// 	}
 
 	return 0;
 }

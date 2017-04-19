@@ -1,6 +1,7 @@
 PROGRAM = pg_probackup
 OBJS = backup.o \
 	catalog.o \
+	configure.o \
 	data.o \
 	delete.o \
 	dir.o \

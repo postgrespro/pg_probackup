@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------------------
  *
- * init.c: manage backup catalog.
+ * init.c: - initialize backup catalog.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2017, Postgres Professional
@@ -30,11 +30,10 @@ do_init(void)
 {
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
-	FILE	   *fp;
-	uint64		id;
 
 	struct dirent **dp;
 	int results;
+	pgBackupConfig *config = pgut_new(pgBackupConfig);
 
 	/* PGDATA is always required */
 	if (pgdata == NULL)
@@ -49,7 +48,7 @@ do_init(void)
 	}
 
 	/* Read system_identifier from PGDATA */
-	id = get_system_identifier();
+	system_identifier = get_system_identifier();
 
 	/* create backup catalog root directory */
 	dir_create_dir(backup_path, DIR_PERMISSION);
@@ -62,16 +61,14 @@ do_init(void)
 	join_path_components(arclog_path_dir, backup_path, "wal");
 	dir_create_dir(arclog_path_dir, DIR_PERMISSION);
 
-	/* create BACKUP_CATALOG_CONF_FILE */
-	join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
-	fp = fopen(path, "wt");
-	if (fp == NULL)
-		elog(ERROR, "cannot create %s: %s",
-			 BACKUP_CATALOG_CONF_FILE, strerror(errno));
-
-	fprintf(fp, "system-identifier = %li\n", id);
-	fprintf(fp, "\n");
-	fclose(fp);
+	/*
+	 * Wite initial config. system-identifier and pgdata are set in
+	 * init subcommand and will never be updated.
+	 */
+	pgBackupConfigInit(config);
+	config->system_identifier = system_identifier;
+	config->pgdata = pgdata;
+	writeBackupCatalogConfigFile(config);
 
 	return 0;
 }
