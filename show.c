@@ -195,7 +195,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 
-		fprintf(out, "%-8s %-19s  %s%s %2d / %-2d              %5s  %6s  %2X/%08X  %2X/%08X  %-8s\n",
+		fprintf(out, "%-8s %-19s  %s%-9s %2d / %d               %5s  %6s  %2X/%08X  %2X/%08X  %-8s\n",
 				base36enc(backup->start_time),
 				timestamp,
 				modes[backup->backup_mode],
