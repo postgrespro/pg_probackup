@@ -83,10 +83,11 @@ static pgut_option options[] =
 	{ 'b', 12, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 16, "expired",				&delete_expired,	SOURCE_CMDLINE },
 	{ 'b', 17, "all",					&apply_to_all,		SOURCE_CMDLINE },
+	/* TODO not implemented yet */
 	{ 'b', 18, "force",					&force_delete,		SOURCE_CMDLINE },
 	/* configure options */
-	{ 'u', 13, "set-retention-redundancy", &retention_redundancy,	SOURCE_CMDLINE },
-	{ 'u', 14, "set-retention-window",	&retention_window,		SOURCE_CMDLINE },
+	{ 'u', 13, "retention-redundancy", &retention_redundancy,	SOURCE_CMDLINE },
+	{ 'u', 14, "retention-window",	&retention_window,		SOURCE_CMDLINE },
 	/* other */
 	{ 'U', 15, "system-identifier",		&system_identifier,		SOURCE_FILE_STRICT },
 
@@ -235,7 +236,12 @@ main(int argc, char *argv[])
 		case SHOW:
 			return do_show(current.backup_id);
 		case DELETE:
-			return do_delete(current.backup_id);
+			if (delete_expired && backup_id_string_param)
+				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
+			if (delete_expired)
+				return do_retention_purge();
+			else
+				return do_delete(current.backup_id);
 		case CONFIGURE:
 			/* TODO fixit */
 			if (argc == 4)

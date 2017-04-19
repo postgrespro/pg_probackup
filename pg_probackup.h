@@ -329,6 +329,7 @@ extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
 
 extern pgFile *pgFileNew(const char *path, bool omit_symlink);
+extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(pgFile *file);

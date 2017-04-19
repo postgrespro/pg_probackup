@@ -128,12 +128,23 @@ pgFileNew(const char *path, bool omit_symlink)
 			strerror(errno));
 	}
 
+	file = pgFileInit(path);
+	file->size = st.st_size;
+	file->mode = st.st_mode;
+
+	return file;
+}
+
+pgFile *
+pgFileInit(const char *path)
+{
+	pgFile		   *file;
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
-	file->size = st.st_size;
+	file->size = 0;
+	file->mode = 0;
 	file->read_size = 0;
 	file->write_size = 0;
-	file->mode = st.st_mode;
 	file->crc = 0;
 	file->is_datafile = false;
 	file->linked = NULL;
@@ -142,10 +153,9 @@ pgFileNew(const char *path, bool omit_symlink)
 	file->ptrack_path = NULL;
 	file->segno = 0;
 	file->path = pgut_malloc(strlen(path) + 1);
+	strcpy(file->path, path);		/* enough buffer size guaranteed */
 	file->generation = -1;
 	file->is_partial_copy = 0;
-	strcpy(file->path, path);		/* enough buffer size guaranteed */
-
 	return file;
 }
 
@@ -725,7 +735,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		else
 			strcpy(filepath, path);
 
-		file = pgFileNew(filepath, false);
+		file = pgFileInit(filepath);
 
 		file->write_size = write_size;
 		file->mode = mode;
