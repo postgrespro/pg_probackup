@@ -78,9 +78,9 @@ backup_data_page(pgFile *file, const XLogRecPtr *prev_backup_start_lsn,
 			/* TODO Should we check specific error code here? */
 			if (verbose)
 				elog(WARNING, "File: %s, could not seek to block %u."
-						  "Probably the file was truncated after backup start.",
-						  file->path, blknum);
-				return;
+					 "Probably the file was truncated after backup start.",
+					 file->path, blknum);
+			return;
 		}
 
 		read_len = fread(&page, 1, BLCKSZ, in);

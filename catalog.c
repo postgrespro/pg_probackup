@@ -551,11 +551,11 @@ parse_backup_mode(const char *value)
 		v++;
 	len = strlen(v);
 
-	if (len > 0 && pg_strncasecmp("full", v, strlen("full")) == 0)
+	if (len > 0 && pg_strncasecmp("full", v, len) == 0)
 		return BACKUP_MODE_FULL;
-	else if (len > 0 && pg_strncasecmp("page", v, strlen("page")) == 0)
+	else if (len > 0 && pg_strncasecmp("page", v, len) == 0)
 		return BACKUP_MODE_DIFF_PAGE;
-	else if (len > 0 && pg_strncasecmp("ptrack", v, strlen("ptrack")) == 0)
+	else if (len > 0 && pg_strncasecmp("ptrack", v, len) == 0)
 		return BACKUP_MODE_DIFF_PTRACK;
 
 	/* Backup mode is invalid, so leave with an error */
