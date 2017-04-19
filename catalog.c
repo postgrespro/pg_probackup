@@ -21,9 +21,8 @@
 #include <time.h>
 #include <unistd.h>
 
-static pgBackup *read_backup_from_file(const char *path);
-
-#define BOOL_TO_STR(val)	((val) ? "true" : "false")
+static const char *backupModes[] = {"", "PAGE", "PTRACK", "FULL"};
+static pgBackup *readBackupControlFile(const char *path);
 
 static bool exit_hook_registered = false;
 static char lock_file[MAXPGPATH];
@@ -208,7 +207,7 @@ catalog_lock(void)
 }
 
 /*
- * Read backup meta information from BACKUP_CONF_FILE.
+ * Read backup meta information from BACKUP_CONTROL_FILE.
  * If no backup matches, return NULL.
  */
 pgBackup *
@@ -218,9 +217,9 @@ read_backup(time_t timestamp)
 	char		conf_path[MAXPGPATH];
 
 	tmp.start_time = timestamp;
-	pgBackupGetPath(&tmp, conf_path, lengthof(conf_path), BACKUP_CONF_FILE);
+	pgBackupGetPath(&tmp, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
 
-	return read_backup_from_file(conf_path);
+	return readBackupControlFile(conf_path);
 }
 
 static bool
@@ -274,9 +273,9 @@ catalog_get_backup_list(time_t requested_backup_id)
 		/* open subdirectory of specific backup */
 		join_path_components(date_path, backups_path, date_ent->d_name);
 
-		/* read backup information from BACKUP_CONF_FILE */
-		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONF_FILE);
-		backup = read_backup_from_file(backup_conf_path);
+		/* read backup information from BACKUP_CONTROL_FILE */
+		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONTROL_FILE);
+		backup = readBackupControlFile(backup_conf_path);
 
 		/* ignore corrupted backups */
 		if (backup)
@@ -370,94 +369,83 @@ pgBackupCreateDir(pgBackup *backup)
 }
 
 /*
- * Write configuration section of backup.in to stream "out".
+ * Write information about backup.in to stream "out".
+ * TODO improve comments
  */
 void
-pgBackupWriteConfigSection(FILE *out, pgBackup *backup)
-{
-	static const char *modes[] = { "", "PAGE", "PTRACK", "FULL"};
-
-	fprintf(out, "# configuration\n");
-	fprintf(out, "BACKUP_MODE=%s\n", modes[backup->backup_mode]);
-}
-
-/*
- * Write result section of backup.in to stream "out".
- */
-void
-pgBackupWriteResultSection(FILE *out, pgBackup *backup)
+pgBackupWriteControl(FILE *out, pgBackup *backup)
 {
 	char timestamp[20];
-
-	fprintf(out, "# result\n");
-	fprintf(out, "TIMELINEID=%d\n", backup->tli);
-	fprintf(out, "START_LSN=%x/%08x\n",
+	fprintf(out, "#Configuration\n");
+	fprintf(out, "backup-mode = %s\n", backupModes[backup->backup_mode]);
+ 	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
+	
+	fprintf(out, "\n#Compatibility\n");
+	fprintf(out, "block-size = %u\n", backup->block_size);
+	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
+	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	
+	fprintf(out, "\n#Result backup info\n");
+	fprintf(out, "timelineid = %d\n", backup->tli);
+	fprintf(out, "start-lsn = %x/%08x\n",
 			(uint32) (backup->start_lsn >> 32),
 			(uint32) backup->start_lsn);
-	fprintf(out, "STOP_LSN=%x/%08x\n",
+	fprintf(out, "stop-lsn = %x/%08x\n",
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	fprintf(out, "START_TIME='%s'\n", timestamp);
+	fprintf(out, "start-time = '%s'\n", timestamp);
 	if (backup->end_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->end_time);
-		fprintf(out, "END_TIME='%s'\n", timestamp);
+		fprintf(out, "end-time = '%s'\n", timestamp);
 	}
-	fprintf(out, "RECOVERY_XID=" XID_FMT "\n", backup->recovery_xid);
+	fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
-		fprintf(out, "RECOVERY_TIME='%s'\n", timestamp);
+		fprintf(out, "recovery-time = '%s'\n", timestamp);
 	}
 
+	/* TODO rename the field? */
 	if (backup->data_bytes != BYTES_INVALID)
-		fprintf(out, "DATA_BYTES=" INT64_FORMAT "\n",
-				backup->data_bytes);
-	fprintf(out, "BLOCK_SIZE=%u\n", backup->block_size);
-	fprintf(out, "XLOG_BLOCK_SIZE=%u\n", backup->wal_block_size);
-	fprintf(out, "CHECKSUM_VERSION=%u\n", backup->checksum_version);
-	fprintf(out, "STREAM=%u\n", backup->stream);
+		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
-	fprintf(out, "STATUS=%s\n", status2str(backup->status));
+	fprintf(out, "status = %s\n", status2str(backup->status));
 	if (backup->parent_backup != 0)
 	{
 		char *parent_backup = base36enc(backup->parent_backup);
-		fprintf(out, "PARENT_BACKUP='%s'\n", parent_backup);
+		fprintf(out, "parent-backup-id = '%s'\n", parent_backup);
 		free(parent_backup);
 	}
 }
 
-/* create BACKUP_CONF_FILE */
+/* create BACKUP_CONTROL_FILE */
 void
-pgBackupWriteConf(pgBackup *backup)
+pgBackupWriteBackupControlFile(pgBackup *backup)
 {
 	FILE   *fp = NULL;
 	char	ini_path[MAXPGPATH];
 
-	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_CONF_FILE);
+	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_CONTROL_FILE);
 	fp = fopen(ini_path, "wt");
 	if (fp == NULL)
 		elog(ERROR, "cannot open configuration file \"%s\": %s", ini_path,
 			strerror(errno));
 
-	/* configuration section */
-	pgBackupWriteConfigSection(fp, backup);
-
-	/* result section */
-	pgBackupWriteResultSection(fp, backup);
+	pgBackupWriteControl(fp, backup);
 
 	fclose(fp);
 }
 
 /*
- * Read BACKUP_CONF_FILE and create pgBackup.
+ * Read BACKUP_CONTROL_FILE and create pgBackup.
  *  - Comment starts with ';'.
  *  - Do not care section.
  */
 static pgBackup *
-read_backup_from_file(const char *path)
+readBackupControlFile(const char *path)
 {
 	pgBackup   *backup = pgut_new(pgBackup);
 	char	   *backup_mode = NULL;
@@ -480,7 +468,7 @@ read_backup_from_file(const char *path)
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum_version",	&backup->checksum_version, SOURCE_FILE_STRICT},
-		{'u', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
+		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent_backup",		&parent_backup, SOURCE_FILE_STRICT},
 		{0}

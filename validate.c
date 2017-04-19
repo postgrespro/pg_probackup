@@ -89,7 +89,7 @@ pgBackupValidate(pgBackup *backup)
 
 	/* Update backup status */
 	backup->status = corrupted ? BACKUP_STATUS_CORRUPT : BACKUP_STATUS_OK;
-	pgBackupWriteConf(backup);
+	pgBackupWriteBackupControlFile(backup);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s is corrupted", backup_id_string);

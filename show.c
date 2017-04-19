@@ -11,6 +11,7 @@
 #include "pg_probackup.h"
 #include <time.h>
 
+static const char *backupModes[] = {"", "PAGE", "PTRACK", "FULL"};
 static void show_backup_list(FILE *out, parray *backup_list);
 static void show_backup_detail(FILE *out, pgBackup *backup);
 
@@ -172,7 +173,6 @@ show_backup_list(FILE *out, parray *backup_list)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = parray_get(backup_list, i);
-		const char *modes[] = {"", "PAGE", "PTRACK", "FULL"};
 		TimeLineID	parent_tli;
 		char		timestamp[20] = "----";
 		char		duration[20] = "----";
@@ -198,7 +198,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		fprintf(out, "%-8s %-19s  %s%s %2d / %-2d              %5s  %6s  %2X/%08X  %2X/%08X  %-8s\n",
 				base36enc(backup->start_time),
 				timestamp,
-				modes[backup->backup_mode],
+				backupModes[backup->backup_mode],
 				backup->stream ? "+STREAM": "+ARCHIVE",
 				backup->tli,
 				parent_tli,
@@ -215,6 +215,5 @@ show_backup_list(FILE *out, parray *backup_list)
 static void
 show_backup_detail(FILE *out, pgBackup *backup)
 {
-	pgBackupWriteConfigSection(out, backup);
-	pgBackupWriteResultSection(out, backup);
+	pgBackupWriteControl(out, backup);
 }

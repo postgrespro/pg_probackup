@@ -26,6 +26,7 @@
 #include "streamutil.h"
 #include "receivelog.h"
 
+static const char *backupModes[] = {"", "PAGE", "PTRACK", "FULL"};
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
 const char *progname = "pg_probackup";
@@ -191,7 +192,7 @@ do_backup_database(parray *backup_list)
 		prev_backup_start_lsn = &prev_backup->start_lsn;
 
 		current.parent_backup = prev_backup->start_time;
-		pgBackupWriteConf(&current);
+		pgBackupWriteBackupControlFile(&current);
 	}
 
 	/* initialize backup list */
@@ -417,19 +418,17 @@ do_backup(void)
 	 */
 	check_system_identifiers();
 
-	elog(LOG, "Backup start");
-	/* Show configuration actually used */
-	if (verbose)
-		pgBackupWriteConfigSection(stderr, &current);
+	elog(LOG, "Backup start. backup-mode = %s+%s",
+		backupModes[current.backup_mode], current.stream?"STREAM":"ARCHIVE");
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = time(NULL);
 
-	/* Create backup directory and BACKUP_CONF_FILE */
+	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "cannot create backup directory");
-	pgBackupWriteConf(&current);
+	pgBackupWriteBackupControlFile(&current);
 
 	elog(LOG, "Backup destination is initialized");
 
@@ -448,7 +447,7 @@ do_backup(void)
 	/* Backup is done. Update backup status */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
-	pgBackupWriteConf(&current);
+	pgBackupWriteBackupControlFile(&current);
 
 	elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 		 current.data_bytes);
@@ -940,7 +939,7 @@ backup_cleanup(bool fatal, void *userdata)
 	}
 
 	/*
-	 * Update status of backup in BACKUP_CONF_FILE to ERROR.
+	 * Update status of backup in BACKUP_CONTROL_FILE to ERROR.
 	 * end_time != 0 means backup finished
 	 */
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
@@ -948,7 +947,7 @@ backup_cleanup(bool fatal, void *userdata)
 		elog(LOG, "Backup is running, update its status to ERROR");
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
-		pgBackupWriteConf(&current);
+		pgBackupWriteBackupControlFile(&current);
 	}
 }
 

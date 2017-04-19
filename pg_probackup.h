@@ -36,7 +36,7 @@
 #define BACKUPS_DIR				"backups"
 #define PG_XLOG_DIR				"pg_xlog"
 #define PG_TBLSPC_DIR			"pg_tblspc"
-#define BACKUP_CONF_FILE		"backup.conf"
+#define BACKUP_CONTROL_FILE		"backup.control"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
 #define BACKUP_CATALOG_PID		"pg_probackup.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
@@ -286,9 +286,8 @@ extern parray *catalog_get_backup_list(time_t requested_backup_id);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 extern void catalog_lock(void);
-extern void pgBackupWriteConfigSection(FILE *out, pgBackup *backup);
-extern void pgBackupWriteResultSection(FILE *out, pgBackup *backup);
-extern void pgBackupWriteConf(pgBackup *backup);
+extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
+extern void pgBackupWriteBackupControlFile(pgBackup *backup);
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir);
 extern int pgBackupCreateDir(pgBackup *backup);
 extern void pgBackupFree(void *backup);
