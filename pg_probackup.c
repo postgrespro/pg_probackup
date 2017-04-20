@@ -110,7 +110,7 @@ main(int argc, char *argv[])
 	char		path[MAXPGPATH];
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
-	int			rc = stat(backup_path, &stat_buf);
+	int			rc;
 
 	/* initialize configuration */
 	pgBackup_init(&current);
@@ -164,6 +164,7 @@ main(int argc, char *argv[])
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
 
+	rc = stat(backup_path, &stat_buf);
 	/* If rc == -1,  there is no file or directory. So it's OK. */
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
