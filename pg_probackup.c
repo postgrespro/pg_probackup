@@ -107,7 +107,10 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
-	int				i;
+	char		path[MAXPGPATH];
+	/* Check if backup_path is directory. */
+	struct stat stat_buf;
+	int			rc = stat(backup_path, &stat_buf);
 
 	/* initialize configuration */
 	pgBackup_init(&current);
@@ -147,7 +150,7 @@ main(int argc, char *argv[])
 	}
 
 	/* Parse command line arguments */
-	i = pgut_getopt(argc, argv, options);
+	pgut_getopt(argc, argv, options);
 
 	if (backup_path == NULL)
 	{
@@ -156,27 +159,20 @@ main(int argc, char *argv[])
 		if (backup_path == NULL)
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
-	else
+
+	/* If rc == -1,  there is no file or directory. So it's OK. */
+	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
+		elog(ERROR, "-B, --backup-path must be a path to directory");
+
+	/* Do not read options from file or env if we're going to set them */
+	if (backup_subcmd != CONFIGURE)
 	{
-		char		path[MAXPGPATH];
-		/* Check if backup_path is directory. */
-		struct stat stat_buf;
-		int			rc = stat(backup_path, &stat_buf);
+		/* Read options from configuration file */
+		join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
+		pgut_readopt(path, options, ERROR);
 
-		/* If rc == -1,  there is no file or directory. So it's OK. */
-		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-			elog(ERROR, "-B, --backup-path must be a path to directory");
-
-		/* Do not read options from file or env if we're going to set them */
-		if (backup_subcmd != CONFIGURE)
-		{
-			/* Read options from configuration file */
-			join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
-			pgut_readopt(path, options, ERROR);
-
-			/* Read environment variables */
-			pgut_getopt_env(options);
-		}
+		/* Read environment variables */
+		pgut_getopt_env(options);
 	}
 
 	if (backup_id_string_param != NULL)
@@ -205,10 +201,15 @@ main(int argc, char *argv[])
 	join_path_components(arclog_path, backup_path, "wal");
 
 	/* setup exclusion list for file search */
-	for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
+	if (!backup_logs)
+	{
+		int			i;
 
-	if(!backup_logs)
-		pgdata_exclude_dir[i++] = "pg_log";
+		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
+
+		/* Set 'pg_log' in first empty slot */
+		pgdata_exclude_dir[i] = "pg_log";
+	}
 
 	if (target_time != NULL && target_xid != NULL)
 		elog(ERROR, "You can't specify recovery-target-time and recovery-target-xid at the same time");

@@ -723,7 +723,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 			sscanf(buf, "linked:%s", linked);
 		ptr = strstr(buf,"segno");
 		if (ptr)
-			sscanf(buf, "linked:%s", linked);
+			sscanf(buf, "segno:%d", &segno);
 #ifdef PGPRO_EE
 		ptr = strstr(buf,"CFS_generation");
 		sscanf(buf, "CFS_generation:%lu", &generation);

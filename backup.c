@@ -128,7 +128,7 @@ do_backup_database(parray *backup_list)
 	{
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
-			elog(ERROR, "Valid backup on current timeline is not found."
+			elog(ERROR, "Valid backup on current timeline is not found. "
 						"Create new FULL backup before an incremental one.");
 	}
 
