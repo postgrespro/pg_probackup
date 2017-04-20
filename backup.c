@@ -47,7 +47,7 @@ typedef struct
 	const char *to_root;
 	parray *backup_files_list;
 	parray *prev_backup_filelist;
-	const XLogRecPtr *prev_backup_start_lsn;
+	XLogRecPtr prev_backup_start_lsn;
 } backup_files_args;
 
 /*
@@ -101,7 +101,7 @@ do_backup_database(parray *backup_list)
 	char		database_path[MAXPGPATH];
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
-	XLogRecPtr *prev_backup_start_lsn = NULL;
+	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
 
 	pthread_t	backup_threads[num_threads];
 	pthread_t	stream_thread;
@@ -128,7 +128,7 @@ do_backup_database(parray *backup_list)
 	{
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
-			elog(ERROR, "Valid backup on current timeline is not found."
+			elog(ERROR, "Valid backup on current timeline is not found. "
 						"Create new FULL backup before an incremental one.");
 	}
 
@@ -189,7 +189,7 @@ do_backup_database(parray *backup_list)
 		prev_backup_filelist = dir_read_file_list(pgdata, prev_backup_filelist_path);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
-		prev_backup_start_lsn = &prev_backup->start_lsn;
+		prev_backup_start_lsn = prev_backup->start_lsn;
 
 		current.parent_backup = prev_backup->start_time;
 		pgBackupWriteBackupControlFile(&current);
@@ -432,13 +432,13 @@ do_backup(void)
 
 	elog(LOG, "Backup destination is initialized");
 
+	/* set the error processing function for the backup process */
+	pgut_atexit_push(backup_cleanup, NULL);
+
 	/* get list of backups already taken */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 	if (backup_list == NULL)
 		elog(ERROR, "Failed to get backup list.");
-
-	/* set the error processing function for the backup process */
-	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
 	do_backup_database(backup_list);
