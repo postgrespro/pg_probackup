@@ -368,6 +368,8 @@ extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
 							   time_t *recovery_time,
 							   TransactionId *recovery_xid);
+extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
+							 TimeLineID target_tli);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);

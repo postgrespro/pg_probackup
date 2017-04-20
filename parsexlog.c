@@ -303,6 +303,7 @@ read_recovery_info(const char *archivedir, TimeLineID tli,
 	XLogRecPtr	startpoint = stop_lsn;
 	XLogReaderState *xlogreader;
 	XLogPageReadPrivate private;
+	bool		res;
 
 	private.archivedir = archivedir;
 	private.tli = tli;
@@ -342,12 +343,66 @@ read_recovery_info(const char *archivedir, TimeLineID tli,
 			*recovery_time = timestamptz_to_time_t(last_time);
 			*recovery_xid = XLogRecGetXid(xlogreader);
 
-			return true;
+			/* Found timestamp in WAL record 'record' */
+			res = true;
+			goto cleanup;
 		}
 	} while (startpoint >= start_lsn);
 
 	/* Didn't find timestamp from WAL records between start_lsn and stop_lsn */
-	return false;
+	res = false;
+
+cleanup:
+	XLogReaderFree(xlogreader);
+	if (xlogreadfd != -1)
+	{
+		close(xlogreadfd);
+		xlogreadfd = -1;
+		xlogexists = false;
+	}
+
+	return res;
+}
+
+/*
+ * Check if WAL segment file 'wal_path' contains 'target_lsn'.
+ */
+bool
+wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
+				 TimeLineID target_tli)
+{
+	XLogReaderState *xlogreader;
+	XLogPageReadPrivate private;
+	char	   *errormsg;
+	bool		res;
+
+	private.archivedir = archivedir;
+	private.tli = target_tli;
+
+	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
+	if (xlogreader == NULL)
+		elog(ERROR, "out of memory");
+
+	res = XLogReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
+	if (!res)
+	{
+		if (errormsg)
+			elog(ERROR, "could not read WAL record at %X/%X: %s",
+				 (uint32) (target_lsn >> 32), (uint32) (target_lsn),
+				 errormsg);
+
+		/* Didn't find 'target_lsn' and there is no error, return false */
+	}
+
+	XLogReaderFree(xlogreader);
+	if (xlogreadfd != -1)
+	{
+		close(xlogreadfd);
+		xlogreadfd = -1;
+		xlogexists = false;
+	}
+
+	return res;
 }
 
 /* XLogreader callback function, to read a WAL page */

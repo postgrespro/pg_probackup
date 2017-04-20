@@ -790,7 +790,7 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 	/* append target timeline */
 	entry = pgut_new(TimeLineHistoryEntry);
 	entry->tli = targetTLI;
-	/* lsn in target timeline is valid */
+	/* LSN in target timeline is valid */
 	entry->end = (uint32) (-1UL << 32) | -1UL;
 	parray_insert(result, 0, entry);
 

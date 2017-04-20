@@ -239,7 +239,7 @@ do_backup_database(parray *backup_list)
 
 		if (ptrack_lsn > prev_backup->stop_lsn)
 		{
-			elog(ERROR, "lsn from ptrack_control %lx differs from lsn of previous ptrack backup %lx.\n"
+			elog(ERROR, "LSN from ptrack_control %lx differs from LSN of previous ptrack backup %lx.\n"
 						"Create new full backup before an incremental one.",
 						ptrack_lsn, prev_backup->start_lsn);
 		}
@@ -714,7 +714,8 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
 }
 
 /*
- * TODO Add comment
+ * Wait for target 'lsn' to be archived in archive 'wal' directory with
+ * WAL segment file.
  */
 static void
 wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
@@ -729,7 +730,7 @@ wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 
 	tli = get_current_timeline(false);
 
-	/* Compute the name of the WAL file containig requested lsn */
+	/* Compute the name of the WAL file containig requested LSN */
 	XLByteToSeg(lsn, targetSegNo);
 	if (prev_segno)
 		targetSegNo--;
@@ -747,7 +748,7 @@ wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 
 		/* Inform user if WAL segment is absent in first attempt */
 		if (try_count == 1)
-			elog(INFO, "wait for lsn %X/%X in archived WAL segment %s",
+			elog(INFO, "wait for LSN %X/%X in archived WAL segment %s",
 				 (uint32) (lsn >> 32), (uint32) lsn, wal_path);
 
 		if (archive_timeout > 0 && try_count > archive_timeout)
@@ -755,6 +756,14 @@ wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 				 "switched WAL segment %s could not be archived in %d seconds",
 				 wal_file, archive_timeout);
 	}
+
+	/*
+	 * WAL segment was archived. Check LSN on it if we waited current WAL
+	 * segment, not previous.
+	 */
+	if (!prev_segno && !wal_contains_lsn(arclog_path, lsn, tli))
+		elog(ERROR, "WAL segment %s doesn't contain target LSN %X/%X",
+			 wal_file, (uint32) (lsn >> 32), (uint32) lsn);
 }
 
 /*
