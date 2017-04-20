@@ -130,14 +130,18 @@ main(int argc, char *argv[])
 			backup_subcmd = SHOW;
 		else if (strcmp(argv[1], "delete") == 0)
 			backup_subcmd = DELETE;
-		else if (strcmp(argv[1], "configure") == 0)
+		else if (strcmp(argv[1], "config") == 0)
 			backup_subcmd = CONFIGURE;
-		else if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0)
+		else if (strcmp(argv[1], "--help") == 0
+				|| strcmp(argv[1], "help") == 0
+				|| strcmp(argv[1], "-?") == 0)
 		{
 			help(true);
 			exit(0);
 		}
-		else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0)
+		else if (strcmp(argv[1], "--version") == 0
+				 || strcmp(argv[1], "version") == 0
+				 || strcmp(argv[1], "-V") == 0)
 		{
 			fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
 			exit(0);

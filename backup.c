@@ -454,6 +454,13 @@ do_backup(void)
 
 	pgBackupValidate(&current);
 
+	/*
+	 * After successfil backup completion remove backups
+	 * which are expired according to retention policies
+	 */
+	if (delete_expired)
+		do_retention_purge();
+
 	return 0;
 }
 
