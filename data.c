@@ -53,7 +53,7 @@ parse_page(const DataPage *page, XLogRecPtr *lsn)
  * to the backup file.
  */
 static void
-backup_data_page(pgFile *file, const XLogRecPtr *prev_backup_start_lsn,
+backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				BlockNumber blknum, BlockNumber nblocks,
 				FILE *in, FILE *out,
 				pg_crc32 *crc)
@@ -137,9 +137,9 @@ backup_data_page(pgFile *file, const XLogRecPtr *prev_backup_start_lsn,
 		}
 
 		/* If the page hasn't changed since previous backup, don't backup it. */
-		if (prev_backup_start_lsn
+		if (!XLogRecPtrIsInvalid(prev_backup_start_lsn)
 			&& !XLogRecPtrIsInvalid(page_lsn)
-			&& page_lsn < *prev_backup_start_lsn)
+			&& page_lsn < prev_backup_start_lsn)
 			return;
 
 		/* Verify checksum */
@@ -194,7 +194,7 @@ backup_data_page(pgFile *file, const XLogRecPtr *prev_backup_start_lsn,
  */
 bool
 backup_data_file(const char *from_root, const char *to_root,
-				 pgFile *file, const XLogRecPtr *prev_backup_start_lsn)
+				 pgFile *file, XLogRecPtr prev_backup_start_lsn)
 {
 	char			to_path[MAXPGPATH];
 	FILE			*in;

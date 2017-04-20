@@ -340,7 +340,7 @@ extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
 extern bool backup_data_file(const char *from_root, const char *to_root,
-							 pgFile *file, const XLogRecPtr *lsn);
+							 pgFile *file, XLogRecPtr prev_backup_start_lsn);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern bool is_compressed_data_file(pgFile *file);
