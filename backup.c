@@ -432,13 +432,13 @@ do_backup(void)
 
 	elog(LOG, "Backup destination is initialized");
 
+	/* set the error processing function for the backup process */
+	pgut_atexit_push(backup_cleanup, NULL);
+
 	/* get list of backups already taken */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 	if (backup_list == NULL)
 		elog(ERROR, "Failed to get backup list.");
-
-	/* set the error processing function for the backup process */
-	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
 	do_backup_database(backup_list);
