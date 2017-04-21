@@ -354,7 +354,13 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 	/* skip if the file is in black_list defined by user */
 	if (black_list && parray_bsearch(black_list, root, BlackListCompare))
 	{
-		/* found in black_list. skip this item */
+		elog(LOG, "Skip file \"%s\": file is in the user's black list", file->path);
+		return;
+	}
+
+	if (!S_ISDIR(file->mode) && !S_ISLNK(file->mode) &&	!S_ISREG(file->mode))
+	{
+		elog(WARNING, "Skip file \"%s\": Unexpected file format", file->path);
 		return;
 	}
 
