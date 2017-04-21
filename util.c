@@ -14,11 +14,12 @@
 
 #include "storage/bufpage.h"
 
-char *base36enc(long unsigned int value)
+char *
+base36enc(long unsigned int value)
 {
-	char base36[36] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	char		base36[36] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	/* log(2**64) / log(36) = 12.38 => max 13 char + '\0' */
-	char buffer[14];
+	char		buffer[14];
 	unsigned int offset = sizeof(buffer);
 
 	buffer[--offset] = '\0';
@@ -29,7 +30,8 @@ char *base36enc(long unsigned int value)
 	return strdup(&buffer[offset]); // warning: this must be free-d by the user
 }
 
-long unsigned int base36dec(const char *text)
+long unsigned int
+base36dec(const char *text)
 {
 	return strtoul(text, NULL, 36);
 }

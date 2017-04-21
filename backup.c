@@ -208,11 +208,6 @@ do_backup_database(parray *backup_list)
 			 (uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn));
 		elog(LOG, "current.start_lsn: %X/%X",
 			 (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
-
-		/* TODO for some reason we sort the list for both incremental modes.
-		 * Is it necessary?
-		 */
-		parray_qsort(backup_files_list, pgFileComparePathDesc);
 	}
 
 	/*
@@ -243,13 +238,15 @@ do_backup_database(parray *backup_list)
 						"Create new full backup before an incremental one.",
 						ptrack_lsn, prev_backup->start_lsn);
 		}
+		parray_qsort(backup_files_list, pgFileComparePathDesc);
 		make_pagemap_from_ptrack(backup_files_list);
 	}
 
-	/* sort pathname ascending TODO What for?*/
+	/* Sort pathname ascending TODO What for?*/
 	parray_qsort(backup_files_list, pgFileComparePath);
 
-	/* make dirs before backup
+	/*
+	 * Make directories before backup
 	 * and setup threads at the same time
 	 */
 	for (i = 0; i < parray_num(backup_files_list); i++)

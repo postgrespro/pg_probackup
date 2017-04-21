@@ -252,6 +252,7 @@ static int
 pgBackupDeleteFiles(pgBackup *backup)
 {
 	size_t		i;
+	char	   *backup_id;
 	char		path[MAXPGPATH];
 	char		timestamp[20];
 	parray	   *files;

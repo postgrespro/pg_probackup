@@ -375,16 +375,17 @@ pgBackupCreateDir(pgBackup *backup)
 void
 pgBackupWriteControl(FILE *out, pgBackup *backup)
 {
-	char timestamp[20];
+	char		timestamp[20];
+
 	fprintf(out, "#Configuration\n");
 	fprintf(out, "backup-mode = %s\n", backupModes[backup->backup_mode]);
- 	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
+	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
 	
 	fprintf(out, "\n#Compatibility\n");
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
 	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
-	
+
 	fprintf(out, "\n#Result backup info\n");
 	fprintf(out, "timelineid = %d\n", backup->tli);
 	fprintf(out, "start-lsn = %x/%08x\n",
@@ -415,7 +416,8 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "status = %s\n", status2str(backup->status));
 	if (backup->parent_backup != 0)
 	{
-		char *parent_backup = base36enc(backup->parent_backup);
+		char	   *parent_backup = base36enc(backup->parent_backup);
+
 		fprintf(out, "parent-backup-id = '%s'\n", parent_backup);
 		free(parent_backup);
 	}
@@ -470,7 +472,7 @@ readBackupControlFile(const char *path)
 		{'u', 0, "checksum_version",	&backup->checksum_version, SOURCE_FILE_STRICT},
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
-		{'s', 0, "parent_backup",		&parent_backup, SOURCE_FILE_STRICT},
+		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -599,7 +601,7 @@ pgBackupCompareIdDesc(const void *l, const void *r)
 void
 pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
 {
-	char	*datetime;
+	char	   *datetime;
 
 	datetime = base36enc(backup->start_time);
 	if (subdir)
