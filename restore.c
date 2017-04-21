@@ -691,7 +691,14 @@ create_recovery_conf(time_t backup_id,
 		fprintf(fp, "recovery_target_xid = '%s'\n", target_xid);
 	else if (backup_id != 0)
 	{
-		/* TODO Why does it depend on backup_id? */
+		/*
+		 * We need to set this parameters only if 'backup_id' is provided
+		 * because the backup will be recovered as soon as possible as stop_lsn
+		 * is reached.
+		 * If 'backup_id' is not set we want to replay all available WAL records,
+		 * if 'recovery_target' is set all available WAL records will not be
+		 * replayed.
+		 */
 		fprintf(fp, "recovery_target = 'immediate'\n");
 		fprintf(fp, "recovery_target_action = 'promote'\n");
 	}
