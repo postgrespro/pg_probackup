@@ -230,12 +230,18 @@ pgFileGetCRC(pgFile *file)
 void
 pgFileFree(void *file)
 {
+	pgFile	   *file_ptr;
+
 	if (file == NULL)
 		return;
-	free(((pgFile *)file)->linked);
-	free(((pgFile *)file)->path);
-	if (((pgFile *)file)->ptrack_path != NULL)
-		free(((pgFile *)file)->ptrack_path);
+
+	file_ptr = (pgFile *) file;
+
+	if (file_ptr->linked)
+		free(file_ptr->linked);
+	free(file_ptr->path);
+	if (file_ptr->ptrack_path != NULL)
+		free(file_ptr->ptrack_path);
 	free(file);
 }
 
@@ -693,6 +699,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 	FILE   *fp;
 	parray *files;
 	char	buf[MAXPGPATH * 2];
+	int		line_num = 0;
 
 	fp = fopen(file_txt, "rt");
 	if (fp == NULL)
@@ -711,36 +718,55 @@ dir_read_file_list(const char *root, const char *file_txt)
 		unsigned long	write_size;
 		pg_crc32		crc;
 		unsigned int	mode;	/* bit length of mode_t depends on platforms */
-		pgFile			*file;
-		char 			*ptr;
+		pgFile		   *file;
+		char		   *ptr;
 		unsigned int	is_datafile;
-		int 			segno = 0;
+		int				segno = 0;
 
-		ptr = strstr(buf,"path");
-		sscanf(buf, "path:%s", path);
-		ptr = strstr(buf,"size");
-		sscanf(buf, "size:%lu", &write_size);
-		ptr = strstr(buf,"mode");
-		sscanf(buf, "mode:%u", &mode);
-		ptr = strstr(buf,"is_datafile");
-		sscanf(buf, "is_datafile:%u", &is_datafile);
-		ptr = strstr(buf,"crc");
-		sscanf(buf, "crc:%u", &crc);
+		/* XXX Maybe use better parser function? */
+#define GET_VALUE(name, value, format, is_mandatory)	\
+	do {												\
+		if (ptr == NULL && is_mandatory)				\
+			elog(ERROR, "parameter \"%s\" is not found in \"%s\" in %d line",	\
+				 name, file_txt, line_num);				\
+		if (ptr)										\
+			sscanf(ptr, format, &value);				\
+	} while (0)
+
+		line_num++;
+
+		ptr = strstr(buf,"\"path\"");
+		GET_VALUE("path", path, "\"path\":\"%s\"", true);
+
+		ptr = strstr(buf,"\"size\"");
+		GET_VALUE("size", write_size, "\"size\":\"%lu\"", true);
+
+		ptr = strstr(buf,"\"mode\"");
+		GET_VALUE("mode", mode, "\"mode\":\"%u\"", true);
+
+		ptr = strstr(buf,"\"is_datafile\"");
+		GET_VALUE("is_datafile", is_datafile, "\"is_datafile\":\"%u\"", true);
+
+		ptr = strstr(buf,"\"crc\"");
+		GET_VALUE("crc", crc, "\"crc\":\"%u\"", true);
+
 		/* optional fields */
-		ptr = strstr(buf,"linked");
-		if (ptr)
-			sscanf(buf, "linked:%s", linked);
-		ptr = strstr(buf,"segno");
-		if (ptr)
-			sscanf(buf, "segno:%d", &segno);
+		linked[0] = '\0';
+		ptr = strstr(buf,"\"linked\"");
+		GET_VALUE("linked", linked, "\"linked\":\"%s\"", false);
+
+		ptr = strstr(buf,"\"segno\"");
+		GET_VALUE("segno", segno, "\"segno\":\"%d\"", false);
+
 #ifdef PGPRO_EE
-		ptr = strstr(buf,"CFS_generation");
-		sscanf(buf, "CFS_generation:%lu", &generation);
-		ptr = strstr(buf,"is_partial_copy");
-		sscanf(buf, "is_partial_copy:%d", &is_partial_copy);
+		ptr = strstr(buf,"\"CFS_generation\"");
+		GET_VALUE("CFS_generation", generation, "\"CFS_generation\":\"%lu\"", true);
+
+		sscanf(buf, "\"CFS_generation\":\"%lu\"", &generation);
+		GET_VALUE("is_partial_copy", is_partial_copy, "\"is_partial_copy\":\"%d\"", true);
 #endif
 		if (root)
-			sprintf(filepath, "%s/%s", root, path);
+			join_path_components(filepath, root, path);
 		else
 			strcpy(filepath, path);
 
@@ -750,7 +776,8 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file->mode = mode;
 		file->is_datafile = is_datafile ? true : false;
 		file->crc = crc;
-		file->linked = NULL; /* TODO Why don't read it? */
+		if (linked[0])
+			file->linked = pgut_strdup(linked);
 		file->segno = segno;
 		file->generation = generation;
 		file->is_partial_copy = is_partial_copy;

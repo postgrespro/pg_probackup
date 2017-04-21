@@ -633,7 +633,7 @@ restore_files(void *arg)
 				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
 
 
-		/* Directories are created before */
+		/* Directories was created before */
 		if (S_ISDIR(file->mode))
 		{
 			elog(LOG, "directory, skip");
