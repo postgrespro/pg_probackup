@@ -159,7 +159,7 @@ do_restore_or_validate(time_t target_backup_id,
 			{
 				if (target_backup_id != INVALID_BACKUP_ID)
 					elog(ERROR, "target backup %s does not satisfy restore options",
-							base36enc(target_backup_id));
+						 base36enc(target_backup_id));
 				else
 					/* Try to find another backup that satisfies target options */
 					continue;

@@ -29,14 +29,14 @@ typedef struct
 void
 pgBackupValidate(pgBackup *backup)
 {
-	char	*backup_id_string;
-	char	base_path[MAXPGPATH];
-	char	path[MAXPGPATH];
-	parray *files;
-	bool	corrupted = false;
+	char	   *backup_id_string;
+	char		base_path[MAXPGPATH];
+	char		path[MAXPGPATH];
+	parray	   *files;
+	bool		corrupted = false;
 	pthread_t	validate_threads[num_threads];
 	validate_files_args *validate_threads_args[num_threads];
-	int i;
+	int			i;
 
 	backup_id_string = base36enc(backup->start_time);
 
@@ -54,7 +54,7 @@ pgBackupValidate(pgBackup *backup)
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile *file = (pgFile *) parray_get(files, i);
+		pgFile	   *file = (pgFile *) parray_get(files, i);
 		__sync_lock_release(&file->lock);
 	}
 
@@ -95,6 +95,7 @@ pgBackupValidate(pgBackup *backup)
 		elog(WARNING, "Backup %s is corrupted", backup_id_string);
 	else
 		elog(LOG, "Backup %s is valid", backup_id_string);
+	free(backup_id_string);
 }
 
 /*

@@ -33,6 +33,7 @@ do_show(time_t requested_backup_id)
 		if (backup == NULL)
 		{
 			elog(INFO, "Requested backup \"%s\" is not found.",
+				 /* We do not need free base36enc's result, we exit anyway */
 				 base36enc(requested_backup_id));
 			/* This is not error */
 			return 0;
@@ -174,6 +175,7 @@ show_backup_list(FILE *out, parray *backup_list)
 	{
 		pgBackup   *backup = parray_get(backup_list, i);
 		TimeLineID	parent_tli;
+		char	   *backup_id;
 		char		timestamp[20] = "----";
 		char		duration[20] = "----";
 		char		data_bytes_str[10] = "----";
@@ -194,9 +196,10 @@ show_backup_list(FILE *out, parray *backup_list)
 
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
+		backup_id = base36enc(backup->start_time);
 
 		fprintf(out, "%-8s %-19s  %s%-9s %2d / %d               %5s  %6s  %2X/%08X  %2X/%08X  %-8s\n",
-				base36enc(backup->start_time),
+				backup_id,
 				timestamp,
 				backupModes[backup->backup_mode],
 				backup->stream ? "+STREAM": "+ARCHIVE",
@@ -209,6 +212,8 @@ show_backup_list(FILE *out, parray *backup_list)
 				(uint32) (backup->stop_lsn >> 32),
 				(uint32) backup->stop_lsn,
 				status2str(backup->status));
+
+		free(backup_id);
 	}
 }
 
