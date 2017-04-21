@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------------------
  *
- * catalog.c: backup catalog opration
+ * catalog.c: backup catalog operation
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2017, Postgres Professional
@@ -222,6 +222,15 @@ read_backup(time_t timestamp)
 	return readBackupControlFile(conf_path);
 }
 
+/*
+ * Get backup_mode in string representation.
+ */
+const char *
+pgBackupGetBackupMode(pgBackup *backup)
+{
+	return backupModes[backup->backup_mode];
+}
+
 static bool
 IsDir(const char *dirpath, const char *entry)
 {
@@ -370,7 +379,6 @@ pgBackupCreateDir(pgBackup *backup)
 
 /*
  * Write information about backup.in to stream "out".
- * TODO improve comments
  */
 void
 pgBackupWriteControl(FILE *out, pgBackup *backup)
@@ -378,7 +386,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	char		timestamp[20];
 
 	fprintf(out, "#Configuration\n");
-	fprintf(out, "backup-mode = %s\n", backupModes[backup->backup_mode]);
+	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
 	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
 	
 	fprintf(out, "\n#Compatibility\n");
@@ -388,9 +396,11 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 	fprintf(out, "\n#Result backup info\n");
 	fprintf(out, "timelineid = %d\n", backup->tli);
+	/* LSN returned by pg_start_backup */
 	fprintf(out, "start-lsn = %x/%08x\n",
 			(uint32) (backup->start_lsn >> 32),
 			(uint32) backup->start_lsn);
+	/* LSN returned by pg_stop_backup */
 	fprintf(out, "stop-lsn = %x/%08x\n",
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
@@ -409,11 +419,16 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 		fprintf(out, "recovery-time = '%s'\n", timestamp);
 	}
 
-	/* TODO rename the field? */
+	/*
+	 * Size of PGDATA directory. The size does not include size of related
+	 * WAL segments in archive 'wal' directory.
+	 */
 	if (backup->data_bytes != BYTES_INVALID)
 		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
 	fprintf(out, "status = %s\n", status2str(backup->status));
+
+	/* 'parent_backup' is set if it is incremental backup */
 	if (backup->parent_backup != 0)
 	{
 		char	   *parent_backup = base36enc(backup->parent_backup);

@@ -338,8 +338,14 @@ restore_backup(pgBackup *backup)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	/* TODO print backup name */
-	elog(LOG, "restore backup completed");
+	if (verbose)
+	{
+		char	   *backup_id;
+
+		backup_id = base36enc(backup->start_time);
+		elog(LOG, "restore %s backup completed", backup_id);
+		free(backup_id);
+	}
 }
 
 /*

@@ -26,7 +26,6 @@
 #include "streamutil.h"
 #include "receivelog.h"
 
-static const char *backupModes[] = {"", "PAGE", "PTRACK", "FULL"};
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
 const char *progname = "pg_probackup";
@@ -242,7 +241,14 @@ do_backup_database(parray *backup_list)
 		make_pagemap_from_ptrack(backup_files_list);
 	}
 
-	/* Sort pathname ascending TODO What for?*/
+	/*
+	 * Sort pathname ascending. It is necessary to create intermediate
+	 * directories sequentially.
+	 *
+	 * For example:
+	 * 1 - create 'base'
+	 * 2 - create 'base/1'
+	 */
 	parray_qsort(backup_files_list, pgFileComparePath);
 
 	/*
@@ -416,7 +422,7 @@ do_backup(void)
 	check_system_identifiers();
 
 	elog(LOG, "Backup start. backup-mode = %s+%s",
-		backupModes[current.backup_mode], current.stream?"STREAM":"ARCHIVE");
+		pgBackupGetBackupMode(&current), current.stream?"STREAM":"ARCHIVE");
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -1495,7 +1501,10 @@ make_pagemap_from_ptrack(parray *files)
 }
 
 
-/* TODO Add comment */
+/*
+ * Stop WAL streaming if current 'xlogpos' exceeds 'stop_backup_lsn', which is
+ * set by pg_stop_backup().
+ */
 static bool
 stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 {

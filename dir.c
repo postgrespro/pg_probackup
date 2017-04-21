@@ -339,7 +339,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 /*
  * TODO Add comment, review
- * TODO if met file of unusual format throw a WARNING and don't add to list.
  */
 static void
 dir_list_file_internal(parray *files, const char *root, bool exclude,
@@ -358,9 +357,13 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 		return;
 	}
 
+	/*
+	 * Add to files list only files, links and directories. Skip sockets and
+	 * other unexpected file formats.
+	 */
 	if (!S_ISDIR(file->mode) && !S_ISLNK(file->mode) &&	!S_ISREG(file->mode))
 	{
-		elog(WARNING, "Skip file \"%s\": Unexpected file format", file->path);
+		elog(WARNING, "Skip file \"%s\": unexpected file format", file->path);
 		return;
 	}
 

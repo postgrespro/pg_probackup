@@ -54,9 +54,9 @@ parse_page(const DataPage *page, XLogRecPtr *lsn)
  */
 static void
 backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
-				BlockNumber blknum, BlockNumber nblocks,
-				FILE *in, FILE *out,
-				pg_crc32 *crc)
+				 BlockNumber blknum, BlockNumber nblocks,
+				 FILE *in, FILE *out,
+				 pg_crc32 *crc)
 {
 	BackupPageHeader	header;
 	off_t				offset;
@@ -77,7 +77,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		{
 			/* TODO Should we check specific error code here? */
 			if (verbose)
-				elog(WARNING, "File: %s, could not seek to block %u."
+				elog(WARNING, "File: %s, could not seek to block %u. "
 					 "Probably the file was truncated after backup start.",
 					 file->path, blknum);
 			return;
@@ -98,7 +98,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		 * If after several attempts page header is still invalid, throw an error.
 		 * The same idea is applied to checksum verification.
 		 */
-		
+
 		/*
 		 * TODO Should we show a hint about possible false positives suggesting to
 		 * decrease concurrent load? Or we can just copy this page and rely on

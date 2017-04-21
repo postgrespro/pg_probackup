@@ -301,6 +301,7 @@ extern void pgBackupValidate(pgBackup* backup);
 
 /* in catalog.c */
 extern pgBackup *read_backup(time_t timestamp);
+extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
 extern parray *catalog_get_backup_list(time_t requested_backup_id);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,

@@ -11,7 +11,6 @@
 #include "pg_probackup.h"
 #include <time.h>
 
-static const char *backupModes[] = {"", "PAGE", "PTRACK", "FULL"};
 static void show_backup_list(FILE *out, parray *backup_list);
 static void show_backup_detail(FILE *out, pgBackup *backup);
 
@@ -201,7 +200,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		fprintf(out, "%-8s %-19s  %s%-9s %2d / %d               %5s  %6s  %2X/%08X  %2X/%08X  %-8s\n",
 				backup_id,
 				timestamp,
-				backupModes[backup->backup_mode],
+				pgBackupGetBackupMode(backup),
 				backup->stream ? "+STREAM": "+ARCHIVE",
 				backup->tli,
 				parent_tli,
