@@ -670,7 +670,7 @@ print_file_list(FILE *out, const parray *files, const char *root)
 			path = GetRelativePath(path, root);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\" \"crc\":\"%u\"",
+					 "\"is_datafile\":\"%u\", \"crc\":\"%u\"",
 				path, (unsigned long) file->write_size, file->mode,
 				file->is_datafile?1:0, file->crc);
 
@@ -689,6 +689,140 @@ print_file_list(FILE *out, const parray *files, const char *root)
 	}
 }
 
+/* Parsing states for get_control_value() */
+#define CONTROL_WAIT_NAME			1
+#define CONTROL_INNAME				2
+#define CONTROL_WAIT_COLON			3
+#define CONTROL_WAIT_VALUE			4
+#define CONTROL_INVALUE				5
+#define CONTROL_WAIT_NEXT_NAME		6
+
+/*
+ * Get value from json-like line "str" of backup_content.control file.
+ *
+ * The line has the following format:
+ *   {"name1":"value1", "name2":"value2"}
+ *
+ * The value will be returned to "value_str" as string if it is not NULL. If it
+ * is NULL the value will be returned to "value_ulong" as unsigned long.
+ */
+static void
+get_control_value(const char *str, const char *name,
+				  char *value_str, uint64 *value_uint64, bool is_mandatory)
+{
+	int			state = CONTROL_WAIT_NAME;
+	char	   *name_ptr = (char *) name;
+	char	   *buf = (char *) str;
+	char		buf_uint64[32],	/* Buffer for "value_uint64" */
+			   *buf_uint64_ptr;
+
+	/* Set default values */
+	if (value_str)
+		*value_str = '\0';
+	else if (value_uint64)
+		*value_uint64 = 0;
+
+	while (*buf)
+	{
+		switch (state)
+		{
+			case CONTROL_WAIT_NAME:
+				if (*buf == '"')
+					state = CONTROL_INNAME;
+				else if (IsAlpha(*buf))
+					goto bad_format;
+				break;
+			case CONTROL_INNAME:
+				/* Found target field. Parse value. */
+				if (*buf == '"')
+					state = CONTROL_WAIT_COLON;
+				/* Check next field */
+				else if (*buf != *name_ptr)
+				{
+					name_ptr = (char *) name;
+					state = CONTROL_WAIT_NEXT_NAME;
+				}
+				else
+					name_ptr++;
+				break;
+			case CONTROL_WAIT_COLON:
+				if (*buf == ':')
+					state = CONTROL_WAIT_VALUE;
+				else if (!IsSpace(*buf))
+					goto bad_format;
+				break;
+			case CONTROL_WAIT_VALUE:
+				if (*buf == '"')
+				{
+					state = CONTROL_INVALUE;
+					buf_uint64_ptr = buf_uint64;
+				}
+				else if (IsAlpha(*buf))
+					goto bad_format;
+				break;
+			case CONTROL_INVALUE:
+				/* Value was parsed, exit */
+				if (*buf == '"')
+				{
+					if (value_str)
+					{
+						*value_str = '\0';
+					}
+					else if (value_uint64)
+					{
+						/* Length of buf_uint64 should not be greater than 31 */
+						if (buf_uint64_ptr - buf_uint64 >= 32)
+							elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
+								 name, str, DATABASE_FILE_LIST);
+
+						*buf_uint64_ptr = '\0';
+						if (!parse_uint64(buf_uint64, value_uint64))
+							goto bad_format;
+					}
+
+					return;
+				}
+				else
+				{
+					if (value_str)
+					{
+						*value_str = *buf;
+						value_str++;
+					}
+					else
+					{
+						*buf_uint64_ptr = *buf;
+						buf_uint64_ptr++;
+					}
+				}
+				break;
+			case CONTROL_WAIT_NEXT_NAME:
+				if (*buf == ',')
+					state = CONTROL_WAIT_NAME;
+				break;
+			default:
+				/* Should not happen */
+				break;
+		}
+
+		buf++;
+	}
+
+	/* There is no close quotes */
+	if (state == CONTROL_INNAME || state == CONTROL_INVALUE)
+		goto bad_format;
+
+	/* Did not find target field */
+	if (is_mandatory)
+		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
+			 name, str, DATABASE_FILE_LIST);
+	return;
+
+bad_format:
+	elog(ERROR, "%s file has invalid format in line %s",
+		 DATABASE_FILE_LIST, str);
+}
+
 /*
  * Construct parray of pgFile from the backup content list.
  * If root is not NULL, path will be absolute path.
@@ -699,7 +833,6 @@ dir_read_file_list(const char *root, const char *file_txt)
 	FILE   *fp;
 	parray *files;
 	char	buf[MAXPGPATH * 2];
-	int		line_num = 0;
 
 	fp = fopen(file_txt, "rt");
 	if (fp == NULL)
@@ -710,60 +843,33 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
-		char			path[MAXPGPATH];
-		char			filepath[MAXPGPATH];
-		char			linked[MAXPGPATH];
-		uint64			generation = -1;
-		int				is_partial_copy = 0;
-		unsigned long	write_size;
-		pg_crc32		crc;
-		unsigned int	mode;	/* bit length of mode_t depends on platforms */
-		pgFile		   *file;
-		char		   *ptr;
-		unsigned int	is_datafile;
-		int				segno = 0;
+		char		path[MAXPGPATH];
+		char		filepath[MAXPGPATH];
+		char		linked[MAXPGPATH];
+		uint64		write_size,
+					mode,		/* bit length of mode_t depends on platforms */
+					is_datafile,
+					crc,
+					segno;
+#ifdef PGPRO_EE
+		uint64		generation,
+					is_partial_copy;
+#endif
+		pgFile	   *file;
 
-		/* XXX Maybe use better parser function? */
-#define GET_VALUE(name, value, format, is_mandatory)	\
-	do {												\
-		if (ptr == NULL && is_mandatory)				\
-			elog(ERROR, "parameter \"%s\" is not found in \"%s\" in %d line",	\
-				 name, file_txt, line_num);				\
-		if (ptr)										\
-			sscanf(ptr, format, &value);				\
-	} while (0)
-
-		line_num++;
-
-		ptr = strstr(buf,"\"path\"");
-		GET_VALUE("path", path, "\"path\":\"%s\"", true);
-
-		ptr = strstr(buf,"\"size\"");
-		GET_VALUE("size", write_size, "\"size\":\"%lu\"", true);
-
-		ptr = strstr(buf,"\"mode\"");
-		GET_VALUE("mode", mode, "\"mode\":\"%u\"", true);
-
-		ptr = strstr(buf,"\"is_datafile\"");
-		GET_VALUE("is_datafile", is_datafile, "\"is_datafile\":\"%u\"", true);
-
-		ptr = strstr(buf,"\"crc\"");
-		GET_VALUE("crc", crc, "\"crc\":\"%u\"", true);
+		get_control_value(buf, "path", path, NULL, true);
+		get_control_value(buf, "size", NULL, &write_size, true);
+		get_control_value(buf, "mode", NULL, &mode, true);
+		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
+		get_control_value(buf, "crc", NULL, &crc, true);
 
 		/* optional fields */
-		linked[0] = '\0';
-		ptr = strstr(buf,"\"linked\"");
-		GET_VALUE("linked", linked, "\"linked\":\"%s\"", false);
-
-		ptr = strstr(buf,"\"segno\"");
-		GET_VALUE("segno", segno, "\"segno\":\"%d\"", false);
+		get_control_value(buf, "linked", linked, NULL, false);
+		get_control_value(buf, "segno", NULL, &segno, false);
 
 #ifdef PGPRO_EE
-		ptr = strstr(buf,"\"CFS_generation\"");
-		GET_VALUE("CFS_generation", generation, "\"CFS_generation\":\"%lu\"", true);
-
-		sscanf(buf, "\"CFS_generation\":\"%lu\"", &generation);
-		GET_VALUE("is_partial_copy", is_partial_copy, "\"is_partial_copy\":\"%d\"", true);
+		get_control_value(buf, "CFS_generation", NULL, &generation, true);
+		get_control_value(buf, "is_partial_copy", NULL, &is_partial_copy, true);
 #endif
 		if (root)
 			join_path_components(filepath, root, path);
@@ -772,15 +878,17 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 		file = pgFileInit(filepath);
 
-		file->write_size = write_size;
-		file->mode = mode;
+		file->write_size = (size_t) write_size;
+		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
-		file->crc = crc;
+		file->crc = (pg_crc32) crc;
 		if (linked[0])
 			file->linked = pgut_strdup(linked);
-		file->segno = segno;
+		file->segno = (int) segno;
+#ifdef PGPRO_EE
 		file->generation = generation;
-		file->is_partial_copy = is_partial_copy;
+		file->is_partial_copy = (int) is_partial_copy;
+#endif
 
 		parray_append(files, file);
 	}
