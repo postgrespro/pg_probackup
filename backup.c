@@ -421,8 +421,8 @@ do_backup(void)
 	 */
 	check_system_identifiers();
 
-	elog(LOG, "Backup start. backup-mode = %s+%s",
-		pgBackupGetBackupMode(&current), current.stream?"STREAM":"ARCHIVE");
+	elog(LOG, "Backup start. backup-mode = %s, stream = %s",
+		pgBackupGetBackupMode(&current), current.stream ? "true" : "false");
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
