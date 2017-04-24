@@ -700,6 +700,8 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
 	res_db = pgut_execute(backup_conn,
 						  "SELECT datname FROM pg_database WHERE oid=$1",
 						  1, (const char **) params);
+	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
+		elog(ERROR, "cannot find database by oid %u", db_oid);
 
 	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
 	PQclear(res_db);
@@ -710,6 +712,9 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
 
 	res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
 					   2, (const char **)params);
+	if (PQnfields(res) != 1)
+		elog(ERROR, "cannot get ptrack file from database \"%s\" by tablespace oid %u and relation oid %u",
+			 dbname, tablespace_oid, rel_oid);
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
 									  result_size);
 	PQclear(res);
@@ -1447,23 +1452,23 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 static void
 make_pagemap_from_ptrack(parray *files)
 {
-	int i;
+	size_t		i;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile *p = (pgFile *) parray_get(files, i);
+		pgFile	   *p = (pgFile *) parray_get(files, i);
 
 		if (p->ptrack_path != NULL)
 		{
-			char 	* tablespace;
-			Oid 	db_oid,
-					rel_oid,
-					tablespace_oid = 0;
-			int 	sep_iter,
-					sep_count = 0;
-			char *ptrack_nonparsed;
-			size_t ptrack_nonparsed_size = 0;
-			size_t start_addr;
+			char	   *tablespace;
+			Oid			db_oid,
+						rel_oid,
+						tablespace_oid = 0;
+			int			sep_iter,
+						sep_count = 0;
+			char	   *ptrack_nonparsed;
+			size_t		ptrack_nonparsed_size = 0;
+			size_t		start_addr;
 
 			tablespace = strstr(p->ptrack_path, PG_TBLSPC_DIR);
 
@@ -1476,13 +1481,23 @@ make_pagemap_from_ptrack(parray *files)
 			 * base/db_oid/rel_oid
 			 */
 			sep_iter = strlen(p->path);
-			while (sep_count != 2 && sep_iter >= 0)
+			while (sep_iter >= 0)
+			{
+				if (IS_DIR_SEP(p->path[sep_iter]))
+					sep_count++;
+				if (sep_count == 2)
+					break;
 				sep_iter--;
+			}
+
+			if (sep_iter <= 0)
+				elog(ERROR, "path of the file \"%s\" has wrong format",
+					 p->path);
 
 			sscanf(p->path + sep_iter + 1, "%u/%u", &db_oid, &rel_oid);
 			
 			ptrack_nonparsed = pg_ptrack_get_and_clear(tablespace_oid, db_oid,
-												  rel_oid, &ptrack_nonparsed_size);
+											   rel_oid, &ptrack_nonparsed_size);
 
 			/* TODO What is 8? */
 			start_addr = (RELSEG_SIZE/8)*p->segno;
