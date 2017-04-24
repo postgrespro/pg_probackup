@@ -1480,8 +1480,6 @@ make_pagemap_from_ptrack(parray *files)
 				sep_iter--;
 
 			sscanf(p->path + sep_iter + 1, "%u/%u", &db_oid, &rel_oid);
-			elog(ERROR, "make_pagemap_from_ptrack. %s, %s, ",
-						p->path, p->path + sep_iter + 1);
 			
 			ptrack_nonparsed = pg_ptrack_get_and_clear(tablespace_oid, db_oid,
 												  rel_oid, &ptrack_nonparsed_size);
