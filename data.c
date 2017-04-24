@@ -73,15 +73,9 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 	while(try_checksum--)
 	{
-		if (fseek(in, offset, SEEK_SET) != offset)
-		{
-			/* TODO Should we check specific error code here? */
-			if (verbose)
-				elog(WARNING, "File: %s, could not seek to block %u. "
-					 "Probably the file was truncated after backup start.",
-					 file->path, blknum);
-			return;
-		}
+		if (fseek(in, offset, SEEK_SET) != 0)
+			elog(ERROR, "File: %s, could not seek to block %u: %s",
+				 file->path, blknum, strerror(errno));
 
 		read_len = fread(&page, 1, BLCKSZ, in);
 
