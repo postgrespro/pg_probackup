@@ -287,7 +287,6 @@ extern int do_show(time_t requested_backup_id);
 
 /* in delete.c */
 extern int do_delete(time_t backup_id);
-extern int do_deletewal(time_t backup_id, bool strict, bool need_catalog_lock);
 extern int do_retention_purge(void);
 
 /* in fetch.c */

@@ -26,6 +26,8 @@ do_delete(time_t backup_id)
 			   *delete_list;
 	time_t		parent_id = 0;
 	bool		backup_found = false;
+	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
+	TimeLineID	oldest_tli = 0;
 
 	/* DATE are always required */
 	if (backup_id == 0)
@@ -90,61 +92,29 @@ do_delete(time_t backup_id)
 		pgBackupDeleteFiles(backup);
 	}
 
+	/* Clean WAL segments */
+	if (delete_wal)
+	{
+		/* Find oldest LSN, used by backups */
+		for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
+		{
+			pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
+
+			if (backup->status == BACKUP_STATUS_OK)
+			{
+				oldest_lsn = backup->start_lsn;
+				oldest_tli = backup->tli;
+				break;
+			}
+		}
+
+		delete_walfiles(oldest_lsn, oldest_tli, true);
+	}
+
 	/* cleanup */
 	parray_free(delete_list);
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
-
-	if (delete_wal)
-		do_deletewal(backup_id, false, false);
-
-	return 0;
-}
-
-/*
- * Delete in archive WAL segments that are not needed anymore. The oldest
- * segment to be kept is the first segment that the oldest full backup
- * found around needs to keep.
- */
-int
-do_deletewal(time_t backup_id, bool strict, bool need_catalog_lock)
-{
-	size_t		i;
-	parray		*backup_list;
-	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
-	TimeLineID	oldest_tli;
-	bool		backup_found = false;
-
-	/* Get exclusive lock of backup catalog */
-	if (need_catalog_lock)
-		catalog_lock();
-
-	/* Find oldest LSN, used by backups */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		pgBackup   *last_backup = (pgBackup *) parray_get(backup_list, i);
-
-		if (last_backup->status == BACKUP_STATUS_OK)
-		{
-			oldest_lsn = last_backup->start_lsn;
-			oldest_tli = last_backup->tli;
-
-			if (strict && backup_id != 0 && backup_id >= last_backup->start_time)
-			{
-				backup_found = true;
-				break;
-			}
-		}
-	}
-
-	if (strict && backup_id != 0 && backup_found == false)
-		elog(ERROR, "not found backup for deletwal command");
-
-	parray_walk(backup_list, pgBackupFree);
-	parray_free(backup_list);
-
-	delete_walfiles(oldest_lsn, oldest_tli, true);
 
 	return 0;
 }
