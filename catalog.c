@@ -341,7 +341,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 	pgBackup   *backup = NULL;
 
 	/* backup_list is sorted in order of descending ID */
-	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
+	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		backup = (pgBackup *) parray_get(backup_list, (size_t) i);
 
