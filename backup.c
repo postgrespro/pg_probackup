@@ -432,6 +432,11 @@ do_backup(void)
 	 */
 	check_system_identifiers();
 
+	/* get list of backups already taken */
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	if (backup_list == NULL)
+		elog(ERROR, "Failed to get backup list.");
+
 	elog(LOG, "Backup start. backup-mode = %s, stream = %s",
 		pgBackupGetBackupMode(&current), current.stream ? "true" : "false");
 
@@ -448,11 +453,6 @@ do_backup(void)
 
 	/* set the error processing function for the backup process */
 	pgut_atexit_push(backup_cleanup, NULL);
-
-	/* get list of backups already taken */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backup_list == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
 	/* backup data */
 	do_backup_database(backup_list);
