@@ -468,6 +468,8 @@ do_backup(void)
 
 	pgBackupValidate(&current);
 
+	elog(INFO, "Backup %s completed", base36enc(current.start_time));
+
 	/*
 	 * After successfil backup completion remove backups
 	 * which are expired according to retention policies
