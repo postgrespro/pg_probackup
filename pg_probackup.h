@@ -15,21 +15,24 @@
 #include <limits.h>
 #include "libpq-fe.h"
 
-#include "pgut/pgut.h"
-#include "access/xlogdefs.h"
-#include "access/xlog_internal.h"
-#include "catalog/pg_control.h"
-#include "utils/pg_crc.h"
-#include "parray.h"
-#include "datapagemap.h"
-#include "storage/bufpage.h"
-#include "storage/block.h"
-#include "storage/checksum.h"
-#include "access/timeline.h"
-
 #ifndef WIN32
 #include <sys/mman.h>
 #endif
+
+#include "access/timeline.h"
+#include "access/xlogdefs.h"
+#include "access/xlog_internal.h"
+#include "catalog/pg_control.h"
+#include "storage/block.h"
+#include "storage/bufpage.h"
+#include "storage/checksum.h"
+#include "utils/pg_crc.h"
+
+#include "pgut/pgut.h"
+
+#include "datapagemap.h"
+#include "parray.h"
+
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"

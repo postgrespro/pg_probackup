@@ -15,6 +15,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "logger.h"
 #include "pgut.h"
 
 /* old gcc doesn't have LLONG_MAX. */
@@ -34,7 +35,6 @@ const char	   *port = NULL;
 const char	   *username = NULL;
 char		   *password = NULL;
 bool			verbose = false;
-bool			quiet = false;
 bool			prompt_password = true;
 
 /* Database connections */
@@ -1030,55 +1030,6 @@ pgut_wait(int num, PGconn *connections[], struct timeval *timeout)
 
 	errno = EINTR;
 	return -1;
-}
-
-/*
- * elog - log to stderr and exit if ERROR or FATAL
- */
-void
-elog(int elevel, const char *fmt, ...)
-{
-	va_list		args;
-
-	if (!verbose && elevel <= LOG)
-		return;
-	if (quiet && elevel < WARNING)
-		return;
-
-	switch (elevel)
-	{
-	case LOG:
-		fputs("LOG: ", stderr);
-		break;
-	case INFO:
-		fputs("INFO: ", stderr);
-		break;
-	case NOTICE:
-		fputs("NOTICE: ", stderr);
-		break;
-	case WARNING:
-		fputs("WARNING: ", stderr);
-		break;
-	case FATAL:
-		fputs("FATAL: ", stderr);
-		break;
-	case PANIC:
-		fputs("PANIC: ", stderr);
-		break;
-	default:
-		if (elevel >= ERROR)
-			fputs("ERROR: ", stderr);
-		break;
-	}
-
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	fputc('\n', stderr);
-	fflush(stderr);
-	va_end(args);
-
-	if (elevel > 0)
-		exit_or_abort(elevel);
 }
 
 void pg_log(eLogType type, const char *fmt, ...)

@@ -16,6 +16,8 @@
 #include <assert.h>
 #include <sys/time.h>
 
+#include "logger.h"
+
 #if !defined(C_H) && !defined(__cplusplus)
 #ifndef bool
 typedef char bool;
@@ -84,7 +86,6 @@ extern const char  *port;
 extern const char  *username;
 extern char		   *password;
 extern bool			verbose;
-extern bool			quiet;
 extern bool			prompt_password;
 
 extern bool			interrupted;
@@ -125,23 +126,6 @@ extern char *strdup_trim(const char *str);
  * file operations
  */
 extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
-
-/*
- * elog
- */
-#define VERBOSE		(-5)
-#define LOG			(-4)
-#define INFO		(-3)
-#define NOTICE		(-2)
-#define WARNING		(-1)
-#define ERROR		1
-#define FATAL		2
-#define PANIC		3
-
-#undef elog
-extern void
-elog(int elevel, const char *fmt, ...)
-__attribute__((format(printf, 2, 3)));
 
 /*
  * Assert
