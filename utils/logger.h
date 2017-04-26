@@ -10,6 +10,8 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
+#include "postgres_fe.h"
+
 /* Log level */
 #define VERBOSE		(-5)
 #define LOG			(-4)
@@ -27,6 +29,7 @@ extern int			log_level;
 extern char		   *log_filename;
 extern char		   *error_log_filename;
 extern char		   *log_directory;
+extern char			log_path[MAXPGPATH];
 
 extern int			log_rotation_size;
 extern int			log_rotation_age;

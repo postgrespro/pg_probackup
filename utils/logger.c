@@ -7,13 +7,11 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
-#include "pgtime.h"
-
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 #include "logger.h"
@@ -25,6 +23,7 @@ int			log_level = INFO;
 char	   *log_filename = NULL;
 char	   *error_log_filename = NULL;
 char	   *log_directory = NULL;
+char		log_path[MAXPGPATH] = "";
 
 int			log_rotation_size = 0;
 int			log_rotation_age = 0;
@@ -47,7 +46,7 @@ static void elog_internal(int elevel, const char *fmt, va_list args)
 /* Functions to work with log files */
 static void open_logfile(void);
 static void release_logfile(void);
-static char *logfile_getname(pg_time_t timestamp);
+static char *logfile_getname(time_t timestamp);
 static FILE *logfile_open(const char *filename, const char *mode);
 
 /* Static variables */
@@ -60,6 +59,38 @@ static bool logging_to_file = false;
 
 static pthread_mutex_t log_file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+static void
+write_elevel(FILE *stream, int elevel)
+{
+	switch (elevel)
+	{
+		case LOG:
+			fputs("LOG: ", stream);
+			break;
+		case INFO:
+			fputs("INFO: ", stream);
+			break;
+		case NOTICE:
+			fputs("NOTICE: ", stream);
+			break;
+		case WARNING:
+			fputs("WARNING: ", stream);
+			break;
+		case ERROR:
+			fputs("ERROR: ", stream);
+			break;
+		case FATAL:
+			fputs("FATAL: ", stream);
+			break;
+		case PANIC:
+			fputs("PANIC: ", stream);
+			break;
+		default:
+			elog(ERROR, "invalid logging level: %d", elevel);
+			break;
+	}
+}
+
 /*
  * Logs to stderr or to log file and exit if ERROR or FATAL.
  *
@@ -69,34 +100,6 @@ static void
 elog_internal(int elevel, const char *fmt, va_list args)
 {
 	bool		wrote_to_file = false;
-
-	switch (elevel)
-	{
-		case LOG:
-			fputs("LOG: ", stderr);
-			break;
-		case INFO:
-			fputs("INFO: ", stderr);
-			break;
-		case NOTICE:
-			fputs("NOTICE: ", stderr);
-			break;
-		case WARNING:
-			fputs("WARNING: ", stderr);
-			break;
-		case ERROR:
-			fputs("ERROR: ", stderr);
-			break;
-		case FATAL:
-			fputs("FATAL: ", stderr);
-			break;
-		case PANIC:
-			fputs("PANIC: ", stderr);
-			break;
-		default:
-			elog(ERROR, "invalid logging level: %d", elevel);
-			break;
-	}
 
 	pthread_mutex_lock(&log_file_mutex);
 
@@ -111,6 +114,8 @@ elog_internal(int elevel, const char *fmt, va_list args)
 
 		if (log_file == NULL)
 			open_logfile();
+
+		write_elevel(log_file, elevel);
 
 		vfprintf(log_file, fmt, args);
 		fputc('\n', log_file);
@@ -127,6 +132,8 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	if (!wrote_to_file ||
 		elevel >= ERROR)
 	{
+		write_elevel(stderr, elevel);
+
 		vfprintf(stderr, fmt, args);
 		fputc('\n', stderr);
 		fflush(stderr);
@@ -203,20 +210,24 @@ pg_log(eLogType type, const char *fmt, ...)
  * Result is palloc'd.
  */
 static char *
-logfile_getname(pg_time_t timestamp)
+logfile_getname(time_t timestamp)
 {
 	char	   *filename;
 	size_t		len;
+	struct tm  *tm = localtime(&timestamp);
+
+	if (log_path[0] == '\0')
+		elog(ERROR, "logging path is not set");
 
 	filename = (char *) palloc(MAXPGPATH);
 
-	snprintf(filename, MAXPGPATH, "%s/", log_directory);
+	snprintf(filename, MAXPGPATH, "%s/", log_path);
 
 	len = strlen(filename);
 
-	/* treat pgaudit.log_filename as a strftime pattern */
-	pg_strftime(filename + len, MAXPGPATH - len, log_filename,
-				pg_localtime(&timestamp, log_timezone));
+	/* Treat log_filename as a strftime pattern */
+	if (strftime(filename + len, MAXPGPATH - len, log_filename, tm) <= 0)
+		elog(ERROR, "strftime(%s) failed: %s", log_filename, strerror(errno));
 
 	return filename;
 }
@@ -228,6 +239,11 @@ static FILE *
 logfile_open(const char *filename, const char *mode)
 {
 	FILE	   *fh;
+
+	/*
+	 * Create log directory if not present; ignore errors
+	 */
+	mkdir(log_path, S_IRWXU);
 
 	fh = fopen(filename, mode);
 
@@ -257,7 +273,7 @@ open_logfile(void)
 
 	log_file = logfile_open(filename, "a");
 
-	if (last_file_name != NULL)		/* probably shouldn't happen */
+	if (last_file_name != NULL)
 		pfree(last_file_name);
 
 	last_file_name = filename;

@@ -228,6 +228,9 @@ main(int argc, char *argv[])
 
 	join_path_components(arclog_path, backup_path, "wal");
 
+	log_filename = "pg_probackup-%Y-%m-%d_%H%M%S.log";
+	join_path_components(log_path, backup_path, "log");
+
 	/* setup exclusion list for file search */
 	if (!backup_logs)
 	{
