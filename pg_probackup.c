@@ -98,8 +98,6 @@ static pgut_option options[] =
 	{ 's', 'h', "pghost"		, &host, SOURCE_CMDLINE },
 	{ 's', 'p', "pgport"		, &port, SOURCE_CMDLINE },
 	{ 's', 'U', "pguser"	, &username, SOURCE_CMDLINE },
-	{ 'b', 'q', "quiet"		, &quiet, SOURCE_CMDLINE },
-	{ 'b', 'v', "verbose"	, &verbose, SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password"	, &prompt_password, SOURCE_CMDLINE },
 	{ 0 }
 };
@@ -197,6 +195,13 @@ main(int argc, char *argv[])
 		pgut_getopt_env(options);
 	}
 
+	/*
+	 * We read backup path from command line or from configuration file.
+	 * Do final check.
+	 */
+	if (!is_absolute_path(backup_path))
+		elog(ERROR, "-B, --backup-path must be an absolute path");
+
 	if (backup_id_string_param != NULL)
 	{
 		current.backup_id = base36dec(backup_id_string_param);
@@ -204,7 +209,7 @@ main(int argc, char *argv[])
 			elog(ERROR, "Invalid backup-id");
 	}
 
-	/* setup stream options */
+	/* Setup stream options. They are used in streamutil.c. */
 	if (pgut_dbname != NULL)
 		dbname = pstrdup(pgut_dbname);
 	if (host != NULL)
@@ -214,9 +219,10 @@ main(int argc, char *argv[])
 	if (username != NULL)
 		dbuser = pstrdup(username);
 
-	/* path must be absolute */
-	if (!is_absolute_path(backup_path))
-		elog(ERROR, "-B, --backup-path must be an absolute path");
+	/*
+	 * We read pgdata path from command line or from configuration file.
+	 * Do final check.
+	 */
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
 

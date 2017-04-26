@@ -276,8 +276,7 @@ do_backup_database(parray *backup_list)
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name = GetRelativePath(file->path, pgdata);
 
-			if (verbose)
-				elog(LOG, "Create directory \"%s\"", dir_name);
+			elog(LOG, "Create directory \"%s\"", dir_name);
 
 			join_path_components(dirpath, database_path, dir_name);
 			dir_create_dir(dirpath, DIR_PERMISSION);
@@ -305,8 +304,7 @@ do_backup_database(parray *backup_list)
 	/* Run threads */
 	for (i = 0; i < num_threads; i++)
 	{
-		if (verbose)
-			elog(WARNING, "Start thread num:%li", parray_num(backup_threads_args[i]->backup_files_list));
+		elog(LOG, "Start thread num:%li", parray_num(backup_threads_args[i]->backup_files_list));
 		pthread_create(&backup_threads[i], NULL, (void *(*)(void *)) backup_files, backup_threads_args[i]);
 	}
 
@@ -1157,9 +1155,8 @@ backup_files(void *arg)
 				if (prev_file && false)
 				{
 					file->write_size = BYTES_INVALID;
-					if (verbose)
-						elog(LOG, "File \"%s\" has not changed since previous backup",
-							file->path);
+					elog(LOG, "File \"%s\" has not changed since previous backup",
+						 file->path);
 					continue;
 				}
 			}
@@ -1554,10 +1551,9 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	static XLogRecPtr prevpos = InvalidXLogRecPtr;
 
 	/* we assume that we get called once at the end of each segment */
-	if (verbose && segment_finished)
-		fprintf(stderr, _("%s: finished segment at %X/%X (timeline %u)\n"),
-				PROGRAM_NAME, (uint32) (xlogpos >> 32), (uint32) xlogpos,
-				timeline);
+	if (segment_finished)
+		elog(LOG, _("finished segment at %X/%X (timeline %u)\n"),
+			 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
 	/*
 	 * Note that we report the previous, not current, position here. After a
@@ -1568,9 +1564,8 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	 * timeline, but it's close enough for reporting purposes.
 	 */
 	if (prevtimeline != 0 && prevtimeline != timeline)
-		fprintf(stderr, _("%s: switched to timeline %u at %X/%X\n"),
-				PROGRAM_NAME, timeline,
-				(uint32) (prevpos >> 32), (uint32) prevpos);
+		elog(LOG, _("switched to timeline %u at %X/%X\n"),
+			 timeline, (uint32) (prevpos >> 32), (uint32) prevpos);
 
 	if (stop_backup_lsn != InvalidXLogRecPtr && xlogpos > stop_backup_lsn)
 		return true;
@@ -1637,11 +1632,8 @@ StreamLog(void *arg)
 	/*
 	 * Start the replication
 	 */
-	if (verbose)
-		fprintf(stderr,
-				_("%s: starting log streaming at %X/%X (timeline %u)\n"),
-				PROGRAM_NAME, (uint32) (startpos >> 32), (uint32) startpos,
-				starttli);
+	elog(LOG, _("starting log streaming at %X/%X (timeline %u)\n"),
+		 (uint32) (startpos >> 32), (uint32) startpos, starttli);
 
 #if PG_VERSION_NUM >= 90600
 	{

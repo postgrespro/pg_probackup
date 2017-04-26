@@ -119,9 +119,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				/* Try to read and verify this page again several times. */
 				if (try_checksum)
 				{
-					if (verbose)
-						elog(WARNING, "File: %s blknum %u have wrong page header, try again",
-							 file->path, blknum);
+					elog(WARNING, "File: %s blknum %u have wrong page header, try again",
+						 file->path, blknum);
 					usleep(100);
 					continue;
 				}
@@ -150,9 +149,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			{
 				if (try_checksum)
 				{
-					if (verbose)
-						elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
-							 file->path, blknum);
+					elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
+						 file->path, blknum);
 					usleep(100);
 				}
 				else

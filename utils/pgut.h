@@ -85,7 +85,6 @@ extern const char  *host;
 extern const char  *port;
 extern const char  *username;
 extern char		   *password;
-extern bool			verbose;
 extern bool			prompt_password;
 
 extern bool			interrupted;

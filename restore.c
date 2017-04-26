@@ -332,8 +332,7 @@ restore_backup(pgBackup *backup)
 		arg->files = files;
 		arg->backup = backup;
 
-		if (verbose)
-			elog(LOG, "Start thread for num:%li", parray_num(files));
+		elog(LOG, "Start thread for num:%li", parray_num(files));
 
 		restore_threads_args[i] = arg;
 		pthread_create(&restore_threads[i], NULL, (void *(*)(void *)) restore_files, arg);
@@ -350,7 +349,7 @@ restore_backup(pgBackup *backup)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (verbose)
+	if (log_level <= LOG)
 	{
 		char	   *backup_id;
 
@@ -395,7 +394,7 @@ remove_deleted_files(pgBackup *backup)
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
 			pgFileDelete(file);
-			if (verbose)
+			if (log_level <= LOG)
 				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
 		}
 	}

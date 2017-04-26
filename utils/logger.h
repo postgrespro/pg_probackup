@@ -10,10 +10,6 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-/* Log destination bitmap */
-#define LOG_DESTINATION_STDERR		1
-#define LOG_DESTINATION_LOGFILE		2
-
 /* Log level */
 #define VERBOSE		(-5)
 #define LOG			(-4)
@@ -26,12 +22,10 @@
 
 /* Logger parameters */
 
-extern int			log_destination;
 extern int			log_level;
-extern bool			quiet;
 
 extern char		   *log_filename;
-extern char		   *log_error_filename;
+extern char		   *error_log_filename;
 extern char		   *log_directory;
 
 extern int			log_rotation_size;

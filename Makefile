@@ -8,7 +8,6 @@ OBJS = backup.o \
 	fetch.o \
 	help.o \
 	init.o \
-	parray.o \
 	pg_probackup.o \
 	restore.o \
 	show.o \
@@ -20,8 +19,9 @@ OBJS = backup.o \
 	xlogreader.o \
 	streamutil.o \
 	receivelog.o \
-	pgut/pgut.o \
-	pgut/logger.o
+	utils/parray.o \
+	utils/pgut.o \
+	utils/logger.o
 
 EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h streamutil.c streamutil.h logging.h
 

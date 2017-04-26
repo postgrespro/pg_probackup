@@ -356,8 +356,7 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 							 wal_file, strerror(errno));
 						break;
 					}
-					if (verbose)
-						elog(LOG, "removed WAL segment \"%s\"", wal_file);
+					elog(LOG, "removed WAL segment \"%s\"", wal_file);
 
 					if (max_wal_file[0] == '\0' ||
 						strcmp(max_wal_file + 8, arcde->d_name + 8) < 0)
@@ -370,9 +369,9 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 			}
 		}
 
-		if (!verbose && min_wal_file[0] != '\0')
+		if (min_wal_file[0] != '\0')
 			elog(INFO, "removed min WAL segment \"%s\"", min_wal_file);
-		if (!verbose && max_wal_file[0] != '\0')
+		if (max_wal_file[0] != '\0')
 			elog(INFO, "removed max WAL segment \"%s\"", max_wal_file);
 
 		if (errno)

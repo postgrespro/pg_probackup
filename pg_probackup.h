@@ -28,10 +28,10 @@
 #include "storage/checksum.h"
 #include "utils/pg_crc.h"
 
-#include "pgut/pgut.h"
+#include "utils/parray.h"
+#include "utils/pgut.h"
 
 #include "datapagemap.h"
-#include "parray.h"
 
 
 /* Directory/File names */
