@@ -44,15 +44,16 @@ static void elog_internal(int elevel, const char *fmt, va_list args)
 						  pg_attribute_printf(2, 0);
 
 /* Functions to work with log files */
-static void open_logfile(void);
+static void open_logfile(FILE **file, const char *filename_format);
 static void release_logfile(void);
-static char *logfile_getname(time_t timestamp);
+static char *logfile_getname(const char *format, time_t timestamp);
 static FILE *logfile_open(const char *filename, const char *mode);
 
 /* Static variables */
 
 static FILE *log_file = NULL;
-static char *last_file_name = NULL;
+static FILE *error_log_file = NULL;
+
 static bool exit_hook_registered = false;
 /* Logging to file is in progress */
 static bool logging_to_file = false;
@@ -113,7 +114,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 		logging_to_file = true;
 
 		if (log_file == NULL)
-			open_logfile();
+			open_logfile(&log_file, log_filename);
 
 		write_elevel(log_file, elevel);
 
@@ -123,6 +124,27 @@ elog_internal(int elevel, const char *fmt, va_list args)
 
 		logging_to_file = false;
 		wrote_to_file = true;
+	}
+
+	/*
+	 * Write error message to error log file.
+	 * Do not write to file if this error was raised during write previous
+	 * message.
+	 */
+	if (elevel >= ERROR && error_log_filename && !logging_to_file)
+	{
+		logging_to_file = true;
+
+		if (error_log_file == NULL)
+			open_logfile(&error_log_file, error_log_filename);
+
+		write_elevel(error_log_file, elevel);
+
+		vfprintf(error_log_file, fmt, args);
+		fputc('\n', error_log_file);
+		fflush(error_log_file);
+
+		logging_to_file = false;
 	}
 
 	/*
@@ -249,7 +271,7 @@ parse_log_level(const char *level)
  * Result is palloc'd.
  */
 static char *
-logfile_getname(time_t timestamp)
+logfile_getname(const char *format, time_t timestamp)
 {
 	char	   *filename;
 	size_t		len;
@@ -265,8 +287,8 @@ logfile_getname(time_t timestamp)
 	len = strlen(filename);
 
 	/* Treat log_filename as a strftime pattern */
-	if (strftime(filename + len, MAXPGPATH - len, log_filename, tm) <= 0)
-		elog(ERROR, "strftime(%s) failed: %s", log_filename, strerror(errno));
+	if (strftime(filename + len, MAXPGPATH - len, format, tm) <= 0)
+		elog(ERROR, "strftime(%s) failed: %s", format, strerror(errno));
 
 	return filename;
 }
@@ -304,18 +326,13 @@ logfile_open(const char *filename, const char *mode)
  * Open the log file.
  */
 static void
-open_logfile(void)
+open_logfile(FILE **file, const char *filename_format)
 {
 	char	   *filename;
 
-	filename = logfile_getname(time(NULL));
-
-	log_file = logfile_open(filename, "a");
-
-	if (last_file_name != NULL)
-		pfree(last_file_name);
-
-	last_file_name = filename;
+	filename = logfile_getname(filename_format, time(NULL));
+	*file = logfile_open(filename, "a");
+	pfree(filename);
 
 	/*
 	 * Arrange to close opened file at proc_exit.
@@ -338,6 +355,9 @@ release_logfile(void)
 		fclose(log_file);
 		log_file = NULL;
 	}
-	if (last_file_name != NULL)
-		pfree(last_file_name);
+	if (error_log_file)
+	{
+		fclose(error_log_file);
+		error_log_file = NULL;
+	}
 }
