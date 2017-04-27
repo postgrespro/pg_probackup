@@ -116,6 +116,10 @@ get_parent_tli(TimeLineID child_tli)
 	char		fline[MAXPGPATH];
 	FILE	   *fd;
 
+	/* Timeline 1 does not have a history file and parent timeline */
+	if (child_tli == 1)
+		return 0;
+
 	/* Search history file in archives */
 	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path,
 		child_tli);
@@ -126,6 +130,7 @@ get_parent_tli(TimeLineID child_tli)
 			elog(ERROR, "could not open file \"%s\": %s", path,
 				strerror(errno));
 
+		/* Did not find history file, do not raise the error */
 		return 0;
 	}
 

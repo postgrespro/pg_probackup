@@ -727,7 +727,7 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 	parray	   *result;
 	char		path[MAXPGPATH];
 	char		fline[MAXPGPATH];
-	FILE	   *fd;
+	FILE	   *fd = NULL;
 	TimeLineHistoryEntry *entry;
 	TimeLineHistoryEntry *last_timeline = NULL;
 
@@ -735,12 +735,20 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path,
 		targetTLI);
 
-	fd = fopen(path, "rt");
-	if (fd == NULL)
+	/* Timeline 1 does not have a history file */
+	if (targetTLI != 1)
 	{
-		if (errno != ENOENT)
-			elog(ERROR, "could not open file \"%s\": %s", path,
-				strerror(errno));
+		fd = fopen(path, "rt");
+		if (fd == NULL)
+		{
+			if (errno != ENOENT)
+				elog(ERROR, "could not open file \"%s\": %s", path,
+					strerror(errno));
+
+			/* There is no history file for target timeline */
+			elog(ERROR, "recovery target timeline %u does not exist",
+				 targetTLI);
+		}
 	}
 
 	result = parray_new();
@@ -748,7 +756,7 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 	/*
 	 * Parse the file...
 	 */
-	while (fgets(fline, sizeof(fline), fd) != NULL)
+	while (fd && fgets(fline, sizeof(fline), fd) != NULL)
 	{
 		char	   *ptr;
 		TimeLineID	tli;
@@ -797,8 +805,7 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 		fclose(fd);
 
 	if (last_timeline && targetTLI <= last_timeline->tli)
-		elog(ERROR,
-			"Timeline IDs must be less than child timeline's ID.");
+		elog(ERROR, "Timeline IDs must be less than child timeline's ID.");
 
 	/* append target timeline */
 	entry = pgut_new(TimeLineHistoryEntry);
