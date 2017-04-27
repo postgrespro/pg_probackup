@@ -103,15 +103,24 @@ readBackupCatalogConfigFile(void)
 
 	pgut_option options[] =
 	{
-			/* configure options */
-		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
+		/* retention options */
+		{ 'u', 0, "retention-redundancy",	&(config->retention_redundancy),SOURCE_FILE_STRICT },
+		{ 'u', 0, "retention-window",		&(config->retention_window),	SOURCE_FILE_STRICT },
+		/* logging options */
+//		{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
+//		{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
+//		{ 's', 42, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
+//		{ 's', 43, "log-directory",			&log_directory,		SOURCE_CMDLINE },
+//		{ 'u', 44, "log-rotation-size",		&log_rotation_size,	SOURCE_CMDLINE },
+//		{ 'u', 45, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
+		/* connection options */
 		{ 's', 0, "pgdata",					&(config->pgdata),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgdatabase",				&(config->pgdatabase),			SOURCE_FILE_STRICT },
 		{ 's', 0, "pghost",					&(config->pghost),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgport",					&(config->pgport),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pguser",					&(config->pguser),				SOURCE_FILE_STRICT },
-		{ 'u', 0, "retention-redundancy",	&(config->retention_redundancy),SOURCE_FILE_STRICT },
-		{ 'u', 0, "retention-window",		&(config->retention_window),	SOURCE_FILE_STRICT },
+		/* other options */
+		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
 		{0}
 	};
 

@@ -205,6 +205,45 @@ pg_log(eLogType type, const char *fmt, ...)
 }
 
 /*
+ * Parses string representation of log level.
+ */
+int
+parse_log_level(const char *level)
+{
+	const char *v = level;
+	size_t		len;
+
+	/* Skip all spaces detected */
+	while (isspace((unsigned char)*v))
+		v++;
+	len = strlen(v);
+
+	if (len == 0)
+		elog(ERROR, "log-level is empty");
+
+	if (pg_strncasecmp("verbose", v, len) == 0)
+		return VERBOSE;
+	else if (pg_strncasecmp("log", v, len) == 0)
+		return LOG;
+	else if (pg_strncasecmp("info", v, len) == 0)
+		return INFO;
+	else if (pg_strncasecmp("notice", v, len) == 0)
+		return NOTICE;
+	else if (pg_strncasecmp("warning", v, len) == 0)
+		return WARNING;
+	else if (pg_strncasecmp("error", v, len) == 0)
+		return ERROR;
+	else if (pg_strncasecmp("fatal", v, len) == 0)
+		return FATAL;
+	else if (pg_strncasecmp("panic", v, len) == 0)
+		return PANIC;
+
+	/* Log level is invalid */
+	elog(ERROR, "invalid log-level \"%s\"", level);
+	return 0;
+}
+
+/*
  * Construct logfile name using timestamp information.
  *
  * Result is palloc'd.

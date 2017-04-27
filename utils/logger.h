@@ -37,4 +37,6 @@ extern int			log_rotation_age;
 #undef elog
 extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
 
+extern int parse_log_level(const char *level);
+
 #endif   /* LOGGER_H */
