@@ -133,8 +133,10 @@ main(int argc, char *argv[])
 			backup_subcmd = SHOW;
 		else if (strcmp(argv[1], "delete") == 0)
 			backup_subcmd = DELETE;
-		else if (strcmp(argv[1], "config") == 0)
-			backup_subcmd = CONFIGURE;
+		else if (strcmp(argv[1], "set-config") == 0)
+			backup_subcmd = SET_CONFIG;
+		else if (strcmp(argv[1], "show-config") == 0)
+			backup_subcmd = SHOW_CONFIG;
 		else if (strcmp(argv[1], "--help") == 0
 				|| strcmp(argv[1], "help") == 0
 				|| strcmp(argv[1], "-?") == 0)
@@ -170,7 +172,7 @@ main(int argc, char *argv[])
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
 	/* Do not read options from file or env if we're going to set them */
-	if (backup_subcmd != CONFIGURE)
+	if (backup_subcmd != SET_CONFIG)
 	{
 		/* Read options from configuration file */
 		join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
@@ -248,12 +250,14 @@ main(int argc, char *argv[])
 				return do_retention_purge();
 			else
 				return do_delete(current.backup_id);
-		case CONFIGURE:
-			/* TODO fixit */
+		case SHOW_CONFIG:
+			if (argc > 4)
+				elog(ERROR, "show-config command doesn't accept any options");
+			return do_configure(true);
+		case SET_CONFIG:
 			if (argc == 4)
-				return do_configure(true);
-			else
-				return do_configure(false);
+				elog(ERROR, "set-config command requires at least one option");
+			return do_configure(false);
 	}
 
 	return 0;

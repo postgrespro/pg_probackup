@@ -107,7 +107,8 @@ typedef enum ProbackupSubcmd
 	VALIDATE,
 	SHOW,
 	DELETE,
-	CONFIGURE
+	SET_CONFIG,
+	SHOW_CONFIG
 } ProbackupSubcmd;
 
 /* special values of pgBackup fields */
