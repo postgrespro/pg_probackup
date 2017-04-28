@@ -329,9 +329,33 @@ static void
 open_logfile(FILE **file, const char *filename_format)
 {
 	char	   *filename;
+	struct stat st;
+	bool		rotation_requested = false;
 
 	filename = logfile_getname(filename_format, time(NULL));
-	*file = logfile_open(filename, "a");
+
+	/* First check for rotation by size */
+	if (log_rotation_size > 0)
+	{
+		if (stat(filename, &st) == -1)
+		{
+			if (errno == ENOENT)
+			{
+				/* There is no file "filename" and rotation does not need */
+			}
+			else
+				elog(ERROR, "cannot stat log file \"%s\": %s",
+					 filename, strerror(errno));
+		}
+		/* Found log file "filename" */
+		else
+			rotation_requested = (st.st_size >= log_rotation_size * 1024L);
+	}
+
+	if (rotation_requested)
+		*file = logfile_open(filename, "w");
+	else
+		*file = logfile_open(filename, "a");
 	pfree(filename);
 
 	/*
