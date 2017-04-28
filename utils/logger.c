@@ -329,29 +329,59 @@ static void
 open_logfile(FILE **file, const char *filename_format)
 {
 	char	   *filename;
-	struct stat st;
+	struct stat	st;
 	bool		rotation_requested = false;
 
 	filename = logfile_getname(filename_format, time(NULL));
 
-	/* First check for rotation by size */
-	if (log_rotation_size > 0)
+	/* First check for rotation */
+	if (log_rotation_size > 0 || log_rotation_age > 0)
 	{
 		if (stat(filename, &st) == -1)
 		{
 			if (errno == ENOENT)
 			{
 				/* There is no file "filename" and rotation does not need */
+				goto logfile_open;
 			}
 			else
 				elog(ERROR, "cannot stat log file \"%s\": %s",
 					 filename, strerror(errno));
 		}
 		/* Found log file "filename" */
-		else
+
+		/* Check for rotation by age */
+		if (log_rotation_age > 0)
+		{
+			char		control[MAXPGPATH];
+			struct stat	control_st;
+			FILE	   *control_file;
+
+			snprintf(control, MAXPGPATH, "%s.rotation", filename);
+			if (stat(control, &control_st) == -1)
+			{
+				if (errno == ENOENT)
+				{
+					/* There is no control file for rotation */
+					goto logfile_open;
+				}
+				else
+					elog(ERROR, "cannot stat rotation file \"%s\": %s",
+						 control, strerror(errno));
+			}
+
+			/* Found control file for rotation */
+
+			control_file = fopen(control, "r");
+			fclose(control_file);
+		}
+
+		/* Check for rotation by size */
+		if (!rotation_requested && log_rotation_size > 0)
 			rotation_requested = (st.st_size >= log_rotation_size * 1024L);
 	}
 
+logfile_open:
 	if (rotation_requested)
 		*file = logfile_open(filename, "w");
 	else
