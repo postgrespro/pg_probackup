@@ -616,7 +616,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 	join_path_components(db_path, backup_dir, DATABASE_DIR);
 	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
-	/* Exit if database/tablespace_map don't exists */
+	/* Exit if database/tablespace_map doesn't exist */
 	if (!fileExists(map_path))
 	{
 		elog(LOG, "there is no file tablespace_map");
@@ -648,6 +648,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		parray_append(files, file);
 	}
 
+	parray_qsort(files, pgFileCompareLinked);
 	fclose(fp);
 }
 
