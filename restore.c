@@ -250,7 +250,8 @@ do_restore_or_validate(time_t target_backup_id,
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
 
-	elog(LOG, "%s completed.", action);
+	elog(INFO, "%s of backup %s completed.",
+		 action, base36enc(dest_backup->start_time));
 	return 0;
 }
 
