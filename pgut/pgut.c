@@ -1291,25 +1291,25 @@ help(bool details)
 {
 	pgut_help(details);
 
-	if (details)
-	{
-		printf("\nConnection options:\n");
-		printf("  -d, --dbname=DBNAME       database to connect\n");
-		printf("  -h, --host=HOSTNAME       database server host or socket directory\n");
-		printf("  -p, --port=PORT           database server port\n");
-		printf("  -U, --username=USERNAME   user name to connect as\n");
-		printf("  -w, --no-password         never prompt for password\n");
-		printf("  -W, --password            force password prompt\n");
-	}
-
-	printf("\nGeneric options:\n");
-	if (details)
-	{
-		printf("  -q, --quiet               don't write any messages\n");
-		printf("  -v, --verbose             verbose mode\n");
-	}
-		printf("      --help                show this help, then exit\n");
-		printf("      --version             output version information and exit\n");
+// 	if (details)
+// 	{
+// 		printf("\nConnection options:\n");
+// 		printf("  -d, --dbname=DBNAME       database to connect\n");
+// 		printf("  -h, --host=HOSTNAME       database server host or socket directory\n");
+// 		printf("  -p, --port=PORT           database server port\n");
+// 		printf("  -U, --username=USERNAME   user name to connect as\n");
+// 		printf("  -w, --no-password         never prompt for password\n");
+// 		printf("  -W, --password            force password prompt\n");
+// 	}
+// 
+// 	printf("\nGeneric options:\n");
+// 	if (details)
+// 	{
+// 		printf("  -q, --quiet               don't write any messages\n");
+// 		printf("  -v, --verbose             verbose mode\n");
+// 	}
+// 		printf("      --help                show this help, then exit\n");
+// 		printf("      --version             output version information and exit\n");
 
 	if (details && (PROGRAM_URL || PROGRAM_EMAIL))
 	{
