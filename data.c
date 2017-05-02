@@ -319,7 +319,7 @@ restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
 	int			errno_tmp;
 	struct stat	st;
 	char		to_path[MAXPGPATH];
-	char		buf[8192];
+	char		buf[BLCKSZ];
 	size_t write_size = 0;
 
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
@@ -562,7 +562,6 @@ is_compressed_data_file(pgFile *file)
 }
 
 /*
- * TODO Don't use buffer.
  * Add check that file is not bigger than RELSEG_SIZE.
  * WARNING compressed file can be exceed this limit.
  * Add compression.
@@ -575,7 +574,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	FILE	   *out;
 	size_t		read_len = 0;
 	int			errno_tmp;
-	char		buf[8192];
+	char		buf[BLCKSZ];
 	struct stat	st;
 	pg_crc32	crc;
 
@@ -705,7 +704,7 @@ copy_file_partly(const char *from_root, const char *to_root,
 	size_t		read_len = 0;
 	int			errno_tmp;
 	struct stat	st;
-	char		buf[8192];
+	char		buf[BLCKSZ];
 
 	/* reset size summary */
 	file->read_size = 0;
@@ -823,7 +822,6 @@ copy_file_partly(const char *from_root, const char *to_root,
  * Calculate checksum of various files which are not copied from PGDATA,
  * but created in process of backup, such as stream XLOG files,
  * PG_TABLESPACE_MAP_FILE and PG_BACKUP_LABEL_FILE.
- * TODO Why do we read them into a buffer of blocksize?
  */
 bool
 calc_file_checksum(pgFile *file)
@@ -831,7 +829,7 @@ calc_file_checksum(pgFile *file)
 	FILE	   *in;
 	size_t		read_len = 0;
 	int			errno_tmp;
-	char		buf[8192];
+	char		buf[BLCKSZ];
 	struct stat	st;
 	pg_crc32	crc;
 

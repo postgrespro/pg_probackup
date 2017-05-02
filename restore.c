@@ -135,8 +135,9 @@ do_restore_or_validate(time_t target_backup_id,
 		 * We found target backup. Check its status and
 		 * ensure that it satisfies recovery target.
 		 */
-		if (target_backup_id == current_backup->start_time
+		if ((target_backup_id == current_backup->start_time
 			|| target_backup_id == INVALID_BACKUP_ID)
+			&& !dest_backup)
 		{
 			if (current_backup->status != BACKUP_STATUS_OK)
 				elog(ERROR, "given backup %s is in %s status",

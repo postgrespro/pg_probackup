@@ -876,6 +876,7 @@ pg_stop_backup(pgBackup *backup)
 		fwrite(PQgetvalue(res, 0, 1), 1, strlen(PQgetvalue(res, 0, 1)), fp);
 		fclose(fp);
 
+		/* TODO What for do we save the file into backup_list? */
 		file = pgFileNew(backup_label, true);
 		calc_file_checksum(file);
 		free(file->path);
