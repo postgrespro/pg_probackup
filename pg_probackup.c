@@ -16,7 +16,7 @@
 #include <time.h>
 #include <sys/stat.h>
 
-const char *PROGRAM_VERSION	= "1.1.8";
+const char *PROGRAM_VERSION	= "1.1.9";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
