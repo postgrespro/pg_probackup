@@ -1312,7 +1312,7 @@ add_pgdata_files(parray *files, const char *root)
 			parray_remove(files, i);
 			i--;
 		}
-		/* compress map file it is not data file */
+		/* compress map file is not data file */
 		else if (path_len > 4 &&
 				 strncmp(file->path + (path_len - 4), ".cfm", 4) == 0)
 		{

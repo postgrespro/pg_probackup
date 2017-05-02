@@ -18,13 +18,11 @@ static void pgBackupValidateFiles(void *arg);
 typedef struct
 {
 	parray *files;
-	bool validate_crc;
 	bool corrupted;
 } validate_files_args;
 
 /*
  * Validate backup files.
- * TODO review
  */
 void
 pgBackupValidate(pgBackup *backup)
@@ -63,12 +61,6 @@ pgBackupValidate(pgBackup *backup)
 	{
 		validate_files_args *arg = pg_malloc(sizeof(validate_files_args));
 		arg->files = files;
-		arg->validate_crc = true;
-
-		/* TODO Why didn't we validate checksums on restore before? */
-// 		if (backup_subcmd == RESTORE)
-// 			arg->validate_crc = false;
-
 		arg->corrupted = false;
 		validate_threads_args[i] = arg;
 		pthread_create(&validate_threads[i], NULL, (void *(*)(void *)) pgBackupValidateFiles, arg);
@@ -99,7 +91,7 @@ pgBackupValidate(pgBackup *backup)
 }
 
 /*
- * Validate files in the backup with size or CRC.
+ * Validate files in the backup.
  * NOTE: If file is not valid, do not use ERROR log message,
  * rather throw a WARNING and set arguments->corrupted = true.
  * This is necessary to update backup status.
@@ -109,6 +101,7 @@ pgBackupValidateFiles(void *arg)
 {
 	int		i;
 	validate_files_args *arguments = (validate_files_args *)arg;
+	pg_crc32	crc;
 
 	for (i = 0; i < parray_num(arguments->files); i++)
 	{
@@ -158,18 +151,13 @@ pgBackupValidateFiles(void *arg)
 			return;
 		}
 
-		if (arguments->validate_crc)
+		crc = pgFileGetCRC(file);
+		if (crc != file->crc)
 		{
-			pg_crc32	crc;
-
-			crc = pgFileGetCRC(file);
-			if (crc != file->crc)
-			{
-				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-					 file->path, file->crc, crc);
-				arguments->corrupted = true;
-				return;
-			}
+			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+					file->path, file->crc, crc);
+			arguments->corrupted = true;
+			return;
 		}
 	}
 }

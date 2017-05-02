@@ -209,19 +209,24 @@ do_restore_or_validate(time_t target_backup_id,
 
 	/*
 	 * Validate backups from base_full_backup to dest_backup.
-	 * And restore if subcommand is RESTORE.
-	 * TODO what if we found out that backup is not valid?
 	 */
 	for (i = base_full_backup_index; i >= dest_backup_index; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+		pgBackupValidate(backup);
+	}
 
-		if (backup->status == BACKUP_STATUS_OK)
+	/* We ensured that all backups are valid, now restore if required */
+	if (is_restore)
+	{
+		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
-			pgBackupValidate(backup);
-
-			if (is_restore)
+			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			if (backup->status == BACKUP_STATUS_OK)
 				restore_backup(backup);
+			else
+				elog(ERROR, "backup %s is not valid",
+					 base36enc(backup->start_time));
 		}
 	}
 
@@ -548,9 +553,8 @@ create_directory:
  * Check that all tablespace mapping entries have correct linked directory
  * paths. Linked directories must be empty or do not exist.
  *
- * If tablespace-mapping option is supplied all OLDDIR entries should have
+ * If tablespace-mapping option is supplied, all OLDDIR entries must have
  * entries in tablespace_map file.
- * TODO review
  */
 static void
 check_tablespace_mapping(pgBackup *backup)
@@ -568,7 +572,7 @@ check_tablespace_mapping(pgBackup *backup)
 
 	elog(LOG, "check tablespace directories of backup %s", base36enc(backup->start_time));
 
-	/* 1 - OLDDIR should has an entry in links */
+	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
 	for (cell = tablespace_dirs.head; cell; cell = cell->next)
 	{
 		tmp_file->linked = cell->old_dir;
@@ -579,7 +583,7 @@ check_tablespace_mapping(pgBackup *backup)
 				 cell->old_dir);
 	}
 
-	/* 2 - all linked directories should be empty */
+	/* 2 - all linked directories must be empty */
 	for (i = 0; i < parray_num(links); i++)
 	{
 		pgFile	   *link = (pgFile *) parray_get(links, i);
