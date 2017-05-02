@@ -991,6 +991,7 @@ set_tablespace_created(const char *link, const char *dir)
 
 	strcpy(cell->link_name, link);
 	strcpy(cell->linked_dir, dir);
+	cell->next = NULL;
 
 	if (tablespace_created_dirs.tail)
 		tablespace_created_dirs.tail->next = cell;
