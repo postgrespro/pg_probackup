@@ -57,14 +57,15 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # calculate md5sums for every page of this fork
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['old_size'], idx_ptrack[i]['path'])
+                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         # Make full backup to clean every ptrack
         self.init_pb(node)
         self.backup_pb(node, backup_type='full', options=['-j100', '--stream'])
         for i in idx_ptrack:
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(idx_ptrack[i]['path'])
-            self.check_ptrack_clean(idx_ptrack[i])
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
+            self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
 
         # Delete some rows, vacuum it and make checkpoint
         node.psql('postgres', 'delete from t_heap where id%2 = 1')
@@ -78,9 +79,10 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # calculate new md5sums for pages
             idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['new_size'], idx_ptrack[i]['path'])
+                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(idx_ptrack[i]['path'])
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])

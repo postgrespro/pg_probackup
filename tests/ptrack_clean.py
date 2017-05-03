@@ -1,8 +1,6 @@
 import unittest
 from sys import exit
 from testgres import get_new_node, stop_all
-#import os
-from os import path, open, lseek, read, close, O_RDONLY
 from .ptrack_helpers import ProbackupTest, idx_ptrack
 
 
@@ -48,7 +46,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['size'])
-            self.check_ptrack_clean(idx_ptrack[i])
+            self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
         # Update everything, vacuum it and make PTRACK BACKUP
         node.psql('postgres', 'update t_heap set text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;')
@@ -66,34 +64,29 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             # check that ptrack bits are cleaned
-            self.check_ptrack_clean(idx_ptrack[i])
-#
-#        # Update everything, vacuum it and make PAGE BACKUP
-#        node.psql('postgres', 'update t_heap set text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;')
-#        node.psql('postgres', 'vacuum t_heap')
-#
-#        # Make page backup to clean every ptrack
-#        self.backup_pb(node, backup_type='page', options=['-j100'])
-#        node.psql('postgres', 'checkpoint')
-#
-#        for i in idx_ptrack:
-#            # get new size of heap and indexes and calculate it in pages
-#            idx_ptrack[i]['size'] = self.get_fork_size(node, i)
-#            # update path to heap and index files in case they`ve changed
-#            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-#            # # get ptrack for every idx
-#            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
-#                idx_ptrack[i]['path'], idx_ptrack[i]['size'])
-#            # check that ptrack bits are cleaned
-#            self.check_ptrack_clean(idx_ptrack[i])
+            self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
-#        print self.clean_pb(node)
-#        for i in self.show_pb(node):
-#            print i
-        self.show_pb(node, as_text=True)
+        # Update everything, vacuum it and make PAGE BACKUP
+        node.psql('postgres', 'update t_heap set text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;')
+        node.psql('postgres', 'vacuum t_heap')
+
+        # Make page backup to clean every ptrack
+        self.backup_pb(node, backup_type='page', options=['-j100'])
+        node.psql('postgres', 'checkpoint')
+
+        for i in idx_ptrack:
+            # get new size of heap and indexes and calculate it in pages
+            idx_ptrack[i]['size'] = self.get_fork_size(node, i)
+            # update path to heap and index files in case they`ve changed
+            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
+            # # get ptrack for every idx
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['size'])
+            # check that ptrack bits are cleaned
+            self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
+
+        print self.show_pb(node, as_text=True)
         self.clean_pb(node)
-#        print a
-#        print a.mode
         node.stop()
 
 if __name__ == '__main__':
