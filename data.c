@@ -406,7 +406,7 @@ restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
 	fclose(out);
 }
 
-static void
+void
 restore_compressed_file(const char *from_root,
 						const char *to_root,
 						pgFile *file)
@@ -435,20 +435,6 @@ restore_data_file(const char *from_root,
 	FILE			   *out;
 	BackupPageHeader	header;
 	BlockNumber			blknum;
-
-	if (!file->is_datafile)
-	{
-		/*
-		 * If the file is not a datafile and not compressed file,
-		 * just copy it.
-		 */
-		if (file->generation == -1)
-			copy_file(from_root, to_root, file);
-		else
-			restore_compressed_file(from_root, to_root, file);
-
-		return;
-	}
 
 	/* open backup mode file for read */
 	in = fopen(file->path, "r");

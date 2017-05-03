@@ -666,7 +666,15 @@ restore_files(void *arg)
 		}
 
 		/* restore file */
-		restore_data_file(from_root, pgdata, file, arguments->backup);
+		if (file->is_datafile)
+		{
+			if (is_compressed_data_file(file))
+				restore_compressed_file(from_root, pgdata, file);
+			else
+				restore_data_file(from_root, pgdata, file, arguments->backup);
+		}
+		else
+			copy_file(from_root, pgdata, file);
 
 		/* print size of restored file */
 		elog(LOG, "restored %lu\n", (unsigned long) file->write_size);

@@ -344,6 +344,8 @@ extern bool backup_data_file(const char *from_root, const char *to_root,
 							 pgFile *file, XLogRecPtr prev_backup_start_lsn);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
+extern void restore_compressed_file(const char *from_root,
+									const char *to_root, pgFile *file);
 extern bool is_compressed_data_file(pgFile *file);
 extern bool backup_compressed_file_partially(pgFile *file,
 											 void *arg,
