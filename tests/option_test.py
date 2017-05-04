@@ -65,7 +65,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             exit(1)
         except ProbackupException, e:
-            print e.message
+#            print e.message
             self.assertEqual(
                 e.message,
                 'ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)\n'

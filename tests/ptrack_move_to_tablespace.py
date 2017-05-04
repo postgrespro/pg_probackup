@@ -48,7 +48,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # get path to heap and index files
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(idx_ptrack[i]['path'])
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             # check that ptrack has correct bits after recovery
             self.check_ptrack_recovery(idx_ptrack[i])
 

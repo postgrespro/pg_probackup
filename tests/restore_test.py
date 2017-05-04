@@ -406,7 +406,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
+            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
         node.start()
         self.assertEqual(self.init_pb(node), six.b(""))
@@ -418,10 +418,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.skipTest("ptrack not supported")
             return
 
-        node.append_conf("pg_hba.conf", "local replication all trust")
-        node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
-        node.append_conf("postgresql.conf", "ptrack_enable = on")
-        node.append_conf("postgresql.conf", "max_wal_senders = 1")
+        #node.append_conf("pg_hba.conf", "local replication all trust")
+        #node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
+        #node.append_conf("postgresql.conf", "ptrack_enable = on")
+        #node.append_conf("postgresql.conf", "max_wal_senders = 1")
         node.restart()
 
         with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
@@ -471,7 +471,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
+            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
         node.start()
         self.assertEqual(self.init_pb(node), six.b(""))
@@ -483,10 +483,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.skipTest("ptrack not supported")
             return
 
-        node.append_conf("pg_hba.conf", "local replication all trust")
-        node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
-        node.append_conf("postgresql.conf", "ptrack_enable = on")
-        node.append_conf("postgresql.conf", "max_wal_senders = 1")
+        #node.append_conf("pg_hba.conf", "local replication all trust")
+        #node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
+        #node.append_conf("postgresql.conf", "ptrack_enable = on")
+        #node.append_conf("postgresql.conf", "max_wal_senders = 1")
         node.restart()
 
         pgbench = node.pgbench(

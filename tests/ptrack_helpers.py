@@ -194,7 +194,7 @@ class ProbackupTest(object):
             node.set_replication_conf()
         # Setup archiving for node
         if set_archiving:
-            node.set_archiving_conf(self.arcwal_dir(node))
+            self.set_archiving_conf(node, self.arcwal_dir(node))
         return node
 
 
@@ -223,7 +223,7 @@ class ProbackupTest(object):
         return os.path.join(node.base_dir, 'data',
             node.execute("postgres", "select pg_relation_filepath('{0}')".format(fork_name))[0][0])
 
-    def get_md5_per_page_for_fork(self, size, file):
+    def get_md5_per_page_for_fork(self, file, size):
         file = os.open(file, os.O_RDONLY)
         offset = 0
         md5_per_page = {}
@@ -258,7 +258,6 @@ class ProbackupTest(object):
             size = idx_dict['new_size']
         else:
             size = idx_dict['old_size']
-
         for PageNum in range(size):
             if PageNum not in idx_dict['old_pages']:
                 # Page was not present before, meaning that relation got bigger
@@ -272,9 +271,9 @@ class ProbackupTest(object):
             if PageNum not in idx_dict['new_pages']:
                 # Page is not present now, meaning that relation got smaller
                 # Ptrack should be equal to 0, We are not freaking out about false positive stuff
-                if idx_dict['ptrack'][PageNum] != 0:
-                    print 'Page Number {0} of type {1} was deleted, but ptrack value is {2}'.format(
-                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
+                #if idx_dict['ptrack'][PageNum] != 0:
+                #    print 'Page Number {0} of type {1} was deleted, but ptrack value is {2}'.format(
+                #        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
                 continue
             # Ok, all pages in new_pages that do not have corresponding page in old_pages
             # are been dealt with. We can now safely proceed to comparing old and new pages 
@@ -307,9 +306,8 @@ class ProbackupTest(object):
                 success = False
             self.assertEqual(success, True)
 
-    def check_ptrack_clean(self, idx_dict):
+    def check_ptrack_clean(self, idx_dict, size):
         success = True
-        size = idx_dict['size']
         for PageNum in range(size):
             if idx_dict['ptrack'][PageNum] != 0:
                 print 'Ptrack for Page Number {0} of Type {1} should be clean, but ptrack value is {2}. THIS IS BAD'.format(
@@ -320,7 +318,7 @@ class ProbackupTest(object):
 
     def run_pb(self, command):
         try:
-            # print [self.probackup_path] + command
+#            print [self.probackup_path] + command
             output = subprocess.check_output(
                 [self.probackup_path] + command,
                 stderr=subprocess.STDOUT,
@@ -437,10 +435,10 @@ class ProbackupTest(object):
         else:
             # cut out empty lines and lines started with #
             # and other garbage then reconstruct it as dictionary
-            print show_splitted
+            # print show_splitted
             sanitized_show = [item for item in show_splitted if item]
             sanitized_show = [item for item in sanitized_show if not item.startswith('#')]
-            print sanitized_show
+            # print sanitized_show
             for line in sanitized_show:
                 name, var = line.partition(" = ")[::2]
                 var = var.strip('"')
@@ -494,6 +492,26 @@ class ProbackupTest(object):
                     continue
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
         return out_dict
+
+    def set_archiving_conf(self, node, archive_dir):
+        node.append_conf(
+                "postgresql.auto.conf",
+                "wal_level = archive"
+                )
+        node.append_conf(
+                "postgresql.auto.conf",
+                "archive_mode = on"
+                )
+        if os.name == 'posix':
+            node.append_conf(
+                    "postgresql.auto.conf",
+                    "archive_command = 'test ! -f {0}/%f && cp %p {0}/%f'".format(archive_dir)
+                    )
+        elif os.name == 'nt':
+            node.append_conf(
+                    "postgresql.auto.conf",
+                    "archive_command = 'copy %p {0}\\%f'".format(archive_dir)
+                    )
 
     def wrong_wal_clean(self, node, wal_size):
         wals_dir = os.path.join(self.backup_dir(node), "wal")

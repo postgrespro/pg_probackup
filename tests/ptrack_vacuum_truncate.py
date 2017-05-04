@@ -43,7 +43,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # calculate md5sums of pages
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['old_size'], idx_ptrack[i]['path'])
+                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         self.init_pb(node)
         self.backup_pb(node, backup_type='full', options=['-j100', '--stream'])
@@ -59,9 +59,10 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # calculate new md5sums for pages
             idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['new_size'], idx_ptrack[i]['path'])
+                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(idx_ptrack[i]['path'])
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])

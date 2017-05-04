@@ -50,7 +50,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         with open(path.join(node.logs_dir, "backup_page.log"), "wb") as backup_log:
             backup_log.write(self.backup_pb(node, backup_type="page", options=["--verbose"]))
 
-        print self.show_pb(node)
+        # print self.show_pb(node)
         show_backup = self.show_pb(node)[1]
         self.assertEqual(show_backup['Status'], six.b("OK"))
         self.assertEqual(show_backup['Mode'], six.b("PAGE"))
