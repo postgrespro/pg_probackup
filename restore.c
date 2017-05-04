@@ -677,7 +677,8 @@ restore_files(void *arg)
 			copy_file(from_root, pgdata, file);
 
 		/* print size of restored file */
-		elog(LOG, "restored %lu\n", (unsigned long) file->write_size);
+		elog(LOG, "Restored file %s : %lu bytes",
+			 file->path, (unsigned long) file->write_size);
 	}
 }
 
