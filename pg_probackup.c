@@ -29,6 +29,8 @@ char arclog_path[MAXPGPATH];
 pgBackup	current;
 ProbackupSubcmd	backup_subcmd;
 
+bool help = false;
+
 char 	*backup_id_string_param = NULL;
 bool	backup_logs = false;
 
@@ -59,6 +61,7 @@ static void opt_backup_mode(pgut_option *opt, const char *arg);
 static pgut_option options[] =
 {
 	/* directory options */
+	{ 'b',  1,  "help",					&help,			SOURCE_CMDLINE },
 	{ 's', 'D', "pgdata",				&pgdata,		SOURCE_CMDLINE },
 	{ 's', 'B', "backup-path",			&backup_path,	SOURCE_CMDLINE },
 	/* common options */
@@ -141,22 +144,34 @@ main(int argc, char *argv[])
 				|| strcmp(argv[1], "help") == 0
 				|| strcmp(argv[1], "-?") == 0)
 		{
-			help(true);
-			exit(0);
+			if (argc > 2)
+				help_command(argv[2]);
+			else
+				help_pg_probackup();
 		}
 		else if (strcmp(argv[1], "--version") == 0
 				 || strcmp(argv[1], "version") == 0
 				 || strcmp(argv[1], "-V") == 0)
 		{
-			fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
-			exit(0);
+			if (argc == 2)
+			{
+				fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
+				exit(0);
+			}
+			else if (strcmp(argv[2], "--help") == 0)
+				help_command(argv[1]);
+			else
+				elog(ERROR, "Invalid arguments for \"%s\" subcommand", argv[1]);
 		}
 		else
-			elog(ERROR, "Invalid subcommand");
+			elog(ERROR, "Unknown subcommand");
 	}
 
 	/* Parse command line arguments */
 	pgut_getopt(argc, argv, options);
+
+	if (help)
+		help_command(argv[2]);
 
 	if (backup_path == NULL)
 	{
@@ -261,92 +276,6 @@ main(int argc, char *argv[])
 	}
 
 	return 0;
-}
-
-/* TODO Update help in accordance with new options */
-void
-pgut_help(bool details)
-{
-	printf(_("\n%s - utility to manage backup/recovery of PostgreSQL database.\n\n"), PROGRAM_NAME);
-
-	printf(_("  %s help\n"), PROGRAM_NAME);
-
-	printf(_("\n  %s version\n"), PROGRAM_NAME);
-
-	printf(_("\n  %s init -B backup-path -D pgdata-dir\n"), PROGRAM_NAME);
-
-	printf(_("\n  %s set-config -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
-	printf(_("                 [--retention-redundancy=retention-redundancy]]\n"));
-	printf(_("                 [--retention-window=retention-window]\n"));
-
-	printf(_("\n  %s show-config -B backup-dir\n"), PROGRAM_NAME);
-
-	printf(_("\n  %s backup -B backup-path -b backup-mode\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
-	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress] [-q] [-v] [--delete-expired]\n"));
-	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
-
-	printf(_("\n  %s restore -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id]\n"));
-	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
-	printf(_("                [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
-
-	printf(_("\n  %s validate -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id]\n"));
-	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
-	printf(_("                [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
-
-	printf(_("\n  %s show -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-i backup-id]\n"));
-
-	printf(_("\n  %s delete -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [--wal] [-i backup-id | --expired] [--force]\n"));
-
-
-// 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-// 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
-// 	printf(_("  -b, --backup-mode=backup-mode	 backup mode=FULL|PAGE|PTRACK\n"));
-// 	printf("  Connection options:\n");
-// 	printf("  -d, --dbname=DBNAME       database to connect\n");
-// 	printf("  -h, --host=HOSTNAME       database server host or socket directory\n");
-// 	printf("  -p, --port=PORT           database server port\n");
-// 	printf("  -U, --username=USERNAME   user name to connect as\n");
-// 	printf("  -w, --no-password         never prompt for password\n");
-// 	printf("  -W, --password            force password prompt\n");
-// 	printf("  Retention options:\n");
-// 	printf(_("  --retention-redundancy=n-full-backups     specifies how many full backups purge command should keep\n"));
-// 	printf(_("  --retention-window=n-days                 specifies the number of days of recoverability\n"));
-// 
-// 
-// 	printf(_("\nOptional p:\n"));
-// 	printf(_("  -B, --backup-path=PATH    location of the backup storage area\n"));
-// 	printf(_("  -D, --pgdata=PATH         location of the database storage area\n"));
-// 	/*printf(_("  -c, --check               show what would have been done\n"));*/
-// 	printf(_("\nBackup options:\n"));
-// 	printf(_("  -b, --backup-mode=MODE    backup mode (full, page, ptrack)\n"));
-// 	printf(_("  -C, --smooth-checkpoint   do smooth checkpoint before backup\n"));
-// 	printf(_("      --stream              stream the transaction log and include it in the backup\n"));
-// 	printf(_("      --archive-timeout     wait timeout for WAL segment archiving\n"));
-// 	printf(_("  -S, --slot=SLOTNAME       replication slot to use\n"));
-// 	printf(_("      --backup-pg-log       backup of pg_log directory\n"));
-// 	printf(_("  -j, --threads=NUM         number of parallel threads\n"));
-// 	printf(_("      --progress            show progress\n"));
-// 	printf(_("\nRestore options:\n"));
-// 	printf(_("      --time                time stamp up to which recovery will proceed\n"));
-// 	printf(_("      --xid                 transaction ID up to which recovery will proceed\n"));
-// 	printf(_("      --inclusive           whether we stop just after the recovery target\n"));
-// 	printf(_("      --timeline            recovering into a particular timeline\n"));
-// 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
-// 	printf(_("                            relocate the tablespace in directory OLDDIR to NEWDIR\n"));
-// 	printf(_("  -j, --threads=NUM         number of parallel threads\n"));
-// 	printf(_("      --progress            show progress\n"));
-// 	printf(_("\nDelete options:\n"));
-// 	printf(_("      --wal                 remove unnecessary wal files\n"));
-// 	printf(_("\nRetention options:\n"));
-// 	printf(_("      --redundancy          specifies how many full backups purge command should keep\n"));
-// 	printf(_("      --window              specifies the number of days of recoverability\n"));
 }
 
 static void

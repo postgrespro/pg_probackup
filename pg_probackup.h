@@ -296,6 +296,10 @@ extern char *slurpFile(const char *datadir,
 					   size_t *filesize,
 					   bool safe);
 
+/* in help.c */
+extern void help_pg_probackup(void);
+extern void help_command(char *command);
+
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup);
 

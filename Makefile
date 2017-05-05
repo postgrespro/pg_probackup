@@ -6,6 +6,7 @@ OBJS = backup.o \
 	delete.o \
 	dir.o \
 	fetch.o \
+	help.o \
 	init.o \
 	parray.o \
 	pg_probackup.o \
