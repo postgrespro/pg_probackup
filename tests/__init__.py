@@ -8,7 +8,6 @@ from . import init_test, option_test, show_test, \
     ptrack_vacuum_full, ptrack_vacuum_truncate
 
 
-
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTests(loader.loadTestsFromModule(init_test))
@@ -17,8 +16,8 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(backup_test))
     suite.addTests(loader.loadTestsFromModule(delete_test))
     suite.addTests(loader.loadTestsFromModule(restore_test))
-#    suite.addTests(loader.loadTestsFromModule(validate_test))
-#    suite.addTests(loader.loadTestsFromModule(retention_test))
+    suite.addTests(loader.loadTestsFromModule(validate_test))
+    suite.addTests(loader.loadTestsFromModule(retention_test))
     suite.addTests(loader.loadTestsFromModule(ptrack_clean))
     suite.addTests(loader.loadTestsFromModule(ptrack_cluster))
     suite.addTests(loader.loadTestsFromModule(ptrack_move_to_tablespace))

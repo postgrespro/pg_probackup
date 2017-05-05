@@ -133,11 +133,10 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         with open(path.join(self.backup_dir(node), "pg_probackup.conf"), "a") as conf:
             conf.write("retention-redundancy=1\n")
 
-#       TODO AFTER PGPRO-505
-#        self.assertEqual(
-#            self.retention_show(node, ["--redundancy", "2"]),
-#            six.b("# retention policy\nREDUNDANCY=2\n")
-#        )
+        self.assertEqual(
+            self.show_config(node)['retention-redundancy'],
+            six.b('1')
+        )
 
         # User cannot send --system-identifier parameter via command line
         try:

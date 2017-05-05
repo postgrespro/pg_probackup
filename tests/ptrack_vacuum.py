@@ -1,20 +1,7 @@
 import unittest
 from sys import exit
 from testgres import get_new_node, stop_all
-#import os
-from os import path, open, lseek, read, close, O_RDONLY
 from .ptrack_helpers import ProbackupTest, idx_ptrack
-
-#        res = node.execute('postgres', 'show fsync')
-#        print res[0][0]
-#        res = node.execute('postgres', 'show wal_level')
-#        print res[0][0]
-#        a = ProbackupTest
-#        res = node.execute('postgres', 'select 1')`
-#        self.assertEqual(len(res), 1)
-#        self.assertEqual(res[0][0], 1)
-#        node.stop()
-#        a = self.backup_dir(node)
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
@@ -63,7 +50,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.init_pb(node)
         self.backup_pb(node, backup_type='full', options=['-j100', '--stream'])
         for i in idx_ptrack:
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
 
@@ -81,7 +68,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
