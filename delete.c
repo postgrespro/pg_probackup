@@ -207,9 +207,9 @@ do_retention_purge(void)
 	parray_free(backup_list);
 
 	if (backup_deleted)
-		elog(INFO, "purging finished");
+		elog(INFO, "Purging finished");
 	else
-		elog(INFO, "no one backup was deleted by retention policy");
+		elog(INFO, "Nothing to delete by retention policy");
 
 	return 0;
 }
