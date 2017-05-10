@@ -26,8 +26,9 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         stop_all()
 
     def test_ptrack_vacuum_full(self):
-        print 'test_ptrack_vacuum_full started'
-        node = self.make_simple_node(base_dir="tmp_dirs/ptrack/test_ptrack_vacuum_full",
+        fname = self.id().split('.')[3]
+        print '{0} started'.format(fname)
+        node = self.make_simple_node(base_dir='tmp_dirs/ptrack/{0}'.format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],
             pg_options={'ptrack_enable': 'on', 'wal_level': 'replica', 'max_wal_senders': '2'})
@@ -73,7 +74,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity, the most important part

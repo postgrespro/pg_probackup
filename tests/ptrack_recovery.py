@@ -50,7 +50,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         for i in idx_ptrack:
             # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             # check that ptrack has correct bits after recovery
             self.check_ptrack_recovery(idx_ptrack[i])

@@ -172,6 +172,8 @@ class ProbackupTest(object):
 
         return node
 
+#    def print_started(self, fname):
+#        print 
 
     def make_simple_node(self, base_dir=None, set_replication=False,
                         set_archiving=False, initdb_params=[], pg_options={}):
@@ -234,23 +236,21 @@ class ProbackupTest(object):
         os.close(file)
         return md5_per_page
 
-    def get_ptrack_bits_per_for_fork(self, file, size):
+    def get_ptrack_bits_per_page_for_fork(self, file, size):
+        ptrack_bits_for_fork = []
         byte_size = os.path.getsize(file + '_ptrack')
         byte_size_minus_header = byte_size - 24
         file = os.open(file + '_ptrack', os.O_RDONLY)
         os.lseek(file, 24, 0)
         lot_of_bytes = os.read(file, byte_size_minus_header)
-        ptrack_bits_per_for_fork = []
         for byte in lot_of_bytes:
             byte_inverted = bin(ord(byte))[2:].rjust(8, '0')[::-1]
 #            byte_to_bits = (byte >> x) & 1 for x in range(7, -1, -1)
             for bit in byte_inverted:
-                while len(ptrack_bits_per_for_fork) != size:
-                    ptrack_bits_per_for_fork.append(int(bit))
-#        print 'Size: {}'.format(size)
-#        print ptrack_bits_per_for_fork
+                if len(ptrack_bits_for_fork) < size:
+                    ptrack_bits_for_fork.append(int(bit))
         os.close(file)
-        return ptrack_bits_per_for_fork
+        return ptrack_bits_for_fork
 
     def check_ptrack_sanity(self, idx_dict):
         success = True
@@ -284,7 +284,7 @@ class ProbackupTest(object):
                         PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
                     print idx_dict
                     if PageNum == 0 and idx_dict['type'] == 'spgist':
-                        print 'SPGIST is a special showflake, so don`t freat about losing ptrack for blknum 0'
+                        print 'SPGIST is a special snowflake, so don`t fret about losing ptrack for blknum 0'
                         continue
                     success = False
             else:
@@ -468,19 +468,26 @@ class ProbackupTest(object):
         # print(cmd_list)
         return self.run_pb(cmd_list + options)
 
-    def retention_purge_pb(self, node, options=[]):
+    def delete_expired(self, node, options=[]):
         cmd_list = [
-            "retention", "purge",
+            "delete", "--expired",
             "-B", self.backup_dir(node),
         ]
         return self.run_pb(cmd_list + options)
 
-    def retention_show(self, node, options=[]):
+    def show_config(self, node):
+        out_dict = {}
         cmd_list = [
-            "config",
+            "show-config",
             "-B", self.backup_dir(node),
         ]
-        return self.run_pb(cmd_list + options)
+        res = self.run_pb(cmd_list).splitlines()
+        for line in res:
+            if not line.startswith('#'):
+                name, var = line.partition(" = ")[::2]
+                out_dict[name] = var
+        return out_dict
+
 
     def get_recovery_conf(self, node):
         out_dict = {}

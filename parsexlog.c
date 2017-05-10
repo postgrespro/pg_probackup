@@ -249,8 +249,8 @@ validate_wal(pgBackup *backup,
 			if (!xlogexists)
 				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
 			else if (xlogreadfd != -1)
-				elog(WARNING, "error was occured during reading WAL segment \"%s\"",
-					 xlogfpath);
+					elog(ERROR, "Possible WAL CORRUPTION."
+						"Error has occured during reading WAL segment \"%s\"", xlogfpath);
 		}
 
 		if (!got_endpoint)

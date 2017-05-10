@@ -14,10 +14,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(RestoreTest, self).__init__(*args, **kwargs)
 
-#    @classmethod
-#    def tearDownClass(cls):
-#        stop_all()
+    @classmethod
+    def tearDownClass(cls):
+        stop_all()
 
+#    @unittest.skip("123")
     def test_restore_full_to_latest(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
@@ -366,12 +367,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.skipTest("ptrack not supported")
             return
 
-#        node.append_conf("pg_hba.conf", "local replication all trust")
-#        node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
-#        node.append_conf("postgresql.conf", "ptrack_enable = on")
-#        node.append_conf("postgresql.conf", "max_wal_senders = 1")
-#        node.restart()
-
         with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
             backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose", "--stream"]))
 
@@ -400,11 +395,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
 
     def test_restore_full_ptrack_under_load(self):
-        """recovery to latest from full + page backups with loads when ptrack backup do"""
+        """recovery to latest from full + ptrack backups with loads when ptrack backup do"""
         fname = self.id().split('.')[3]
         print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
+            set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
@@ -417,11 +413,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             node.stop()
             self.skipTest("ptrack not supported")
             return
-
-        #node.append_conf("pg_hba.conf", "local replication all trust")
-        #node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
-        #node.append_conf("postgresql.conf", "ptrack_enable = on")
-        #node.append_conf("postgresql.conf", "max_wal_senders = 1")
         node.restart()
 
         with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
@@ -438,8 +429,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgbench.wait()
         pgbench.stdout.close()
-
-        node.execute("postgres", "SELECT pg_switch_xlog()")
 
         bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
@@ -470,6 +459,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
+            set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
@@ -483,10 +473,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.skipTest("ptrack not supported")
             return
 
-        #node.append_conf("pg_hba.conf", "local replication all trust")
-        #node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
-        #node.append_conf("postgresql.conf", "ptrack_enable = on")
-        #node.append_conf("postgresql.conf", "max_wal_senders = 1")
         node.restart()
 
         pgbench = node.pgbench(
@@ -503,8 +489,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
             backup_log.write(self.backup_pb(node, backup_type="ptrack", options=["--verbose", "--stream"]))
-
-        node.execute("postgres", "SELECT pg_switch_xlog()")
 
         bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
@@ -638,9 +622,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 'ERROR: restore tablespace destination is not empty: "{0}"\n'.format(tblspc_path)
                 )
 
-#        self.assertIn(six.b("ERROR: restore tablespace destination is not empty"),
-#            self.restore_pb(node))
-
         # 3 - Restore using tablespace-mapping
         tblspc_path_new = path.join(node.base_dir, "tblspc_new")
 #        TODO WAITING FIX FOR RESTORE
@@ -662,7 +643,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         show_pb = self.show_pb(node)
         self.assertEqual(show_pb[1]['Status'], six.b("OK"))
-        self.assertEqual(show_pb[2]['Status'], six.b("OK"))#
+        self.assertEqual(show_pb[2]['Status'], six.b("OK"))
 
         node.stop()
         node.cleanup()
@@ -677,7 +658,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         id = node.execute("postgres", "SELECT id FROM test OFFSET 1")
         self.assertEqual(id[0][0], 2)
 
-        #node.stop()
+        node.stop()
 
     def test_restore_with_tablespace_mapping_2(self):
         """recovery using tablespace-mapping option and page backup"""
@@ -728,7 +709,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
 
         tblspc_path_new = path.join(node.base_dir, "tblspc_new")
-        print tblspc_path_new
 #        exit(1)
 #        TODO WAITING FIX FOR RESTORE
 #        self.assertIn(six.b("INFO: restore complete."),

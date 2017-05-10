@@ -44,7 +44,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # get path to heap and index files
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
@@ -61,7 +61,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # update path to heap and index files in case they`ve changed
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
@@ -80,7 +80,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # update path to heap and index files in case they`ve changed
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_for_fork(
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
