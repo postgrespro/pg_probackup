@@ -56,7 +56,7 @@ static void
 backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BlockNumber blknum, BlockNumber nblocks,
 				 FILE *in, FILE *out,
-				 pg_crc32 *crc)
+				 pg_crc32 *crc, int *n_skipped)
 {
 	BackupPageHeader	header;
 	off_t				offset;
@@ -134,7 +134,10 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		if (!XLogRecPtrIsInvalid(prev_backup_start_lsn)
 			&& !XLogRecPtrIsInvalid(page_lsn)
 			&& page_lsn < prev_backup_start_lsn)
+		{
+			*n_skipped += 1;
 			return;
+		}
 
 		/* Verify checksum */
 		if(current.checksum_version && !is_zero_page)
@@ -195,6 +198,8 @@ backup_data_file(const char *from_root, const char *to_root,
 	FILE			*out;
 	BlockNumber		blknum = 0;
 	BlockNumber		nblocks = 0;
+	int n_blocks_skipped = 0;
+	int n_blocks_read = 0;
 
 	/* reset size summary */
 	file->read_size = 0;
@@ -253,26 +258,24 @@ backup_data_file(const char *from_root, const char *to_root,
 	if (file->pagemap.bitmapsize == 0)
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
+		{
 			backup_data_page(file, prev_backup_start_lsn, blknum,
-							 nblocks, in, out, &(file->crc));
+							 nblocks, in, out, &(file->crc), &n_blocks_skipped);
+			n_blocks_read++;
+		}
 	}
 	else
 	{
 		datapagemap_iterator_t *iter;
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
+		{
 			backup_data_page(file, prev_backup_start_lsn, blknum,
-							 nblocks, in, out, &(file->crc));
+							 nblocks, in, out, &(file->crc), &n_blocks_skipped);
+			n_blocks_read++;
+		}
 
 		pg_free(iter);
-		/*
-		 * If we have pagemap then file can't be a zero size.
-		 * Otherwise, we will clear the last file.
-		 * Increase read_size to delete after.
-		 * TODO rewrite this code
-		 */
-		if (file->read_size == 0)
-			file->read_size++;
 	}
 
 	/* update file permission */
@@ -294,8 +297,11 @@ backup_data_file(const char *from_root, const char *to_root,
 	if (file->read_size == 0)
 		file->is_datafile = false;
 
-	/* We do not backup if all pages skipped. */
-	if (file->write_size == 0 && file->read_size > 0)
+	/*
+	 * If we have pagemap then file can't be a zero size.
+	 * Otherwise, we will clear the last file.
+	 */
+	if (n_blocks_read == n_blocks_skipped)
 	{
 		if (remove(to_path) == -1)
 			elog(ERROR, "cannot remove file \"%s\": %s", to_path,
@@ -406,7 +412,7 @@ restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
 	fclose(out);
 }
 
-static void
+void
 restore_compressed_file(const char *from_root,
 						const char *to_root,
 						pgFile *file)
@@ -435,20 +441,6 @@ restore_data_file(const char *from_root,
 	FILE			   *out;
 	BackupPageHeader	header;
 	BlockNumber			blknum;
-
-	if (!file->is_datafile)
-	{
-		/*
-		 * If the file is not a datafile and not compressed file,
-		 * just copy it.
-		 */
-		if (file->generation == -1)
-			copy_file(from_root, to_root, file);
-		else
-			restore_compressed_file(from_root, to_root, file);
-
-		return;
-	}
 
 	/* open backup mode file for read */
 	in = fopen(file->path, "r");

@@ -1,7 +1,7 @@
 import unittest
-from os import path, listdir
+import os
 import six
-from .pb_lib import ProbackupTest
+from .ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 from testgres import stop_all
 import subprocess
@@ -9,86 +9,227 @@ import subprocess
 
 class ValidateTest(ProbackupTest, unittest.TestCase):
 
-	def __init__(self, *args, **kwargs):
-		super(ValidateTest, self).__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(ValidateTest, self).__init__(*args, **kwargs)
 
-	@classmethod
-	def tearDownClass(cls):
-		try:
-			stop_all()
-		except:
-			pass
+#    @classmethod
+#    def tearDownClass(cls):
+#        try:
+#            stop_all()
+#        except:
+#            pass
 
-	def test_validate_wal_1(self):
-		"""recovery to latest from full backup"""
-		node = self.make_bnode(base_dir="tmp_dirs/validate/wal_1")
-		node.start()
-		self.assertEqual(self.init_pb(node), six.b(""))
-		node.pgbench_init(scale=2)
-		with node.connect("postgres") as con:
-			con.execute("CREATE TABLE tbl0005 (a text)")
-			con.commit()
+#    @unittest.skip("123")
+    def test_validate_wal_1(self):
+        """recovery to latest from full backup"""
+        fname = self.id().split('.')[3]
+        print '\n {0} started'.format(fname)
+        node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
+            set_archiving=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
 
-		with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-			backup_log.write(self.backup_pb(node, options=["--verbose"]))
+        node.start()
+        self.assertEqual(self.init_pb(node), six.b(""))
+        node.pgbench_init(scale=2)
+        with node.connect("postgres") as con:
+            con.execute("CREATE TABLE tbl0005 (a text)")
+            con.commit()
 
-		pgbench = node.pgbench(
-			stdout=subprocess.PIPE,
-			stderr=subprocess.STDOUT,
-			options=["-c", "4", "-T", "10"]
-		)
+        with open(os.path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
+            backup_log.write(self.backup_pb(node, options=["--verbose"]))
 
-		pgbench.wait()
-		pgbench.stdout.close()
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "4", "-T", "10"]
+        )
 
-		# Save time to validate
-		target_time = datetime.now()
+        pgbench.wait()
+        pgbench.stdout.close()
 
-		target_xid = None
-		with node.connect("postgres") as con:
-			res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
-			con.commit()
-			target_xid = res[0][0]
+        id_backup = self.show_pb(node)[0]['ID']
+        target_time = self.show_pb(node)[0]['Recovery time']
+        after_backup_time = datetime.now()
 
-		node.execute("postgres", "SELECT pg_switch_xlog()")
-		node.stop({"-m": "smart"})
+        # Validate to real time
+        self.assertIn(six.b("INFO: backup validation completed successfully on"),
+            self.validate_pb(node, options=["--time='{0}'".format(target_time)]))
 
-		id_backup = self.show_pb(node)[0].id
+        # Validate to unreal time
+        try:
+            self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
+                after_backup_time - timedelta(days=2))])
+            # we should die here because exception is what we expect to happen
+            exit(1)
+        except ProbackupException, e:
+            self.assertEqual(
+                e.message,
+                'ERROR: Full backup satisfying target options is not found.\n'
+                )
 
-		# Validate to real time
-		self.assertIn(six.b("INFO: backup validation completed successfully on"),
-			self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
-				target_time)]))
+        # Validate to unreal time #2
+        try:
+            self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
+                after_backup_time + timedelta(days=2))])
+            # we should die here because exception is what we expect to happen
+            exit(1)
+        except ProbackupException, e:
+            self.assertEqual(
+                True,
+                'ERROR: not enough WAL records to time' in e.message
+                )
 
-		# Validate to unreal time
-		self.assertIn(six.b("ERROR: no full backup found, cannot validate."),
-			self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
-				target_time - timedelta(days=2))]))
+        # Validate to real xid
+        target_xid = None
+        with node.connect("postgres") as con:
+            res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
+            con.commit()
+            target_xid = res[0][0]
+        node.execute("postgres", "SELECT pg_switch_xlog()")
 
-		# Validate to unreal time #2
-		self.assertIn(six.b("ERROR: not enough WAL records to time"),
-			self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
-				target_time + timedelta(days=2))]))
+        self.assertIn(six.b("INFO: backup validation completed successfully on"),
+            self.validate_pb(node, options=["--xid=%s" % target_xid]))
 
-		# Validate to real xid
-		self.assertIn(six.b("INFO: backup validation completed successfully on"),
-			self.validate_pb(node, options=["--xid=%s" % target_xid]))
+        # Validate to unreal xid
+        try:
+            self.validate_pb(node, options=["--xid=%d" % (int(target_xid) + 1000)])
+            # we should die here because exception is what we expect to happen
+            exit(1)
+        except ProbackupException, e:
+            self.assertEqual(
+                True,
+                'ERROR: not enough WAL records to xid' in e.message
+                )
 
-		# Validate to unreal xid
-		self.assertIn(six.b("ERROR: not enough WAL records to xid"),
-			self.validate_pb(node, options=["--xid=%d" % (int(target_xid) + 1000)]))
+        # Validate with backup ID
+        self.assertIn(six.b("INFO: backup validation completed successfully on"),
+            self.validate_pb(node, id_backup))
 
-		# Validate with backup ID
-		self.assertIn(six.b("INFO: backup validation completed successfully on"),
-			self.validate_pb(node, id_backup))
+        # Validate broken WAL
+        wals_dir = os.path.join(self.backup_dir(node), "wal")
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        wals.sort()
+        for wal in wals:
+            f = open(os.path.join(wals_dir, wal), "rb+")
+            f.seek(256)
+            f.write(six.b("blablabla"))
+            f.close
 
-		# Validate broken WAL
-		wals_dir = path.join(self.backup_dir(node), "wal")
-		wals = [f for f in listdir(wals_dir) if path.isfile(path.join(wals_dir, f))]
-		wals.sort()
-		with open(path.join(wals_dir, wals[-3]), "rb+") as f:
-			f.seek(256)
-			f.write(six.b("blablabla"))
+        try:
+            self.validate_pb(node, id_backup, options=['--xid=%s' % target_xid])
+            # we should die here because exception is what we expect to happen
+            exit(1)
+        except ProbackupException, e:
+            self.assertEqual(
+                True,
+                'Possible WAL CORRUPTION' in e.message
+                )
 
-		res = self.validate_pb(node, id_backup, options=['--xid=%s' % target_xid])
-		self.assertIn(six.b("not enough WAL records to xid"), res)
+        try:
+            self.validate_pb(node)
+            # we should die here because exception is what we expect to happen
+            exit(1)
+        except ProbackupException, e:
+            self.assertEqual(
+                True,
+                'Possible WAL CORRUPTION' in e.message
+                )
+
+        node.stop()
+
+#    @unittest.skip("123")
+    def test_validate_wal_lost_segment_1(self):
+        """Loose segment which belong to some backup"""
+        fname = self.id().split('.')[3]
+        print '{0} started'.format(fname)
+        node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
+            set_archiving=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        node.start()
+        self.assertEqual(self.init_pb(node), six.b(""))
+        node.pgbench_init(scale=2)
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "4", "-T", "10"]
+        )
+        pgbench.wait()
+        pgbench.stdout.close()
+        self.backup_pb(node, backup_type='full')
+
+        wals_dir = os.path.join(self.backup_dir(node), "wal")
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        os.remove(os.path.join(self.backup_dir(node), "wal", wals[1]))
+        try:
+            self.validate_pb(node)
+            # we should die here because exception is what we expect to happen
+            exit(1)
+        except ProbackupException, e:
+            self.assertEqual(
+                True,
+                'is absent' in e.message
+                )
+        node.stop()
+
+    def test_validate_wal_lost_segment_2(self):
+        """Loose segment located between backups """
+        fname = self.id().split('.')[3]
+        print '{0} started'.format(fname)
+        node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
+            set_archiving=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        node.start()
+        self.assertEqual(self.init_pb(node), six.b(""))
+        node.pgbench_init(scale=2)
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "4", "-T", "10"]
+        )
+        pgbench.wait()
+        pgbench.stdout.close()
+        self.backup_pb(node, backup_type='full')
+
+        # need to do that to find segment between(!) backups
+        node.psql("postgres", "CREATE TABLE t1(a int)")
+        node.psql("postgres", "SELECT pg_switch_xlog()")
+        node.psql("postgres", "CREATE TABLE t2(a int)")
+        node.psql("postgres", "SELECT pg_switch_xlog()")
+
+        wals_dir = os.path.join(self.backup_dir(node), "wal")
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        wals = map(int, wals)
+
+        # delete last wal segment
+        print os.path.join(self.backup_dir(node), "wal", '0000000' + str(max(wals)))
+        os.remove(os.path.join(self.backup_dir(node), "wal", '0000000' + str(max(wals))))
+
+        # Need more accurate error message about loosing wal segment between backups
+        try:
+            self.backup_pb(node, backup_type='page')
+            # we should die here because exception is what we expect to happen
+            exit(1)
+        except ProbackupException, e:
+            self.assertEqual(
+                True,
+                'could not read WAL record' in e.message
+                )
+        self.delete_pb(node, id=self.show_pb(node)[1]['ID'])
+
+
+        ##### Hole Smokes, Batman! We just lost a wal segment and know nothing about it
+        ##### We need archive-push ASAP
+        self.backup_pb(node, backup_type='full')
+        self.assertEqual(False,
+                'validation completed successfully' in self.validate_pb(node))
+        ########
+
+        node.stop()

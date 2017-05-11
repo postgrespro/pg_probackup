@@ -140,8 +140,8 @@ do_restore_or_validate(time_t target_backup_id,
 			&& !dest_backup)
 		{
 			if (current_backup->status != BACKUP_STATUS_OK)
-				elog(ERROR, "given backup %s is in %s status",
-					 base36enc(target_backup_id), status2str(current_backup->status));
+				elog(ERROR, "Backup %s has status: %s",
+					 base36enc(current_backup->status), status2str(current_backup->status));
 
 			if (target_tli)
 			{
@@ -666,10 +666,19 @@ restore_files(void *arg)
 		}
 
 		/* restore file */
-		restore_data_file(from_root, pgdata, file, arguments->backup);
+		if (file->is_datafile)
+		{
+			if (is_compressed_data_file(file))
+				restore_compressed_file(from_root, pgdata, file);
+			else
+				restore_data_file(from_root, pgdata, file, arguments->backup);
+		}
+		else
+			copy_file(from_root, pgdata, file);
 
 		/* print size of restored file */
-		elog(LOG, "restored %lu\n", (unsigned long) file->write_size);
+		elog(LOG, "Restored file %s : %lu bytes",
+			 file->path, (unsigned long) file->write_size);
 	}
 }
 

@@ -1,59 +1,40 @@
-pg_probackup manage backup/recovery of PostgreSQL database.
 
-Usage:
-  pg_probackup [option...] init
-  pg_probackup [option...] backup
-  pg_probackup [option...] restore [backup-ID]
-  pg_probackup [option...] show [backup-ID]
-  pg_probackup [option...] validate [backup-ID]
-  pg_probackup [option...] delete backup-ID
-  pg_probackup [option...] delwal [backup-ID]
-  pg_probackup [option...] retention show|purge
+pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
-Common Options:
-  -B, --backup-path=PATH    location of the backup storage area
-  -D, --pgdata=PATH         location of the database storage area
+  pg_probackup help
 
-Backup options:
-  -b, --backup-mode=MODE    backup mode (full, page, ptrack)
-  -C, --smooth-checkpoint   do smooth checkpoint before backup
-      --stream              stream the transaction log and include it in the backup
-      --archive-timeout     wait timeout for WAL segment archiving
-  -S, --slot=SLOTNAME       replication slot to use
-      --backup-pg-log       backup of pg_log directory
-  -j, --threads=NUM         number of parallel threads
-      --progress            show progress
+  pg_probackup version
 
-Restore options:
-      --time                time stamp up to which recovery will proceed
-      --xid                 transaction ID up to which recovery will proceed
-      --inclusive           whether we stop just after the recovery target
-      --timeline            recovering into a particular timeline
-  -T, --tablespace-mapping=OLDDIR=NEWDIR
-                            relocate the tablespace in directory OLDDIR to NEWDIR
-  -j, --threads=NUM         number of parallel threads
-      --progress            show progress
+  pg_probackup init -B backup-path -D pgdata-dir
 
-Delete options:
-      --wal                 remove unnecessary wal files
+  pg_probackup set-config -B backup-dir
+                 [-d dbname] [-h host] [-p port] [-U username]
+                 [--retention-redundancy=retention-redundancy]]
+                 [--retention-window=retention-window]
 
-Retention options:
-      --redundancy          specifies how many full backups purge command should keep
-      --window              specifies the number of days of recoverability
+  pg_probackup show-config -B backup-dir
 
-Connection options:
-  -d, --dbname=DBNAME       database to connect
-  -h, --host=HOSTNAME       database server host or socket directory
-  -p, --port=PORT           database server port
-  -U, --username=USERNAME   user name to connect as
-  -w, --no-password         never prompt for password
-  -W, --password            force password prompt
+  pg_probackup backup -B backup-path -b backup-mode
+                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]
+                 [-j num-threads] [--archive-timeout=archive-timeout]
+                 [--progress] [-q] [-v] [--delete-expired]
+                 [-d dbname] [-h host] [-p port] [-U username]
 
-Generic options:
-  -q, --quiet               don't write any messages
-  -v, --verbose             verbose mode
-      --help                show this help, then exit
-      --version             output version information and exit
+  pg_probackup restore -B backup-dir
+                [-D pgdata-dir] [-i backup-id]
+                [--time=time|--xid=xid [--inclusive=boolean]]
+                [--timeline=timeline] [-T OLDDIR=NEWDIR]
+
+  pg_probackup validate -B backup-dir
+                [-D pgdata-dir] [-i backup-id]
+                [--time=time|--xid=xid [--inclusive=boolean]]
+                [--timeline=timeline] [-T OLDDIR=NEWDIR]
+
+  pg_probackup show -B backup-dir
+                [-i backup-id]
+
+  pg_probackup delete -B backup-dir
+                [--wal] [-i backup-id | --expired] [--force]
 
 Read the website for details. <https://github.com/postgrespro/pg_probackup>
 Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.
