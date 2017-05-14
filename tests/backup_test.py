@@ -114,10 +114,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 #    @unittest.skip("123")
     def test_ptrack_threads(self):
         """ptrack multi thread backup mode"""
-        node = self.make_bnode(
-            base_dir="tmp_dirs/backup/ptrack_threads_4",
-            options={"ptrack_enable": "on", 'max_wal_senders': '2'}
-        )
+        fname = self.id().split('.')[3]
+        print '{0} started'.format(fname)
+        node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
+            set_archiving=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', "ptrack_enable": "on", 'max_wal_senders': '2'}
+            )
         node.start()
         self.assertEqual(self.init_pb(node), six.b(""))
 
@@ -143,8 +146,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
-#        node.append_conf("pg_hba.conf", "local replication all trust")
-#        node.append_conf("pg_hba.conf", "host replication all 127.0.0.1/32 trust")
         node.start()
         self.assertEqual(self.init_pb(node), six.b(""))
 
@@ -165,5 +166,4 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             ))
 
         self.assertEqual(self.show_pb(node)[1]['Status'], six.b("OK"))
-
         node.stop()

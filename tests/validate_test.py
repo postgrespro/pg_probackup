@@ -5,6 +5,7 @@ from .ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 from testgres import stop_all
 import subprocess
+from sys import exit
 
 
 class ValidateTest(ProbackupTest, unittest.TestCase):
@@ -18,6 +19,34 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 #            stop_all()
 #        except:
 #            pass
+
+#    @unittest.skip("123")
+    def test_validate_time(self):
+        """recovery to latest from full backup"""
+        fname = self.id().split('.')[3]
+        print '\n {0} started'.format(fname)
+        node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
+            set_archiving=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        node.start()
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "4", "-T", "10"]
+        )
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        self.assertEqual(self.init_pb(node), six.b(""))
+        id = self.backup_pb(node)
+        recovery_time = self.show_pb(node, id=id)['recovery-time']
+
+        self.assertIn(six.b("INFO: backup validation completed successfully on"),
+            self.validate_pb(node, options=["--time='{0}'".format(recovery_time)]))
+        node.stop()
 
 #    @unittest.skip("123")
     def test_validate_wal_1(self):
@@ -176,6 +205,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 )
         node.stop()
 
+#    @unittest.skip("123")
     def test_validate_wal_lost_segment_2(self):
         """Loose segment located between backups """
         fname = self.id().split('.')[3]
@@ -224,12 +254,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 )
         self.delete_pb(node, id=self.show_pb(node)[1]['ID'])
 
-
         ##### Hole Smokes, Batman! We just lost a wal segment and know nothing about it
         ##### We need archive-push ASAP
         self.backup_pb(node, backup_type='full')
-        self.assertEqual(False,
-                'validation completed successfully' in self.validate_pb(node))
+        self.assertEqual(False, 'validation completed successfully' in self.validate_pb(node))
         ########
 
         node.stop()

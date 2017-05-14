@@ -152,25 +152,25 @@ class ProbackupTest(object):
     def backup_dir(self, node):
         return os.path.abspath("%s/backup" % node.base_dir)
 
-    def make_bnode(self, base_dir=None, allows_streaming=False, options={}):
-        real_base_dir = os.path.join(self.dir_path, base_dir)
-        shutil.rmtree(real_base_dir, ignore_errors=True)
-
-        node = get_new_node('test', base_dir=real_base_dir)
-        node.init(allows_streaming=allows_streaming)
-
-        if not allows_streaming:
-            node.append_conf("postgresql.auto.conf", "wal_level = hot_standby")
-        node.append_conf("postgresql.auto.conf", "archive_mode = on")
-        node.append_conf(
-            "postgresql.auto.conf",
-            """archive_command = 'cp "%%p" "%s/%%f"'""" % os.path.abspath(self.arcwal_dir(node))
-        )
-
-        for key, value in six.iteritems(options):
-            node.append_conf("postgresql.conf", "%s = %s" % (key, value))
-
-        return node
+#    def make_bnode(self, base_dir=None, allows_streaming=False, options={}):
+#        real_base_dir = os.path.join(self.dir_path, base_dir)
+#        shutil.rmtree(real_base_dir, ignore_errors=True)
+#
+#        node = get_new_node('test', base_dir=real_base_dir)
+#        node.init(allows_streaming=allows_streaming)
+#
+#        if not allows_streaming:
+#            node.append_conf("postgresql.auto.conf", "wal_level = hot_standby")
+#        node.append_conf("postgresql.auto.conf", "archive_mode = on")
+#        node.append_conf(
+#            "postgresql.auto.conf",
+#            """archive_command = 'cp "%%p" "%s/%%f"'""" % os.path.abspath(self.arcwal_dir(node))
+#        )
+#
+#        for key, value in six.iteritems(options):
+#            node.append_conf("postgresql.conf", "%s = %s" % (key, value))
+#
+#        return node
 
 #    def print_started(self, fname):
 #        print 
@@ -318,7 +318,7 @@ class ProbackupTest(object):
 
     def run_pb(self, command):
         try:
-#            print [self.probackup_path] + command
+            print [self.probackup_path] + command
             output = subprocess.check_output(
                 [self.probackup_path] + command,
                 stderr=subprocess.STDOUT,
@@ -417,12 +417,12 @@ class ProbackupTest(object):
             body = body[::-1]
             # split string in list with string for every header element
             header_split = re.split("  +", header)
-            # CRUNCH, remove last item, because it empty, like that ''
+            # CRUNCH, remove last item, because it`s empty, like that ''
             header_split.pop()
             for backup_record in body:
                 # split string in list with string for every backup record element
                 backup_record_split = re.split("  +", backup_record)
-                # CRUNCH, remove last item, because it empty, like that ''
+                # CRUNCH, remove last item, because it`s empty, like that ''
                 backup_record_split.pop()
                 if len(header_split) != len(backup_record_split):
                     print warning.format(
