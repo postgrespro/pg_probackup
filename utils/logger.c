@@ -2,7 +2,7 @@
  *
  * logger.c: - log events into log file or stderr.
  *
- * Portions Copyright (c) 2017-2017, Postgres Professional
+ * Copyright (c) 2017-2017, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -103,11 +103,21 @@ write_elevel(FILE *stream, int elevel)
 static void
 elog_internal(int elevel, const char *fmt, va_list args)
 {
-	bool		wrote_to_file = false;
+	bool		wrote_to_file = false,
+				write_to_error_log,
+				write_to_stderr;
+	va_list		error_args,
+				std_args;
 
 	/* There is no need to lock if this is elog() from upper elog() */
 	if (!logging_to_file)
 		pthread_mutex_lock(&log_file_mutex);
+
+	write_to_error_log =
+		elevel >= ERROR && error_log_filename && !logging_to_file;
+	/* We need copy args only if we need write to error log file */
+	if (write_to_error_log)
+		va_copy(error_args, args);
 
 	/*
 	 * Write message to log file.
@@ -132,11 +142,20 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	}
 
 	/*
+	 * Write to stderr if the message was not written to log file.
+	 * Write to stderr if the message level is greater than WARNING anyway.
+	 */
+	write_to_stderr = !wrote_to_file || elevel >= ERROR;
+	/* We need copy args only if we need write to stderr */
+	if (write_to_stderr)
+		va_copy(std_args, error_args);
+
+	/*
 	 * Write error message to error log file.
 	 * Do not write to file if this error was raised during write previous
 	 * message.
 	 */
-	if (elevel >= ERROR && error_log_filename && !logging_to_file)
+	if (write_to_error_log)
 	{
 		logging_to_file = true;
 
@@ -145,25 +164,23 @@ elog_internal(int elevel, const char *fmt, va_list args)
 
 		write_elevel(error_log_file, elevel);
 
-		vfprintf(error_log_file, fmt, args);
+		vfprintf(error_log_file, fmt, error_args);
 		fputc('\n', error_log_file);
 		fflush(error_log_file);
 
 		logging_to_file = false;
+		va_end(error_args);
 	}
 
-	/*
-	 * Write to stderr if the message was not written to log file.
-	 * Write to stderr if the message level is greater than WARNING anyway.
-	 */
-	if (!wrote_to_file ||
-		elevel >= ERROR)
+	if (write_to_stderr)
 	{
 		write_elevel(stderr, elevel);
 
-		vfprintf(stderr, fmt, args);
+		vfprintf(stderr, fmt, std_args);
 		fputc('\n', stderr);
 		fflush(stderr);
+
+		va_end(std_args);
 	}
 
 	if (!logging_to_file)
