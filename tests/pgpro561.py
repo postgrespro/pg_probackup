@@ -19,9 +19,9 @@ class CommonArchiveDir(ProbackupTest, unittest.TestCase):
 
     def test_pgpro561(self):
         """
-        make node with archiving, make backup,
-        restore it to node1 and node2, compare timelines
-        EXPECT TO FAIL
+        EXPECTED TO FAIL
+        make node with archiving, make stream backup, restore it to node1,
+        check that archiving is not successful on node1
         """
         fname = self.id().split('.')[3]
         master = self.make_simple_node(base_dir="tmp_dirs/pgpro561/{0}/master".format(fname),
@@ -32,37 +32,28 @@ class CommonArchiveDir(ProbackupTest, unittest.TestCase):
             )
         master.start()
 
-        node1 = self.make_simple_node(base_dir="tmp_dirs/pgpro561/{0}/node1".format(fname))
-        node2 = self.make_simple_node(base_dir="tmp_dirs/pgpro561/{0}/node2".format(fname))
-        node1.cleanup()
-        node2.cleanup()
-
         self.assertEqual(self.init_pb(master), six.b(""))
-        self.backup_pb(master, backup_type='full')
+        id = self.backup_pb(master, backup_type='full', options=["--stream"])
+
+        node1 = self.make_simple_node(base_dir="tmp_dirs/pgpro561/{0}/node1".format(fname))
+        node1.cleanup()
 
         master.psql(
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
-        # for i in idx_ptrack:
-        #    if idx_ptrack[i]['type'] == 'heap':
-        #        continue
-        #    master.psql("postgres", "create index {0} on {1} using {2}({3})".format(
-        #        i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
-        #before = master.execute("postgres", "SELECT * FROM t_heap")
 
-        id = self.backup_pb(master, backup_type='page')
+        self.backup_pb(master, backup_type='page', options=["--stream"])
         self.restore_pb(backup_dir=self.backup_dir(master), data_dir=node1.data_dir)
         node1.append_conf('postgresql.auto.conf', 'port = {0}'.format(node1.port))
-
-        self.restore_pb(backup_dir=self.backup_dir(master), data_dir=node2.data_dir)
-        node2.append_conf('postgresql.auto.conf', 'port = {0}'.format(node2.port))
-
         node1.start({"-t": "600"})
-        node2.start({"-t": "600"})
 
+        timeline_master = master.get_control_data()["Latest checkpoint's TimeLineID"]
         timeline_node1 = node1.get_control_data()["Latest checkpoint's TimeLineID"]
-        timeline_node2 = node2.get_control_data()["Latest checkpoint's TimeLineID"]
-        self.assertEqual(timeline_node1, timeline_node2,
-            "Node1 and Node2 timelines are different.\nWhich means that Node2 applied wals archived by Master AND Node1.\nWhich means that Master and Node1 have common archive.\nTHIS IS BAD\nCheck archive directory in {0}".format(os.path.join(self.backup_dir(master), "wal")))
-#        node1.pgbench_init(scale=5)
-#        node2.pgbench_init(scale=5)
+        self.assertEqual(timeline_master, timeline_node1, "Timelines on Master and Node1 should be equal. This is unexpected")
+
+        archive_command_master = master.safe_psql("postgres", "show archive_command")
+        archive_command_node1 = node1.safe_psql("postgres", "show archive_command")
+        self.assertEqual(archive_command_master, archive_command_node1, "Archive command on Master and Node should be equal. This is unexpected")
+
+        res = node1.safe_psql("postgres", "select last_failed_wal from pg_stat_get_archiver() where last_failed_wal is not NULL")
+        self.assertEqual(res, six.b(""), 'Restored Node1 failed to archive segment {0} due to having the same archive command as Master'.format(res.rstrip()))
