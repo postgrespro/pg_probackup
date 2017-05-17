@@ -15,7 +15,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 #    @unittest.skip("123")
     def test_ptrack_vacuum(self):
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir='tmp_dirs/ptrack/{0}'.format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],

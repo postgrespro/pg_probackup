@@ -17,7 +17,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_backup_modes_archive(self):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -74,7 +73,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_smooth_checkpoint(self):
         """full backup with smooth checkpoint"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -94,7 +92,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_page_backup_without_full(self):
         """page-level backup without validated full backup"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -115,7 +112,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_threads(self):
         """ptrack multi thread backup mode"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -140,7 +136,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_threads_stream(self):
         """ptrack multi thread backup mode and stream"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
             set_replication=True,
             initdb_params=['--data-checksums'],

@@ -152,29 +152,6 @@ class ProbackupTest(object):
     def backup_dir(self, node):
         return os.path.abspath("%s/backup" % node.base_dir)
 
-#    def make_bnode(self, base_dir=None, allows_streaming=False, options={}):
-#        real_base_dir = os.path.join(self.dir_path, base_dir)
-#        shutil.rmtree(real_base_dir, ignore_errors=True)
-#
-#        node = get_new_node('test', base_dir=real_base_dir)
-#        node.init(allows_streaming=allows_streaming)
-#
-#        if not allows_streaming:
-#            node.append_conf("postgresql.auto.conf", "wal_level = hot_standby")
-#        node.append_conf("postgresql.auto.conf", "archive_mode = on")
-#        node.append_conf(
-#            "postgresql.auto.conf",
-#            """archive_command = 'cp "%%p" "%s/%%f"'""" % os.path.abspath(self.arcwal_dir(node))
-#        )
-#
-#        for key, value in six.iteritems(options):
-#            node.append_conf("postgresql.conf", "%s = %s" % (key, value))
-#
-#        return node
-
-#    def print_started(self, fname):
-#        print 
-
     def make_simple_node(self, base_dir=None, set_replication=False,
                         set_archiving=False, initdb_params=[], pg_options={}):
         real_base_dir = os.path.join(self.dir_path, base_dir)
@@ -198,7 +175,6 @@ class ProbackupTest(object):
         if set_archiving:
             self.set_archiving_conf(node, self.arcwal_dir(node))
         return node
-
 
     def create_tblspace_in_node(self, node, tblspc_name, cfs=False):
         res = node.execute(
@@ -346,11 +322,16 @@ class ProbackupTest(object):
     def clean_pb(self, node):
         shutil.rmtree(self.backup_dir(node), ignore_errors=True)
 
-    def backup_pb(self, node, backup_type="full", options=[]):
+    def backup_pb(self, node=None, data_dir=None, backup_dir=None, backup_type="full", options=[]):
+        if data_dir is None:
+            data_dir = node.data_dir
+        if backup_dir is None:
+            backup_dir = self.backup_dir(node)
+
         cmd_list = [
             "backup",
-            "-D", node.data_dir,
-            "-B", self.backup_dir(node),
+            "-B", backup_dir,
+            "-D", data_dir,
             "-p", "%i" % node.port,
             "-d", "postgres"
         ]
@@ -359,37 +340,20 @@ class ProbackupTest(object):
 
         return self.run_pb(cmd_list + options)
 
-    def backup_pb_proc(self, node, backup_type="full",
-        stdout=None, stderr=None, options=[]):
-        cmd_list = [
-            self.probackup_path,
-            "backup",
-            "-D", node.data_dir,
-            "-B", self.backup_dir(node),
-            "-p", "%i" % (node.port),
-            "-d", "postgres"
-        ]
-        if backup_type:
-            cmd_list += ["-b", backup_type]
+    def restore_pb(self, node=None, backup_dir=None, data_dir=None, id=None, options=[]):
+        if data_dir is None:
+            data_dir = node.data_dir
+        if backup_dir is None:
+            backup_dir = self.backup_dir(node)
 
-        proc = subprocess.Popen(
-            cmd_list + options,
-            stdout=stdout,
-            stderr=stderr
-        )
-
-        return proc
-
-    def restore_pb(self, node, id=None, options=[]):
         cmd_list = [
             "restore",
-            "-D", node.data_dir,
-            "-B", self.backup_dir(node)
+            "-B", backup_dir,
+            "-D", data_dir
         ]
         if id:
             cmd_list += ["-i", id]
 
-        # print(cmd_list)
         return self.run_pb(cmd_list + options)
 
     def show_pb(self, node, id=None, options=[], as_text=False):

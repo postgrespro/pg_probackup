@@ -5,11 +5,12 @@ from . import init_test, option_test, show_test, \
     retention_test, ptrack_clean, ptrack_cluster, \
     ptrack_move_to_tablespace, ptrack_recovery, ptrack_vacuum, \
     ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
-    ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro668
+    ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro561, pgpro668
 
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
+    suite.addTests(loader.loadTestsFromModule(pgpro561))
     suite.addTests(loader.loadTestsFromModule(pgpro668))
     suite.addTests(loader.loadTestsFromModule(init_test))
     suite.addTests(loader.loadTestsFromModule(option_test))

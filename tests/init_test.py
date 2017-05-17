@@ -15,7 +15,6 @@ class InitTest(ProbackupTest, unittest.TestCase):
     def test_success_1(self):
         """Success normal init"""
         fname = self.id().split(".")[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/init/{0}".format(fname))
         self.assertEqual(self.init_pb(node), six.b(""))
         self.assertEqual(
@@ -26,7 +25,6 @@ class InitTest(ProbackupTest, unittest.TestCase):
     def test_already_exist_2(self):
         """Failure with backup catalog already existed"""
         fname = self.id().split(".")[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/init/{0}".format(fname))
         self.init_pb(node)
         try:
@@ -42,7 +40,6 @@ class InitTest(ProbackupTest, unittest.TestCase):
     def test_abs_path_3(self):
         """failure with backup catalog should be given as absolute path"""
         fname = self.id().split(".")[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/init/{0}".format(fname))
         try:
             self.run_pb(["init", "-B", path.relpath("%s/backup" % node.base_dir, self.dir_path)])

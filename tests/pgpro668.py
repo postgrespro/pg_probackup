@@ -23,8 +23,7 @@ class SomeTest(ProbackupTest, unittest.TestCase):
         get Recovery Time, try to make pitr to Recovery Time
         """
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
-        node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
+        node = self.make_simple_node(base_dir="tmp_dirs/pgpro668/{0}".format(fname),
             set_archiving=True,
             set_replication=True,
             initdb_params=['--data-checksums'],
@@ -50,8 +49,7 @@ class SomeTest(ProbackupTest, unittest.TestCase):
         Should fail. Waiting PGPRO-688
         """
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
-        node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
+        node = self.make_simple_node(base_dir="tmp_dirs/pgpro668/{0}".format(fname),
             set_archiving=True,
             set_replication=True,
             initdb_params=['--data-checksums'],
@@ -84,8 +82,7 @@ class SomeTest(ProbackupTest, unittest.TestCase):
         try to make pitr to Recovery Time, check that t_heap do not exists
         """
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
-        node = self.make_simple_node(base_dir="tmp_dirs/backup/{0}".format(fname),
+        node = self.make_simple_node(base_dir="tmp_dirs/pgpro668/{0}".format(fname),
             set_archiving=True,
             set_replication=True,
             initdb_params=['--data-checksums'],

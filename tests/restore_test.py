@@ -22,7 +22,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_to_latest(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -61,7 +60,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_page_to_latest(self):
         """recovery to latest from full + page backups"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -101,7 +99,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_to_timeline(self):
         """recovery to target timeline"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -156,7 +153,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_to_time(self):
         """recovery to target timeline"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -195,7 +191,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_to_xid(self):
         """recovery to target xid"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -249,7 +244,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_ptrack(self):
         """recovery to latest from full + ptrack backups"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -297,7 +291,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_ptrack_ptrack(self):
         """recovery to latest from full + ptrack + ptrack backups"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -352,7 +345,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_ptrack_stream(self):
         """recovery in stream mode to latest from full + ptrack backups"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
@@ -397,7 +389,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_ptrack_under_load(self):
         """recovery to latest from full + ptrack backups with loads when ptrack backup do"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             set_replication=True,
@@ -456,7 +447,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_under_load_ptrack(self):
         """recovery to latest from full + page backups with loads when full backup do"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             set_replication=True,
@@ -516,7 +506,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_to_xid_inclusive(self):
         """recovery with target inclusive false"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -575,7 +564,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_with_tablespace_mapping_1(self):
         """recovery using tablespace-mapping option"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -663,7 +651,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_with_tablespace_mapping_2(self):
         """recovery using tablespace-mapping option and page backup"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],

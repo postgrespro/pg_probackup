@@ -15,7 +15,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 #    @unittest.skip("123")
     def test_ptrack_cluster_btree(self):
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/ptrack/{0}".format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],
@@ -71,10 +70,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.clean_pb(node)
         node.stop()
 
-    @unittest.skip("123")
     def test_ptrack_cluster_spgist(self):
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/ptrack/{0}".format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],
@@ -130,10 +127,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.clean_pb(node)
         node.stop()
 
-    @unittest.skip("123")
     def test_ptrack_cluster_brin(self):
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/ptrack/{0}".format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],
@@ -189,10 +184,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.clean_pb(node)
         node.stop()
 
-    @unittest.skip("123")
     def test_ptrack_cluster_gist(self):
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/ptrack/{0}".format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],
@@ -248,10 +241,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.clean_pb(node)
         node.stop()
 
-    @unittest.skip("123")
     def test_ptrack_cluster_gin(self):
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/ptrack/{0}".format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],

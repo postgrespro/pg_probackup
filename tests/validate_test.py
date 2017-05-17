@@ -24,7 +24,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_time(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
-        print '\n {0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -52,7 +51,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_wal_1(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
-        print '\n {0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -172,7 +170,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_wal_lost_segment_1(self):
         """Loose segment which belong to some backup"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -209,7 +206,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_wal_lost_segment_2(self):
         """Loose segment located between backups """
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],

@@ -14,8 +14,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         stop_all()
 
     def test_ptrack_vacuum_bits_visibility(self):
-        print 'test_ptrack_vacuum_bits_visibility started'
-        node = self.make_simple_node(base_dir="tmp_dirs/ptrack/test_ptrack_vacuum_bits_visibility",
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir='tmp_dirs/ptrack/{0}'.format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],
             pg_options={'ptrack_enable': 'on', 'wal_level': 'replica', 'max_wal_senders': '2'})

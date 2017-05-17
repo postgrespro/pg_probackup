@@ -17,7 +17,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_help_1(self):
         """help options"""
         fname = self.id().split(".")[3]
-        print '{0} started'.format(fname)
         with open(path.join(self.dir_path, "expected/option_help.out"), "rb") as help_out:
             self.assertEqual(
                 self.run_pb(["--help"]),
@@ -27,7 +26,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_version_2(self):
         """help options"""
         fname = self.id().split(".")[3]
-        print '{0} started'.format(fname)
         with open(path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
             self.assertEqual(
                 self.run_pb(["--version"]),
@@ -37,7 +35,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_without_backup_path_3(self):
         """backup command failure without backup mode option"""
         fname = self.id().split(".")[3]
-        print '{0} started'.format(fname)
         try:
             self.run_pb(["backup", "-b", "full"])
             # we should die here because exception is what we expect to happen
@@ -51,7 +48,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_options_4(self):
         """check options test"""
         fname = self.id().split(".")[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/option/{0}".format(fname))
         try:
             node.stop()

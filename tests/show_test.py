@@ -18,7 +18,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def show_test_1(self):
         """Status DONE and OK"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/show/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -37,7 +36,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_corrupt_2(self):
         """Status CORRUPT"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/show/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
