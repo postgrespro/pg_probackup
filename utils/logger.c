@@ -15,6 +15,7 @@
 #include <time.h>
 
 #include "logger.h"
+#include "pgut.h"
 
 /* Logger parameters */
 
@@ -25,7 +26,9 @@ char	   *error_log_filename = NULL;
 char	   *log_directory = NULL;
 char		log_path[MAXPGPATH] = "";
 
+/* Maximum size of an individual log file in kilobytes */
 int			log_rotation_size = 0;
+/* Maximum lifetime of an individual log file in minutes */
 int			log_rotation_age = 0;
 
 /* Implementation for logging.h */
@@ -102,7 +105,9 @@ elog_internal(int elevel, const char *fmt, va_list args)
 {
 	bool		wrote_to_file = false;
 
-	pthread_mutex_lock(&log_file_mutex);
+	/* There is no need to lock if this is elog() from upper elog() */
+	if (!logging_to_file)
+		pthread_mutex_lock(&log_file_mutex);
 
 	/*
 	 * Write message to log file.
@@ -161,7 +166,8 @@ elog_internal(int elevel, const char *fmt, va_list args)
 		fflush(stderr);
 	}
 
-	pthread_mutex_unlock(&log_file_mutex);
+	if (!logging_to_file)
+		pthread_mutex_unlock(&log_file_mutex);
 
 	/* Exit with code if it is an error */
 	if (elevel > WARNING)
@@ -329,56 +335,82 @@ static void
 open_logfile(FILE **file, const char *filename_format)
 {
 	char	   *filename;
+	char		control[MAXPGPATH];
 	struct stat	st;
-	bool		rotation_requested = false;
+	FILE	   *control_file;
+	time_t		cur_time = time(NULL);
+	bool		rotation_requested = false,
+				logfile_exists = false;
 
-	filename = logfile_getname(filename_format, time(NULL));
+	filename = logfile_getname(filename_format, cur_time);
+
+	/* "log_path" was checked in logfile_getname() */
+	snprintf(control, MAXPGPATH, "%s/log_rotation", log_path);
+
+	if (stat(filename, &st) == -1)
+	{
+		if (errno == ENOENT)
+		{
+			/* There is no file "filename" and rotation does not need */
+			goto logfile_open;
+		}
+		else
+			elog(ERROR, "cannot stat log file \"%s\": %s",
+				 filename, strerror(errno));
+	}
+	/* Found log file "filename" */
+	logfile_exists = true;
 
 	/* First check for rotation */
 	if (log_rotation_size > 0 || log_rotation_age > 0)
 	{
-		if (stat(filename, &st) == -1)
-		{
-			if (errno == ENOENT)
-			{
-				/* There is no file "filename" and rotation does not need */
-				goto logfile_open;
-			}
-			else
-				elog(ERROR, "cannot stat log file \"%s\": %s",
-					 filename, strerror(errno));
-		}
-		/* Found log file "filename" */
-
 		/* Check for rotation by age */
 		if (log_rotation_age > 0)
 		{
-			char		control[MAXPGPATH];
 			struct stat	control_st;
-			FILE	   *control_file;
 
-			snprintf(control, MAXPGPATH, "%s.rotation", filename);
 			if (stat(control, &control_st) == -1)
 			{
-				if (errno == ENOENT)
-				{
-					/* There is no control file for rotation */
-					goto logfile_open;
-				}
-				else
+				if (errno != ENOENT)
 					elog(ERROR, "cannot stat rotation file \"%s\": %s",
 						 control, strerror(errno));
 			}
+			else
+			{
+				char		buf[1024];
 
-			/* Found control file for rotation */
+				control_file = fopen(control, "r");
+				if (control_file == NULL)
+					elog(ERROR, "cannot open rotation file \"%s\": %s",
+						 control, strerror(errno));
 
-			control_file = fopen(control, "r");
-			fclose(control_file);
+				if (fgets(buf, lengthof(buf), control_file))
+				{
+					time_t		creation_time;
+
+					if (!parse_int64(buf, (int64 *) &creation_time))
+						elog(ERROR, "rotation file \"%s\" has wrong "
+							 "creation timestamp \"%s\"",
+							 control, buf);
+					/* Parsed creation time */
+
+					rotation_requested = (cur_time - creation_time) >
+							/* convert to seconds */
+							log_rotation_age * 60;
+				}
+				else
+					elog(ERROR, "cannot read creation timestamp from "
+						 "rotation file \"%s\"", control);
+
+				fclose(control_file);
+			}
 		}
 
 		/* Check for rotation by size */
 		if (!rotation_requested && log_rotation_size > 0)
-			rotation_requested = (st.st_size >= log_rotation_size * 1024L);
+			rotation_requested = st.st_size >=
+					/* convert to bytes */
+					log_rotation_size * 1024L;
 	}
 
 logfile_open:
@@ -387,6 +419,21 @@ logfile_open:
 	else
 		*file = logfile_open(filename, "a");
 	pfree(filename);
+
+	/* Rewrite rotation control file */
+	if (rotation_requested || !logfile_exists)
+	{
+		time_t		timestamp = time(NULL);
+
+		control_file = fopen(control, "w");
+		if (control_file == NULL)
+			elog(ERROR, "cannot open rotation file \"%s\": %s",
+				 control, strerror(errno));
+
+		fprintf(control_file, "%ld", timestamp);
+
+		fclose(control_file);
+	}
 
 	/*
 	 * Arrange to close opened file at proc_exit.
