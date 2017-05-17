@@ -22,7 +22,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #    @unittest.skip("123")
     def test_validate_time(self):
-        """recovery to latest from full backup"""
+        """recovery to latest from full backup. Expect to Fail"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
@@ -204,7 +204,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #    @unittest.skip("123")
     def test_validate_wal_lost_segment_2(self):
-        """Loose segment located between backups """
+        """Loose segment located between backups. Expect to fail """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
@@ -235,7 +235,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         wals = map(int, wals)
 
         # delete last wal segment
-        print os.path.join(self.backup_dir(node), "wal", '0000000' + str(max(wals)))
+        #print os.path.join(self.backup_dir(node), "wal", '0000000' + str(max(wals)))
         os.remove(os.path.join(self.backup_dir(node), "wal", '0000000' + str(max(wals))))
 
         # Need more accurate error message about loosing wal segment between backups

@@ -8,10 +8,10 @@ import subprocess
 from sys import exit
 
 
-class SomeTest(ProbackupTest, unittest.TestCase):
+class RecoveryWithTimeTarget(ProbackupTest, unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(SomeTest, self).__init__(*args, **kwargs)
+        super(RecoveryWithTimeTarget, self).__init__(*args, **kwargs)
 
 #    @classmethod
 #    def tearDownClass(cls):
@@ -46,7 +46,8 @@ class SomeTest(ProbackupTest, unittest.TestCase):
         """
         make node with archiving, make stream backup,
         get Recovery Time, validate to Recovery Time
-        Should fail. Waiting PGPRO-688
+        EXPECT VALIDATE TO FAIL
+        Waiting PGPRO-688
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/pgpro668/{0}".format(fname),

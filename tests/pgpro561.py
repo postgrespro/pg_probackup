@@ -8,10 +8,10 @@ import subprocess
 from sys import exit
 
 
-class SomeTest(ProbackupTest, unittest.TestCase):
+class CommonArchiveDir(ProbackupTest, unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(SomeTest, self).__init__(*args, **kwargs)
+        super(CommonArchiveDir, self).__init__(*args, **kwargs)
 
 #    @classmethod
 #    def tearDownClass(cls):
@@ -19,8 +19,9 @@ class SomeTest(ProbackupTest, unittest.TestCase):
 
     def test_pgpro561(self):
         """
-        make node with archiving, make stream backup,
-        get Recovery Time, try to make pitr to Recovery Time
+        make node with archiving, make backup,
+        restore it to node1 and node2, compare timelines
+        EXPECT TO FAIL
         """
         fname = self.id().split('.')[3]
         master = self.make_simple_node(base_dir="tmp_dirs/pgpro561/{0}/master".format(fname),

@@ -294,7 +294,7 @@ class ProbackupTest(object):
 
     def run_pb(self, command):
         try:
-            print [self.probackup_path] + command
+            # print [self.probackup_path] + command
             output = subprocess.check_output(
                 [self.probackup_path] + command,
                 stderr=subprocess.STDOUT,
