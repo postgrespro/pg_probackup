@@ -132,8 +132,6 @@ help_backup(void)
 	printf(_("      --backup-pg-log              backup of pg_log directory\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --progress                   show progress\n"));
-	printf(_("  -q, --quiet                      don't write any messages\n"));
-	printf(_("  -v, --verbose                    verbose mode\n"));
 	printf(_("      --delete-expired             delete backups expired according to current\n"));
 	printf(_("                                   retention policy after successful backup completion\n"));
 
@@ -157,8 +155,6 @@ help_restore(void)
 	printf(_("  -i, --backup-id=backup-id        backup to restore\n"));
 
 	printf(_("      --progress                   show progress\n"));
-	printf(_("  -q, --quiet                      don't write any messages\n"));
-	printf(_("  -v, --verbose                    verbose mode\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
@@ -180,8 +176,6 @@ help_validate(void)
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
 	printf(_("      --progress                   show progress\n"));
-	printf(_("  -q, --quiet                      don't write any messages\n"));
-	printf(_("  -v, --verbose                    verbose mode\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
