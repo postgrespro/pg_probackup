@@ -9,6 +9,10 @@
 
 #include "pg_probackup.h"
 
+static void opt_log_level(pgut_option *opt, const char *arg);
+
+static pgBackupConfig *cur_config = NULL;
+
 /* Set configure options */
 int
 do_configure(bool show_only)
@@ -24,6 +28,19 @@ do_configure(bool show_only)
 		config->pgport = port;
 	if (username)
 		config->pguser = username;
+
+	if (log_level_defined)
+		config->log_level = log_level;
+	if (log_filename)
+		config->log_filename = log_filename;
+	if (error_log_filename)
+		config->error_log_filename = error_log_filename;
+	if (log_directory)
+		config->log_directory = log_directory;
+	if (log_rotation_size)
+		config->log_rotation_size = log_rotation_size;
+	if (log_rotation_age)
+		config->log_rotation_age = log_rotation_age;
 
 	if (retention_redundancy)
 		config->retention_redundancy = retention_redundancy;
@@ -48,6 +65,13 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->pgport = NULL;
 	config->pguser = NULL;
 
+	config->log_level = INT_MIN;	// INT_MIN means "undefined"
+	config->log_filename = NULL;
+	config->error_log_filename = NULL;
+	config->log_directory = NULL;
+	config->log_rotation_size = 0;
+	config->log_rotation_age = 0;
+
 	config->retention_redundancy = 0;
 	config->retention_window = 0;
 }
@@ -68,6 +92,20 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "PGPORT = %s\n", config->pgport);
 	if (config->pguser)
 		fprintf(out, "PGUSER = %s\n", config->pguser);
+
+	fprintf(out, "#Logging parameters:\n");
+	if (config->log_level != INT_MIN)
+		fprintf(out, "log-level = %s\n", deparse_log_level(config->log_level));
+	if (config->log_filename)
+		fprintf(out, "log-filename = %s\n", config->log_filename);
+	if (config->error_log_filename)
+		fprintf(out, "error-log-filename = %s\n", config->error_log_filename);
+	if (config->log_directory)
+		fprintf(out, "log-directory = %s\n", config->log_directory);
+	if (config->log_rotation_size)
+		fprintf(out, "log-rotation-size = %d\n", config->log_rotation_size);
+	if (config->log_rotation_age)
+		fprintf(out, "log-rotation-age = %d\n", config->log_rotation_age);
 
 	fprintf(out, "#Retention parameters:\n");
 	if (config->retention_redundancy)
@@ -107,12 +145,12 @@ readBackupCatalogConfigFile(void)
 		{ 'u', 0, "retention-redundancy",	&(config->retention_redundancy),SOURCE_FILE_STRICT },
 		{ 'u', 0, "retention-window",		&(config->retention_window),	SOURCE_FILE_STRICT },
 		/* logging options */
-//		{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
-//		{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
-//		{ 's', 42, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
-//		{ 's', 43, "log-directory",			&log_directory,		SOURCE_CMDLINE },
-//		{ 'u', 44, "log-rotation-size",		&log_rotation_size,	SOURCE_CMDLINE },
-//		{ 'u', 45, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
+		{ 'f', 40, "log-level",				opt_log_level,					SOURCE_CMDLINE },
+		{ 's', 41, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
+		{ 's', 42, "error-log-filename",	&(config->error_log_filename),	SOURCE_CMDLINE },
+		{ 's', 43, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
+		{ 'u', 44, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE },
+		{ 'u', 45, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE },
 		/* connection options */
 		{ 's', 0, "pgdata",					&(config->pgdata),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgdatabase",				&(config->pgdatabase),			SOURCE_FILE_STRICT },
@@ -124,6 +162,8 @@ readBackupCatalogConfigFile(void)
 		{0}
 	};
 
+	cur_config = config;
+
 	join_path_components(path, backup_path, BACKUPS_DIR);
 	join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
 
@@ -132,4 +172,10 @@ readBackupCatalogConfigFile(void)
 
 	return config;
 
+}
+
+static void
+opt_log_level(pgut_option *opt, const char *arg)
+{
+	cur_config->log_level = parse_log_level(arg);
 }

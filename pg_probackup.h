@@ -127,6 +127,13 @@ typedef struct pgBackupConfig
 	const char	*pgport;
 	const char	*pguser;
 
+	int			log_level;
+	char	   *log_filename;
+	char	   *error_log_filename;
+	char	   *log_directory;
+	int			log_rotation_size;
+	int			log_rotation_age;
+
 	uint32		retention_redundancy;
 	uint32		retention_window;
 } pgBackupConfig;

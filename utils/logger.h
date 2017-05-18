@@ -25,6 +25,7 @@
 /* Logger parameters */
 
 extern int			log_level;
+extern bool			log_level_defined;
 
 extern char		   *log_filename;
 extern char		   *error_log_filename;
@@ -38,5 +39,6 @@ extern int			log_rotation_age;
 extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
 
 extern int parse_log_level(const char *level);
+extern const char *deparse_log_level(int level);
 
 #endif   /* LOGGER_H */

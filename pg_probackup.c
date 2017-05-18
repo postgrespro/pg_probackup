@@ -312,4 +312,5 @@ static void
 opt_log_level(pgut_option *opt, const char *arg)
 {
 	log_level = parse_log_level(arg);
+	log_level_defined = true;
 }

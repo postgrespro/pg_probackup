@@ -20,6 +20,7 @@
 /* Logger parameters */
 
 int			log_level = INFO;
+bool		log_level_defined = false;
 
 char	   *log_filename = NULL;
 char	   *error_log_filename = NULL;
@@ -286,6 +287,37 @@ parse_log_level(const char *level)
 	/* Log level is invalid */
 	elog(ERROR, "invalid log-level \"%s\"", level);
 	return 0;
+}
+
+/*
+ * Converts integer representation of log level to string.
+ */
+const char *
+deparse_log_level(int level)
+{
+	switch (level)
+	{
+		case VERBOSE:
+			return "VERBOSE";
+		case LOG:
+			return "LOG";
+		case INFO:
+			return "INFO";
+		case NOTICE:
+			return "NOTICE";
+		case WARNING:
+			return "WARNING";
+		case ERROR:
+			return "ERROR";
+		case FATAL:
+			return "FATAL";
+		case PANIC:
+			return "PANIC";
+		default:
+			elog(ERROR, "invalid log-level %d", level);
+	}
+
+	return NULL;
 }
 
 /*
