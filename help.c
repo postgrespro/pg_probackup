@@ -61,7 +61,13 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s set-config -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
-	printf(_("                 [--retention-redundancy=retention-redundancy]]\n"));
+	printf(_("                 [--log-level=log-level]\n"));
+	printf(_("                 [--log-filename=log-filename]\n"));
+	printf(_("                 [--error-log-filename=error-log-filename]\n"));
+	printf(_("                 [--log-directory=log-directory]\n"));
+	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
 
 	printf(_("\n  %s show-config -B backup-dir\n"), PROGRAM_NAME);
@@ -210,7 +216,13 @@ help_set_config(void)
 {
 	printf(_("%s set-config -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
-	printf(_("                 [--retention-redundancy=retention-redundancy]]\n"));
+	printf(_("                 [--log-level=log-level]\n"));
+	printf(_("                 [--log-filename=log-filename]\n"));
+	printf(_("                 [--error-log-filename=error-log-filename]\n"));
+	printf(_("                 [--log-directory=log-directory]\n"));
+	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
@@ -220,6 +232,18 @@ help_set_config(void)
 	printf(_("  -h, --host=HOSTNAME              database server host or socket directory\n"));
 	printf(_("  -p, --port=PORT                  database server port\n"));
 	printf(_("  -U, --username=USERNAME          user name to connect as\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level=log-level        controls which message levels are sent to the log\n"));
+	printf(_("      --log-filename=log-filename  file names of the created log files which is treated as as strftime pattern\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   file names of the created log files for error messages\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory in which log files will be created\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   maximum size of an individual log file in kilobytes\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   maximum lifetime of an individual log file in minutes\n"));
 
 	printf(_("\n  Retention options:\n"));
 	printf(_("      --retention-redundancy=retention-redundancy\n"));
