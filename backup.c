@@ -216,16 +216,6 @@ do_backup_database(parray *backup_list)
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
 		/*
-		 * Switch to a new WAL segment. It is necessary to get archived WAL
-		 * segment, which includes start LSN of current backup.
-		 *
-		 * Do not switch for standby node and if backup is stream.
-		 */
-		if (!from_replica && !stream_wal)
-			pg_switch_wal();
-		if (!stream_wal)
-			wait_archive_lsn(current.start_lsn, false);
-		/*
 		 * Build the page map. Obtain information about changed pages
 		 * reading WAL segments present in archives up to the point
 		 * where this backup has started.
@@ -593,6 +583,17 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	backup->start_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 
 	PQclear(res);
+
+	/*
+	 * Switch to a new WAL segment. It is necessary to get archived WAL
+	 * segment, which includes start LSN of current backup.
+	 *
+	 * Do not switch for standby node and if backup is stream.
+	 */
+	if (!from_replica && !stream_wal)
+		pg_switch_wal();
+	if (!stream_wal)
+		wait_archive_lsn(backup->start_lsn, false);
 }
 
 /*
