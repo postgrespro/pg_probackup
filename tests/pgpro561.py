@@ -57,3 +57,6 @@ class CommonArchiveDir(ProbackupTest, unittest.TestCase):
 
         res = node1.safe_psql("postgres", "select last_failed_wal from pg_stat_get_archiver() where last_failed_wal is not NULL")
         self.assertEqual(res, six.b(""), 'Restored Node1 failed to archive segment {0} due to having the same archive command as Master'.format(res.rstrip()))
+
+        master.stop()
+        node1.stop()

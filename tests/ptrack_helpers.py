@@ -292,17 +292,27 @@ class ProbackupTest(object):
                 success = False
             self.assertEqual(success, True)
 
-    def run_pb(self, command):
+    def run_pb(self, command, async=False):
         try:
             # print [self.probackup_path] + command
-            output = subprocess.check_output(
-                [self.probackup_path] + command,
-                stderr=subprocess.STDOUT,
-                env=self.test_env
-            )
+            if async is True:
+                return subprocess.Popen(
+                    [self.probackup_path] + command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=self.test_env
+                )
+            else:
+                output = subprocess.check_output(
+                    [self.probackup_path] + command,
+                    stderr=subprocess.STDOUT,
+                    env=self.test_env
+                )
             if command[0] == 'backup':
                 if '-q' in command or '--quiet' in command:
                     return None
+                elif '-v' in command or '--verbose' in command:
+                    return output
                 else:
                     # return backup ID
                     return output.split()[2]
@@ -322,7 +332,7 @@ class ProbackupTest(object):
     def clean_pb(self, node):
         shutil.rmtree(self.backup_dir(node), ignore_errors=True)
 
-    def backup_pb(self, node=None, data_dir=None, backup_dir=None, backup_type="full", options=[]):
+    def backup_pb(self, node=None, data_dir=None, backup_dir=None, backup_type="full", options=[], async=False):
         if data_dir is None:
             data_dir = node.data_dir
         if backup_dir is None:
@@ -338,7 +348,7 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ["-b", backup_type]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, async)
 
     def restore_pb(self, node=None, backup_dir=None, data_dir=None, id=None, options=[]):
         if data_dir is None:

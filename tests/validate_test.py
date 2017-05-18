@@ -31,6 +31,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             )
         node.start()
 
+        node.pgbench_init(scale=2)
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -67,6 +68,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
             backup_log.write(self.backup_pb(node, options=["--verbose"]))
 
+        node.pgbench_init(scale=2)
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
