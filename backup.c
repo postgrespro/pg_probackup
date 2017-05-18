@@ -73,6 +73,7 @@ static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
 static bool pg_ptrack_enable(void);
 static bool pg_is_in_recovery(void);
+static bool pg_archive_enabled(void);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
@@ -410,6 +411,10 @@ do_backup(void)
 			elog(ERROR, "Ptrack is disabled");
 	}
 
+	/* archiving check */
+	if (!current.stream && !pg_archive_enabled())
+		elog(ERROR, "Archiving must be enabled for archive backup");
+
 	/* Get exclusive lock of backup catalog */
 	catalog_lock();
 
@@ -674,6 +679,25 @@ pg_is_in_recovery(void)
 	}
 	PQclear(res_db);
 	return false;
+}
+
+/*
+ * Check if archiving is enabled
+ */
+static bool
+pg_archive_enabled(void)
+{
+	PGresult   *res_db;
+
+	res_db = pgut_execute(backup_conn, "show archive_mode", 0, NULL);
+
+	if (strcmp(PQgetvalue(res_db, 0, 0), "off") == 0)
+	{
+		PQclear(res_db);
+		return false;
+	}
+	PQclear(res_db);
+	return true;
 }
 
 /* Clear ptrack files in all databases of the instance we connected to */
