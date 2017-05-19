@@ -1006,14 +1006,6 @@ backup_cleanup(bool fatal, void *userdata)
 {
 	char path[MAXPGPATH];
 
-	/* If backup_label exists in $PGDATA, notify stop of backup to PostgreSQL */
-	join_path_components(path, pgdata, PG_BACKUP_LABEL_FILE);
-	if (fileExists(path))
-	{
-		elog(LOG, "%s exists, stop backup", PG_BACKUP_LABEL_FILE);
-		pg_stop_backup(NULL);	/* don't care stop_lsn on error case */
-	}
-
 	/*
 	 * Update status of backup in BACKUP_CONTROL_FILE to ERROR.
 	 * end_time != 0 means backup finished
@@ -1024,6 +1016,17 @@ backup_cleanup(bool fatal, void *userdata)
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
 		pgBackupWriteBackupControlFile(&current);
+	}
+
+	/*
+	 * If backup_label exists in $PGDATA, notify stop of backup to PostgreSQL
+	 * TODO Do we need this?
+	 */
+	join_path_components(path, pgdata, PG_BACKUP_LABEL_FILE);
+	if (fileExists(path))
+	{
+		elog(LOG, "%s exists, stop backup", PG_BACKUP_LABEL_FILE);
+		pg_stop_backup(NULL);	/* don't care stop_lsn on error case */
 	}
 }
 
