@@ -75,16 +75,16 @@ help_pg_probackup(void)
 	printf(_("\n  %s backup -B backup-path -b backup-mode\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress] [-q] [-v] [--delete-expired]\n"));
+	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 
 	printf(_("\n  %s restore -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress] [-q] [-v]\n"));
+	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
 	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 
 	printf(_("\n  %s validate -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress] [-q] [-v]\n"));
+	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
 	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                [--timeline=timeline]\n"));
 
@@ -119,7 +119,7 @@ help_backup(void)
 	printf(_("%s backup -B backup-path -b backup-mode\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress] [-q] [-v] [--delete-expired]\n"));
+	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
@@ -146,7 +146,7 @@ static void
 help_restore(void)
 {
 	printf(_("%s restore -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress] [-q] [-v]\n"));
+	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
 	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                [--timeline=timeline] [-T OLDDIR=NEWDIR]\n\n"));
 
@@ -167,7 +167,7 @@ static void
 help_validate(void)
 {
 	printf(_("%s validate -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress] [-q] [-v]\n"));
+	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
 	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                [--timeline=timeline]\n\n"));
 
