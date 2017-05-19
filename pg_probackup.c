@@ -68,8 +68,8 @@ static pgut_option options[] =
 	{ 's', 'B', "backup-path",			&backup_path,		SOURCE_CMDLINE },
 	/* common options */
 	{ 'u', 'j', "threads",				&num_threads,		SOURCE_CMDLINE },
-	{ 'b', 1, "stream",					&stream_wal,		SOURCE_CMDLINE },
-	{ 'b', 2, "progress",				&progress,			SOURCE_CMDLINE },
+	{ 'b', 2, "stream",					&stream_wal,		SOURCE_CMDLINE },
+	{ 'b', 3, "progress",				&progress,			SOURCE_CMDLINE },
 	{ 's', 'i', "backup-id",			&backup_id_string_param, SOURCE_CMDLINE },
 	/* backup options */
 	{ 'b', 10, "backup-pg-log",			&backup_logs,		SOURCE_CMDLINE },
