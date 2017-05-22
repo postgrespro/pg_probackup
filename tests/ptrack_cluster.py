@@ -12,7 +12,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # clean_all()
         stop_all()
 
-#    @unittest.skip("123")
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_ptrack_cluster_btree(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/ptrack/{0}".format(fname),

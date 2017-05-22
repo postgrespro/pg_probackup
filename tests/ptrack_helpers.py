@@ -161,6 +161,7 @@ class ProbackupTest(object):
         node.init(initdb_params=initdb_params)
 
         # Sane default parameters, not a shit with fsync = off from testgres
+        node.append_conf("postgresql.auto.conf", "{0} = {1}".format('shared_buffers', '10MB'))
         node.append_conf("postgresql.auto.conf", "{0} = {1}".format('fsync', 'on'))
         node.append_conf("postgresql.auto.conf", "{0} = {1}".format('wal_level', 'minimal'))
 
@@ -294,7 +295,7 @@ class ProbackupTest(object):
 
     def run_pb(self, command, async=False):
         try:
-            # print [self.probackup_path] + command
+            #print [self.probackup_path] + command
             if async is True:
                 return subprocess.Popen(
                     [self.probackup_path] + command,
@@ -315,7 +316,9 @@ class ProbackupTest(object):
                     return output
                 else:
                     # return backup ID
-                    return output.split()[2]
+                    for line in output.splitlines():
+                        if 'INFO: Backup' and 'completed' in line:
+                            return line.split()[2]
             else:
                 return output
         except subprocess.CalledProcessError as e:
@@ -391,13 +394,17 @@ class ProbackupTest(object):
             body = body[::-1]
             # split string in list with string for every header element
             header_split = re.split("  +", header)
-            # CRUNCH, remove last item, because it`s empty, like that ''
-            header_split.pop()
+            # Remove empty items
+            for i in header_split:
+                if i == '':
+                    header_split.remove(i)
             for backup_record in body:
                 # split string in list with string for every backup record element
                 backup_record_split = re.split("  +", backup_record)
-                # CRUNCH, remove last item, because it`s empty, like that ''
-                backup_record_split.pop()
+                # Remove empty items
+                for i in backup_record_split:
+                    if i == '':
+                        backup_record_split.remove(i)
                 if len(header_split) != len(backup_record_split):
                     print warning.format(
                         header=header, body=body,

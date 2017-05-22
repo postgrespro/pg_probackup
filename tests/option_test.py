@@ -14,6 +14,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def tearDownClass(cls):
         stop_all()
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_help_1(self):
         """help options"""
         fname = self.id().split(".")[3]

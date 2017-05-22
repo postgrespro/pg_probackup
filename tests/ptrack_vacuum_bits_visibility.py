@@ -13,6 +13,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # clean_all()
         stop_all()
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_ptrack_vacuum_bits_visibility(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir='tmp_dirs/ptrack/{0}'.format(fname),

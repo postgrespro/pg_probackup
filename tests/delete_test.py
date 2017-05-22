@@ -11,10 +11,12 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DeleteTest, self).__init__(*args, **kwargs)
 
-#    @classmethod
-#    def tearDownClass(cls):
-#        stop_all()
-#    @unittest.skip("123")
+    @classmethod
+    def tearDownClass(cls):
+        stop_all()
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_delete_full_backups(self):
         """delete full backups"""
         fname = self.id().split('.')[3]
@@ -28,22 +30,19 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init()
 
         # full backup mode
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, options=["--verbose"]))
+        self.backup_pb(node)
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, options=["--verbose"]))
+        self.backup_pb(node)
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_3.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, options=["--verbose"]))
+        self.backup_pb(node)
 
         show_backups = self.show_pb(node)
         id_1 = show_backups[0]['ID']
@@ -55,7 +54,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-#    @unittest.skip("123")
     def test_delete_increment(self):
         """delete increment and all after him"""
         fname = self.id().split('.')[3]
@@ -68,16 +66,13 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(self.init_pb(node), six.b(""))
 
         # full backup mode
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, options=["--verbose"]))
+        self.backup_pb(node)
 
         # page backup mode
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="page", options=["--verbose"]))
+        self.backup_pb(node, backup_type="page")
 
         # page backup mode
-        with open(path.join(node.logs_dir, "backup_3.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="page", options=["--verbose"]))
+        self.backup_pb(node, backup_type="page")
 
         # full backup mode
         self.backup_pb(node)

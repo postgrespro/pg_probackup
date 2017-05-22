@@ -12,6 +12,8 @@ class InitTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(InitTest, self).__init__(*args, **kwargs)
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_success_1(self):
         """Success normal init"""
         fname = self.id().split(".")[3]

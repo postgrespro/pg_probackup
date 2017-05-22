@@ -5,17 +5,6 @@ from testgres import get_new_node, stop_all
 from os import path, open, lseek, read, close, O_RDONLY
 from .ptrack_helpers import ProbackupTest, idx_ptrack
 
-#        res = node.execute('postgres', 'show fsync')
-#        print res[0][0]
-#        res = node.execute('postgres', 'show wal_level')
-#        print res[0][0]
-#        a = ProbackupTest
-#        res = node.execute('postgres', 'select 1')`
-#        self.assertEqual(len(res), 1)
-#        self.assertEqual(res[0][0], 1)
-#        node.stop()
-#        a = self.backup_dir(node)
-
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -25,9 +14,10 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # clean_all()
         stop_all()
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_ptrack_vacuum_full(self):
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir='tmp_dirs/ptrack/{0}'.format(fname),
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],

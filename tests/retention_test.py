@@ -15,7 +15,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
     def tearDownClass(cls):
         stop_all()
 
-#    @unittest.skip("123")
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_retention_redundancy_1(self):
         """purge backups using redundancy-based retention policy"""
         fname = self.id().split('.')[3]

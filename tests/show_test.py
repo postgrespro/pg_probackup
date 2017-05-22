@@ -15,6 +15,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def tearDownClass(cls):
         stop_all()
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def show_test_1(self):
         """Status DONE and OK"""
         fname = self.id().split('.')[3]

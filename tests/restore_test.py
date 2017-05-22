@@ -18,7 +18,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def tearDownClass(cls):
         stop_all()
 
-#    @unittest.skip("123")
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_restore_full_to_latest(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
@@ -34,17 +35,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, options=["--verbose"]))
+        self.backup_pb(node)
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
         # 1 - Test recovery from latest
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#           )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         # 2 - Test that recovery.conf was created
         recovery_conf = path.join(node.data_dir, "recovery.conf")
@@ -70,24 +68,21 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=2)
 
         with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, options=["--verbose"]))
+            backup_log.write(self.backup_pb(node))
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="page", options=["--verbose"]))
+        self.backup_pb(node, backup_type="page")
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -110,17 +105,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         target_tli = int(node.get_control_data()[six.b("Latest checkpoint's TimeLineID")])
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -128,17 +120,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node,
-            options=["-j", "4", "--verbose", "--timeline=%i" % target_tli])
-#        )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node,
+            options=["-j", "4", "--timeline=%i" % target_tli]))
 
         recovery_target_timeline = self.get_recovery_conf(node)["recovery_target_timeline"]
         self.assertEqual(int(recovery_target_timeline), target_tli)
@@ -164,8 +153,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -175,11 +163,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node,
-            options=["-j", "4", "--verbose", '--time="%s"' % target_time])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node,
+            options=["-j", "4", '--time="%s"' % target_time]))
 
         node.start({"-t": "600"})
 
@@ -203,8 +189,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.execute("CREATE TABLE tbl0005 (a text)")
             con.commit()
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
@@ -228,11 +213,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "fast"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node,
-            options=["-j", "4", "--verbose", '--xid=%s' % target_xid])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node,
+            options=["-j", "4", '--xid=%s' % target_xid]))
 
         node.start({"-t": "600"})
 
@@ -261,25 +244,21 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.append_conf("postgresql.conf", "ptrack_enable = on")
         node.restart()
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="ptrack", options=["--verbose"]))
+        self.backup_pb(node, backup_type="ptrack")
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#        )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -308,32 +287,27 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.append_conf("postgresql.conf", "ptrack_enable = on")
         node.restart()
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="ptrack", options=["--verbose"]))
+        self.backup_pb(node, backup_type="ptrack")
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_3.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="ptrack", options=["--verbose"]))
+        self.backup_pb(node, backup_type="ptrack")
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -359,25 +333,21 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.skipTest("ptrack not supported")
             return
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose", "--stream"]))
+        self.backup_pb(node, backup_type="full", options=["--stream"])
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="ptrack", options=["--verbose", "--stream"]))
+        self.backup_pb(node, backup_type="ptrack", options=["--stream"])
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -406,8 +376,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             return
         node.restart()
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -415,8 +384,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             options=["-c", "4", "-T", "8"]
         )
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="ptrack", options=["--verbose", "--stream"]))
+        self.backup_pb(node, backup_type="ptrack", options=["--stream"])
 
         pgbench.wait()
         pgbench.stdout.close()
@@ -430,10 +398,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.wrong_wal_clean(node, wal_segment_size)
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -471,14 +437,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             options=["-c", "4", "-T", "8"]
         )
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         pgbench.wait()
         pgbench.stdout.close()
 
-        with open(path.join(node.logs_dir, "backup_2.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="ptrack", options=["--verbose", "--stream"]))
+        self.backup_pb(node, backup_type="ptrack", options=["--stream"])
 
         bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
@@ -489,10 +453,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.wrong_wal_clean(node, wal_segment_size)
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node, options=["-j", "4", "--verbose"])
-#            )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -518,8 +480,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.execute("CREATE TABLE tbl0005 (a text)")
             con.commit()
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node, backup_type="full", options=["--verbose"]))
+        self.backup_pb(node, backup_type="full")
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
@@ -543,15 +504,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "fast"})
         node.cleanup()
 
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete"),
-        self.restore_pb(node,
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node,
             options=[
                 "-j", "4",
-                "--verbose",
                 '--xid=%s' % target_xid,
-                "--inclusive=false"])
-#        )
+                "--inclusive=false"]))
 
         node.start({"-t": "600"})
 
@@ -590,33 +548,27 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
         try:
             self.restore_pb(node)
-            # we should die here because exception is what we expect to happen
-            exit(1)
+            assertEqual(1, 0, 'Error is expected because restore destination is not empty')
         except ProbackupException, e:
             self.assertEqual(
                 e.message,
-                'ERROR: restore destination is not empty: "{0}"\n'.format(node.data_dir)
-                )
+                'ERROR: restore destination is not empty: "{0}"\n'.format(node.data_dir))
 
         # 2 - Try to restore to existing tablespace directory
         shutil.rmtree(node.data_dir)
         try:
             self.restore_pb(node)
-            # we should die here because exception is what we expect to happen
-            exit(1)
+            assertEqual(1, 0, 'Error is expected because restore tablespace destination is not empty')
         except ProbackupException, e:
             self.assertEqual(
                 e.message,
-                'ERROR: restore tablespace destination is not empty: "{0}"\n'.format(tblspc_path)
-                )
+                'ERROR: restore tablespace destination is not empty: "{0}"\n'.format(tblspc_path))
 
         # 3 - Restore using tablespace-mapping
         tblspc_path_new = path.join(node.base_dir, "tblspc_new")
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete."),
-        self.restore_pb(node,
-            options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)])
-#        )
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node,
+            options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]))
 
         node.start()
         id = node.execute("postgres", "SELECT id FROM test")
@@ -636,11 +588,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
         node.cleanup()
         tblspc_path_page = path.join(node.base_dir, "tblspc_page")
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete."),
-        self.restore_pb(node,
-            options=["-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)])
-#        )
+
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node,
+            options=["-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)]))
 
         node.start()
         id = node.execute("postgres", "SELECT id FROM test OFFSET 1")
@@ -696,13 +647,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
 
         tblspc_path_new = path.join(node.base_dir, "tblspc_new")
-#        exit(1)
-#        TODO WAITING FIX FOR RESTORE
-#        self.assertIn(six.b("INFO: restore complete."),
-        self.restore_pb(node,
-            options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)])
-#        )
-         # Check tables
+
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in  self.restore_pb(node,
+            options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]))
         node.start()
 
         count = node.execute("postgres", "SELECT count(*) FROM tbl")
@@ -732,7 +680,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.pg_ctl('stop', {'-m': 'immediate', '-D': '{0}'.format(node.data_dir)})
         node.cleanup()
 
-        self.restore_pb(node, options=['--time="{0}"'.format(recovery_time)])
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(
+                node, options=['--time="{0}"'.format(recovery_time)]))
+
         node.start({"-t": "600"})
         self.assertEqual(True, node.status())
         node.stop()
@@ -757,9 +708,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.pg_ctl('stop', {'-m': 'immediate', '-D': '{0}'.format(node.data_dir)})
         node.cleanup()
         recovery_time = self.show_pb(node, id=id)['recovery-time']
-        self.restore_pb(node,
-            options=["-j", "4", '--time="{0}"'.format(recovery_time)]
-            )
+
+        self.assertTrue(six.b("INFO: Restore of backup") and
+            six.b("completed.") in self.restore_pb(node,
+            options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
+
         node.start({"-t": "600"})
 
         res = node.psql("postgres", 'select * from t_heap')
