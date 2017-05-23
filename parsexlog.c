@@ -155,6 +155,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	}
 }
 
+/* TODO Add comment, review */
 void
 validate_wal(pgBackup *backup,
 			 const char *archivedir,
@@ -245,6 +246,10 @@ validate_wal(pgBackup *backup,
 	{
 		if (xlogfpath[0] != 0)
 		{
+			/* Update backup status */
+			backup->status = BACKUP_STATUS_CORRUPT;
+			pgBackupWriteBackupControlFile(backup);
+
 			/* XLOG reader couldnt read WAL segment */
 			if (!xlogexists)
 				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
@@ -254,11 +259,17 @@ validate_wal(pgBackup *backup,
 		}
 
 		if (!got_endpoint)
+		{
+			/* Update backup status */
+			backup->status = BACKUP_STATUS_CORRUPT;
+			pgBackupWriteBackupControlFile(backup);
+
 			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
 				 (uint32) (backup->start_lsn >> 32),
 				 (uint32) (backup->start_lsn),
 				 (uint32) (backup->stop_lsn >> 32),
 				 (uint32) (backup->stop_lsn));
+		}
 		else
 		{
 			if (target_time > 0)

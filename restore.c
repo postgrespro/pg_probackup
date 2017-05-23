@@ -122,7 +122,7 @@ do_restore_or_validate(time_t target_backup_id,
 		timelines = readTimeLineHistory_probackup(target_tli);
 	}
 
-	/* Find backup range we should restore. */
+	/* Find backup range we should restore or validate. */
 	for (i = 0; i < parray_num(backups); i++)
 	{
 		current_backup = (pgBackup *) parray_get(backups, i);
@@ -217,40 +217,42 @@ do_restore_or_validate(time_t target_backup_id,
 		pgBackupValidate(backup);
 	}
 
+	/*
+	 * Validate corresponding WAL files.
+	 * TODO Shouldn't we pass recovery_target_timeline as last argument?
+	 */
+	validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
+						 rt->recovery_target_xid, base_full_backup->tli);
+
+
 	/* We ensured that all backups are valid, now restore if required */
 	if (is_restore)
 	{
+		pgBackup   *backup;
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
-			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			backup = (pgBackup *) parray_get(backups, i);
 			if (backup->status == BACKUP_STATUS_OK)
 				restore_backup(backup);
 			else
 				elog(ERROR, "backup %s is not valid",
 					 base36enc(backup->start_time));
 		}
-	}
 
-	/*
-	 * Delete files which are not in dest backup file list. Files which were
-	 * deleted between previous and current backup are not in the list.
-	 */
-	if (is_restore)
-	{
-		pgBackup   *dest_backup = (pgBackup *) parray_get(backups, dest_backup_index);
+		/*
+		 * Delete files which are not in dest backup file list. Files which were
+		 * deleted between previous and current backup are not in the list.
+		 */
 		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
 			remove_deleted_files(dest_backup);
-	}
 
-	if (!dest_backup->stream
-		|| (target_time != NULL || target_xid != NULL))
-	{
-		if (is_restore)
+		/* TODO Add comment */
+		if (!dest_backup->stream
+			|| (target_time != NULL || target_xid != NULL))
+		{
 			create_recovery_conf(target_backup_id, target_time, target_xid,
 								target_inclusive, target_tli);
-		else
-			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-						 rt->recovery_target_xid, base_full_backup->tli);
+		}
 	}
 
 	/* cleanup */
