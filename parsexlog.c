@@ -123,6 +123,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	do
 	{
 		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+
 		if (record == NULL)
 		{
 			XLogRecPtr	errptr;
@@ -130,12 +131,23 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
 
 			if (errormsg)
-				elog(ERROR, "could not read WAL record at %X/%X: %s",
+				elog(WARNING, "could not read WAL record at %X/%X: %s",
 					 (uint32) (errptr >> 32), (uint32) (errptr),
 					 errormsg);
 			else
-				elog(ERROR, "could not read WAL record at %X/%X",
+				elog(WARNING, "could not read WAL record at %X/%X",
 					 (uint32) (errptr >> 32), (uint32) (errptr));
+
+			/*
+			 * If we don't have all WAL files from prev backup start_lsn to current
+			 * start_lsn, we won't be able to build page map and PAGE backup will
+			 * be incorrect. Stop it and throw an error.
+			 */
+			if (!xlogexists)
+				elog(ERROR, "WAL segment \"%s\" is absent", xlogfpath);
+			else if (xlogreadfd != -1)
+				elog(ERROR, "Possible WAL CORRUPTION."
+							"Error has occured during reading WAL segment \"%s\"", xlogfpath);
 		}
 
 		extractPageInfo(xlogreader);
@@ -143,7 +155,6 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
 
 		XLByteToSeg(xlogreader->EndRecPtr, nextSegNo);
-
 	} while (nextSegNo <= endSegNo && xlogreader->EndRecPtr != endpoint);
 
 	XLogReaderFree(xlogreader);
@@ -228,6 +239,8 @@ validate_wal(pgBackup *backup,
 		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
 	}
 
+
+	/* TODO Add comment */
 	if (last_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_time));
@@ -237,33 +250,37 @@ validate_wal(pgBackup *backup,
 	if (last_xid == InvalidTransactionId)
 		last_xid = backup->recovery_xid;
 
-	/* There are all need WAL records */
+	/* There are all needed WAL records */
 	if (all_wal)
 		elog(INFO, "backup validation completed successfully on time %s and xid " XID_FMT,
 			 last_timestamp, last_xid);
-	/* There are not need WAL records */
+	/* Some needed WAL records are absent */
 	else
 	{
 		if (xlogfpath[0] != 0)
 		{
-			/* Update backup status */
-			backup->status = BACKUP_STATUS_CORRUPT;
-			pgBackupWriteBackupControlFile(backup);
-
-			/* XLOG reader couldnt read WAL segment */
+			/* XLOG reader couldn't read WAL segment.
+			 * We throw a WARNING here to be able to update backup status below.
+			 */
 			if (!xlogexists)
+			{
 				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
+			}
 			else if (xlogreadfd != -1)
-					elog(ERROR, "Possible WAL CORRUPTION."
-						"Error has occured during reading WAL segment \"%s\"", xlogfpath);
+			{
+				elog(WARNING, "Possible WAL CORRUPTION."
+					"Error has occured during reading WAL segment \"%s\"", xlogfpath);
+			}
 		}
 
 		if (!got_endpoint)
 		{
-			/* Update backup status */
+			/*
+			 * If we don't have WAL between start_lsn and stop_lsn,
+			 * the backup is definitely corrupted. Update its status.
+			 */
 			backup->status = BACKUP_STATUS_CORRUPT;
 			pgBackupWriteBackupControlFile(backup);
-
 			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
 				 (uint32) (backup->start_lsn >> 32),
 				 (uint32) (backup->start_lsn),

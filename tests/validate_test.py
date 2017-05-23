@@ -17,8 +17,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def tearDownClass(cls):
         stop_all()
 
-    # @unittest.skip("skip")
-    # @unittest.expectedFailure
+    #@unittest.skip("skip")
+    #@unittest.expectedFailure
     def test_validate_wal_unreal_values(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
@@ -177,6 +177,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('CORRUPT', self.show_pb(node, id=backup_id)['status'], 'Backup STATUS should be "CORRUPT"')
         node.stop()
 
+    @unittest.skip("skip")
     def test_validate_wal_lost_segment_1(self):
         """Loose segment which belong to some backup"""
         fname = self.id().split('.')[3]
@@ -245,5 +246,5 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.backup_pb(node, backup_type='page')
             self.assertEqual(1, 0, "Expecting Error in PAGE backup because of wal segment disappearance")
         except ProbackupException, e:
-            self.assertEqual(True, 'could not read WAL record' in e.message)
+            self.assertEqual(True, 'is absent' in e.message)
         node.stop()
