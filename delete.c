@@ -15,8 +15,7 @@
 #include <unistd.h>
 
 static int pgBackupDeleteFiles(pgBackup *backup);
-static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
-							bool delete_all);
+static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli);
 
 int
 do_delete(time_t backup_id)
@@ -108,7 +107,7 @@ do_delete(time_t backup_id)
 			}
 		}
 
-		delete_walfiles(oldest_lsn, oldest_tli, true);
+		delete_walfiles(oldest_lsn, oldest_tli);
 	}
 
 	/* cleanup */
@@ -200,7 +199,7 @@ do_retention_purge(void)
 	}
 
 	/* Purge WAL files */
-	delete_walfiles(oldest_lsn, oldest_tli, true);
+	delete_walfiles(oldest_lsn, oldest_tli);
 
 	/* Cleanup */
 	parray_walk(backup_list, pgBackupFree);
@@ -280,13 +279,16 @@ pgBackupDeleteFiles(pgBackup *backup)
 }
 
 /*
- * Delete WAL segments up to oldest_lsn.
+ * Deletes WAL segments up to oldest_lsn or all WAL segments (if all backups
+ * was deleted and so oldest_lsn is invalid).
  *
- * If oldest_lsn is invalid function exists. But if delete_all is true then
- * WAL segements will be deleted anyway.
+ *  oldest_lsn - if valid, function deletes WAL segments, which contain lsn
+ *    older than oldest_lsn. If it is invalid function deletes all WAL segments.
+ *  oldest_tli - is used to construct oldest WAL segment in addition to
+ *    oldest_lsn.
  */
 static void
-delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
+delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 {
 	XLogSegNo   targetSegNo;
 	char		oldestSegmentNeeded[MAXFNAMELEN];
@@ -296,9 +298,6 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 	char		max_wal_file[MAXPGPATH];
 	char		min_wal_file[MAXPGPATH];
 	int			rc;
-
-	if (XLogRecPtrIsInvalid(oldest_lsn) && !delete_all)
-		return;
 
 	max_wal_file[0] = '\0';
 	min_wal_file[0] = '\0';
