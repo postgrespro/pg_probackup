@@ -12,18 +12,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(ValidateTest, self).__init__(*args, **kwargs)
 
-#    @classmethod
-#    def tearDownClass(cls):
-#        try:
-#            stop_all()
-#        except:
-#            pass
+    @classmethod
+    def tearDownClass(cls):
+        stop_all()
 
 #    @unittest.skip("123")
     def test_validate_wal_1(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
-        print '\n {0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -62,19 +58,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
                 after_backup_time - timedelta(days=2))])
             # we should die here because exception is what we expect to happen
-            exit(1)
+            self.assertEqual(1, 0, "Error in validation is expected because of validation of unreal time")
         except ProbackupException, e:
-            self.assertEqual(
-                e.message,
-                'ERROR: Full backup satisfying target options is not found.\n'
-                )
+            self.assertEqual(e.message, 'ERROR: Full backup satisfying target options is not found.\n')
 
         # Validate to unreal time #2
         try:
             self.validate_pb(node, options=["--time='{:%Y-%m-%d %H:%M:%S}'".format(
                 after_backup_time + timedelta(days=2))])
-            # we should die here because exception is what we expect to happen
-            exit(1)
+            self.assertEqual(1, 0, "Error in validation is expected because of validation of unreal time")
         except ProbackupException, e:
             self.assertEqual(
                 True,
@@ -95,8 +87,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate to unreal xid
         try:
             self.validate_pb(node, options=["--xid=%d" % (int(target_xid) + 1000)])
-            # we should die here because exception is what we expect to happen
-            exit(1)
+            self.assertEqual(1, 0, "Error in validation is expected because of validation of unreal xid")
         except ProbackupException, e:
             self.assertEqual(
                 True,
@@ -120,22 +111,16 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(node, id_backup, options=['--xid=%s' % target_xid])
             # we should die here because exception is what we expect to happen
-            exit(1)
+            self.assertEqual(1, 0, "Expecting Error because of wal segment corruption")
         except ProbackupException, e:
-            self.assertEqual(
-                True,
-                'Possible WAL CORRUPTION' in e.message
-                )
+            self.assertTrue(True, 'Possible WAL CORRUPTION' in e.message)
 
         try:
             self.validate_pb(node)
             # we should die here because exception is what we expect to happen
-            exit(1)
+            self.assertEqual(1, 0, "Expecting Error because of wal segment corruption")
         except ProbackupException, e:
-            self.assertEqual(
-                True,
-                'Possible WAL CORRUPTION' in e.message
-                )
+            self.assertTrue(True, 'Possible WAL CORRUPTION' in e.message)
 
         node.stop()
 
@@ -143,7 +128,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_wal_lost_segment_1(self):
         """Loose segment which belong to some backup"""
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -167,19 +151,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.remove(os.path.join(self.backup_dir(node), "wal", wals[1]))
         try:
             self.validate_pb(node)
-            # we should die here because exception is what we expect to happen
-            exit(1)
+            self.assertEqual(1, 0, "Expecting Error because of wal segment disappearance")
         except ProbackupException, e:
-            self.assertEqual(
-                True,
-                'is absent' in e.message
-                )
+            self.assertTrue('is absent' in e.message)
         node.stop()
 
+    @unittest.expectedFailure
     def test_validate_wal_lost_segment_2(self):
         """Loose segment located between backups """
         fname = self.id().split('.')[3]
-        print '{0} started'.format(fname)
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,
             initdb_params=['--data-checksums'],
@@ -209,7 +189,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         wals = map(int, wals)
 
         # delete last wal segment
-        print os.path.join(self.backup_dir(node), "wal", '0000000' + str(max(wals)))
         os.remove(os.path.join(self.backup_dir(node), "wal", '0000000' + str(max(wals))))
 
         # Need more accurate error message about loosing wal segment between backups

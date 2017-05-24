@@ -14,7 +14,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         stop_all()
 
     def test_ptrack_vacuum_truncate(self):
-        print 'test_ptrack_vacuum_truncate started'
         node = self.make_simple_node(base_dir="tmp_dirs/ptrack/test_ptrack_vacuum_truncate",
             set_replication=True,
             initdb_params=['--data-checksums', '-A trust'],
@@ -62,7 +61,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])

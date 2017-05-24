@@ -152,29 +152,6 @@ class ProbackupTest(object):
     def backup_dir(self, node):
         return os.path.abspath("%s/backup" % node.base_dir)
 
-    def make_bnode(self, base_dir=None, allows_streaming=False, options={}):
-        real_base_dir = os.path.join(self.dir_path, base_dir)
-        shutil.rmtree(real_base_dir, ignore_errors=True)
-
-        node = get_new_node('test', base_dir=real_base_dir)
-        node.init(allows_streaming=allows_streaming)
-
-        if not allows_streaming:
-            node.append_conf("postgresql.auto.conf", "wal_level = hot_standby")
-        node.append_conf("postgresql.auto.conf", "archive_mode = on")
-        node.append_conf(
-            "postgresql.auto.conf",
-            """archive_command = 'cp "%%p" "%s/%%f"'""" % os.path.abspath(self.arcwal_dir(node))
-        )
-
-        for key, value in six.iteritems(options):
-            node.append_conf("postgresql.conf", "%s = %s" % (key, value))
-
-        return node
-
-#    def print_started(self, fname):
-#        print 
-
     def make_simple_node(self, base_dir=None, set_replication=False,
                         set_archiving=False, initdb_params=[], pg_options={}):
         real_base_dir = os.path.join(self.dir_path, base_dir)
@@ -184,6 +161,7 @@ class ProbackupTest(object):
         node.init(initdb_params=initdb_params)
 
         # Sane default parameters, not a shit with fsync = off from testgres
+        node.append_conf("postgresql.auto.conf", "{0} = {1}".format('shared_buffers', '10MB'))
         node.append_conf("postgresql.auto.conf", "{0} = {1}".format('fsync', 'on'))
         node.append_conf("postgresql.auto.conf", "{0} = {1}".format('wal_level', 'minimal'))
 
@@ -198,7 +176,6 @@ class ProbackupTest(object):
         if set_archiving:
             self.set_archiving_conf(node, self.arcwal_dir(node))
         return node
-
 
     def create_tblspace_in_node(self, node, tblspc_name, cfs=False):
         res = node.execute(
@@ -236,12 +213,16 @@ class ProbackupTest(object):
         os.close(file)
         return md5_per_page
 
-    def get_ptrack_bits_per_page_for_fork(self, file, size):
+    def get_ptrack_bits_per_page_for_fork(self, node, file, size):
+        if self.get_pgpro_edition(node) == 'enterprise':
+            header_size = 48
+        else:
+            header_size = 24
         ptrack_bits_for_fork = []
         byte_size = os.path.getsize(file + '_ptrack')
-        byte_size_minus_header = byte_size - 24
+        byte_size_minus_header = byte_size - header_size
         file = os.open(file + '_ptrack', os.O_RDONLY)
-        os.lseek(file, 24, 0)
+        os.lseek(file, header_size, 0)
         lot_of_bytes = os.read(file, byte_size_minus_header)
         for byte in lot_of_bytes:
             byte_inverted = bin(ord(byte))[2:].rjust(8, '0')[::-1]
@@ -316,20 +297,32 @@ class ProbackupTest(object):
                 success = False
             self.assertEqual(success, True)
 
-    def run_pb(self, command):
+    def run_pb(self, command, async=False):
         try:
-#            print [self.probackup_path] + command
-            output = subprocess.check_output(
-                [self.probackup_path] + command,
-                stderr=subprocess.STDOUT,
-                env=self.test_env
-            )
+            #print ' '.join(map(str,[self.probackup_path] + command))
+            if async is True:
+                return subprocess.Popen(
+                    [self.probackup_path] + command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=self.test_env
+                )
+            else:
+                output = subprocess.check_output(
+                    [self.probackup_path] + command,
+                    stderr=subprocess.STDOUT,
+                    env=self.test_env
+                )
             if command[0] == 'backup':
                 if '-q' in command or '--quiet' in command:
                     return None
+                elif '-v' in command or '--verbose' in command:
+                    return output
                 else:
                     # return backup ID
-                    return output.split()[2]
+                    for line in output.splitlines():
+                        if 'INFO: Backup' and 'completed' in line:
+                            return line.split()[2]
             else:
                 return output
         except subprocess.CalledProcessError as e:
@@ -346,50 +339,38 @@ class ProbackupTest(object):
     def clean_pb(self, node):
         shutil.rmtree(self.backup_dir(node), ignore_errors=True)
 
-    def backup_pb(self, node, backup_type="full", options=[]):
+    def backup_pb(self, node=None, data_dir=None, backup_dir=None, backup_type="full", options=[], async=False):
+        if data_dir is None:
+            data_dir = node.data_dir
+        if backup_dir is None:
+            backup_dir = self.backup_dir(node)
+
         cmd_list = [
             "backup",
-            "-D", node.data_dir,
-            "-B", self.backup_dir(node),
+            "-B", backup_dir,
+            "-D", data_dir,
             "-p", "%i" % node.port,
             "-d", "postgres"
         ]
         if backup_type:
             cmd_list += ["-b", backup_type]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, async)
 
-    def backup_pb_proc(self, node, backup_type="full",
-        stdout=None, stderr=None, options=[]):
-        cmd_list = [
-            self.probackup_path,
-            "backup",
-            "-D", node.data_dir,
-            "-B", self.backup_dir(node),
-            "-p", "%i" % (node.port),
-            "-d", "postgres"
-        ]
-        if backup_type:
-            cmd_list += ["-b", backup_type]
+    def restore_pb(self, node=None, backup_dir=None, data_dir=None, id=None, options=[]):
+        if data_dir is None:
+            data_dir = node.data_dir
+        if backup_dir is None:
+            backup_dir = self.backup_dir(node)
 
-        proc = subprocess.Popen(
-            cmd_list + options,
-            stdout=stdout,
-            stderr=stderr
-        )
-
-        return proc
-
-    def restore_pb(self, node, id=None, options=[]):
         cmd_list = [
             "restore",
-            "-D", node.data_dir,
-            "-B", self.backup_dir(node)
+            "-B", backup_dir,
+            "-D", data_dir
         ]
         if id:
             cmd_list += ["-i", id]
 
-        # print(cmd_list)
         return self.run_pb(cmd_list + options)
 
     def show_pb(self, node, id=None, options=[], as_text=False):
@@ -417,13 +398,17 @@ class ProbackupTest(object):
             body = body[::-1]
             # split string in list with string for every header element
             header_split = re.split("  +", header)
-            # CRUNCH, remove last item, because it empty, like that ''
-            header_split.pop()
+            # Remove empty items
+            for i in header_split:
+                if i == '':
+                    header_split.remove(i)
             for backup_record in body:
                 # split string in list with string for every backup record element
                 backup_record_split = re.split("  +", backup_record)
-                # CRUNCH, remove last item, because it empty, like that ''
-                backup_record_split.pop()
+                # Remove empty items
+                for i in backup_record_split:
+                    if i == '':
+                        backup_record_split.remove(i)
                 if len(header_split) != len(backup_record_split):
                     print warning.format(
                         header=header, body=body,
@@ -500,25 +485,34 @@ class ProbackupTest(object):
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
         return out_dict
 
-    def set_archiving_conf(self, node, archive_dir):
+    def set_archiving_conf(self, node, archive_dir=False, replica=False):
+        if not archive_dir:
+            archive_dir = self.arcwal_dir(node)
+
+        if replica:
+            archive_mode = 'always'
+            node.append_conf('postgresql.auto.conf', 'hot_standby = on')
+        else:
+            archive_mode = 'on'
+
         node.append_conf(
                 "postgresql.auto.conf",
                 "wal_level = archive"
                 )
         node.append_conf(
                 "postgresql.auto.conf",
-                "archive_mode = on"
+                "archive_mode = {0}".format(archive_mode)
                 )
         if os.name == 'posix':
             node.append_conf(
                     "postgresql.auto.conf",
                     "archive_command = 'test ! -f {0}/%f && cp %p {0}/%f'".format(archive_dir)
                     )
-        elif os.name == 'nt':
-            node.append_conf(
-                    "postgresql.auto.conf",
-                    "archive_command = 'copy %p {0}\\%f'".format(archive_dir)
-                    )
+        #elif os.name == 'nt':
+        #    node.append_conf(
+        #            "postgresql.auto.conf",
+        #            "archive_command = 'copy %p {0}\\%f'".format(archive_dir)
+        #            )
 
     def wrong_wal_clean(self, node, wal_size):
         wals_dir = os.path.join(self.backup_dir(node), "wal")
@@ -536,4 +530,9 @@ class ProbackupTest(object):
         var = node.execute("postgres", "select setting from pg_settings where name = 'wal_block_size'")
         return int(var[0][0])
 
-#    def ptrack_node(self, ptrack_enable=False, wal_level='minimal', max_wal_senders='2', allow_replication=True)
+    def get_pgpro_edition(self, node):
+        if node.execute("postgres", "select exists(select 1 from pg_proc where proname = 'pgpro_edition')")[0][0]:
+            var = node.execute("postgres", "select pgpro_edition()")
+            return str(var[0][0])
+        else:
+            return False
