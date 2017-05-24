@@ -64,7 +64,7 @@ static void pg_stop_backup(pgBackup *backup);
 
 static void add_pgdata_files(parray *files, const char *root);
 static void write_backup_file_list(parray *files, const char *root);
-static void wait_archive_lsn(XLogRecPtr lsn, bool prev_segno);
+static void wait_wal_lsn(XLogRecPtr lsn);
 static void make_pagemap_from_ptrack(parray *files);
 static void StreamLog(void *arg);
 
@@ -598,7 +598,12 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	if (!from_replica && !stream_wal)
 		pg_switch_wal();
 	if (!stream_wal)
-		wait_archive_lsn(backup->start_lsn, false);
+		/*
+		 * Do not wait start_lsn for stream backup.
+		 * Because WAL streaming will start after pg_start_backup() in stream
+		 * mode.
+		 */
+		wait_wal_lsn(backup->start_lsn);
 }
 
 /*
@@ -784,28 +789,32 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
  * WAL segment file.
  */
 static void
-wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
+wait_wal_lsn(XLogRecPtr lsn)
 {
 	TimeLineID	tli;
 	XLogSegNo	targetSegNo;
-	char		wal_path[MAXPGPATH];
-	char		wal_file[MAXFNAMELEN];
+	char		wal_dir[MAXPGPATH],
+				wal_segment_full_path[MAXPGPATH];
+	char		wal_segment[MAXFNAMELEN];
 	uint32		try_count = 0;
-
-	Assert(!stream_wal);
 
 	tli = get_current_timeline(false);
 
 	/* Compute the name of the WAL file containig requested LSN */
 	XLByteToSeg(lsn, targetSegNo);
-	if (prev_segno)
-		targetSegNo--;
-	XLogFileName(wal_file, tli, targetSegNo);
+	XLogFileName(wal_segment, tli, targetSegNo);
 
-	join_path_components(wal_path, arclog_path, wal_file);
+	if (stream_wal)
+	{
+		pgBackupGetPath2(&current, wal_dir, lengthof(wal_dir),
+						 DATABASE_DIR, PG_XLOG_DIR);
+		join_path_components(wal_segment_full_path, wal_dir, wal_segment);
+	}
+	else
+		join_path_components(wal_segment_full_path, arclog_path, wal_segment);
 
 	/* Wait until switched WAL is archived */
-	while (!fileExists(wal_path))
+	while (!fileExists(wal_segment_full_path))
 	{
 		sleep(1);
 		if (interrupted)
@@ -815,21 +824,21 @@ wait_archive_lsn(XLogRecPtr lsn, bool prev_segno)
 		/* Inform user if WAL segment is absent in first attempt */
 		if (try_count == 1)
 			elog(INFO, "wait for LSN %X/%X in archived WAL segment %s",
-				 (uint32) (lsn >> 32), (uint32) lsn, wal_path);
+				 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_full_path);
 
 		if (archive_timeout > 0 && try_count > archive_timeout)
 			elog(ERROR,
 				 "switched WAL segment %s could not be archived in %d seconds",
-				 wal_file, archive_timeout);
+				 wal_segment, archive_timeout);
 	}
 
 	/*
-	 * WAL segment was archived. Check LSN on it if we waited current WAL
-	 * segment, not previous.
+	 * WAL segment was archived. Check LSN on it.
 	 */
-	if (!prev_segno && !wal_contains_lsn(arclog_path, lsn, tli))
+	if ((stream_wal && !wal_contains_lsn(wal_dir, lsn, tli)) ||
+		(!stream_wal && !wal_contains_lsn(arclog_path, lsn, tli)))
 		elog(ERROR, "WAL segment %s doesn't contain target LSN %X/%X",
-			 wal_file, (uint32) (lsn >> 32), (uint32) lsn);
+			 wal_segment, (uint32) (lsn >> 32), (uint32) lsn);
 }
 
 /*
@@ -950,8 +959,7 @@ pg_stop_backup(pgBackup *backup)
 
 	PQclear(res);
 
-	if (!stream_wal)
-		wait_archive_lsn(stop_backup_lsn, false);
+	wait_wal_lsn(stop_backup_lsn);
 
 	/* Fill in fields if that is the correct end of backup. */
 	if (backup != NULL)
@@ -961,7 +969,9 @@ pg_stop_backup(pgBackup *backup)
 
 		if (stream_wal)
 		{
-			join_path_components(stream_xlog_path, pgdata, PG_XLOG_DIR);
+			pgBackupGetPath2(backup, stream_xlog_path,
+							 lengthof(stream_xlog_path),
+							 DATABASE_DIR, PG_XLOG_DIR);
 			xlog_path = stream_xlog_path;
 		}
 		else

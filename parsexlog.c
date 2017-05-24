@@ -488,7 +488,8 @@ cleanup:
 }
 
 /*
- * Check if WAL segment file 'wal_path' contains 'target_lsn'.
+ * Check if there is a WAL segment file in 'archivedir' which contains
+ * 'target_lsn'.
  */
 bool
 wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
