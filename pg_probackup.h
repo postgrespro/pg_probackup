@@ -338,6 +338,8 @@ extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void pgBackupWriteBackupControlFile(pgBackup *backup);
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir);
+extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
+							 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);

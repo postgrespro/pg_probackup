@@ -373,11 +373,9 @@ remove_deleted_files(pgBackup *backup)
 {
 	parray	   *files;
 	parray	   *files_restored;
-	char		database_path[MAXPGPATH];
 	char		filelist_path[MAXPGPATH];
 	int 		i;
 
-	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
 	/* Read backup's filelist using target database path as base path */
 	files = dir_read_file_list(pgdata, filelist_path);

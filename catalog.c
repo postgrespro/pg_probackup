@@ -614,13 +614,31 @@ pgBackupCompareIdDesc(const void *l, const void *r)
 void
 pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
 {
+	pgBackupGetPath2(backup, path, len, subdir, NULL);
+}
+
+/*
+ * Construct absolute path of the backup directory.
+ * Append "subdir1" and "subdir2" to the backup directory.
+ */
+void
+pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
+				 const char *subdir1, const char *subdir2)
+{
 	char	   *datetime;
 
 	datetime = base36enc(backup->start_time);
-	if (subdir)
-		snprintf(path, len, "%s/%s/%s", backup_instance_path, datetime, subdir);
+
+	/* If "subdir1" is NULL do not check "subdir2" */
+	if (!subdir1)
+		snprintf(path, len, "%s/%s/%s", backup_path, BACKUPS_DIR, datetime);
+	else if (!subdir2)
+		snprintf(path, len, "%s/%s/%s/%s", backup_path, BACKUPS_DIR, datetime, subdir1);
+	/* "subdir1" and "subdir2" is not NULL */
 	else
-		snprintf(path, len, "%s/%s", backup_instance_path, datetime);
+		snprintf(path, len, "%s/%s/%s/%s/%s", backup_path, BACKUPS_DIR,
+				 datetime, subdir1, subdir2);
+
 	free(datetime);
 
 	make_native_path(path);
