@@ -77,7 +77,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of validation to unreal time.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException, e:
-            self.assertTrue(re.match('WARNING: recovery can be done up to time [0-9-: ]+ and xid \d+\nERROR: not enough WAL records to time {0}\n\Z'.format(unreal_time_2), e.message),
+            self.assertTrue('ERROR: not enough WAL records to time' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Validate to real xid
@@ -98,7 +98,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of validation to unreal xid.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException, e:
-            self.assertTrue(re.match('WARNING: recovery can be done up to time [0-9-: ]+ and xid \d+\nERROR: not enough WAL records to xid \d+\n\Z', e.message),
+            self.assertTrue('ERROR: not enough WAL records to xid' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Validate with backup ID
@@ -135,8 +135,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         wals.sort()
         for wal in wals:
             f = open(os.path.join(wals_dir, wal), "rb+")
-            f.seek(256)
-            f.write(six.b("blablabla"))
+            f.seek(42)
+            f.write(six.b("blablablaadssaaaaaaaaaaaaaaa"))
             f.close
 
         # Simple validate
@@ -145,9 +145,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of wal segments corruption.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException, e:
-            #TODO assert correct error message
-            self.assertTrue(re.match('Possible WAL CORRUPTION\Z', e.message),
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertTrue('Possible WAL CORRUPTION' in e.message),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd)
 
         self.assertEqual('CORRUPT', self.show_pb(node, id=backup_id)['status'], 'Backup STATUS should be "CORRUPT"')
         node.stop()
@@ -188,7 +187,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         wals.sort()
         for wal in wals:
             f = open(os.path.join(wals_dir, wal), "rb+")
-            f.seek(256)
+            f.seek(0)
             f.write(six.b("blablabla"))
             f.close
 
@@ -198,9 +197,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of wal segments corruption.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException, e:
-            #TODO assert correct error message
-            self.assertTrue(re.match('Possible WAL CORRUPTION\Z', e.message),
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertTrue('Possible WAL CORRUPTION' in e.message),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd)
 
         self.assertEqual('CORRUPT', self.show_pb(node, id=backup_id)['status'], 'Backup STATUS should be "CORRUPT"')
         node.stop()

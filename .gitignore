@@ -29,7 +29,7 @@
 /tests/__pycache__/
 /tests/tmp_dirs/
 /tests/*pyc
-/helpers/*pyc
+/tests/helpers/*pyc
 
 # Extra files
 /datapagemap.c
