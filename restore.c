@@ -141,7 +141,7 @@ do_restore_or_validate(time_t target_backup_id,
 		{
 			if (current_backup->status != BACKUP_STATUS_OK)
 				elog(ERROR, "Backup %s has status: %s",
-					 base36enc(current_backup->status), status2str(current_backup->status));
+					 base36enc(current_backup->start_time), status2str(current_backup->status));
 
 			if (target_tli)
 			{
