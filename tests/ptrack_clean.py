@@ -45,7 +45,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
         # Update everything, vacuum it and make PTRACK BACKUP
@@ -62,7 +62,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
@@ -81,7 +81,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
             # # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['size'])
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 

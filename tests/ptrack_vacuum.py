@@ -51,7 +51,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.backup_pb(node, backup_type='full', options=['-j100', '--stream'])
         for i in idx_ptrack:
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
 
         # Delete some rows, vacuum it and make checkpoint
@@ -69,7 +69,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])

@@ -63,7 +63,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
@@ -120,7 +120,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
@@ -177,7 +177,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
@@ -234,7 +234,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
@@ -291,7 +291,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
             # get ptrack for every idx
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                node, idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
 
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
