@@ -508,15 +508,7 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 		elog(ERROR, "out of memory");
 
 	res = XLogReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
-	if (!res)
-	{
-		if (errormsg)
-			elog(ERROR, "could not read WAL record at %X/%X: %s",
-				 (uint32) (target_lsn >> 32), (uint32) (target_lsn),
-				 errormsg);
-
-		/* Didn't find 'target_lsn' and there is no error, return false */
-	}
+	/* Didn't find 'target_lsn' and there is no error, return false */
 
 	XLogReaderFree(xlogreader);
 	if (xlogreadfd != -1)

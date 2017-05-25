@@ -837,9 +837,22 @@ wait_wal_lsn(XLogRecPtr lsn)
 		timeout = archive_timeout;
 	}
 
-	/* Wait until switched WAL is archived */
-	while (!fileExists(wal_segment_full_path))
+	/* Wait until target LSN is archived */
+	while (true)
 	{
+		bool		file_exists = fileExists(wal_segment_full_path);
+
+		if (file_exists)
+		{
+			/*
+			 * WAL segment was archived. Check LSN on it.
+			 */
+			if ((stream_wal && wal_contains_lsn(wal_dir, lsn, tli)) ||
+				(!stream_wal && wal_contains_lsn(arclog_path, lsn, tli)))
+				/* Target LSN was found */
+				return;
+		}
+
 		sleep(1);
 		if (interrupted)
 			elog(ERROR, "interrupted during waiting for WAL archiving");
@@ -851,18 +864,17 @@ wait_wal_lsn(XLogRecPtr lsn)
 				 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_full_path);
 
 		if (timeout > 0 && try_count > timeout)
-			elog(ERROR,
-				 "switched WAL segment %s could not be archived in %d seconds",
-				 wal_segment, timeout);
+		{
+			if (file_exists)
+				elog(ERROR, "WAL segment %s was archived, "
+					 "but target LSN %X/%X could not be archived in %d seconds",
+					 wal_segment, (uint32) (lsn >> 32), (uint32) lsn, timeout);
+			else
+				elog(ERROR,
+					 "switched WAL segment %s could not be archived in %d seconds",
+					 wal_segment, timeout);
+		}
 	}
-
-	/*
-	 * WAL segment was archived. Check LSN on it.
-	 */
-	if ((stream_wal && !wal_contains_lsn(wal_dir, lsn, tli)) ||
-		(!stream_wal && !wal_contains_lsn(arclog_path, lsn, tli)))
-		elog(ERROR, "WAL segment %s doesn't contain target LSN %X/%X",
-			 wal_segment, (uint32) (lsn >> 32), (uint32) lsn);
 }
 
 /*
@@ -984,8 +996,11 @@ pg_stop_backup(pgBackup *backup)
 	PQclear(res);
 
 	if (stream_wal)
+	{
 		/* Wait for the completion of stream */
+		elog(LOG, "Wait end of WAL streaming");
 		pthread_join(stream_thread, NULL);
+	}
 	wait_wal_lsn(stop_backup_lsn);
 
 	/* Fill in fields if that is the correct end of backup. */
