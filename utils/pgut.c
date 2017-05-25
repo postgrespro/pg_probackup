@@ -2,7 +2,8 @@
  *
  * pgut.c
  *
- * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2017-2017, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -53,6 +54,75 @@ static void on_interrupt(void);
 static void on_cleanup(void);
 static void exit_or_abort(int exitcode);
 static const char *get_username(void);
+
+/*
+ * Unit conversion tables.
+ *
+ * Copied from guc.c.
+ */
+#define MAX_UNIT_LEN		3	/* length of longest recognized unit string */
+
+typedef struct
+{
+	char		unit[MAX_UNIT_LEN + 1]; /* unit, as a string, like "kB" or
+										 * "min" */
+	int			base_unit;		/* OPTION_UNIT_XXX */
+	int			multiplier;		/* If positive, multiply the value with this
+								 * for unit -> base_unit conversion.  If
+								 * negative, divide (with the absolute value) */
+} unit_conversion;
+
+static const char *memory_units_hint = "Valid units for this parameter are \"kB\", \"MB\", \"GB\", and \"TB\".";
+
+static const unit_conversion memory_unit_conversion_table[] =
+{
+	{"TB", OPTION_UNIT_KB, 1024 * 1024 * 1024},
+	{"GB", OPTION_UNIT_KB, 1024 * 1024},
+	{"MB", OPTION_UNIT_KB, 1024},
+	{"kB", OPTION_UNIT_KB, 1},
+
+	{"TB", OPTION_UNIT_BLOCKS, (1024 * 1024 * 1024) / (BLCKSZ / 1024)},
+	{"GB", OPTION_UNIT_BLOCKS, (1024 * 1024) / (BLCKSZ / 1024)},
+	{"MB", OPTION_UNIT_BLOCKS, 1024 / (BLCKSZ / 1024)},
+	{"kB", OPTION_UNIT_BLOCKS, -(BLCKSZ / 1024)},
+
+	{"TB", OPTION_UNIT_XBLOCKS, (1024 * 1024 * 1024) / (XLOG_BLCKSZ / 1024)},
+	{"GB", OPTION_UNIT_XBLOCKS, (1024 * 1024) / (XLOG_BLCKSZ / 1024)},
+	{"MB", OPTION_UNIT_XBLOCKS, 1024 / (XLOG_BLCKSZ / 1024)},
+	{"kB", OPTION_UNIT_XBLOCKS, -(XLOG_BLCKSZ / 1024)},
+
+	{"TB", OPTION_UNIT_XSEGS, (1024 * 1024 * 1024) / (XLOG_SEG_SIZE / 1024)},
+	{"GB", OPTION_UNIT_XSEGS, (1024 * 1024) / (XLOG_SEG_SIZE / 1024)},
+	{"MB", OPTION_UNIT_XSEGS, -(XLOG_SEG_SIZE / (1024 * 1024))},
+	{"kB", OPTION_UNIT_XSEGS, -(XLOG_SEG_SIZE / 1024)},
+
+	{""}						/* end of table marker */
+};
+
+static const char *time_units_hint = "Valid units for this parameter are \"ms\", \"s\", \"min\", \"h\", and \"d\".";
+
+static const unit_conversion time_unit_conversion_table[] =
+{
+	{"d", OPTION_UNIT_MS, 1000 * 60 * 60 * 24},
+	{"h", OPTION_UNIT_MS, 1000 * 60 * 60},
+	{"min", OPTION_UNIT_MS, 1000 * 60},
+	{"s", OPTION_UNIT_MS, 1000},
+	{"ms", OPTION_UNIT_MS, 1},
+
+	{"d", OPTION_UNIT_S, 60 * 60 * 24},
+	{"h", OPTION_UNIT_S, 60 * 60},
+	{"min", OPTION_UNIT_S, 60},
+	{"s", OPTION_UNIT_S, 1},
+	{"ms", OPTION_UNIT_S, -1000},
+
+	{"d", OPTION_UNIT_MIN, 60 * 24},
+	{"h", OPTION_UNIT_MIN, 60},
+	{"min", OPTION_UNIT_MIN, 1},
+	{"s", OPTION_UNIT_MIN, -60},
+	{"ms", OPTION_UNIT_MIN, -1000 * 60},
+
+	{""}						/* end of table marker */
+};
 
 static size_t
 option_length(const pgut_option opts[])
@@ -467,6 +537,129 @@ parse_time(const char *value, time_t *time)
 
 	*time = mktime(&tm);
 
+	return true;
+}
+
+/*
+ * Convert a value from one of the human-friendly units ("kB", "min" etc.)
+ * to the given base unit.  'value' and 'unit' are the input value and unit
+ * to convert from.  The converted value is stored in *base_value.
+ *
+ * Returns true on success, false if the input unit is not recognized.
+ */
+static bool
+convert_to_base_unit(int64 value, const char *unit,
+					 int base_unit, int64 *base_value)
+{
+	const unit_conversion *table;
+	int			i;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit &&
+			strcmp(unit, table[i].unit) == 0)
+		{
+			if (table[i].multiplier < 0)
+				*base_value = value / (-table[i].multiplier);
+			else
+				*base_value = value * table[i].multiplier;
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * Try to parse value as an integer.  The accepted formats are the
+ * usual decimal, octal, or hexadecimal formats, optionally followed by
+ * a unit name if "flags" indicates a unit is allowed.
+ *
+ * If the string parses okay, return true, else false.
+ * If okay and result is not NULL, return the value in *result.
+ * If not okay and hintmsg is not NULL, *hintmsg is set to a suitable
+ *	HINT message, or NULL if no hint provided.
+ */
+bool
+parse_int(const char *value, int *result, int flags, const char **hintmsg)
+{
+	int64		val;
+	char	   *endptr;
+
+	/* To suppress compiler warnings, always set output params */
+	if (result)
+		*result = 0;
+	if (hintmsg)
+		*hintmsg = NULL;
+
+	/* We assume here that int64 is at least as wide as long */
+	errno = 0;
+	val = strtol(value, &endptr, 0);
+
+	if (endptr == value)
+		return false;			/* no HINT for integer syntax error */
+
+	if (errno == ERANGE || val != (int64) ((int32) val))
+	{
+		if (hintmsg)
+			*hintmsg = "Value exceeds integer range.";
+		return false;
+	}
+
+	/* allow whitespace between integer and unit */
+	while (isspace((unsigned char) *endptr))
+		endptr++;
+
+	/* Handle possible unit */
+	if (*endptr != '\0')
+	{
+		char		unit[MAX_UNIT_LEN + 1];
+		int			unitlen;
+		bool		converted = false;
+
+		if ((flags & OPTION_UNIT) == 0)
+			return false;		/* this setting does not accept a unit */
+
+		unitlen = 0;
+		while (*endptr != '\0' && !isspace((unsigned char) *endptr) &&
+			   unitlen < MAX_UNIT_LEN)
+			unit[unitlen++] = *(endptr++);
+		unit[unitlen] = '\0';
+		/* allow whitespace after unit */
+		while (isspace((unsigned char) *endptr))
+			endptr++;
+
+		if (*endptr == '\0')
+			converted = convert_to_base_unit(val, unit, (flags & OPTION_UNIT),
+											 &val);
+		if (!converted)
+		{
+			/* invalid unit, or garbage after the unit; set hint and fail. */
+			if (hintmsg)
+			{
+				if (flags & OPTION_UNIT_MEMORY)
+					*hintmsg = memory_units_hint;
+				else
+					*hintmsg = time_units_hint;
+			}
+			return false;
+		}
+
+		/* Check for overflow due to units conversion */
+		if (val != (int64) ((int32) val))
+		{
+			if (hintmsg)
+				*hintmsg = "Value exceeds integer range.";
+			return false;
+		}
+	}
+
+	if (result)
+		*result = (int) val;
 	return true;
 }
 

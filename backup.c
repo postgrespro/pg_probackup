@@ -33,7 +33,11 @@ const char *progname = "pg_probackup";
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
 
-static pthread_mutex_t check_stream_mut = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t start_stream_mut = PTHREAD_MUTEX_INITIALIZER;
+/*
+ * We need to wait end of WAL streaming before execute pg_stop_backup().
+ */
+static pthread_t stream_thread;
 
 static int is_ptrack_enable = false;
 
@@ -105,7 +109,6 @@ do_backup_database(parray *backup_list)
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
 
 	pthread_t	backup_threads[num_threads];
-	pthread_t	stream_thread;
 	backup_files_args *backup_threads_args[num_threads];
 
 	pgBackup   *prev_backup = NULL;
@@ -142,24 +145,6 @@ do_backup_database(parray *backup_list)
 	strncat(label, " with pg_probackup", lengthof(label));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
-
-	/* start stream replication */
-	if (stream_wal)
-	{
-		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
-		dir_create_dir(dst_backup_path, DIR_PERMISSION);
-
-		pthread_mutex_lock(&check_stream_mut);
-		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
-		pthread_mutex_lock(&check_stream_mut);
-		if (conn == NULL)
-			elog(ERROR, "Cannot continue backup because stream connect has failed.");
-
-		pthread_mutex_unlock(&check_stream_mut);
-	}
-
 	/*
 	 * If backup_label does not exist in $PGDATA, stop taking backup.
 	 * NOTE. We can check it only on master, though.
@@ -176,6 +161,24 @@ do_backup_database(parray *backup_list)
 			pg_stop_backup(NULL);
 			elog(ERROR, "%s does not exist in PGDATA", PG_BACKUP_LABEL_FILE);
 		}
+	}
+
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
+
+	/* start stream replication */
+	if (stream_wal)
+	{
+		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
+		dir_create_dir(dst_backup_path, DIR_PERMISSION);
+
+		pthread_mutex_lock(&start_stream_mut);
+		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
+		pthread_mutex_lock(&start_stream_mut);
+		if (conn == NULL)
+			elog(ERROR, "Cannot continue backup because stream connect has failed.");
+
+		pthread_mutex_unlock(&start_stream_mut);
 	}
 
 	/*
@@ -299,7 +302,7 @@ do_backup_database(parray *backup_list)
 		pthread_create(&backup_threads[i], NULL, (void *(*)(void *)) backup_files, backup_threads_args[i]);
 	}
 
-	/* Wait theads */
+	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(backup_threads[i], NULL);
@@ -321,9 +324,6 @@ do_backup_database(parray *backup_list)
 	{
 		parray	   *xlog_files_list;
 		char		pg_xlog_path[MAXPGPATH];
-
-		/* Wait for the completion of stream */
-		pthread_join(stream_thread, NULL);
 
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
@@ -796,7 +796,8 @@ wait_wal_lsn(XLogRecPtr lsn)
 	char		wal_dir[MAXPGPATH],
 				wal_segment_full_path[MAXPGPATH];
 	char		wal_segment[MAXFNAMELEN];
-	uint32		try_count = 0;
+	uint32		try_count = 0,
+				timeout;
 
 	tli = get_current_timeline(false);
 
@@ -806,12 +807,35 @@ wait_wal_lsn(XLogRecPtr lsn)
 
 	if (stream_wal)
 	{
+		PGresult   *res;
+		const char *val;
+		const char *hintmsg;
+
 		pgBackupGetPath2(&current, wal_dir, lengthof(wal_dir),
 						 DATABASE_DIR, PG_XLOG_DIR);
 		join_path_components(wal_segment_full_path, wal_dir, wal_segment);
+
+		res = pgut_execute(backup_conn, "show checkpoint_timeout", 0, NULL);
+		val = PQgetvalue(res, 0, 0);
+		PQclear(res);
+
+		if (!parse_int(val, (int *) &timeout, OPTION_UNIT_S,
+					   &hintmsg))
+		{
+			if (hintmsg)
+				elog(ERROR, "Invalid value of checkout_timeout %s: %s", val,
+					 hintmsg);
+			else
+				elog(ERROR, "Invalid value of checkout_timeout %s", val);
+		}
+		/* Add 3 seconds to the initial value of checkpoint_timeout */
+		timeout = timeout + 3;
 	}
 	else
+	{
 		join_path_components(wal_segment_full_path, arclog_path, wal_segment);
+		timeout = archive_timeout;
+	}
 
 	/* Wait until switched WAL is archived */
 	while (!fileExists(wal_segment_full_path))
@@ -826,10 +850,10 @@ wait_wal_lsn(XLogRecPtr lsn)
 			elog(INFO, "wait for LSN %X/%X in archived WAL segment %s",
 				 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_full_path);
 
-		if (archive_timeout > 0 && try_count > archive_timeout)
+		if (timeout > 0 && try_count > timeout)
 			elog(ERROR,
 				 "switched WAL segment %s could not be archived in %d seconds",
-				 wal_segment, archive_timeout);
+				 wal_segment, timeout);
 	}
 
 	/*
@@ -959,6 +983,9 @@ pg_stop_backup(pgBackup *backup)
 
 	PQclear(res);
 
+	if (stream_wal)
+		/* Wait for the completion of stream */
+		pthread_join(stream_thread, NULL);
 	wait_wal_lsn(stop_backup_lsn);
 
 	/* Fill in fields if that is the correct end of backup. */
@@ -1631,7 +1658,7 @@ StreamLog(void *arg)
 		conn = GetConnection();
 	if (!conn)
 	{
-		pthread_mutex_unlock(&check_stream_mut);
+		pthread_mutex_unlock(&start_stream_mut);
 		/* Error message already written in GetConnection() */
 		return;
 	}
@@ -1655,7 +1682,7 @@ StreamLog(void *arg)
 		disconnect_and_exit(1);
 
 	/* Ok we have normal stream connect and main process can work again */
-	pthread_mutex_unlock(&check_stream_mut);
+	pthread_mutex_unlock(&start_stream_mut);
 
 	/*
 	 * We must use startpos as start_lsn from start_backup

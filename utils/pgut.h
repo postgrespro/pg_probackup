@@ -2,7 +2,8 @@
  *
  * pgut.h
  *
- * Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
+ * Portions Copyright (c) 2017-2017, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -66,6 +67,22 @@ typedef struct pgut_option
 
 typedef void (*pgut_optfn) (pgut_option *opt, const char *arg);
 typedef void (*pgut_atexit_callback)(bool fatal, void *userdata);
+
+/*
+ * bit values in "flags" of an option
+ */
+#define OPTION_UNIT_KB				0x1000	/* value is in kilobytes */
+#define OPTION_UNIT_BLOCKS			0x2000	/* value is in blocks */
+#define OPTION_UNIT_XBLOCKS			0x3000	/* value is in xlog blocks */
+#define OPTION_UNIT_XSEGS			0x4000	/* value is in xlog segments */
+#define OPTION_UNIT_MEMORY			0xF000	/* mask for size-related units */
+
+#define OPTION_UNIT_MS				0x10000	/* value is in milliseconds */
+#define OPTION_UNIT_S				0x20000	/* value is in seconds */
+#define OPTION_UNIT_MIN				0x30000	/* value is in minutes */
+#define OPTION_UNIT_TIME			0xF0000	/* mask for time-related units */
+
+#define OPTION_UNIT					(OPTION_UNIT_MEMORY | OPTION_UNIT_TIME)
 
 /*
  * pgut client variables and functions
@@ -172,6 +189,8 @@ extern bool parse_uint32(const char *value, uint32 *result);
 extern bool parse_int64(const char *value, int64 *result);
 extern bool parse_uint64(const char *value, uint64 *result);
 extern bool parse_time(const char *value, time_t *time);
+extern bool parse_int(const char *value, int *result, int flags,
+					  const char **hintmsg);
 
 #define IsSpace(c)		(isspace((unsigned char)(c)))
 #define IsAlpha(c)		(isalpha((unsigned char)(c)))
