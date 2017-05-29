@@ -166,7 +166,98 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	}
 }
 
-/* TODO Add comment, review */
+/*
+ * Ensure that the backup has all wal files needed for recovery to consistent state.
+ */
+static void
+validate_backup_wal_from_start_to_stop(pgBackup *backup,
+									   char *backup_xlog_path,
+									   TimeLineID tli)
+{
+	XLogRecPtr	startpoint = backup->start_lsn;
+	XLogRecord *record;
+	XLogReaderState *xlogreader;
+	char	   *errormsg;
+	XLogPageReadPrivate private;
+	bool		got_endpoint = false;
+
+	private.archivedir = backup_xlog_path;
+	private.tli = tli;
+
+	/* We will check it in the end */
+	xlogfpath[0] = '\0';
+
+	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
+	if (xlogreader == NULL)
+		elog(ERROR, "out of memory");
+
+	while (true)
+	{
+		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+
+		if (record == NULL)
+		{
+			if (errormsg)
+				elog(WARNING, "%s", errormsg);
+
+			break;
+		}
+
+		/* Got WAL record at stop_lsn */
+		if (xlogreader->ReadRecPtr == backup->stop_lsn)
+		{
+			got_endpoint = true;
+			break;
+		}
+		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
+	}
+
+	if (!got_endpoint)
+	{
+		if (xlogfpath[0] != 0)
+		{
+			/* XLOG reader couldn't read WAL segment.
+			 * We throw a WARNING here to be able to update backup status below.
+			 */
+			if (!xlogexists)
+			{
+				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
+			}
+			else if (xlogreadfd != -1)
+			{
+				elog(WARNING, "Possible WAL CORRUPTION."
+					"Error has occured during reading WAL segment \"%s\"", xlogfpath);
+			}
+		}
+
+		/*
+		 * If we don't have WAL between start_lsn and stop_lsn,
+		 * the backup is definitely corrupted. Update its status.
+		 */
+			backup->status = BACKUP_STATUS_CORRUPT;
+			pgBackupWriteBackupControlFile(backup);
+			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
+				 (uint32) (backup->start_lsn >> 32),
+				 (uint32) (backup->start_lsn),
+				 (uint32) (backup->stop_lsn >> 32),
+				 (uint32) (backup->stop_lsn));
+	}
+
+	/* clean */
+	XLogReaderFree(xlogreader);
+	if (xlogreadfd != -1)
+	{
+		close(xlogreadfd);
+		xlogreadfd = -1;
+		xlogexists = false;
+	}
+}
+
+/*
+ * Ensure that the backup has all wal files needed for recovery to consistent
+ * state. And check if we have in archive all files needed to restore the backup
+ * up to the given recovery target.
+ */
 void
 validate_wal(pgBackup *backup,
 			 const char *archivedir,
@@ -183,9 +274,33 @@ validate_wal(pgBackup *backup,
 	TimestampTz last_time = 0;
 	char		last_timestamp[100],
 				target_timestamp[100];
-	bool		all_wal = false,
-				got_endpoint = false;
+	bool		all_wal = false;
+	char 		backup_xlog_path[MAXPGPATH];
 
+	/*
+	 * Check that the backup has all wal files needed
+	 * for recovery to consistent state.
+	 */
+	if (backup->stream)
+	{
+		sprintf(backup_xlog_path, "%s/%s/%s/%s/%s",
+			backup_path, BACKUPS_DIR, base36enc(backup->start_time), DATABASE_DIR, PG_XLOG_DIR);
+
+		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli);
+	}
+	else
+		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, tli);
+
+	/* If recovery target is provided, ensure that archive exists. */
+	if (dir_is_empty(archivedir)
+		&& (TransactionIdIsValid(target_xid) || target_time != 0))
+			elog(ERROR, "WAL archive is empty. You cannot restore backup to a recovery target without WAL archive.");
+
+	/*
+	 * Check if we have in archive all files needed to restore backup
+	 * up to the given recovery target.
+	 * In any case we cannot restore to the point before stop_lsn.
+	 */
 	private.archivedir = archivedir;
 	private.tli = tli;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
@@ -195,6 +310,15 @@ validate_wal(pgBackup *backup,
 	/* We will check it in the end */
 	xlogfpath[0] = '\0';
 
+	/* We can restore at least up to the backup end */
+	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time);
+	last_xid = backup->recovery_xid;
+
+	if ((TransactionIdIsValid(target_xid) && target_xid == last_xid)
+		|| (target_time != 0 && backup->recovery_time >= target_time))
+		all_wal = true;
+
+	startpoint = backup->stop_lsn;
 	while (true)
 	{
 		bool		timestamp_record;
@@ -207,10 +331,6 @@ validate_wal(pgBackup *backup,
 
 			break;
 		}
-
-		/* Got WAL record at stop_lsn */
-		if (xlogreader->ReadRecPtr == backup->stop_lsn)
-			got_endpoint = true;
 
 		timestamp_record = getRecordTimestamp(xlogreader, &last_time);
 		if (XLogRecGetXid(xlogreader) != InvalidTransactionId)
@@ -239,16 +359,9 @@ validate_wal(pgBackup *backup,
 		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
 	}
 
-
-	/* TODO Add comment */
 	if (last_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_time));
-	else
-		time2iso(last_timestamp, lengthof(last_timestamp),
-				 backup->recovery_time);
-	if (last_xid == InvalidTransactionId)
-		last_xid = backup->recovery_xid;
 
 	/* There are all needed WAL records */
 	if (all_wal)
@@ -273,39 +386,21 @@ validate_wal(pgBackup *backup,
 			}
 		}
 
-		if (!got_endpoint)
-		{
-			/*
-			 * If we don't have WAL between start_lsn and stop_lsn,
-			 * the backup is definitely corrupted. Update its status.
-			 */
-			backup->status = BACKUP_STATUS_CORRUPT;
-			pgBackupWriteBackupControlFile(backup);
-			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
-				 (uint32) (backup->start_lsn >> 32),
-				 (uint32) (backup->start_lsn),
-				 (uint32) (backup->stop_lsn >> 32),
-				 (uint32) (backup->stop_lsn));
-		}
-		else
-		{
-			if (target_time > 0)
-				time2iso(target_timestamp, lengthof(target_timestamp),
-						 target_time);
+		elog(WARNING, "recovery can be done up to time %s and xid " XID_FMT,
+				last_timestamp, last_xid);
 
-			elog(WARNING, "recovery can be done up to time %s and xid " XID_FMT,
-				 last_timestamp, last_xid);
-
-			if (TransactionIdIsValid(target_xid) && target_time != 0)
-				elog(ERROR, "not enough WAL records to time %s and xid " XID_FMT,
-					 target_timestamp, target_xid);
-			else if (TransactionIdIsValid(target_xid))
-				elog(ERROR, "not enough WAL records to xid " XID_FMT,
-					 target_xid);
-			else if (target_time != 0)
-				elog(ERROR, "not enough WAL records to time %s",
-					 target_timestamp);
-		}
+		if (target_time > 0)
+			time2iso(target_timestamp, lengthof(target_timestamp),
+						target_time);
+		if (TransactionIdIsValid(target_xid) && target_time != 0)
+			elog(ERROR, "not enough WAL records to time %s and xid " XID_FMT,
+					target_timestamp, target_xid);
+		else if (TransactionIdIsValid(target_xid))
+			elog(ERROR, "not enough WAL records to xid " XID_FMT,
+					target_xid);
+		else if (target_time != 0)
+			elog(ERROR, "not enough WAL records to time %s",
+					target_timestamp);
 	}
 
 	/* clean */
