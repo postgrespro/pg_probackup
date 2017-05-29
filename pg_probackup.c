@@ -215,7 +215,7 @@ main(int argc, char *argv[])
 	if (log_filename || error_log_filename)
 	{
 		if (log_directory)
-			join_path_components(log_path, backup_path, log_directory);
+			strcpy(log_path, log_directory);
 		else
 			join_path_components(log_path, backup_path, "log");
 	}
