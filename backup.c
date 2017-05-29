@@ -998,7 +998,7 @@ pg_stop_backup(pgBackup *backup)
 	if (stream_wal)
 	{
 		/* Wait for the completion of stream */
-		elog(LOG, "Wait end of WAL streaming");
+		elog(INFO, "Wait end of WAL streaming");
 		pthread_join(stream_thread, NULL);
 	}
 	wait_wal_lsn(stop_backup_lsn);
