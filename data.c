@@ -299,7 +299,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	 * If we have pagemap then file can't be a zero size.
 	 * Otherwise, we will clear the last file.
 	 */
-	if (n_blocks_read == n_blocks_skipped)
+	if (n_blocks_read != 0 && n_blocks_read == n_blocks_skipped)
 	{
 		if (remove(to_path) == -1)
 			elog(ERROR, "cannot remove file \"%s\": %s", to_path,
