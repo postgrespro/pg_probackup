@@ -25,6 +25,10 @@ bool		log_level_defined = false;
 char	   *log_filename = NULL;
 char	   *error_log_filename = NULL;
 char	   *log_directory = NULL;
+/*
+ * If log_path is empty logging is not initialized.
+ * We will log only into stderr
+ */
 char		log_path[MAXPGPATH] = "";
 
 /* Maximum size of an individual log file in kilobytes */
@@ -104,22 +108,34 @@ write_elevel(FILE *stream, int elevel)
 static void
 elog_internal(int elevel, const char *fmt, va_list args)
 {
-	bool		wrote_to_file = false,
-				write_to_error_log;
+	bool		write_to_file,
+				write_to_error_log,
+				write_to_stderr;
 	va_list		error_args,
 				std_args;
 
-	/* There is no need to lock if this is elog() from upper elog() */
-	if (!logging_to_file)
+	write_to_file = log_path[0] != '\0' && !logging_to_file &&
+		(log_filename || error_log_filename);
+
+	/*
+	 * There is no need to lock if this is elog() from upper elog() and
+	 * logging is not initialized.
+	 */
+	if (write_to_file)
 		pthread_mutex_lock(&log_file_mutex);
 
 	write_to_error_log =
-		elevel >= ERROR && error_log_filename && !logging_to_file;
+		elevel >= ERROR && error_log_filename && write_to_file;
+	write_to_stderr = elevel >= ERROR || !write_to_file;
+
 	/* We need copy args only if we need write to error log file */
 	if (write_to_error_log)
 		va_copy(error_args, args);
-	/* We need copy args only if we need write to stderr */
-	if (elevel >= ERROR || !(log_filename && !logging_to_file))
+	/*
+	 * We need copy args only if we need write to stderr. But do not copy args
+	 * if we need to log only to stderr.
+	 */
+	if (write_to_stderr && write_to_file)
 		va_copy(std_args, args);
 
 	/*
@@ -127,7 +143,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	 * Do not write to file if this error was raised during write previous
 	 * message.
 	 */
-	if (log_filename && !logging_to_file)
+	if (log_filename && write_to_file)
 	{
 		logging_to_file = true;
 
@@ -141,7 +157,6 @@ elog_internal(int elevel, const char *fmt, va_list args)
 		fflush(log_file);
 
 		logging_to_file = false;
-		wrote_to_file = true;
 	}
 
 	/*
@@ -170,18 +185,22 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	 * Write to stderr if the message was not written to log file.
 	 * Write to stderr if the message level is greater than WARNING anyway.
 	 */
-	if (!wrote_to_file || elevel >= ERROR)
+	if (write_to_stderr)
 	{
 		write_elevel(stderr, elevel);
 
-		vfprintf(stderr, fmt, std_args);
+		if (write_to_file)
+			vfprintf(stderr, fmt, std_args);
+		else
+			vfprintf(stderr, fmt, args);
 		fputc('\n', stderr);
 		fflush(stderr);
 
-		va_end(std_args);
+		if (write_to_file)
+			va_end(std_args);
 	}
 
-	if (!logging_to_file)
+	if (write_to_file)
 		pthread_mutex_unlock(&log_file_mutex);
 
 	/* Exit with code if it is an error */
