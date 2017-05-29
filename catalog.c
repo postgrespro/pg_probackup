@@ -50,7 +50,7 @@ catalog_lock(void)
 	pid_t		my_pid,
 				my_p_pid;
 
-	join_path_components(lock_file, backup_path, BACKUP_CATALOG_PID);
+	join_path_components(lock_file, backup_instance_path, BACKUP_CATALOG_PID);
 
 	/*
 	 * If the PID in the lockfile is our own PID or our parent's or
@@ -84,7 +84,7 @@ catalog_lock(void)
 
 	/*
 	 * We need a loop here because of race conditions.  But don't loop forever
-	 * (for example, a non-writable $backup_path directory might cause a failure
+	 * (for example, a non-writable $backup_instance_path directory might cause a failure
 	 * that won't go away).  100 tries seems like plenty.
 	 */
 	for (ntries = 0;; ntries++)
@@ -253,16 +253,14 @@ catalog_get_backup_list(time_t requested_backup_id)
 {
 	DIR			   *date_dir = NULL;
 	struct dirent  *date_ent = NULL;
-	char			backups_path[MAXPGPATH];
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
 
-	/* open backup root directory */
-	join_path_components(backups_path, backup_path, BACKUPS_DIR);
-	date_dir = opendir(backups_path);
+	/* open backup instance backups directory */
+	date_dir = opendir(backup_instance_path);
 	if (date_dir == NULL)
 	{
-		elog(WARNING, "cannot open directory \"%s\": %s", backups_path,
+		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
 			strerror(errno));
 		goto err_proc;
 	}
@@ -275,12 +273,12 @@ catalog_get_backup_list(time_t requested_backup_id)
 		char date_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backups_path, date_ent->d_name)
+		if (!IsDir(backup_instance_path, date_ent->d_name)
 			|| date_ent->d_name[0] == '.')
 			continue;
 
 		/* open subdirectory of specific backup */
-		join_path_components(date_path, backups_path, date_ent->d_name);
+		join_path_components(date_path, backup_instance_path, date_ent->d_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
 		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONTROL_FILE);
@@ -309,7 +307,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 	if (errno)
 	{
 		elog(WARNING, "cannot read backup root directory \"%s\": %s",
-			backups_path, strerror(errno));
+			backup_instance_path, strerror(errno));
 		goto err_proc;
 	}
 
@@ -620,9 +618,9 @@ pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subd
 
 	datetime = base36enc(backup->start_time);
 	if (subdir)
-		snprintf(path, len, "%s/%s/%s/%s", backup_path, BACKUPS_DIR, datetime, subdir);
+		snprintf(path, len, "%s/%s/%s", backup_instance_path, datetime, subdir);
 	else
-		snprintf(path, len, "%s/%s/%s", backup_path, BACKUPS_DIR, datetime);
+		snprintf(path, len, "%s/%s", backup_instance_path, datetime);
 	free(datetime);
 
 	make_native_path(path);

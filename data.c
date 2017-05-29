@@ -679,6 +679,105 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	return true;
 }
 
+/* Almost like copy file, except the fact we don't calculate checksum */
+void
+copy_wal_file(const char *from_path, const char *to_path)
+{
+	FILE	   *in;
+	FILE	   *out;
+	size_t		read_len = 0;
+	int			errno_tmp;
+	char		buf[XLOG_BLCKSZ];
+	struct stat	st;
+
+	/* open file for read */
+	in = fopen(from_path, "r");
+	if (in == NULL)
+	{
+		/* maybe deleted, it's not error */
+		if (errno == ENOENT)
+			elog(ERROR, "cannot open source WAL file \"%s\": %s", from_path,
+			 strerror(errno));
+	}
+
+	/* open backup file for write  */
+	out = fopen(to_path, "w");
+	if (out == NULL)
+	{
+		int errno_tmp = errno;
+		fclose(in);
+		elog(ERROR, "cannot open destination file \"%s\": %s",
+			 to_path, strerror(errno_tmp));
+	}
+
+	/* stat source file to change mode of destination file */
+	if (fstat(fileno(in), &st) == -1)
+	{
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot stat \"%s\": %s", from_path,
+			 strerror(errno));
+	}
+
+	if (st.st_size > XLOG_SEG_SIZE)
+		elog(ERROR, "Unexpected wal file size %s : %ld", from_path, st.st_size);
+
+	/* copy content */
+	for (;;)
+	{
+		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
+			break;
+
+		if (fwrite(buf, 1, read_len, out) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR, "cannot write to \"%s\": %s", to_path,
+				 strerror(errno_tmp));
+		}
+	}
+
+	errno_tmp = errno;
+	if (!feof(in))
+	{
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot read backup mode file \"%s\": %s",
+			 from_path, strerror(errno_tmp));
+	}
+
+	/* copy odd part */
+	if (read_len > 0)
+	{
+		if (fwrite(buf, 1, read_len, out) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fclose(in);
+			fclose(out);
+			elog(ERROR, "cannot write to \"%s\": %s", to_path,
+				 strerror(errno_tmp));
+		}
+	}
+
+
+	/* update file permission. */
+	if (chmod(to_path, st.st_mode) == -1)
+	{
+		errno_tmp = errno;
+		fclose(in);
+		fclose(out);
+		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
+			 strerror(errno_tmp));
+	}
+
+	fclose(in);
+	fclose(out);
+
+}
+
 /*
  * Save part of the file into backup.
  * skip_size - size of the file in previous backup. We can skip it

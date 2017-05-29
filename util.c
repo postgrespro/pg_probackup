@@ -114,14 +114,14 @@ get_current_timeline(bool safe)
 }
 
 uint64
-get_system_identifier(void)
+get_system_identifier(char *pgdata_path)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);

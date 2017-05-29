@@ -121,8 +121,7 @@ writeBackupCatalogConfigFile(pgBackupConfig *config)
 	char		path[MAXPGPATH];
 	FILE	   *fp;
 
-	join_path_components(path, backup_path, BACKUPS_DIR);
-	join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
+	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
 		elog(ERROR, "cannot create %s: %s",
@@ -164,8 +163,7 @@ readBackupCatalogConfigFile(void)
 
 	cur_config = config;
 
-	join_path_components(path, backup_path, BACKUPS_DIR);
-	join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
+	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
 
 	pgBackupConfigInit(config);
 	pgut_readopt(path, options, ERROR);

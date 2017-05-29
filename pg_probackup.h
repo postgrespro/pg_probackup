@@ -105,6 +105,10 @@ typedef enum BackupMode
 typedef enum ProbackupSubcmd
 {
 	INIT = 0,
+	ARCHIVE_PUSH,
+	ARCHIVE_GET,
+	ADD_INSTANCE,
+	DELETE_INSTANCE,
 	BACKUP,
 	RESTORE,
 	VALIDATE,
@@ -231,8 +235,11 @@ extern int cfs_munmap(FileMap* map);
 
 /* path configuration */
 extern char *backup_path;
+extern char backup_instance_path[MAXPGPATH];
 extern char *pgdata;
 extern char arclog_path[MAXPGPATH];
+
+extern char *instance_name;
 
 /* current settings */
 extern pgBackup current;
@@ -285,6 +292,12 @@ extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 
 /* in init.c */
 extern int do_init(void);
+extern int do_add_instance(void);
+
+/* in archive.c */
+extern int do_archive_push(char *wal_file_path, char *wal_file_name);
+extern int do_archive_get(char *wal_file_path, char *wal_file_name);
+
 
 /* in configure.c */
 extern int do_configure(bool show_only);
@@ -299,6 +312,7 @@ extern int do_show(time_t requested_backup_id);
 /* in delete.c */
 extern int do_delete(time_t backup_id);
 extern int do_retention_purge(void);
+extern int do_delete_instance(void);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -366,6 +380,7 @@ extern bool backup_compressed_file_partially(pgFile *file,
 											 size_t *skip_size);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
+extern void copy_wal_file(const char *from_root, const char *to_root);
 extern bool copy_file_partly(const char *from_root, const char *to_root,
 				 pgFile *file, size_t skip_size);
 
@@ -399,7 +414,7 @@ extern XLogRecPtr get_last_ptrack_lsn(void);
 extern uint32 get_data_checksum_version(bool safe);
 extern char *base36enc(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
-extern uint64 get_system_identifier(void);
+extern uint64 get_system_identifier(char *pgdata);
 extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 extern void pgBackup_init(pgBackup *backup);
 

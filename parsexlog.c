@@ -283,8 +283,8 @@ validate_wal(pgBackup *backup,
 	 */
 	if (backup->stream)
 	{
-		sprintf(backup_xlog_path, "%s/%s/%s/%s/%s",
-			backup_path, BACKUPS_DIR, base36enc(backup->start_time), DATABASE_DIR, PG_XLOG_DIR);
+		sprintf(backup_xlog_path, "/%s/%s/%s/%s",
+			backup_instance_path, base36enc(backup->start_time), DATABASE_DIR, PG_XLOG_DIR);
 
 		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli);
 	}

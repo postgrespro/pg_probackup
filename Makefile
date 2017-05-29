@@ -19,6 +19,7 @@ OBJS = backup.o \
 	xlogreader.o \
 	streamutil.o \
 	receivelog.o \
+	archive.o \
 	utils/parray.o \
 	utils/pgut.o \
 	utils/logger.o

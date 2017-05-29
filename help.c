@@ -16,6 +16,8 @@ static void help_show(void);
 static void help_delete(void);
 static void help_set_config(void);
 static void help_show_config(void);
+static void help_add_instance(void);
+static void help_del_instance(void);
 
 void
 help_command(char *command)
@@ -36,6 +38,10 @@ help_command(char *command)
 		help_set_config();
 	else if (strcmp(command, "show-config") == 0)
 		help_show_config();
+	else if (strcmp(command, "add-instance") == 0)
+		help_add_instance();
+	else if (strcmp(command, "del-instance") == 0)
+		help_del_instance();
 	else if (strcmp(command, "--help") == 0
 			 || strcmp(command, "help") == 0
 			 || strcmp(command, "-?") == 0
@@ -94,6 +100,12 @@ help_pg_probackup(void)
 	printf(_("\n  %s delete -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                [--wal] [-i backup-id | --expired]\n"));
 
+	printf(_("\n  %s add-instance -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("                --instance=instance_name\n"));
+
+	printf(_("\n  %s del-instance -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("                --instance=instance_name\n"));
+
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
 		printf("\n");
@@ -116,7 +128,7 @@ help_init(void)
 static void
 help_backup(void)
 {
-	printf(_("%s backup -B backup-path -b backup-mode\n"), PROGRAM_NAME);
+	printf(_("%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
@@ -124,6 +136,7 @@ help_backup(void)
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|PTRACK\n"));
+	printf(_("  --instance=instance_name		 name of the instance\n"));
 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
@@ -166,12 +179,13 @@ help_restore(void)
 static void
 help_validate(void)
 {
-	printf(_("%s validate -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("%s validate -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
 	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                [--timeline=timeline]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  --instance=instance_name		 name of the instance\n"));
 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
@@ -186,19 +200,21 @@ static void
 help_show(void)
 {
 	printf(_("%s show -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [-i backup-id]\n\n"));
+	printf(_("                 [--instance=instance_name] [-i backup-id]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  --instance=instance_name		 show info about specific intstance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
 }
 
 static void
 help_delete(void)
 {
-	printf(_("%s delete -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("%s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                [--wal] [-i backup-id | --expired]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  --instance=instance_name		 name of the instance\n"));
 	printf(_("      --wal                        remove unnecessary wal files\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to delete\n"));
 	printf(_("      --expired                    delete backups expired according to current\n"));
@@ -208,7 +224,7 @@ help_delete(void)
 static void
 help_set_config(void)
 {
-	printf(_("%s set-config -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("%s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [--log-level=log-level]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
@@ -220,6 +236,7 @@ help_set_config(void)
 	printf(_("                 [--retention-window=retention-window]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  --instance=instance_name		 name of the instance\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -d, --dbname=DBNAME              database to connect\n"));
@@ -250,7 +267,28 @@ help_set_config(void)
 static void
 help_show_config(void)
 {
-	printf(_("%s show-config -B backup-dir\n\n"), PROGRAM_NAME);
+	printf(_("%s show-config -B backup-dir --instance=instance_name\n\n"), PROGRAM_NAME);
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  --instance=instance_name		 name of the instance\n"));
+}
+
+static void
+help_add_instance(void)
+{
+	printf(_("%s add-instance -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("                --instance=instance_name\n\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  --instance=instance_name		 name of the new instance\n"));
+}
+
+static void
+help_del_instance(void)
+{
+	printf(_("%s del-instance -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("                --instance=instance_name\n\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  --instance=instance_name		 name of the instance to delete\n"));
 }

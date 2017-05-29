@@ -384,3 +384,48 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 		elog(WARNING, "could not open archive location \"%s\": %s",
 			 arclog_path, strerror(errno));
 }
+
+
+/* Delete all backup files and wal files of given instance. */
+int
+do_delete_instance(void)
+{
+	parray	   *backup_list;
+	int i;
+	char		instance_config_path[MAXPGPATH];
+
+	/* Delete all backups. */
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+		pgBackupDeleteFiles(backup);
+	}
+
+	/* Cleanup */
+	parray_walk(backup_list, pgBackupFree);
+	parray_free(backup_list);
+
+	/* Delete all wal files. */
+	delete_walfiles(InvalidXLogRecPtr, 0);
+
+	/* Delete backup instance config file */
+	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+	if (remove(instance_config_path))
+	{
+		elog(ERROR, "can't remove \"%s\": %s", instance_config_path,
+			strerror(errno));
+	}
+
+	/* Delete instance root directories */
+	if (rmdir(backup_instance_path) != 0)
+		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+			strerror(errno));
+	if (rmdir(arclog_path) != 0)
+		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+			strerror(errno));
+
+	elog(INFO, "Instance '%s' deleted successfully", instance_name);
+	return 0;
+}

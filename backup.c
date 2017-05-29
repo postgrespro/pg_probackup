@@ -512,7 +512,7 @@ check_system_identifiers(void)
 	uint64		system_id_pgdata;
 	char	   *val;
 
-	system_id_pgdata = get_system_identifier();
+	system_id_pgdata = get_system_identifier(pgdata);
 
 	res = pgut_execute(backup_conn,
 					   "SELECT system_identifier FROM pg_control_system()",

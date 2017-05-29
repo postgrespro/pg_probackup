@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 const char *PROGRAM_VERSION	= "1.1.13";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
@@ -23,7 +24,18 @@ const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues"
 /* path configuration */
 char	   *backup_path = NULL;
 char	   *pgdata = NULL;
+/*
+ * path or to the data files in the backup catalog
+ * $BACKUP_PATH/backups/instance_name
+ */
+char backup_instance_path[MAXPGPATH];
+/*
+ * path or to the wal files in the backup catalog
+ * $BACKUP_PATH/wal/instance_name
+ */
 char		arclog_path[MAXPGPATH] = "";
+ 
+char *instance_name;
 
 /* directory configuration */
 pgBackup	current;
@@ -56,6 +68,10 @@ static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
+
+/* archive push */
+static char *wal_file_path;
+static char *wal_file_name;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 static void opt_log_level(pgut_option *opt, const char *arg);
@@ -108,6 +124,10 @@ static pgut_option options[] =
 	{ 'B', 'w', "no-password",			&prompt_password,	SOURCE_CMDLINE },
 	/* other options */
 	{ 'U', 50, "system-identifier",		&system_identifier,	SOURCE_FILE_STRICT },
+	{ 's', 51, "instance",					&instance_name,		SOURCE_CMDLINE },
+	/* archive-push options */
+	{ 's',  60, "wal-file-path",			&wal_file_path,		SOURCE_CMDLINE },
+	{ 's',  61, "wal-file-name",			&wal_file_name,		SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -131,7 +151,15 @@ main(int argc, char *argv[])
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
 	{
-		if (strcmp(argv[1], "init") == 0)
+		if (strcmp(argv[1], "archive-push") == 0)
+			backup_subcmd = ARCHIVE_PUSH;
+		else if (strcmp(argv[1], "archive-get") == 0)
+			backup_subcmd = ARCHIVE_GET;
+		else if (strcmp(argv[1], "add-instance") == 0)
+			backup_subcmd = ADD_INSTANCE;
+		else if (strcmp(argv[1], "del-instance") == 0)
+			backup_subcmd = DELETE_INSTANCE;
+		else if (strcmp(argv[1], "init") == 0)
 			backup_subcmd = INIT;
 		else if (strcmp(argv[1], "backup") == 0)
 			backup_subcmd = BACKUP;
@@ -180,36 +208,76 @@ main(int argc, char *argv[])
 	if (help)
 		help_command(argv[2]);
 
+	/* backup_path is required for all pg_probackup commands except help */
 	if (backup_path == NULL)
 	{
-		/* Try to read BACKUP_PATH from environment variable */
+		/*
+		 * If command line argument is not set, try to read BACKUP_PATH
+		 * from environment variable
+		 */
 		backup_path = getenv("BACKUP_PATH");
 		if (backup_path == NULL)
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
 
+	/* Ensure that backup_path is an absolute path */
+	if (!is_absolute_path(backup_path))
+		elog(ERROR, "-B, --backup-path must be an absolute path");
+
+	/* Ensure that backup_path is a path to a directory */
 	rc = stat(backup_path, &stat_buf);
-	/* If rc == -1,  there is no file or directory. So it's OK. */
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
-	/* Do not read options from file or env if we're going to set them */
-	if (backup_subcmd != SET_CONFIG)
+	/* Option --instance is required for all commands except init and show */
+	if (backup_subcmd != INIT && backup_subcmd != SHOW)
 	{
-		/* Read options from configuration file */
-		join_path_components(path, backup_path, BACKUP_CATALOG_CONF_FILE);
-		pgut_readopt(path, options, ERROR);
-
-		/* Read environment variables */
-		pgut_getopt_env(options);
+		if (instance_name == NULL)
+			elog(ERROR, "required parameter not specified: --instance");
 	}
 
 	/*
-	 * We read backup path from command line or from configuration file.
-	 * Do final check.
+	 * If --instance option was passed, construct paths for backup data and
+	 * xlog files of this backup instance.
 	 */
-	if (!is_absolute_path(backup_path))
-		elog(ERROR, "-B, --backup-path must be an absolute path");
+	if (instance_name)
+	{
+		sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
+		sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
+
+		/*
+		 * Ensure that requested backup instance exists.
+		 * for all commands except init, which doesn't take this parameter
+		 * and add-instance which creates new instance.
+		 */
+		if (backup_subcmd != INIT && backup_subcmd != ADD_INSTANCE)
+		{
+			if (access(backup_instance_path, F_OK) != 0)
+				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
+							instance_name);
+		}
+	}
+
+	/*
+	 * Read options from env variables or from config file,
+	 * unless we're going to set them via set-config.
+	 */
+	if (instance_name && backup_subcmd != SET_CONFIG)
+	{
+		/* Read environment variables */
+		pgut_getopt_env(options);
+
+		/* Read options from configuration file */
+		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+		pgut_readopt(path, options, ERROR);
+	}
+
+	/*
+	 * We have read pgdata path from command line or from configuration file.
+	 * Ensure that pgdata is an absolute path.
+	 */
+	if (pgdata != NULL && !is_absolute_path(pgdata))
+		elog(ERROR, "-D, --pgdata must be an absolute path");
 
 	/* Set log path */
 	if (log_filename || error_log_filename)
@@ -220,8 +288,16 @@ main(int argc, char *argv[])
 			join_path_components(log_path, backup_path, "log");
 	}
 
+	/* Sanity check of --backup-id option */
 	if (backup_id_string_param != NULL)
 	{
+		if (backup_subcmd != RESTORE
+			&& backup_subcmd != VALIDATE
+			&& backup_subcmd != DELETE
+			&& backup_subcmd != SHOW)
+			elog(ERROR, "Cannot use -i (--backup-id) option together with the '%s' command",
+						argv[1]);
+
 		current.backup_id = base36dec(backup_id_string_param);
 		if (current.backup_id == 0)
 			elog(ERROR, "Invalid backup-id");
@@ -236,15 +312,6 @@ main(int argc, char *argv[])
 		dbport = pstrdup(port);
 	if (username != NULL)
 		dbuser = pstrdup(username);
-
-	/*
-	 * We read pgdata path from command line or from configuration file.
-	 * Do final check.
-	 */
-	if (pgdata != NULL && !is_absolute_path(pgdata))
-		elog(ERROR, "-D, --pgdata must be an absolute path");
-
-	join_path_components(arclog_path, backup_path, "wal");
 
 	/* setup exclusion list for file search */
 	if (!backup_logs)
@@ -266,6 +333,14 @@ main(int argc, char *argv[])
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
+		case ARCHIVE_PUSH:
+			return do_archive_push(wal_file_path, wal_file_name);
+		case ARCHIVE_GET:
+			return do_archive_get(wal_file_path, wal_file_name);
+		case ADD_INSTANCE:
+			return do_add_instance();
+		case DELETE_INSTANCE:
+			return do_delete_instance();
 		case INIT:
 			return do_init();
 		case BACKUP:
@@ -290,11 +365,11 @@ main(int argc, char *argv[])
 			else
 				return do_delete(current.backup_id);
 		case SHOW_CONFIG:
-			if (argc > 4)
+			if (argc > 5)
 				elog(ERROR, "show-config command doesn't accept any options");
 			return do_configure(true);
 		case SET_CONFIG:
-			if (argc == 4)
+			if (argc == 5)
 				elog(ERROR, "set-config command requires at least one option");
 			return do_configure(false);
 	}

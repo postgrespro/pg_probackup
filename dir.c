@@ -307,7 +307,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	parray	   *black_list = NULL;
 	char		path[MAXPGPATH];
 
-	join_path_components(path, backup_path, PG_BLACK_LIST);
+	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
 	if (root && pgdata && strcmp(root, pgdata) == 0 && fileExists(path))
 	{
