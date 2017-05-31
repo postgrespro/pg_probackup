@@ -631,12 +631,12 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 
 	/* If "subdir1" is NULL do not check "subdir2" */
 	if (!subdir1)
-		snprintf(path, len, "%s/%s/%s", backup_path, BACKUPS_DIR, datetime);
+		snprintf(path, len, "%s/%s", backup_instance_path, datetime);
 	else if (!subdir2)
-		snprintf(path, len, "%s/%s/%s/%s", backup_path, BACKUPS_DIR, datetime, subdir1);
+		snprintf(path, len, "%s/%s/%s", backup_instance_path, datetime, subdir1);
 	/* "subdir1" and "subdir2" is not NULL */
 	else
-		snprintf(path, len, "%s/%s/%s/%s/%s", backup_path, BACKUPS_DIR,
+		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
 				 datetime, subdir1, subdir2);
 
 	free(datetime);
