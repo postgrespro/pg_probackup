@@ -960,11 +960,18 @@ pg_stop_backup(pgBackup *backup)
 		fclose(fp);
 
 		/* TODO What for do we save the file into backup_list? */
-		file = pgFileNew(backup_label, true);
-		calc_file_checksum(file);
-		free(file->path);
-		file->path = strdup(PG_BACKUP_LABEL_FILE);
-		parray_append(backup_files_list, file);
+		/*
+		 * It's vital to check if backup_files_list is initialized,
+		 * because we could get here because the backup was interrupted
+		 */
+		if (backup_files_list)
+		{
+			file = pgFileNew(backup_label, true);
+			calc_file_checksum(file);
+			free(file->path);
+			file->path = strdup(PG_BACKUP_LABEL_FILE);
+			parray_append(backup_files_list, file);
+		}
 
 		/* Write tablespace_map */
 		if (strlen(PQgetvalue(res, 0, 2)) > 0)
