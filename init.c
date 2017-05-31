@@ -52,6 +52,7 @@ do_init(void)
 	join_path_components(arclog_path_dir, backup_path, "wal");
 	dir_create_dir(arclog_path_dir, DIR_PERMISSION);
 
+	elog(INFO, "Backup catalog '%s' successfully inited", backup_path);
 	return 0;
 }
 
@@ -106,5 +107,6 @@ do_add_instance(void)
 	config->pgdata = pgdata;
 	writeBackupCatalogConfigFile(config);
 
+	elog(INFO, "Instance '%s' successfully inited", instance_name);
 	return 0;
 }

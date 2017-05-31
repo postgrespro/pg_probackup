@@ -23,6 +23,10 @@ int
 do_show(time_t requested_backup_id)
 {
 
+	if (instance_name == NULL
+		&& requested_backup_id != INVALID_BACKUP_ID)
+		elog(ERROR, "You must specify --instance to use --backup_id option");
+
 	if (instance_name == NULL)
 	{
 		/* Show list of instances */

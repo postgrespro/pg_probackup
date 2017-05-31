@@ -426,6 +426,6 @@ do_delete_instance(void)
 		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
 			strerror(errno));
 
-	elog(INFO, "Instance '%s' deleted successfully", instance_name);
+	elog(INFO, "Instance '%s' successfully deleted", instance_name);
 	return 0;
 }
