@@ -365,8 +365,8 @@ main(int argc, char *argv[])
 			else
 				return do_delete(current.backup_id);
 		case SHOW_CONFIG:
-			if (argc > 5)
-				elog(ERROR, "show-config command doesn't accept any options");
+			if (argc > 6)
+				elog(ERROR, "show-config command doesn't accept any options except -B and --instance");
 			return do_configure(true);
 		case SET_CONFIG:
 			if (argc == 5)
