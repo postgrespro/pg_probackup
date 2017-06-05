@@ -63,6 +63,9 @@ uint64		system_identifier = 0;
 uint32		retention_redundancy = 0;
 uint32		retention_window = 0;
 
+CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
+int			compress_level = -1;
+
 /* restore configuration */
 static char		   *target_time;
 static char		   *target_xid;
@@ -75,6 +78,7 @@ static char *wal_file_name;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 static void opt_log_level(pgut_option *opt, const char *arg);
+static void opt_compress_alg(pgut_option *opt, const char *arg);
 
 static pgut_option options[] =
 {
@@ -109,6 +113,9 @@ static pgut_option options[] =
 	/* retention options */
 	{ 'u', 34, "retention-redundancy",	&retention_redundancy, SOURCE_CMDLINE },
 	{ 'u', 35, "retention-window",		&retention_window,	SOURCE_CMDLINE },
+	/* compression options */
+	{ 'f', 36, "compress-algorithm",	opt_compress_alg,	SOURCE_CMDLINE },
+	{ 'u', 37, "compress-level",		&compress_level,	SOURCE_CMDLINE },
 	/* logging options */
 	{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
 	{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
@@ -330,6 +337,10 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
+	if (compress_level != -1 &&
+		(compress_level < 0 || compress_level > 9))
+		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
+
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
@@ -388,4 +399,52 @@ opt_log_level(pgut_option *opt, const char *arg)
 {
 	log_level = parse_log_level(arg);
 	log_level_defined = true;
+}
+
+CompressAlg
+parse_compress_alg(const char *arg)
+{
+	size_t		len;
+
+	/* Skip all spaces detected */
+	while (isspace((unsigned char)*arg))
+		arg++;
+	len = strlen(arg);
+
+	if (len == 0)
+		elog(ERROR, "compress algrorithm is empty");
+
+	if (pg_strncasecmp("zlib", arg, len) == 0)
+		return ZLIB_COMPRESS;
+	else if (pg_strncasecmp("pglz", arg, len) == 0)
+		return PGLZ_COMPRESS;
+	else if (pg_strncasecmp("none", arg, len) == 0)
+		return NONE_COMPRESS;
+	else
+		elog(ERROR, "invalid compress algorithm value \"%s\"", arg);
+
+	return NOT_DEFINED_COMPRESS;
+}
+
+const char*
+deparse_compress_alg(int alg)
+{
+	switch (alg)
+	{
+		case NONE_COMPRESS:
+		case NOT_DEFINED_COMPRESS:
+			return "none";
+		case ZLIB_COMPRESS:
+			return "zlib";
+		case PGLZ_COMPRESS:
+			return "pglz";
+	}
+
+	return NULL;
+}
+
+void
+opt_compress_alg(pgut_option *opt, const char *arg)
+{
+	compress_alg = parse_compress_alg(arg);
 }

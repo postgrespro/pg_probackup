@@ -19,10 +19,63 @@
 #include "storage/block.h"
 #include "storage/bufpage.h"
 #include "storage/checksum_impl.h"
+#include <common/pg_lzcompress.h>
+#include <zlib.h>
+
+static size_t zlib_compress(void* dst, size_t dst_size, void const* src, size_t src_size)
+{
+	uLongf compressed_size = dst_size;
+	int rc = compress2(dst, &compressed_size, src, src_size, compress_level);
+	return rc == Z_OK ? compressed_size : rc;
+}
+
+static size_t zlib_decompress(void* dst, size_t dst_size, void const* src, size_t src_size)
+{
+	uLongf dest_len = dst_size;
+	int rc = uncompress(dst, &dest_len, src, src_size);
+	return rc == Z_OK ? dest_len : rc;
+}
+
+static size_t
+do_compress(void* dst, size_t dst_size, void const* src, size_t src_size, CompressAlg alg)
+{
+	switch (alg)
+	{
+		case NONE_COMPRESS:
+		case NOT_DEFINED_COMPRESS:
+			return -1;
+		case ZLIB_COMPRESS:
+			return zlib_compress(dst, dst_size, src, src_size);
+		case PGLZ_COMPRESS:
+			return pglz_compress(src, src_size, dst, PGLZ_strategy_always);
+	}
+
+	return -1;
+}
+
+static size_t
+do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size, CompressAlg alg)
+{
+	switch (alg)
+	{
+		case NONE_COMPRESS:
+		case NOT_DEFINED_COMPRESS:
+			return -1;
+		case ZLIB_COMPRESS:
+			return zlib_decompress(dst, dst_size, src, src_size);
+		case PGLZ_COMPRESS:
+			return pglz_decompress(src, src_size, dst, dst_size);
+	}
+
+	return -1;
+}
+
+
 
 typedef struct BackupPageHeader
 {
 	BlockNumber	block;			/* block number */
+	int32		compressed_size;
 } BackupPageHeader;
 
 /* Verify page's header */
@@ -61,8 +114,10 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	BackupPageHeader	header;
 	off_t				offset;
 	DataPage			page; /* used as read buffer */
-	size_t				write_buffer_size = sizeof(header) + BLCKSZ;
-	char				write_buffer[write_buffer_size];
+	DataPage			compressed_page; /* used as read buffer */
+	size_t				write_buffer_size;
+	/* maximum size of write buffer */
+	char				write_buffer[BLCKSZ+sizeof(header)];
 	size_t				read_len = 0;
 	XLogRecPtr			page_lsn;
 	int					try_checksum = 100;
@@ -162,9 +217,31 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 	file->read_size += read_len;
 
-	memcpy(write_buffer, &header, sizeof(header));
-	/* TODO implement block compression here? */
-	memcpy(write_buffer + sizeof(header), page.data, BLCKSZ);
+	header.compressed_size = do_compress(compressed_page.data, sizeof(compressed_page.data),
+										 page.data, sizeof(page.data), compress_alg);
+
+	file->compress_alg = compress_alg;
+
+	Assert (header.compressed_size <= BLCKSZ);
+	write_buffer_size = sizeof(header);
+
+	if (header.compressed_size > 0)
+	{
+		memcpy(write_buffer, &header, sizeof(header));
+		memcpy(write_buffer + sizeof(header), compressed_page.data, header.compressed_size);
+		write_buffer_size += MAXALIGN(header.compressed_size);
+	}
+	else
+	{
+		header.compressed_size = BLCKSZ;
+		memcpy(write_buffer, &header, sizeof(header));
+		memcpy(write_buffer + sizeof(header), page.data, BLCKSZ);
+		write_buffer_size += header.compressed_size;
+	}
+
+	/* Update CRC */
+	COMP_CRC32C(*crc, &write_buffer, write_buffer_size);
+
 	/* write data page */
 	if(fwrite(write_buffer, 1, write_buffer_size, out) != write_buffer_size)
 	{
@@ -174,10 +251,6 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		elog(ERROR, "File: %s, cannot write backup at block %u : %s",
 				file->path, blknum, strerror(errno_tmp));
 	}
-
-	/* update CRC */
-	COMP_CRC32C(*crc, &header, sizeof(header));
-	COMP_CRC32C(*crc, page.data, BLCKSZ);
 
 	file->write_size += write_buffer_size;
 }
@@ -468,7 +541,8 @@ restore_data_file(const char *from_root,
 	for (blknum = 0; ; blknum++)
 	{
 		size_t		read_len;
-		DataPage	page;		/* used as read buffer */
+		DataPage	compressed_page; /* used as read buffer */
+		DataPage	page;
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -482,18 +556,35 @@ restore_data_file(const char *from_root,
 					 "odd size page found at block %u of \"%s\"",
 					 blknum, file->path);
 			else
-				elog(ERROR, "cannot read block %u of \"%s\": %s",
+				elog(ERROR, "cannot read header of block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno_tmp));
 		}
 
 		if (header.block < blknum)
-			elog(ERROR, "backup is broken at block %u",
-				 blknum);
+			elog(ERROR, "backup is broken at block %u", blknum);
 
+		/* TODO fix this assert */
+		Assert (header.compressed_size <= BLCKSZ);
 
-		if (fread(page.data, 1, BLCKSZ, in) != BLCKSZ)
-			elog(ERROR, "cannot read block %u of \"%s\": %s",
-				 blknum, file->path, strerror(errno));
+		read_len = fread(compressed_page.data, 1,
+			MAXALIGN(header.compressed_size), in);
+		if (read_len != MAXALIGN(header.compressed_size))
+			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+				 blknum, file->path, read_len, header.compressed_size);
+
+		if (header.compressed_size < BLCKSZ)
+		{
+			size_t uncompressed_size = 0;
+
+			uncompressed_size = do_decompress(page.data, BLCKSZ,
+											  compressed_page.data,
+											  header.compressed_size, file->compress_alg);
+
+			if (uncompressed_size != BLCKSZ)
+				elog(ERROR, "page uncompressed to %ld bytes. != BLCKSZ", uncompressed_size);
+		}
+		else
+			memcpy(page.data, compressed_page.data, BLCKSZ);
 
 		/* update checksum because we are not save whole */
 		if(backup->checksum_version)

@@ -56,6 +56,14 @@
 #define XID_FMT "%u"
 #endif
 
+typedef enum CompressAlg
+{
+	NOT_DEFINED_COMPRESS = 0,
+	NONE_COMPRESS,
+	PGLZ_COMPRESS,
+	ZLIB_COMPRESS,
+} CompressAlg;
+
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
 {
@@ -77,6 +85,7 @@ typedef struct pgFile
 							 * we cannot backup compressed file partially. */
 	int		is_partial_copy; /* for compressed files. Set to '1' if backed up
 							  * via copy_file_partly() */
+	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
@@ -118,6 +127,7 @@ typedef enum ProbackupSubcmd
 	SHOW_CONFIG
 } ProbackupSubcmd;
 
+
 /* special values of pgBackup fields */
 #define INVALID_BACKUP_ID	 0
 #define BYTES_INVALID		(-1)
@@ -140,6 +150,9 @@ typedef struct pgBackupConfig
 
 	uint32		retention_redundancy;
 	uint32		retention_window;
+
+	CompressAlg	compress_alg;
+	int			compress_level;
 } pgBackupConfig;
 
 /* Information about single backup stored in backup.conf */
@@ -260,6 +273,14 @@ extern uint64 system_identifier;
 
 extern uint32 retention_redundancy;
 extern uint32 retention_window;
+
+extern CompressAlg compress_alg;
+extern int    compress_level;
+
+#define DEFAULT_COMPRESS_LEVEL 6
+
+extern CompressAlg parse_compress_alg(const char *arg);
+extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */

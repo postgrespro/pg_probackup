@@ -75,12 +75,16 @@ help_pg_probackup(void)
 	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
+	printf(_("                 [--compress-level=compress-level]\n"));
 
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
+	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
+	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 
@@ -132,6 +136,8 @@ help_backup(void)
 	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
+	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
+	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
@@ -147,6 +153,11 @@ help_backup(void)
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --delete-expired             delete backups expired according to current\n"));
 	printf(_("                                   retention policy after successful backup completion\n"));
+
+	printf(_("\n  Compression options:\n"));
+	printf(_("  --compress-algorithm=compress-algorithm\n"));
+	printf(_("                                   available options: 'zlib','pglz','none'\n"));
+	printf(_("  --compress-level=compress-level  level of compression [0-9]\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -d, --dbname=DBNAME              database to connect\n"));
@@ -236,6 +247,8 @@ help_set_config(void)
 	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n\n"));
+	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
+	printf(_("                 [--compress-level=compress-level]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  --instance=instance_name		 name of the instance\n"));
@@ -264,6 +277,11 @@ help_set_config(void)
 	printf(_("      --retention-window=retention-window\n"));
 	printf(_("                                   number of days of recoverability\n"));
 
+	printf(_("\n  Compression options:\n"));
+	printf(_("      --compress-algorithm=compress-algorithm\n"));
+	printf(_("                                   available options: 'zlib','pglz','none'\n"));
+	printf(_("      --compress-level=compress-level\n"));
+	printf(_("                                   level of compression [0-9]\n"));
 }
 
 static void

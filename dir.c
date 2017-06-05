@@ -156,6 +156,7 @@ pgFileInit(const char *path)
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 	file->generation = -1;
 	file->is_partial_copy = 0;
+	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }
 
@@ -671,9 +672,9 @@ print_file_list(FILE *out, const parray *files, const char *root)
 			path = GetRelativePath(path, root);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\", \"crc\":\"%u\"",
+					 "\"is_datafile\":\"%u\", \"crc\":\"%u\", \"compress_alg\":\"%s\"",
 				path, (unsigned long) file->write_size, file->mode,
-				file->is_datafile?1:0, file->crc);
+				file->is_datafile?1:0, file->crc, deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
@@ -847,6 +848,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		char		path[MAXPGPATH];
 		char		filepath[MAXPGPATH];
 		char		linked[MAXPGPATH];
+		char		compress_alg_string[MAXPGPATH];
 		uint64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
@@ -867,6 +869,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		/* optional fields */
 		get_control_value(buf, "linked", linked, NULL, false);
 		get_control_value(buf, "segno", NULL, &segno, false);
+		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 
 #ifdef PGPRO_EE
 		get_control_value(buf, "CFS_generation", NULL, &generation, true);
@@ -883,6 +886,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
 		file->crc = (pg_crc32) crc;
+		file->compress_alg = parse_compress_alg(compress_alg_string);
 		if (linked[0])
 			file->linked = pgut_strdup(linked);
 		file->segno = (int) segno;

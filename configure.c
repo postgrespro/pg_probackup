@@ -10,6 +10,7 @@
 #include "pg_probackup.h"
 
 static void opt_log_level(pgut_option *opt, const char *arg);
+static void opt_compress_alg(pgut_option *opt, const char *arg);
 
 static pgBackupConfig *cur_config = NULL;
 
@@ -47,6 +48,11 @@ do_configure(bool show_only)
 	if (retention_window)
 		config->retention_window = retention_window;
 
+	if (compress_alg != NOT_DEFINED_COMPRESS)
+		config->compress_alg = compress_alg;
+	if (compress_level != -1)
+		config->compress_level = compress_level;
+
 	if (show_only)
 		writeBackupCatalogConfig(stderr, config);
 	else
@@ -74,6 +80,9 @@ pgBackupConfigInit(pgBackupConfig *config)
 
 	config->retention_redundancy = 0;
 	config->retention_window = 0;
+
+	config->compress_alg = NOT_DEFINED_COMPRESS;
+	config->compress_level = -1;
 }
 
 void
@@ -113,6 +122,15 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	if (config->retention_window)
 		fprintf(out, "retention-window = %u\n", config->retention_window);
 
+	fprintf(out, "#Compression parameters:\n");
+
+	fprintf(out, "compress-algorithm = %s\n", deparse_compress_alg(config->compress_alg));
+
+	/* if none value is set, print default */
+	if (config->compress_level == -1)
+		fprintf(out, "compress-level = %u\n", DEFAULT_COMPRESS_LEVEL);
+	else
+		fprintf(out, "compress-level = %u\n", config->compress_level);
 }
 
 void
@@ -143,6 +161,9 @@ readBackupCatalogConfigFile(void)
 		/* retention options */
 		{ 'u', 0, "retention-redundancy",	&(config->retention_redundancy),SOURCE_FILE_STRICT },
 		{ 'u', 0, "retention-window",		&(config->retention_window),	SOURCE_FILE_STRICT },
+		/* compression options */
+		{ 'f', 36, "compress-algorithm",	opt_compress_alg,				SOURCE_CMDLINE },
+		{ 'u', 37, "compress-level",		&(config->compress_level),		SOURCE_CMDLINE },
 		/* logging options */
 		{ 'f', 40, "log-level",				opt_log_level,					SOURCE_CMDLINE },
 		{ 's', 41, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
@@ -176,4 +197,10 @@ static void
 opt_log_level(pgut_option *opt, const char *arg)
 {
 	cur_config->log_level = parse_log_level(arg);
+}
+
+static void
+opt_compress_alg(pgut_option *opt, const char *arg)
+{
+	cur_config->compress_alg = parse_compress_alg(arg);
 }
