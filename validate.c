@@ -12,8 +12,12 @@
 
 #include <sys/stat.h>
 #include <pthread.h>
+#include <dirent.h>
 
 static void pgBackupValidateFiles(void *arg);
+static void do_validate_instance(void);
+
+static bool corrupted_backup_found = false;
 
 typedef struct
 {
@@ -37,6 +41,14 @@ pgBackupValidate(pgBackup *backup)
 	int			i;
 
 	backup_id_string = base36enc(backup->start_time);
+
+	if (backup->status != BACKUP_STATUS_OK &&
+		backup->status != BACKUP_STATUS_DONE)
+	{
+		elog(INFO, "Backup %s has status %s. Skip validation.",
+					backup_id_string, status2str(backup->status));
+		return;
+	}
 
 	elog(LOG, "Validate backup %s", backup_id_string);
 
@@ -160,4 +172,120 @@ pgBackupValidateFiles(void *arg)
 			return;
 		}
 	}
+}
+
+/*
+ * Validate all backups in the backup catalog.
+ * If --instance option was provided, validate only backups of this instance.
+ */
+int
+do_validate_all(void)
+{
+	if (instance_name == NULL)
+	{
+		/* Show list of instances */
+		char		path[MAXPGPATH];
+		DIR		   *dir;
+		struct dirent *dent;
+
+		/* open directory and list contents */
+		join_path_components(path, backup_path, BACKUPS_DIR);
+		dir = opendir(path);
+		if (dir == NULL)
+			elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
+
+		errno = 0;
+		while ((dent = readdir(dir)))
+		{
+			char		child[MAXPGPATH];
+			struct stat	st;
+
+			/* skip entries point current dir or parent dir */
+			if (strcmp(dent->d_name, ".") == 0 ||
+				strcmp(dent->d_name, "..") == 0)
+				continue;
+
+			join_path_components(child, path, dent->d_name);
+
+			if (lstat(child, &st) == -1)
+				elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
+
+			if (!S_ISDIR(st.st_mode))
+				continue;
+
+			instance_name = dent->d_name;
+			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
+			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
+			do_validate_instance();
+		}
+	}
+	else
+	{
+		do_validate_instance();
+	}
+
+	if (corrupted_backup_found)
+		elog(INFO, "Some backups are not valid");
+	else
+		elog(INFO, "All backups are valid");
+
+	return 0;
+}
+
+/*
+ * Validate all backups in the given instance of the backup catalog.
+ */
+static void
+do_validate_instance(void)
+{
+	int			i, j;
+	parray	   *backups;
+	pgBackup   *current_backup = NULL;
+	pgBackup   *base_full_backup = NULL;
+
+	elog(INFO, "Validate backups of the instance '%s'", instance_name);
+
+	/* Get exclusive lock of backup catalog */
+	catalog_lock();
+
+	/* Get list of all backups sorted in order of descending start time */
+	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
+	if (backups == NULL)
+		elog(ERROR, "Failed to get backup list.");
+
+	/* Valiate each backup along with its xlog files. */
+	for (i = 0; i < parray_num(backups); i++)
+	{
+		current_backup = (pgBackup *) parray_get(backups, i);
+		elog(INFO, "Validate backup %s", base36enc(current_backup->start_time));
+
+		if (current_backup->backup_mode != BACKUP_MODE_FULL)
+		{
+			j = i+1;
+			do
+			{
+				base_full_backup = (pgBackup *) parray_get(backups, j);
+				j++;
+			}
+			while (base_full_backup->backup_mode != BACKUP_MODE_FULL
+				   && j < parray_num(backups));
+		}
+
+		pgBackupValidate(current_backup);
+
+		/* There is no point in wal validation for corrupted backup */
+		if (current_backup->status == BACKUP_STATUS_OK)
+		{
+			/* Validate corresponding WAL files */
+			validate_wal(current_backup, arclog_path, 0,
+						0, base_full_backup->tli);
+		}
+
+		if (current_backup->status != BACKUP_STATUS_OK)
+			corrupted_backup_found = true;
+	}
+
+	/* cleanup */
+	parray_walk(backups, pgBackupFree);
+	parray_free(backups);
 }

@@ -253,7 +253,7 @@ main(int argc, char *argv[])
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
 	/* Option --instance is required for all commands except init and show */
-	if (backup_subcmd != INIT && backup_subcmd != SHOW)
+	if (backup_subcmd != INIT && backup_subcmd != SHOW && backup_subcmd != VALIDATE)
 	{
 		if (instance_name == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
@@ -378,7 +378,10 @@ main(int argc, char *argv[])
 						  target_inclusive, target_tli,
 						  true);
 		case VALIDATE:
-			return do_restore_or_validate(current.backup_id,
+			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
+				return do_validate_all();
+			else
+				return do_restore_or_validate(current.backup_id,
 						  target_time, target_xid,
 						  target_inclusive, target_tli,
 						  false);

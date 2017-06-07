@@ -97,8 +97,8 @@ help_pg_probackup(void)
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 
-	printf(_("\n  %s validate -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
+	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
+	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
 
@@ -206,14 +206,13 @@ help_restore(void)
 static void
 help_validate(void)
 {
-	printf(_("%s validate -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
+	printf(_("%s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
+	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
-	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
 	printf(_("      --progress                   show progress\n"));

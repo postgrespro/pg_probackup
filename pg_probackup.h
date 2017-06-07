@@ -368,6 +368,7 @@ extern void help_command(char *command);
 
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup);
+extern int do_validate_all(void);
 
 /* in catalog.c */
 extern pgBackup *read_backup(time_t timestamp);
