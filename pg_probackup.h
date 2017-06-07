@@ -33,6 +33,12 @@
 
 #include "datapagemap.h"
 
+/*
+ * Macro needed to parse ptrack.
+ * NOTE Keep those values syncronised with definitions in ptrack.h
+ */
+#define PTRACK_BITS_PER_HEAPBLOCK 1
+#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"

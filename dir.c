@@ -345,7 +345,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 }
 
 /*
- * TODO Add comment, review
+ * TODO Add comment
  */
 static void
 dir_list_file_internal(parray *files, const char *root, bool exclude,
@@ -679,7 +679,6 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
-		/* TODO What for do we write it to file? */
 		if (S_ISLNK(file->mode))
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 

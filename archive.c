@@ -18,7 +18,7 @@
  * --wal-file-path %p --wal-file-name %f', to move backups into arclog_path.
  * Where archlog_path is $BACKUP_PATH/wal/system_id.
  * Currently it just copies wal files to the new location.
- * TODO Planned options: compress, list the arclog content,
+ * TODO: Planned options: compress, list the arclog content,
  * compute and validate checksums.
  */
 int

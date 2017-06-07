@@ -162,7 +162,6 @@ pretty_size(int64 size, char *buf, size_t len)
 	}
 }
 
-/* TODO Add comment */
 static TimeLineID
 get_parent_tli(TimeLineID child_tli)
 {

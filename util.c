@@ -75,7 +75,9 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 	checkControlFile(ControlFile);
 }
 
-/* TODO Add comment */
+/*
+ * Get lsn of the moment when ptrack was enabled the last time.
+ */
 XLogRecPtr
 get_last_ptrack_lsn(void)
 {

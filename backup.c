@@ -654,7 +654,7 @@ pg_switch_wal(void)
 
 /*
  * Check if the instance supports ptrack
- * TODO Implement check of ptrack_version() instead of existing one
+ * TODO Maybe we should rather check ptrack_version()?
  */
 static bool
 pg_ptrack_support(void)
@@ -959,7 +959,6 @@ pg_stop_backup(pgBackup *backup)
 		fwrite(PQgetvalue(res, 0, 1), 1, strlen(PQgetvalue(res, 0, 1)), fp);
 		fclose(fp);
 
-		/* TODO What for do we save the file into backup_list? */
 		/*
 		 * It's vital to check if backup_files_list is initialized,
 		 * because we could get here because the backup was interrupted
@@ -1213,7 +1212,6 @@ backup_compressed_file_partially(pgFile *file, void *arg, size_t *skip_size)
  * verify checksum and copy.
  * In incremental backup mode, copy only files or datafiles' pages changed after
  * previous backup.
- * TODO review
  */
 static void
 backup_files(void *arg)
@@ -1268,31 +1266,11 @@ backup_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
-			/* skip files which have not been modified since last backup */
-			/* TODO Implement: compare oldfile and newfile checksum. Now it's just a stub */
-			if (arguments->prev_backup_filelist)
-			{
-				pgFile *prev_file = NULL;
-				pgFile **p = (pgFile **) parray_bsearch(arguments->prev_backup_filelist,
-														file, pgFileComparePath);
-				if (p)
-					prev_file = *p;
-
-				if (prev_file && false)
-				{
-					file->write_size = BYTES_INVALID;
-					elog(LOG, "File \"%s\" has not changed since previous backup",
-						 file->path);
-					continue;
-				}
-			}
-
 			/* copy the file into backup */
 			if (file->is_datafile)
 			{
 				if (is_compressed_data_file(file))
 				{
-					/* TODO review */
 					size_t skip_size = 0;
 					if (backup_compressed_file_partially(file, arguments, &skip_size))
 					{
@@ -1345,7 +1323,6 @@ backup_files(void *arg)
 
 /*
  * Append files to the backup list array.
- * TODO review
  */
 static void
 add_pgdata_files(parray *files, const char *root)
@@ -1370,7 +1347,7 @@ add_pgdata_files(parray *files, const char *root)
 		/* data files are under "base", "global", or "pg_tblspc" */
 		relative = GetRelativePath(file->path, root);
 		if (!path_is_prefix_of_path("base", relative) &&
-			/*!path_is_prefix_of_path("global", relative) &&*/ //TODO What's wrong with this line?
+			!path_is_prefix_of_path("global", relative) &&
 			!path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
 			continue;
 
@@ -1600,7 +1577,10 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	pg_free(rel_path);
 }
 
-/* TODO review it */
+/*
+ * Given a list of files in the instance to backup, build a pagemap for each
+ * data file that has ptrack. Result is saved in the pagemap field of pgFile.
+ */
 static void
 make_pagemap_from_ptrack(parray *files)
 {
@@ -1621,6 +1601,8 @@ make_pagemap_from_ptrack(parray *files)
 			char	   *ptrack_nonparsed;
 			size_t		ptrack_nonparsed_size = 0;
 			size_t		start_addr;
+
+			/* Compute db_oid and rel_oid of the relation from the path */
 
 			tablespace = strstr(p->ptrack_path, PG_TBLSPC_DIR);
 
@@ -1647,19 +1629,25 @@ make_pagemap_from_ptrack(parray *files)
 					 p->path);
 
 			sscanf(p->path + sep_iter + 1, "%u/%u", &db_oid, &rel_oid);
-			
+
+			/* get ptrack map for all segments of the relation in a raw format */
 			ptrack_nonparsed = pg_ptrack_get_and_clear(tablespace_oid, db_oid,
 											   rel_oid, &ptrack_nonparsed_size);
 
-			/* TODO What is 8? */
-			start_addr = (RELSEG_SIZE/8)*p->segno;
-			if (start_addr + RELSEG_SIZE/8 > ptrack_nonparsed_size)
+			/*
+			 * FIXME When do we cut VARHDR from ptrack_nonparsed?
+			 * Compute the beginning of the ptrack map related to this segment
+			 */
+			start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*p->segno;
+
+			if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
 				p->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
 			else
-				p->pagemap.bitmapsize =	RELSEG_SIZE/8;
+				p->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
 
 			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
 			memcpy(p->pagemap.bitmap, ptrack_nonparsed+start_addr, p->pagemap.bitmapsize);
+
 			pg_free(ptrack_nonparsed);
 		}
 	}
@@ -1815,7 +1803,7 @@ StreamLog(void *arg)
  * cfs_mmap() and cfs_munmap() function definitions mirror ones
  * from cfs.h, but doesn't use atomic variables, since they are
  * not allowed in frontend code.
- * TODO Is it so?
+ *
  * Since we cannot take atomic lock on files compressed by CFS,
  * it should care about not changing files while backup is running.
  */

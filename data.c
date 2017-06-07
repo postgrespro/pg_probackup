@@ -147,12 +147,6 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		 * If after several attempts page header is still invalid, throw an error.
 		 * The same idea is applied to checksum verification.
 		 */
-
-		/*
-		 * TODO Should we show a hint about possible false positives suggesting to
-		 * decrease concurrent load? Or we can just copy this page and rely on
-		 * xlog recovery, marking backup as untrusted.
-		 */
 		if (!parse_page(&page, &page_lsn))
 		{
 			int i;
@@ -346,6 +340,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			n_blocks_read++;
 		}
 
+		pg_free(&file->pagemap);
 		pg_free(iter);
 	}
 
@@ -364,7 +359,7 @@ backup_data_file(const char *from_root, const char *to_root,
 
 	FIN_CRC32C(file->crc);
 
-	/* Treat empty file as not-datafile. TODO Why? */
+	/* Treat empty file as not-datafile. */
 	if (file->read_size == 0)
 		file->is_datafile = false;
 
@@ -385,7 +380,6 @@ backup_data_file(const char *from_root, const char *to_root,
 
 /*
  * Restore compressed file that was backed up partly.
- * TODO review
  */
 static void
 restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
@@ -563,8 +557,7 @@ restore_data_file(const char *from_root,
 		if (header.block < blknum)
 			elog(ERROR, "backup is broken at block %u", blknum);
 
-		/* TODO fix this assert */
-		Assert (header.compressed_size <= BLCKSZ);
+		Assert(header.compressed_size <= BLCKSZ);
 
 		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);

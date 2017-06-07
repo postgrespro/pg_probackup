@@ -219,7 +219,8 @@ do_restore_or_validate(time_t target_backup_id,
 
 	/*
 	 * Validate corresponding WAL files.
-	 * TODO Shouldn't we pass recovery_target_timeline as last argument?
+	 * We pass base_full_backup timeline as last argument to this function,
+	 * because it's needed to form the name of xlog file.
 	 */
 	validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
 						 rt->recovery_target_xid, base_full_backup->tli);
@@ -246,7 +247,7 @@ do_restore_or_validate(time_t target_backup_id,
 		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
 			remove_deleted_files(dest_backup);
 
-		/* TODO Add comment */
+		/* Create recovery.conf with given recovery target parameters */
 		if (!dest_backup->stream
 			|| (target_time != NULL || target_xid != NULL))
 		{
@@ -867,7 +868,6 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 /*
  * Get recovery options in the string format, parse them
  * and fill up the pgRecoveryTarget structure.
- * TODO move arguments parsing and validation to getopt.
  */
 pgRecoveryTarget *
 parseRecoveryTargetOptions(const char *target_time,
