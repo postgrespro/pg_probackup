@@ -340,7 +340,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			n_blocks_read++;
 		}
 
-		pg_free(&file->pagemap);
+		pg_free(file->pagemap.bitmap);
 		pg_free(iter);
 	}
 
