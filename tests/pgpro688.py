@@ -1,9 +1,9 @@
 import unittest
 import os
 import six
-from helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
+from helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
-from testgres import stop_all
+from testgres import stop_all, get_username
 import subprocess
 from sys import exit, _getframe
 import shutil
@@ -33,9 +33,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master = self.make_simple_node(base_dir="{0}/{1}/master".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '5min'}
             )
-
         master.start()
         shutil.rmtree(backup_dir, ignore_errors=True)
         self.init_pb(backup_dir)
@@ -65,7 +64,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         slave.append_conf('recovery.conf', "standby_mode = 'on'")
         slave.append_conf('recovery.conf',
-            "primary_conninfo = 'user=gsmol port={0} sslmode=prefer sslcompression=1'".format(master.port))
+            "primary_conninfo = 'user={0} port={1} sslmode=prefer sslcompression=1'".format(get_username(), master.port))
         slave.start({"-t": "600"})
         # Replica Ready
 
@@ -75,9 +74,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Make backup from replica
         self.add_instance(backup_dir, self.instance_2, slave)
-        time.sleep(2)
         self.assertTrue('INFO: Wait end of WAL streaming' and 'completed' in
-            self.backup_node(backup_dir, self.instance_2, slave, backup_type='full', options=['--stream', '--log-level=verbose']))
+            self.backup_node(backup_dir, self.instance_2, slave, backup_type='full', options=[
+                '--stream', '--log-level=verbose', '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)]))
         self.validate_pb(backup_dir, self.instance_2)
         self.assertEqual('OK', self.show_pb(backup_dir, self.instance_2)[0]['Status'])
 

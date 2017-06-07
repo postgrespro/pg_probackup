@@ -2,7 +2,7 @@ import unittest
 import os
 from os import path
 import six
-from .ptrack_helpers import ProbackupTest, ProbackupException
+from helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from testgres import stop_all
 import subprocess
 from datetime import datetime
@@ -18,7 +18,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def tearDownClass(cls):
         stop_all()
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_restore_full_to_latest(self):
         """recovery to latest from full backup"""
@@ -55,6 +55,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_full_page_to_latest(self):
         """recovery to latest from full + page backups"""
         fname = self.id().split('.')[3]
@@ -91,6 +92,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_to_timeline(self):
         """recovery to target timeline"""
         fname = self.id().split('.')[3]
@@ -139,6 +141,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_to_time(self):
         """recovery to target timeline"""
         fname = self.id().split('.')[3]
@@ -153,19 +156,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-        self.backup_pb(node, backup_type="full")
+        backup_id = self.backup_pb(node, backup_type="full")
 
         target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        node.stop({"-m": "immediate"})
+        node.stop()
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node,
-            options=["-j", "4", '--time="%s"' % target_time]))
+        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in self.restore_pb(node,
+            options=["-j", "4", '--time="{0}"'.format(target_time)]))
 
         node.start({"-t": "600"})
 
@@ -174,6 +176,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_to_xid(self):
         """recovery to target xid"""
         fname = self.id().split('.')[3]
@@ -224,7 +227,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    def test_restore_full_ptrack(self):
+    @unittest.skip("skip")
+    def test_restore_full_ptrack_archive(self):
         """recovery to latest from full + ptrack backups"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
@@ -267,6 +271,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_full_ptrack_ptrack(self):
         """recovery to latest from full + ptrack + ptrack backups"""
         fname = self.id().split('.')[3]
@@ -339,15 +344,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_pb(node, backup_type="ptrack", options=["--stream"])
+        backup_id = self.backup_pb(node, backup_type="ptrack", options=["--stream"])
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-        node.stop({"-m": "immediate"})
+        node.stop()
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
+        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in 
+            self.restore_pb(node, options=["-j", "4"]))
 
         node.start({"-t": "600"})
 
@@ -356,6 +361,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_full_ptrack_under_load(self):
         """recovery to latest from full + ptrack backups with loads when ptrack backup do"""
         fname = self.id().split('.')[3]
@@ -410,6 +416,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_full_under_load_ptrack(self):
         """recovery to latest from full + page backups with loads when full backup do"""
         fname = self.id().split('.')[3]
@@ -465,6 +472,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_to_xid_inclusive(self):
         """recovery with target inclusive false"""
         fname = self.id().split('.')[3]
@@ -519,6 +527,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_1(self):
         """recovery using tablespace-mapping option"""
         fname = self.id().split('.')[3]
@@ -599,6 +608,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_2(self):
         """recovery using tablespace-mapping option and page backup"""
         fname = self.id().split('.')[3]
@@ -659,10 +669,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(count[0][0], 4)
         node.stop()
 
+    @unittest.skip("skip")
     def test_archive_node_backup_stream_restore_to_recovery_time(self):
-        """
-        make node with archiving, make stream backup,
-        get Recovery Time, try to make PITR to Recovery Time
+        """make node with archiving, make stream backup, make PITR to Recovery Time
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/pgpro668/{0}".format(fname),
@@ -674,25 +683,27 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         self.assertEqual(self.init_pb(node), six.b(""))
-        id = self.backup_pb(node, backup_type='full', options=["--stream"])
-        recovery_time = self.show_pb(node, id=id)['recovery-time']
-
-        node.pg_ctl('stop', {'-m': 'immediate', '-D': '{0}'.format(node.data_dir)})
+        backup_id = self.backup_pb(node, backup_type='full', options=["--stream"])
+        node.psql("postgres", "create table t_heap(a int)")
+        node.psql("postgres", "select pg_switch_xlog()")
+        node.stop()
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(
-                node, options=['--time="{0}"'.format(recovery_time)]))
+        recovery_time = self.show_pb(node, id=backup_id)['recovery-time']
+
+        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in 
+            self.restore_pb(node, options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
 
         node.start({"-t": "600"})
+
+        res = node.psql("postgres", 'select * from t_heap')
+        self.assertEqual(True, 'does not exist' in res[2])
         self.assertEqual(True, node.status())
         node.stop()
 
-    def test_archive_node_backup_stream_additional_commit_pitr(self):
-        """
-        make node with archiving, make stream backup, create table t_heap,
-        try to make pitr to Recovery Time, check that t_heap do not exists
-        """
+    @unittest.skip("skip")
+    def test_archive_node_backup_stream_pitr(self):
+        """make node with archiving, make stream backup, create table t_heap, make pitr to Recovery Time, check that t_heap do not exists"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
             set_archiving=True,
@@ -703,18 +714,50 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         self.assertEqual(self.init_pb(node), six.b(""))
-        id = self.backup_pb(node, backup_type='full', options=["--stream"])
+        backup_id = self.backup_pb(node, backup_type='full', options=["--stream"])
         node.psql("postgres", "create table t_heap(a int)")
-        node.pg_ctl('stop', {'-m': 'immediate', '-D': '{0}'.format(node.data_dir)})
+        node.psql("postgres", "select pg_switch_xlog()")
+        node.stop()
         node.cleanup()
-        recovery_time = self.show_pb(node, id=id)['recovery-time']
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node,
-            options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
+        recovery_time = self.show_pb(node, id=backup_id)['recovery-time']
+
+        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in
+            self.restore_pb(node, options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
 
         node.start({"-t": "600"})
 
         res = node.psql("postgres", 'select * from t_heap')
         self.assertEqual(True, 'does not exist' in res[2])
         node.stop()
+
+    @unittest.skip("fucking illegal")
+    def test_archive_node_backup_stream_pitr_2(self):
+        """make node with archiving, make stream backup, create table t_heap, make pitr to Recovery Time, check that t_heap do not exists"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
+            set_archiving=True,
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        node.start()
+#        exit(1)
+
+        self.assertEqual(self.init_pb(node), six.b(""))
+        backup_id = self.backup_pb(node, backup_type='full', options=["--stream"])
+        node.psql("postgres", "create table t_heap(a int)")
+        node.psql("postgres", "select pg_switch_xlog()")
+        node.pg_ctl('stop', {'-m': 'immediate', '-D': '{0}'.format(node.data_dir)})
+        node.cleanup()
+
+        recovery_time = self.show_pb(node, id=backup_id)['recovery-time']
+
+        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in self.restore_pb(node,
+            options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
+
+        node.start({"-t": "600"})
+
+        res = node.psql("postgres", 'select * from t_heap')
+        self.assertEqual(True, 'does not exist' in res[2])
+#        node.stop()

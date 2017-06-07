@@ -2,7 +2,7 @@ import unittest
 import os
 from datetime import datetime, timedelta
 from os import path, listdir
-from .ptrack_helpers import ProbackupTest
+from helpers.ptrack_helpers import ProbackupTest
 from testgres import stop_all
 
 

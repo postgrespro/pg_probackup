@@ -1,7 +1,7 @@
 import unittest
 from os import path, listdir
 import six
-from .ptrack_helpers import ProbackupTest, ProbackupException
+from helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from testgres import stop_all
 
 
@@ -16,6 +16,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    # PGPRO-707
     def test_backup_modes_archive(self):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]

@@ -42,5 +42,11 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup delete -B backup-dir
                 [--wal] [-i backup-id | --expired]
 
+  pg_probackup add-instance -B backup-dir
+                --instance=instance_name
+
+  pg_probackup del-instance -B backup-dir
+                --instance=instance_name
+
 Read the website for details. <https://github.com/postgrespro/pg_probackup>
 Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.
