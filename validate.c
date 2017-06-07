@@ -270,6 +270,8 @@ do_validate_instance(void)
 			while (base_full_backup->backup_mode != BACKUP_MODE_FULL
 				   && j < parray_num(backups));
 		}
+		else
+			base_full_backup = current_backup;
 
 		pgBackupValidate(current_backup);
 
