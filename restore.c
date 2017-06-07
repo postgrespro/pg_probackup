@@ -572,7 +572,14 @@ check_tablespace_mapping(pgBackup *backup)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	read_tablespace_map(links, this_backup_path);
 
-	elog(LOG, "check tablespace directories of backup %s", base36enc(backup->start_time));
+	if (log_level <= LOG)
+	{
+		char	   *backup_id;
+
+		backup_id = base36enc(backup->start_time);
+		elog(LOG, "check tablespace directories of backup %s", backup_id);
+		pfree(backup_id);
+	}
 
 	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
 	for (cell = tablespace_dirs.head; cell; cell = cell->next)

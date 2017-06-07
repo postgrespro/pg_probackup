@@ -21,60 +21,71 @@ const char *PROGRAM_VERSION	= "1.1.14";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
-/* path configuration */
+/* directory options */
 char	   *backup_path = NULL;
 char	   *pgdata = NULL;
 /*
  * path or to the data files in the backup catalog
  * $BACKUP_PATH/backups/instance_name
  */
-char backup_instance_path[MAXPGPATH];
+char		backup_instance_path[MAXPGPATH];
 /*
  * path or to the wal files in the backup catalog
  * $BACKUP_PATH/wal/instance_name
  */
 char		arclog_path[MAXPGPATH] = "";
- 
-char *instance_name;
 
-/* directory configuration */
-pgBackup	current;
-ProbackupSubcmd backup_subcmd;
-
-bool		help = false;
-
+/* common options */
 char	   *backup_id_string_param = NULL;
-bool		backup_logs = false;
-
-bool		smooth_checkpoint;
 int			num_threads = 1;
 bool		stream_wal = false;
-bool		from_replica = false;
 bool		progress = false;
-bool		delete_wal = false;
-bool		delete_expired = false;
-bool		apply_to_all = false;
-bool		force_delete = false;
+
+/* backup options */
+bool		backup_logs = false;
+bool		smooth_checkpoint;
+bool		from_replica = false;
 /* Wait timeout for WAL segment archiving */
-uint32		archive_timeout = 300;
+uint32		archive_timeout = 300;		/* default is 300 seconds */
+const char *master_db = NULL;
+const char *master_host = NULL;
+const char *master_port= NULL;
+const char *master_user = NULL;
+uint32		replica_timeout = 300;		/* default is 300 seconds */
 
-uint64		system_identifier = 0;
-
-uint32		retention_redundancy = 0;
-uint32		retention_window = 0;
-
-CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
-int			compress_level = -1;
-
-/* restore configuration */
+/* restore options */
 static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
 
-/* archive push */
+/* delete options */
+bool		delete_wal = false;
+bool		delete_expired = false;
+bool		apply_to_all = false;
+bool		force_delete = false;
+
+/* retention options */
+uint32		retention_redundancy = 0;
+uint32		retention_window = 0;
+
+/* compression options */
+CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
+int			compress_level = -1;
+
+/* other options */
+char	   *instance_name;
+uint64		system_identifier = 0;
+
+/* archive push options */
 static char *wal_file_path;
 static char *wal_file_name;
+
+/* current settings */
+pgBackup	current;
+ProbackupSubcmd backup_subcmd;
+
+bool		help = false;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 static void opt_log_level(pgut_option *opt, const char *arg);
@@ -98,6 +109,11 @@ static pgut_option options[] =
 	{ 's', 'S', "slot",					&replication_slot,	SOURCE_CMDLINE },
 	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE },
 	{ 'b', 12, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
+	{ 's', 13, "master-db",				&master_db,			SOURCE_CMDLINE, },
+	{ 's', 14, "master-host",			&master_host,		SOURCE_CMDLINE, },
+	{ 's', 15, "master-port",			&master_port,		SOURCE_CMDLINE, },
+	{ 's', 16, "master-user",			&master_user,		SOURCE_CMDLINE, },
+	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE, },
 	/* restore options */
 	{ 's', 20, "time",					&target_time,		SOURCE_CMDLINE },
 	{ 's', 21, "xid",					&target_xid,		SOURCE_CMDLINE },

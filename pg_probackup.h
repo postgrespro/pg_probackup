@@ -147,6 +147,12 @@ typedef struct pgBackupConfig
 	const char	*pgport;
 	const char	*pguser;
 
+	const char *master_host;
+	const char *master_port;
+	const char *master_db;
+	const char *master_user;
+	int			replica_timeout;
+
 	int			log_level;
 	char	   *log_filename;
 	char	   *error_log_filename;
@@ -250,36 +256,38 @@ extern int cfs_munmap(FileMap* map);
 #define XLogDataFromLSN(data, xlogid, xrecoff)		\
 	sscanf(data, "%X/%X", xlogid, xrecoff)
 
-/* in probackup.c */
-
-/* path configuration */
+/* directory options */
 extern char *backup_path;
 extern char backup_instance_path[MAXPGPATH];
 extern char *pgdata;
 extern char arclog_path[MAXPGPATH];
 
-extern char *instance_name;
-
-/* current settings */
-extern pgBackup current;
-extern ProbackupSubcmd	backup_subcmd;
-
-extern bool	smooth_checkpoint;
+/* common options */
 extern int num_threads;
 extern bool stream_wal;
-extern bool from_replica;
 extern bool progress;
+
+/* backup options */
+extern bool	smooth_checkpoint;
+extern uint32 archive_timeout;
+extern bool from_replica;
+extern const char *master_db;
+extern const char *master_host;
+extern const char *master_port;
+extern const char *master_user;
+extern uint32 replica_timeout;
+
+/* delete options */
 extern bool delete_wal;
 extern bool	delete_expired;
 extern bool	apply_to_all;
 extern bool	force_delete;
-extern uint32 archive_timeout;
 
-extern uint64 system_identifier;
-
+/* retention options */
 extern uint32 retention_redundancy;
 extern uint32 retention_window;
 
+/* compression options */
 extern CompressAlg compress_alg;
 extern int    compress_level;
 
@@ -287,6 +295,13 @@ extern int    compress_level;
 
 extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
+/* other options */
+extern char *instance_name;
+extern uint64 system_identifier;
+
+/* current settings */
+extern pgBackup current;
+extern ProbackupSubcmd	backup_subcmd;
 
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */

@@ -110,6 +110,14 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	XLogSegNo	endSegNo,
 				nextSegNo = 0;
 
+	if (!XRecOffIsValid(startpoint))
+		elog(ERROR, "Invalid startpoint value %X/%X",
+			 (uint32) (startpoint >> 32), (uint32) (startpoint));
+
+	if (!XRecOffIsValid(endpoint))
+		elog(ERROR, "Invalid endpoint value %X/%X",
+			 (uint32) (endpoint >> 32), (uint32) (endpoint));
+
 	private.archivedir = archivedir;
 	private.tli = tli;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
@@ -277,6 +285,16 @@ validate_wal(pgBackup *backup,
 	bool		all_wal = false;
 	char 		backup_xlog_path[MAXPGPATH];
 
+	if (!XRecOffIsValid(backup->start_lsn))
+		elog(ERROR, "Invalid start_lsn value %X/%X of backup %s",
+			 (uint32) (backup->start_lsn >> 32), (uint32) (backup->start_lsn),
+			 base36enc(backup->start_time));
+
+	if (!XRecOffIsValid(backup->stop_lsn))
+		elog(ERROR, "Invalid stop_lsn value %X/%X of backup %s",
+			 (uint32) (backup->stop_lsn >> 32), (uint32) (backup->stop_lsn),
+			 base36enc(backup->start_time));
+
 	/*
 	 * Check that the backup has all wal files needed
 	 * for recovery to consistent state.
@@ -428,6 +446,14 @@ read_recovery_info(const char *archivedir, TimeLineID tli,
 	XLogPageReadPrivate private;
 	bool		res;
 
+	if (!XRecOffIsValid(start_lsn))
+		elog(ERROR, "Invalid start_lsn value %X/%X",
+			 (uint32) (start_lsn >> 32), (uint32) (start_lsn));
+
+	if (!XRecOffIsValid(stop_lsn))
+		elog(ERROR, "Invalid stop_lsn value %X/%X",
+			 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
+
 	private.archivedir = archivedir;
 	private.tli = tli;
 
@@ -499,6 +525,10 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 	XLogPageReadPrivate private;
 	char	   *errormsg;
 	bool		res;
+
+	if (!XRecOffIsValid(target_lsn))
+		elog(ERROR, "Invalid target_lsn value %X/%X",
+			 (uint32) (target_lsn >> 32), (uint32) (target_lsn));
 
 	private.archivedir = archivedir;
 	private.tli = target_tli;

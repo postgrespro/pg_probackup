@@ -66,7 +66,6 @@ help_pg_probackup(void)
 	printf(_("\n  %s init -B backup-path -D pgdata-dir\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [--log-level=log-level]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
@@ -77,6 +76,9 @@ help_pg_probackup(void)
 	printf(_("                 [--retention-window=retention-window]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
+	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
+	printf(_("                 [--replica-timeout]\n"));
 
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 
@@ -87,28 +89,30 @@ help_pg_probackup(void)
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
+	printf(_("                 [--replica-timeout]\n"));
 
 	printf(_("\n  %s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
-	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
-	printf(_("                [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
+	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 
 	printf(_("\n  %s validate -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
-	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
-	printf(_("                [--timeline=timeline]\n"));
+	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
+	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--timeline=timeline]\n"));
 
 	printf(_("\n  %s show -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                [--instance=instance_name [-i backup-id]]\n"));
+	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
 
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                [--wal] [-i backup-id | --expired]\n"));
+	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
 
 	printf(_("\n  %s add-instance -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                --instance=instance_name\n"));
+	printf(_("                 --instance=instance_name\n"));
 
 	printf(_("\n  %s del-instance -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                --instance=instance_name\n"));
+	printf(_("                 --instance=instance_name\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
@@ -139,10 +143,12 @@ help_backup(void)
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n\n"));
+	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
+	printf(_("                 [--replica-timeout]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|PTRACK\n"));
-	printf(_("  --instance=instance_name		 name of the instance\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
@@ -155,27 +161,35 @@ help_backup(void)
 	printf(_("                                   retention policy after successful backup completion\n"));
 
 	printf(_("\n  Compression options:\n"));
-	printf(_("  --compress-algorithm=compress-algorithm\n"));
+	printf(_("      --compress-algorithm=compress-algorithm\n"));
 	printf(_("                                   available options: 'zlib','pglz','none'\n"));
-	printf(_("  --compress-level=compress-level  level of compression [0-9]\n"));
+	printf(_("      --compress-level=compress-level\n"));
+	printf(_("                                   level of compression [0-9]\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -d, --dbname=DBNAME              database to connect\n"));
 	printf(_("  -h, --host=HOSTNAME              database server host or socket directory\n"));
 	printf(_("  -p, --port=PORT                  database server port\n"));
 	printf(_("  -U, --username=USERNAME          user name to connect as\n"));
+
+	printf(_("\n  Replica options:\n"));
+	printf(_("      --master-db=db_name          database to connect to master\n"));
+	printf(_("      --master-host=host_name      database server host of master\n"));
+	printf(_("      --master-port=port           database server port of master\n"));
+	printf(_("      --master-user=user_name      user name to connect to master\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
 }
 
 static void
 help_restore(void)
 {
 	printf(_("%s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
-	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
-	printf(_("                [--timeline=timeline] [-T OLDDIR=NEWDIR]\n\n"));
+	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
+	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 name of the instance\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to restore\n"));
@@ -186,19 +200,19 @@ help_restore(void)
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("           						 relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
 }
 
 static void
 help_validate(void)
 {
 	printf(_("%s validate -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                [-D pgdata-dir] [-i backup-id] [--progress]\n"));
-	printf(_("                [--time=time|--xid=xid [--inclusive=boolean]]\n"));
-	printf(_("                [--timeline=timeline]\n\n"));
+	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
+	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--timeline=timeline]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 name of the instance\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
@@ -216,7 +230,7 @@ help_show(void)
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 show info about specific intstance\n"));
+	printf(_("      --instance=instance_name     show info about specific intstance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
 }
 
@@ -224,10 +238,10 @@ static void
 help_delete(void)
 {
 	printf(_("%s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                [--wal] [-i backup-id | --expired]\n\n"));
+	printf(_("                 [--wal] [-i backup-id | --expired]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 name of the instance\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("      --wal                        remove unnecessary wal files\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to delete\n"));
 	printf(_("      --expired                    delete backups expired according to current\n"));
@@ -238,7 +252,6 @@ static void
 help_set_config(void)
 {
 	printf(_("%s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [--log-level=log-level]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
@@ -246,18 +259,15 @@ help_set_config(void)
 	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
 	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
-	printf(_("                 [--retention-window=retention-window]\n\n"));
+	printf(_("                 [--retention-window=retention-window]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
+	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
+	printf(_("                 [--replica-timeout]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 name of the instance\n"));
-
-	printf(_("\n  Connection options:\n"));
-	printf(_("  -d, --dbname=DBNAME              database to connect\n"));
-	printf(_("  -h, --host=HOSTNAME              database server host or socket directory\n"));
-	printf(_("  -p, --port=PORT                  database server port\n"));
-	printf(_("  -U, --username=USERNAME          user name to connect as\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level=log-level        controls which message levels are sent to the log\n"));
@@ -282,6 +292,19 @@ help_set_config(void)
 	printf(_("                                   available options: 'zlib','pglz','none'\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9]\n"));
+
+	printf(_("\n  Connection options:\n"));
+	printf(_("  -d, --dbname=DBNAME              database to connect\n"));
+	printf(_("  -h, --host=HOSTNAME              database server host or socket directory\n"));
+	printf(_("  -p, --port=PORT                  database server port\n"));
+	printf(_("  -U, --username=USERNAME          user name to connect as\n"));
+
+	printf(_("\n  Replica options:\n"));
+	printf(_("      --master-db=db_name          database to connect to master\n"));
+	printf(_("      --master-host=host_name      database server host of master\n"));
+	printf(_("      --master-port=port           database server port of master\n"));
+	printf(_("      --master-user=user_name      user name to connect to master\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
 }
 
 static void
@@ -290,25 +313,25 @@ help_show_config(void)
 	printf(_("%s show-config -B backup-dir --instance=instance_name\n\n"), PROGRAM_NAME);
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 name of the instance\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
 }
 
 static void
 help_add_instance(void)
 {
 	printf(_("%s add-instance -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                --instance=instance_name\n\n"));
+	printf(_("                 --instance=instance_name\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 name of the new instance\n"));
+	printf(_("      --instance=instance_name     name of the new instance\n"));
 }
 
 static void
 help_del_instance(void)
 {
 	printf(_("%s del-instance -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                --instance=instance_name\n\n"));
+	printf(_("                 --instance=instance_name\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  --instance=instance_name		 name of the instance to delete\n"));
+	printf(_("      --instance=instance_name     name of the instance to delete\n"));
 }

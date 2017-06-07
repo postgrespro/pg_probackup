@@ -30,6 +30,17 @@ do_configure(bool show_only)
 	if (username)
 		config->pguser = username;
 
+	if (master_host)
+		config->master_host = master_host;
+	if (master_port)
+		config->master_port = master_port;
+	if (master_db)
+		config->master_db = master_db;
+	if (master_user)
+		config->master_user = master_user;
+	if (replica_timeout != 300)		/* 300 is default value */
+		config->replica_timeout = replica_timeout;
+
 	if (log_level_defined)
 		config->log_level = log_level;
 	if (log_filename)
@@ -71,7 +82,13 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->pgport = NULL;
 	config->pguser = NULL;
 
-	config->log_level = INT_MIN;	// INT_MIN means "undefined"
+	config->master_host = NULL;
+	config->master_port = NULL;
+	config->master_db = NULL;
+	config->master_user = NULL;
+	config->replica_timeout = INT_MIN;	// INT_MIN means "undefined"
+
+	config->log_level = INT_MIN;		// INT_MIN means "undefined"
 	config->log_filename = NULL;
 	config->error_log_filename = NULL;
 	config->log_directory = NULL;
@@ -101,6 +118,18 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "PGPORT = %s\n", config->pgport);
 	if (config->pguser)
 		fprintf(out, "PGUSER = %s\n", config->pguser);
+
+	fprintf(out, "#Replica parameters:\n");
+	if (config->master_host)
+		fprintf(out, "master-host = %s\n", config->master_host);
+	if (config->master_port)
+		fprintf(out, "master-port = %s\n", config->master_port);
+	if (config->master_db)
+		fprintf(out, "master-db = %s\n", config->master_db);
+	if (config->master_user)
+		fprintf(out, "master-user = %s\n", config->master_user);
+	if (config->replica_timeout != INT_MIN)
+		fprintf(out, "replica_timeout = %u\n", config->replica_timeout);
 
 	fprintf(out, "#Logging parameters:\n");
 	if (config->log_level != INT_MIN)
@@ -177,6 +206,12 @@ readBackupCatalogConfigFile(void)
 		{ 's', 0, "pghost",					&(config->pghost),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgport",					&(config->pgport),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pguser",					&(config->pguser),				SOURCE_FILE_STRICT },
+		/* replica options */
+		{ 's', 0, "master-host",			&(config->master_host),			SOURCE_FILE_STRICT },
+		{ 's', 0, "master-port",			&(config->master_port),			SOURCE_FILE_STRICT },
+		{ 's', 0, "master-db",				&(config->master_db),			SOURCE_FILE_STRICT },
+		{ 's', 0, "master-user",			&(config->master_user),			SOURCE_FILE_STRICT },
+		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE },
 		/* other options */
 		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
 		{0}

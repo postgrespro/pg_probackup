@@ -50,8 +50,9 @@ static pthread_t stream_thread;
 
 static int is_ptrack_enable = false;
 
-/* Backup connection */
+/* Backup connections */
 static PGconn *backup_conn = NULL;
+static PGconn *master_conn = NULL;
 
 /* PostgreSQL server version from "backup_conn" */
 static int server_version = 0;
@@ -433,6 +434,17 @@ do_backup(void)
 	/* archiving check */
 	if (!current.stream && !pg_archive_enabled())
 		elog(ERROR, "Archiving must be enabled for archive backup");
+
+	if (from_replica)
+	{
+		/* Check master connection options */
+		if (master_host == NULL)
+			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
+
+		/* Create connection to master server */
+		master_conn = pgut_connect_extended(master_host, master_port,
+											master_db, master_user, password);
+	}
 
 	/* Get exclusive lock of backup catalog */
 	catalog_lock();
@@ -896,6 +908,7 @@ pg_stop_backup(pgBackup *backup)
 	PGresult   *res;
 	uint32		xlogid;
 	uint32		xrecoff;
+	XLogRecPtr	restore_lsn;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
@@ -911,6 +924,80 @@ pg_stop_backup(pgBackup *backup)
 	res = pgut_execute(backup_conn, "SET client_min_messages = warning;",
 					   0, NULL);
 	PQclear(res);
+
+	/* Create restore point */
+	if (backup != NULL)
+	{
+		const char *params[1];
+		char		name[1024];
+		char	   *backup_id;
+
+		backup_id = base36enc(backup->start_time);
+
+		if (!from_replica)
+		{
+			snprintf(name, lengthof(name), "pg_probackup, backup_id %s",
+					 backup_id);
+			params[0] = name;
+
+			res = pgut_execute(backup_conn, "SELECT pg_create_restore_point($1)",
+							   1, params);
+			PQclear(res);
+		}
+		else
+		{
+			uint32		try_count = 0;
+
+			snprintf(name, lengthof(name), "pg_probackup, backup_id %s. Replica Backup",
+					 backup_id);
+			params[0] = name;
+
+			res = pgut_execute(master_conn, "SELECT pg_create_restore_point($1)",
+							   1, params);
+			/* Extract timeline and LSN from result */
+			XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+			/* Calculate LSN */
+			restore_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+			PQclear(res);
+
+			/* Wait for restore_lsn from master */
+			while (true)
+			{
+				XLogRecPtr	min_recovery_lsn;
+
+				res = pgut_execute(backup_conn, "SELECT min_recovery_end_location from pg_control_recovery()",
+								   0, NULL);
+				/* Extract timeline and LSN from result */
+				XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+				/* Calculate LSN */
+				min_recovery_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+				PQclear(res);
+
+				/* restore_lsn was streamed and applied to the replica */
+				if (min_recovery_lsn >= restore_lsn)
+					break;
+
+				sleep(1);
+				if (interrupted)
+					elog(ERROR, "Interrupted during waiting for restore point LSN");
+				try_count++;
+
+				/* Inform user if restore_lsn is absent in first attempt */
+				if (try_count == 1)
+					elog(INFO, "Wait for restore point LSN %X/%X to be streamed "
+						 "to replica",
+						 (uint32) (restore_lsn >> 32), (uint32) restore_lsn);
+
+				if (replica_timeout > 0 && try_count > replica_timeout)
+					elog(ERROR, "Restore point LSN %X/%X could not be "
+						 "streamed to replica in %d seconds",
+						 (uint32) (restore_lsn >> 32), (uint32) restore_lsn,
+						 replica_timeout);
+			}
+		}
+
+		pfree(backup_id);
+	}
 
 	if (!exclusive_backup)
 		/*
@@ -936,6 +1023,15 @@ pg_stop_backup(pgBackup *backup)
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
 	/* Calculate LSN */
 	stop_backup_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+
+	if (!XRecOffIsValid(stop_backup_lsn))
+	{
+		stop_backup_lsn = restore_lsn;
+	}
+
+	if (!XRecOffIsValid(stop_backup_lsn))
+		elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
+			 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
 
 	/* Write backup_label and tablespace_map for backup from replica */
 	if (!exclusive_backup)
@@ -1019,17 +1115,18 @@ pg_stop_backup(pgBackup *backup)
 	if (stream_wal)
 		/* Wait for the completion of stream */
 		pthread_join(stream_thread, NULL);
-	/*
-	 * Wait for stop_lsn to be archived or streamed.
-	 * We wait for stop_lsn in stream mode just in case.
-	 */
-	wait_wal_lsn(stop_backup_lsn);
 
 	/* Fill in fields if that is the correct end of backup. */
 	if (backup != NULL)
 	{
 		char	   *xlog_path,
 					stream_xlog_path[MAXPGPATH];
+
+		/*
+		 * Wait for stop_lsn to be archived or streamed.
+		 * We wait for stop_lsn in stream mode just in case.
+		 */
+		wait_wal_lsn(stop_backup_lsn);
 
 		if (stream_wal)
 		{
@@ -1134,6 +1231,8 @@ static void
 backup_disconnect(bool fatal, void *userdata)
 {
 	pgut_disconnect(backup_conn);
+	if (master_conn)
+		pgut_disconnect(master_conn);
 }
 
 /* Count bytes in file */

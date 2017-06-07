@@ -174,7 +174,7 @@ option_find(int c, pgut_option opts1[])
 static void
 assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 {
-	const char	  *message;
+	const char *message;
 
 	if (opt == NULL)
 	{
@@ -194,6 +194,8 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 	}
 	else
 	{
+		pgut_optsrc	orig_source = opt->source;
+
 		/* can be overwritten if non-command line source */
 		opt->source = src;
 
@@ -236,7 +238,7 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				message = "a 64bit unsigned integer";
 				break;
 			case 's':
-				if (opt->source != SOURCE_DEFAULT)
+				if (orig_source != SOURCE_DEFAULT)
 					free(*(char **) opt->var);
 				*(char **) opt->var = pgut_strdup(optarg);
 				return;
@@ -1011,14 +1013,23 @@ prompt_for_password(const char *username)
 PGconn *
 pgut_connect(const char *dbname)
 {
+	return pgut_connect_extended(host, port, dbname, username, password);
+}
+
+PGconn *
+pgut_connect_extended(const char *pghost, const char *pgport,
+					  const char *dbname, const char *login, const char *pwd)
+{
 	PGconn	   *conn;
+
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
 
 	/* Start the connection. Loop until we have a password if requested by backend. */
 	for (;;)
 	{
-		conn = PQsetdbLogin(host, port, NULL, NULL, dbname, username, password);
+		conn = PQsetdbLogin(pghost, pgport, NULL, NULL,
+							dbname, login, pwd);
 
 		if (PQstatus(conn) == CONNECTION_OK)
 			return conn;
