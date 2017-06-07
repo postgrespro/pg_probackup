@@ -224,10 +224,11 @@ show_backup_list(FILE *out, parray *backup_list)
 {
 	int			i;
 
+	/* if you add new fields here, fix the header */
 	/* show header */
-	fputs("====================================================================================================================\n", out);
-	fputs("ID      Recovery time        Mode    WAL      Current/Parent TLI    Time    Data    Start LSN    Stop LSN   Status  \n", out);
-	fputs("====================================================================================================================\n", out);
+	fputs("===============================================================================================================================\n", out);
+	fputs(" Instance    ID      Recovery time        Mode    WAL      Current/Parent TLI    Time    Data    Start LSN    Stop LSN   Status  \n", out);
+	fputs("===============================================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -256,8 +257,8 @@ show_backup_list(FILE *out, parray *backup_list)
 		parent_tli = get_parent_tli(backup->tli);
 		backup_id = base36enc(backup->start_time);
 
-		fprintf(out, "%-6s  %-19s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%-8X  %2X/%-8X  %-8s\n",
-				backup_id,
+		fprintf(out, " %-11s %-6s  %-19s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%-8X  %2X/%-8X  %-8s\n",
+				instance_name, backup_id,
 				timestamp,
 				pgBackupGetBackupMode(backup),
 				backup->stream ? "STREAM": "ARCHIVE",
