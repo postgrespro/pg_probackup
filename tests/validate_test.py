@@ -2,7 +2,6 @@ import unittest
 import os
 import six
 from helpers.ptrack_helpers import ProbackupTest, ProbackupException
-#from helpers.expected_errors import satisfying_full_backup_not_found, wal_corruption
 from datetime import datetime, timedelta
 from testgres import stop_all
 import subprocess
@@ -22,11 +21,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_validate_wal_unreal_values(self):
-        """
-        make node with archiving
-        make archive backup
-        validate to both real and unreal values
-        """
+        """make node with archiving, make archive backup, validate to both real and unreal values"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="tmp_dirs/validate/{0}".format(fname),
             set_archiving=True,

@@ -2,7 +2,7 @@ import unittest
 import os
 from os import path
 import six
-from .ptrack_helpers import ProbackupTest
+from helpers.ptrack_helpers import ProbackupTest
 from testgres import stop_all
 
 

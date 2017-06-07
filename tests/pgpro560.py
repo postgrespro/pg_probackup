@@ -1,7 +1,7 @@
 import unittest
 import os
 import six
-from .ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
+from helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
 from testgres import stop_all
 import subprocess

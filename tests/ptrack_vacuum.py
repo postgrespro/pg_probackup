@@ -1,7 +1,7 @@
 import unittest
 from sys import exit
 from testgres import get_new_node, stop_all
-from .ptrack_helpers import ProbackupTest, idx_ptrack
+from helpers.ptrack_helpers import ProbackupTest, idx_ptrack
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
