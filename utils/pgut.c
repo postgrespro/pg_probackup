@@ -241,7 +241,10 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				if (orig_source != SOURCE_DEFAULT)
 					free(*(char **) opt->var);
 				*(char **) opt->var = pgut_strdup(optarg);
-				return;
+				if (strcmp(optarg,"") != 0)
+					return;
+				message = "a valid string. But provided: ";
+				break;
 			case 't':
 				if (parse_time(optarg, opt->var))
 					return;
