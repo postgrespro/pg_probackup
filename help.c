@@ -77,20 +77,22 @@ help_pg_probackup(void)
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
-	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
-	printf(_("                 [--replica-timeout]\n"));
+	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
+	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
-	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
-	printf(_("                 [--replica-timeout]\n"));
+	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
+	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("\n  %s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
@@ -137,19 +139,19 @@ static void
 help_backup(void)
 {
 	printf(_("%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
-	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n\n"));
-	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
-	printf(_("                 [--replica-timeout]\n"));
+	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
+	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|PTRACK\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
-	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
 	printf(_("      --archive-timeout            wait timeout for WAL segment archiving\n"));
@@ -177,7 +179,7 @@ help_backup(void)
 	printf(_("      --master-host=host_name      database server host of master\n"));
 	printf(_("      --master-port=port           database server port of master\n"));
 	printf(_("      --master-user=user_name      user name to connect to master\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication in seconds\n"));
 }
 
 static void
@@ -262,8 +264,9 @@ help_set_config(void)
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
-	printf(_("                 [--master-db] [--master-host] [--master-port] [--master-user]\n"));
-	printf(_("                 [--replica-timeout]\n"));
+	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
+	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -300,9 +303,9 @@ help_set_config(void)
 
 	printf(_("\n  Replica options:\n"));
 	printf(_("      --master-db=db_name          database to connect to master\n"));
-	printf(_("      --master-host=host_name      database server host of master\n"));
-	printf(_("      --master-port=port           database server port of master\n"));
-	printf(_("      --master-user=user_name      user name to connect to master\n"));
+	printf(_("      --master-host=host_name=host_name      database server host of master\n"));
+	printf(_("      --master-port=port=port           database server port of master\n"));
+	printf(_("      --master-user=user_name=user_name      user name to connect to master\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
 }
 
