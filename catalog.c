@@ -395,11 +395,11 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "\n#Result backup info\n");
 	fprintf(out, "timelineid = %d\n", backup->tli);
 	/* LSN returned by pg_start_backup */
-	fprintf(out, "start-lsn = %x/%08x\n",
+	fprintf(out, "start-lsn = %X/%X\n",
 			(uint32) (backup->start_lsn >> 32),
 			(uint32) backup->start_lsn);
 	/* LSN returned by pg_stop_backup */
-	fprintf(out, "stop-lsn = %x/%08x\n",
+	fprintf(out, "stop-lsn = %X/%X\n",
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
