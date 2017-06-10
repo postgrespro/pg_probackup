@@ -410,7 +410,7 @@ open_logfile(FILE **file, const char *filename_format)
 	filename = logfile_getname(filename_format, cur_time);
 
 	/* "log_path" was checked in logfile_getname() */
-	snprintf(control, MAXPGPATH, "%s/log_rotation", log_path);
+	snprintf(control, MAXPGPATH, "%s.rotation", filename);
 
 	if (stat(filename, &st) == -1)
 	{
