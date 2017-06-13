@@ -63,7 +63,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s version\n"), PROGRAM_NAME);
 
-	printf(_("\n  %s init -B backup-path -D pgdata-dir\n"), PROGRAM_NAME);
+	printf(_("\n  %s init -B backup-path\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--log-level=log-level]\n"));
@@ -110,7 +110,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
 
-	printf(_("\n  %s add-instance -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("\n  %s add-instance -B backup-dir -D pgdata-dir\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
 
 	printf(_("\n  %s del-instance -B backup-dir\n"), PROGRAM_NAME);
@@ -132,7 +132,6 @@ help_init(void)
 {
 	printf(_("%s init -B backup-path -D pgdata-dir\n\n"), PROGRAM_NAME);
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 }
 
 static void
@@ -321,10 +320,11 @@ help_show_config(void)
 static void
 help_add_instance(void)
 {
-	printf(_("%s add-instance -B backup-dir\n"), PROGRAM_NAME);
+	printf(_("%s add-instance -B backup-dir -D pgdata-dir\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
 	printf(_("      --instance=instance_name     name of the new instance\n"));
 }
 
