@@ -1368,7 +1368,7 @@ backup_files(void *arg)
 			/* copy the file into backup */
 			if (file->is_datafile)
 			{
-				if (is_compressed_data_file(file))
+				if (file->is_cfs)
 				{
 					size_t skip_size = 0;
 					if (backup_compressed_file_partially(file, arguments, &skip_size))
@@ -1378,9 +1378,7 @@ backup_files(void *arg)
 								arguments->to_root,
 								file, skip_size))
 						{
-							/* record as skipped file in file_xxx.txt */
 							file->write_size = BYTES_INVALID;
-							elog(LOG, "skip");
 							continue;
 						}
 					}
@@ -1388,9 +1386,7 @@ backup_files(void *arg)
 								arguments->to_root,
 								file))
 					{
-						/* record as skipped file in file_xxx.txt */
 						file->write_size = BYTES_INVALID;
-						elog(LOG, "skip");
 						continue;
 					}
 				}

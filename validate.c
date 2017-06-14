@@ -135,8 +135,12 @@ pgBackupValidateFiles(void *arg)
 		 */
 		if (file->write_size == BYTES_INVALID)
 			continue;
-		/* We don't compute checksums for compressed data, so skip them */
-		if (file->generation != -1)
+
+		/*
+		 * Currently we don't compute checksums for
+		 * cfs_compressed data files, so skip them.
+		 */
+		if (file->is_cfs)
 			continue;
 
 		/* print progress */

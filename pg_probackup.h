@@ -86,11 +86,12 @@ typedef struct pgFile
 	char	*path;			/* path of the file */
 	char	*ptrack_path;	/* path of the ptrack fork of the relation */
 	int		segno;			/* Segment number for ptrack */
-	uint64	generation;		/* Generation of the compressed file. Set to '-1'
-							 * for non-compressed files. If generation has changed,
-							 * we cannot backup compressed file partially. */
-	int		is_partial_copy; /* for compressed files. Set to '1' if backed up
-							  * via copy_file_partly() */
+	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
+	uint64	generation;		/* Generation of the compressed file.If generation
+							 * has changed, we cannot backup compressed file
+							 * partially. Has no sense if (is_cfs == false). */
+	bool	is_partial_copy; /* If the file was backed up via copy_file_partly().
+							  * Only applies to is_cfs files. */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
@@ -419,7 +420,6 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern void restore_compressed_file(const char *from_root,
 									const char *to_root, pgFile *file);
-extern bool is_compressed_data_file(pgFile *file);
 extern bool backup_compressed_file_partially(pgFile *file,
 											 void *arg,
 											 size_t *skip_size);

@@ -359,10 +359,6 @@ backup_data_file(const char *from_root, const char *to_root,
 
 	FIN_CRC32C(file->crc);
 
-	/* Treat empty file as not-datafile. */
-	if (file->read_size == 0)
-		file->is_datafile = false;
-
 	/*
 	 * If we have pagemap then file can't be a zero size.
 	 * Otherwise, we will clear the last file.
@@ -482,13 +478,10 @@ restore_compressed_file(const char *from_root,
 						const char *to_root,
 						pgFile *file)
 {
-	if (file->is_partial_copy == 0)
+	if (!file->is_partial_copy)
 		copy_file(from_root, to_root, file);
-	else if (file->is_partial_copy == 1)
-		restore_file_partly(from_root, to_root, file);
 	else
-		elog(ERROR, "restore_compressed_file(). Unknown is_partial_copy value %d",
-					file->is_partial_copy);
+		restore_file_partly(from_root, to_root, file);
 }
 
 /*
@@ -625,19 +618,9 @@ restore_data_file(const char *from_root,
 	fclose(out);
 }
 
-/* If someone's want to use this function before correct
- * generation values is set, he can look up for corresponding
- * .cfm file in the file_list
- */
-bool
-is_compressed_data_file(pgFile *file)
-{
-	return (file->generation != -1);
-}
-
 /*
  * Add check that file is not bigger than RELSEG_SIZE.
- * WARNING compressed file can be exceed this limit.
+ * WARNING cfs_compressed file can be exceed this limit.
  * Add compression.
  */
 bool
@@ -696,6 +679,8 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	/* copy content and calc CRC */
 	for (;;)
 	{
+		read_len = 0;
+
 		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
 			break;
 
@@ -711,8 +696,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		/* update CRC */
 		COMP_CRC32C(crc, buf, read_len);
 
-		file->write_size += sizeof(buf);
-		file->read_size += sizeof(buf);
+		file->read_size += read_len;
 	}
 
 	errno_tmp = errno;
@@ -739,10 +723,10 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		/* update CRC */
 		COMP_CRC32C(crc, buf, read_len);
 
-		file->write_size += read_len;
 		file->read_size += read_len;
 	}
 
+	file->write_size = file->read_size;
 	/* finish CRC calculation and store into pgFile */
 	FIN_CRC32C(crc);
 	file->crc = crc;
@@ -980,9 +964,7 @@ copy_file_partly(const char *from_root, const char *to_root,
 	}
 
 	/* add meta information needed for recovery */
-	file->is_partial_copy = 1;
-
-//	elog(LOG, "copy_file_partly(). %s file->write_size %lu", to_path, file->write_size);
+	file->is_partial_copy = true;
 
 	fclose(in);
 	fclose(out);

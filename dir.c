@@ -154,8 +154,9 @@ pgFileInit(const char *path)
 	file->segno = 0;
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
-	file->generation = -1;
-	file->is_partial_copy = 0;
+	file->is_cfs = false;
+	file->generation = 0;
+	file->is_partial_copy = false;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }
@@ -683,8 +684,10 @@ print_file_list(FILE *out, const parray *files, const char *root)
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 #ifdef PGPRO_EE
-		fprintf(out, ",\"CFS_generation\":\"" UINT64_FORMAT "\",\"is_partial_copy\":\"%d\"",
-				file->generation, file->is_partial_copy);
+		if (file->is_cfs)
+			fprintf(out, ",\"is_cfs\":\"%u\" ,\"CFS_generation\":\"" UINT64_FORMAT "\","
+					"\"is_partial_copy\":\"%u\"",
+					file->is_cfs?1:0, file->generation, file->is_partial_copy?1:0);
 #endif
 		fprintf(out, "}\n");
 	}
@@ -855,7 +858,8 @@ dir_read_file_list(const char *root, const char *file_txt)
 					segno;
 #ifdef PGPRO_EE
 		uint64		generation,
-					is_partial_copy;
+					is_partial_copy,
+					is_cfs;
 #endif
 		pgFile	   *file;
 
@@ -871,8 +875,9 @@ dir_read_file_list(const char *root, const char *file_txt)
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 
 #ifdef PGPRO_EE
-		get_control_value(buf, "CFS_generation", NULL, &generation, true);
-		get_control_value(buf, "is_partial_copy", NULL, &is_partial_copy, true);
+		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
+		get_control_value(buf, "CFS_generation", NULL, &generation, false);
+		get_control_value(buf, "is_partial_copy", NULL, &is_partial_copy, false);
 #endif
 		if (root)
 			join_path_components(filepath, root, path);
@@ -890,8 +895,9 @@ dir_read_file_list(const char *root, const char *file_txt)
 			file->linked = pgut_strdup(linked);
 		file->segno = (int) segno;
 #ifdef PGPRO_EE
+		file->is_cfs = is_cfs ? true : false;
 		file->generation = generation;
-		file->is_partial_copy = (int) is_partial_copy;
+		file->is_partial_copy = is_partial_copy ? true : false;
 #endif
 
 		parray_append(files, file);

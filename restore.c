@@ -673,10 +673,15 @@ restore_files(void *arg)
 			continue;
 		}
 
-		/* restore file */
+		/*
+		 * restore the file.
+		 * We treat datafiles separately, cause they were backed up block by
+		 * block and have BackupPageHeader meta information, so we cannot just
+		 * copy the file from backup.
+		 */
 		if (file->is_datafile)
 		{
-			if (is_compressed_data_file(file))
+			if (file->is_cfs)
 				restore_compressed_file(from_root, pgdata, file);
 			else
 				restore_data_file(from_root, pgdata, file, arguments->backup);
