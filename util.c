@@ -27,7 +27,7 @@ base36enc(long unsigned int value)
 		buffer[--offset] = base36[value % 36];
 	} while (value /= 36);
 
-	return strdup(&buffer[offset]); // warning: this must be free-d by the user
+	return strdup(&buffer[offset]); /* warning: this must be free-d by the user */
 }
 
 long unsigned int

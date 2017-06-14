@@ -86,9 +86,9 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->master_port = NULL;
 	config->master_db = NULL;
 	config->master_user = NULL;
-	config->replica_timeout = INT_MIN;	// INT_MIN means "undefined"
+	config->replica_timeout = INT_MIN;	/* INT_MIN means "undefined" */
 
-	config->log_level = INT_MIN;		// INT_MIN means "undefined"
+	config->log_level = INT_MIN;		/* INT_MIN means "undefined" */
 	config->log_filename = NULL;
 	config->error_log_filename = NULL;
 	config->log_directory = NULL;

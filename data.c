@@ -253,6 +253,9 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
  * Backup data file in the from_root directory to the to_root directory with
  * same relative path. If prev_backup_start_lsn is not NULL, only pages with
  * higher lsn will be copied.
+ * Not just copy file, but read it block by block (use bitmap in case of
+ * incremental backup), validate checksum, optionally compress and write to
+ * backup with special header.
  */
 bool
 backup_data_file(const char *from_root, const char *to_root,
@@ -455,8 +458,6 @@ restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
 		write_size += read_len;
 	}
 
-// 	elog(LOG, "restore_file_partly(). %s write_size %lu, file->write_size %lu",
-// 			   file->path, write_size, file->write_size);
 
 	/* update file permission */
 	if (chmod(to_path, file->mode) == -1)
@@ -572,27 +573,8 @@ restore_data_file(const char *from_root,
 		else
 			memcpy(page.data, compressed_page.data, BLCKSZ);
 
-		/* update checksum because we are not save whole */
-		if(backup->checksum_version)
-		{
-			bool is_zero_page = false;
-
-			if(page.page_data.pd_upper == 0)
-			{
-				int i;
-				for(i = 0; i < BLCKSZ && page.data[i] == 0; i++);
-				if (i == BLCKSZ)
-					is_zero_page = true;
-			}
-
-			/* skip calc checksum if zero page */
-			if (!is_zero_page)
-				((PageHeader) page.data)->pd_checksum = pg_checksum_page(page.data, file->segno * RELSEG_SIZE + header.block);
-		}
-
 		/*
-		 * Seek and write the restored page. Backup might have holes in
-		 * differential backups.
+		 * Seek and write the restored page.
 		 */
 		blknum = header.block;
 		if (fseek(out, blknum * BLCKSZ, SEEK_SET) < 0)
@@ -619,9 +601,9 @@ restore_data_file(const char *from_root,
 }
 
 /*
- * Add check that file is not bigger than RELSEG_SIZE.
- * WARNING cfs_compressed file can be exceed this limit.
- * Add compression.
+ * Copy file to backup.
+ * We do not apply compression to these files, because
+ * it is either small control file or already compressed cfs file.
  */
 bool
 copy_file(const char *from_root, const char *to_root, pgFile *file)
