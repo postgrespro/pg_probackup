@@ -40,6 +40,7 @@ pgBackupValidate(pgBackup *backup)
 	validate_files_args *validate_threads_args[num_threads];
 	int			i;
 
+	/* We need free() this later */
 	backup_id_string = base36enc(backup->start_time);
 
 	if (backup->status != BACKUP_STATUS_OK &&
@@ -260,8 +261,14 @@ do_validate_instance(void)
 	/* Valiate each backup along with its xlog files. */
 	for (i = 0; i < parray_num(backups); i++)
 	{
+		char	   *backup_id;
+
 		current_backup = (pgBackup *) parray_get(backups, i);
-		elog(INFO, "Validate backup %s", base36enc(current_backup->start_time));
+		backup_id = base36enc(current_backup->start_time);
+
+		elog(INFO, "Validate backup %s", backup_id);
+
+		free(backup_id);
 
 		if (current_backup->backup_mode != BACKUP_MODE_FULL)
 		{

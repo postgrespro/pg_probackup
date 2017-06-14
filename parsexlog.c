@@ -274,6 +274,7 @@ validate_wal(pgBackup *backup,
 			 TimeLineID tli)
 {
 	XLogRecPtr	startpoint = backup->start_lsn;
+	char	   *backup_id;
 	XLogRecord *record;
 	XLogReaderState *xlogreader;
 	char	   *errormsg;
@@ -283,17 +284,20 @@ validate_wal(pgBackup *backup,
 	char		last_timestamp[100],
 				target_timestamp[100];
 	bool		all_wal = false;
-	char 		backup_xlog_path[MAXPGPATH];
+	char		backup_xlog_path[MAXPGPATH];
+
+	/* We need free() this later */
+	backup_id = base36enc(backup->start_time);
 
 	if (!XRecOffIsValid(backup->start_lsn))
 		elog(ERROR, "Invalid start_lsn value %X/%X of backup %s",
 			 (uint32) (backup->start_lsn >> 32), (uint32) (backup->start_lsn),
-			 base36enc(backup->start_time));
+			 backup_id);
 
 	if (!XRecOffIsValid(backup->stop_lsn))
 		elog(ERROR, "Invalid stop_lsn value %X/%X of backup %s",
 			 (uint32) (backup->stop_lsn >> 32), (uint32) (backup->stop_lsn),
-			 base36enc(backup->start_time));
+			 backup_id);
 
 	/*
 	 * Check that the backup has all wal files needed
@@ -302,12 +306,14 @@ validate_wal(pgBackup *backup,
 	if (backup->stream)
 	{
 		sprintf(backup_xlog_path, "/%s/%s/%s/%s",
-			backup_instance_path, base36enc(backup->start_time), DATABASE_DIR, PG_XLOG_DIR);
+				backup_instance_path, backup_id, DATABASE_DIR, PG_XLOG_DIR);
 
 		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli);
 	}
 	else
 		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, tli);
+
+	free(backup_id);
 
 	/* If recovery target is provided, ensure that archive exists. */
 	if (dir_is_empty(archivedir)
