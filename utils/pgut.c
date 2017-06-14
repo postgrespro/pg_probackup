@@ -1174,6 +1174,24 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 	return true;
 }
 
+void
+pgut_cancel(PGconn* conn)
+{
+	PGcancel *cancel_conn = PQgetCancel(conn);
+	char		errbuf[256];
+
+	if (cancel_conn != NULL)
+	{
+		if (PQcancel(cancel_conn, errbuf, sizeof(errbuf)))
+			elog(WARNING, "Cancel request sent");
+		else
+			elog(WARNING, "Cancel request failed");
+	}
+
+	if (cancel_conn)
+		PQfreeCancel(cancel_conn);
+}
+
 int
 pgut_wait(int num, PGconn *connections[], struct timeval *timeout)
 {

@@ -909,6 +909,9 @@ pg_stop_backup(pgBackup *backup)
 	uint32		xlogid;
 	uint32		xrecoff;
 	XLogRecPtr	restore_lsn;
+	bool sent = false;
+	int pg_stop_backup_timeout = 0;
+	int is_busy = 1;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
@@ -999,23 +1002,72 @@ pg_stop_backup(pgBackup *backup)
 		pfree(backup_id);
 	}
 
+	/*
+	 * send pg_stop_backup asynchronously because we could came
+	 * here from backup_cleanup() after some error caused by
+	 * postgres archive_command problem and in this case we will
+	 * wait for pg_stop_backup() forever.
+	 */
 	if (!exclusive_backup)
 		/*
 		 * Stop the non-exclusive backup. Besides stop_lsn it returns from
 		 * pg_stop_backup(false) copy of the backup label and tablespace map
 		 * so they can be written to disk by the caller.
 		 */
-		res = pgut_execute(backup_conn,
+		sent = pgut_send(backup_conn,
 						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
 						   " current_timestamp(0)::timestamp"
 						   " FROM pg_stop_backup(false)",
-						   0, NULL);
+						   0, NULL, WARNING);
 	else
-		res = pgut_execute(backup_conn,
+		sent = pgut_send(backup_conn,
 						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
 						   " current_timestamp(0)::timestamp"
 						   " FROM pg_stop_backup()",
-						   0, NULL);
+						   0, NULL, WARNING);
+
+	if (!sent)
+		elog(WARNING, "Failed to send pg_stop_backup query");
+
+
+	/*
+	 * Wait for the result of pg_stop_backup(),
+	 * but no longer than PG_STOP_BACKUP_TIMEOUT seconds
+	 */
+	elog(INFO, "wait for pg_stop_backup()");
+	do
+	{
+		/*
+		 * PQisBusy returns 1 if a command is busy, that is, PQgetResult would
+		 * block waiting for input. A 0 return indicates that PQgetResult can
+		 * be called with assurance of not blocking
+		 */
+		is_busy = PQisBusy(backup_conn);
+		pg_stop_backup_timeout++;
+		sleep(1);
+
+		if (interrupted)
+		{
+			pgut_cancel(backup_conn);
+			elog(ERROR, "interrupted during waiting for pg_stop_backup");
+		}
+
+	} while (is_busy && pg_stop_backup_timeout < PG_STOP_BACKUP_TIMEOUT);
+
+	/*
+	 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
+	 * send an interrupt.
+	 */
+	if (is_busy)
+	{
+		pgut_cancel(backup_conn);
+		elog(ERROR, "pg_stop_backup doesn't finish in 300 seconds.");
+	}
+
+	res = PQgetResult(backup_conn);
+
+	if (!res)
+		elog(ERROR, "pg_stop backup() failed");
 
 	backup_in_progress = false;
 

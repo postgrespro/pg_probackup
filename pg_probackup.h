@@ -33,6 +33,7 @@
 
 #include "datapagemap.h"
 
+# define PG_STOP_BACKUP_TIMEOUT 300
 /*
  * Macro needed to parse ptrack.
  * NOTE Keep those values syncronised with definitions in ptrack.h

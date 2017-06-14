@@ -570,8 +570,6 @@ restore_data_file(const char *from_root,
 			if (uncompressed_size != BLCKSZ)
 				elog(ERROR, "page uncompressed to %ld bytes. != BLCKSZ", uncompressed_size);
 		}
-		else
-			memcpy(page.data, compressed_page.data, BLCKSZ);
 
 		/*
 		 * Seek and write the restored page.
@@ -580,9 +578,20 @@ restore_data_file(const char *from_root,
 		if (fseek(out, blknum * BLCKSZ, SEEK_SET) < 0)
 			elog(ERROR, "cannot seek block %u of \"%s\": %s",
 				 blknum, to_path, strerror(errno));
-		if (fwrite(page.data, 1, sizeof(page), out) != sizeof(page))
-			elog(ERROR, "cannot write block %u of \"%s\": %s",
-				 blknum, file->path, strerror(errno));
+
+		if (header.compressed_size < BLCKSZ)
+		{
+			if (fwrite(page.data, 1, BLCKSZ, out) != BLCKSZ)
+				elog(ERROR, "cannot write block %u of \"%s\": %s",
+					blknum, file->path, strerror(errno));
+		}
+		else
+		{
+			/* if page wasn't compressed, we've read full block */
+			if (fwrite(compressed_page.data, 1, BLCKSZ, out) != BLCKSZ)
+				elog(ERROR, "cannot write block %u of \"%s\": %s",
+					blknum, file->path, strerror(errno));
+		}
 	}
 
 	/* update file permission */
