@@ -386,9 +386,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "#Configuration\n");
 	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
 	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
-	fprintf(out, "compress_alg = %s\n", deparse_compress_alg(compress_alg));
-	fprintf(out, "compress_level = %d\n", compress_level);
-	fprintf(out, "from_replica = %s\n", from_replica?"true":"false");
+	fprintf(out, "compress-alg = %s\n", deparse_compress_alg(compress_alg));
+	fprintf(out, "compress-level = %d\n", compress_level);
+	fprintf(out, "from-replica = %s\n", from_replica?"true":"false");
 	
 	fprintf(out, "\n#Compatibility\n");
 	fprintf(out, "block-size = %u\n", backup->block_size);
@@ -471,6 +471,9 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
+	char	   *compress_alg = NULL;
+	int		   *compress_level;
+	bool	   *from_replica;
 
 	pgut_option options[] =
 	{
@@ -489,6 +492,9 @@ readBackupControlFile(const char *path)
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
+		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
+		{'u', 0, "compress-level",		&compress_level, SOURCE_FILE_STRICT},
+		{'b', 0, "from-replica",		&from_replica, SOURCE_FILE_STRICT},
 		{0}
 	};
 
