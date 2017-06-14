@@ -911,7 +911,6 @@ pg_stop_backup(pgBackup *backup)
 	XLogRecPtr	restore_lsn;
 	bool sent = false;
 	int pg_stop_backup_timeout = 0;
-	int is_busy = 1;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
@@ -1035,36 +1034,36 @@ pg_stop_backup(pgBackup *backup)
 	 * but no longer than PG_STOP_BACKUP_TIMEOUT seconds
 	 */
 	elog(INFO, "wait for pg_stop_backup()");
-	do
-	{
-		/*
-		 * PQisBusy returns 1 if a command is busy, that is, PQgetResult would
-		 * block waiting for input. A 0 return indicates that PQgetResult can
-		 * be called with assurance of not blocking
-		 */
-		is_busy = PQisBusy(backup_conn);
-		pg_stop_backup_timeout++;
-		sleep(1);
 
-		if (interrupted)
+	while (1)
+	{
+		if (!PQconsumeInput(backup_conn) || PQisBusy(backup_conn))
 		{
-			pgut_cancel(backup_conn);
-			elog(ERROR, "interrupted during waiting for pg_stop_backup");
+				pg_stop_backup_timeout++;
+				sleep(1);
+
+				if (interrupted)
+				{
+					pgut_cancel(backup_conn);
+					elog(ERROR, "interrupted during waiting for pg_stop_backup");
+				}
+				/*
+				 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
+				 * send an interrupt.
+				 */
+				if (pg_stop_backup_timeout > PG_STOP_BACKUP_TIMEOUT)
+				{
+					pgut_cancel(backup_conn);
+					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
+						 PG_STOP_BACKUP_TIMEOUT);
+				}
 		}
-
-	} while (is_busy && pg_stop_backup_timeout < PG_STOP_BACKUP_TIMEOUT);
-
-	/*
-	 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
-	 * send an interrupt.
-	 */
-	if (is_busy)
-	{
-		pgut_cancel(backup_conn);
-		elog(ERROR, "pg_stop_backup doesn't finish in 300 seconds.");
+		else
+		{
+			res = PQgetResult(backup_conn);
+			break;
+		}
 	}
-
-	res = PQgetResult(backup_conn);
 
 	if (!res)
 		elog(ERROR, "pg_stop backup() failed");
