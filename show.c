@@ -256,7 +256,6 @@ show_backup_list(FILE *out, parray *backup_list)
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);
 		backup_id = base36enc(backup->start_time);
-		elog(INFO, "%s : %ld", backup_id, backup->data_bytes);
 
 		fprintf(out, " %-11s %-6s  %-19s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%-8X  %2X/%-8X  %-8s\n",
 				instance_name, backup_id,
