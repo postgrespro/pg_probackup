@@ -386,6 +386,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "#Configuration\n");
 	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
 	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
+	fprintf(out, "compress_alg = %s\n", deparse_compress_alg(compress_alg));
+	fprintf(out, "compress_level = %d\n", compress_level);
+	fprintf(out, "from_replica = %s\n", from_replica?"true":"false");
 	
 	fprintf(out, "\n#Compatibility\n");
 	fprintf(out, "block-size = %u\n", backup->block_size);
