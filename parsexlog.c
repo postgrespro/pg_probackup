@@ -315,20 +315,30 @@ validate_wal(pgBackup *backup,
 
 	free(backup_id);
 
-	/* If recovery target is provided, ensure that archive exists. */
-	if (dir_is_empty(archivedir)
-		&& (TransactionIdIsValid(target_xid) || target_time != 0))
-			elog(ERROR, "WAL archive is empty. You cannot restore backup to a recovery target without WAL archive.");
+	/*
+	 * If recovery target is provided check that we can restore backup to a
+	 * recoverty target time or xid.
+	 */
+	if (!TransactionIdIsValid(target_xid) || target_time == 0)
+	{
+		/* Recoverty target is not given so exit */
+		elog(INFO, "backup validation completed successfully");
+		return;
+	}
+
+	/*
+	 * If recovery target is provided, ensure that archive files exist in
+	 * archive directory.
+	 */
+	if (dir_is_empty(archivedir))
+		elog(ERROR, "WAL archive is empty. You cannot restore backup to a recovery target without WAL archive.");
 
 	/*
 	 * Check if we have in archive all files needed to restore backup
 	 * up to the given recovery target.
 	 * In any case we cannot restore to the point before stop_lsn.
 	 */
-	if (backup->stream)
-		private.archivedir = backup_xlog_path;
-	else
-		private.archivedir = archivedir;
+	private.archivedir = archivedir;
 
 	private.tli = tli;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
