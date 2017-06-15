@@ -320,8 +320,11 @@ validate_wal(pgBackup *backup,
 	 * recoverty target time or xid.
 	 */
 	if (!TransactionIdIsValid(target_xid) || target_time == 0)
+	{
 		/* Recoverty target is not given so exit */
+		elog(INFO, "backup validation completed successfully");
 		return;
+	}
 
 	/*
 	 * If recovery target is provided, ensure that archive files exist in
