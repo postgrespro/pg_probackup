@@ -325,7 +325,11 @@ validate_wal(pgBackup *backup,
 	 * up to the given recovery target.
 	 * In any case we cannot restore to the point before stop_lsn.
 	 */
-	private.archivedir = archivedir;
+	if (backup->stream)
+		private.archivedir = backup_xlog_path;
+	else
+		private.archivedir = archivedir;
+
 	private.tli = tli;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
 	if (xlogreader == NULL)
