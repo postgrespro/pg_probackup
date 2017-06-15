@@ -30,13 +30,11 @@ all: checksrcdir datapagemap.h logging.h receivelog.h streamutil.h pg_probackup
 
 MAKE_GLOBAL="../../src/Makefile.global"
 TEST_GLOBAL:=$(shell test -e ../../src/Makefile.global)
-ifeq ($(.SHELLSTATUS),1)
+
+ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
-
-.PHONY: checksrcdir
-checksrcdir:
 ifndef top_srcdir
 	@echo "You must have PostgreSQL source tree available to compile."
 	@echo "Pass the path to the PostgreSQL source tree to make, in the top_srcdir"
@@ -44,13 +42,12 @@ ifndef top_srcdir
 	@exit 1
 endif
 else
-#TODO: fix me
-REGRESS =
 subdir=contrib/pg_probackup
 top_builddir=../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
+
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS}
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
