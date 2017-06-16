@@ -252,6 +252,9 @@ pg_log(eLogType type, const char *fmt, ...)
 		case PG_FATAL:
 			elevel = ERROR;
 			break;
+		default:
+			elog(ERROR, "invalid logging level: %d", type);
+			break;
 	}
 
 	/*
