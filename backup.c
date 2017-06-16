@@ -916,7 +916,7 @@ pg_stop_backup(pgBackup *backup)
 	PGresult   *res;
 	uint32		xlogid;
 	uint32		xrecoff;
-	XLogRecPtr	restore_lsn;
+	XLogRecPtr	restore_lsn = InvalidXLogRecPtr ;
 	bool sent = false;
 	int pg_stop_backup_timeout = 0;
 

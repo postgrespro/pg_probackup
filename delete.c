@@ -130,7 +130,7 @@ do_retention_purge(void)
 	size_t		i;
 	time_t		days_threshold = time(NULL) - (retention_window * 60 * 60 * 24);
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
-	TimeLineID	oldest_tli;
+	TimeLineID	oldest_tli = 0;
 	bool		keep_next_backup = true;	/* Do not delete first full backup */
 	bool		backup_deleted = false;		/* At least one backup was deleted */
 
