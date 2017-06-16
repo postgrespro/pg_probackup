@@ -154,7 +154,11 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	fprintf(out, "#Compression parameters:\n");
 
 	fprintf(out, "compress-algorithm = %s\n", deparse_compress_alg(config->compress_alg));
-	fprintf(out, "compress-level = %d\n", config->compress_level);
+
+	if (compress_level != config->compress_level)
+		fprintf(out, "compress-level = %d\n", compress_level);
+	else
+		fprintf(out, "compress-level = %d\n", config->compress_level);
 }
 
 void

@@ -353,6 +353,13 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
+	if (backup_subcmd != SET_CONFIG)
+	{
+		if (compress_level != DEFAULT_COMPRESS_LEVEL
+			&& compress_alg == NONE_COMPRESS)
+			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
+	}
+
 	if (compress_level < 0 || compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
