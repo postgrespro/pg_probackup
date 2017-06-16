@@ -579,9 +579,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 {
 	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
 	uint32		targetPageOff;
-	XLogSegNo	targetSegNo;
 
-	XLByteToSeg(targetPagePtr, targetSegNo);
 	targetPageOff = targetPagePtr % XLogSegSize;
 
 	/*
@@ -643,8 +641,6 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			 xlogfpath, strerror(errno));
 		return -1;
 	}
-
-	Assert(targetSegNo == xlogreadsegno);
 
 	*pageTLI = private->tli;
 	return XLOG_BLCKSZ;
