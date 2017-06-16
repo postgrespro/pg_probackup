@@ -61,7 +61,7 @@ do_configure(bool show_only)
 
 	if (compress_alg != NOT_DEFINED_COMPRESS)
 		config->compress_alg = compress_alg;
-	if (compress_level != -1)
+	if (compress_level != DEFAULT_COMPRESS_LEVEL)
 		config->compress_level = compress_level;
 
 	if (show_only)
@@ -154,12 +154,7 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	fprintf(out, "#Compression parameters:\n");
 
 	fprintf(out, "compress-algorithm = %s\n", deparse_compress_alg(config->compress_alg));
-
-	/* if none value is set, print default */
-	if (config->compress_level == -1)
-		fprintf(out, "compress-level = %u\n", DEFAULT_COMPRESS_LEVEL);
-	else
-		fprintf(out, "compress-level = %u\n", config->compress_level);
+	fprintf(out, "compress-level = %u\n", config->compress_level);
 }
 
 void
