@@ -196,6 +196,8 @@ typedef struct pgBackup
 	 * BYTES_INVALID means nothing was backed up.
 	 */
 	int64			data_bytes;
+	/* Size of WAL files in archive needed to restore this backup */
+	int64			wal_bytes;
 
 	/* Fields needed for compatibility check */
 	uint32			block_size;

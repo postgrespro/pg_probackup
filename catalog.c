@@ -427,6 +427,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->data_bytes != BYTES_INVALID)
 		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
+	if (backup->data_bytes != BYTES_INVALID)
+		fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
+
 	fprintf(out, "status = %s\n", status2str(backup->status));
 
 	/* 'parent_backup' is set if it is incremental backup */
@@ -486,6 +489,7 @@ readBackupControlFile(const char *path)
 		{'U', 0, "recovery-xid",		&backup->recovery_xid, SOURCE_FILE_STRICT},
 		{'t', 0, "recovery-time",		&backup->recovery_time, SOURCE_FILE_STRICT},
 		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
+		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum_version",	&backup->checksum_version, SOURCE_FILE_STRICT},

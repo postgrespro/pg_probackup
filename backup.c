@@ -374,11 +374,12 @@ do_backup_database(parray *backup_list)
 	{
 		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
 
-		if (!S_ISREG(file->mode))
-			continue;
+		if (S_ISDIR(file->mode))
+			current.data_bytes += 4096;
 
 		/* Count the amount of the data actually copied */
-		current.data_bytes += file->write_size;
+		if (S_ISREG(file->mode))
+			current.data_bytes += file->write_size;
 	}
 
 	if (backup_files_list)
@@ -481,6 +482,13 @@ do_backup(void)
 	/* backup data */
 	do_backup_database(backup_list);
 	pgut_atexit_pop(backup_cleanup, NULL);
+
+	/* compute size of wal files of this backup stored in the archive */
+	if (!current.stream)
+	{
+		current.wal_bytes = XLOG_SEG_SIZE *
+							(current.stop_lsn/XLogSegSize - current.start_lsn/XLogSegSize + 1);
+	}
 
 	/* Backup is done. Update backup status */
 	current.end_time = time(NULL);
