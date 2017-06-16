@@ -71,7 +71,7 @@ uint32		retention_window = 0;
 
 /* compression options */
 CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
-int			compress_level = -1;
+int			compress_level = DEFAULT_COMPRESS_LEVEL;
 
 /* other options */
 char	   *instance_name;
@@ -353,8 +353,7 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
-	if (compress_level != -1 &&
-		(compress_level < 0 || compress_level > 9))
+	if (compress_level < 0 || compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
 	/* do actual operation */
