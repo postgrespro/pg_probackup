@@ -235,7 +235,7 @@ void
 pg_log(eLogType type, const char *fmt, ...)
 {
 	va_list		args;
-	int			elevel;
+	int			elevel = INFO;
 
 	/* Transform logging level from eLogType to utils/logger.h levels */
 	switch (type)

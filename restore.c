@@ -450,7 +450,7 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 
 			/* Extract link name from relative path */
 			link_sep = first_dir_separator(link_ptr);
-			if (link_sep)
+			if (link_sep != NULL)
 			{
 				int			len = link_sep - link_ptr;
 				strncpy(link_name, link_ptr, len);
@@ -484,8 +484,12 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 					 */
 					if (strcmp(dir_created, linked_path) == 0)
 					{
-						/* Create rest of directories */
-						if (link_sep && (link_sep + 1))
+						/*
+						 * Create rest of directories.
+						 * First check is there any directory name after
+						 * separator.
+						 */
+						if (link_sep != NULL && *(link_sep + 1) != '\0')
 							goto create_directory;
 						else
 							continue;
@@ -528,8 +532,11 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 				/* Save linked directory */
 				set_tablespace_created(link_name, linked_path);
 
-				/* Create rest of directories */
-				if (link_sep && (link_sep + 1))
+				/*
+				 * Create rest of directories.
+				 * First check is there any directory name after separator.
+				 */
+				if (link_sep != NULL && *(link_sep + 1) != '\0')
 					goto create_directory;
 
 				continue;

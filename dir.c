@@ -635,7 +635,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 					path[MAXPGPATH];
 		pgFile	   *file;
 
-		if (sscanf(buf, "%s %s", link_name, path) != 2)
+		if (sscanf(buf, "%1023s %1023s", link_name, path) != 2)
 			elog(ERROR, "invalid format found in \"%s\"", map_path);
 
 		file = pgut_new(pgFile);
