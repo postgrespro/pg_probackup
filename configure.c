@@ -129,7 +129,7 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	if (config->master_user)
 		fprintf(out, "master-user = %s\n", config->master_user);
 	if (config->replica_timeout != INT_MIN)
-		fprintf(out, "replica_timeout = %u\n", config->replica_timeout);
+		fprintf(out, "replica_timeout = %d\n", config->replica_timeout);
 
 	fprintf(out, "#Logging parameters:\n");
 	if (config->log_level != INT_MIN)
@@ -154,7 +154,7 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	fprintf(out, "#Compression parameters:\n");
 
 	fprintf(out, "compress-algorithm = %s\n", deparse_compress_alg(config->compress_alg));
-	fprintf(out, "compress-level = %u\n", config->compress_level);
+	fprintf(out, "compress-level = %d\n", config->compress_level);
 }
 
 void
