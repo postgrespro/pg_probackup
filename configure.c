@@ -99,7 +99,7 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->retention_window = 0;
 
 	config->compress_alg = NOT_DEFINED_COMPRESS;
-	config->compress_level = -1;
+	config->compress_level = DEFAULT_COMPRESS_LEVEL;
 }
 
 void

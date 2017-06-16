@@ -13,7 +13,7 @@
 #include "postgres_fe.h"
 
 #include <limits.h>
-#include "libpq-fe.h"
+#include <libpq-fe.h>
 
 #ifndef WIN32
 #include <sys/mman.h>
