@@ -90,8 +90,8 @@ do_restore_or_validate(time_t target_backup_id,
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
-	int			dest_backup_index;
-	int			base_full_backup_index;
+	int			dest_backup_index = 0;
+	int			base_full_backup_index = 0;
 	char 	   *action = is_restore ? "Restore":"Validate";
 
 	if (is_restore)
