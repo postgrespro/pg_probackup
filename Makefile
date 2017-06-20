@@ -6,9 +6,10 @@ OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
 	src/xlogreader.o src/streamutil.o src/receivelog.o \
 	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o
 
-EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h streamutil.c streamutil.h logging.h
+EXTRA_CLEAN = src/datapagemap.c src/datapagemap.h src/xlogreader.c \
+	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h src/logging.h
 
-all: checksrcdir datapagemap.h logging.h receivelog.h streamutil.h pg_probackup
+all: checksrcdir src/datapagemap.h src/logging.h src/receivelog.h src/streamutil.h pg_probackup
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -36,7 +37,7 @@ ifeq ($(PORTNAME), aix)
 endif
 
 envtest:
-	: top_srcdir=$(top_srcdir)
+	: top_srcdir=$( )
 	: libpq_srcdir = $(libpq_srcdir)
 
 # This rule's only purpose is to give the user instructions on how to pass
@@ -50,20 +51,24 @@ ifndef top_srcdir
 	@exit 1
 endif
 
+all: checksrcdir src/datapagemap.h src/logging.h src/receivelog.h src/streamutil.h pg_probackup
+
+
 # Those files are symlinked from the PostgreSQL sources.
-xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/%
-	rm -f $@ && $(LN_S) $< .
-datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/%
-	rm -f $@ && $(LN_S) $< .
-datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/%
-	rm -f  && $(LN_S) $< .
-logging.h: % : $(top_srcdir)/src/bin/pg_rewind/%
-	rm -f  && $(LN_S) $< .
-receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .
-receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .
-streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .
-streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .
+src/datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
+	rm -f $@ && $(LN_S) $< src/datapagemap.h
+
+src/xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/xlogreader.c
+	rm -f $@ && $(LN_S) $< src/xlogreader.c
+src/datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
+	rm -f $@ && $(LN_S) $< src/datapagemap.c
+src/logging.h: % : $(top_srcdir)/src/bin/pg_rewind/logging.h
+	rm -f $@ && $(LN_S) $< src
+src/receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
+	rm -f $@ && $(LN_S) $< src
+src/receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
+	rm -f $@ && $(LN_S) $< src
+src/streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
+	rm -f $@ && $(LN_S) $< src
+src/streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
+	rm -f $@ && $(LN_S) $< src
