@@ -53,20 +53,19 @@ endif
 
 
 # Those files are symlinked from the PostgreSQL sources.
-src/datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
-	rm -f $@ && $(LN_S) $< src/datapagemap.h
-
 src/xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/xlogreader.c
-	rm -f $@ && $(LN_S) $< src/xlogreader.c
+	rm -f $@ && $(LN_S) ../$< ./src/xlogreader.c
 src/datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
-	rm -f $@ && $(LN_S) $< src/datapagemap.c
+	rm -f $@ && $(LN_S) ../$< ./src/datapagemap.c
+src/datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
+	rm -f $@ && $(LN_S) ../$< src/datapagemap.h
 src/logging.h: % : $(top_srcdir)/src/bin/pg_rewind/logging.h
-	rm -f $@ && $(LN_S) $< src
+	rm -f $@ && $(LN_S) ../$< ./src
 src/receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
-	rm -f $@ && $(LN_S) $< src
+	rm -f $@ && $(LN_S) ../$< ./src
 src/receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
-	rm -f $@ && $(LN_S) $< src
+	rm -f $@ && $(LN_S) ../$< ./src
 src/streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
-	rm -f $@ && $(LN_S) $< src
+	rm -f $@ && $(LN_S) ../$< ./src
 src/streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
-	rm -f $@ && $(LN_S) $< src
+	rm -f $@ && $(LN_S) ../$< ./src
