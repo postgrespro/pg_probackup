@@ -10,6 +10,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(OptionTest, self).__init__(*args, **kwargs)
+        self.module_name = 'show'
 
     @classmethod
     def tearDownClass(cls):
@@ -17,39 +18,48 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def show_test_1(self):
+    def test_show_1(self):
         """Status DONE and OK"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/show/{0}".format(fname),
-            set_archiving=True,
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
 
         self.assertEqual(
-            self.backup_pb(node, options=["--quiet"]),
+            self.backup_node(backup_dir, 'node', node, options=["--log-level=panic"]),
             None
         )
-        self.assertIn(six.b("OK"), self.show_pb(node, as_text=True))
+        self.assertIn(six.b("OK"), self.show_pb(backup_dir, 'node', as_text=True))
         node.stop()
 
+    # @unittest.skip("skip")
     def test_corrupt_2(self):
         """Status CORRUPT"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/show/{0}".format(fname),
-            set_archiving=True,
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
-        id_backup = self.backup_pb(node)
 
-        path.join(self.backup_dir(node), "backups", id_backup.decode("utf-8"), "database", "postgresql.conf")
-        os.remove(path.join(self.backup_dir(node), "backups", id_backup.decode("utf-8"), "database", "postgresql.conf"))
+        backup_id = self.backup_node(backup_dir, 'node', node)
 
-        self.validate_pb(node, id_backup)
-        self.assertIn(six.b("CORRUPT"), self.show_pb(node, as_text=True))
+        # delete file which belong to backup
+        file = path.join(backup_dir, "backups", "node", backup_id.decode("utf-8"), "database", "postgresql.conf")
+        os.remove(file)
+
+        self.validate_pb(backup_dir, 'node', backup_id)
+        self.assertIn(six.b("CORRUPT"), self.show_pb(backup_dir, as_text=True))
         node.stop()

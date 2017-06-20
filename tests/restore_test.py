@@ -1,52 +1,57 @@
 import unittest
 import os
-from os import path
 import six
 from helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from testgres import stop_all
 import subprocess
 from datetime import datetime
 import shutil
+from sys import exit
 
 
 class RestoreTest(ProbackupTest, unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(RestoreTest, self).__init__(*args, **kwargs)
+        self.module_name = 'restore'
 
     @classmethod
     def tearDownClass(cls):
         stop_all()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_restore_full_to_latest(self):
         """recovery to latest from full backup"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
+
         node.pgbench_init(scale=2)
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
-        self.backup_pb(node)
+        backup_id = self.backup_node(backup_dir, 'node', node)
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
         # 1 - Test recovery from latest
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         # 2 - Test that recovery.conf was created
-        recovery_conf = path.join(node.data_dir, "recovery.conf")
-        self.assertEqual(path.isfile(recovery_conf), True)
+        recovery_conf = os.path.join(node.data_dir, "recovery.conf")
+        self.assertEqual(os.path.isfile(recovery_conf), True)
 
         node.start({"-t": "600"})
 
@@ -55,35 +60,38 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_full_page_to_latest(self):
         """recovery to latest from full + page backups"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
+
         node.pgbench_init(scale=2)
 
-        with open(path.join(node.logs_dir, "backup_1.log"), "wb") as backup_log:
-            backup_log.write(self.backup_pb(node))
+        self.backup_node(backup_dir, 'node', node)
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_pb(node, backup_type="page")
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="page")
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -92,29 +100,33 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_to_timeline(self):
         """recovery to target timeline"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
+
         node.pgbench_init(scale=2)
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-        self.backup_pb(node, backup_type="full")
+        backup_id = self.backup_node(backup_dir, 'node', node)
 
         target_tli = int(node.get_control_data()[six.b("Latest checkpoint's TimeLineID")])
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -122,14 +134,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_pb(node, backup_type="full")
+        self.backup_node(backup_dir, 'node', node, backup_type="full")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node,
-            options=["-j", "4", "--timeline=%i" % target_tli]))
+        # Correct Backup must be choosen for restore
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4", "--timeline={0}".format(target_tli)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         recovery_target_timeline = self.get_recovery_conf(node)["recovery_target_timeline"]
         self.assertEqual(int(recovery_target_timeline), target_tli)
@@ -141,22 +154,24 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_to_time(self):
-        """recovery to target timeline"""
+        """recovery to target time"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
-        node.pgbench_init(scale=2)
 
+        node.pgbench_init(scale=2)
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
-        backup_id = self.backup_pb(node, backup_type="full")
+        backup_id = self.backup_node(backup_dir, 'node', node)
 
         target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -166,8 +181,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in self.restore_pb(node,
-            options=["-j", "4", '--time="{0}"'.format(target_time)]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4", '--time="{0}"'.format(target_time)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -176,23 +192,26 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_to_xid(self):
         """recovery to target xid"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
+
         node.pgbench_init(scale=2)
         with node.connect("postgres") as con:
             con.execute("CREATE TABLE tbl0005 (a text)")
             con.commit()
 
-        self.backup_pb(node, backup_type="full")
+        backup_id = self.backup_node(backup_dir, 'node', node)
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
@@ -211,14 +230,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Enforce segment to be archived to ensure that recovery goes up to the
         # wanted point. There is no way to ensure that all segments needed have
         # been archived up to the xmin point saved earlier without that.
-        node.execute("postgres", "SELECT pg_switch_xlog()")
+        #node.execute("postgres", "SELECT pg_switch_xlog()")
 
         node.stop({"-m": "fast"})
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node,
-            options=["-j", "4", '--xid=%s' % target_xid]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4", '--xid={0}'.format(target_xid)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -227,42 +246,38 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_full_ptrack_archive(self):
-        """recovery to latest from full + ptrack backups"""
+        """recovery to latest from archive full+ptrack backups"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
+
         node.pgbench_init(scale=2)
-        is_ptrack = node.execute("postgres", "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'")
-        if not is_ptrack:
-            node.stop()
-            self.skipTest("ptrack not supported")
-            return
 
-        node.append_conf("postgresql.conf", "ptrack_enable = on")
-        node.restart()
-
-        self.backup_pb(node, backup_type="full")
+        self.backup_node(backup_dir, 'node', node)
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_pb(node, backup_type="ptrack")
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -271,48 +286,44 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
-    def test_restore_full_ptrack_ptrack(self):
-        """recovery to latest from full + ptrack + ptrack backups"""
+    # @unittest.skip("skip")
+    def test_restore_ptrack(self):
+        """recovery to latest from archive full+ptrack+ptrack backups"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
+
         node.pgbench_init(scale=2)
-        is_ptrack = node.execute("postgres", "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'")
-        if not is_ptrack:
-            node.stop()
-            self.skipTest("ptrack not supported")
-            return
 
-        node.append_conf("postgresql.conf", "ptrack_enable = on")
-        node.restart()
-
-        self.backup_pb(node, backup_type="full")
+        self.backup_node(backup_dir, 'node', node)
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_pb(node, backup_type="ptrack")
+        self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_pb(node, backup_type="ptrack")
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -321,38 +332,39 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
+    # @unittest.skip("skip")
     def test_restore_full_ptrack_stream(self):
         """recovery in stream mode to latest from full + ptrack backups"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
-        node.pgbench_init(scale=2)
-        is_ptrack = node.execute("postgres", "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'")
-        if not is_ptrack:
-            node.stop()
-            self.skipTest("ptrack not supported")
-            return
 
-        self.backup_pb(node, backup_type="full", options=["--stream"])
+        node.pgbench_init(scale=2)
+
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
 
-        backup_id = self.backup_pb(node, backup_type="ptrack", options=["--stream"])
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="ptrack", options=["--stream"])
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
 
         node.stop()
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in 
-            self.restore_pb(node, options=["-j", "4"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -361,28 +373,24 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_full_ptrack_under_load(self):
         """recovery to latest from full + ptrack backups with loads when ptrack backup do"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
-        wal_segment_size = self.guc_wal_segment_size(node)
-        node.pgbench_init(scale=2)
-        is_ptrack = node.execute("postgres", "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'")
-        if not is_ptrack:
-            node.stop()
-            self.skipTest("ptrack not supported")
-            return
-        node.restart()
 
-        self.backup_pb(node, backup_type="full")
+        node.pgbench_init(scale=2)
+
+        self.backup_node(backup_dir, 'node', node)
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -390,7 +398,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             options=["-c", "4", "-T", "8"]
         )
 
-        self.backup_pb(node, backup_type="ptrack", options=["--stream"])
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="ptrack", options=["--stream"])
 
         pgbench.wait()
         pgbench.stdout.close()
@@ -402,10 +410,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.wrong_wal_clean(node, wal_segment_size)
-
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -416,27 +423,23 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_full_under_load_ptrack(self):
         """recovery to latest from full + page backups with loads when full backup do"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
-        wal_segment_size = self.guc_wal_segment_size(node)
-        node.pgbench_init(scale=2)
-        is_ptrack = node.execute("postgres", "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'")
-        if not is_ptrack:
-            node.stop()
-            self.skipTest("ptrack not supported")
-            return
 
-        node.restart()
+        # wal_segment_size = self.guc_wal_segment_size(node)
+        node.pgbench_init(scale=2)
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -444,12 +447,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             options=["-c", "4", "-T", "8"]
         )
 
-        self.backup_pb(node, backup_type="full")
+        self.backup_node(backup_dir, 'node', node)
 
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_pb(node, backup_type="ptrack", options=["--stream"])
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="ptrack", options=["--stream"])
 
         bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
@@ -458,37 +461,39 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop({"-m": "immediate"})
         node.cleanup()
-        self.wrong_wal_clean(node, wal_segment_size)
+        #self.wrong_wal_clean(node, wal_segment_size)
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node, options=["-j", "4"]))
-
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         node.start({"-t": "600"})
 
         bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
 
         self.assertEqual(bbalance, delta)
-
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_to_xid_inclusive(self):
         """recovery with target inclusive false"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
+            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
+
         node.pgbench_init(scale=2)
         with node.connect("postgres") as con:
             con.execute("CREATE TABLE tbl0005 (a text)")
             con.commit()
 
-        self.backup_pb(node, backup_type="full")
+        backup_id = self.backup_node(backup_dir, 'node', node)
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
@@ -507,17 +512,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Enforce segment to be archived to ensure that recovery goes up to the
         # wanted point. There is no way to ensure that all segments needed have
         # been archived up to the xmin point saved earlier without that.
-        node.execute("postgres", "SELECT pg_switch_xlog()")
+        # node.execute("postgres", "SELECT pg_switch_xlog()")
 
         node.stop({"-m": "fast"})
         node.cleanup()
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node,
-            options=[
-                "-j", "4",
-                '--xid=%s' % target_xid,
-                "--inclusive=false"]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node,
+                options=["-j", "4", '--xid={0}'.format(target_xid), "--inclusive=false"]),
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -527,20 +530,22 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_1(self):
         """recovery using tablespace-mapping option"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
+            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
 
         # Create tablespace
-        tblspc_path = path.join(node.base_dir, "tblspc")
+        tblspc_path = os.path.join(node.base_dir, "tblspc")
         os.makedirs(tblspc_path)
         with node.connect("postgres") as con:
             con.connection.autocommit = True
@@ -550,82 +555,88 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.execute("INSERT INTO test VALUES (1)")
             con.commit()
 
-        self.backup_pb(node)
-        self.assertEqual(self.show_pb(node)[0]['Status'], six.b("OK"))
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
 
         # 1 - Try to restore to existing directory
         node.stop()
         try:
-            self.restore_pb(node)
-            assertEqual(1, 0, 'Error is expected because restore destination is not empty')
+            self.restore_node(backup_dir, 'node', node)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because restore destionation is not empty.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
         except ProbackupException, e:
-            self.assertEqual(
-                e.message,
-                'ERROR: restore destination is not empty: "{0}"\n'.format(node.data_dir))
+            self.assertEqual(e.message,
+                'ERROR: restore destination is not empty: "{0}"\n'.format(node.data_dir),
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # 2 - Try to restore to existing tablespace directory
-        shutil.rmtree(node.data_dir)
+        node.cleanup()
         try:
-            self.restore_pb(node)
-            assertEqual(1, 0, 'Error is expected because restore tablespace destination is not empty')
+            self.restore_node(backup_dir, 'node', node)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because restore tablespace destination is not empty.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
         except ProbackupException, e:
-            self.assertEqual(
-                e.message,
-                'ERROR: restore tablespace destination is not empty: "{0}"\n'.format(tblspc_path))
+            self.assertEqual(e.message,
+                'ERROR: restore tablespace destination is not empty: "{0}"\n'.format(tblspc_path),
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # 3 - Restore using tablespace-mapping
-        tblspc_path_new = path.join(node.base_dir, "tblspc_new")
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node,
-            options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]))
+        tblspc_path_new = os.path.join(node.base_dir, "tblspc_new")
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start()
-        id = node.execute("postgres", "SELECT id FROM test")
-        self.assertEqual(id[0][0], 1)
+        res = node.execute("postgres", "SELECT id FROM test")
+        self.assertEqual(res[0][0], 1)
 
         # 4 - Restore using tablespace-mapping using page backup
-        self.backup_pb(node)
+        self.backup_node(backup_dir, 'node', node)
         with node.connect("postgres") as con:
             con.execute("INSERT INTO test VALUES (2)")
             con.commit()
-        self.backup_pb(node, backup_type="page")
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="page")
 
-        show_pb = self.show_pb(node)
+        show_pb = self.show_pb(backup_dir, 'node')
         self.assertEqual(show_pb[1]['Status'], six.b("OK"))
         self.assertEqual(show_pb[2]['Status'], six.b("OK"))
 
         node.stop()
         node.cleanup()
-        tblspc_path_page = path.join(node.base_dir, "tblspc_page")
+        tblspc_path_page = os.path.join(node.base_dir, "tblspc_page")
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in self.restore_pb(node,
-            options=["-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start()
-        id = node.execute("postgres", "SELECT id FROM test OFFSET 1")
-        self.assertEqual(id[0][0], 2)
+        res = node.execute("postgres", "SELECT id FROM test OFFSET 1")
+        self.assertEqual(res[0][0], 2)
 
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_2(self):
         """recovery using tablespace-mapping option and page backup"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-        self.assertEqual(self.init_pb(node), six.b(""))
 
         # Full backup
-        self.backup_pb(node)
-        self.assertEqual(self.show_pb(node)[0]['Status'], six.b("OK"))
+        self.backup_node(backup_dir, 'node', node)
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
 
         # Create tablespace
-        tblspc_path = path.join(node.base_dir, "tblspc")
+        tblspc_path = os.path.join(node.base_dir, "tblspc")
         os.makedirs(tblspc_path)
         with node.connect("postgres") as con:
             con.connection.autocommit = True
@@ -635,9 +646,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.commit()
 
         # First page backup
-        self.backup_pb(node, backup_type="page")
-        self.assertEqual(self.show_pb(node)[1]['Status'], six.b("OK"))
-        self.assertEqual(self.show_pb(node)[1]['Mode'], six.b("PAGE"))
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Mode'], six.b("PAGE"))
 
         # Create tablespace table
         with node.connect("postgres") as con:
@@ -649,18 +660,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.commit()
 
         # Second page backup
-        self.backup_pb(node, backup_type="page")
-        self.assertEqual(self.show_pb(node)[2]['Status'], six.b("OK"))
-        self.assertEqual(self.show_pb(node)[2]['Mode'], six.b("PAGE"))
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="page")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Mode'], six.b("PAGE"))
 
         node.stop()
         node.cleanup()
 
-        tblspc_path_new = path.join(node.base_dir, "tblspc_new")
+        tblspc_path_new = os.path.join(node.base_dir, "tblspc_new")
 
-        self.assertTrue(six.b("INFO: Restore of backup") and
-            six.b("completed.") in  self.restore_pb(node,
-            options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         node.start()
 
         count = node.execute("postgres", "SELECT count(*) FROM tbl")
@@ -669,30 +680,31 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(count[0][0], 4)
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_archive_node_backup_stream_restore_to_recovery_time(self):
-        """make node with archiving, make stream backup, make PITR to Recovery Time
-        """
+        """make node with archiving, make stream backup, make PITR to Recovery Time"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/pgpro668/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
         node.start()
 
-        self.assertEqual(self.init_pb(node), six.b(""))
-        backup_id = self.backup_pb(node, backup_type='full', options=["--stream"])
+        backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
         node.psql("postgres", "create table t_heap(a int)")
         node.psql("postgres", "select pg_switch_xlog()")
         node.stop()
         node.cleanup()
 
-        recovery_time = self.show_pb(node, id=backup_id)['recovery-time']
+        recovery_time = self.show_pb(backup_dir, 'node', backup_id=backup_id)['recovery-time']
 
-        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in 
-            self.restore_pb(node, options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4", '--time="{0}"'.format(recovery_time)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -701,29 +713,31 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(True, node.status())
         node.stop()
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_archive_node_backup_stream_pitr(self):
         """make node with archiving, make stream backup, create table t_heap, make pitr to Recovery Time, check that t_heap do not exists"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
 
-        self.assertEqual(self.init_pb(node), six.b(""))
-        backup_id = self.backup_pb(node, backup_type='full', options=["--stream"])
+        backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
         node.psql("postgres", "create table t_heap(a int)")
-        node.psql("postgres", "select pg_switch_xlog()")
-        node.stop()
         node.cleanup()
 
-        recovery_time = self.show_pb(node, id=backup_id)['recovery-time']
+        recovery_time = self.show_pb(backup_dir, 'node', backup_id=backup_id)['recovery-time']
 
-        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in
-            self.restore_pb(node, options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node,
+                options=["-j", "4", '--time="{0}"'.format(recovery_time)]),
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
@@ -731,33 +745,34 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(True, 'does not exist' in res[2])
         node.stop()
 
-    @unittest.skip("fucking illegal")
-    def test_archive_node_backup_stream_pitr_2(self):
-        """make node with archiving, make stream backup, create table t_heap, make pitr to Recovery Time, check that t_heap do not exists"""
+    # @unittest.skip("skip")
+    def test_archive_node_backup_archive_pitr_2(self):
+        """make node with archiving, make archive backup, create table t_heap, make pitr to Recovery Time, check that t_heap do not exists"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/restore/{0}".format(fname),
-            set_archiving=True,
-            set_replication=True,
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
-#        exit(1)
 
-        self.assertEqual(self.init_pb(node), six.b(""))
-        backup_id = self.backup_pb(node, backup_type='full', options=["--stream"])
+        backup_id = self.backup_node(backup_dir, 'node', node)
         node.psql("postgres", "create table t_heap(a int)")
-        node.psql("postgres", "select pg_switch_xlog()")
         node.pg_ctl('stop', {'-m': 'immediate', '-D': '{0}'.format(node.data_dir)})
         node.cleanup()
 
-        recovery_time = self.show_pb(node, id=backup_id)['recovery-time']
+        recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
 
-        self.assertTrue(six.b("INFO: Restore of backup {0} completed.".format(backup_id)) in self.restore_pb(node,
-            options=["-j", "4", '--time="{0}"'.format(recovery_time)]))
+        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+            self.restore_node(backup_dir, 'node', node, 
+                options=["-j", "4", '--time="{0}"'.format(recovery_time)]),
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
         res = node.psql("postgres", 'select * from t_heap')
         self.assertEqual(True, 'does not exist' in res[2])
-#        node.stop()
+        node.stop()
