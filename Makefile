@@ -1,35 +1,14 @@
 PROGRAM = pg_probackup
-OBJS = backup.o \
-	catalog.o \
-	configure.o \
-	data.o \
-	delete.o \
-	dir.o \
-	fetch.o \
-	help.o \
-	init.o \
-	pg_probackup.o \
-	restore.o \
-	show.o \
-	status.o \
-	util.o \
-	validate.o \
-	datapagemap.o \
-	parsexlog.o \
-	xlogreader.o \
-	streamutil.o \
-	receivelog.o \
-	archive.o \
-	utils/parray.o \
-	utils/pgut.o \
-	utils/logger.o
+OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
+	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o \
+	src/pg_probackup.o src/restore.o src/show.o src/status.o \
+	src/util.o src/validate.o src/datapagemap.o src/parsexlog.o \
+	src/xlogreader.o src/streamutil.o src/receivelog.o \
+	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o
 
 EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h streamutil.c streamutil.h logging.h
 
 all: checksrcdir datapagemap.h logging.h receivelog.h streamutil.h pg_probackup
-
-MAKE_GLOBAL="../../src/Makefile.global"
-TEST_GLOBAL:=$(shell test -e ../../src/Makefile.global)
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -78,8 +57,6 @@ datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/%
 	rm -f $@ && $(LN_S) $< .
 datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/%
 	rm -f  && $(LN_S) $< .
-#logging.c: % : $(top_srcdir)/src/bin/pg_rewind/%
-#	rm -f  && $(LN_S) $< .
 logging.h: % : $(top_srcdir)/src/bin/pg_rewind/%
 	rm -f  && $(LN_S) $< .
 receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/%
