@@ -51,8 +51,6 @@ ifndef top_srcdir
 	@exit 1
 endif
 
-all: checksrcdir src/datapagemap.h src/logging.h src/receivelog.h src/streamutil.h pg_probackup
-
 
 # Those files are symlinked from the PostgreSQL sources.
 src/datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
