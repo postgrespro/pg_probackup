@@ -12,6 +12,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(FalsePositive, self).__init__(*args, **kwargs)
+        self.module_name = 'false_positive'
 
     @classmethod
     def tearDownClass(cls):

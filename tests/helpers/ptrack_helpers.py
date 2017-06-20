@@ -7,6 +7,7 @@ import six
 from testgres import get_new_node
 import hashlib
 import re
+import pwd
 
 
 idx_ptrack = {
@@ -143,6 +144,7 @@ class ProbackupTest(object):
             pass
         self.probackup_path = os.path.abspath(os.path.join(
             self.dir_path, "../pg_probackup"))
+        self.user = self.get_username()
 
     def arcwal_dir(self, node):
         return "%s/backup/wal" % node.base_dir
@@ -329,6 +331,7 @@ class ProbackupTest(object):
 
     def init_pb(self, backup_dir):
 
+        shutil.rmtree(backup_dir, ignore_errors=True)
         return self.run_pb([
             "init",
             "-B", backup_dir
@@ -352,8 +355,8 @@ class ProbackupTest(object):
             "-D", node.data_dir
         ])
 
-    def clean_pb(self, node):
-        shutil.rmtree(self.backup_dir(node), ignore_errors=True)
+    def clean_pb(self, backup_dir):
+        shutil.rmtree(backup_dir, ignore_errors=True)
 
     def backup_node(self, backup_dir, instance, node, backup_type="full", options=[], async=False):
 
@@ -370,11 +373,9 @@ class ProbackupTest(object):
 
         return self.run_pb(cmd_list + options, async)
 
-    def restore_node(self, backup_dir, instance, data_dir=None, id=None, options=[]):
+    def restore_node(self, backup_dir, instance, node=False, data_dir=None, backup_id=None, options=[]):
         if data_dir is None:
             data_dir = node.data_dir
-        if backup_dir is None:
-            backup_dir = self.backup_dir(node)
 
         cmd_list = [
             "restore",
@@ -382,8 +383,8 @@ class ProbackupTest(object):
             "-D", data_dir,
             "--instance={0}".format(instance)
         ]
-        if id:
-            cmd_list += ["-i", id]
+        if backup_id:
+            cmd_list += ["-i", backup_id]
 
         return self.run_pb(cmd_list + options)
 
@@ -449,44 +450,46 @@ class ProbackupTest(object):
                 specific_record[name.strip()] = var
             return specific_record
 
-    def validate_pb(self, backup_dir, instance=None, id=None, options=[]):
+    def validate_pb(self, backup_dir, instance=None, backup_id=None, options=[]):
 
         cmd_list = [
             "validate",
-            "-B", backup_dir,
+            "-B", backup_dir
         ]
         if instance:
             cmd_list += ["--instance={0}".format(instance)]
-        if id:
-            cmd_list += ["-i", id]
+        if backup_id:
+            cmd_list += ["-i", backup_id]
 
         return self.run_pb(cmd_list + options)
 
-    def delete_pb(self, backup_dir, instance=None, id=None, options=[]):
+    def delete_pb(self, backup_dir, instance=None, backup_id=None, options=[]):
         cmd_list = [
             "delete",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir
         ]
         if instance:
             cmd_list += ["--instance={0}".format(instance)]
-        if id:
-            cmd_list += ["-i", id]
+        if backup_id:
+            cmd_list += ["-i", backup_id]
 
         # print(cmd_list)
         return self.run_pb(cmd_list + options)
 
-    def delete_expired(self, backup_dir, instance=None, options=[]):
+    def delete_expired(self, backup_dir, instance, options=[]):
         cmd_list = [
             "delete", "--expired",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir,
+            "--instance={0}".format(instance)
         ]
         return self.run_pb(cmd_list + options)
 
-    def show_config(self, backup_dir, instance=None):
+    def show_config(self, backup_dir, instance):
         out_dict = {}
         cmd_list = [
             "show-config",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir,
+            "--instance={0}".format(instance)
         ]
         res = self.run_pb(cmd_list).splitlines()
         for line in res:
@@ -556,3 +559,7 @@ class ProbackupTest(object):
             return str(var[0][0])
         else:
             return False
+
+    def get_username(self):
+        """ Returns current user name """
+        return pwd.getpwuid(os.getuid())[0]

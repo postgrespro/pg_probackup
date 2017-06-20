@@ -10,6 +10,7 @@ from time import sleep
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SimpleTest, self).__init__(*args, **kwargs)
+        self.module_name = 'ptrack_move_to_tablespace'
 
     def teardown(self):
         # clean_all()
@@ -18,13 +19,16 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_recovery(self):
-        fname = self.id().split(".")[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/ptrack/{0}".format(fname),
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
-            initdb_params=['--data-checksums', '-A trust'],
+            initdb_params=['--data-checksums'],
             pg_options={'ptrack_enable': 'on', 'wal_level': 'replica', 'max_wal_senders': '2'})
-
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
         node.start()
+
         self.create_tblspace_in_node(node, 'somedata')
 
         # Create table and indexes
@@ -54,7 +58,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # check that ptrack has correct bits after recovery
             self.check_ptrack_recovery(idx_ptrack[i])
 
-        self.clean_pb(node)
         node.stop()
 
 if __name__ == '__main__':
