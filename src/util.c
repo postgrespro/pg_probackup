@@ -27,7 +27,7 @@ base36enc(long unsigned int value)
 		buffer[--offset] = base36[value % 36];
 	} while (value /= 36);
 
-	return strdup(&buffer[offset]); // warning: this must be free-d by the user
+	return strdup(&buffer[offset]); /* warning: this must be free-d by the user */
 }
 
 long unsigned int
@@ -75,7 +75,9 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 	checkControlFile(ControlFile);
 }
 
-/* TODO Add comment */
+/*
+ * Get lsn of the moment when ptrack was enabled the last time.
+ */
 XLogRecPtr
 get_last_ptrack_lsn(void)
 {
@@ -114,14 +116,14 @@ get_current_timeline(bool safe)
 }
 
 uint64
-get_system_identifier(void)
+get_system_identifier(char *pgdata_path)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);

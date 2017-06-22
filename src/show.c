@@ -10,19 +10,74 @@
 
 #include "pg_probackup.h"
 #include <time.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
 
 static void show_backup_list(FILE *out, parray *backup_list);
 static void show_backup_detail(FILE *out, pgBackup *backup);
-
-/*
- * If 'requested_backup_id' is INVALID_BACKUP_ID, show brief meta information
- * about all backups in the backup catalog.
- * If valid backup id is passed, show detailed meta information
- * about specified backup.
- */
+static int do_show_instance(time_t requested_backup_id);
 
 int
 do_show(time_t requested_backup_id)
+{
+
+	if (instance_name == NULL
+		&& requested_backup_id != INVALID_BACKUP_ID)
+		elog(ERROR, "You must specify --instance to use --backup_id option");
+
+	if (instance_name == NULL)
+	{
+		/* Show list of instances */
+		char		path[MAXPGPATH];
+		DIR		   *dir;
+		struct dirent *dent;
+
+		/* open directory and list contents */
+		join_path_components(path, backup_path, BACKUPS_DIR);
+		dir = opendir(path);
+		if (dir == NULL)
+			elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
+
+		errno = 0;
+		while ((dent = readdir(dir)))
+		{
+			char		child[MAXPGPATH];
+			struct stat	st;
+
+			/* skip entries point current dir or parent dir */
+			if (strcmp(dent->d_name, ".") == 0 ||
+				strcmp(dent->d_name, "..") == 0)
+				continue;
+
+			join_path_components(child, path, dent->d_name);
+
+			if (lstat(child, &st) == -1)
+				elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
+
+			if (!S_ISDIR(st.st_mode))
+				continue;
+
+			instance_name = dent->d_name;
+			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
+			fprintf(stdout, "\nBACKUP INSTANCE '%s'\n", instance_name);
+			do_show_instance(0);
+		}
+		return 0;
+	}
+	else
+		return do_show_instance(requested_backup_id);
+}
+
+/*
+ * If 'requested_backup_id' is INVALID_BACKUP_ID, show brief meta information
+ * about all backups in the backup instance.
+ * If valid backup id is passed, show detailed meta information
+ * about specified backup.
+ */
+static int
+do_show_instance(time_t requested_backup_id)
 {
 	if (requested_backup_id != INVALID_BACKUP_ID)
 	{
@@ -107,7 +162,6 @@ pretty_size(int64 size, char *buf, size_t len)
 	}
 }
 
-/* TODO Add comment */
 static TimeLineID
 get_parent_tli(TimeLineID child_tli)
 {
@@ -170,10 +224,11 @@ show_backup_list(FILE *out, parray *backup_list)
 {
 	int			i;
 
+	/* if you add new fields here, fix the header */
 	/* show header */
-	fputs("====================================================================================================================\n", out);
-	fputs("ID      Recovery time        Mode    WAL      Current/Parent TLI    Time    Data    Start LSN    Stop LSN   Status  \n", out);
-	fputs("====================================================================================================================\n", out);
+	fputs("===============================================================================================================================\n", out);
+	fputs(" Instance    ID      Recovery time        Mode    WAL      Current/Parent TLI    Time    Data    Start LSN    Stop LSN   Status  \n", out);
+	fputs("===============================================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -202,8 +257,8 @@ show_backup_list(FILE *out, parray *backup_list)
 		parent_tli = get_parent_tli(backup->tli);
 		backup_id = base36enc(backup->start_time);
 
-		fprintf(out, "%-6s  %-19s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%08X  %2X/%08X  %-8s\n",
-				backup_id,
+		fprintf(out, " %-11s %-6s  %-19s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%-8X  %2X/%-8X  %-8s\n",
+				instance_name, backup_id,
 				timestamp,
 				pgBackupGetBackupMode(backup),
 				backup->stream ? "STREAM": "ARCHIVE",

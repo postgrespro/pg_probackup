@@ -13,23 +13,33 @@
 #include "postgres_fe.h"
 
 #include <limits.h>
-#include "libpq-fe.h"
-
-#include "pgut/pgut.h"
-#include "access/xlogdefs.h"
-#include "access/xlog_internal.h"
-#include "catalog/pg_control.h"
-#include "utils/pg_crc.h"
-#include "parray.h"
-#include "datapagemap.h"
-#include "storage/bufpage.h"
-#include "storage/block.h"
-#include "storage/checksum.h"
-#include "access/timeline.h"
+#include <libpq-fe.h>
 
 #ifndef WIN32
 #include <sys/mman.h>
 #endif
+
+#include "access/timeline.h"
+#include "access/xlogdefs.h"
+#include "access/xlog_internal.h"
+#include "catalog/pg_control.h"
+#include "storage/block.h"
+#include "storage/bufpage.h"
+#include "storage/checksum.h"
+#include "utils/pg_crc.h"
+
+#include "utils/parray.h"
+#include "utils/pgut.h"
+
+#include "datapagemap.h"
+
+# define PG_STOP_BACKUP_TIMEOUT 300
+/*
+ * Macro needed to parse ptrack.
+ * NOTE Keep those values syncronised with definitions in ptrack.h
+ */
+#define PTRACK_BITS_PER_HEAPBLOCK 1
+#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"
@@ -53,6 +63,14 @@
 #define XID_FMT "%u"
 #endif
 
+typedef enum CompressAlg
+{
+	NOT_DEFINED_COMPRESS = 0,
+	NONE_COMPRESS,
+	PGLZ_COMPRESS,
+	ZLIB_COMPRESS,
+} CompressAlg;
+
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
 {
@@ -69,11 +87,13 @@ typedef struct pgFile
 	char	*path;			/* path of the file */
 	char	*ptrack_path;	/* path of the ptrack fork of the relation */
 	int		segno;			/* Segment number for ptrack */
-	uint64	generation;		/* Generation of the compressed file. Set to '-1'
-							 * for non-compressed files. If generation has changed,
-							 * we cannot backup compressed file partially. */
-	int		is_partial_copy; /* for compressed files. Set to '1' if backed up
-							  * via copy_file_partly() */
+	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
+	uint64	generation;		/* Generation of the compressed file.If generation
+							 * has changed, we cannot backup compressed file
+							 * partially. Has no sense if (is_cfs == false). */
+	bool	is_partial_copy; /* If the file was backed up via copy_file_partly().
+							  * Only applies to is_cfs files. */
+	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
@@ -102,6 +122,10 @@ typedef enum BackupMode
 typedef enum ProbackupSubcmd
 {
 	INIT = 0,
+	ARCHIVE_PUSH,
+	ARCHIVE_GET,
+	ADD_INSTANCE,
+	DELETE_INSTANCE,
 	BACKUP,
 	RESTORE,
 	VALIDATE,
@@ -110,6 +134,7 @@ typedef enum ProbackupSubcmd
 	SET_CONFIG,
 	SHOW_CONFIG
 } ProbackupSubcmd;
+
 
 /* special values of pgBackup fields */
 #define INVALID_BACKUP_ID	 0
@@ -124,8 +149,24 @@ typedef struct pgBackupConfig
 	const char	*pgport;
 	const char	*pguser;
 
+	const char *master_host;
+	const char *master_port;
+	const char *master_db;
+	const char *master_user;
+	int			replica_timeout;
+
+	int			log_level;
+	char	   *log_filename;
+	char	   *error_log_filename;
+	char	   *log_directory;
+	int			log_rotation_size;
+	int			log_rotation_age;
+
 	uint32		retention_redundancy;
 	uint32		retention_window;
+
+	CompressAlg	compress_alg;
+	int			compress_level;
 } pgBackupConfig;
 
 /* Information about single backup stored in backup.conf */
@@ -155,6 +196,8 @@ typedef struct pgBackup
 	 * BYTES_INVALID means nothing was backed up.
 	 */
 	int64			data_bytes;
+	/* Size of WAL files in archive needed to restore this backup */
+	int64			wal_bytes;
 
 	/* Fields needed for compatibility check */
 	uint32			block_size;
@@ -217,32 +260,52 @@ extern int cfs_munmap(FileMap* map);
 #define XLogDataFromLSN(data, xlogid, xrecoff)		\
 	sscanf(data, "%X/%X", xlogid, xrecoff)
 
-/* in probackup.c */
-
-/* path configuration */
+/* directory options */
 extern char *backup_path;
+extern char backup_instance_path[MAXPGPATH];
 extern char *pgdata;
 extern char arclog_path[MAXPGPATH];
 
-/* current settings */
-extern pgBackup current;
-extern ProbackupSubcmd	backup_subcmd;
-
-extern bool	smooth_checkpoint;
+/* common options */
 extern int num_threads;
 extern bool stream_wal;
-extern bool from_replica;
 extern bool progress;
+
+/* backup options */
+extern bool	smooth_checkpoint;
+extern uint32 archive_timeout;
+extern bool from_replica;
+extern const char *master_db;
+extern const char *master_host;
+extern const char *master_port;
+extern const char *master_user;
+extern uint32 replica_timeout;
+
+/* delete options */
 extern bool delete_wal;
 extern bool	delete_expired;
 extern bool	apply_to_all;
 extern bool	force_delete;
-extern uint32 archive_timeout;
 
-extern uint64 system_identifier;
-
+/* retention options */
 extern uint32 retention_redundancy;
 extern uint32 retention_window;
+
+/* compression options */
+extern CompressAlg compress_alg;
+extern int    compress_level;
+
+#define DEFAULT_COMPRESS_LEVEL 6
+
+extern CompressAlg parse_compress_alg(const char *arg);
+extern const char* deparse_compress_alg(int alg);
+/* other options */
+extern char *instance_name;
+extern uint64 system_identifier;
+
+/* current settings */
+extern pgBackup current;
+extern ProbackupSubcmd	backup_subcmd;
 
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */
@@ -275,6 +338,12 @@ extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 
 /* in init.c */
 extern int do_init(void);
+extern int do_add_instance(void);
+
+/* in archive.c */
+extern int do_archive_push(char *wal_file_path, char *wal_file_name);
+extern int do_archive_get(char *wal_file_path, char *wal_file_name);
+
 
 /* in configure.c */
 extern int do_configure(bool show_only);
@@ -289,6 +358,7 @@ extern int do_show(time_t requested_backup_id);
 /* in delete.c */
 extern int do_delete(time_t backup_id);
 extern int do_retention_purge(void);
+extern int do_delete_instance(void);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -302,6 +372,7 @@ extern void help_command(char *command);
 
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup);
+extern int do_validate_all(void);
 
 /* in catalog.c */
 extern pgBackup *read_backup(time_t timestamp);
@@ -314,6 +385,8 @@ extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void pgBackupWriteBackupControlFile(pgBackup *backup);
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir);
+extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
+							 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
@@ -350,12 +423,12 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern void restore_compressed_file(const char *from_root,
 									const char *to_root, pgFile *file);
-extern bool is_compressed_data_file(pgFile *file);
 extern bool backup_compressed_file_partially(pgFile *file,
 											 void *arg,
 											 size_t *skip_size);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
+extern void copy_wal_file(const char *from_root, const char *to_root);
 extern bool copy_file_partly(const char *from_root, const char *to_root,
 				 pgFile *file, size_t skip_size);
 
@@ -389,7 +462,7 @@ extern XLogRecPtr get_last_ptrack_lsn(void);
 extern uint32 get_data_checksum_version(bool safe);
 extern char *base36enc(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
-extern uint64 get_system_identifier(void);
+extern uint64 get_system_identifier(char *pgdata);
 extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 extern void pgBackup_init(pgBackup *backup);
 

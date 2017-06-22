@@ -5,36 +5,58 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup version
 
-  pg_probackup init -B backup-path -D pgdata-dir
+  pg_probackup init -B backup-path
 
-  pg_probackup set-config -B backup-dir
-                 [-d dbname] [-h host] [-p port] [-U username]
-                 [--retention-redundancy=retention-redundancy]]
+  pg_probackup set-config -B backup-dir --instance=instance_name
+                 [--log-level=log-level]
+                 [--log-filename=log-filename]
+                 [--error-log-filename=error-log-filename]
+                 [--log-directory=log-directory]
+                 [--log-rotation-size=log-rotation-size]
+                 [--log-rotation-age=log-rotation-age]
+                 [--retention-redundancy=retention-redundancy]
                  [--retention-window=retention-window]
-
-  pg_probackup show-config -B backup-dir
-
-  pg_probackup backup -B backup-path -b backup-mode
-                 [-D pgdata-dir] [-C] [--stream [-S slot-name]] [--backup-pg-log]
-                 [-j num-threads] [--archive-timeout=archive-timeout]
-                 [--progress] [-q] [-v] [--delete-expired]
+                 [--compress-algorithm=compress-algorithm]
+                 [--compress-level=compress-level]
                  [-d dbname] [-h host] [-p port] [-U username]
+                 [--master-db=db_name] [--master-host=host_name]
+                 [--master-port=port] [--master-user=user_name]
+                 [--replica-timeout=timeout]
 
-  pg_probackup restore -B backup-dir
-                [-D pgdata-dir] [-i backup-id] [--progress] [-q] [-v]
-                [--time=time|--xid=xid [--inclusive=boolean]]
-                [--timeline=timeline] [-T OLDDIR=NEWDIR]
+  pg_probackup show-config -B backup-dir --instance=instance_name
 
-  pg_probackup validate -B backup-dir
-                [-D pgdata-dir] [-i backup-id] [--progress] [-q] [-v]
-                [--time=time|--xid=xid [--inclusive=boolean]]
-                [--timeline=timeline]
+  pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
+                 [-C] [--stream [-S slot-name]] [--backup-pg-log]
+                 [-j num-threads] [--archive-timeout=archive-timeout]
+                 [--compress-algorithm=compress-algorithm]
+                 [--compress-level=compress-level]
+                 [--progress] [--delete-expired]
+                 [-d dbname] [-h host] [-p port] [-U username]
+                 [--master-db=db_name] [--master-host=host_name]
+                 [--master-port=port] [--master-user=user_name]
+                 [--replica-timeout=timeout]
+
+  pg_probackup restore -B backup-dir --instance=instance_name
+                 [-D pgdata-dir] [-i backup-id] [--progress]
+                 [--time=time|--xid=xid [--inclusive=boolean]]
+                 [--timeline=timeline] [-T OLDDIR=NEWDIR]
+
+  pg_probackup validate -B backup-dir [--instance=instance_name]
+                 [-i backup-id] [--progress]
+                 [--time=time|--xid=xid [--inclusive=boolean]]
+                 [--timeline=timeline]
 
   pg_probackup show -B backup-dir
-                [-i backup-id]
+                 [--instance=instance_name [-i backup-id]]
 
-  pg_probackup delete -B backup-dir
-                [--wal] [-i backup-id | --expired]
+  pg_probackup delete -B backup-dir --instance=instance_name
+                 [--wal] [-i backup-id | --expired]
+
+  pg_probackup add-instance -B backup-dir -D pgdata-dir
+                 --instance=instance_name
+
+  pg_probackup del-instance -B backup-dir
+                 --instance=instance_name
 
 Read the website for details. <https://github.com/postgrespro/pg_probackup>
 Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.

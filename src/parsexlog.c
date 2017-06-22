@@ -110,6 +110,14 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	XLogSegNo	endSegNo,
 				nextSegNo = 0;
 
+	if (!XRecOffIsValid(startpoint))
+		elog(ERROR, "Invalid startpoint value %X/%X",
+			 (uint32) (startpoint >> 32), (uint32) (startpoint));
+
+	if (!XRecOffIsValid(endpoint))
+		elog(ERROR, "Invalid endpoint value %X/%X",
+			 (uint32) (endpoint >> 32), (uint32) (endpoint));
+
 	private.archivedir = archivedir;
 	private.tli = tli;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
@@ -123,6 +131,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	do
 	{
 		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+
 		if (record == NULL)
 		{
 			XLogRecPtr	errptr;
@@ -130,12 +139,23 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
 
 			if (errormsg)
-				elog(ERROR, "could not read WAL record at %X/%X: %s",
+				elog(WARNING, "could not read WAL record at %X/%X: %s",
 					 (uint32) (errptr >> 32), (uint32) (errptr),
 					 errormsg);
 			else
-				elog(ERROR, "could not read WAL record at %X/%X",
+				elog(WARNING, "could not read WAL record at %X/%X",
 					 (uint32) (errptr >> 32), (uint32) (errptr));
+
+			/*
+			 * If we don't have all WAL files from prev backup start_lsn to current
+			 * start_lsn, we won't be able to build page map and PAGE backup will
+			 * be incorrect. Stop it and throw an error.
+			 */
+			if (!xlogexists)
+				elog(ERROR, "WAL segment \"%s\" is absent", xlogfpath);
+			else if (xlogreadfd != -1)
+				elog(ERROR, "Possible WAL CORRUPTION."
+							"Error has occured during reading WAL segment \"%s\"", xlogfpath);
 		}
 
 		extractPageInfo(xlogreader);
@@ -143,7 +163,6 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
 
 		XLByteToSeg(xlogreader->EndRecPtr, nextSegNo);
-
 	} while (nextSegNo <= endSegNo && xlogreader->EndRecPtr != endpoint);
 
 	XLogReaderFree(xlogreader);
@@ -155,6 +174,98 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	}
 }
 
+/*
+ * Ensure that the backup has all wal files needed for recovery to consistent state.
+ */
+static void
+validate_backup_wal_from_start_to_stop(pgBackup *backup,
+									   char *backup_xlog_path,
+									   TimeLineID tli)
+{
+	XLogRecPtr	startpoint = backup->start_lsn;
+	XLogRecord *record;
+	XLogReaderState *xlogreader;
+	char	   *errormsg;
+	XLogPageReadPrivate private;
+	bool		got_endpoint = false;
+
+	private.archivedir = backup_xlog_path;
+	private.tli = tli;
+
+	/* We will check it in the end */
+	xlogfpath[0] = '\0';
+
+	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
+	if (xlogreader == NULL)
+		elog(ERROR, "out of memory");
+
+	while (true)
+	{
+		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+
+		if (record == NULL)
+		{
+			if (errormsg)
+				elog(WARNING, "%s", errormsg);
+
+			break;
+		}
+
+		/* Got WAL record at stop_lsn */
+		if (xlogreader->ReadRecPtr == backup->stop_lsn)
+		{
+			got_endpoint = true;
+			break;
+		}
+		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
+	}
+
+	if (!got_endpoint)
+	{
+		if (xlogfpath[0] != 0)
+		{
+			/* XLOG reader couldn't read WAL segment.
+			 * We throw a WARNING here to be able to update backup status below.
+			 */
+			if (!xlogexists)
+			{
+				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
+			}
+			else if (xlogreadfd != -1)
+			{
+				elog(WARNING, "Possible WAL CORRUPTION."
+					"Error has occured during reading WAL segment \"%s\"", xlogfpath);
+			}
+		}
+
+		/*
+		 * If we don't have WAL between start_lsn and stop_lsn,
+		 * the backup is definitely corrupted. Update its status.
+		 */
+			backup->status = BACKUP_STATUS_CORRUPT;
+			pgBackupWriteBackupControlFile(backup);
+			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
+				 (uint32) (backup->start_lsn >> 32),
+				 (uint32) (backup->start_lsn),
+				 (uint32) (backup->stop_lsn >> 32),
+				 (uint32) (backup->stop_lsn));
+	}
+
+	/* clean */
+	XLogReaderFree(xlogreader);
+	if (xlogreadfd != -1)
+	{
+		close(xlogreadfd);
+		xlogreadfd = -1;
+		xlogexists = false;
+	}
+}
+
+/*
+ * Ensure that the backup has all wal files needed for recovery to consistent
+ * state. And check if we have in archive all files needed to restore the backup
+ * up to the given recovery target.
+ */
 void
 validate_wal(pgBackup *backup,
 			 const char *archivedir,
@@ -163,6 +274,7 @@ validate_wal(pgBackup *backup,
 			 TimeLineID tli)
 {
 	XLogRecPtr	startpoint = backup->start_lsn;
+	char	   *backup_id;
 	XLogRecord *record;
 	XLogReaderState *xlogreader;
 	char	   *errormsg;
@@ -171,10 +283,63 @@ validate_wal(pgBackup *backup,
 	TimestampTz last_time = 0;
 	char		last_timestamp[100],
 				target_timestamp[100];
-	bool		all_wal = false,
-				got_endpoint = false;
+	bool		all_wal = false;
+	char		backup_xlog_path[MAXPGPATH];
 
+	/* We need free() this later */
+	backup_id = base36enc(backup->start_time);
+
+	if (!XRecOffIsValid(backup->start_lsn))
+		elog(ERROR, "Invalid start_lsn value %X/%X of backup %s",
+			 (uint32) (backup->start_lsn >> 32), (uint32) (backup->start_lsn),
+			 backup_id);
+
+	if (!XRecOffIsValid(backup->stop_lsn))
+		elog(ERROR, "Invalid stop_lsn value %X/%X of backup %s",
+			 (uint32) (backup->stop_lsn >> 32), (uint32) (backup->stop_lsn),
+			 backup_id);
+
+	/*
+	 * Check that the backup has all wal files needed
+	 * for recovery to consistent state.
+	 */
+	if (backup->stream)
+	{
+		sprintf(backup_xlog_path, "/%s/%s/%s/%s",
+				backup_instance_path, backup_id, DATABASE_DIR, PG_XLOG_DIR);
+
+		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli);
+	}
+	else
+		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, tli);
+
+	free(backup_id);
+
+	/*
+	 * If recovery target is provided check that we can restore backup to a
+	 * recoverty target time or xid.
+	 */
+	if (!TransactionIdIsValid(target_xid) || target_time == 0)
+	{
+		/* Recoverty target is not given so exit */
+		elog(INFO, "backup validation completed successfully");
+		return;
+	}
+
+	/*
+	 * If recovery target is provided, ensure that archive files exist in
+	 * archive directory.
+	 */
+	if (dir_is_empty(archivedir))
+		elog(ERROR, "WAL archive is empty. You cannot restore backup to a recovery target without WAL archive.");
+
+	/*
+	 * Check if we have in archive all files needed to restore backup
+	 * up to the given recovery target.
+	 * In any case we cannot restore to the point before stop_lsn.
+	 */
 	private.archivedir = archivedir;
+
 	private.tli = tli;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
 	if (xlogreader == NULL)
@@ -183,6 +348,15 @@ validate_wal(pgBackup *backup,
 	/* We will check it in the end */
 	xlogfpath[0] = '\0';
 
+	/* We can restore at least up to the backup end */
+	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time);
+	last_xid = backup->recovery_xid;
+
+	if ((TransactionIdIsValid(target_xid) && target_xid == last_xid)
+		|| (target_time != 0 && backup->recovery_time >= target_time))
+		all_wal = true;
+
+	startpoint = backup->stop_lsn;
 	while (true)
 	{
 		bool		timestamp_record;
@@ -195,10 +369,6 @@ validate_wal(pgBackup *backup,
 
 			break;
 		}
-
-		/* Got WAL record at stop_lsn */
-		if (xlogreader->ReadRecPtr == backup->stop_lsn)
-			got_endpoint = true;
 
 		timestamp_record = getRecordTimestamp(xlogreader, &last_time);
 		if (XLogRecGetXid(xlogreader) != InvalidTransactionId)
@@ -230,54 +400,45 @@ validate_wal(pgBackup *backup,
 	if (last_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_time));
-	else
-		time2iso(last_timestamp, lengthof(last_timestamp),
-				 backup->recovery_time);
-	if (last_xid == InvalidTransactionId)
-		last_xid = backup->recovery_xid;
 
-	/* There are all need WAL records */
+	/* There are all needed WAL records */
 	if (all_wal)
 		elog(INFO, "backup validation completed successfully on time %s and xid " XID_FMT,
 			 last_timestamp, last_xid);
-	/* There are not need WAL records */
+	/* Some needed WAL records are absent */
 	else
 	{
 		if (xlogfpath[0] != 0)
 		{
-			/* XLOG reader couldnt read WAL segment */
+			/* XLOG reader couldn't read WAL segment.
+			 * We throw a WARNING here to be able to update backup status below.
+			 */
 			if (!xlogexists)
+			{
 				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
+			}
 			else if (xlogreadfd != -1)
-					elog(ERROR, "Possible WAL CORRUPTION."
-						"Error has occured during reading WAL segment \"%s\"", xlogfpath);
+			{
+				elog(WARNING, "Possible WAL CORRUPTION."
+					"Error has occured during reading WAL segment \"%s\"", xlogfpath);
+			}
 		}
 
-		if (!got_endpoint)
-			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
-				 (uint32) (backup->start_lsn >> 32),
-				 (uint32) (backup->start_lsn),
-				 (uint32) (backup->stop_lsn >> 32),
-				 (uint32) (backup->stop_lsn));
-		else
-		{
-			if (target_time > 0)
-				time2iso(target_timestamp, lengthof(target_timestamp),
-						 target_time);
+		elog(WARNING, "recovery can be done up to time %s and xid " XID_FMT,
+				last_timestamp, last_xid);
 
-			elog(WARNING, "recovery can be done up to time %s and xid " XID_FMT,
-				 last_timestamp, last_xid);
-
-			if (TransactionIdIsValid(target_xid) && target_time != 0)
-				elog(ERROR, "not enough WAL records to time %s and xid " XID_FMT,
-					 target_timestamp, target_xid);
-			else if (TransactionIdIsValid(target_xid))
-				elog(ERROR, "not enough WAL records to xid " XID_FMT,
-					 target_xid);
-			else if (target_time != 0)
-				elog(ERROR, "not enough WAL records to time %s",
-					 target_timestamp);
-		}
+		if (target_time > 0)
+			time2iso(target_timestamp, lengthof(target_timestamp),
+						target_time);
+		if (TransactionIdIsValid(target_xid) && target_time != 0)
+			elog(ERROR, "not enough WAL records to time %s and xid " XID_FMT,
+					target_timestamp, target_xid);
+		else if (TransactionIdIsValid(target_xid))
+			elog(ERROR, "not enough WAL records to xid " XID_FMT,
+					target_xid);
+		else if (target_time != 0)
+			elog(ERROR, "not enough WAL records to time %s",
+					target_timestamp);
 	}
 
 	/* clean */
@@ -304,6 +465,14 @@ read_recovery_info(const char *archivedir, TimeLineID tli,
 	XLogReaderState *xlogreader;
 	XLogPageReadPrivate private;
 	bool		res;
+
+	if (!XRecOffIsValid(start_lsn))
+		elog(ERROR, "Invalid start_lsn value %X/%X",
+			 (uint32) (start_lsn >> 32), (uint32) (start_lsn));
+
+	if (!XRecOffIsValid(stop_lsn))
+		elog(ERROR, "Invalid stop_lsn value %X/%X",
+			 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
 
 	private.archivedir = archivedir;
 	private.tli = tli;
@@ -365,7 +534,8 @@ cleanup:
 }
 
 /*
- * Check if WAL segment file 'wal_path' contains 'target_lsn'.
+ * Check if there is a WAL segment file in 'archivedir' which contains
+ * 'target_lsn'.
  */
 bool
 wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
@@ -376,6 +546,10 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 	char	   *errormsg;
 	bool		res;
 
+	if (!XRecOffIsValid(target_lsn))
+		elog(ERROR, "Invalid target_lsn value %X/%X",
+			 (uint32) (target_lsn >> 32), (uint32) (target_lsn));
+
 	private.archivedir = archivedir;
 	private.tli = target_tli;
 
@@ -384,15 +558,7 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 		elog(ERROR, "out of memory");
 
 	res = XLogReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
-	if (!res)
-	{
-		if (errormsg)
-			elog(ERROR, "could not read WAL record at %X/%X: %s",
-				 (uint32) (target_lsn >> 32), (uint32) (target_lsn),
-				 errormsg);
-
-		/* Didn't find 'target_lsn' and there is no error, return false */
-	}
+	/* Didn't find 'target_lsn' and there is no error, return false */
 
 	XLogReaderFree(xlogreader);
 	if (xlogreadfd != -1)
@@ -413,9 +579,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 {
 	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
 	uint32		targetPageOff;
-	XLogSegNo	targetSegNo;
 
-	XLByteToSeg(targetPagePtr, targetSegNo);
 	targetPageOff = targetPagePtr % XLogSegSize;
 
 	/*
@@ -477,8 +641,6 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			 xlogfpath, strerror(errno));
 		return -1;
 	}
-
-	Assert(targetSegNo == xlogreadsegno);
 
 	*pageTLI = private->tli;
 	return XLOG_BLCKSZ;

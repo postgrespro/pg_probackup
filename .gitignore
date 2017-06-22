@@ -29,13 +29,14 @@
 /tests/__pycache__/
 /tests/tmp_dirs/
 /tests/*pyc
+/tests/helpers/*pyc
 
 # Extra files
-/datapagemap.c
-/datapagemap.h
-/logging.h
-/receivelog.c
-/receivelog.h
-/streamutil.c
-/streamutil.h
-/xlogreader.c
+/src/datapagemap.c
+/src/datapagemap.h
+/src/logging.h
+/src/receivelog.c
+/src/receivelog.h
+/src/streamutil.c
+/src/streamutil.h
+/src/xlogreader.c

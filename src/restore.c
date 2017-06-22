@@ -90,8 +90,8 @@ do_restore_or_validate(time_t target_backup_id,
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
-	int			dest_backup_index;
-	int			base_full_backup_index;
+	int			dest_backup_index = 0;
+	int			base_full_backup_index = 0;
 	char 	   *action = is_restore ? "Restore":"Validate";
 
 	if (is_restore)
@@ -122,7 +122,7 @@ do_restore_or_validate(time_t target_backup_id,
 		timelines = readTimeLineHistory_probackup(target_tli);
 	}
 
-	/* Find backup range we should restore. */
+	/* Find backup range we should restore or validate. */
 	for (i = 0; i < parray_num(backups); i++)
 	{
 		current_backup = (pgBackup *) parray_get(backups, i);
@@ -141,7 +141,7 @@ do_restore_or_validate(time_t target_backup_id,
 		{
 			if (current_backup->status != BACKUP_STATUS_OK)
 				elog(ERROR, "Backup %s has status: %s",
-					 base36enc(current_backup->status), status2str(current_backup->status));
+					 base36enc(current_backup->start_time), status2str(current_backup->status));
 
 			if (target_tli)
 			{
@@ -217,40 +217,43 @@ do_restore_or_validate(time_t target_backup_id,
 		pgBackupValidate(backup);
 	}
 
+	/*
+	 * Validate corresponding WAL files.
+	 * We pass base_full_backup timeline as last argument to this function,
+	 * because it's needed to form the name of xlog file.
+	 */
+	validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
+						 rt->recovery_target_xid, base_full_backup->tli);
+
+
 	/* We ensured that all backups are valid, now restore if required */
 	if (is_restore)
 	{
+		pgBackup   *backup;
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
-			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			backup = (pgBackup *) parray_get(backups, i);
 			if (backup->status == BACKUP_STATUS_OK)
 				restore_backup(backup);
 			else
 				elog(ERROR, "backup %s is not valid",
 					 base36enc(backup->start_time));
 		}
-	}
 
-	/*
-	 * Delete files which are not in dest backup file list. Files which were
-	 * deleted between previous and current backup are not in the list.
-	 */
-	if (is_restore)
-	{
-		pgBackup   *dest_backup = (pgBackup *) parray_get(backups, dest_backup_index);
+		/*
+		 * Delete files which are not in dest backup file list. Files which were
+		 * deleted between previous and current backup are not in the list.
+		 */
 		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
 			remove_deleted_files(dest_backup);
-	}
 
-	if (!dest_backup->stream
-		|| (target_time != NULL || target_xid != NULL))
-	{
-		if (is_restore)
+		/* Create recovery.conf with given recovery target parameters */
+		if (!dest_backup->stream
+			|| (target_time != NULL || target_xid != NULL))
+		{
 			create_recovery_conf(target_backup_id, target_time, target_xid,
 								target_inclusive, target_tli);
-		else
-			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-						 rt->recovery_target_xid, base_full_backup->tli);
+		}
 	}
 
 	/* cleanup */
@@ -269,7 +272,7 @@ void
 restore_backup(pgBackup *backup)
 {
 	char		timestamp[100];
-	char		backup_path[MAXPGPATH];
+	char		this_backup_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
@@ -296,9 +299,10 @@ restore_backup(pgBackup *backup)
 
 	/*
 	 * Restore backup directories.
+	 * this_backup_path = $BACKUP_PATH/backups/instance_name/backup_id
 	 */
-	pgBackupGetPath(backup, backup_path, lengthof(backup_path), NULL);
-	restore_directories(pgdata, backup_path);
+	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
+	restore_directories(pgdata, this_backup_path);
 
 	/*
 	 * Get list of files which need to be restored.
@@ -332,8 +336,7 @@ restore_backup(pgBackup *backup)
 		arg->files = files;
 		arg->backup = backup;
 
-		if (verbose)
-			elog(LOG, "Start thread for num:%li", parray_num(files));
+		elog(LOG, "Start thread for num:%li", parray_num(files));
 
 		restore_threads_args[i] = arg;
 		pthread_create(&restore_threads[i], NULL, (void *(*)(void *)) restore_files, arg);
@@ -350,7 +353,7 @@ restore_backup(pgBackup *backup)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (verbose)
+	if (log_level <= LOG)
 	{
 		char	   *backup_id;
 
@@ -371,11 +374,9 @@ remove_deleted_files(pgBackup *backup)
 {
 	parray	   *files;
 	parray	   *files_restored;
-	char		database_path[MAXPGPATH];
 	char		filelist_path[MAXPGPATH];
 	int 		i;
 
-	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
 	/* Read backup's filelist using target database path as base path */
 	files = dir_read_file_list(pgdata, filelist_path);
@@ -395,7 +396,7 @@ remove_deleted_files(pgBackup *backup)
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
 			pgFileDelete(file);
-			if (verbose)
+			if (log_level <= LOG)
 				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
 		}
 	}
@@ -449,7 +450,7 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 
 			/* Extract link name from relative path */
 			link_sep = first_dir_separator(link_ptr);
-			if (link_sep)
+			if (link_sep != NULL)
 			{
 				int			len = link_sep - link_ptr;
 				strncpy(link_name, link_ptr, len);
@@ -483,8 +484,12 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 					 */
 					if (strcmp(dir_created, linked_path) == 0)
 					{
-						/* Create rest of directories */
-						if (link_sep && (link_sep + 1))
+						/*
+						 * Create rest of directories.
+						 * First check is there any directory name after
+						 * separator.
+						 */
+						if (link_sep != NULL && *(link_sep + 1) != '\0')
 							goto create_directory;
 						else
 							continue;
@@ -527,8 +532,11 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 				/* Save linked directory */
 				set_tablespace_created(link_name, linked_path);
 
-				/* Create rest of directories */
-				if (link_sep && (link_sep + 1))
+				/*
+				 * Create rest of directories.
+				 * First check is there any directory name after separator.
+				 */
+				if (link_sep != NULL && *(link_sep + 1) != '\0')
 					goto create_directory;
 
 				continue;
@@ -560,7 +568,7 @@ create_directory:
 static void
 check_tablespace_mapping(pgBackup *backup)
 {
-	char		backup_path[MAXPGPATH];
+	char		this_backup_path[MAXPGPATH];
 	parray	   *links;
 	size_t		i;
 	TablespaceListCell *cell;
@@ -568,10 +576,17 @@ check_tablespace_mapping(pgBackup *backup)
 
 	links = parray_new();
 
-	pgBackupGetPath(backup, backup_path, lengthof(backup_path), NULL);
-	read_tablespace_map(links, backup_path);
+	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
+	read_tablespace_map(links, this_backup_path);
 
-	elog(LOG, "check tablespace directories of backup %s", base36enc(backup->start_time));
+	if (log_level <= LOG)
+	{
+		char	   *backup_id;
+
+		backup_id = base36enc(backup->start_time);
+		elog(LOG, "check tablespace directories of backup %s", backup_id);
+		pfree(backup_id);
+	}
 
 	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
 	for (cell = tablespace_dirs.head; cell; cell = cell->next)
@@ -665,10 +680,15 @@ restore_files(void *arg)
 			continue;
 		}
 
-		/* restore file */
+		/*
+		 * restore the file.
+		 * We treat datafiles separately, cause they were backed up block by
+		 * block and have BackupPageHeader meta information, so we cannot just
+		 * copy the file from backup.
+		 */
 		if (file->is_datafile)
 		{
-			if (is_compressed_data_file(file))
+			if (file->is_cfs)
 				restore_compressed_file(from_root, pgdata, file);
 			else
 				restore_data_file(from_root, pgdata, file, arguments->backup);
@@ -703,7 +723,8 @@ create_recovery_conf(time_t backup_id,
 
 	fprintf(fp, "# recovery.conf generated by pg_probackup %s\n",
 		PROGRAM_VERSION);
-	fprintf(fp, "restore_command = 'cp %s/%%f %%p'\n", arclog_path);
+	fprintf(fp, "restore_command = 'pg_probackup archive-get -B %s --instance %s --wal-file-path %%p --wal-file-name %%f'\n",
+			backup_path, instance_name);
 
 	if (target_time)
 		fprintf(fp, "recovery_target_time = '%s'\n", target_time);
@@ -866,7 +887,6 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 /*
  * Get recovery options in the string format, parse them
  * and fill up the pgRecoveryTarget structure.
- * TODO move arguments parsing and validation to getopt.
  */
 pgRecoveryTarget *
 parseRecoveryTargetOptions(const char *target_time,

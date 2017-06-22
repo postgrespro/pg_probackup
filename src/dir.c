@@ -154,8 +154,10 @@ pgFileInit(const char *path)
 	file->segno = 0;
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
-	file->generation = -1;
-	file->is_partial_copy = 0;
+	file->is_cfs = false;
+	file->generation = 0;
+	file->is_partial_copy = false;
+	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }
 
@@ -307,7 +309,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	parray	   *black_list = NULL;
 	char		path[MAXPGPATH];
 
-	join_path_components(path, backup_path, PG_BLACK_LIST);
+	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
 	if (root && pgdata && strcmp(root, pgdata) == 0 && fileExists(path))
 	{
@@ -344,7 +346,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 }
 
 /*
- * TODO Add comment, review
+ * TODO Add comment
  */
 static void
 dir_list_file_internal(parray *files, const char *root, bool exclude,
@@ -633,7 +635,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 					path[MAXPGPATH];
 		pgFile	   *file;
 
-		if (sscanf(buf, "%s %s", link_name, path) != 2)
+		if (sscanf(buf, "%1023s %1023s", link_name, path) != 2)
 			elog(ERROR, "invalid format found in \"%s\"", map_path);
 
 		file = pgut_new(pgFile);
@@ -671,20 +673,21 @@ print_file_list(FILE *out, const parray *files, const char *root)
 			path = GetRelativePath(path, root);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\", \"crc\":\"%u\"",
+					 "\"is_datafile\":\"%u\", \"crc\":\"%u\", \"compress_alg\":\"%s\"",
 				path, (unsigned long) file->write_size, file->mode,
-				file->is_datafile?1:0, file->crc);
+				file->is_datafile?1:0, file->crc, deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
-		/* TODO What for do we write it to file? */
 		if (S_ISLNK(file->mode))
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 #ifdef PGPRO_EE
-		fprintf(out, ",\"CFS_generation\":\"" UINT64_FORMAT "\",\"is_partial_copy\":\"%d\"",
-				file->generation, file->is_partial_copy);
+		if (file->is_cfs)
+			fprintf(out, ",\"is_cfs\":\"%u\" ,\"CFS_generation\":\"" UINT64_FORMAT "\","
+					"\"is_partial_copy\":\"%u\"",
+					file->is_cfs?1:0, file->generation, file->is_partial_copy?1:0);
 #endif
 		fprintf(out, "}\n");
 	}
@@ -847,6 +850,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		char		path[MAXPGPATH];
 		char		filepath[MAXPGPATH];
 		char		linked[MAXPGPATH];
+		char		compress_alg_string[MAXPGPATH];
 		uint64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
@@ -854,7 +858,8 @@ dir_read_file_list(const char *root, const char *file_txt)
 					segno;
 #ifdef PGPRO_EE
 		uint64		generation,
-					is_partial_copy;
+					is_partial_copy,
+					is_cfs;
 #endif
 		pgFile	   *file;
 
@@ -867,10 +872,12 @@ dir_read_file_list(const char *root, const char *file_txt)
 		/* optional fields */
 		get_control_value(buf, "linked", linked, NULL, false);
 		get_control_value(buf, "segno", NULL, &segno, false);
+		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 
 #ifdef PGPRO_EE
-		get_control_value(buf, "CFS_generation", NULL, &generation, true);
-		get_control_value(buf, "is_partial_copy", NULL, &is_partial_copy, true);
+		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
+		get_control_value(buf, "CFS_generation", NULL, &generation, false);
+		get_control_value(buf, "is_partial_copy", NULL, &is_partial_copy, false);
 #endif
 		if (root)
 			join_path_components(filepath, root, path);
@@ -883,12 +890,14 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
 		file->crc = (pg_crc32) crc;
+		file->compress_alg = parse_compress_alg(compress_alg_string);
 		if (linked[0])
 			file->linked = pgut_strdup(linked);
 		file->segno = (int) segno;
 #ifdef PGPRO_EE
+		file->is_cfs = is_cfs ? true : false;
 		file->generation = generation;
-		file->is_partial_copy = (int) is_partial_copy;
+		file->is_partial_copy = is_partial_copy ? true : false;
 #endif
 
 		parray_append(files, file);

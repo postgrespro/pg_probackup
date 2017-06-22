@@ -5,11 +5,17 @@ from . import init_test, option_test, show_test, \
     retention_test, ptrack_clean, ptrack_cluster, \
     ptrack_move_to_tablespace, ptrack_recovery, ptrack_vacuum, \
     ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
-    ptrack_vacuum_full, ptrack_vacuum_truncate
+    ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
+    pgpro688, false_positive, replica
 
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
+    suite.addTests(loader.loadTestsFromModule(replica))
+#    suite.addTests(loader.loadTestsFromModule(pgpro560))
+#    suite.addTests(loader.loadTestsFromModule(pgpro589))
+#    suite.addTests(loader.loadTestsFromModule(pgpro688))
+#    suite.addTests(loader.loadTestsFromModule(false_positive))
     suite.addTests(loader.loadTestsFromModule(init_test))
     suite.addTests(loader.loadTestsFromModule(option_test))
     suite.addTests(loader.loadTestsFromModule(show_test))
@@ -29,3 +35,6 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_truncate))
 
     return suite
+
+
+# ExpectedFailures are bugs, which should be fixed

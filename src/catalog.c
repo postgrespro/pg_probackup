@@ -50,7 +50,7 @@ catalog_lock(void)
 	pid_t		my_pid,
 				my_p_pid;
 
-	join_path_components(lock_file, backup_path, BACKUP_CATALOG_PID);
+	join_path_components(lock_file, backup_instance_path, BACKUP_CATALOG_PID);
 
 	/*
 	 * If the PID in the lockfile is our own PID or our parent's or
@@ -84,7 +84,7 @@ catalog_lock(void)
 
 	/*
 	 * We need a loop here because of race conditions.  But don't loop forever
-	 * (for example, a non-writable $backup_path directory might cause a failure
+	 * (for example, a non-writable $backup_instance_path directory might cause a failure
 	 * that won't go away).  100 tries seems like plenty.
 	 */
 	for (ntries = 0;; ntries++)
@@ -253,16 +253,14 @@ catalog_get_backup_list(time_t requested_backup_id)
 {
 	DIR			   *date_dir = NULL;
 	struct dirent  *date_ent = NULL;
-	char			backups_path[MAXPGPATH];
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
 
-	/* open backup root directory */
-	join_path_components(backups_path, backup_path, BACKUPS_DIR);
-	date_dir = opendir(backups_path);
+	/* open backup instance backups directory */
+	date_dir = opendir(backup_instance_path);
 	if (date_dir == NULL)
 	{
-		elog(WARNING, "cannot open directory \"%s\": %s", backups_path,
+		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
 			strerror(errno));
 		goto err_proc;
 	}
@@ -275,12 +273,12 @@ catalog_get_backup_list(time_t requested_backup_id)
 		char date_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backups_path, date_ent->d_name)
+		if (!IsDir(backup_instance_path, date_ent->d_name)
 			|| date_ent->d_name[0] == '.')
 			continue;
 
 		/* open subdirectory of specific backup */
-		join_path_components(date_path, backups_path, date_ent->d_name);
+		join_path_components(date_path, backup_instance_path, date_ent->d_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
 		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONTROL_FILE);
@@ -309,7 +307,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 	if (errno)
 	{
 		elog(WARNING, "cannot read backup root directory \"%s\": %s",
-			backups_path, strerror(errno));
+			backup_instance_path, strerror(errno));
 		goto err_proc;
 	}
 
@@ -388,6 +386,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "#Configuration\n");
 	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
 	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
+	fprintf(out, "compress-alg = %s\n", deparse_compress_alg(compress_alg));
+	fprintf(out, "compress-level = %d\n", compress_level);
+	fprintf(out, "from-replica = %s\n", from_replica?"true":"false");
 	
 	fprintf(out, "\n#Compatibility\n");
 	fprintf(out, "block-size = %u\n", backup->block_size);
@@ -397,11 +398,11 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "\n#Result backup info\n");
 	fprintf(out, "timelineid = %d\n", backup->tli);
 	/* LSN returned by pg_start_backup */
-	fprintf(out, "start-lsn = %x/%08x\n",
+	fprintf(out, "start-lsn = %X/%X\n",
 			(uint32) (backup->start_lsn >> 32),
 			(uint32) backup->start_lsn);
 	/* LSN returned by pg_stop_backup */
-	fprintf(out, "stop-lsn = %x/%08x\n",
+	fprintf(out, "stop-lsn = %X/%X\n",
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
@@ -425,6 +426,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	 */
 	if (backup->data_bytes != BYTES_INVALID)
 		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
+
+	if (backup->data_bytes != BYTES_INVALID)
+		fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
 	fprintf(out, "status = %s\n", status2str(backup->status));
 
@@ -470,6 +474,9 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
+	char	   *compress_alg = NULL;
+	int		   *compress_level;
+	bool	   *from_replica;
 
 	pgut_option options[] =
 	{
@@ -482,12 +489,16 @@ readBackupControlFile(const char *path)
 		{'U', 0, "recovery-xid",		&backup->recovery_xid, SOURCE_FILE_STRICT},
 		{'t', 0, "recovery-time",		&backup->recovery_time, SOURCE_FILE_STRICT},
 		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
+		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum_version",	&backup->checksum_version, SOURCE_FILE_STRICT},
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
+		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
+		{'u', 0, "compress-level",		&compress_level, SOURCE_FILE_STRICT},
+		{'b', 0, "from-replica",		&from_replica, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -616,13 +627,31 @@ pgBackupCompareIdDesc(const void *l, const void *r)
 void
 pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
 {
+	pgBackupGetPath2(backup, path, len, subdir, NULL);
+}
+
+/*
+ * Construct absolute path of the backup directory.
+ * Append "subdir1" and "subdir2" to the backup directory.
+ */
+void
+pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
+				 const char *subdir1, const char *subdir2)
+{
 	char	   *datetime;
 
 	datetime = base36enc(backup->start_time);
-	if (subdir)
-		snprintf(path, len, "%s/%s/%s/%s", backup_path, BACKUPS_DIR, datetime, subdir);
+
+	/* If "subdir1" is NULL do not check "subdir2" */
+	if (!subdir1)
+		snprintf(path, len, "%s/%s", backup_instance_path, datetime);
+	else if (!subdir2)
+		snprintf(path, len, "%s/%s/%s", backup_instance_path, datetime, subdir1);
+	/* "subdir1" and "subdir2" is not NULL */
 	else
-		snprintf(path, len, "%s/%s/%s", backup_path, BACKUPS_DIR, datetime);
+		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
+				 datetime, subdir1, subdir2);
+
 	free(datetime);
 
 	make_native_path(path);

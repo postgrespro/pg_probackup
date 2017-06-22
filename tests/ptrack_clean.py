@@ -1,12 +1,14 @@
 import unittest
+import os
 from sys import exit
 from testgres import get_new_node, stop_all
-from .ptrack_helpers import ProbackupTest, idx_ptrack
+from helpers.ptrack_helpers import ProbackupTest, idx_ptrack
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SimpleTest, self).__init__(*args, **kwargs)
+        self.module_name = 'ptrack_clean'
 
     def teardown(self):
         stop_all()
@@ -15,13 +17,16 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_ptrack_clean(self):
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir='tmp_dirs/ptrack/{0}'.format(fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
-            set_archiving=True,
-            initdb_params=['--data-checksums', '-A trust'],
+            initdb_params=['--data-checksums'],
             pg_options={'ptrack_enable': 'on', 'wal_level': 'replica', 'max_wal_senders': '2'})
-
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
+
         self.create_tblspace_in_node(node, 'somedata')
 
         # Create table and indexes
@@ -35,8 +40,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
         # Make full backup to clean every ptrack
-        self.init_pb(node)
-        self.backup_pb(node, backup_type='full', options=['-j100', '--stream'])
+        self.backup_node(backup_dir, 'node', node, options=['-j100', '--stream'])
 
         for i in idx_ptrack:
             # get fork size and calculate it in pages
@@ -52,7 +56,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         node.psql('postgres', 'update t_heap set text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;')
         node.psql('postgres', 'vacuum t_heap')
 
-        id = self.backup_pb(node, backup_type='ptrack', options=['-j100', '--stream'])
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['-j100', '--stream'])
         node.psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -71,7 +75,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         node.psql('postgres', 'vacuum t_heap')
 
         # Make page backup to clean every ptrack
-        self.backup_pb(node, backup_type='page', options=['-j100'])
+        self.backup_node(backup_dir, 'node', node, backup_type='page', options=['-j100'])
         node.psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -85,8 +89,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
-        print self.show_pb(node, as_text=True)
-        self.clean_pb(node)
+        print self.show_pb(backup_dir, 'node', as_text=True)
         node.stop()
 
 if __name__ == '__main__':

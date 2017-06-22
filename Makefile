@@ -1,54 +1,67 @@
 PROGRAM = pg_probackup
-OBJS = backup.o \
-	catalog.o \
-	configure.o \
-	data.o \
-	delete.o \
-	dir.o \
-	fetch.o \
-	help.o \
-	init.o \
-	parray.o \
-	pg_probackup.o \
-	restore.o \
-	show.o \
-	status.o \
-	util.o \
-	validate.o \
-	datapagemap.o \
-	parsexlog.o \
-	xlogreader.o \
-	streamutil.o \
-	receivelog.o \
-	pgut/pgut.o
+OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
+	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o \
+	src/pg_probackup.o src/restore.o src/show.o src/status.o \
+	src/util.o src/validate.o src/datapagemap.o src/parsexlog.o \
+	src/xlogreader.o src/streamutil.o src/receivelog.o \
+	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o
 
-EXTRA_CLEAN = datapagemap.c datapagemap.h xlogreader.c receivelog.c receivelog.h streamutil.c streamutil.h logging.h
+EXTRA_CLEAN = src/datapagemap.c src/datapagemap.h src/xlogreader.c \
+	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h src/logging.h
 
-all: checksrcdir datapagemap.h logging.h receivelog.h streamutil.h pg_probackup
+all: checksrcdir src/datapagemap.h src/logging.h src/receivelog.h src/streamutil.h pg_probackup
 
-MAKE_GLOBAL="../../src/Makefile.global"
-TEST_GLOBAL:=$(shell test -e ../../src/Makefile.global)
-ifeq ($(.SHELLSTATUS),1)
+ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
-
-.PHONY: checksrcdir
-checksrcdir:
 ifndef top_srcdir
 	@echo "You must have PostgreSQL source tree available to compile."
 	@echo "Pass the path to the PostgreSQL source tree to make, in the top_srcdir"
 	@echo "variable: \"make top_srcdir=<path to PostgreSQL source tree>\""
 	@exit 1
 endif
+# Those files are symlinked from the PostgreSQL sources.
+src/xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/xlogreader.c
+	rm -f $@ && $(LN_S) $< ./src/xlogreader.c
+src/datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
+	rm -f $@ && $(LN_S) $< ./src/datapagemap.c
+src/datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
+	rm -f $@ && $(LN_S) $< src/datapagemap.h
+src/logging.h: % : $(top_srcdir)/src/bin/pg_rewind/logging.h
+	rm -f $@ && $(LN_S) $< ./src
+src/receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
+	rm -f $@ && $(LN_S) $< ./src
+src/receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
+	rm -f $@ && $(LN_S) $< ./src
+src/streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
+	rm -f $@ && $(LN_S) $< ./src
+src/streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
+	rm -f $@ && $(LN_S) $< ./src
 else
-#TODO: fix me
-REGRESS =
 subdir=contrib/pg_probackup
 top_builddir=../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
+# Those files are symlinked from the PostgreSQL sources.
+src/xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/xlogreader.c
+	rm -f $@ && $(LN_S) ../$< ./src/xlogreader.c
+src/datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
+	rm -f $@ && $(LN_S) ../$< ./src/datapagemap.c
+src/datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
+	rm -f $@ && $(LN_S) ../$< src/datapagemap.h
+src/logging.h: % : $(top_srcdir)/src/bin/pg_rewind/logging.h
+	rm -f $@ && $(LN_S) ../$< ./src
+src/receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
+	rm -f $@ && $(LN_S) ../$< ./src
+src/receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
+	rm -f $@ && $(LN_S) ../$< ./src
+src/streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
+	rm -f $@ && $(LN_S) ../$< ./src
+src/streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
+	rm -f $@ && $(LN_S) ../$< ./src
 endif
+
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS}
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
@@ -58,7 +71,7 @@ ifeq ($(PORTNAME), aix)
 endif
 
 envtest:
-	: top_srcdir=$(top_srcdir)
+	: top_srcdir=$( )
 	: libpq_srcdir = $(libpq_srcdir)
 
 # This rule's only purpose is to give the user instructions on how to pass
@@ -71,23 +84,3 @@ ifndef top_srcdir
 	@echo "variable: \"make top_srcdir=<path to PostgreSQL source tree>\""
 	@exit 1
 endif
-
-# Those files are symlinked from the PostgreSQL sources.
-xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/%
-	rm -f $@ && $(LN_S) $< .
-datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/%
-	rm -f $@ && $(LN_S) $< .
-datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/%
-	rm -f  && $(LN_S) $< .
-#logging.c: % : $(top_srcdir)/src/bin/pg_rewind/%
-#	rm -f  && $(LN_S) $< .
-logging.h: % : $(top_srcdir)/src/bin/pg_rewind/%
-	rm -f  && $(LN_S) $< .
-receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .
-receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .
-streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .
-streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/%
-	rm -f  && $(LN_S) $< .

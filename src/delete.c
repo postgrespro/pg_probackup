@@ -15,8 +15,7 @@
 #include <unistd.h>
 
 static int pgBackupDeleteFiles(pgBackup *backup);
-static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
-							bool delete_all);
+static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli);
 
 int
 do_delete(time_t backup_id)
@@ -108,7 +107,7 @@ do_delete(time_t backup_id)
 			}
 		}
 
-		delete_walfiles(oldest_lsn, oldest_tli, true);
+		delete_walfiles(oldest_lsn, oldest_tli);
 	}
 
 	/* cleanup */
@@ -131,7 +130,7 @@ do_retention_purge(void)
 	size_t		i;
 	time_t		days_threshold = time(NULL) - (retention_window * 60 * 60 * 24);
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
-	TimeLineID	oldest_tli;
+	TimeLineID	oldest_tli = 0;
 	bool		keep_next_backup = true;	/* Do not delete first full backup */
 	bool		backup_deleted = false;		/* At least one backup was deleted */
 
@@ -200,7 +199,7 @@ do_retention_purge(void)
 	}
 
 	/* Purge WAL files */
-	delete_walfiles(oldest_lsn, oldest_tli, true);
+	delete_walfiles(oldest_lsn, oldest_tli);
 
 	/* Cleanup */
 	parray_walk(backup_list, pgBackupFree);
@@ -280,13 +279,16 @@ pgBackupDeleteFiles(pgBackup *backup)
 }
 
 /*
- * Delete WAL segments up to oldest_lsn.
+ * Deletes WAL segments up to oldest_lsn or all WAL segments (if all backups
+ * was deleted and so oldest_lsn is invalid).
  *
- * If oldest_lsn is invalid function exists. But if delete_all is true then
- * WAL segements will be deleted anyway.
+ *  oldest_lsn - if valid, function deletes WAL segments, which contain lsn
+ *    older than oldest_lsn. If it is invalid function deletes all WAL segments.
+ *  oldest_tli - is used to construct oldest WAL segment in addition to
+ *    oldest_lsn.
  */
 static void
-delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
+delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 {
 	XLogSegNo   targetSegNo;
 	char		oldestSegmentNeeded[MAXFNAMELEN];
@@ -296,9 +298,6 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 	char		max_wal_file[MAXPGPATH];
 	char		min_wal_file[MAXPGPATH];
 	int			rc;
-
-	if (XLogRecPtrIsInvalid(oldest_lsn) && !delete_all)
-		return;
 
 	max_wal_file[0] = '\0';
 	min_wal_file[0] = '\0';
@@ -356,8 +355,7 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 							 wal_file, strerror(errno));
 						break;
 					}
-					if (verbose)
-						elog(LOG, "removed WAL segment \"%s\"", wal_file);
+					elog(LOG, "removed WAL segment \"%s\"", wal_file);
 
 					if (max_wal_file[0] == '\0' ||
 						strcmp(max_wal_file + 8, arcde->d_name + 8) < 0)
@@ -370,9 +368,9 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 			}
 		}
 
-		if (!verbose && min_wal_file[0] != '\0')
+		if (min_wal_file[0] != '\0')
 			elog(INFO, "removed min WAL segment \"%s\"", min_wal_file);
-		if (!verbose && max_wal_file[0] != '\0')
+		if (max_wal_file[0] != '\0')
 			elog(INFO, "removed max WAL segment \"%s\"", max_wal_file);
 
 		if (errno)
@@ -385,4 +383,49 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli, bool delete_all)
 	else
 		elog(WARNING, "could not open archive location \"%s\": %s",
 			 arclog_path, strerror(errno));
+}
+
+
+/* Delete all backup files and wal files of given instance. */
+int
+do_delete_instance(void)
+{
+	parray	   *backup_list;
+	int i;
+	char		instance_config_path[MAXPGPATH];
+
+	/* Delete all backups. */
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+		pgBackupDeleteFiles(backup);
+	}
+
+	/* Cleanup */
+	parray_walk(backup_list, pgBackupFree);
+	parray_free(backup_list);
+
+	/* Delete all wal files. */
+	delete_walfiles(InvalidXLogRecPtr, 0);
+
+	/* Delete backup instance config file */
+	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+	if (remove(instance_config_path))
+	{
+		elog(ERROR, "can't remove \"%s\": %s", instance_config_path,
+			strerror(errno));
+	}
+
+	/* Delete instance root directories */
+	if (rmdir(backup_instance_path) != 0)
+		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+			strerror(errno));
+	if (rmdir(arclog_path) != 0)
+		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+			strerror(errno));
+
+	elog(INFO, "Instance '%s' successfully deleted", instance_name);
+	return 0;
 }

@@ -7,6 +7,7 @@ import six
 from testgres import get_new_node
 import hashlib
 import re
+import pwd
 
 
 idx_ptrack = {
@@ -55,8 +56,6 @@ Splitted Body
 # You can lookup error message and cmdline in exception object attributes
 class ProbackupException(Exception):
     def __init__(self, message, cmd):
-#        print message
-#        self.message = repr(message).strip("'")
         self.message = message
         self.cmd = cmd
     #need that to make second raise
@@ -136,25 +135,34 @@ class ProbackupTest(object):
         self.test_env["LC_MESSAGES"] = "C"
         self.test_env["LC_TIME"] = "C"
 
-        self.dir_path = os.path.dirname(os.path.realpath(__file__))
+        self.helpers_path = os.path.dirname(os.path.realpath(__file__))
+        self.dir_path = os.path.abspath(os.path.join(self.helpers_path, os.pardir))
+        self.tmp_path = os.path.abspath(os.path.join(self.dir_path, 'tmp_dirs'))
         try:
-            os.makedirs(os.path.join(self.dir_path, "tmp_dirs"))
+            os.makedirs(os.path.join(self.dir_path, 'tmp_dirs'))
         except:
             pass
         self.probackup_path = os.path.abspath(os.path.join(
-            self.dir_path,
-            "../pg_probackup"
-        ))
+            self.dir_path, "../pg_probackup"))
+        self.user = self.get_username()
 
     def arcwal_dir(self, node):
         return "%s/backup/wal" % node.base_dir
 
-    def backup_dir(self, node):
-        return os.path.abspath("%s/backup" % node.base_dir)
+    def backup_dir(self, node=None, path=None):
+        if node:
+            return os.path.abspath("{0}/backup".format(node.base_dir))
+        if path:
+            return
 
-    def make_simple_node(self, base_dir=None, set_replication=False,
-                        set_archiving=False, initdb_params=[], pg_options={}):
-        real_base_dir = os.path.join(self.dir_path, base_dir)
+    def make_simple_node(
+            self,
+            base_dir=None,
+            set_replication=False,
+            initdb_params=[],
+            pg_options={}):
+
+        real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
 
         node = get_new_node('test', base_dir=real_base_dir)
@@ -172,9 +180,6 @@ class ProbackupTest(object):
         # Allow replication in pg_hba.conf
         if set_replication:
             node.set_replication_conf()
-        # Setup archiving for node
-        if set_archiving:
-            self.set_archiving_conf(node, self.arcwal_dir(node))
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, cfs=False):
@@ -299,7 +304,8 @@ class ProbackupTest(object):
 
     def run_pb(self, command, async=False):
         try:
-            #print ' '.join(map(str,[self.probackup_path] + command))
+            self.cmd = [' '.join(map(str,[self.probackup_path] + command))]
+            print self.cmd
             if async is True:
                 return subprocess.Popen(
                     [self.probackup_path] + command,
@@ -308,80 +314,93 @@ class ProbackupTest(object):
                     env=self.test_env
                 )
             else:
-                output = subprocess.check_output(
+                self.output = subprocess.check_output(
                     [self.probackup_path] + command,
                     stderr=subprocess.STDOUT,
                     env=self.test_env
                 )
             if command[0] == 'backup':
-                if '-q' in command or '--quiet' in command:
-                    return None
-                elif '-v' in command or '--verbose' in command:
-                    return output
-                else:
-                    # return backup ID
-                    for line in output.splitlines():
-                        if 'INFO: Backup' and 'completed' in line:
-                            return line.split()[2]
+                # return backup ID
+                for line in self.output.splitlines():
+                    if 'INFO: Backup' and 'completed' in line:
+                        return line.split()[2]
             else:
-                return output
+                return self.output
         except subprocess.CalledProcessError as e:
-            raise  ProbackupException(e.output, e.cmd)
+            raise  ProbackupException(e.output, self.cmd)
 
-    def init_pb(self, node):
+    def init_pb(self, backup_dir):
 
+        shutil.rmtree(backup_dir, ignore_errors=True)
         return self.run_pb([
             "init",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir
+        ])
+
+    def add_instance(self, backup_dir, instance, node):
+
+        return self.run_pb([
+            "add-instance",
+            "--instance={0}".format(instance),
+            "-B", backup_dir,
             "-D", node.data_dir
         ])
 
-    def clean_pb(self, node):
-        shutil.rmtree(self.backup_dir(node), ignore_errors=True)
+    def del_instance(self, backup_dir, instance, node):
 
-    def backup_pb(self, node=None, data_dir=None, backup_dir=None, backup_type="full", options=[], async=False):
-        if data_dir is None:
-            data_dir = node.data_dir
-        if backup_dir is None:
-            backup_dir = self.backup_dir(node)
+        return self.run_pb([
+            "del-instance",
+            "--instance={0}".format(instance),
+            "-B", backup_dir,
+            "-D", node.data_dir
+        ])
+
+    def clean_pb(self, backup_dir):
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
+    def backup_node(self, backup_dir, instance, node, backup_type="full", options=[], async=False):
 
         cmd_list = [
             "backup",
             "-B", backup_dir,
-            "-D", data_dir,
+            "-D", node.data_dir,
             "-p", "%i" % node.port,
-            "-d", "postgres"
+            "-d", "postgres",
+            "--instance={0}".format(instance)
         ]
         if backup_type:
             cmd_list += ["-b", backup_type]
 
         return self.run_pb(cmd_list + options, async)
 
-    def restore_pb(self, node=None, backup_dir=None, data_dir=None, id=None, options=[]):
+    def restore_node(self, backup_dir, instance, node=False, data_dir=None, backup_id=None, options=[]):
         if data_dir is None:
             data_dir = node.data_dir
-        if backup_dir is None:
-            backup_dir = self.backup_dir(node)
 
         cmd_list = [
             "restore",
             "-B", backup_dir,
-            "-D", data_dir
+            "-D", data_dir,
+            "--instance={0}".format(instance)
         ]
-        if id:
-            cmd_list += ["-i", id]
+        if backup_id:
+            cmd_list += ["-i", backup_id]
 
         return self.run_pb(cmd_list + options)
 
-    def show_pb(self, node, id=None, options=[], as_text=False):
+    def show_pb(self, backup_dir, instance=None, backup_id=None, options=[], as_text=False):
+
         backup_list = []
         specific_record = {}
         cmd_list = [
             "show",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir,
         ]
-        if id:
-            cmd_list += ["-i", id]
+        if instance:
+            cmd_list += ["--instance={0}".format(instance)]
+
+        if backup_id:
+            cmd_list += ["-i", backup_id]
 
         if as_text:
             # You should print it when calling as_text=true
@@ -389,7 +408,7 @@ class ProbackupTest(object):
 
         # get show result as list of lines
         show_splitted = self.run_pb(cmd_list + options).splitlines()
-        if id is None:
+        if instance is not None and backup_id is None:
             # cut header(ID, Mode, etc) from show as single string
             header = show_splitted[1:2][0]
             # cut backup records from show as single list with string for every backup record
@@ -431,40 +450,46 @@ class ProbackupTest(object):
                 specific_record[name.strip()] = var
             return specific_record
 
-    def validate_pb(self, node, id=None, options=[]):
+    def validate_pb(self, backup_dir, instance=None, backup_id=None, options=[]):
+
         cmd_list = [
             "validate",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir
         ]
-        if id:
-            cmd_list += ["-i", id]
+        if instance:
+            cmd_list += ["--instance={0}".format(instance)]
+        if backup_id:
+            cmd_list += ["-i", backup_id]
 
-        # print(cmd_list)
         return self.run_pb(cmd_list + options)
 
-    def delete_pb(self, node, id=None, options=[]):
+    def delete_pb(self, backup_dir, instance=None, backup_id=None, options=[]):
         cmd_list = [
             "delete",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir
         ]
-        if id:
-            cmd_list += ["-i", id]
+        if instance:
+            cmd_list += ["--instance={0}".format(instance)]
+        if backup_id:
+            cmd_list += ["-i", backup_id]
 
         # print(cmd_list)
         return self.run_pb(cmd_list + options)
 
-    def delete_expired(self, node, options=[]):
+    def delete_expired(self, backup_dir, instance, options=[]):
         cmd_list = [
             "delete", "--expired",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir,
+            "--instance={0}".format(instance)
         ]
         return self.run_pb(cmd_list + options)
 
-    def show_config(self, node):
+    def show_config(self, backup_dir, instance):
         out_dict = {}
         cmd_list = [
             "show-config",
-            "-B", self.backup_dir(node),
+            "-B", backup_dir,
+            "--instance={0}".format(instance)
         ]
         res = self.run_pb(cmd_list).splitlines()
         for line in res:
@@ -485,9 +510,7 @@ class ProbackupTest(object):
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
         return out_dict
 
-    def set_archiving_conf(self, node, archive_dir=False, replica=False):
-        if not archive_dir:
-            archive_dir = self.arcwal_dir(node)
+    def set_archiving(self, backup_dir, instance, node, replica=False):
 
         if replica:
             archive_mode = 'always'
@@ -506,8 +529,8 @@ class ProbackupTest(object):
         if os.name == 'posix':
             node.append_conf(
                     "postgresql.auto.conf",
-                    "archive_command = 'test ! -f {0}/%f && cp %p {0}/%f'".format(archive_dir)
-                    )
+                    "archive_command = '{0} archive-push -B {1} --instance={2} --wal-file-path %p --wal-file-name %f'".format(
+                        self.probackup_path, backup_dir, instance))
         #elif os.name == 'nt':
         #    node.append_conf(
         #            "postgresql.auto.conf",
@@ -536,3 +559,7 @@ class ProbackupTest(object):
             return str(var[0][0])
         else:
             return False
+
+    def get_username(self):
+        """ Returns current user name """
+        return pwd.getpwuid(os.getuid())[0]
