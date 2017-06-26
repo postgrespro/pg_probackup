@@ -230,7 +230,10 @@ do_validate_all(void)
 	}
 
 	if (corrupted_backup_found)
+	{
 		elog(INFO, "Some backups are not valid");
+		return 1;
+	}
 	else
 		elog(INFO, "All backups are valid");
 
