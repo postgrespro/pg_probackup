@@ -1,20 +1,20 @@
+import os
 import unittest
 from sys import exit
-from testgres import get_new_node, stop_all
-import os
-from signal import SIGTERM
-from helpers.ptrack_helpers import ProbackupTest, idx_ptrack
-from time import sleep
+from testgres import clean_all, stop_all
+from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import shutil
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SimpleTest, self).__init__(*args, **kwargs)
-        self.module_name = 'ptrack_move_to_tablespace'
+        self.module_name = 'ptrack_recovery'
 
-    def teardown(self):
-        # clean_all()
-        stop_all()
+    # @classmethod
+    # def tearDownClass(cls):
+    #     clean_all()
+    #    shutil.rmtree(os.path.join(self.tmp_path, self.module_name), ignore_errors=True)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -45,12 +45,13 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # get path to heap and index files
             idx_ptrack[i]['path'] = self.get_fork_path(node, i)
 
-        print 'Killing postmaster. Losing Ptrack changes'
+        if self.verbose:
+            print('Killing postmaster. Losing Ptrack changes')
         node.pg_ctl('stop', {'-m': 'immediate', '-D': '{0}'.format(node.data_dir)})    
         if not node.status():
             node.start()
         else:
-            print "Die! Die! Why won't you die?... Why won't you die?"
+            print("Die! Die! Why won't you die?... Why won't you die?")
             exit(1)
 
         for i in idx_ptrack:
@@ -60,7 +61,5 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # check that ptrack has correct bits after recovery
             self.check_ptrack_recovery(idx_ptrack[i])
 
-        node.stop()
-
-if __name__ == '__main__':
-    unittest.main()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

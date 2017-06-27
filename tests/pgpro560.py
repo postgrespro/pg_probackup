@@ -1,21 +1,17 @@
-import unittest
 import os
-import six
-from helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
+import unittest
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
-from testgres import stop_all
+from testgres import stop_all, clean_all
 import subprocess
-from sys import exit
+import shutil
 
 
 class CheckSystemID(ProbackupTest, unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(CheckSystemID, self).__init__(*args, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        stop_all()
+        self.module_name = 'pgpro560'
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -27,24 +23,32 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         check that backup failed
         """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="tmp_dirs/pgpro560/{0}/node".format(fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
         node.start()
 
-        self.assertEqual(self.init_pb(node), six.b(""))
         file = os.path.join(node.base_dir,'data', 'global', 'pg_control')
         os.remove(file)
 
         try:
-            self.backup_pb(node, backup_type='full', options=['--stream'])
-            assertEqual(1, 0, 'Error is expected because of control file loss')
-        except ProbackupException, e:
+            self.backup_node(backup_dir, 'node', node, options=['--stream'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because pg_control was deleted.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
             self.assertTrue(
-                'ERROR: could not open file' and 'pg_control' in e.message,
-                'Expected error is about control file loss')
+                'ERROR: could not open file' in e.message
+                 and 'pg_control' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     def test_pgpro560_systemid_mismatch(self):
         """
@@ -54,25 +58,33 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         check that backup failed
         """
         fname = self.id().split('.')[3]
-        node1 = self.make_simple_node(base_dir="tmp_dirs/pgpro560/{0}/node1".format(fname),
+        node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
         node1.start()
-        node2 = self.make_simple_node(base_dir="tmp_dirs/pgpro560/{0}/node2".format(fname),
+        node2 = self.make_simple_node(base_dir="{0}/{1}/node2".format(self.module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
         node2.start()
-        self.assertEqual(self.init_pb(node1), six.b(""))
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node1', node1)
 
         try:
-            self.backup_pb(node1, data_dir=node2.data_dir, backup_type='full', options=['--stream'])
-            assertEqual(1, 0, 'Error is expected because of SYSTEM ID mismatch')
-        except ProbackupException, e:
+            self.backup_node(backup_dir, 'node1', node1, data_dir=node2.data_dir, options=['--stream'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because of of SYSTEM ID mismatch.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
             self.assertTrue(
-                'ERROR: Backup data directory was initialized for system id' and
-                'but target backup directory system id is' in e.message,
-                'Expected error is about SYSTEM ID mismatch')
+                'ERROR: Backup data directory was initialized for system id' in e.message
+                 and 'but target backup directory system id is' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

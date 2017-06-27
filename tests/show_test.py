@@ -1,9 +1,9 @@
 import unittest
 import os
 from os import path
-import six
-from helpers.ptrack_helpers import ProbackupTest
-from testgres import stop_all
+from .helpers.ptrack_helpers import ProbackupTest
+from testgres import stop_all, clean_all
+import shutil
 
 
 class OptionTest(ProbackupTest, unittest.TestCase):
@@ -11,10 +11,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(OptionTest, self).__init__(*args, **kwargs)
         self.module_name = 'show'
-
-    @classmethod
-    def tearDownClass(cls):
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -36,8 +32,10 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.backup_node(backup_dir, 'node', node, options=["--log-level=panic"]),
             None
         )
-        self.assertIn(six.b("OK"), self.show_pb(backup_dir, 'node', as_text=True))
-        node.stop()
+        self.assertIn("OK", self.show_pb(backup_dir, 'node', as_text=True))
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_corrupt_2(self):
@@ -57,9 +55,11 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
 
         # delete file which belong to backup
-        file = path.join(backup_dir, "backups", "node", backup_id.decode("utf-8"), "database", "postgresql.conf")
+        file = path.join(backup_dir, "backups", "node", backup_id, "database", "postgresql.conf")
         os.remove(file)
 
         self.validate_pb(backup_dir, 'node', backup_id)
-        self.assertIn(six.b("CORRUPT"), self.show_pb(backup_dir, as_text=True))
-        node.stop()
+        self.assertIn("CORRUPT", self.show_pb(backup_dir, as_text=True))
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

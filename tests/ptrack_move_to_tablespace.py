@@ -1,10 +1,8 @@
-import unittest
-from sys import exit
-from testgres import get_new_node, stop_all
 import os
-from signal import SIGTERM
-from helpers.ptrack_helpers import ProbackupTest, idx_ptrack
-from time import sleep
+import unittest
+from testgres import clean_all, stop_all
+from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import shutil
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
@@ -12,9 +10,10 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         super(SimpleTest, self).__init__(*args, **kwargs)
         self.module_name = 'ptrack_move_to_tablespace'
 
-    def teardown(self):
-        # clean_all()
-        stop_all()
+    # @classmethod
+    # def tearDownClass(cls):
+    #     clean_all()
+    #     shutil.rmtree(os.path.join(self.tmp_path, self.module_name), ignore_errors=True)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -58,7 +57,5 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # check that ptrack has correct bits after recovery
             self.check_ptrack_recovery(idx_ptrack[i])
 
-        node.stop()
-
-if __name__ == '__main__':
-    unittest.main()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

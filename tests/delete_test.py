@@ -1,9 +1,9 @@
 import unittest
 import os
-import six
-from helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from testgres import stop_all
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from testgres import stop_all, clean_all
 import subprocess
+import shutil
 
 
 class DeleteTest(ProbackupTest, unittest.TestCase):
@@ -11,10 +11,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DeleteTest, self).__init__(*args, **kwargs)
         self.module_name = 'delete'
-
-    @classmethod
-    def tearDownClass(cls):
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -55,7 +51,8 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[0]['ID'], id_1)
         self.assertEqual(show_backups[1]['ID'], id_3)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     def test_delete_increment_page(self):
         """delete increment and all after him"""
@@ -88,12 +85,13 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         show_backups = self.show_pb(backup_dir, 'node')
         self.assertEqual(len(show_backups), 2)
 
-        self.assertEqual(show_backups[0]['Mode'], six.b("FULL"))
-        self.assertEqual(show_backups[0]['Status'], six.b("OK"))
-        self.assertEqual(show_backups[1]['Mode'], six.b("FULL"))
-        self.assertEqual(show_backups[1]['Status'], six.b("OK"))
+        self.assertEqual(show_backups[0]['Mode'], "FULL")
+        self.assertEqual(show_backups[0]['Status'], "OK")
+        self.assertEqual(show_backups[1]['Mode'], "FULL")
+        self.assertEqual(show_backups[1]['Status'], "OK")
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     def test_delete_increment_ptrack(self):
         """delete increment and all after him"""
@@ -126,9 +124,10 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         show_backups = self.show_pb(backup_dir, 'node')
         self.assertEqual(len(show_backups), 2)
 
-        self.assertEqual(show_backups[0]['Mode'], six.b("FULL"))
-        self.assertEqual(show_backups[0]['Status'], six.b("OK"))
-        self.assertEqual(show_backups[1]['Mode'], six.b("FULL"))
-        self.assertEqual(show_backups[1]['Status'], six.b("OK"))
+        self.assertEqual(show_backups[0]['Mode'], "FULL")
+        self.assertEqual(show_backups[0]['Status'], "OK")
+        self.assertEqual(show_backups[1]['Mode'], "FULL")
+        self.assertEqual(show_backups[1]['Status'], "OK")
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

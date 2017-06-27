@@ -1,9 +1,9 @@
 import unittest
 import os
-import six
 from time import sleep
-from helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from testgres import stop_all
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from testgres import stop_all, clean_all
+import shutil
 
 
 class BackupTest(ProbackupTest, unittest.TestCase):
@@ -11,10 +11,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(BackupTest, self).__init__(*args, **kwargs)
         self.module_name = 'backup'
-
-    @classmethod
-    def tearDownClass(cls):
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -39,8 +35,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
         show_backup = self.show_pb(backup_dir, 'node')[0]
 
-        self.assertEqual(show_backup['Status'], six.b("OK"))
-        self.assertEqual(show_backup['Mode'], six.b("FULL"))
+        self.assertEqual(show_backup['Status'], "OK")
+        self.assertEqual(show_backup['Mode'], "FULL")
 
         # postmaster.pid and postmaster.opts shouldn't be copied
         excluded = True
@@ -56,8 +52,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # print self.show_pb(node)
         show_backup = self.show_pb(backup_dir, 'node')[1]
-        self.assertEqual(show_backup['Status'], six.b("OK"))
-        self.assertEqual(show_backup['Mode'], six.b("PAGE"))
+        self.assertEqual(show_backup['Status'], "OK")
+        self.assertEqual(show_backup['Mode'], "PAGE")
 
         # Check parent backup
         self.assertEqual(
@@ -68,15 +64,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
 
         show_backup = self.show_pb(backup_dir, 'node')[2]
-        self.assertEqual(show_backup['Status'], six.b("OK"))
-        self.assertEqual(show_backup['Mode'], six.b("PTRACK"))
+        self.assertEqual(show_backup['Status'], "OK")
+        self.assertEqual(show_backup['Mode'], "PTRACK")
 
         # Check parent backup
         self.assertEqual(
             page_backup_id,
             self.show_pb(backup_dir, 'node', backup_id=show_backup['ID'])["parent-backup-id"])
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_smooth_checkpoint(self):
@@ -93,8 +90,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         self.backup_node(backup_dir, 'node' ,node, options=["-C"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
         node.stop()
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     #@unittest.skip("skip")
     def test_incremental_backup_without_full(self):
@@ -115,7 +115,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because page backup should not be possible without valid full backup.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
-        except ProbackupException, e:
+        except ProbackupException as e:
             self.assertEqual(e.message,
                 'ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
@@ -127,16 +127,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because page backup should not be possible without valid full backup.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
-        except ProbackupException, e:
+        except ProbackupException as e:
             self.assertEqual(e.message,
                 'ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("ERROR"))
-        node.stop()
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "ERROR")
 
-    @unittest.expectedFailure
-    # Need to forcibly validate parent
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
+
+    # @unittest.expectedFailure
     def test_incremental_backup_corrupt_full(self):
         """page-level backup with corrupted full backup"""
         fname = self.id().split('.')[3]
@@ -151,29 +152,37 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
-        file = os.path.join(backup_dir, "backups", "node", backup_id.decode("utf-8"), "database", "postgresql.conf")
+        file = os.path.join(backup_dir, "backups", "node", backup_id, "database", "postgresql.conf")
         os.remove(file)
+
+        try:
+            self.validate_pb(backup_dir, 'node')
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because of validation of corrupted backup.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue("INFO: Validate backups of the instance 'node'\n" in e.message
+                and 'WARNING: Backup file "{0}" is not found\n'.format(file) in e.message
+                and "WARNING: Backup {0} is corrupted\n".format(backup_id) in e.message
+                and "INFO: Some backups are not valid\n" in e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
 
         try:
             self.backup_node(backup_dir, 'node', node, backup_type="page")
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because page backup should not be possible without valid full backup.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
-        except ProbackupException, e:
+        except ProbackupException as e:
             self.assertEqual(e.message,
-                'ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+                "ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n",
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
 
-            sleep(1)
-            self.assertEqual(1, 0, "Expecting Error because page backup should not be possible without valid full backup.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException, e:
-            self.assertEqual(e.message,
-                'ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        # sleep(1)
+        self.assertEqual(self.show_pb(backup_dir, 'node', backup_id)['status'], "CORRUPT")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "ERROR")
 
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("ERROR"))
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_threads(self):
@@ -190,12 +199,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         self.backup_node(backup_dir, 'node', node, backup_type="full", options=["-j", "4"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
 
         self.backup_node(backup_dir, 'node', node, backup_type="ptrack", options=["-j", "4"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_threads_stream(self):
@@ -213,7 +223,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'node', node, backup_type="full", options=["-j", "4", "--stream"])
 
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
         self.backup_node(backup_dir, 'node', node, backup_type="ptrack", options=["-j", "4", "--stream"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], six.b("OK"))
-        node.stop()
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "OK")
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

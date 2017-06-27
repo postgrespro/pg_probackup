@@ -1,18 +1,14 @@
-import unittest
 import os
-from sys import exit
-from testgres import get_new_node, stop_all
-from helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import unittest
+from testgres import stop_all, clean_all
+from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import shutil
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SimpleTest, self).__init__(*args, **kwargs)
         self.module_name = 'ptrack_cluster'
-
-    def teardown(self):
-        # clean_all()
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -72,7 +68,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     def test_ptrack_cluster_spgist(self):
         fname = self.id().split('.')[3]
@@ -130,7 +127,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     def test_ptrack_cluster_brin(self):
         fname = self.id().split('.')[3]
@@ -188,7 +186,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     def test_ptrack_cluster_gist(self):
         fname = self.id().split('.')[3]
@@ -246,7 +245,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     def test_ptrack_cluster_gin(self):
         fname = self.id().split('.')[3]
@@ -304,7 +304,5 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
 
-        node.stop()
-
-if __name__ == '__main__':
-    unittest.main()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

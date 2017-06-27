@@ -1,19 +1,14 @@
 import os
 import unittest
-from sys import exit
-from testgres import get_new_node, stop_all
-#import os
-from helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+from testgres import stop_all, clean_all
+from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import shutil
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SimpleTest, self).__init__(*args, **kwargs)
         self.module_name = 'ptrack_vacuum_full'
-
-    def teardown(self):
-        # clean_all()
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -72,7 +67,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
             # compare pages and check ptrack sanity, the most important part
             self.check_ptrack_sanity(idx_ptrack[i])
-        node.stop()
 
-if __name__ == '__main__':
-    unittest.main()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

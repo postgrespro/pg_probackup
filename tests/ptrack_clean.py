@@ -1,17 +1,14 @@
-import unittest
 import os
-from sys import exit
-from testgres import get_new_node, stop_all
-from helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import unittest
+from testgres import stop_all, clean_all
+from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import shutil
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SimpleTest, self).__init__(*args, **kwargs)
         self.module_name = 'ptrack_clean'
-
-    def teardown(self):
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -89,8 +86,5 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
-        print self.show_pb(backup_dir, 'node', as_text=True)
-        node.stop()
-
-if __name__ == '__main__':
-    unittest.main()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
