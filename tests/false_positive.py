@@ -2,9 +2,7 @@ import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
-from testgres import stop_all, clean_all
 import subprocess
-import shutil
 
 
 class FalsePositive(ProbackupTest, unittest.TestCase):

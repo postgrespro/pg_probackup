@@ -1,10 +1,6 @@
-import unittest
-from sys import exit
 import os
-from os import path
+import unittest
 from .helpers.ptrack_helpers import dir_files, ProbackupTest, ProbackupException
-from testgres import stop_all, clean_all
-import shutil
 
 
 class InitTest(ProbackupTest, unittest.TestCase):
@@ -67,7 +63,7 @@ class InitTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname))
         try:
-            self.run_pb(["init", "-B", path.relpath("%s/backup" % node.base_dir, self.dir_path)])
+            self.run_pb(["init", "-B", os.path.relpath("%s/backup" % node.base_dir, self.dir_path)])
             self.assertEqual(1, 0, 'Expecting Error due to initialization with non-absolute path in --backup-path. Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:

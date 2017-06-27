@@ -2,8 +2,6 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from testgres import stop_all, clean_all
-import shutil
 
 
 class BackupTest(ProbackupTest, unittest.TestCase):

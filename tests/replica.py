@@ -1,12 +1,8 @@
-import unittest
 import os
+import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
-from testgres import stop_all, clean_all
 import subprocess
-from sys import exit
-import time
-import shutil
 
 
 class ReplicaTest(ProbackupTest, unittest.TestCase):
@@ -14,11 +10,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(ReplicaTest, self).__init__(*args, **kwargs)
         self.module_name = 'replica'
-
-    # @classmethod
-    # def tearDownClass(cls):
-    #    clean_all()
-    #    shutil.rmtree(os.path.join(self.tmp_path, self.module_name), ignore_errors=True)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure

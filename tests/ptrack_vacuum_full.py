@@ -1,8 +1,6 @@
 import os
 import unittest
-from testgres import stop_all, clean_all
 from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
-import shutil
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):

@@ -1,10 +1,8 @@
-import unittest
 import os
+import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
-from testgres import stop_all, clean_all
 import subprocess
-from sys import exit
 
 
 class ValidateTest(ProbackupTest, unittest.TestCase):

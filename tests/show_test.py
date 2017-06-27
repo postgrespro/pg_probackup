@@ -1,9 +1,6 @@
-import unittest
 import os
-from os import path
+import unittest
 from .helpers.ptrack_helpers import ProbackupTest
-from testgres import stop_all, clean_all
-import shutil
 
 
 class OptionTest(ProbackupTest, unittest.TestCase):
@@ -55,7 +52,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
 
         # delete file which belong to backup
-        file = path.join(backup_dir, "backups", "node", backup_id, "database", "postgresql.conf")
+        file = os.path.join(backup_dir, "backups", "node", backup_id, "database", "postgresql.conf")
         os.remove(file)
 
         self.validate_pb(backup_dir, 'node', backup_id)

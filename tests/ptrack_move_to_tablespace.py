@@ -1,19 +1,12 @@
 import os
 import unittest
-from testgres import clean_all, stop_all
 from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
-import shutil
 
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SimpleTest, self).__init__(*args, **kwargs)
         self.module_name = 'ptrack_move_to_tablespace'
-
-    # @classmethod
-    # def tearDownClass(cls):
-    #     clean_all()
-    #     shutil.rmtree(os.path.join(self.tmp_path, self.module_name), ignore_errors=True)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure

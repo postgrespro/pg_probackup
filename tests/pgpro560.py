@@ -2,9 +2,7 @@ import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
-from testgres import stop_all, clean_all
 import subprocess
-import shutil
 
 
 class CheckSystemID(ProbackupTest, unittest.TestCase):

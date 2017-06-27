@@ -1,9 +1,7 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from testgres import stop_all, clean_all
 import subprocess
-import shutil
 
 
 class DeleteTest(ProbackupTest, unittest.TestCase):

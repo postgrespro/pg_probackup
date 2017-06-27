@@ -1,8 +1,6 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from testgres import stop_all, clean_all
-import shutil
 
 
 class OptionTest(ProbackupTest, unittest.TestCase):
