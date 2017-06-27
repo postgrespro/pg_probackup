@@ -1112,6 +1112,7 @@ pg_stop_backup(pgBackup *backup)
 				 backup_label, strerror(errno));
 
 		fwrite(PQgetvalue(res, 0, 1), 1, strlen(PQgetvalue(res, 0, 1)), fp);
+		fsync(fileno(fp));
 		fclose(fp);
 
 		/*
@@ -1139,6 +1140,7 @@ pg_stop_backup(pgBackup *backup)
 					 tablespace_map, strerror(errno));
 
 			fwrite(PQgetvalue(res, 0, 2), 1, strlen(PQgetvalue(res, 0, 2)), fp);
+			fsync(fileno(fp));
 			fclose(fp);
 
 			file = pgFileNew(tablespace_map, true);
@@ -1662,6 +1664,7 @@ write_backup_file_list(parray *files, const char *root)
 
 	print_file_list(fp, files, root);
 
+	fsync(fileno(fp));
 	fclose(fp);
 }
 
