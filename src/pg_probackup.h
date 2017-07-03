@@ -294,6 +294,7 @@ extern uint32 retention_window;
 /* compression options */
 extern CompressAlg compress_alg;
 extern int    compress_level;
+extern bool		compress_shortcut;
 
 #define DEFAULT_COMPRESS_LEVEL 6
 

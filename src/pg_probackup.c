@@ -72,6 +72,7 @@ uint32		retention_window = 0;
 /* compression options */
 CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
 int			compress_level = DEFAULT_COMPRESS_LEVEL;
+bool 		compress_shortcut = false;
 
 /* other options */
 char	   *instance_name;
@@ -132,6 +133,7 @@ static pgut_option options[] =
 	/* compression options */
 	{ 'f', 36, "compress-algorithm",	opt_compress_alg,	SOURCE_CMDLINE },
 	{ 'u', 37, "compress-level",		&compress_level,	SOURCE_CMDLINE },
+	{ 'b', 38, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
 	/* logging options */
 	{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
 	{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
@@ -352,6 +354,9 @@ main(int argc, char *argv[])
 
 	if (num_threads < 1)
 		num_threads = 1;
+
+	if (compress_shortcut)
+		compress_alg = ZLIB_COMPRESS;
 
 	if (backup_subcmd != SET_CONFIG)
 	{
