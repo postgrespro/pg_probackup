@@ -405,7 +405,7 @@ main(int argc, char *argv[])
 				elog(ERROR, "show-config command doesn't accept any options except -B and --instance");
 			return do_configure(true);
 		case SET_CONFIG:
-			if (argc == 5)
+			if (argc == 6)
 				elog(ERROR, "set-config command requires at least one option");
 			return do_configure(false);
 	}
