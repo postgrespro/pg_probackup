@@ -1,13 +1,8 @@
-import unittest
 import os
-import six
-from helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
+import unittest
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
-from testgres import stop_all
 import subprocess
-from sys import exit, _getframe
-import shutil
-import time
 
 
 class ReplicaTest(ProbackupTest, unittest.TestCase):
@@ -15,10 +10,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(ReplicaTest, self).__init__(*args, **kwargs)
         self.module_name = 'replica'
-
-#    @classmethod
-#    def tearDownClass(cls):
-#        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -65,16 +56,18 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Make backup from replica
         self.add_instance(backup_dir, 'slave', slave)
-        #time.sleep(2)
         self.assertTrue('INFO: Wait end of WAL streaming' and 'completed' in
             self.backup_node(backup_dir, 'slave', slave, options=['--stream', '--log-level=verbose', 
                 '--master-host=localhost', '--master-db=postgres','--master-port={0}'.format(master.port)]))
         self.validate_pb(backup_dir, 'slave')
         self.assertEqual('OK', self.show_pb(backup_dir, 'slave')[0]['Status'])
 
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
+
     # @unittest.skip("skip")
     def test_replica_archive_full_backup(self):
-        """make full archive backup from replica"""
+        """make full archive backup from replica, set replica, make backup from replica"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
         master = self.make_simple_node(base_dir="{0}/{1}/master".format(self.module_name, fname),
@@ -127,3 +120,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'slave', slave, options=['--archive-timeout=300',
             '--master-host=localhost', '--master-db=postgres','--master-port={0}'.format(master.port)])
         self.validate_pb(backup_dir, 'slave')
+        self.assertEqual('OK', self.show_pb(backup_dir, 'slave')[0]['Status'])
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

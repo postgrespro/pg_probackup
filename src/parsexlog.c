@@ -319,7 +319,7 @@ validate_wal(pgBackup *backup,
 	 * If recovery target is provided check that we can restore backup to a
 	 * recoverty target time or xid.
 	 */
-	if (!TransactionIdIsValid(target_xid) || target_time == 0)
+	if (!TransactionIdIsValid(target_xid) && target_time == 0)
 	{
 		/* Recoverty target is not given so exit */
 		elog(INFO, "backup validation completed successfully");

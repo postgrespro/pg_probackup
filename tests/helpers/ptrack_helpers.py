@@ -1,10 +1,10 @@
 # you need os for unittest to work
 import os
-from sys import exit
+from sys import exit, argv, version_info
 import subprocess
 import shutil
 import six
-from testgres import get_new_node
+from testgres import get_new_node, clean_all
 import hashlib
 import re
 import pwd
@@ -73,40 +73,6 @@ def dir_files(base_dir):
     out_list.sort()
     return out_list
 
-
-class ShowBackup(object):
-    def __init__(self, line):
-        self.counter = 0
-
-        print split_line
-        self.id = self.get_inc(split_line)
-        # TODO: parse to datetime
-        if len(split_line) == 12:
-            self.recovery_time = "%s %s" % (self.get_inc(split_line), self.get_inc(split_line))
-        # if recovery time is '----'
-        else:
-            self.recovery_time = self.get_inc(split_line)
-        self.mode = self.get_inc(split_line)
-#        print self.mode
-        self.wal = self.get_inc(split_line)
-        self.cur_tli = self.get_inc(split_line)
-        # slash
-        self.counter += 1
-        self.parent_tli = self.get_inc(split_line)
-        # TODO: parse to interval
-        self.time = self.get_inc(split_line)
-        # TODO: maybe rename to size?
-        self.data = self.get_inc(split_line)
-        self.start_lsn = self.get_inc(split_line)
-        self.stop_lsn = self.get_inc(split_line)
-        self.status = self.get_inc(split_line)
-
-    def get_inc(self, split_line):
-#        self.counter += 1
-#        return split_line[self.counter - 1]
-         return split_line
-
-
 class ProbackupTest(object):
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -134,7 +100,6 @@ class ProbackupTest(object):
 
         self.test_env["LC_MESSAGES"] = "C"
         self.test_env["LC_TIME"] = "C"
-
         self.helpers_path = os.path.dirname(os.path.realpath(__file__))
         self.dir_path = os.path.abspath(os.path.join(self.helpers_path, os.pardir))
         self.tmp_path = os.path.abspath(os.path.join(self.dir_path, 'tmp_dirs'))
@@ -145,6 +110,10 @@ class ProbackupTest(object):
         self.probackup_path = os.path.abspath(os.path.join(
             self.dir_path, "../pg_probackup"))
         self.user = self.get_username()
+        if '-v' in argv or '--verbose' in argv:
+            self.verbose = True
+        else:
+            self.verbose = False
 
     def arcwal_dir(self, node):
         return "%s/backup/wal" % node.base_dir
@@ -228,10 +197,12 @@ class ProbackupTest(object):
         byte_size_minus_header = byte_size - header_size
         file = os.open(file + '_ptrack', os.O_RDONLY)
         os.lseek(file, header_size, 0)
-        lot_of_bytes = os.read(file, byte_size_minus_header)
-        for byte in lot_of_bytes:
+        lots_of_bytes = os.read(file, byte_size_minus_header)
+        byte_list = [lots_of_bytes[i:i+1] for i in range(len(lots_of_bytes))]
+        for byte in byte_list:
+            #byte_inverted = bin(int(byte, base=16))[2:][::-1]
+            #bits = (byte >> x) & 1 for x in range(7, -1, -1)
             byte_inverted = bin(ord(byte))[2:].rjust(8, '0')[::-1]
-#            byte_to_bits = (byte >> x) & 1 for x in range(7, -1, -1)
             for bit in byte_inverted:
                 if len(ptrack_bits_for_fork) < size:
                     ptrack_bits_for_fork.append(int(bit))
@@ -249,9 +220,10 @@ class ProbackupTest(object):
                 # Page was not present before, meaning that relation got bigger
                 # Ptrack should be equal to 1
                 if idx_dict['ptrack'][PageNum] != 1:
-                    print 'Page Number {0} of type {1} was added, but ptrack value is {2}. THIS IS BAD'.format(
-                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
-                    print idx_dict
+                    if self.verbose:
+                        print('Page Number {0} of type {1} was added, but ptrack value is {2}. THIS IS BAD'.format(
+                            PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
+                        print(idx_dict)
                     success = False
                 continue
             if PageNum not in idx_dict['new_pages']:
@@ -266,29 +238,34 @@ class ProbackupTest(object):
             if idx_dict['new_pages'][PageNum] != idx_dict['old_pages'][PageNum]:
                 # Page has been changed, meaning that ptrack should be equal to 1
                 if idx_dict['ptrack'][PageNum] != 1:
-                    print 'Page Number {0} of type {1} was changed, but ptrack value is {2}. THIS IS BAD'.format(
-                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
-                    print idx_dict
+                    if self.verbose:
+                        print('Page Number {0} of type {1} was changed, but ptrack value is {2}. THIS IS BAD'.format(
+                            PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
+                        print(idx_dict)
                     if PageNum == 0 and idx_dict['type'] == 'spgist':
-                        print 'SPGIST is a special snowflake, so don`t fret about losing ptrack for blknum 0'
+                        if self.verbose:
+                            print('SPGIST is a special snowflake, so don`t fret about losing ptrack for blknum 0')
                         continue
                     success = False
             else:
                 # Page has not been changed, meaning that ptrack should be equal to 0
                 if idx_dict['ptrack'][PageNum] != 0:
-                    print 'Page Number {0} of type {1} was not changed, but ptrack value is {2}'.format(
-                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
-                    print idx_dict
-            self.assertEqual(success, True)
+                    if self.verbose:
+                        print('Page Number {0} of type {1} was not changed, but ptrack value is {2}'.format(
+                            PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
+                        print(idx_dict)
+            self.assertEqual(success, True, 'Ptrack of index {0} does not correspond to state of its pages.\n Gory Details: \n{1}'.format(
+                idx_dict['type'], idx_dict))
 
     def check_ptrack_recovery(self, idx_dict):
         success = True
         size = idx_dict['size']
         for PageNum in range(size):
             if idx_dict['ptrack'][PageNum] != 1:
-                print 'Recovery for Page Number {0} of Type {1} was conducted, but ptrack value is {2}. THIS IS BAD'.format(
-                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
-                print idx_dict
+                if self.verbose:
+                    print('Recovery for Page Number {0} of Type {1} was conducted, but ptrack value is {2}. THIS IS BAD'.format(
+                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
+                    print(idx_dict)
                 success = False
             self.assertEqual(success, True)
 
@@ -296,29 +273,23 @@ class ProbackupTest(object):
         success = True
         for PageNum in range(size):
             if idx_dict['ptrack'][PageNum] != 0:
-                print 'Ptrack for Page Number {0} of Type {1} should be clean, but ptrack value is {2}. THIS IS BAD'.format(
-                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
-                print idx_dict
+                if self.verbose:
+                    print('Ptrack for Page Number {0} of Type {1} should be clean, but ptrack value is {2}. THIS IS BAD'.format(
+                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
+                    print(idx_dict)
                 success = False
-            self.assertEqual(success, True)
+            self.assertEqual(success, True, '')
 
-    def run_pb(self, command, async=False):
+    def run_pb(self, command):
         try:
             self.cmd = [' '.join(map(str,[self.probackup_path] + command))]
-            print self.cmd
-            if async is True:
-                return subprocess.Popen(
-                    [self.probackup_path] + command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=self.test_env
-                )
-            else:
-                self.output = subprocess.check_output(
-                    [self.probackup_path] + command,
-                    stderr=subprocess.STDOUT,
-                    env=self.test_env
-                )
+            if self.verbose:
+                print(self.cmd)
+            self.output = subprocess.check_output(
+                [self.probackup_path] + command,
+                stderr=subprocess.STDOUT,
+                env=self.test_env
+                ).decode("utf-8")
             if command[0] == 'backup':
                 # return backup ID
                 for line in self.output.splitlines():
@@ -327,7 +298,7 @@ class ProbackupTest(object):
             else:
                 return self.output
         except subprocess.CalledProcessError as e:
-            raise  ProbackupException(e.output, self.cmd)
+            raise  ProbackupException(e.output.decode("utf-8"), self.cmd)
 
     def init_pb(self, backup_dir):
 
@@ -358,12 +329,21 @@ class ProbackupTest(object):
     def clean_pb(self, backup_dir):
         shutil.rmtree(backup_dir, ignore_errors=True)
 
-    def backup_node(self, backup_dir, instance, node, backup_type="full", options=[], async=False):
+    def backup_node(self, backup_dir, instance, node=False, data_dir=False, backup_type="full", options=[]):
+        if not node and not data_dir:
+            print('You must provide ether node or data_dir for backup')
+            exit(1)
+
+        if node:
+            pgdata = node.data_dir
+
+        if data_dir:
+            pgdata = data_dir
 
         cmd_list = [
             "backup",
             "-B", backup_dir,
-            "-D", node.data_dir,
+            "-D", pgdata,
             "-p", "%i" % node.port,
             "-d", "postgres",
             "--instance={0}".format(instance)
@@ -371,7 +351,7 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ["-b", backup_type]
 
-        return self.run_pb(cmd_list + options, async)
+        return self.run_pb(cmd_list + options)
 
     def restore_node(self, backup_dir, instance, node=False, data_dir=None, backup_id=None, options=[]):
         if data_dir is None:
@@ -429,9 +409,9 @@ class ProbackupTest(object):
                     if i == '':
                         backup_record_split.remove(i)
                 if len(header_split) != len(backup_record_split):
-                    print warning.format(
+                    print(warning.format(
                         header=header, body=body,
-                        header_split=header_split, body_split=backup_record_split)
+                        header_split=header_split, body_split=backup_record_split))
                     exit(1)
                 new_dict = dict(zip(header_split, backup_record_split))
                 backup_list.append(new_dict)
@@ -473,7 +453,6 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
-        # print(cmd_list)
         return self.run_pb(cmd_list + options)
 
     def delete_expired(self, backup_dir, instance, options=[]):
@@ -563,3 +542,17 @@ class ProbackupTest(object):
     def get_username(self):
         """ Returns current user name """
         return pwd.getpwuid(os.getuid())[0]
+
+    def del_test_dir(self, module_name, fname):
+        """ Returns current user name """
+        try:
+            clean_all()
+        except:
+            pass
+
+        shutil.rmtree(os.path.join(self.tmp_path, self.module_name, fname),
+            ignore_errors=True)
+        try:
+            os.rmdir(os.path.join(self.tmp_path, self.module_name))
+        except:
+            pass

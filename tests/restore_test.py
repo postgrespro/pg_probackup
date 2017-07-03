@@ -1,12 +1,8 @@
-import unittest
 import os
-import six
-from helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from testgres import stop_all
+import unittest
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 from datetime import datetime
-import shutil
-from sys import exit
 
 
 class RestoreTest(ProbackupTest, unittest.TestCase):
@@ -14,10 +10,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(RestoreTest, self).__init__(*args, **kwargs)
         self.module_name = 'restore'
-
-    @classmethod
-    def tearDownClass(cls):
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -45,7 +37,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
 
         # 1 - Test recovery from latest
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -58,7 +50,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_full_page_to_latest(self):
@@ -89,7 +82,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -98,10 +91,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
-    # @unittest.skip("skip")
-    def test_restore_to_timeline(self):
+    #@unittest.skip("skip")
+    def test_restore_to_specific_timeline(self):
         """recovery to target timeline"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
@@ -120,11 +114,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
-        target_tli = int(node.get_control_data()[six.b("Latest checkpoint's TimeLineID")])
+        target_tli = int(node.get_control_data()["Latest checkpoint's TimeLineID"])
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -134,13 +128,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(backup_dir, 'node', node, backup_type="full")
+        self.backup_node(backup_dir, 'node', node)
 
         node.stop({"-m": "immediate"})
         node.cleanup()
 
         # Correct Backup must be choosen for restore
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4", "--timeline={0}".format(target_tli)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -152,7 +146,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_to_time(self):
@@ -181,7 +176,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4", '--time="{0}"'.format(target_time)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -190,7 +185,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_to_xid(self):
@@ -235,7 +231,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "fast"})
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4", '--xid={0}'.format(target_xid)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -244,7 +240,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_full_ptrack_archive(self):
@@ -275,7 +272,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -284,7 +281,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_ptrack(self):
@@ -321,7 +319,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -330,7 +328,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_full_ptrack_stream(self):
@@ -362,7 +361,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -371,7 +370,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_full_ptrack_under_load(self):
@@ -410,7 +410,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "immediate"})
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
@@ -418,10 +418,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
-
         self.assertEqual(bbalance, delta)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_full_under_load_ptrack(self):
@@ -463,16 +463,17 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         #self.wrong_wal_clean(node, wal_segment_size)
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         node.start({"-t": "600"})
 
         bbalance = node.execute("postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute("postgres", "SELECT sum(delta) FROM pgbench_history")
-
         self.assertEqual(bbalance, delta)
-        node.stop()
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_to_xid_inclusive(self):
@@ -501,9 +502,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
         with node.connect("postgres") as con:
-            res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
+            result = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
-            target_xid = res[0][0]
+            target_xid = result[0][0]
 
         pgbench = node.pgbench(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
@@ -517,7 +518,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop({"-m": "fast"})
         node.cleanup()
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node,
                 options=["-j", "4", '--xid={0}'.format(target_xid), "--inclusive=false"]),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
@@ -528,7 +529,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(before, after)
         self.assertEqual(len(node.execute("postgres", "SELECT * FROM tbl0005")), 0)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_1(self):
@@ -556,7 +558,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.commit()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
 
         # 1 - Try to restore to existing directory
         node.stop()
@@ -565,7 +567,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because restore destionation is not empty.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
-        except ProbackupException, e:
+        except ProbackupException as e:
             self.assertEqual(e.message,
                 'ERROR: restore destination is not empty: "{0}"\n'.format(node.data_dir),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
@@ -577,20 +579,20 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because restore tablespace destination is not empty.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
-        except ProbackupException, e:
+        except ProbackupException as e:
             self.assertEqual(e.message,
                 'ERROR: restore tablespace destination is not empty: "{0}"\n'.format(tblspc_path),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # 3 - Restore using tablespace-mapping
         tblspc_path_new = os.path.join(node.base_dir, "tblspc_new")
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start()
-        res = node.execute("postgres", "SELECT id FROM test")
-        self.assertEqual(res[0][0], 1)
+        result = node.execute("postgres", "SELECT id FROM test")
+        self.assertEqual(result[0][0], 1)
 
         # 4 - Restore using tablespace-mapping using page backup
         self.backup_node(backup_dir, 'node', node)
@@ -600,22 +602,23 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node, backup_type="page")
 
         show_pb = self.show_pb(backup_dir, 'node')
-        self.assertEqual(show_pb[1]['Status'], six.b("OK"))
-        self.assertEqual(show_pb[2]['Status'], six.b("OK"))
+        self.assertEqual(show_pb[1]['Status'], "OK")
+        self.assertEqual(show_pb[2]['Status'], "OK")
 
         node.stop()
         node.cleanup()
         tblspc_path_page = os.path.join(node.base_dir, "tblspc_page")
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start()
-        res = node.execute("postgres", "SELECT id FROM test OFFSET 1")
-        self.assertEqual(res[0][0], 2)
+        result = node.execute("postgres", "SELECT id FROM test OFFSET 1")
+        self.assertEqual(result[0][0], 2)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_2(self):
@@ -633,7 +636,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Full backup
         self.backup_node(backup_dir, 'node', node)
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], six.b("OK"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
 
         # Create tablespace
         tblspc_path = os.path.join(node.base_dir, "tblspc")
@@ -647,8 +650,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # First page backup
         self.backup_node(backup_dir, 'node', node, backup_type="page")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], six.b("OK"))
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Mode'], six.b("PAGE"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Mode'], "PAGE")
 
         # Create tablespace table
         with node.connect("postgres") as con:
@@ -661,15 +664,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Second page backup
         backup_id = self.backup_node(backup_dir, 'node', node, backup_type="page")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Status'], six.b("OK"))
-        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Mode'], six.b("PAGE"))
+        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Mode'], "PAGE")
 
         node.stop()
         node.cleanup()
 
         tblspc_path_new = os.path.join(node.base_dir, "tblspc_new")
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         node.start()
@@ -678,9 +681,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(count[0][0], 4)
         count = node.execute("postgres", "SELECT count(*) FROM tbl1")
         self.assertEqual(count[0][0], 4)
-        node.stop()
 
-    # @unittest.skip("skip")
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
+
+    #@unittest.skip("skip")
     def test_archive_node_backup_stream_restore_to_recovery_time(self):
         """make node with archiving, make stream backup, make PITR to Recovery Time"""
         fname = self.id().split('.')[3]
@@ -692,6 +697,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
 
         backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
@@ -700,18 +706,57 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
         node.cleanup()
 
-        recovery_time = self.show_pb(backup_dir, 'node', backup_id=backup_id)['recovery-time']
+        recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, options=["-j", "4", '--time="{0}"'.format(recovery_time)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
-        res = node.psql("postgres", 'select * from t_heap')
-        self.assertEqual(True, 'does not exist' in res[2])
+        result = node.psql("postgres", 'select * from t_heap')
+        self.assertEqual(True, 'does not exist' in result[2].decode("utf-8"))
         self.assertEqual(True, node.status())
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
+
+
+    #@unittest.skip("skip")
+    def test_archive_node_backup_stream_restore_to_recovery_time(self):
+        """make node with archiving, make stream backup, make PITR to Recovery Time"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
+        node.psql("postgres", "create table t_heap(a int)")
+        node.psql("postgres", "select pg_switch_xlog()")
         node.stop()
+        node.cleanup()
+
+        recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
+
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
+            self.restore_node(backup_dir, 'node', node, options=["-j", "4", '--time="{0}"'.format(recovery_time)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
+
+        node.start({"-t": "600"})
+
+        result = node.psql("postgres", 'select * from t_heap')
+        self.assertEqual(True, 'does not exist' in result[2].decode("utf-8"))
+        self.assertEqual(True, node.status())
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_archive_node_backup_stream_pitr(self):
@@ -734,16 +779,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         recovery_time = self.show_pb(backup_dir, 'node', backup_id=backup_id)['recovery-time']
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node,
                 options=["-j", "4", '--time="{0}"'.format(recovery_time)]),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
-        res = node.psql("postgres", 'select * from t_heap')
-        self.assertEqual(True, 'does not exist' in res[2])
-        node.stop()
+        result = node.psql("postgres", 'select * from t_heap')
+        self.assertEqual(True, 'does not exist' in result[2].decode("utf-8"))
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
     # @unittest.skip("skip")
     def test_archive_node_backup_archive_pitr_2(self):
@@ -766,13 +813,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
 
-        self.assertIn(six.b("INFO: Restore of backup {0} completed.".format(backup_id)),
+        self.assertIn("INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(backup_dir, 'node', node, 
                 options=["-j", "4", '--time="{0}"'.format(recovery_time)]),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.start({"-t": "600"})
 
-        res = node.psql("postgres", 'select * from t_heap')
-        self.assertEqual(True, 'does not exist' in res[2])
-        node.stop()
+        result = node.psql("postgres", 'select * from t_heap')
+        self.assertTrue('does not exist' in result[2].decode("utf-8"))
+
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

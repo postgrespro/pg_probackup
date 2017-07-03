@@ -357,6 +357,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			 strerror(errno_tmp));
 	}
 
+	fsync(fileno(out));
 	fclose(in);
 	fclose(out);
 
@@ -470,6 +471,7 @@ restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
 			strerror(errno_tmp));
 	}
 
+	fsync(fileno(out));
 	fclose(in);
 	fclose(out);
 }
@@ -605,6 +607,7 @@ restore_data_file(const char *from_root,
 			 strerror(errno_tmp));
 	}
 
+	fsync(fileno(out));
 	fclose(in);
 	fclose(out);
 }
@@ -732,6 +735,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 			 strerror(errno_tmp));
 	}
 
+	fsync(fileno(out));
 	fclose(in);
 	fclose(out);
 
@@ -832,9 +836,9 @@ copy_wal_file(const char *from_path, const char *to_path)
 			 strerror(errno_tmp));
 	}
 
+	fsync(fileno(out));
 	fclose(in);
 	fclose(out);
-
 }
 
 /*
@@ -957,6 +961,7 @@ copy_file_partly(const char *from_root, const char *to_root,
 	/* add meta information needed for recovery */
 	file->is_partial_copy = true;
 
+	fsync(fileno(out));
 	fclose(in);
 	fclose(out);
 

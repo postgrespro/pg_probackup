@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "1.1.17";
+const char *PROGRAM_VERSION	= "2.0.0";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -72,6 +72,7 @@ uint32		retention_window = 0;
 /* compression options */
 CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
 int			compress_level = DEFAULT_COMPRESS_LEVEL;
+bool 		compress_shortcut = false;
 
 /* other options */
 char	   *instance_name;
@@ -132,6 +133,7 @@ static pgut_option options[] =
 	/* compression options */
 	{ 'f', 36, "compress-algorithm",	opt_compress_alg,	SOURCE_CMDLINE },
 	{ 'u', 37, "compress-level",		&compress_level,	SOURCE_CMDLINE },
+	{ 'b', 38, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
 	/* logging options */
 	{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
 	{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
@@ -353,6 +355,9 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
+	if (compress_shortcut)
+		compress_alg = ZLIB_COMPRESS;
+
 	if (backup_subcmd != SET_CONFIG)
 	{
 		if (compress_level != DEFAULT_COMPRESS_LEVEL
@@ -405,7 +410,7 @@ main(int argc, char *argv[])
 				elog(ERROR, "show-config command doesn't accept any options except -B and --instance");
 			return do_configure(true);
 		case SET_CONFIG:
-			if (argc == 5)
+			if (argc == 6)
 				elog(ERROR, "set-config command requires at least one option");
 			return do_configure(false);
 	}

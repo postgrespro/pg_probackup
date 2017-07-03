@@ -750,6 +750,7 @@ create_recovery_conf(time_t backup_id,
 	if (target_tli)
 		fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
 
+	fsync(fileno(fp));
 	fclose(fp);
 }
 

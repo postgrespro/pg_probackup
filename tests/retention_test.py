@@ -1,9 +1,7 @@
-import unittest
 import os
+import unittest
 from datetime import datetime, timedelta
-from os import path, listdir
-from helpers.ptrack_helpers import ProbackupTest
-from testgres import stop_all
+from .helpers.ptrack_helpers import ProbackupTest
 
 
 class RetentionTest(ProbackupTest, unittest.TestCase):
@@ -11,10 +9,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(RetentionTest, self).__init__(*args, **kwargs)
         self.module_name = 'retention'
-
-    @classmethod
-    def tearDownClass(cls):
-        stop_all()
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -51,17 +45,18 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         min_wal = None
         max_wal = None
         for line in log.splitlines():
-            if line.startswith(b"INFO: removed min WAL segment"):
+            if line.startswith("INFO: removed min WAL segment"):
                 min_wal = line[31:-1]
-            elif line.startswith(b"INFO: removed max WAL segment"):
+            elif line.startswith("INFO: removed max WAL segment"):
                 max_wal = line[31:-1]
-        for wal_name in listdir(os.path.join(backup_dir, 'wal', 'node')):
+        for wal_name in os.listdir(os.path.join(backup_dir, 'wal', 'node')):
             if not wal_name.endswith(".backup"):
-                wal_name_b = wal_name.encode('ascii')
-                self.assertEqual(wal_name_b[8:] > min_wal[8:], True)
-                self.assertEqual(wal_name_b[8:] > max_wal[8:], True)
+                #wal_name_b = wal_name.encode('ascii')
+                self.assertEqual(wal_name[8:] > min_wal[8:], True)
+                self.assertEqual(wal_name[8:] > max_wal[8:], True)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)
 
 #    @unittest.skip("123")
     def test_retention_window_2(self):
@@ -87,12 +82,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Make backup to be keeped
         self.backup_node(backup_dir, 'node', node)
 
-        backups = path.join(backup_dir, 'backups', 'node')
+        backups = os.path.join(backup_dir, 'backups', 'node')
         days_delta = 5
-        for backup in listdir(backups):
+        for backup in os.listdir(backups):
             if backup == 'pg_probackup.conf':
                 continue
-            with open(path.join(backups, backup, "backup.control"), "a") as conf:
+            with open(os.path.join(backups, backup, "backup.control"), "a") as conf:
                 conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
                     datetime.now() - timedelta(days=days_delta)))
                 days_delta -= 1
@@ -106,4 +101,5 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.delete_expired(backup_dir, 'node')
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
-        node.stop()
+        # Clean after yourself
+        self.del_test_dir(self.module_name, fname)

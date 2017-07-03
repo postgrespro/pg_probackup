@@ -66,6 +66,9 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
 
 	elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
+	if (access(backup_wal_file_path, F_OK) != -1)
+		elog(ERROR, "file '%s', already exists.", backup_wal_file_path);
+
 	copy_wal_file(absolute_wal_file_path, backup_wal_file_path);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
