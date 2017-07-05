@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.0";
+const char *PROGRAM_VERSION	= "2.0.1";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -401,6 +401,8 @@ main(int argc, char *argv[])
 		case DELETE:
 			if (delete_expired && backup_id_string_param)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
+			if (!delete_expired && !delete_wal && !backup_id_string_param)
+				elog(ERROR, "You must specify at least one of the delete options: --expired |--wal |--backup_id");
 			if (delete_expired)
 				return do_retention_purge();
 			else

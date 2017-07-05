@@ -256,7 +256,7 @@ do_backup_database(parray *backup_list)
 
 		if (ptrack_lsn > prev_backup->stop_lsn)
 		{
-			elog(ERROR, "LSN from ptrack_control %lx differs from LSN of previous ptrack backup %lx.\n"
+			elog(ERROR, "LSN from ptrack_control %lx differs from LSN of previous backup %lx.\n"
 						"Create new full backup before an incremental one.",
 						ptrack_lsn, prev_backup->start_lsn);
 		}
@@ -435,6 +435,9 @@ do_backup(void)
 	/* archiving check */
 	if (!current.stream && !pg_archive_enabled())
 		elog(ERROR, "Archiving must be enabled for archive backup");
+
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE && !pg_archive_enabled())
+		elog(ERROR, "Archiving must be enabled for PAGE backup");
 
 	if (from_replica)
 	{

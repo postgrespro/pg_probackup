@@ -28,10 +28,6 @@ do_delete(time_t backup_id)
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
 
-	/* DATE are always required */
-	if (backup_id == 0)
-		elog(ERROR, "required backup ID not specified");
-
 	/* Get exclusive lock of backup catalog */
 	catalog_lock();
 
@@ -40,55 +36,60 @@ do_delete(time_t backup_id)
 	if (backup_list == NULL)
 		elog(ERROR, "Failed to get backup list.");
 
-	delete_list = parray_new();
-
-	/* Find backup to be deleted and make increment backups array to be deleted */
-	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
+	if (backup_id != 0)
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
+		delete_list = parray_new();
 
-		if (backup->start_time == backup_id)
+		/* Find backup to be deleted and make increment backups array to be deleted */
+		for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 		{
-			parray_append(delete_list, backup);
+			pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
 
-			/*
-			 * Do not remove next backups, if target backup was finished
-			 * incorrectly.
-			 */
-			if (backup->status == BACKUP_STATUS_ERROR)
-				break;
-
-			/* Save backup id to retreive increment backups */
-			parent_id = backup->start_time;
-			backup_found = true;
-		}
-		else if (backup_found)
-		{
-			if (backup->backup_mode != BACKUP_MODE_FULL &&
-				backup->parent_backup == parent_id)
+			if (backup->start_time == backup_id)
 			{
-				/* Append to delete list increment backup */
 				parray_append(delete_list, backup);
+
+				/*
+				* Do not remove next backups, if target backup was finished
+				* incorrectly.
+				*/
+				if (backup->status == BACKUP_STATUS_ERROR)
+					break;
+
 				/* Save backup id to retreive increment backups */
 				parent_id = backup->start_time;
+				backup_found = true;
 			}
-			else
-				break;
+			else if (backup_found)
+			{
+				if (backup->backup_mode != BACKUP_MODE_FULL &&
+					backup->parent_backup == parent_id)
+				{
+					/* Append to delete list increment backup */
+					parray_append(delete_list, backup);
+					/* Save backup id to retreive increment backups */
+					parent_id = backup->start_time;
+				}
+				else
+					break;
+			}
 		}
-	}
 
-	if (parray_num(delete_list) == 0)
-		elog(ERROR, "no backup found, cannot delete");
+		if (parray_num(delete_list) == 0)
+			elog(ERROR, "no backup found, cannot delete");
 
-	/* Delete backups from the end of list */
-	for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
-	{
-		pgBackup   *backup = (pgBackup *) parray_get(delete_list, (size_t) i);
+		/* Delete backups from the end of list */
+		for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
+		{
+			pgBackup   *backup = (pgBackup *) parray_get(delete_list, (size_t) i);
 
-		if (interrupted)
-			elog(ERROR, "interrupted during delete backup");
+			if (interrupted)
+				elog(ERROR, "interrupted during delete backup");
 
-		pgBackupDeleteFiles(backup);
+			pgBackupDeleteFiles(backup);
+		}
+
+		parray_free(delete_list);
 	}
 
 	/* Clean WAL segments */
@@ -111,7 +112,6 @@ do_delete(time_t backup_id)
 	}
 
 	/* cleanup */
-	parray_free(delete_list);
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
 

@@ -43,26 +43,31 @@ subdir=contrib/pg_probackup
 top_builddir=../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
+ifeq ("$(top_srcdir)","../..")
+srchome="$(top_srcdir)/.."
+else
+srchome="$(top_srcdir)"
+endif
 # Those files are symlinked from the PostgreSQL sources.
-src/xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/xlogreader.c
-	rm -f $@ && $(LN_S) ../$< ./src/xlogreader.c
-src/datapagemap.c: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
-	rm -f $@ && $(LN_S) ../$< ./src/datapagemap.c
-src/datapagemap.h: % : $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
-	rm -f $@ && $(LN_S) ../$< src/datapagemap.h
-src/logging.h: % : $(top_srcdir)/src/bin/pg_rewind/logging.h
-	rm -f $@ && $(LN_S) ../$< ./src
-src/receivelog.c: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
-	rm -f $@ && $(LN_S) ../$< ./src
-src/receivelog.h: % : $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
-	rm -f $@ && $(LN_S) ../$< ./src
-src/streamutil.c: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
-	rm -f $@ && $(LN_S) ../$< ./src
-src/streamutil.h: % : $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
-	rm -f $@ && $(LN_S) ../$< ./src
+src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
+	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
+src/datapagemap.c: $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.c $@
+src/datapagemap.h: $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.h $@
+src/logging.h: $(top_srcdir)/src/bin/pg_rewind/logging.h
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/logging.h $@
+src/receivelog.c: $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/receivelog.c $@
+src/receivelog.h: $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/receivelog.h $@
+src/streamutil.c: $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.c $@
+src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.h $@
 endif
 
-PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS}
+PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
