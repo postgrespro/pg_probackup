@@ -1102,6 +1102,7 @@ pg_stop_backup(pgBackup *backup)
 		char		backup_label[MAXPGPATH];
 		FILE	   *fp;
 		pgFile	   *file;
+		size_t		len;
 
 		Assert(PQnfields(res) >= 5);
 
@@ -1114,9 +1115,13 @@ pg_stop_backup(pgBackup *backup)
 			elog(ERROR, "can't open backup label file \"%s\": %s",
 				 backup_label, strerror(errno));
 
-		fwrite(PQgetvalue(res, 0, 1), 1, strlen(PQgetvalue(res, 0, 1)), fp);
-		fsync(fileno(fp));
-		fclose(fp);
+		len = strlen(PQgetvalue(res, 0, 1));
+		if (fwrite(PQgetvalue(res, 0, 1), 1, len, fp) != len ||
+			fflush(fp) != 0 ||
+			fsync(fileno(fp)) != 0 ||
+			fclose(fp))
+			elog(ERROR, "can't write backup label file \"%s\": %s",
+				 backup_label, strerror(errno));
 
 		/*
 		 * It's vital to check if backup_files_list is initialized,
@@ -1142,9 +1147,13 @@ pg_stop_backup(pgBackup *backup)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 
-			fwrite(PQgetvalue(res, 0, 2), 1, strlen(PQgetvalue(res, 0, 2)), fp);
-			fsync(fileno(fp));
-			fclose(fp);
+			len = strlen(PQgetvalue(res, 0, 2));
+			if (fwrite(PQgetvalue(res, 0, 2), 1, len, fp) != len ||
+				fflush(fp) != 0 ||
+				fsync(fileno(fp)) != 0 ||
+				fclose(fp))
+				elog(ERROR, "can't write tablespace map file \"%s\": %s",
+					 tablespace_map, strerror(errno));
 
 			file = pgFileNew(tablespace_map, true);
 			calc_file_checksum(file);
@@ -1667,8 +1676,10 @@ write_backup_file_list(parray *files, const char *root)
 
 	print_file_list(fp, files, root);
 
-	fsync(fileno(fp));
-	fclose(fp);
+	if (fflush(fp) != 0 ||
+		fsync(fileno(fp)) != 0 ||
+		fclose(fp))
+		elog(ERROR, "cannot write file list \"%s\": %s", path, strerror(errno));
 }
 
 /*

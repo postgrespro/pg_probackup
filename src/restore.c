@@ -750,8 +750,11 @@ create_recovery_conf(time_t backup_id,
 	if (target_tli)
 		fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
 
-	fsync(fileno(fp));
-	fclose(fp);
+	if (fflush(fp) != 0 ||
+		fsync(fileno(fp)) != 0 ||
+		fclose(fp))
+		elog(ERROR, "cannot write recovery.conf \"%s\": %s", path,
+			 strerror(errno));
 }
 
 /*
