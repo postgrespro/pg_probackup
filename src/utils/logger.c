@@ -19,8 +19,8 @@
 
 /* Logger parameters */
 
-int			log_level = INFO;
-bool		log_level_defined = false;
+int			log_to_file = LOGGER_NONE;
+int			log_level = LOGGER_NONE;
 
 char	   *log_filename = NULL;
 char	   *error_log_filename = NULL;
@@ -68,6 +68,19 @@ static bool logging_to_file = false;
 
 static pthread_mutex_t log_file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+void
+init_logger(const char *root_path)
+{
+	/* Set log path */
+	if (LOG_TO_FILE || error_log_filename)
+	{
+		if (log_directory)
+			strcpy(log_path, log_directory);
+		else
+			join_path_components(log_path, root_path, "log");
+	}
+}
+
 static void
 write_elevel(FILE *stream, int elevel)
 {
@@ -113,9 +126,11 @@ elog_internal(int elevel, const char *fmt, va_list args)
 				write_to_stderr;
 	va_list		error_args,
 				std_args;
+	time_t		log_time = (time_t) time(NULL);
+	char		strfbuf[128];
 
 	write_to_file = log_path[0] != '\0' && !logging_to_file &&
-		(log_filename || error_log_filename);
+		(LOG_TO_FILE || error_log_filename);
 
 	/*
 	 * There is no need to lock if this is elog() from upper elog() and
@@ -138,18 +153,28 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	if (write_to_stderr && write_to_file)
 		va_copy(std_args, args);
 
+	if (write_to_file)
+		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
+				 localtime(&log_time));
+
 	/*
 	 * Write message to log file.
 	 * Do not write to file if this error was raised during write previous
 	 * message.
 	 */
-	if (log_filename && write_to_file)
+	if (LOG_TO_FILE && write_to_file)
 	{
 		logging_to_file = true;
 
 		if (log_file == NULL)
-			open_logfile(&log_file, log_filename);
+		{
+			if (log_filename == NULL)
+				open_logfile(&log_file, "pg_probackup.log");
+			else
+				open_logfile(&log_file, log_filename);
+		}
 
+		fprintf(log_file, "%s: ", strfbuf);
 		write_elevel(log_file, elevel);
 
 		vfprintf(log_file, fmt, args);
@@ -171,6 +196,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 		if (error_log_file == NULL)
 			open_logfile(&error_log_file, error_log_filename);
 
+		fprintf(log_file, "%s: ", strfbuf);
 		write_elevel(error_log_file, elevel);
 
 		vfprintf(error_log_file, fmt, error_args);
@@ -220,7 +246,7 @@ elog(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < log_level && elevel < ERROR)
+	if (elevel < LOG_LEVEL && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -261,7 +287,7 @@ pg_log(eLogType type, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < log_level && elevel < ERROR)
+	if (elevel < LOG_LEVEL && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);

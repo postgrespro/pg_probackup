@@ -155,6 +155,7 @@ typedef struct pgBackupConfig
 	const char *master_user;
 	int			replica_timeout;
 
+	int			log_to_file;
 	int			log_level;
 	char	   *log_filename;
 	char	   *error_log_filename;

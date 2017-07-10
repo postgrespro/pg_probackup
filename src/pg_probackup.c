@@ -135,6 +135,7 @@ static pgut_option options[] =
 	{ 'u', 37, "compress-level",		&compress_level,	SOURCE_CMDLINE },
 	{ 'b', 38, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
 	/* logging options */
+	{ 'b', 'l', "log",					&log_to_file,		SOURCE_CMDLINE },
 	{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
 	{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
 	{ 's', 42, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
@@ -304,14 +305,8 @@ main(int argc, char *argv[])
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
 
-	/* Set log path */
-	if (log_filename || error_log_filename)
-	{
-		if (log_directory)
-			strcpy(log_path, log_directory);
-		else
-			join_path_components(log_path, backup_path, "log");
-	}
+	/* Initialize logger */
+	init_logger(backup_path);
 
 	/* Sanity check of --backup-id option */
 	if (backup_id_string_param != NULL)
@@ -430,7 +425,6 @@ static void
 opt_log_level(pgut_option *opt, const char *arg)
 {
 	log_level = parse_log_level(arg);
-	log_level_defined = true;
 }
 
 CompressAlg
