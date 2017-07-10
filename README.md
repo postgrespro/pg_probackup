@@ -4,6 +4,7 @@
 
 The extension is compatible with:
 * PostgreSQL 9.5, 9.6, 10;
+
 `PTRACK` backup requires:
 * Postgres Pro Standard 9.5, 9.6;
 or
