@@ -10,8 +10,6 @@ The extension is compatible with:
 or
 * Postgres Pro Enterprise;
 
-The extension has its own [Wiki](https://github.com/postgrespro/pg_probackup/wiki).
-
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 * Choosing between full and page-level incremental backups to speed up backup and recovery
 * Implementing a single backup strategy for multi-server PostgreSQL clusters
@@ -51,7 +49,19 @@ To compile `pg_probackup`, you must have a PostgreSQL installation and raw sourc
 make USE_PGXS=1 PG_CONFIG=<path_to_pg_config> top_srcdir=<path_to_PostgreSQL_source_tree>
 ```
 
-Once you have `pg_probackup` installed, complete [the setup](https://github.com/postgrespro/pg_probackup/wiki).
+Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgresproee/current/app-pgprobackup.html#pg-probackup-install-and-setup).
+
+## Documentation
+
+Currently the latest documentation can be found at [Postgres Pro Enterprise documentation](https://postgrespro.com/docs/postgresproee/current/app-pgprobackup).
+
+## Licence
+
+This module available under the same license as [PostgreSQL](https://www.postgresql.org/about/licence/).
+
+## Feedback
+
+Do not hesitate to post your issues, questions and new ideas at the [issues](https://github.com/postgrespro/pg_probackup/issues) page.
 
 ## Authors
 
