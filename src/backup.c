@@ -87,6 +87,7 @@ static int checkpoint_timeout(void);
 static void add_pgdata_files(parray *files, const char *root);
 static void write_backup_file_list(parray *files, const char *root);
 static void wait_wal_lsn(XLogRecPtr lsn);
+static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
 static void StreamLog(void *arg);
 
@@ -610,18 +611,22 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	const char *params[2];
 	uint32		xlogid;
 	uint32		xrecoff;
+	PGconn	   *conn;
 
 	params[0] = label;
+
+	/* For replica we call pg_start_backup() on master */
+	conn = (from_replica) ? master_conn : backup_conn;
 
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
 	if (!exclusive_backup)
-		res = pgut_execute(backup_conn,
+		res = pgut_execute(conn,
 						   "SELECT pg_start_backup($1, $2, false)",
 						   2,
 						   params);
 	else
-		res = pgut_execute(backup_conn,
+		res = pgut_execute(conn,
 						   "SELECT pg_start_backup($1, $2)",
 						   2,
 						   params);
@@ -635,14 +640,6 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 
 	PQclear(res);
 
-	/*
-	 * Switch to a new WAL segment. It is necessary to get archived WAL
-	 * segment, which includes start LSN of current backup.
-	 *
-	 * Do not switch for standby node and if backup is stream.
-	 */
-	if (!from_replica && !stream_wal)
-		pg_switch_wal(backup_conn);
 	if (!stream_wal)
 		/*
 		 * Do not wait start_lsn for stream backup.
@@ -907,6 +904,66 @@ wait_wal_lsn(XLogRecPtr lsn)
 					 "switched WAL segment %s could not be archived in %d seconds",
 					 wal_segment, timeout);
 		}
+	}
+}
+
+/*
+ * Wait for target 'lsn' on replica instance.
+ */
+static void
+wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
+{
+	uint32		try_count = 0;
+
+	Assert(from_replica);
+
+	while (true)
+	{
+		PGresult   *res;
+		uint32		xlogid;
+		uint32		xrecoff;
+		XLogRecPtr	replica_lsn;
+
+		/*
+		 * For lsn from pg_start_backup() we need it to be replayed on replica's
+		 * data.
+		 */
+		if (is_start_backup)
+			res = pgut_execute(backup_conn, "SELECT pg_last_xlog_replay_location()",
+							   0, NULL);
+		/*
+		 * For lsn from pg_stop_backup() we need it only to be received by
+		 * replica and fsync()'ed on WAL segment.
+		 */
+		else
+			res = pgut_execute(backup_conn, "SELECT pg_last_xlog_receive_location()",
+							   0, NULL);
+
+		/* Extract timeline and LSN from result */
+		XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+		/* Calculate LSN */
+		replica_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+		PQclear(res);
+
+		/* target lsn was replicated */
+		if (replica_lsn >= lsn)
+			break;
+
+		sleep(1);
+		if (interrupted)
+			elog(ERROR, "Interrupted during waiting for target LSN");
+		try_count++;
+
+		/* Inform user if target lsn is absent in first attempt */
+		if (try_count == 1)
+			elog(INFO, "Wait for target LSN %X/%X to be received by replica",
+				 (uint32) (lsn >> 32), (uint32) lsn);
+
+		if (replica_timeout > 0 && try_count > replica_timeout)
+			elog(ERROR, "Target LSN %X/%X could not be recevied by replica "
+				 "in %d seconds",
+				 (uint32) (lsn >> 32), (uint32) lsn,
+				 replica_timeout);
 	}
 }
 
