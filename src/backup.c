@@ -382,9 +382,9 @@ do_backup_database(parray *backup_list)
 			current.data_bytes += file->write_size;
 	}
 
-	if (backup_files_list)
-		parray_walk(backup_files_list, pgFileFree);
+	parray_walk(backup_files_list, pgFileFree);
 	parray_free(backup_files_list);
+	backup_files_list = NULL;
 }
 
 /*
@@ -1155,11 +1155,14 @@ pg_stop_backup(pgBackup *backup)
 				elog(ERROR, "can't write tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 
-			file = pgFileNew(tablespace_map, true);
-			calc_file_checksum(file);
-			free(file->path);
-			file->path = strdup(PG_TABLESPACE_MAP_FILE);
-			parray_append(backup_files_list, file);
+			if (backup_files_list)
+			{
+				file = pgFileNew(tablespace_map, true);
+				calc_file_checksum(file);
+				free(file->path);
+				file->path = strdup(PG_TABLESPACE_MAP_FILE);
+				parray_append(backup_files_list, file);
+			}
 		}
 
 		if (sscanf(PQgetvalue(res, 0, 3), XID_FMT, &recovery_xid) != 1)
