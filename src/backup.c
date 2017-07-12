@@ -648,9 +648,6 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	 */
 	if (!stream_wal)
 		pg_switch_wal(conn);
-	/* Wait for start_lsn to be received by replica */
-	if (from_replica)
-		wait_replica_wal_lsn(backup->start_lsn, true);
 
 	if (!stream_wal)
 		/*
@@ -659,6 +656,10 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 		 * mode.
 		 */
 		wait_wal_lsn(backup->start_lsn);
+
+	/* Wait for start_lsn to be replayed by replica */
+	if (from_replica)
+		wait_replica_wal_lsn(backup->start_lsn, true);
 }
 
 /*
