@@ -3,18 +3,17 @@ import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
-class OptionTest(ProbackupTest, unittest.TestCase):
+module_name = 'option'
 
-    def __init__(self, *args, **kwargs):
-        super(OptionTest, self).__init__(*args, **kwargs)
-        self.module_name = 'option'
+
+class OptionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_help_1(self):
         """help options"""
         fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         with open(os.path.join(self.dir_path, "expected/option_help.out"), "rb") as help_out:
             self.assertEqual(
                 self.run_pb(["--help"]),
@@ -25,7 +24,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_version_2(self):
         """help options"""
         fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         with open(os.path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
             self.assertEqual(
                 self.run_pb(["--version"]),
@@ -36,7 +35,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_without_backup_path_3(self):
         """backup command failure without backup mode option"""
         fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         try:
             self.run_pb(["backup", "-b", "full"])
             self.assertEqual(1, 0, "Expecting Error because '-B' parameter is not specified.\n Output: {0} \n CMD: {1}".format(
@@ -50,8 +49,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_options_4(self):
         """check options test"""
         fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'})
         try:
             node.stop()
@@ -91,26 +90,37 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 'ERROR: invalid backup-mode "bad"\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        # delete failure without ID
+        # delete failure without delete options
         try:
             self.run_pb(["delete", "-B", backup_dir, "--instance=node"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because delete options are omitted.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertEqual(e.message,
+                'ERROR: You must specify at least one of the delete options: --expired |--wal |--backup_id\n',
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+
+        # delete failure without ID
+        try:
+            self.run_pb(["delete", "-B", backup_dir, "--instance=node", '-i'])
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because backup ID is omitted.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: required backup ID not specified\n',
+            self.assertTrue("option requires an argument -- 'i'" in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     #@unittest.skip("skip")
     def test_options_5(self):
         """check options test"""
         fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'})
 
         self.assertEqual("INFO: Backup catalog '{0}' successfully inited\n".format(backup_dir),
@@ -204,4 +214,4 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)

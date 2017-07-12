@@ -2,24 +2,24 @@ import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
+from sys import exit
+
+
+module_name = 'delete'
 
 
 class DeleteTest(ProbackupTest, unittest.TestCase):
-
-    def __init__(self, *args, **kwargs):
-        super(DeleteTest, self).__init__(*args, **kwargs)
-        self.module_name = 'delete'
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_delete_full_backups(self):
         """delete full backups"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -50,16 +50,17 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[1]['ID'], id_3)
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
     def test_delete_increment_page(self):
         """delete increment and all after him"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -89,16 +90,17 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[1]['Status'], "OK")
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
     def test_delete_increment_ptrack(self):
         """delete increment and all after him"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -128,4 +130,103 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[1]['Status'], "OK")
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delete_orphaned_wal_segments(self):
+        """make archive node, make three full backups, delete second backup without --wal option, then delete orphaned wals via --wal option"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+        # first full backup
+        backup_1_id = self.backup_node(backup_dir, 'node', node)
+        # second full backup
+        backup_2_id = self.backup_node(backup_dir, 'node', node)
+        # third full backup
+        backup_3_id = self.backup_node(backup_dir, 'node', node)
+        node.stop()
+
+        # Check wals
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        original_wal_quantity = len(wals)
+
+        # delete second full backup
+        self.delete_pb(backup_dir, 'node', backup_2_id)
+        # check wal quantity
+        self.validate_pb(backup_dir)
+        self.assertEqual(self.show_pb(backup_dir, 'node', backup_1_id)['status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node', backup_3_id)['status'], "OK")
+        # try to delete wals for second backup
+        self.delete_pb(backup_dir, 'node', options=['--wal'])
+        # check wal quantity
+        self.validate_pb(backup_dir)
+        self.assertEqual(self.show_pb(backup_dir, 'node', backup_1_id)['status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node', backup_3_id)['status'], "OK")
+
+        # delete first full backup
+        self.delete_pb(backup_dir, 'node', backup_1_id)
+        self.validate_pb(backup_dir)
+        self.assertEqual(self.show_pb(backup_dir, 'node', backup_3_id)['status'], "OK")
+
+        result = self.delete_pb(backup_dir, 'node', options=['--wal'])
+        # delete useless wals
+        self.assertTrue('INFO: removed min WAL segment' in result
+            and 'INFO: removed max WAL segment' in result)
+        self.validate_pb(backup_dir)
+        self.assertEqual(self.show_pb(backup_dir, 'node', backup_3_id)['status'], "OK")
+
+        # Check quantity, it should be lower than original
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        self.assertTrue(original_wal_quantity > len(wals), "Number of wals not changed after 'delete --wal' which is illegal")
+
+        # Delete last backup
+        self.delete_pb(backup_dir, 'node', backup_3_id, options=['--wal'])
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        self.assertEqual (0, len(wals), "Number of wals should be equal to 0")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    @unittest.expectedFailure
+    def test_multiple_delete(self):
+        """delete multiple backups"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+        # first full backup
+        backup_1_id = self.backup_node(backup_dir, 'node', node)
+        # second full backup
+        backup_2_id = self.backup_node(backup_dir, 'node', node)
+        # third full backup
+        backup_3_id = self.backup_node(backup_dir, 'node', node)
+        node.stop()
+
+        self.delete_pb(backup_dir, 'node', options=
+            ["-i {0}".format(backup_1_id), "-i {0}".format(backup_2_id), "-i {0}".format(backup_3_id)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

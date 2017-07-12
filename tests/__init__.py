@@ -6,7 +6,7 @@ from . import init_test, option_test, show_test, \
     ptrack_move_to_tablespace, ptrack_recovery, ptrack_vacuum, \
     ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
-    false_positive, replica
+    false_positive, replica, compression, page, ptrack, archive
 
 
 def load_tests(loader, tests, pattern):
@@ -32,5 +32,24 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
     suite.addTests(loader.loadTestsFromModule(false_positive))
+    suite.addTests(loader.loadTestsFromModule(compression))
+    suite.addTests(loader.loadTestsFromModule(page))
+    suite.addTests(loader.loadTestsFromModule(ptrack))
+    suite.addTests(loader.loadTestsFromModule(archive))
 
     return suite
+
+# ToDo:
+#  archive:
+#    discrepancy of instance`s PGDATA and node`s PGDATA should lead to archive-push refusal to work
+#    discrepancy of instance`s SYSTEMID and node`s SYSTEMID should lead to archive-push refusal to work
+#  replica:
+#    backup should exit with correct error message if some master* option is missing
+#    --master* options shoukd not work when backuping master
+#  logging:
+#     https://jira.postgrespro.ru/browse/PGPRO-584
+#     https://jira.postgrespro.ru/secure/attachment/20420/20420_doc_logging.md
+#  ptrack:
+#      ptrack backup on replica should work correctly
+#
+#  function to compare original instance and restored

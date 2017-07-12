@@ -5,11 +5,10 @@ from datetime import datetime, timedelta
 import subprocess
 
 
-class FalsePositive(ProbackupTest, unittest.TestCase):
+module_name = 'false_positive'
 
-    def __init__(self, *args, **kwargs):
-        super(FalsePositive, self).__init__(*args, **kwargs)
-        self.module_name = 'false_positive'
+
+class FalsePositive(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -19,12 +18,12 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         check that archiving is not successful on node1
         """
         fname = self.id().split('.')[3]
-        node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(self.module_name, fname),
+        node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node1', node1)
         self.set_archiving(backup_dir, 'node1', node1)
@@ -32,7 +31,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node1', node1, options=["--stream"])
 
-        node2 = self.make_simple_node(base_dir="{0}/{1}/node2".format(self.module_name, fname))
+        node2 = self.make_simple_node(base_dir="{0}/{1}/node2".format(module_name, fname))
         node2.cleanup()
 
         node1.psql(
@@ -58,18 +57,18 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, 'Error is expected due to Master and Node1 having the common archive and archive_command')
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def pgpro688(self):
         """make node with archiving, make backup, get Recovery Time, validate to Recovery Time. Waiting PGPRO-688. RESOLVED"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -79,9 +78,9 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
 
         # Uncommenting this section will make this test True Positive
-        #node.psql("postgres", "select pg_create_restore_point('123')")
-        #node.psql("postgres", "select txid_current()")
-        #node.psql("postgres", "select pg_switch_xlog()")
+        #node.safe_psql("postgres", "select pg_create_restore_point('123')")
+        #node.safe_psql("postgres", "select txid_current()")
+        #node.safe_psql("postgres", "select pg_switch_xlog()")
         ####
 
         #try:
@@ -94,18 +93,18 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         #    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def pgpro702_688(self):
         """make node without archiving, make stream backup, get Recovery Time, validate to Recovery Time"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.start()
@@ -117,19 +116,19 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             self.validate_pb(backup_dir, 'node', node, options=["--time='{0}'".format(recovery_time)]))
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     @unittest.expectedFailure
     def test_validate_wal_lost_segment(self):
         """Loose segment located between backups. ExpectedFailure. This is BUG """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -161,18 +160,18 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         ########
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     @unittest.expectedFailure
     # Need to force validation of ancestor-chain
     def test_incremental_backup_corrupt_full_1(self):
         """page-level backup with corrupted full backup"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -203,4 +202,4 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "ERROR")
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
