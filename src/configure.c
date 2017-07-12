@@ -198,7 +198,7 @@ readBackupCatalogConfigFile(void)
 		{ 'f', 36, "compress-algorithm",	opt_compress_alg,				SOURCE_CMDLINE },
 		{ 'u', 37, "compress-level",		&(config->compress_level),		SOURCE_CMDLINE },
 		/* logging options */
-		{ 'i', 0, "log",					&(config->log_to_file),			SOURCE_CMDLINE },
+		{ 'b', 0, "log",					&(config->log_to_file),			SOURCE_CMDLINE },
 		{ 'f', 0, "log-level",				opt_log_level,					SOURCE_CMDLINE },
 		{ 's', 0, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
 		{ 's', 0, "error-log-filename",		&(config->error_log_filename),	SOURCE_CMDLINE },
