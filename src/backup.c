@@ -85,7 +85,7 @@ static int checkpoint_timeout(void);
 
 static void add_pgdata_files(parray *files, const char *root);
 static void write_backup_file_list(parray *files, const char *root);
-static void wait_wal_lsn(XLogRecPtr lsn);
+static void wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment);
 static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
 static void StreamLog(void *arg);
@@ -645,7 +645,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 		 * Because WAL streaming will start after pg_start_backup() in stream
 		 * mode.
 		 */
-		wait_wal_lsn(backup->start_lsn);
+		wait_wal_lsn(backup->start_lsn, true);
 
 	/* Wait for start_lsn to be replayed by replica */
 	if (from_replica)
@@ -814,9 +814,11 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
  * archive 'wal' directory with WAL segment file.
  * If current backup started in stream mode wait for 'lsn' to be streamed in
  * 'pg_xlog' directory.
+ *
+ * If 'wait_prev_segment' wait for previous segment.
  */
 static void
-wait_wal_lsn(XLogRecPtr lsn)
+wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 {
 	TimeLineID	tli;
 	XLogSegNo	targetSegNo;
@@ -830,6 +832,8 @@ wait_wal_lsn(XLogRecPtr lsn)
 
 	/* Compute the name of the WAL file containig requested LSN */
 	XLByteToSeg(lsn, targetSegNo);
+	if (wait_prev_segment)
+		targetSegNo--;
 	XLogFileName(wal_segment, tli, targetSegNo);
 
 	if (stream_wal)
@@ -1196,7 +1200,7 @@ pg_stop_backup(pgBackup *backup)
 		 * Wait for stop_lsn to be archived or streamed.
 		 * We wait for stop_lsn in stream mode just in case.
 		 */
-		wait_wal_lsn(stop_backup_lsn);
+		wait_wal_lsn(stop_backup_lsn, false);
 
 		if (stream_wal)
 		{
