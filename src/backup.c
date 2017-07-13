@@ -858,6 +858,10 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 
 		if (file_exists)
 		{
+			/* Do not check LSN for previous WAL segment */
+			if (wait_prev_segment)
+				return;
+
 			/*
 			 * A WAL segment found. Check LSN on it.
 			 */
@@ -874,8 +878,14 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 
 		/* Inform user if WAL segment is absent in first attempt */
 		if (try_count == 1)
-			elog(INFO, "wait for LSN %X/%X in archived WAL segment %s",
-				 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_full_path);
+		{
+			if (wait_prev_segment)
+				elog(INFO, "wait for WAL segment %s to be archived",
+					 wal_segment_full_path);
+			else
+				elog(INFO, "wait for LSN %X/%X in archived WAL segment %s",
+					 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_full_path);
+		}
 
 		if (timeout > 0 && try_count > timeout)
 		{
@@ -883,6 +893,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 				elog(ERROR, "WAL segment %s was archived, "
 					 "but target LSN %X/%X could not be archived in %d seconds",
 					 wal_segment, (uint32) (lsn >> 32), (uint32) lsn, timeout);
+			/* If WAL segment doesn't exist or we wait for previous segment */
 			else
 				elog(ERROR,
 					 "switched WAL segment %s could not be archived in %d seconds",
