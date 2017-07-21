@@ -49,11 +49,11 @@ To compile `pg_probackup`, you must have a PostgreSQL installation and raw sourc
 make USE_PGXS=1 PG_CONFIG=<path_to_pg_config> top_srcdir=<path_to_PostgreSQL_source_tree>
 ```
 
-Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgresproee/current/app-pgprobackup.html#pg-probackup-install-and-setup).
+Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup.html#pg-probackup-install-and-setup).
 
 ## Documentation
 
-Currently the latest documentation can be found at [Postgres Pro Enterprise documentation](https://postgrespro.com/docs/postgresproee/current/app-pgprobackup).
+Currently the latest documentation can be found at [Postgres Pro Enterprise documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup).
 
 ## Licence
 
