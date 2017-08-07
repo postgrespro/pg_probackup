@@ -23,8 +23,8 @@
 #include "libpq/pqsignal.h"
 #include "storage/bufpage.h"
 #include "datapagemap.h"
-#include "streamutil.h"
 #include "receivelog.h"
+#include "streamutil.h"
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
@@ -836,7 +836,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
  * If current backup started in archive mode wait for 'lsn' to be archived in
  * archive 'wal' directory with WAL segment file.
  * If current backup started in stream mode wait for 'lsn' to be streamed in
- * 'pg_xlog' directory.
+ * 'pg_wal' directory.
  */
 static void
 wait_wal_lsn(XLogRecPtr lsn)
@@ -1895,7 +1895,7 @@ StreamLog(void *arg)
 {
 	XLogRecPtr	startpos;
 	TimeLineID	starttli;
-	char *basedir = (char *)arg;
+	char	   *basedir = (char *)arg;
 
 	/*
 	 * Connect in replication mode to the server
@@ -1952,18 +1952,33 @@ StreamLog(void *arg)
 
 #if PG_VERSION_NUM >= 90600
 	{
-		StreamCtl ctl;
+		StreamCtl	ctl;
+
 		ctl.startpos = startpos;
 		ctl.timeline = starttli;
 		ctl.sysidentifier = NULL;
+
+#if PG_VERSION_NUM >= 100000
+		ctl.walmethod = CreateWalDirectoryMethod(basedir, 0, true);
+		ctl.replication_slot = replication_slot;
+#else
 		ctl.basedir = basedir;
+#endif
+
 		ctl.stream_stop = stop_streaming;
 		ctl.standby_message_timeout = standby_message_timeout;
 		ctl.partial_suffix = NULL;
 		ctl.synchronous = false;
 		ctl.mark_done = false;
+
 		if(ReceiveXlogStream(conn, &ctl) == false)
 			elog(ERROR, "Problem in receivexlog");
+
+#if PG_VERSION_NUM >= 100000
+		if (!ctl.walmethod->finish())
+			elog(ERROR, "Could not finish writing WAL files: %s",
+				 strerror(errno));
+#endif
 	}
 #else
 	if(ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
