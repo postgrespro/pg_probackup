@@ -196,7 +196,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 		if (error_log_file == NULL)
 			open_logfile(&error_log_file, error_log_filename);
 
-		fprintf(log_file, "%s: ", strfbuf);
+		fprintf(error_log_file, "%s: ", strfbuf);
 		write_elevel(error_log_file, elevel);
 
 		vfprintf(error_log_file, fmt, error_args);
