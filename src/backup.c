@@ -959,15 +959,27 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		 * data.
 		 */
 		if (is_start_backup)
-			res = pgut_execute(backup_conn, "SELECT pg_last_xlog_replay_location()",
-							   0, NULL);
+		{
+			if (server_version >= 100000)
+				res = pgut_execute(backup_conn, "SELECT pg_last_wal_replay_lsn()",
+								   0, NULL);
+			else
+				res = pgut_execute(backup_conn, "SELECT pg_last_xlog_replay_location()",
+								   0, NULL);
+		}
 		/*
 		 * For lsn from pg_stop_backup() we need it only to be received by
 		 * replica and fsync()'ed on WAL segment.
 		 */
 		else
-			res = pgut_execute(backup_conn, "SELECT pg_last_xlog_receive_location()",
-							   0, NULL);
+		{
+			if (server_version >= 100000)
+				res = pgut_execute(backup_conn, "SELECT pg_last_wal_receive_lsn()",
+								   0, NULL);
+			else
+				res = pgut_execute(backup_conn, "SELECT pg_last_xlog_receive_location()",
+								   0, NULL);
+		}
 
 		/* Extract timeline and LSN from result */
 		XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
