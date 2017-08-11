@@ -44,7 +44,11 @@
 /* Directory/File names */
 #define DATABASE_DIR			"database"
 #define BACKUPS_DIR				"backups"
+#if PG_VERSION_NUM >= 100000
+#define PG_XLOG_DIR				"pg_wal"
+#else
 #define PG_XLOG_DIR				"pg_xlog"
+#endif
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define BACKUP_CONTROL_FILE		"backup.control"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
@@ -271,6 +275,10 @@ extern char arclog_path[MAXPGPATH];
 extern int num_threads;
 extern bool stream_wal;
 extern bool progress;
+#if PG_VERSION_NUM >= 100000
+/* In pre-10 'replication_slot' is defined in receivelog.h */
+extern char *replication_slot;
+#endif
 
 /* backup options */
 extern bool	smooth_checkpoint;

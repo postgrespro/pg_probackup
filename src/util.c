@@ -65,9 +65,15 @@ checkControlFile(ControlFileData *ControlFile)
 static void
 digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 {
-	if (size != PG_CONTROL_SIZE)
+#if PG_VERSION_NUM >= 100000
+	int			ControlFileSize = PG_CONTROL_FILE_SIZE;
+#else
+	int			ControlFileSize = PG_CONTROL_SIZE;
+#endif
+
+	if (size != ControlFileSize)
 		elog(ERROR, "unexpected control file size %d, expected %d",
-			 (int) size, PG_CONTROL_SIZE);
+			 (int) size, ControlFileSize);
 
 	memcpy(ControlFile, src, sizeof(ControlFileData));
 

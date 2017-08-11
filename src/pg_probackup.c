@@ -40,6 +40,9 @@ char	   *backup_id_string_param = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
 bool		progress = false;
+#if PG_VERSION_NUM >= 100000
+char	   *replication_slot = NULL;
+#endif
 
 /* backup options */
 bool		backup_logs = false;
