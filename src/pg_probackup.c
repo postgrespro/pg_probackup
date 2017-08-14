@@ -327,8 +327,6 @@ main(int argc, char *argv[])
 	}
 
 	/* Setup stream options. They are used in streamutil.c. */
-	if (pgut_dbname != NULL)
-		dbname = pstrdup(pgut_dbname);
 	if (host != NULL)
 		dbhost = pstrdup(host);
 	if (port != NULL)

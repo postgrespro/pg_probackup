@@ -631,8 +631,6 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 						   2,
 						   params);
 
-	backup_in_progress = true;
-
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
 	/* Calculate LSN */
@@ -665,6 +663,12 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	/* Wait for start_lsn to be replayed by replica */
 	if (from_replica)
 		wait_replica_wal_lsn(backup->start_lsn, true);
+
+	/*
+	 * Set flag that pg_start_backup() was called. If an error will happen it
+	 * is necessary to call pg_stop_backup() in backup_cleanup().
+	 */
+	backup_in_progress = true;
 }
 
 /*
@@ -760,6 +764,15 @@ pg_archive_enabled(void)
 		return false;
 	}
 	PQclear(res_db);
+
+	res_db = pgut_execute(backup_conn, "show archive_command", 0, NULL);
+	if (strlen(PQgetvalue(res_db, 0, 0)) == 0)
+	{
+		PQclear(res_db);
+		return false;
+	}
+	PQclear(res_db);
+
 	return true;
 }
 
