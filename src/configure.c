@@ -195,8 +195,8 @@ readBackupCatalogConfigFile(void)
 		{ 'u', 0, "retention-redundancy",	&(config->retention_redundancy),SOURCE_FILE_STRICT },
 		{ 'u', 0, "retention-window",		&(config->retention_window),	SOURCE_FILE_STRICT },
 		/* compression options */
-		{ 'f', 36, "compress-algorithm",	opt_compress_alg,				SOURCE_CMDLINE },
-		{ 'u', 37, "compress-level",		&(config->compress_level),		SOURCE_CMDLINE },
+		{ 'f', 0, "compress-algorithm",		opt_compress_alg,				SOURCE_CMDLINE },
+		{ 'u', 0, "compress-level",			&(config->compress_level),		SOURCE_CMDLINE },
 		/* logging options */
 		{ 'b', 0, "log",					&(config->log_to_file),			SOURCE_CMDLINE },
 		{ 'f', 0, "log-level",				opt_log_level,					SOURCE_CMDLINE },

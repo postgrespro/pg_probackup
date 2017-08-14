@@ -125,26 +125,26 @@ static pgut_option options[] =
 	{ 'u', 23, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
 	/* delete options */
-	{ 'b', 30, "wal",					&delete_wal,		SOURCE_CMDLINE },
-	{ 'b', 31, "expired",				&delete_expired,	SOURCE_CMDLINE },
-	{ 'b', 32, "all",					&apply_to_all,		SOURCE_CMDLINE },
+	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
+	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
+	{ 'b', 132, "all",					&apply_to_all,		SOURCE_CMDLINE },
 	/* TODO not implemented yet */
-	{ 'b', 33, "force",					&force_delete,		SOURCE_CMDLINE },
+	{ 'b', 133, "force",					&force_delete,		SOURCE_CMDLINE },
 	/* retention options */
-	{ 'u', 34, "retention-redundancy",	&retention_redundancy, SOURCE_CMDLINE },
-	{ 'u', 35, "retention-window",		&retention_window,	SOURCE_CMDLINE },
+	{ 'u', 134, "retention-redundancy",	&retention_redundancy, SOURCE_CMDLINE },
+	{ 'u', 135, "retention-window",		&retention_window,	SOURCE_CMDLINE },
 	/* compression options */
-	{ 'f', 36, "compress-algorithm",	opt_compress_alg,	SOURCE_CMDLINE },
-	{ 'u', 37, "compress-level",		&compress_level,	SOURCE_CMDLINE },
-	{ 'b', 38, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
+	{ 'f', 136, "compress-algorithm",	opt_compress_alg,	SOURCE_CMDLINE },
+	{ 'u', 137, "compress-level",		&compress_level,	SOURCE_CMDLINE },
+	{ 'b', 138, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
 	/* logging options */
 	{ 'b', 'l', "log",					&log_to_file,		SOURCE_CMDLINE },
-	{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
-	{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
-	{ 's', 42, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
-	{ 's', 43, "log-directory",			&log_directory,		SOURCE_CMDLINE },
-	{ 'u', 44, "log-rotation-size",		&log_rotation_size,	SOURCE_CMDLINE },
-	{ 'u', 45, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
+	{ 'f', 140, "log-level",			opt_log_level,		SOURCE_CMDLINE },
+	{ 's', 141, "log-filename",			&log_filename,		SOURCE_CMDLINE },
+	{ 's', 142, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
+	{ 's', 143, "log-directory",		&log_directory,		SOURCE_CMDLINE },
+	{ 'u', 144, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE },
+	{ 'u', 145, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },
@@ -152,11 +152,11 @@ static pgut_option options[] =
 	{ 's', 'U', "pguser",				&username,			SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password",			&prompt_password,	SOURCE_CMDLINE },
 	/* other options */
-	{ 'U', 50, "system-identifier",		&system_identifier,	SOURCE_FILE_STRICT },
-	{ 's', 51, "instance",					&instance_name,		SOURCE_CMDLINE },
+	{ 'U', 150, "system-identifier",	&system_identifier,	SOURCE_FILE_STRICT },
+	{ 's', 151, "instance",				&instance_name,		SOURCE_CMDLINE },
 	/* archive-push options */
-	{ 's',  60, "wal-file-path",			&wal_file_path,		SOURCE_CMDLINE },
-	{ 's',  61, "wal-file-name",			&wal_file_name,		SOURCE_CMDLINE },
+	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
+	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },
 	{ 0 }
 };
 
