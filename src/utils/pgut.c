@@ -669,22 +669,21 @@ parse_int(const char *value, int *result, int flags, const char **hintmsg)
 }
 
 static char *
-longopts_to_optstring(const struct option opts[])
+longopts_to_optstring(const struct option opts[], const size_t len)
 {
-	size_t	len;
-	char   *result;
-	char   *s;
+	size_t		i;
+	char	   *result;
+	char	   *s;
 
-	for (len = 0; opts[len].name; len++) { }
 	result = pgut_malloc(len * 2 + 1);
 
 	s = result;
-	for (len = 0; opts[len].name; len++)
+	for (i = 0; i < len; i++)
 	{
-		if (!isprint(opts[len].val))
+		if (!isprint(opts[i].val))
 			continue;
-		*s++ = opts[len].val;
-		if (opts[len].has_arg != no_argument)
+		*s++ = opts[i].val;
+		if (opts[i].has_arg != no_argument)
 			*s++ = ':';
 	}
 	*s = '\0';
@@ -731,18 +730,18 @@ pgut_getopt_env(pgut_option options[])
 int
 pgut_getopt(int argc, char **argv, pgut_option options[])
 {
-	int					c;
-	int					optindex = 0;
-	char			   *optstring;
-	pgut_option		   *opt;
+	int			c;
+	int			optindex = 0;
+	char	   *optstring;
+	pgut_option *opt;
 	struct option *longopts;
-	size_t	len1;
+	size_t		len;
 
-	len1 = option_length(options);
-	longopts = pgut_newarray(struct option, len1 + 1);
-	option_copy(longopts, options, len1);
+	len = option_length(options);
+	longopts = pgut_newarray(struct option, len + 1);
+	option_copy(longopts, options, len);
 
-	optstring = longopts_to_optstring(longopts);
+	optstring = longopts_to_optstring(longopts, len);
 
 	/* Assign named options */
 	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)

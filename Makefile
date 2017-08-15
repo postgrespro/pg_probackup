@@ -39,10 +39,9 @@ PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
-all: checksrcdir $(INCLUDES) $(PROGRAM);
+all: checksrcdir $(INCLUDES);
 
 $(PROGRAM): $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) $(PG_LIBS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
