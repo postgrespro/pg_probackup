@@ -5,11 +5,10 @@ from datetime import datetime, timedelta
 import subprocess
 
 
-class ArchiveCheck(ProbackupTest, unittest.TestCase):
+module_name = 'pgpro589'
 
-    def __init__(self, *args, **kwargs):
-        super(ArchiveCheck, self).__init__(*args, **kwargs)
-        self.module_name = 'pgpro589'
+
+class ArchiveCheck(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -20,11 +19,11 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         check ERROR text
         """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.start()
@@ -48,7 +47,7 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     def test_pgpro589(self):
         """
@@ -58,11 +57,11 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         check that no files where copied to backup catalogue
         """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -100,4 +99,4 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
             '\n Start LSN was not found in archive but datafiles where copied to backup catalogue.\n For example: {0}\n It is not optimal'.format(file))
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)

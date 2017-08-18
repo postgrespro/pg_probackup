@@ -302,9 +302,9 @@ help_set_config(void)
 
 	printf(_("\n  Replica options:\n"));
 	printf(_("      --master-db=db_name          database to connect to master\n"));
-	printf(_("      --master-host=host_name=host_name      database server host of master\n"));
+	printf(_("      --master-host=host_name      database server host of master\n"));
 	printf(_("      --master-port=port=port           database server port of master\n"));
-	printf(_("      --master-user=user_name=user_name      user name to connect to master\n"));
+	printf(_("      --master-user=user_name      user name to connect to master\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
 }
 

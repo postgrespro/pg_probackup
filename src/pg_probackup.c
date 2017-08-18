@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.0";
+const char *PROGRAM_VERSION	= "2.0.2";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -40,6 +40,9 @@ char	   *backup_id_string_param = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
 bool		progress = false;
+#if PG_VERSION_NUM >= 100000
+char	   *replication_slot = NULL;
+#endif
 
 /* backup options */
 bool		backup_logs = false;
@@ -122,25 +125,26 @@ static pgut_option options[] =
 	{ 'u', 23, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
 	/* delete options */
-	{ 'b', 30, "wal",					&delete_wal,		SOURCE_CMDLINE },
-	{ 'b', 31, "expired",				&delete_expired,	SOURCE_CMDLINE },
-	{ 'b', 32, "all",					&apply_to_all,		SOURCE_CMDLINE },
+	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
+	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
+	{ 'b', 132, "all",					&apply_to_all,		SOURCE_CMDLINE },
 	/* TODO not implemented yet */
-	{ 'b', 33, "force",					&force_delete,		SOURCE_CMDLINE },
+	{ 'b', 133, "force",					&force_delete,		SOURCE_CMDLINE },
 	/* retention options */
-	{ 'u', 34, "retention-redundancy",	&retention_redundancy, SOURCE_CMDLINE },
-	{ 'u', 35, "retention-window",		&retention_window,	SOURCE_CMDLINE },
+	{ 'u', 134, "retention-redundancy",	&retention_redundancy, SOURCE_CMDLINE },
+	{ 'u', 135, "retention-window",		&retention_window,	SOURCE_CMDLINE },
 	/* compression options */
-	{ 'f', 36, "compress-algorithm",	opt_compress_alg,	SOURCE_CMDLINE },
-	{ 'u', 37, "compress-level",		&compress_level,	SOURCE_CMDLINE },
-	{ 'b', 38, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
+	{ 'f', 136, "compress-algorithm",	opt_compress_alg,	SOURCE_CMDLINE },
+	{ 'u', 137, "compress-level",		&compress_level,	SOURCE_CMDLINE },
+	{ 'b', 138, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
 	/* logging options */
-	{ 'f', 40, "log-level",				opt_log_level,		SOURCE_CMDLINE },
-	{ 's', 41, "log-filename",			&log_filename,		SOURCE_CMDLINE },
-	{ 's', 42, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
-	{ 's', 43, "log-directory",			&log_directory,		SOURCE_CMDLINE },
-	{ 'u', 44, "log-rotation-size",		&log_rotation_size,	SOURCE_CMDLINE },
-	{ 'u', 45, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
+	{ 'b', 'l', "log",					&log_to_file,		SOURCE_CMDLINE },
+	{ 'f', 140, "log-level",			opt_log_level,		SOURCE_CMDLINE },
+	{ 's', 141, "log-filename",			&log_filename,		SOURCE_CMDLINE },
+	{ 's', 142, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
+	{ 's', 143, "log-directory",		&log_directory,		SOURCE_CMDLINE },
+	{ 'u', 144, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE },
+	{ 'u', 145, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },
@@ -148,11 +152,11 @@ static pgut_option options[] =
 	{ 's', 'U', "pguser",				&username,			SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password",			&prompt_password,	SOURCE_CMDLINE },
 	/* other options */
-	{ 'U', 50, "system-identifier",		&system_identifier,	SOURCE_FILE_STRICT },
-	{ 's', 51, "instance",					&instance_name,		SOURCE_CMDLINE },
+	{ 'U', 150, "system-identifier",	&system_identifier,	SOURCE_FILE_STRICT },
+	{ 's', 151, "instance",				&instance_name,		SOURCE_CMDLINE },
 	/* archive-push options */
-	{ 's',  60, "wal-file-path",			&wal_file_path,		SOURCE_CMDLINE },
-	{ 's',  61, "wal-file-name",			&wal_file_name,		SOURCE_CMDLINE },
+	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
+	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -304,14 +308,8 @@ main(int argc, char *argv[])
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
 
-	/* Set log path */
-	if (log_filename || error_log_filename)
-	{
-		if (log_directory)
-			strcpy(log_path, log_directory);
-		else
-			join_path_components(log_path, backup_path, "log");
-	}
+	/* Initialize logger */
+	init_logger(backup_path);
 
 	/* Sanity check of --backup-id option */
 	if (backup_id_string_param != NULL)
@@ -329,8 +327,6 @@ main(int argc, char *argv[])
 	}
 
 	/* Setup stream options. They are used in streamutil.c. */
-	if (pgut_dbname != NULL)
-		dbname = pstrdup(pgut_dbname);
 	if (host != NULL)
 		dbhost = pstrdup(host);
 	if (port != NULL)
@@ -401,17 +397,15 @@ main(int argc, char *argv[])
 		case DELETE:
 			if (delete_expired && backup_id_string_param)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
+			if (!delete_expired && !delete_wal && !backup_id_string_param)
+				elog(ERROR, "You must specify at least one of the delete options: --expired |--wal |--backup_id");
 			if (delete_expired)
 				return do_retention_purge();
 			else
 				return do_delete(current.backup_id);
 		case SHOW_CONFIG:
-			if (argc > 6)
-				elog(ERROR, "show-config command doesn't accept any options except -B and --instance");
 			return do_configure(true);
 		case SET_CONFIG:
-			if (argc == 6)
-				elog(ERROR, "set-config command requires at least one option");
 			return do_configure(false);
 	}
 
@@ -428,7 +422,6 @@ static void
 opt_log_level(pgut_option *opt, const char *arg)
 {
 	log_level = parse_log_level(arg);
-	log_level_defined = true;
 }
 
 CompressAlg

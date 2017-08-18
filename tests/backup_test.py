@@ -4,11 +4,10 @@ from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
-class BackupTest(ProbackupTest, unittest.TestCase):
+module_name = 'backup'
 
-    def __init__(self, *args, **kwargs):
-        super(BackupTest, self).__init__(*args, **kwargs)
-        self.module_name = 'backup'
+
+class BackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -16,11 +15,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_backup_modes_archive(self):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -71,17 +70,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id=show_backup['ID'])["parent-backup-id"])
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_smooth_checkpoint(self):
         """full backup with smooth checkpoint"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -92,17 +91,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.stop()
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     #@unittest.skip("skip")
     def test_incremental_backup_without_full(self):
         """page-level backup without validated full backup"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -133,17 +132,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "ERROR")
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
     def test_incremental_backup_corrupt_full(self):
         """page-level backup with corrupted full backup"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -180,17 +179,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "ERROR")
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_threads(self):
         """ptrack multi thread backup mode"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -203,18 +202,18 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_threads_stream(self):
         """ptrack multi thread backup mode and stream"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on', 'max_wal_senders': '2'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.start()
@@ -226,4 +225,4 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "OK")
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)

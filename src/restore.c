@@ -353,7 +353,7 @@ restore_backup(pgBackup *backup)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (log_level <= LOG)
+	if (LOG_LEVEL <= LOG)
 	{
 		char	   *backup_id;
 
@@ -396,7 +396,7 @@ remove_deleted_files(pgBackup *backup)
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
 			pgFileDelete(file);
-			if (log_level <= LOG)
+			if (LOG_LEVEL <= LOG)
 				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
 		}
 	}
@@ -579,7 +579,7 @@ check_tablespace_mapping(pgBackup *backup)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	read_tablespace_map(links, this_backup_path);
 
-	if (log_level <= LOG)
+	if (LOG_LEVEL <= LOG)
 	{
 		char	   *backup_id;
 
@@ -750,8 +750,11 @@ create_recovery_conf(time_t backup_id,
 	if (target_tli)
 		fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
 
-	fsync(fileno(fp));
-	fclose(fp);
+	if (fflush(fp) != 0 ||
+		fsync(fileno(fp)) != 0 ||
+		fclose(fp))
+		elog(ERROR, "cannot write recovery.conf \"%s\": %s", path,
+			 strerror(errno));
 }
 
 /*

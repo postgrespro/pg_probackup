@@ -4,22 +4,21 @@ from datetime import datetime, timedelta
 from .helpers.ptrack_helpers import ProbackupTest
 
 
-class RetentionTest(ProbackupTest, unittest.TestCase):
+module_name = 'retention'
 
-    def __init__(self, *args, **kwargs):
-        super(RetentionTest, self).__init__(*args, **kwargs)
-        self.module_name = 'retention'
+
+class RetentionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_retention_redundancy_1(self):
         """purge backups using redundancy-based retention policy"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -56,17 +55,17 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 self.assertEqual(wal_name[8:] > max_wal[8:], True)
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)
 
 #    @unittest.skip("123")
     def test_retention_window_2(self):
         """purge backups using window-based retention policy"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(self.module_name, fname),
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -102,4 +101,4 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
         # Clean after yourself
-        self.del_test_dir(self.module_name, fname)
+        self.del_test_dir(module_name, fname)

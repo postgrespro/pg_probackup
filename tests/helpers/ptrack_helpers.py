@@ -19,6 +19,11 @@ idx_ptrack = {
     'column': 'text',
     'relation': 't_heap'
     },
+'t_seq': {
+    'type': 'seq',
+    'column': 't_seq',
+    'relation': 't_heap'
+    },
 't_spgist': {
     'type': 'spgist',
     'column': 'text',
@@ -41,6 +46,19 @@ idx_ptrack = {
     },
 }
 
+archive_script = """
+#!/bin/bash
+count=$(ls {backup_dir}/test00* | wc -l)
+if [ $count -ge {count_limit} ]
+then
+    exit 1
+else
+    cp $1 {backup_dir}/wal/{node_name}/$2
+    count=$((count+1))
+    touch {backup_dir}/test00$count
+    exit 0
+fi
+"""
 warning = """
 Wrong splint in show_pb
 Original Header:
@@ -76,6 +94,11 @@ def dir_files(base_dir):
 class ProbackupTest(object):
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
+        if '-v' in argv or '--verbose' in argv:
+            self.verbose = True
+        else:
+            self.verbose = False
+
         self.test_env = os.environ.copy()
         envs_list = [
             "LANGUAGE",
@@ -107,22 +130,18 @@ class ProbackupTest(object):
             os.makedirs(os.path.join(self.dir_path, 'tmp_dirs'))
         except:
             pass
-        self.probackup_path = os.path.abspath(os.path.join(
-            self.dir_path, "../pg_probackup"))
+
         self.user = self.get_username()
-        if '-v' in argv or '--verbose' in argv:
-            self.verbose = True
-        else:
-            self.verbose = False
-
-    def arcwal_dir(self, node):
-        return "%s/backup/wal" % node.base_dir
-
-    def backup_dir(self, node=None, path=None):
-        if node:
-            return os.path.abspath("{0}/backup".format(node.base_dir))
-        if path:
-            return
+        self.probackup_path = None
+        if "PGPROBACKUPBIN" in self.test_env:
+            if os.path.isfile(self.test_env["PGPROBACKUPBIN"]) and os.access(self.test_env["PGPROBACKUPBIN"], os.X_OK):
+                self.probackup_path = self.test_env["PGPROBACKUPBIN"]
+            else:
+                if self.verbose:
+                    print('PGPROBINDIR is not an executable file')
+        if not self.probackup_path:
+            self.probackup_path = os.path.abspath(os.path.join(
+                self.dir_path, "../pg_probackup"))
 
     def make_simple_node(
             self,
@@ -138,9 +157,16 @@ class ProbackupTest(object):
         node.init(initdb_params=initdb_params)
 
         # Sane default parameters, not a shit with fsync = off from testgres
-        node.append_conf("postgresql.auto.conf", "{0} = {1}".format('shared_buffers', '10MB'))
-        node.append_conf("postgresql.auto.conf", "{0} = {1}".format('fsync', 'on'))
-        node.append_conf("postgresql.auto.conf", "{0} = {1}".format('wal_level', 'minimal'))
+        node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
+        node.append_conf("postgresql.auto.conf", "fsync = on")
+        node.append_conf("postgresql.auto.conf", "wal_level = minimal")
+
+        node.append_conf("postgresql.auto.conf", "log_line_prefix = '%t [%p]: [%l-1] '")
+        node.append_conf("postgresql.auto.conf", "log_statement = none")
+        node.append_conf("postgresql.auto.conf", "log_duration = on")
+        node.append_conf("postgresql.auto.conf", "log_min_duration_statement = 0")
+        node.append_conf("postgresql.auto.conf", "log_connections = on")
+        node.append_conf("postgresql.auto.conf", "log_disconnections = on")
 
         # Apply given parameters
         for key, value in six.iteritems(pg_options):
@@ -156,17 +182,19 @@ class ProbackupTest(object):
             "postgres", "select exists (select 1 from pg_tablespace where spcname = '{0}')".format(
                 tblspc_name))
         # Check that tablespace with name 'tblspc_name' do not exists already
-        self.assertEqual(res[0][0], False, 'Tablespace "{0}" already exists'.format(tblspc_name))
+        self.assertFalse(res[0][0], 'Tablespace "{0}" already exists'.format(tblspc_name))
 
         tblspc_path = os.path.join(node.base_dir, '{0}'.format(tblspc_name))
         cmd = "CREATE TABLESPACE {0} LOCATION '{1}'".format(tblspc_name, tblspc_path)
         if cfs:
             cmd += " with (compression=true)"
         os.makedirs(tblspc_path)
-        res = node.psql("postgres", cmd)
+        res = node.safe_psql("postgres", cmd)
         # Check that tablespace was successfully created
-        self.assertEqual(res[0], 0, 'Failed to create tablespace with cmd: {0}'.format(cmd))
+        # self.assertEqual(res[0], 0, 'Failed to create tablespace with cmd: {0}'.format(cmd))
 
+    def get_tblspace_path(self, node, tblspc_name):
+        return os.path.join(node.base_dir, tblspc_name)
 
     def get_fork_size(self, node, fork_name):
         return node.execute("postgres",
@@ -187,7 +215,15 @@ class ProbackupTest(object):
         os.close(file)
         return md5_per_page
 
-    def get_ptrack_bits_per_page_for_fork(self, node, file, size):
+    def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
+        if len(size) > 1:
+            if size[0] > size[1]:
+                size = size[0]
+            else:
+                size = size[1]
+        else:
+            size = size[0]
+
         if self.get_pgpro_edition(node) == 'enterprise':
             header_size = 48
         else:
@@ -229,9 +265,10 @@ class ProbackupTest(object):
             if PageNum not in idx_dict['new_pages']:
                 # Page is not present now, meaning that relation got smaller
                 # Ptrack should be equal to 0, We are not freaking out about false positive stuff
-                #if idx_dict['ptrack'][PageNum] != 0:
-                #    print 'Page Number {0} of type {1} was deleted, but ptrack value is {2}'.format(
-                #        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum])
+                if idx_dict['ptrack'][PageNum] != 0:
+                    if self.verbose:
+                        print('Page Number {0} of type {1} was deleted, but ptrack value is {2}'.format(
+                            PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
                 continue
             # Ok, all pages in new_pages that do not have corresponding page in old_pages
             # are been dealt with. We can now safely proceed to comparing old and new pages 
@@ -317,13 +354,12 @@ class ProbackupTest(object):
             "-D", node.data_dir
         ])
 
-    def del_instance(self, backup_dir, instance, node):
+    def del_instance(self, backup_dir, instance):
 
         return self.run_pb([
             "del-instance",
             "--instance={0}".format(instance),
-            "-B", backup_dir,
-            "-D", node.data_dir
+            "-B", backup_dir
         ])
 
     def clean_pb(self, backup_dir):
@@ -443,13 +479,13 @@ class ProbackupTest(object):
 
         return self.run_pb(cmd_list + options)
 
-    def delete_pb(self, backup_dir, instance=None, backup_id=None, options=[]):
+    def delete_pb(self, backup_dir, instance, backup_id=None, options=[]):
         cmd_list = [
             "delete",
             "-B", backup_dir
         ]
-        if instance:
-            cmd_list += ["--instance={0}".format(instance)]
+
+        cmd_list += ["--instance={0}".format(instance)]
         if backup_id:
             cmd_list += ["-i", backup_id]
 
@@ -516,6 +552,18 @@ class ProbackupTest(object):
         #            "archive_command = 'copy %p {0}\\%f'".format(archive_dir)
         #            )
 
+    def set_replica(self, master, replica, replica_name='replica', synchronous=False):
+        replica.append_conf('postgresql.auto.conf', 'port = {0}'.format(replica.port))
+        replica.append_conf('postgresql.auto.conf', 'hot_standby = on')
+        replica.append_conf('recovery.conf', "standby_mode = 'on'")
+        replica.append_conf('recovery.conf',
+            "primary_conninfo = 'user={0} port={1} application_name={2} sslmode=prefer sslcompression=1'".format(
+                self.user, master.port, replica_name))
+        if synchronous:
+            master.append_conf('postgresql.auto.conf', 'synchronous_standby_names="{0}"'.format(replica_name))
+            master.append_conf('postgresql.auto.conf', 'synchronous_commit="remote_apply"')
+            master.reload()
+
     def wrong_wal_clean(self, node, wal_size):
         wals_dir = os.path.join(self.backup_dir(node), "wal")
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))]
@@ -544,15 +592,15 @@ class ProbackupTest(object):
         return pwd.getpwuid(os.getuid())[0]
 
     def del_test_dir(self, module_name, fname):
-        """ Returns current user name """
+        """ Del testdir and optimistically try to del module dir"""
         try:
             clean_all()
         except:
             pass
 
-        shutil.rmtree(os.path.join(self.tmp_path, self.module_name, fname),
+        shutil.rmtree(os.path.join(self.tmp_path, module_name, fname),
             ignore_errors=True)
         try:
-            os.rmdir(os.path.join(self.tmp_path, self.module_name))
+            os.rmdir(os.path.join(self.tmp_path, module_name))
         except:
             pass

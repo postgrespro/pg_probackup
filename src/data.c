@@ -357,9 +357,12 @@ backup_data_file(const char *from_root, const char *to_root,
 			 strerror(errno_tmp));
 	}
 
-	fsync(fileno(out));
+	if (fflush(out) != 0 ||
+		fsync(fileno(out)) != 0 ||
+		fclose(out))
+		elog(ERROR, "cannot write backup file \"%s\": %s",
+			 to_path, strerror(errno));
 	fclose(in);
-	fclose(out);
 
 	FIN_CRC32C(file->crc);
 
@@ -471,9 +474,11 @@ restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
 			strerror(errno_tmp));
 	}
 
-	fsync(fileno(out));
+	if (fflush(out) != 0 ||
+		fsync(fileno(out)) != 0 ||
+		fclose(out))
+		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fclose(in);
-	fclose(out);
 }
 
 void
@@ -607,9 +612,11 @@ restore_data_file(const char *from_root,
 			 strerror(errno_tmp));
 	}
 
-	fsync(fileno(out));
+	if (fflush(out) != 0 ||
+		fsync(fileno(out)) != 0 ||
+		fclose(out))
+		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fclose(in);
-	fclose(out);
 }
 
 /*
@@ -735,9 +742,11 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 			 strerror(errno_tmp));
 	}
 
-	fsync(fileno(out));
+	if (fflush(out) != 0 ||
+		fsync(fileno(out)) != 0 ||
+		fclose(out))
+		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fclose(in);
-	fclose(out);
 
 	return true;
 }
@@ -836,9 +845,11 @@ copy_wal_file(const char *from_path, const char *to_path)
 			 strerror(errno_tmp));
 	}
 
-	fsync(fileno(out));
+	if (fflush(out) != 0 ||
+		fsync(fileno(out)) != 0 ||
+		fclose(out))
+		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fclose(in);
-	fclose(out);
 }
 
 /*
@@ -961,9 +972,11 @@ copy_file_partly(const char *from_root, const char *to_root,
 	/* add meta information needed for recovery */
 	file->is_partial_copy = true;
 
-	fsync(fileno(out));
+	if (fflush(out) != 0 ||
+		fsync(fileno(out)) != 0 ||
+		fclose(out))
+		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fclose(in);
-	fclose(out);
 
 	return true;
 }

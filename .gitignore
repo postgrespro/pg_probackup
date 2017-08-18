@@ -27,6 +27,7 @@
 /results
 /env
 /tests/__pycache__/
+/tests/helpers/__pycache__/
 /tests/tmp_dirs/
 /tests/*pyc
 /tests/helpers/*pyc
@@ -40,3 +41,5 @@
 /src/streamutil.c
 /src/streamutil.h
 /src/xlogreader.c
+/src/walmethods.c
+/src/walmethods.h

@@ -41,8 +41,10 @@ do_configure(bool show_only)
 	if (replica_timeout != 300)		/* 300 is default value */
 		config->replica_timeout = replica_timeout;
 
-	if (log_level_defined)
-		config->log_level = log_level;
+	if (log_to_file != LOGGER_NONE)
+		config->log_to_file = LOG_TO_FILE;
+	if (log_level != LOGGER_NONE)
+		config->log_level = LOG_LEVEL;
 	if (log_filename)
 		config->log_filename = log_filename;
 	if (error_log_filename)
@@ -88,6 +90,7 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->master_user = NULL;
 	config->replica_timeout = INT_MIN;	/* INT_MIN means "undefined" */
 
+	config->log_to_file = INT_MIN;		/* INT_MIN means "undefined" */
 	config->log_level = INT_MIN;		/* INT_MIN means "undefined" */
 	config->log_filename = NULL;
 	config->error_log_filename = NULL;
@@ -132,6 +135,8 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "replica_timeout = %d\n", config->replica_timeout);
 
 	fprintf(out, "#Logging parameters:\n");
+	if (config->log_to_file != INT_MIN)
+		fprintf(out, "log = %d\n", config->log_to_file);
 	if (config->log_level != INT_MIN)
 		fprintf(out, "log-level = %s\n", deparse_log_level(config->log_level));
 	if (config->log_filename)
@@ -190,15 +195,16 @@ readBackupCatalogConfigFile(void)
 		{ 'u', 0, "retention-redundancy",	&(config->retention_redundancy),SOURCE_FILE_STRICT },
 		{ 'u', 0, "retention-window",		&(config->retention_window),	SOURCE_FILE_STRICT },
 		/* compression options */
-		{ 'f', 36, "compress-algorithm",	opt_compress_alg,				SOURCE_CMDLINE },
-		{ 'u', 37, "compress-level",		&(config->compress_level),		SOURCE_CMDLINE },
+		{ 'f', 0, "compress-algorithm",		opt_compress_alg,				SOURCE_CMDLINE },
+		{ 'u', 0, "compress-level",			&(config->compress_level),		SOURCE_CMDLINE },
 		/* logging options */
-		{ 'f', 40, "log-level",				opt_log_level,					SOURCE_CMDLINE },
-		{ 's', 41, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
-		{ 's', 42, "error-log-filename",	&(config->error_log_filename),	SOURCE_CMDLINE },
-		{ 's', 43, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
-		{ 'u', 44, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE },
-		{ 'u', 45, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE },
+		{ 'b', 0, "log",					&(config->log_to_file),			SOURCE_CMDLINE },
+		{ 'f', 0, "log-level",				opt_log_level,					SOURCE_CMDLINE },
+		{ 's', 0, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
+		{ 's', 0, "error-log-filename",		&(config->error_log_filename),	SOURCE_CMDLINE },
+		{ 's', 0, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
+		{ 'u', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE },
+		{ 'u', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE },
 		/* connection options */
 		{ 's', 0, "pgdata",					&(config->pgdata),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgdatabase",				&(config->pgdatabase),			SOURCE_FILE_STRICT },
