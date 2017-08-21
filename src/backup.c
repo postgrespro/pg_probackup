@@ -2022,6 +2022,8 @@ StreamLog(void *arg)
 	{
 		StreamCtl	ctl;
 
+		MemSet(&ctl, 0, sizeof(ctl));
+
 		ctl.startpos = startpos;
 		ctl.timeline = starttli;
 		ctl.sysidentifier = NULL;
@@ -2029,6 +2031,7 @@ StreamLog(void *arg)
 #if PG_VERSION_NUM >= 100000
 		ctl.walmethod = CreateWalDirectoryMethod(basedir, 0, true);
 		ctl.replication_slot = replication_slot;
+		ctl.stop_socket = PGINVALID_SOCKET;
 #else
 		ctl.basedir = basedir;
 #endif
