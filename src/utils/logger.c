@@ -141,7 +141,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 
 	write_to_error_log =
 		elevel >= ERROR && error_log_filename && write_to_file;
-	write_to_stderr = elevel >= ERROR || !write_to_file;
+	write_to_stderr = elevel >= ERROR || !LOG_TO_FILE;
 
 	/* We need copy args only if we need write to error log file */
 	if (write_to_error_log)
