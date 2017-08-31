@@ -303,3 +303,43 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+# @unittest.skip("skip")
+    def test_drop_db(self):
+        """Make node, create database, create table in database, take ptrack backup, drop database, take ptrack backup"""
+        self.maxDiff = None
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
+            )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        # FULL BACKUP
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+
+        # PTRACK BACKUP
+        node.safe_psql(
+            "postgres", "create database db1")
+        node.safe_psql("db1", "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+
+        node.safe_psql(
+            "postgres", "checkpoint;")
+
+        # SECOND PTRACK BACKUP
+        node.safe_psql(
+            "postgres", "drop database db1")
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
