@@ -117,8 +117,7 @@ extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
  */
 extern PGconn *pgut_connect(const char *dbname);
 extern PGconn *pgut_connect_extended(const char *pghost, const char *pgport,
-									 const char *dbname, const char *login,
-									 const char *pwd);
+									 const char *dbname, const char *login);
 extern void pgut_disconnect(PGconn *conn);
 extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams, const char **params);
 extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int elevel);

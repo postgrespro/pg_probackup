@@ -447,8 +447,7 @@ do_backup(void)
 			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
 
 		/* Create connection to master server */
-		master_conn = pgut_connect_extended(master_host, master_port,
-											master_db, master_user, password);
+		master_conn = pgut_connect_extended(master_host, master_port, master_db, master_user);
 	}
 
 	/* Get exclusive lock of backup catalog */

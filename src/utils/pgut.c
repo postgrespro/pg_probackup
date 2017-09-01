@@ -1015,12 +1015,12 @@ prompt_for_password(const char *username)
 PGconn *
 pgut_connect(const char *dbname)
 {
-	return pgut_connect_extended(host, port, dbname, username, password);
+	return pgut_connect_extended(host, port, dbname, username);
 }
 
 PGconn *
 pgut_connect_extended(const char *pghost, const char *pgport,
-					  const char *dbname, const char *login, const char *pwd)
+					  const char *dbname, const char *login)
 {
 	PGconn	   *conn;
 
@@ -1031,7 +1031,7 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 	for (;;)
 	{
 		conn = PQsetdbLogin(pghost, pgport, NULL, NULL,
-							dbname, login, pwd);
+							dbname, login, password);
 
 		if (PQstatus(conn) == CONNECTION_OK)
 			return conn;
@@ -1040,6 +1040,10 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 		{
 			PQfinish(conn);
 			prompt_for_password(username);
+
+			if (interrupted)
+				elog(ERROR, "interrupted");
+
 			continue;
 		}
 		elog(ERROR, "could not connect to database %s: %s",
