@@ -826,8 +826,13 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
 	res_db = pgut_execute(backup_conn,
 						  "SELECT datname FROM pg_database WHERE oid=$1",
 						  1, (const char **) params);
+
+	/*
+	 * If database is not found, it's not an error.
+	 * It could have been deleted since previous backup.
+	 */
 	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
-		elog(ERROR, "cannot find database by oid %u", db_oid);
+		return NULL;
 
 	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
 	PQclear(res_db);
@@ -1877,22 +1882,24 @@ make_pagemap_from_ptrack(parray *files)
 			/* get ptrack map for all segments of the relation in a raw format */
 			ptrack_nonparsed = pg_ptrack_get_and_clear(tablespace_oid, db_oid,
 											   rel_oid, &ptrack_nonparsed_size);
+			if (ptrack_nonparsed != NULL)
+			{
+				/*
+				* FIXME When do we cut VARHDR from ptrack_nonparsed?
+				* Compute the beginning of the ptrack map related to this segment
+				*/
+				start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*p->segno;
 
-			/*
-			 * FIXME When do we cut VARHDR from ptrack_nonparsed?
-			 * Compute the beginning of the ptrack map related to this segment
-			 */
-			start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*p->segno;
+				if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
+					p->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
+				else
+					p->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
 
-			if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
-				p->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
-			else
-				p->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
+				p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
+				memcpy(p->pagemap.bitmap, ptrack_nonparsed+start_addr, p->pagemap.bitmapsize);
 
-			p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
-			memcpy(p->pagemap.bitmap, ptrack_nonparsed+start_addr, p->pagemap.bitmapsize);
-
-			pg_free(ptrack_nonparsed);
+				pg_free(ptrack_nonparsed);
+			}
 		}
 	}
 }
