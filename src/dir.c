@@ -718,7 +718,7 @@ get_control_value(const char *str, const char *name,
 	char	   *name_ptr = (char *) name;
 	char	   *buf = (char *) str;
 	char		buf_uint64[32],	/* Buffer for "value_uint64" */
-			   *buf_uint64_ptr;
+			   *buf_uint64_ptr = buf_uint64;
 
 	/* Set default values */
 	if (value_str)
