@@ -1230,7 +1230,8 @@ pg_stop_backup(pgBackup *backup)
 			if (backup_files_list)
 			{
 				file = pgFileNew(tablespace_map, true);
-				calc_file_checksum(file);
+				if (S_ISREG(file->mode))
+					calc_file_checksum(file);
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
 				parray_append(backup_files_list, file);

@@ -997,6 +997,7 @@ calc_file_checksum(pgFile *file)
 	struct stat	st;
 	pg_crc32	crc;
 
+	Assert(S_ISREG(file->mode));
 	INIT_CRC32C(crc);
 
 	/* reset size summary */
