@@ -121,7 +121,6 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	size_t				read_len = 0;
 	XLogRecPtr			page_lsn;
 	int					try_checksum = 100;
-	bool				is_zero_page = false;
 
 	header.block = blknum;
 	offset = blknum * BLCKSZ;
@@ -152,30 +151,29 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			int i;
 			/* Check if the page is zeroed. */
 			for(i = 0; i < BLCKSZ && page.data[i] == 0; i++);
+
+			/* Page is zeroed. No need to check header and checksum. */
 			if (i == BLCKSZ)
 			{
-				is_zero_page = true;
-				try_checksum = 0;
 				elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
+				break;
 			}
 
 			/*
 			 * If page is not completely empty and we couldn't parse it,
 			 * try again several times. If it didn't help, throw error
 			 */
-			if (!is_zero_page)
+
+			/* Try to read and verify this page again several times. */
+			if (try_checksum)
 			{
-				/* Try to read and verify this page again several times. */
-				if (try_checksum)
-				{
-					elog(WARNING, "File: %s blknum %u have wrong page header, try again",
-						 file->path, blknum);
-					usleep(100);
-					continue;
-				}
-				else
-					elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
+				elog(WARNING, "File: %s blknum %u have wrong page header, try again",
+						file->path, blknum);
+				usleep(100);
+				continue;
 			}
+			else
+				elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
 		}
 
 		/* If the page hasn't changed since previous backup, don't backup it. */
@@ -188,25 +186,31 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		}
 
 		/* Verify checksum */
-		if(current.checksum_version && !is_zero_page)
+		if(current.checksum_version)
 		{
 			/*
 			 * If checksum is wrong, sleep a bit and then try again
 			 * several times. If it didn't help, throw error
 			 */
-			if (pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum) != ((PageHeader) page.data)->pd_checksum)
+			if (pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum)
+				!= ((PageHeader) page.data)->pd_checksum)
 			{
 				if (try_checksum)
 				{
 					elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
 						 file->path, blknum);
 					usleep(100);
+					continue;
 				}
 				else
 					elog(ERROR, "File: %s blknum %u have wrong checksum.",
 									file->path, blknum);
 			}
+			else
+				break; /* page header and checksum are correct */
 		}
+		else
+			break; /* page header is correct and checksum check is disabled */
 	}
 
 	file->read_size += read_len;
