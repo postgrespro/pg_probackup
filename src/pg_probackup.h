@@ -50,6 +50,7 @@
 #define PG_XLOG_DIR				"pg_xlog"
 #endif
 #define PG_TBLSPC_DIR			"pg_tblspc"
+#define PG_GLOBAL_DIR			"global"
 #define BACKUP_CONTROL_FILE		"backup.control"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
 #define BACKUP_CATALOG_PID		"pg_probackup.pid"

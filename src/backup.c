@@ -807,54 +807,91 @@ pg_ptrack_clear(void)
 
 /* Read and clear ptrack files of the target relation.
  * Result is a bytea ptrack map of all segments of the target relation.
+ * case 1: we know a tablespace_oid, db_oid, and rel_filenode
+ * case 2: we know db_oid and rel_filenode (no tablespace_oid, because file in pg_default)
+ * case 3: we know only rel_filenode (because file in pg_global)
  */
 static char *
-pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_oid,
+pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 						size_t *result_size)
 {
 	PGconn	   *tmp_conn;
 	PGresult   *res_db,
+			   *res_pg_global,
 			   *res;
 	char	   *dbname;
 	char	   *params[2];
 	char	   *result;
+	Oid        pg_global_oid;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
-	sprintf(params[0], "%i", db_oid);
 
-	res_db = pgut_execute(backup_conn,
-						  "SELECT datname FROM pg_database WHERE oid=$1",
-						  1, (const char **) params);
+    /* regular file (not in directory 'global') */
+	if (db_oid != 0)
+	{
+		sprintf(params[0], "%i", db_oid);
+		res_db = pgut_execute(backup_conn,
+							  "SELECT datname FROM pg_database WHERE oid=$1",
+							  1, (const char **) params);
+		/*
+		 * If database is not found, it's not an error.
+		 * It could have been deleted since previous backup.
+		 */
+		if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
+			return NULL;
 
-	/*
-	 * If database is not found, it's not an error.
-	 * It could have been deleted since previous backup.
-	 */
-	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
-		return NULL;
+		dbname = pstrdup(PQgetvalue(res_db, 0, 0));
+		PQclear(res_db);
 
-	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
-	PQclear(res_db);
+		tmp_conn = pgut_connect(dbname);
+		sprintf(params[0], "%i", tablespace_oid);
+		sprintf(params[1], "%i", rel_filenode);
+		res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
+						   2, (const char **)params);
 
-	tmp_conn = pgut_connect(dbname);
-	sprintf(params[0], "%i", tablespace_oid);
-	sprintf(params[1], "%i", rel_oid);
+		if (PQnfields(res) != 1)
+			elog(ERROR, "cannot get ptrack file from database \"%s\" by tablespace oid %u and relation oid %u",
+			 dbname, tablespace_oid, rel_filenode);
+		pfree(dbname);
+		pgut_disconnect(tmp_conn);
 
-	res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
-					   2, (const char **)params);
-	if (PQnfields(res) != 1)
-		elog(ERROR, "cannot get ptrack file from database \"%s\" by tablespace oid %u and relation oid %u",
-			 dbname, tablespace_oid, rel_oid);
+	}
+	/* file in directory 'global' */
+	else
+	{
+		/* get oid of pg_global */
+		res_pg_global = pgut_execute(backup_conn,
+							  "SELECT oid FROM pg_tablespace WHERE spcname = 'pg_global'",
+							  0, NULL);
+		/*
+		 * something is very wrong, i.e. ptrack file are present in pg_global directory
+		 * but pg_global tablespace is missing in PostgreSQL catalogue
+		 */
+		if (PQntuples(res_pg_global) != 1 || PQnfields(res_pg_global) != 1)
+			elog(ERROR, "cannot get oid of pg_global tablespace, which was needed"
+						"for getting ptrack file content of filenode %u",
+						rel_filenode);
+
+		pg_global_oid = atoi(pstrdup(PQgetvalue(res_pg_global, 0, 0)));
+		PQclear(res_pg_global);
+
+		/* execute ptrack_get_and_clear for relation in pg_global */
+		sprintf(params[0], "%i", pg_global_oid);
+		sprintf(params[1], "%i", rel_filenode);
+		res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
+						   2, (const char **)params);
+
+		if (PQnfields(res) != 1)
+		elog(ERROR, "cannot get ptrack file from pg_global tablespace and relation oid %u",
+			 rel_filenode);
+	}
+
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
 									  result_size);
 	PQclear(res);
-
-	pgut_disconnect(tmp_conn);
-
 	pfree(params[0]);
 	pfree(params[1]);
-	pfree(dbname);
 
 	return result;
 }
@@ -1843,6 +1880,7 @@ make_pagemap_from_ptrack(parray *files)
 		if (p->ptrack_path != NULL)
 		{
 			char	   *tablespace;
+			char	   *global;
 			Oid			db_oid,
 						rel_oid,
 						tablespace_oid = 0;
@@ -1861,8 +1899,9 @@ make_pagemap_from_ptrack(parray *files)
 
 			/*
 			 * Path has format:
-			 * pg_tblspc/tablespace_oid/tablespace_version_subdir/db_oid/rel_oid
-			 * base/db_oid/rel_oid
+			 * pg_tblspc/tablespace_oid/tablespace_version_subdir/db_oid/rel_filenode
+			 * base/db_oid/rel_filenode
+			 * global/rel_filenode
 			 */
 			sep_iter = strlen(p->path);
 			while (sep_iter >= 0)
@@ -1878,9 +1917,20 @@ make_pagemap_from_ptrack(parray *files)
 				elog(ERROR, "path of the file \"%s\" has wrong format",
 					 p->path);
 
-			sscanf(p->path + sep_iter + 1, "%u/%u", &db_oid, &rel_oid);
+			/*
+			 * If file lies in directory 'global' we cannot get its db_oid from file path
+			 * In this case we set db_oid to 0
+			 */
+			global = strstr(p->path + sep_iter + 1, PG_GLOBAL_DIR);
+			if (global)
+			{
+				sscanf(global+strlen(PG_GLOBAL_DIR)+1, "%u", &rel_oid);
+				db_oid = 0;
+			}
+			else
+				sscanf(p->path + sep_iter + 1, "%u/%u", &db_oid, &rel_oid);
 
-			/* get ptrack map for all segments of the relation in a raw format */
+			/* get ptrack map for all segments of the relation in a raw format*/
 			ptrack_nonparsed = pg_ptrack_get_and_clear(tablespace_oid, db_oid,
 											   rel_oid, &ptrack_nonparsed_size);
 			if (ptrack_nonparsed != NULL)
