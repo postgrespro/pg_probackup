@@ -77,7 +77,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
 
 static void backup_files(void *arg);
-static void do_backup_database(parray *backup_list);
+static void do_backup_instance(void);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_switch_wal(PGconn *conn);
@@ -116,10 +116,11 @@ static void confirm_block_size(const char *name, int blcksz);
 
 
 /*
- * Take a backup of database.
+ * Take a backup of a single postgresql instance.
+ * Move files from 'pgdata' to a subdirectory in 'backup_path'.
  */
 static void
-do_backup_database(parray *backup_list)
+do_backup_instance(void)
 {
 	size_t		i;
 	char		database_path[MAXPGPATH];
@@ -144,15 +145,32 @@ do_backup_database(parray *backup_list)
 
 	/*
 	 * In incremental backup mode ensure that already-validated
-	 * backup on current timeline exists.
+	 * backup on current timeline exists and get its filelist.
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
+		parray	   *backup_list;
+		/* get list of backups already taken */
+		backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+		if (backup_list == NULL)
+			elog(ERROR, "Failed to get backup list.");
+
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
 			elog(ERROR, "Valid backup on current timeline is not found. "
 						"Create new FULL backup before an incremental one.");
+		parray_free(backup_list);
+
+		pgBackupGetPath(prev_backup, prev_backup_filelist_path, lengthof(prev_backup_filelist_path),
+						DATABASE_FILE_LIST);
+		prev_backup_filelist = dir_read_file_list(pgdata, prev_backup_filelist_path);
+
+		/* If lsn is not NULL, only pages with higher lsn will be copied. */
+		prev_backup_start_lsn = prev_backup->start_lsn;
+		current.parent_backup = prev_backup->start_time;
+
+		pgBackupWriteBackupControlFile(&current);
 	}
 
 	/* Clear ptrack files for FULL and PAGE backup */
@@ -198,24 +216,6 @@ do_backup_database(parray *backup_list)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
 
 		pthread_mutex_unlock(&start_stream_mut);
-	}
-
-	/*
-	 * To take incremental backup get the filelist of the last completed database
-	 */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
-		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
-	{
-		Assert(prev_backup);
-		pgBackupGetPath(prev_backup, prev_backup_filelist_path, lengthof(prev_backup_filelist_path),
-						DATABASE_FILE_LIST);
-		prev_backup_filelist = dir_read_file_list(pgdata, prev_backup_filelist_path);
-
-		/* If lsn is not NULL, only pages with higher lsn will be copied. */
-		prev_backup_start_lsn = prev_backup->start_lsn;
-
-		current.parent_backup = prev_backup->start_time;
-		pgBackupWriteBackupControlFile(&current);
 	}
 
 	/* initialize backup list */
@@ -394,9 +394,6 @@ do_backup_database(parray *backup_list)
 int
 do_backup(void)
 {
-	parray	   *backup_list;
-	bool		is_ptrack_support;
-
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
 		elog(ERROR, "required parameter not specified: PGDATA "
@@ -422,15 +419,18 @@ do_backup(void)
 	current.stream = stream_wal;
 
 	/* ptrack backup checks */
-	is_ptrack_support = pg_ptrack_support();
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_support)
-		elog(ERROR, "This PostgreSQL instance does not support ptrack");
-
-	if (is_ptrack_support)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		is_ptrack_enable = pg_ptrack_enable();
-		if(current.backup_mode == BACKUP_MODE_DIFF_PTRACK && !is_ptrack_enable)
-			elog(ERROR, "Ptrack is disabled");
+		bool		is_ptrack_support = pg_ptrack_support();
+
+		if (!is_ptrack_support)
+			elog(ERROR, "This PostgreSQL instance does not support ptrack");
+		else
+		{
+			is_ptrack_enable = pg_ptrack_enable();
+			if(!is_ptrack_enable)
+				elog(ERROR, "Ptrack is disabled");
+		}
 	}
 
 	/* archiving check */
@@ -460,11 +460,6 @@ do_backup(void)
 	 */
 	check_system_identifiers();
 
-	/* get list of backups already taken */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backup_list == NULL)
-		elog(ERROR, "Failed to get backup list.");
-
 	elog(LOG, "Backup start. backup-mode = %s, stream = %s",
 		pgBackupGetBackupMode(&current), current.stream ? "true" : "false");
 
@@ -483,7 +478,7 @@ do_backup(void)
 	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
-	do_backup_database(backup_list);
+	do_backup_instance();
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
