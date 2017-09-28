@@ -222,6 +222,7 @@ do_backup_instance(void)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
+	dir_list_file(backup_files_list, pgdata, true, true, false);
 	add_pgdata_files(backup_files_list, pgdata);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
@@ -251,7 +252,8 @@ do_backup_instance(void)
 						*/
 					   !from_replica);
 	}
-	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn();
 
@@ -295,6 +297,7 @@ do_backup_instance(void)
 			dir_create_dir(dirpath, DIR_PERMISSION);
 		}
 
+		/* setup threads */
 		__sync_lock_release(&file->lock);
 	}
 
@@ -1601,15 +1604,17 @@ backup_files(void *arg)
 }
 
 /*
- * Append files to the backup list array.
+ * Extract information about files in backup_list parsing their names:
+ * - remove temp tables from the list
+ * - set flags for datafiles
+ * - link ptrack files with main fork files
+ * TODO: rename the function
+ * TODO: review flags
  */
 static void
 add_pgdata_files(parray *files, const char *root)
 {
 	size_t		i;
-
-	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(files, root, true, true, false);
 
 	/* mark files that are possible datafile as 'datafile' */
 	for (i = 0; i < parray_num(files); i++)
