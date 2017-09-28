@@ -285,6 +285,7 @@ extern char *replication_slot;
 extern bool	smooth_checkpoint;
 extern uint32 archive_timeout;
 extern bool from_replica;
+extern bool is_remote_backup;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;
