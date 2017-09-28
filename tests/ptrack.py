@@ -3,6 +3,8 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
+from testgres import ClusterException
+import shutil, sys
 
 
 module_name = 'ptrack'
@@ -304,9 +306,9 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-# @unittest.skip("skip")
-    def test_drop_db(self):
-        """Make node, create database, create table in database, take ptrack backup, drop database, take ptrack backup"""
+    # @unittest.skip("skip")
+    def test_create_db(self):
+        """Make node, take full backup, create database db1, take ptrack backup, restore database and check it presense"""
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -327,19 +329,162 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
-        # PTRACK BACKUP
+        # CREATE DATABASE DB1
         node.safe_psql(
             "postgres", "create database db1")
-        node.safe_psql("db1", "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+#        node.safe_psql("db1", "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+#        result =  node.safe_psql("db1", "select * from t_heap")
+
+        # PTRACK BACKUP
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata_content = self.pgdata_content(node.data_dir)
 
-        node.safe_psql(
-            "postgres", "checkpoint;")
-
+        # DROP DATABASE DB1
+        #node.safe_psql(
+        #    "postgres", "drop database db1")
         # SECOND PTRACK BACKUP
+        #self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        node_restored = self.make_simple_node(base_dir="{0}/{1}/node_restored".format(module_name, fname))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored, options=["-j", "4"])
+        pgdata_content_new = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata_content, pgdata_content_new)
+        result_new =  node_restored.safe_psql("db1", "select * from t_heap")
+
+        self.assertEqual(result, result_new)
+        try:
+            node_restored.safe_psql('db1', 'select 1')
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because we are connecting to deleted database.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ClusterException as e:
+            self.assertTrue('FATAL:  database "db1" does not exist' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_drop_tablespace(self):
+        """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
+        self.maxDiff = None
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
+            )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        # CREATE TABLE
         node.safe_psql(
-            "postgres", "drop database db1")
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+        result = node.safe_psql("postgres", "select * from t_heap")
+        # FULL BACKUP
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+
+        # Move table to tablespace 'somedata'
+        node.safe_psql(
+            "postgres", "alter table t_heap set tablespace somedata")
+        # PTRACK BACKUP
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+
+        # Move table back to default tablespace
+        node.safe_psql(
+            "postgres", "alter table t_heap set tablespace pg_default")
+        # SECOND PTRACK BACKUP
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+
+        # DROP TABLESPACE 'somedata'
+        node.safe_psql(
+            "postgres", "drop tablespace somedata")
+        # THIRD PTRACK BACKUP
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+
+        tblspace = self.get_tblspace_path(node, 'somedata')
+        node.cleanup()
+        shutil.rmtree(tblspace, ignore_errors=True)
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+        node.start()
+
+        tblspc_exist = node.safe_psql("postgres", "select exists(select 1 from pg_tablespace where spcname = 'somedata')")
+        if tblspc_exist.rstrip() == 't':
+            self.assertEqual(1, 0, "Expecting Error because tablespace 'somedata' should not be present")
+
+        result_new = node.safe_psql("postgres", "select * from t_heap")
+        self.assertEqual(result, result_new)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_alter_tablespace(self):
+        """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
+        self.maxDiff = None
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
+            )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        # CREATE TABLE
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+        result = node.safe_psql("postgres", "select * from t_heap")
+        # FULL BACKUP
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+
+        # Move table to separate tablespace
+        node.safe_psql(
+            "postgres", "alter table t_heap set tablespace somedata")
+        # FIRTS PTRACK BACKUP
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+
+        # Restore ptrack backup and check table consistency
+        restored_node = self.make_simple_node(base_dir="{0}/{1}/restored_node".format(module_name, fname))
+        restored_node.cleanup()
+        tblspc_path = self.get_tblspace_path(node, 'somedata')
+        tblspc_path_new = self.get_tblspace_path(restored_node, 'somedata_restored')
+        self.restore_node(backup_dir, 'node', restored_node, options=[
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+        restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        restored_node.start()
+
+        result_new = restored_node.safe_psql("postgres", "select * from t_heap")
+        self.assertEqual(result, result_new)
+        restored_node.cleanup()
+        shutil.rmtree(tblspc_path_new, ignore_errors=True)
+
+        # Move table to default tablespace
+        node.safe_psql(
+            "postgres", "alter table t_heap set tablespace pg_default")
+        # SECOND PTRACK BACKUP
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+
+        # Restore second ptrack backup and check table consistency
+        self.restore_node(backup_dir, 'node', restored_node, options=[
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+        restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        restored_node.start()
+        result_new = restored_node.safe_psql("postgres", "select * from t_heap")
+        self.assertEqual(result, result_new)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

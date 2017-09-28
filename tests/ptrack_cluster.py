@@ -10,7 +10,7 @@ module_name = 'ptrack_cluster'
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_cluster_on_btree(self):
         fname = self.id().split('.')[3]
@@ -70,7 +70,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_ptrack_cluster_on_gist(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
@@ -82,15 +82,13 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.start()
 
-        self.create_tblspace_in_node(node, 'somedata')
-
         # Create table and indexes
         node.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap tablespace somedata as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+            "create sequence t_seq; create table t_heap as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                node.safe_psql("postgres", "create index {0} on {1} using {2}({3}) tablespace somedata".format(
+                node.safe_psql("postgres", "create index {0} on {1} using {2}({3})".format(
                     i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
         node.safe_psql('postgres', 'vacuum t_heap')
@@ -123,7 +121,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 node, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
 
-            # compare pages and check ptrack sanity
+            # Compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
 
         # Clean after yourself
@@ -141,31 +139,27 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.start()
 
-        self.create_tblspace_in_node(master, 'somedata')
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(base_dir="{0}/{1}/replica".format(module_name, fname))
         replica.cleanup()
 
-        self.restore_node(backup_dir, 'master', replica, options=['-T', '{0}={1}'.format(
-            self.get_tblspace_path(master, 'somedata'), self.get_tblspace_path(replica, 'somedata_new'))])
+        self.restore_node(backup_dir, 'master', replica)
 
-        replica.append_conf('postgresql.auto.conf', 'port = {0}'.format(replica.port))
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
-        self.set_archiving(backup_dir, 'replica', replica)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.start()
 
         # Create table and indexes
         master.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap tablespace somedata as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+            "create sequence t_seq; create table t_heap as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                master.safe_psql("postgres", "create index {0} on {1} using {2}({3}) tablespace somedata".format(
+                master.safe_psql("postgres", "create index {0} on {1} using {2}({3})".format(
                     i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
-        #exit(1)
         master.safe_psql('postgres', 'vacuum t_heap')
         master.safe_psql('postgres', 'checkpoint')
 
@@ -215,28 +209,25 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.start()
 
-        self.create_tblspace_in_node(master, 'somedata')
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(base_dir="{0}/{1}/replica".format(module_name, fname))
         replica.cleanup()
 
-        self.restore_node(backup_dir, 'master', replica, options=['-T', '{0}={1}'.format(
-            self.get_tblspace_path(master, 'somedata'), self.get_tblspace_path(replica, 'somedata_new'))])
+        self.restore_node(backup_dir, 'master', replica)
 
-        replica.append_conf('postgresql.auto.conf', 'port = {0}'.format(replica.port))
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, 'replica', synchronous=True)
-        self.set_archiving(backup_dir, 'replica', replica)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.start()
 
         # Create table and indexes
         master.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap tablespace somedata as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+            "create sequence t_seq; create table t_heap as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                master.safe_psql("postgres", "create index {0} on {1} using {2}({3}) tablespace somedata".format(
+                master.safe_psql("postgres", "create index {0} on {1} using {2}({3})".format(
                     i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
         master.safe_psql('postgres', 'vacuum t_heap')
@@ -257,7 +248,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
         master.safe_psql('postgres', 'cluster t_heap using t_gist')
         master.safe_psql('postgres', 'checkpoint')
-        #sleep(10)
 
         for i in idx_ptrack:
             # get new size of heap and indexes. size calculated in pages
@@ -271,7 +261,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 replica, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
 
-            # compare pages and check ptrack sanity
+            # Compare pages and check ptrack sanity
             self.check_ptrack_sanity(idx_ptrack[i])
 
         # Clean after yourself

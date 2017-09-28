@@ -19,6 +19,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(restore_test))
     suite.addTests(loader.loadTestsFromModule(validate_test))
     suite.addTests(loader.loadTestsFromModule(retention_test))
+    suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(ptrack_clean))
     suite.addTests(loader.loadTestsFromModule(ptrack_cluster))
     suite.addTests(loader.loadTestsFromModule(ptrack_move_to_tablespace))
@@ -34,14 +35,12 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(false_positive))
     suite.addTests(loader.loadTestsFromModule(compression))
     suite.addTests(loader.loadTestsFromModule(page))
-    suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(archive))
 
     return suite
 
 # ToDo:
 #  archive:
-#    discrepancy of instance`s PGDATA and node`s PGDATA should lead to archive-push refusal to work
 #    discrepancy of instance`s SYSTEMID and node`s SYSTEMID should lead to archive-push refusal to work
 #  replica:
 #    backup should exit with correct error message if some master* option is missing
