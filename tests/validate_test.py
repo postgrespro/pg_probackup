@@ -322,8 +322,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
         recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
 
-        self.assertIn("INFO: backup validation completed successfully on"),
-            self.validate_pb(backup_dir, 'node', node, options=["--time='{0}'".format(recovery_time)])
+        self.assertIn("INFO: backup validation completed successfully on", 
+            self.validate_pb(backup_dir, 'node', node, options=["--time='{0}'".format(recovery_time)]))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
