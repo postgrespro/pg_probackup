@@ -7,7 +7,7 @@ from . import init_test, option_test, show_test, \
     ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
     false_positive, replica, compression, page, ptrack, archive, \
-    cfs_backup_noenc, cfs_backup_enc
+    cfs_backup_noenc, cfs_backup_enc, cfs_restore_noenc
 
 
 def load_tests(loader, tests, pattern):
@@ -39,6 +39,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(cfs_backup_noenc))
     suite.addTests(loader.loadTestsFromModule(cfs_backup_enc))
+    suite.addTests(loader.loadTestsFromModule(cfs_restore_noenc))
 
     return suite
 

@@ -42,29 +42,17 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
 
         node.start()
 
-# --- Section: Prepare --- #
-    # @unittest.expectedFailure
-    # @unittest.skip("skip")
-    def test_create_tblspace_compression(self):
-        """
-        Case: Check to create compression tablespace
-        """
         self.create_tblspace_in_node(node, tblspace_name, True)
+        
         tblspace = node.safe_psql(
             "postgres",
             "SELECT * FROM pg_tablespace WHERE spcname='{0}'".format(tblspace_name)
-        )
-        node.safe_psql(
-            "postgres",
-            'create table {0} tablespace {1} \
-                as select i as id, md5(i::text) as text, \
-                md5(repeat(i::text,10))::tsvector as tsvector \
-                from generate_series(0,256) i'.format('t1', tblspace_name)
         )
         self.assertTrue(
             tblspace_name in tblspace and "compression=true" in tblspace,
             "ERROR: The tablespace not created or it create without compressions"
         )
+
         self.assertTrue(
             find_by_name([self.get_tblspace_path(node, tblspace_name)], ['pg_compression']),
             "ERROR: File pg_compression not found"
@@ -77,7 +65,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         """
         Case: Check fullbackup empty compressed tablespace
         """
-        self.create_tblspace_in_node(node, tblspace_name, True)
 
         backup_id = None
         try:
@@ -85,9 +72,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -107,7 +94,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         """
         Case: Check fullbackup empty compressed tablespace with options stream
         """
-        self.create_tblspace_in_node(node, tblspace_name, True)
 
         backup_id = None
         try:
@@ -115,9 +101,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -143,8 +129,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         Case: Make full backup after created table in the tablespace
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
-
         node.safe_psql(
             "postgres",
             'CREATE TABLE {0} TABLESPACE {1} \
@@ -159,9 +143,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {0}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {0}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -191,8 +175,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         Case: Make full backup after created table in the tablespace with option --stream
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
-
         node.safe_psql(
             "postgres",
             'CREATE TABLE {0} TABLESPACE {1} \
@@ -205,11 +187,10 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         try:
             backup_id = self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--stream'])
         except ProbackupException as e:
-            self.assertTrue(
-                False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+            self.fail(
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -240,15 +221,14 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Make ptrack backup after create table
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         try:
             self.backup_node(backup_dir, 'node', node, backup_type='full')
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -266,9 +246,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -298,15 +278,14 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Make ptrack backup after create table
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         try:
             self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--stream'])
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -324,9 +303,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -356,15 +335,14 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Make page backup after create table
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         try:
             self.backup_node(backup_dir, 'node', node, backup_type='full')
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -382,9 +360,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -414,15 +392,14 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Make page backup after create table
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         try:
             self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--stream'])
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -440,9 +417,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
         show_backup = self.show_pb(backup_dir, 'node', backup_id)
@@ -474,7 +451,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Check: incremental backup will not greater as full
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         node.safe_psql(
             "postgres",
             'CREATE TABLE {0} TABLESPACE {1} \
@@ -489,9 +465,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -509,9 +485,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -535,7 +511,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Check: incremental backup will not greater as full
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         node.safe_psql(
             "postgres",
             'CREATE TABLE {0} TABLESPACE {1} \
@@ -550,9 +525,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -570,9 +545,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -596,7 +571,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Check: incremental backup will not greater as full
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         node.safe_psql(
             "postgres",
             'CREATE TABLE {0} TABLESPACE {1} \
@@ -611,9 +585,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -631,9 +605,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -657,7 +631,6 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
                 Check: incremental backup will not greater as full
         """
 
-        self.create_tblspace_in_node(node, tblspace_name, True)
         node.safe_psql(
             "postgres",
             'CREATE TABLE {0} TABLESPACE {1} \
@@ -672,9 +645,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Full backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
@@ -692,9 +665,9 @@ class CfsBackupEncTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 False,
-                "ERROR: Incremental backup wasn't created.\n {0} \n {1}".format(
-                    str(e.cmd),
-                    str(e.message)
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
                 )
             )
 
