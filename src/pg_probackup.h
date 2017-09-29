@@ -27,6 +27,7 @@
 #include "storage/bufpage.h"
 #include "storage/checksum.h"
 #include "utils/pg_crc.h"
+#include "common/relpath.h"
 
 #include "utils/parray.h"
 #include "utils/pgut.h"
@@ -90,9 +91,13 @@ typedef struct pgFile
 	char	*linked;		/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
 	char	*path;			/* path of the file */
-	char	*ptrack_path;	/* path of the ptrack fork of the relation */
+	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
+	Oid		dbOid;			/* dbOid extracted from path, if applicable */
+	Oid		relOid;			/* relOid extracted from path, if applicable */
+	char	*forkName;		/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
+	bool	is_database;
 	uint64	generation;		/* Generation of the compressed file.If generation
 							 * has changed, we cannot backup compressed file
 							 * partially. Has no sense if (is_cfs == false). */

@@ -150,8 +150,12 @@ pgFileInit(const char *path)
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
 	file->pagemap.bitmapsize = 0;
-	file->ptrack_path = NULL;
+	file->tblspcOid = 0;
+	file->dbOid = 0;
+	file->relOid = 0;
 	file->segno = 0;
+	file->is_database = false;
+	file->forkName = pgut_malloc(MAXPGPATH);
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 	file->is_cfs = false;
@@ -241,9 +245,11 @@ pgFileFree(void *file)
 
 	if (file_ptr->linked)
 		free(file_ptr->linked);
+
+	if (file_ptr->forkName)
+		free(file_ptr->forkName);
+
 	free(file_ptr->path);
-	if (file_ptr->ptrack_path != NULL)
-		free(file_ptr->ptrack_path);
 	free(file);
 }
 

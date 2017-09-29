@@ -22,6 +22,8 @@
 
 #include "libpq/pqsignal.h"
 #include "storage/bufpage.h"
+#include "catalog/catalog.h"
+#include "catalog/pg_tablespace.h"
 #include "datapagemap.h"
 #include "receivelog.h"
 #include "streamutil.h"
@@ -88,7 +90,7 @@ static void pg_switch_wal(PGconn *conn);
 static void pg_stop_backup(pgBackup *backup);
 static int checkpoint_timeout(void);
 
-static void add_pgdata_files(parray *files, const char *root);
+static void parse_backup_filelist_filenames(parray *files, const char *root);
 static void write_backup_file_list(parray *files, const char *root);
 static void wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment);
 static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
@@ -105,6 +107,7 @@ static bool pg_ptrack_support(void);
 static bool pg_ptrack_enable(void);
 static bool pg_is_in_recovery(void);
 static bool pg_archive_enabled(void);
+static bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
@@ -557,7 +560,8 @@ do_backup_instance(void)
 	else
 		dir_list_file(backup_files_list, pgdata, true, true, false);
 
-	add_pgdata_files(backup_files_list, pgdata);
+	/* Extract information about files in backup_list parsing their names:*/
+	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -597,7 +601,7 @@ do_backup_instance(void)
 						"Create new full backup before an incremental one.",
 						ptrack_lsn, prev_backup->start_lsn);
 		}
-		parray_qsort(backup_files_list, pgFileComparePathDesc);
+		parray_qsort(backup_files_list, pgFileComparePath);
 		make_pagemap_from_ptrack(backup_files_list);
 	}
 
@@ -1137,8 +1141,13 @@ pg_ptrack_clear(void)
 			   *res;
 	const char *dbname;
 	int			i;
+	Oid dbOid, tblspcOid;
+	char *params[2];
 
-	res_db = pgut_execute(backup_conn, "SELECT datname FROM pg_database",
+	params[0] = palloc(64);
+	params[1] = palloc(64);
+
+	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
 						  0, NULL);
 
 	for(i = 0; i < PQntuples(res_db); i++)
@@ -1149,14 +1158,52 @@ pg_ptrack_clear(void)
 		if (!strcmp(dbname, "template0"))
 			continue;
 
+		dbOid = atoi(PQgetvalue(res_db, i, 1));
+		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
+
 		tmp_conn = pgut_connect(dbname);
 		res = pgut_execute(tmp_conn, "SELECT pg_ptrack_clear()", 0, NULL);
+
+		sprintf(params[0], "%i", dbOid);
+		sprintf(params[1], "%i", tblspcOid);
+		res = pgut_execute(tmp_conn, "SELECT pg_drop_ptrack_init_file($1, $2)",
+						   2, (const char **)params);
 		PQclear(res);
 
 		pgut_disconnect(tmp_conn);
 	}
 
+	pfree(params[0]);
+	pfree(params[1]);
 	PQclear(res_db);
+}
+
+static bool
+pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
+{
+	char		*params[2];
+	PGresult	*res;
+	bool		result;
+
+	params[0] = palloc(64);
+	params[1] = palloc(64);
+
+	sprintf(params[0], "%i", dbOid);
+	sprintf(params[1], "%i", tblspcOid);
+	res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_and_clear_db($1, $2)",
+						2, (const char **)params);
+
+	if (PQnfields(res) != 1)
+		elog(ERROR, "cannot perform pg_ptrack_get_and_clear_db()");
+	
+	result = (PQgetvalue(res, 0, 0)[0] == 't');
+
+
+	PQclear(res);
+	pfree(params[0]);
+	pfree(params[1]);
+
+	return result;
 }
 
 /* Read and clear ptrack files of the target relation.
@@ -1171,12 +1218,10 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 {
 	PGconn	   *tmp_conn;
 	PGresult   *res_db,
-			   *res_pg_global,
 			   *res;
 	char	   *dbname;
 	char	   *params[2];
 	char	   *result;
-	Oid        pg_global_oid;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -1214,24 +1259,11 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 	/* file in directory 'global' */
 	else
 	{
-		/* get oid of pg_global */
-		res_pg_global = pgut_execute(backup_conn,
-							  "SELECT oid FROM pg_tablespace WHERE spcname = 'pg_global'",
-							  0, NULL);
 		/*
-		 * something is very wrong, i.e. ptrack file are present in pg_global directory
-		 * but pg_global tablespace is missing in PostgreSQL catalogue
+		 * execute ptrack_get_and_clear for relation in pg_global
+		 * Use backup_conn, cause we can do it from any database.
 		 */
-		if (PQntuples(res_pg_global) != 1 || PQnfields(res_pg_global) != 1)
-			elog(ERROR, "cannot get oid of pg_global tablespace, which was needed"
-						"for getting ptrack file content of filenode %u",
-						rel_filenode);
-
-		pg_global_oid = atoi(pstrdup(PQgetvalue(res_pg_global, 0, 0)));
-		PQclear(res_pg_global);
-
-		/* execute ptrack_get_and_clear for relation in pg_global */
-		sprintf(params[0], "%i", pg_global_oid);
+		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
 		res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
 						   2, (const char **)params);
@@ -1963,171 +1995,211 @@ backup_files(void *arg)
  * Extract information about files in backup_list parsing their names:
  * - remove temp tables from the list
  * - set flags for datafiles
- * - link ptrack files with main fork files
  * TODO: rename the function
- * TODO: review flags
  */
 static void
-add_pgdata_files(parray *files, const char *root)
+parse_backup_filelist_filenames(parray *files, const char *root)
 {
 	size_t		i;
 
-	/* mark files that are possible datafile as 'datafile' */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 		char	   *relative;
-		char	   *fname;
-		size_t		path_len;
+		char		*filename = palloc(MAXPGPATH);
+		int 		sscanf_result;
 
-		/* data file must be a regular file */
-		if (!S_ISREG(file->mode))
-			continue;
-
-		/* data files are under "base", "global", or "pg_tblspc" */
 		relative = GetRelativePath(file->path, root);
-		if (!path_is_prefix_of_path("base", relative) &&
-			!path_is_prefix_of_path("global", relative) &&
-			!path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
-			continue;
 
-		/* Get file name from path */
-		fname = last_dir_separator(relative);
-		if (fname == NULL)
-			fname = relative;
-		else
-			fname++;
-
-		/* Remove temp tables from the list */
-		if (fname[0] == 't' && isdigit(fname[1]))
+		elog(INFO, "-----------------------------------------------------: %s", relative);
+		if (path_is_prefix_of_path("global", relative))
 		{
-			pgFileFree(file);
-			parray_remove(files, i);
-			i--;
-			continue;
-		}
-
-		path_len = strlen(file->path);
-		/* Get link ptrack file to relations files */
-		if (path_len > 6 &&
-			strncmp(file->path + (path_len - 6), "ptrack", 6) == 0)
-		{
-			pgFile	   *search_file;
-			pgFile	  **pre_search_file;
-			int			segno = 0;
-
-			while (true)
+			file->tblspcOid = GLOBALTABLESPACE_OID;
+			file->is_database = true; /* TODO add explanation */
+			sscanf_result = sscanf(relative, "global/%s", filename);
+			if (strcmp(relative, "global") == 0)
 			{
-				pgFile		tmp_file;
-
-				tmp_file.path = pg_strdup(file->path);
-
-				/* Segno fits into 6 digits since it is not more than 4000 */
-				if (segno > 0)
-					sprintf(tmp_file.path + path_len - 7, ".%d", segno);
-				else
-					tmp_file.path[path_len - 7] = '\0';
-
-				pre_search_file = (pgFile **) parray_bsearch(files,
-															 &tmp_file,
-															 pgFileComparePath);
-
-				if (pre_search_file != NULL)
-				{
-					search_file = *pre_search_file;
-					search_file->ptrack_path = pg_strdup(file->path);
-					search_file->segno = segno;
-				}
-				else
-				{
-					pg_free(tmp_file.path);
-					break;
-				}
-
-				pg_free(tmp_file.path);
-				segno++;
+				Assert(S_ISDIR(file->mode));
+				elog(INFO, "the global itself, filepath %s", relative);
 			}
-
-			/* Remove ptrack file itself from backup list */
-			pgFileFree(file);
-			parray_remove(files, i);
-			i--;
-		}
-		/* compress map file is not data file */
-		else if (path_len > 4 &&
-				 strncmp(file->path + (path_len - 4), ".cfm", 4) == 0)
-		{
-			pgFile	   **pre_search_file;
-			pgFile		tmp_file;
-
-			tmp_file.path = pg_strdup(file->path);
-			tmp_file.path[path_len - 4] = '\0';
-			pre_search_file = (pgFile **) parray_bsearch(files,
-														 &tmp_file,
-														 pgFileComparePath);
-			if (pre_search_file != NULL)
+			else if (sscanf_result == 1)
 			{
-				FileMap	   *map;
-				int			md = open(file->path, O_RDWR|PG_BINARY, 0);
-
-				if (md < 0)
-					elog(ERROR, "cannot open cfm file '%s'", file->path);
-
-				map = cfs_mmap(md);
-				if (map == MAP_FAILED)
-				{
-					elog(LOG, "cfs_compression_ration failed to map file %s: %m", file->path);
-					close(md);
-					break;
-				}
-
-				(*pre_search_file)->generation = map->generation;
-
-				if (cfs_munmap(map) < 0)
-					elog(LOG, "CFS failed to unmap file %s: %m",
-						 file->path);
-				if (close(md) < 0)
-					elog(LOG, "CFS failed to close file %s: %m",
-						 file->path);
+				elog(INFO, "filename %s, filepath %s", filename, relative);
+			}
+		}
+		else if (path_is_prefix_of_path("base", relative))
+		{
+			file->tblspcOid = DEFAULTTABLESPACE_OID;
+			sscanf_result = sscanf(relative, "base/%u/%s", &(file->dbOid), filename);
+			if (strcmp(relative, "base") == 0)
+			{
+				Assert(S_ISDIR(file->mode));
+				elog(INFO, "the base itself, filepath %s", relative);
+			}
+			else if (sscanf_result == 1)
+			{
+				Assert(S_ISDIR(file->mode));
+				elog(INFO, "dboid %u, filepath %s", file->dbOid, relative);
+				file->is_database = true;
 			}
 			else
-				elog(ERROR, "corresponding segment '%s' is not found",
-					 tmp_file.path);
-
-			pg_free(tmp_file.path);
+			{
+				elog(INFO, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
+			}
 		}
-		/* name of data file start with digit */
-		else if (isdigit(fname[0]))
+		else if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
 		{
-			int			find_dot;
-			int			check_digit;
-			char	   *text_segno;
+			char	*temp_relative_path = palloc(MAXPGPATH);
 
-			file->is_datafile = true;
+			sscanf_result = sscanf(relative, "pg_tblspc/%u/%s", &(file->tblspcOid), temp_relative_path);
+			if (strcmp(relative, "pg_tblspc") == 0)
+			{
+				Assert(S_ISDIR(file->mode));
+				elog(INFO, "the pg_tblspc itself, filepath %s", relative);
+			}
+			else if (sscanf_result == 1)
+			{
+				Assert(S_ISDIR(file->mode));
+				elog(INFO, "tblspcOid %u, filepath %s", file->tblspcOid, relative);
+			}
+			else
+			{
+				/*continue parsing */
+				sscanf_result = sscanf(temp_relative_path+strlen(TABLESPACE_VERSION_DIRECTORY)+1, "%u/%s",
+									   &(file->dbOid), filename);
 
-			/*
-			 * Find segment number.
-			 */
-
-			for (find_dot = (int) path_len - 1;
-				 file->path[find_dot] != '.' && find_dot >= 0;
-				 find_dot--);
-			/* There is not segment number */
-			if (find_dot <= 0)
-				continue;
-
-			text_segno = file->path + find_dot + 1;
-			for (check_digit = 0; text_segno[check_digit] != '\0'; check_digit++)
-				if (!isdigit(text_segno[check_digit]))
+				if (sscanf_result == 0)
 				{
-					check_digit = -1;
-					break;
+					elog(INFO, "the TABLESPACE_VERSION_DIRECTORY itself, filepath %s", relative);
+				}
+				else if (sscanf_result == 1)
+				{
+					Assert(S_ISDIR(file->mode));
+					elog(INFO, "dboid %u, filepath %s", file->dbOid, relative);
+					file->is_database = true;
+				}
+				else
+				{
+					elog(INFO, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
+				}
+			}
+		}
+		else
+		{
+			elog(INFO,"other dir or file, filepath %s", relative);
+		}
+
+		if (strcmp(filename, "ptrack_init") == 0)
+		{
+			/* Do not backup ptrack_init files */
+			pgFileFree(file);
+			parray_remove(files, i);
+			i--;
+			continue;
+		}
+
+		/* Check files located inside database directories */
+		if (filename && file->dbOid != 0)
+		{
+			if (filename[0] == 't' && isdigit(filename[1]))
+			{
+				elog(INFO, "temp file, filepath %s", relative);
+				/* Do not backup temp files */
+				pgFileFree(file);
+				parray_remove(files, i);
+				i--;
+				continue;
+			}
+			else if (isdigit(filename[0]))
+			{
+				char *forkNameptr;
+				char *suffix = palloc(MAXPGPATH);;
+
+				forkNameptr = strstr(filename, "_");
+				if (forkNameptr != NULL)
+				{
+					/* auxiliary fork of the relfile */
+					sscanf(filename, "%u_%s", &(file->relOid), file->forkName);
+					elog(INFO, "relOid %u, forkName %s, filepath %s", file->relOid, file->forkName, relative);
+					if (strcmp(file->forkName, "ptrack") == 0)
+					{
+						/* Do not backup ptrack files */
+						pgFileFree(file);
+						parray_remove(files, i);
+						i--;
+					}
+					continue;
 				}
 
-			if (check_digit != -1)
-				file->segno = (int) strtol(text_segno, NULL, 10);
+				sscanf_result = sscanf(filename, "%u.%d.%s", &(file->relOid), &(file->segno), suffix);
+				if (sscanf_result == 0)
+				{
+					elog(ERROR, "cannot parse filepath %s", relative);
+				}
+				else if (sscanf_result == 1)
+				{
+					/* first segment of the relfile */
+					elog(INFO, "relOid %u, segno %d, filepath %s", file->relOid, 0, relative);
+					file->is_datafile = true;
+				}
+				else if (sscanf_result == 2)
+				{
+					/* not first segment of the relfile */
+					elog(INFO, "relOid %u, segno %d, filepath %s", file->relOid, file->segno, relative);
+					file->is_datafile = true;
+				}
+				else
+				{
+					/* some cfs specific file */
+					elog(INFO, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
+				}
+			}
 		}
-	}
+
+// 		/* compress map file is not data file */
+// 		else if (path_len > 4 &&
+// 				 strncmp(file->path + (path_len - 4), ".cfm", 4) == 0)
+// 		{
+// 			pgFile	   **pre_search_file;
+// 			pgFile		tmp_file;
+// 
+// 			tmp_file.path = pg_strdup(file->path);
+// 			tmp_file.path[path_len - 4] = '\0';
+// 			pre_search_file = (pgFile **) parray_bsearch(files,
+// 														 &tmp_file,
+// 														 pgFileComparePath);
+// 			if (pre_search_file != NULL)
+// 			{
+// 				FileMap	   *map;
+// 				int			md = open(file->path, O_RDWR|PG_BINARY, 0);
+// 
+// 				if (md < 0)
+// 					elog(ERROR, "cannot open cfm file '%s'", file->path);
+// 
+// 				map = cfs_mmap(md);
+// 				if (map == MAP_FAILED)
+// 				{
+// 					elog(LOG, "cfs_compression_ration failed to map file %s: %m", file->path);
+// 					close(md);
+// 					break;
+// 				}
+// 
+// 				(*pre_search_file)->generation = map->generation;
+// 
+// 				if (cfs_munmap(map) < 0)
+// 					elog(LOG, "CFS failed to unmap file %s: %m",
+// 						 file->path);
+// 				if (close(md) < 0)
+// 					elog(LOG, "CFS failed to close file %s: %m",
+// 						 file->path);
+// 			}
+// 			else
+// 				elog(ERROR, "corresponding segment '%s' is not found",
+// 					 tmp_file.path);
+// 
+// 			pg_free(tmp_file.path);
+// 		}
+ 	}
 }
 
 /*
@@ -2223,89 +2295,76 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 /*
  * Given a list of files in the instance to backup, build a pagemap for each
  * data file that has ptrack. Result is saved in the pagemap field of pgFile.
+ * NOTE we rely on the fact that provided parray is sorted by file->path.
  */
 static void
 make_pagemap_from_ptrack(parray *files)
 {
 	size_t		i;
+	Oid dbOid_with_ptrack_init = 0;
+	Oid tblspcOid_with_ptrack_init = 0;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile	   *p = (pgFile *) parray_get(files, i);
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+		char	   *ptrack_nonparsed = NULL;
+		size_t		ptrack_nonparsed_size = 0;
+		size_t		start_addr;
 
-		if (p->ptrack_path != NULL)
+		/*
+		 * If there is a ptrack_init file in the database,
+		 * we must backup all its files, ignoring ptrack files for relations.
+		 */
+		if (file->is_database)
 		{
-			char	   *tablespace;
-			char	   *global;
-			Oid			db_oid,
-						rel_oid,
-						tablespace_oid = 0;
-			int			sep_iter,
-						sep_count = 0;
-			char	   *ptrack_nonparsed;
-			size_t		ptrack_nonparsed_size = 0;
-			size_t		start_addr;
-
-			/* Compute db_oid and rel_oid of the relation from the path */
-
-			tablespace = strstr(p->ptrack_path, PG_TBLSPC_DIR);
-
-			if (tablespace)
-				sscanf(tablespace+strlen(PG_TBLSPC_DIR)+1, "%i/", &tablespace_oid);
-
 			/*
-			 * Path has format:
-			 * pg_tblspc/tablespace_oid/tablespace_version_subdir/db_oid/rel_filenode
-			 * base/db_oid/rel_filenode
-			 * global/rel_filenode
+			 * The function pg_ptrack_get_and_clear_db returns true
+			 * if there was a ptrack_init file
 			 */
-			sep_iter = strlen(p->path);
-			while (sep_iter >= 0)
+			if (pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid))
 			{
-				if (IS_DIR_SEP(p->path[sep_iter]))
-					sep_count++;
-				if (sep_count == 2)
-					break;
-				sep_iter--;
+				dbOid_with_ptrack_init = file->dbOid;
+				tblspcOid_with_ptrack_init = file->tblspcOid;
+			}
+		}
+
+		if (file->is_datafile)
+		{
+			/* get ptrack bitmap once for all segments of the file */
+			if (file->segno == 0)
+			{
+				/* release previous value */
+				if (ptrack_nonparsed != NULL)
+					pg_free(ptrack_nonparsed);
+
+				ptrack_nonparsed = pg_ptrack_get_and_clear(file->tblspcOid, file->dbOid,
+											   file->relOid, &ptrack_nonparsed_size);
 			}
 
-			if (sep_iter <= 0)
-				elog(ERROR, "path of the file \"%s\" has wrong format",
-					 p->path);
-
-			/*
-			 * If file lies in directory 'global' we cannot get its db_oid from file path
-			 * In this case we set db_oid to 0
-			 */
-			global = strstr(p->path + sep_iter + 1, PG_GLOBAL_DIR);
-			if (global)
-			{
-				sscanf(global+strlen(PG_GLOBAL_DIR)+1, "%u", &rel_oid);
-				db_oid = 0;
-			}
-			else
-				sscanf(p->path + sep_iter + 1, "%u/%u", &db_oid, &rel_oid);
-
-			/* get ptrack map for all segments of the relation in a raw format*/
-			ptrack_nonparsed = pg_ptrack_get_and_clear(tablespace_oid, db_oid,
-											   rel_oid, &ptrack_nonparsed_size);
 			if (ptrack_nonparsed != NULL)
 			{
-				/*
-				* FIXME When do we cut VARHDR from ptrack_nonparsed?
-				* Compute the beginning of the ptrack map related to this segment
-				*/
-				start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*p->segno;
-
-				if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
-					p->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
+				if (file->tblspcOid == tblspcOid_with_ptrack_init
+					&& file->dbOid == dbOid_with_ptrack_init)
+				{
+					/* ignore ptrack */
+					elog(INFO, "there is ptrack_init file for this database. Ignore relation's ptrack file.");
+				}
 				else
-					p->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
+				{
+					/*
+					* FIXME When do we cut VARHDR from ptrack_nonparsed?
+					* Compute the beginning of the ptrack map related to this segment
+					*/
+					start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
 
-				p->pagemap.bitmap = pg_malloc(p->pagemap.bitmapsize);
-				memcpy(p->pagemap.bitmap, ptrack_nonparsed+start_addr, p->pagemap.bitmapsize);
+					if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
+						file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
+					else
+						file->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
 
-				pg_free(ptrack_nonparsed);
+					file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
+					memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
+				}
 			}
 		}
 	}
