@@ -1183,7 +1183,7 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 {
 	char		*params[2];
 	PGresult	*res;
-	bool		result;
+	char *result;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -1196,14 +1196,12 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 	if (PQnfields(res) != 1)
 		elog(ERROR, "cannot perform pg_ptrack_get_and_clear_db()");
 	
-	result = (PQgetvalue(res, 0, 0)[0] == 't');
-
-
+	result = PQgetvalue(res, 0, 0);
 	PQclear(res);
 	pfree(params[0]);
 	pfree(params[1]);
 
-	return result;
+	return (strcmp(result, "t") == 0);
 }
 
 /* Read and clear ptrack files of the target relation.
@@ -1242,6 +1240,12 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 
 		dbname = pstrdup(PQgetvalue(res_db, 0, 0));
 		PQclear(res_db);
+
+		if (strcmp(dbname, "template0") == 0)
+		{
+			pfree(dbname);
+			return NULL;
+		}
 
 		tmp_conn = pgut_connect(dbname);
 		sprintf(params[0], "%i", tablespace_oid);
@@ -1830,56 +1834,6 @@ file_size(const char *file_path)
 }
 
 /*
- * Find corresponding file in previous backup.
- * Compare generations and return true if we don't need full copy
- * of the file, but just part of it.
- *
- * skip_size - size of the file in previous backup. We can skip it
- *			   and copy just remaining part of the file.
- */
-bool
-backup_compressed_file_partially(pgFile *file, void *arg, size_t *skip_size)
-{
-	bool result = false;
-	pgFile *prev_file = NULL;
-	size_t current_file_size;
-	backup_files_args *arguments = (backup_files_args *) arg;
-
-	if (arguments->prev_backup_filelist)
-	{
-		pgFile **p = (pgFile **) parray_bsearch(arguments->prev_backup_filelist,
-												file, pgFileComparePath);
-		if (p)
-			prev_file = *p;
-
-		/* If file's gc generation has changed since last backup, just copy it*/
-		if (prev_file && prev_file->generation == file->generation)
-		{
-			current_file_size = file_size(file->path);
-
-			if (prev_file->write_size == BYTES_INVALID)
-				return false;
-
-			*skip_size = prev_file->write_size;
-
-			if (current_file_size >= prev_file->write_size)
-			{
-				elog(LOG, "Backup file %s partially: prev_size %lu, current_size  %lu",
-					 file->path, prev_file->write_size, current_file_size);
-				result = true;
-			}
-			else
-				elog(ERROR, "Something is wrong with %s. current_file_size %lu, prev %lu",
-					file->path, current_file_size, prev_file->write_size);
-		}
-		else
-			elog(LOG, "Copy full %s.", file->path);
-	}
-
-	return result;
-}
-
-/*
  * Take a backup of the PGDATA at a file level.
  * Copy all directories and files listed in backup_files_list.
  * If the file is 'datafile' (regular relation's main fork), read it page by page,
@@ -1943,29 +1897,7 @@ backup_files(void *arg)
 			/* copy the file into backup */
 			if (file->is_datafile)
 			{
-				if (file->is_cfs)
-				{
-					size_t skip_size = 0;
-					if (backup_compressed_file_partially(file, arguments, &skip_size))
-					{
-						/* backup cfs segment partly */
-						if (!copy_file_partly(arguments->from_root,
-								arguments->to_root,
-								file, skip_size))
-						{
-							file->write_size = BYTES_INVALID;
-							continue;
-						}
-					}
-					else if (!copy_file(arguments->from_root,
-								arguments->to_root,
-								file))
-					{
-						file->write_size = BYTES_INVALID;
-						continue;
-					}
-				}
-				else if (!backup_data_file(arguments->from_root,
+				if (!backup_data_file(arguments->from_root,
 									  arguments->to_root, file,
 									  arguments->prev_backup_start_lsn))
 				{
@@ -1994,8 +1926,8 @@ backup_files(void *arg)
 /*
  * Extract information about files in backup_list parsing their names:
  * - remove temp tables from the list
+ * - set flags for database directories
  * - set flags for datafiles
- * TODO: rename the function
  */
 static void
 parse_backup_filelist_filenames(parray *files, const char *root)
@@ -2011,20 +1943,20 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 
 		relative = GetRelativePath(file->path, root);
 
-		elog(INFO, "-----------------------------------------------------: %s", relative);
+		elog(VERBOSE, "-----------------------------------------------------: %s", relative);
 		if (path_is_prefix_of_path("global", relative))
 		{
 			file->tblspcOid = GLOBALTABLESPACE_OID;
-			file->is_database = true; /* TODO add explanation */
 			sscanf_result = sscanf(relative, "global/%s", filename);
 			if (strcmp(relative, "global") == 0)
 			{
 				Assert(S_ISDIR(file->mode));
-				elog(INFO, "the global itself, filepath %s", relative);
+				elog(VERBOSE, "the global itself, filepath %s", relative);
+				file->is_database = true; /* TODO add an explanation */
 			}
 			else if (sscanf_result == 1)
 			{
-				elog(INFO, "filename %s, filepath %s", filename, relative);
+				elog(VERBOSE, "filename %s, filepath %s", filename, relative);
 			}
 		}
 		else if (path_is_prefix_of_path("base", relative))
@@ -2034,17 +1966,17 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 			if (strcmp(relative, "base") == 0)
 			{
 				Assert(S_ISDIR(file->mode));
-				elog(INFO, "the base itself, filepath %s", relative);
+				elog(VERBOSE, "the base itself, filepath %s", relative);
 			}
 			else if (sscanf_result == 1)
 			{
 				Assert(S_ISDIR(file->mode));
-				elog(INFO, "dboid %u, filepath %s", file->dbOid, relative);
+				elog(VERBOSE, "dboid %u, filepath %s", file->dbOid, relative);
 				file->is_database = true;
 			}
 			else
 			{
-				elog(INFO, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
+				elog(VERBOSE, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
 			}
 		}
 		else if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
@@ -2055,12 +1987,12 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 			if (strcmp(relative, "pg_tblspc") == 0)
 			{
 				Assert(S_ISDIR(file->mode));
-				elog(INFO, "the pg_tblspc itself, filepath %s", relative);
+				elog(VERBOSE, "the pg_tblspc itself, filepath %s", relative);
 			}
 			else if (sscanf_result == 1)
 			{
 				Assert(S_ISDIR(file->mode));
-				elog(INFO, "tblspcOid %u, filepath %s", file->tblspcOid, relative);
+				elog(VERBOSE, "tblspcOid %u, filepath %s", file->tblspcOid, relative);
 			}
 			else
 			{
@@ -2070,23 +2002,23 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 
 				if (sscanf_result == 0)
 				{
-					elog(INFO, "the TABLESPACE_VERSION_DIRECTORY itself, filepath %s", relative);
+					elog(VERBOSE, "the TABLESPACE_VERSION_DIRECTORY itself, filepath %s", relative);
 				}
 				else if (sscanf_result == 1)
 				{
 					Assert(S_ISDIR(file->mode));
-					elog(INFO, "dboid %u, filepath %s", file->dbOid, relative);
+					elog(VERBOSE, "dboid %u, filepath %s", file->dbOid, relative);
 					file->is_database = true;
 				}
 				else
 				{
-					elog(INFO, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
+					elog(VERBOSE, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
 				}
 			}
 		}
 		else
 		{
-			elog(INFO,"other dir or file, filepath %s", relative);
+			elog(VERBOSE,"other dir or file, filepath %s", relative);
 		}
 
 		if (strcmp(filename, "ptrack_init") == 0)
@@ -2103,7 +2035,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 		{
 			if (filename[0] == 't' && isdigit(filename[1]))
 			{
-				elog(INFO, "temp file, filepath %s", relative);
+				elog(VERBOSE, "temp file, filepath %s", relative);
 				/* Do not backup temp files */
 				pgFileFree(file);
 				parray_remove(files, i);
@@ -2120,7 +2052,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				{
 					/* auxiliary fork of the relfile */
 					sscanf(filename, "%u_%s", &(file->relOid), file->forkName);
-					elog(INFO, "relOid %u, forkName %s, filepath %s", file->relOid, file->forkName, relative);
+					elog(VERBOSE, "relOid %u, forkName %s, filepath %s", file->relOid, file->forkName, relative);
 					if (strcmp(file->forkName, "ptrack") == 0)
 					{
 						/* Do not backup ptrack files */
@@ -2139,66 +2071,25 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				else if (sscanf_result == 1)
 				{
 					/* first segment of the relfile */
-					elog(INFO, "relOid %u, segno %d, filepath %s", file->relOid, 0, relative);
+					elog(VERBOSE, "relOid %u, segno %d, filepath %s", file->relOid, 0, relative);
 					file->is_datafile = true;
 				}
 				else if (sscanf_result == 2)
 				{
 					/* not first segment of the relfile */
-					elog(INFO, "relOid %u, segno %d, filepath %s", file->relOid, file->segno, relative);
+					elog(VERBOSE, "relOid %u, segno %d, filepath %s", file->relOid, file->segno, relative);
 					file->is_datafile = true;
 				}
 				else
 				{
-					/* some cfs specific file */
-					elog(INFO, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
+					/*
+					 * some cfs specific file.
+					 * It is not datafile, because we cannot read it block by block
+					 */
+					elog(VERBOSE, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
 				}
 			}
 		}
-
-// 		/* compress map file is not data file */
-// 		else if (path_len > 4 &&
-// 				 strncmp(file->path + (path_len - 4), ".cfm", 4) == 0)
-// 		{
-// 			pgFile	   **pre_search_file;
-// 			pgFile		tmp_file;
-// 
-// 			tmp_file.path = pg_strdup(file->path);
-// 			tmp_file.path[path_len - 4] = '\0';
-// 			pre_search_file = (pgFile **) parray_bsearch(files,
-// 														 &tmp_file,
-// 														 pgFileComparePath);
-// 			if (pre_search_file != NULL)
-// 			{
-// 				FileMap	   *map;
-// 				int			md = open(file->path, O_RDWR|PG_BINARY, 0);
-// 
-// 				if (md < 0)
-// 					elog(ERROR, "cannot open cfm file '%s'", file->path);
-// 
-// 				map = cfs_mmap(md);
-// 				if (map == MAP_FAILED)
-// 				{
-// 					elog(LOG, "cfs_compression_ration failed to map file %s: %m", file->path);
-// 					close(md);
-// 					break;
-// 				}
-// 
-// 				(*pre_search_file)->generation = map->generation;
-// 
-// 				if (cfs_munmap(map) < 0)
-// 					elog(LOG, "CFS failed to unmap file %s: %m",
-// 						 file->path);
-// 				if (close(md) < 0)
-// 					elog(LOG, "CFS failed to close file %s: %m",
-// 						 file->path);
-// 			}
-// 			else
-// 				elog(ERROR, "corresponding segment '%s' is not found",
-// 					 tmp_file.path);
-// 
-// 			pg_free(tmp_file.path);
-// 		}
  	}
 }
 
@@ -2303,6 +2194,8 @@ make_pagemap_from_ptrack(parray *files)
 	size_t		i;
 	Oid dbOid_with_ptrack_init = 0;
 	Oid tblspcOid_with_ptrack_init = 0;
+	bool ignore_ptrack_for_db = false;
+	bool is_template = false;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -2318,27 +2211,32 @@ make_pagemap_from_ptrack(parray *files)
 		if (file->is_database)
 		{
 			char *filename = strrchr(file->path, '/');
+			ignore_ptrack_for_db = false;
+			is_template = false;
 
 			Assert(filename != NULL);
 			filename++;
 
-			elog(ERROR, "filename %s", filename);
-			/* always backup all files from template0 */
-			if (strcmp(filename, "template0") == 0)
-					continue;
-
 			/*
 			 * The function pg_ptrack_get_and_clear_db returns true
-			 * if there was a ptrack_init file
+			 * if there was a ptrack_init file.
+			 * And always backup all files from template0 database and global/
 			 */
-			if (pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid))
+			if((strcmp(filename, "1") == 0) ||
+				(strcmp(filename, "12442") == 0))
 			{
+				is_template = true;
+			}
+			else if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
+				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid))
+			{
+				ignore_ptrack_for_db = true;
 				dbOid_with_ptrack_init = file->dbOid;
 				tblspcOid_with_ptrack_init = file->tblspcOid;
 			}
 		}
 
-		if (file->is_datafile)
+		if (file->is_datafile && !is_template)
 		{
 			/* get ptrack bitmap once for all segments of the file */
 			if (file->segno == 0)
@@ -2357,12 +2255,12 @@ make_pagemap_from_ptrack(parray *files)
 					&& file->dbOid == dbOid_with_ptrack_init)
 				{
 					/* ignore ptrack */
-					elog(INFO, "there is ptrack_init file for this database. Ignore relation's ptrack file.");
+					Assert (ignore_ptrack_for_db);
 				}
 				else
 				{
 					/*
-					* FIXME When do we cut VARHDR from ptrack_nonparsed?
+					* TODO When do we cut VARHDR from ptrack_nonparsed?
 					* Compute the beginning of the ptrack map related to this segment
 					*/
 					start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
@@ -2542,42 +2440,4 @@ StreamLog(void *arg)
 
 	PQfinish(conn);
 	conn = NULL;
-}
-
-/*
- * cfs_mmap() and cfs_munmap() function definitions mirror ones
- * from cfs.h, but doesn't use atomic variables, since they are
- * not allowed in frontend code.
- *
- * Since we cannot take atomic lock on files compressed by CFS,
- * it should care about not changing files while backup is running.
- */
-FileMap* cfs_mmap(int md)
-{
-	FileMap* map;
-#ifdef WIN32
-    HANDLE mh = CreateFileMapping(_get_osfhandle(md), NULL, PAGE_READWRITE,
-								  0, (DWORD)sizeof(FileMap), NULL);
-    if (mh == NULL)
-        return (FileMap*)MAP_FAILED;
-
-    map = (FileMap*)MapViewOfFile(mh, FILE_MAP_ALL_ACCESS, 0, 0, 0);
-	CloseHandle(mh);
-    if (map == NULL)
-        return (FileMap*)MAP_FAILED;
-
-#else
-	map = (FileMap*)mmap(NULL, sizeof(FileMap),
-						 PROT_WRITE | PROT_READ, MAP_SHARED, md, 0);
-#endif
-	return map;
-}
-
-int cfs_munmap(FileMap* map)
-{
-#ifdef WIN32
-	return UnmapViewOfFile(map) ? 0 : -1;
-#else
-	return munmap(map, sizeof(FileMap));
-#endif
 }

@@ -176,14 +176,14 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
 		}
 
-		/* If the page hasn't changed since previous backup, don't backup it. */
-		if (!XLogRecPtrIsInvalid(prev_backup_start_lsn)
-			&& !XLogRecPtrIsInvalid(page_lsn)
-			&& page_lsn < prev_backup_start_lsn)
-		{
-			*n_skipped += 1;
-			return;
-		}
+// 		/* If the page hasn't changed since previous backup, don't backup it. */
+// 		if (!XLogRecPtrIsInvalid(prev_backup_start_lsn)
+// 			&& !XLogRecPtrIsInvalid(page_lsn)
+// 			&& page_lsn < prev_backup_start_lsn)
+// 		{
+// 			*n_skipped += 1;
+// 			return;
+// 		}
 
 		/* Verify checksum */
 		if(current.checksum_version)
@@ -383,117 +383,6 @@ backup_data_file(const char *from_root, const char *to_root,
 	}
 
 	return true;
-}
-
-/*
- * Restore compressed file that was backed up partly.
- */
-static void
-restore_file_partly(const char *from_root,const char *to_root, pgFile *file)
-{
-	FILE	   *in;
-	FILE	   *out;
-	size_t		read_len = 0;
-	int			errno_tmp;
-	struct stat	st;
-	char		to_path[MAXPGPATH];
-	char		buf[BLCKSZ];
-	size_t write_size = 0;
-
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	/* open backup mode file for read */
-	in = fopen(file->path, "r");
-	if (in == NULL)
-	{
-		elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
-			strerror(errno));
-	}
-	out = fopen(to_path, "r+");
-
-	/* stat source file to change mode of destination file */
-	if (fstat(fileno(in), &st) == -1)
-	{
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot stat \"%s\": %s", file->path,
-			 strerror(errno));
-	}
-
-	if (fseek(out, 0, SEEK_END) < 0)
-		elog(ERROR, "cannot seek END of \"%s\": %s",
-				to_path, strerror(errno));
-
-	/* copy everything from backup to the end of the file */
-	for (;;)
-	{
-		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
-			break;
-
-		if (fwrite(buf, 1, read_len, out) != read_len)
-		{
-			errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR, "cannot write to \"%s\": %s", to_path,
-				 strerror(errno_tmp));
-		}
-		write_size += read_len;
-	}
-
-	errno_tmp = errno;
-	if (!feof(in))
-	{
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot read backup mode file \"%s\": %s",
-			 file->path, strerror(errno_tmp));
-	}
-
-	/* copy odd part. */
-	if (read_len > 0)
-	{
-		if (fwrite(buf, 1, read_len, out) != read_len)
-		{
-			errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR, "cannot write to \"%s\": %s", to_path,
-				 strerror(errno_tmp));
-		}
-
-		write_size += read_len;
-	}
-
-
-	/* update file permission */
-	if (chmod(to_path, file->mode) == -1)
-	{
-		int errno_tmp = errno;
-
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
-			strerror(errno_tmp));
-	}
-
-	if (fflush(out) != 0 ||
-		fsync(fileno(out)) != 0 ||
-		fclose(out))
-		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
-	fclose(in);
-}
-
-void
-restore_compressed_file(const char *from_root,
-						const char *to_root,
-						pgFile *file)
-{
-	if (!file->is_partial_copy)
-		copy_file(from_root, to_root, file);
-	else
-		restore_file_partly(from_root, to_root, file);
 }
 
 /*

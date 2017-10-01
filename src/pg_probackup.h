@@ -98,9 +98,6 @@ typedef struct pgFile
 	int		segno;			/* Segment number for ptrack */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
-	uint64	generation;		/* Generation of the compressed file.If generation
-							 * has changed, we cannot backup compressed file
-							 * partially. Has no sense if (is_cfs == false). */
 	bool	is_partial_copy; /* If the file was backed up via copy_file_partly().
 							  * Only applies to is_cfs files. */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
@@ -238,24 +235,6 @@ typedef union DataPage
 	PageHeaderData	page_data;
 	char			data[BLCKSZ];
 } DataPage;
-
-/*
- * This struct and function definitions mirror ones from cfs.h, but doesn't use
- * atomic variables, since they are not allowed in frontend code.
- */
-typedef struct
-{
-	uint32 physSize;
-	uint32 virtSize;
-	uint32 usedSize;
-	uint32 lock;
-	pid_t	postmasterPid;
-	uint64	generation;
-	uint64	inodes[RELSEG_SIZE];
-} FileMap;
-
-extern FileMap* cfs_mmap(int md);
-extern int cfs_munmap(FileMap* map);
 
 /*
  * return pointer that exceeds the length of prefix from character string.
@@ -438,11 +417,6 @@ extern bool backup_data_file(const char *from_root, const char *to_root,
 							 pgFile *file, XLogRecPtr prev_backup_start_lsn);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
-extern void restore_compressed_file(const char *from_root,
-									const char *to_root, pgFile *file);
-extern bool backup_compressed_file_partially(pgFile *file,
-											 void *arg,
-											 size_t *skip_size);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
 extern void copy_wal_file(const char *from_root, const char *to_root);
