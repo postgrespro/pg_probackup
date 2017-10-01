@@ -2317,6 +2317,16 @@ make_pagemap_from_ptrack(parray *files)
 		 */
 		if (file->is_database)
 		{
+			char *filename = strrchr(file->path, '/');
+
+			Assert(filename != NULL);
+			filename++;
+
+			elog(ERROR, "filename %s", filename);
+			/* always backup all files from template0 */
+			if (strcmp(filename, "template0") == 0)
+					continue;
+
 			/*
 			 * The function pg_ptrack_get_and_clear_db returns true
 			 * if there was a ptrack_init file

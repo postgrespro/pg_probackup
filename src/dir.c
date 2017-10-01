@@ -384,6 +384,7 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 	if (add_root)
 	{
 		/* Skip files */
+		/* TODO Consider moving this check to parse_backup_filelist_filenames */
 		if (!S_ISDIR(file->mode) && exclude)
 		{
 			char	    *file_name;
