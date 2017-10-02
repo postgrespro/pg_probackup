@@ -753,6 +753,8 @@ do_backup_instance(void)
 int
 do_backup(void)
 {
+	bool is_ptrack_support;
+
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
 		elog(ERROR, "required parameter not specified: PGDATA "
@@ -779,19 +781,15 @@ do_backup(void)
 		current.checksum_version = get_data_checksum_version(true);
 	current.stream = stream_wal;
 
-	/* ptrack backup checks */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
-	{
-		bool		is_ptrack_support = pg_ptrack_support();
+	is_ptrack_support = pg_ptrack_support();
 
-		if (!is_ptrack_support)
-			elog(ERROR, "This PostgreSQL instance does not support ptrack");
-		else
-		{
-			is_ptrack_enable = pg_ptrack_enable();
-			if(!is_ptrack_enable)
-				elog(ERROR, "Ptrack is disabled");
-		}
+	if (!is_ptrack_support)
+		elog(ERROR, "This PostgreSQL instance does not support ptrack");
+	else
+	{
+		is_ptrack_enable = pg_ptrack_enable();
+		if(!is_ptrack_enable)
+			elog(ERROR, "Ptrack is disabled");
 	}
 
 	/* archiving check */
@@ -1147,7 +1145,6 @@ pg_ptrack_clear(void)
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
-
 	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
 						  0, NULL);
 
@@ -1156,7 +1153,7 @@ pg_ptrack_clear(void)
 		PGconn	   *tmp_conn;
 
 		dbname = PQgetvalue(res_db, i, 0);
-		if (!strcmp(dbname, "template0"))
+		if (strcmp(dbname, "template0") == 0)
 			continue;
 
 		dbOid = atoi(PQgetvalue(res_db, i, 1));
@@ -1167,7 +1164,7 @@ pg_ptrack_clear(void)
 
 		sprintf(params[0], "%i", dbOid);
 		sprintf(params[1], "%i", tblspcOid);
-		res = pgut_execute(tmp_conn, "SELECT pg_drop_ptrack_init_file($1, $2)",
+		res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_and_clear_db($1, $2)",
 						   2, (const char **)params);
 		PQclear(res);
 
@@ -2076,12 +2073,6 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				}
 			}
 		}
-
-		if (strcmp(filename, "pg_internal.init") == 0)
-		{
-			elog(INFO, "filename %s, path %s, dbOid %u, tblspcOid %u is_datafile %s",
-				 filename, file->path, file->dbOid, file->tblspcOid, file->is_datafile?"true":"false");
-		}
  	}
 }
 
@@ -2444,12 +2435,16 @@ get_last_ptrack_lsn(void)
 
 {
 	PGresult   *res;
+	uint32		xlogid;
+	uint32		xrecoff;
 	XLogRecPtr	lsn;
 
 	res = pgut_execute(backup_conn, "select pg_ptrack_control_lsn()", 0, NULL);
 
-	lsn = atoi(PQgetvalue(res, 0, 0));
-	elog(INFO, "get_last_ptrack_lsn(): lsn %lu", lsn);
+	/* Extract timeline and LSN from results of pg_start_backup() */
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+	/* Calculate LSN */
+	lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 
 	PQclear(res);
 	return lsn;
