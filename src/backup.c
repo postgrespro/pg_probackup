@@ -112,6 +112,7 @@ static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
 									 size_t *result_size);
+static XLogRecPtr get_last_ptrack_lsn(void);
 
 /* Check functions */
 static void check_server_version(void);
@@ -1814,25 +1815,6 @@ backup_disconnect(bool fatal, void *userdata)
 		pgut_disconnect(master_conn);
 }
 
-/* Count bytes in file */
-static long
-file_size(const char *file_path)
-{
-	long		r;
-	FILE	   *f = fopen(file_path, "r");
-
-	if (!f)
-	{
-		elog(ERROR, "%s: cannot open file \"%s\" for reading: %s\n",
-				PROGRAM_NAME ,file_path, strerror(errno));
-		return -1;
-	}
-	fseek(f, 0, SEEK_END);
-	r = ftell(f);
-	fclose(f);
-	return r;
-}
-
 /*
  * Take a backup of the PGDATA at a file level.
  * Copy all directories and files listed in backup_files_list.
@@ -2044,6 +2026,10 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 			}
 			else if (isdigit(filename[0]))
 			{
+				/*
+				 * TODO TODO TODO Files of this type can be compressed by cfs.
+				 * Check that and do not mark them with 'is_datafile' flag.
+				 */
 				char *forkNameptr;
 				char *suffix = palloc(MAXPGPATH);;
 
@@ -2089,6 +2075,12 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					elog(VERBOSE, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
 				}
 			}
+		}
+
+		if (strcmp(filename, "pg_internal.init") == 0)
+		{
+			elog(INFO, "filename %s, path %s, dbOid %u, tblspcOid %u is_datafile %s",
+				 filename, file->path, file->dbOid, file->tblspcOid, file->is_datafile?"true":"false");
 		}
  	}
 }
@@ -2217,16 +2209,18 @@ make_pagemap_from_ptrack(parray *files)
 			Assert(filename != NULL);
 			filename++;
 
-			/*
-			 * The function pg_ptrack_get_and_clear_db returns true
-			 * if there was a ptrack_init file.
-			 * And always backup all files from template0 database and global/
-			 */
-			if((strcmp(filename, "1") == 0) ||
-				(strcmp(filename, "12442") == 0))
+			 /* Always backup all files from template0, template1 databases */
+			if((file->dbOid == 1) || //dbOid of template1 daatbase
+				(file->dbOid == 12442)) //dbOid of template0 daatbase
 			{
 				is_template = true;
 			}
+			/*
+			 * The function pg_ptrack_get_and_clear_db returns true
+			 * if there was a ptrack_init file.
+			 * Also ignore ptrack files for global tablespace,
+			 * to avoid any possible specific errors.
+			 */
 			else if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
 				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid))
 			{
@@ -2440,4 +2434,23 @@ StreamLog(void *arg)
 
 	PQfinish(conn);
 	conn = NULL;
+}
+
+/*
+ * Get lsn of the moment when ptrack was enabled the last time.
+ */
+static XLogRecPtr
+get_last_ptrack_lsn(void)
+
+{
+	PGresult   *res;
+	XLogRecPtr	lsn;
+
+	res = pgut_execute(backup_conn, "select pg_ptrack_control_lsn()", 0, NULL);
+
+	lsn = atoi(PQgetvalue(res, 0, 0));
+	elog(INFO, "get_last_ptrack_lsn(): lsn %lu", lsn);
+
+	PQclear(res);
+	return lsn;
 }

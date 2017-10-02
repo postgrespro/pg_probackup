@@ -22,6 +22,7 @@
 #include <common/pg_lzcompress.h>
 #include <zlib.h>
 
+/* Implementation of zlib compression method */
 static size_t zlib_compress(void* dst, size_t dst_size, void const* src, size_t src_size)
 {
 	uLongf compressed_size = dst_size;
@@ -29,6 +30,7 @@ static size_t zlib_compress(void* dst, size_t dst_size, void const* src, size_t 
 	return rc == Z_OK ? compressed_size : rc;
 }
 
+/* Implementation of zlib compression method */
 static size_t zlib_decompress(void* dst, size_t dst_size, void const* src, size_t src_size)
 {
 	uLongf dest_len = dst_size;
@@ -36,6 +38,10 @@ static size_t zlib_decompress(void* dst, size_t dst_size, void const* src, size_
 	return rc == Z_OK ? dest_len : rc;
 }
 
+/*
+ * Compresses source into dest using algorithm. Returns the number of bytes
+ * written in the destination buffer, or -1 if compression fails.
+ */
 static size_t
 do_compress(void* dst, size_t dst_size, void const* src, size_t src_size, CompressAlg alg)
 {
@@ -53,6 +59,10 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size, Compre
 	return -1;
 }
 
+/*
+ * Decompresses source into dest using algorithm. Returns the number of bytes
+ * decompressed in the destination buffer, or -1 if decompression fails.
+ */
 static size_t
 do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size, CompressAlg alg)
 {
@@ -70,8 +80,10 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size, Comp
 	return -1;
 }
 
-
-
+/*
+ * When copying datafiles to backup we validate and compress them block
+ * by block. Thus special header is required for each data block.
+ */
 typedef struct BackupPageHeader
 {
 	BlockNumber	block;			/* block number */
@@ -125,6 +137,11 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	header.block = blknum;
 	offset = blknum * BLCKSZ;
 
+	/*
+	 * Read the page and verify its header and checksum.
+	 * Under high write load it's possible that we've read partly
+	 * flushed page, so try several times befor throwing an error.
+	 */
 	while(try_checksum--)
 	{
 		if (fseek(in, offset, SEEK_SET) != 0)
@@ -223,12 +240,14 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	Assert (header.compressed_size <= BLCKSZ);
 	write_buffer_size = sizeof(header);
 
+	/* The page was successfully compressed */
 	if (header.compressed_size > 0)
 	{
 		memcpy(write_buffer, &header, sizeof(header));
 		memcpy(write_buffer + sizeof(header), compressed_page.data, header.compressed_size);
 		write_buffer_size += MAXALIGN(header.compressed_size);
 	}
+	/* The page compression failed. Write it as is. */
 	else
 	{
 		header.compressed_size = BLCKSZ;
@@ -324,8 +343,7 @@ backup_data_file(const char *from_root, const char *to_root,
 
 	/*
 	 * Read each page, verify checksum and write it to backup.
-	 * If page map is not empty we scan only changed blocks, otherwise
-	 * backup all pages of the relation.
+	 * If page map is empty backup all pages of the relation.
 	 */
 	if (file->pagemap.bitmapsize == 0)
 	{
@@ -336,6 +354,7 @@ backup_data_file(const char *from_root, const char *to_root,
 			n_blocks_read++;
 		}
 	}
+	/* If page map is not empty we scan only changed blocks, */
 	else
 	{
 		datapagemap_iterator_t *iter;
@@ -371,7 +390,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	FIN_CRC32C(file->crc);
 
 	/*
-	 * If we have pagemap then file can't be a zero size.
+	 * If we have pagemap then file in the backup can't be a zero size.
 	 * Otherwise, we will clear the last file.
 	 */
 	if (n_blocks_read != 0 && n_blocks_read == n_blocks_skipped)
@@ -411,7 +430,7 @@ restore_data_file(const char *from_root,
 
 	/*
 	 * Open backup file for write. 	We use "r+" at first to overwrite only
-	 * modified pages for differential restore. If the file is not exists,
+	 * modified pages for differential restore. If the file does not exist,
 	 * re-open it with "w" to create an empty file.
 	 */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
@@ -744,136 +763,6 @@ copy_wal_file(const char *from_path, const char *to_path)
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fclose(in);
 }
-
-/*
- * Save part of the file into backup.
- * skip_size - size of the file in previous backup. We can skip it
- *			   and copy just remaining part of the file
- */
-bool
-copy_file_partly(const char *from_root, const char *to_root,
-				 pgFile *file, size_t skip_size)
-{
-	char		to_path[MAXPGPATH];
-	FILE	   *in;
-	FILE	   *out;
-	size_t		read_len = 0;
-	int			errno_tmp;
-	struct stat	st;
-	char		buf[BLCKSZ];
-
-	/* reset size summary */
-	file->read_size = 0;
-	file->write_size = 0;
-
-	/* open backup mode file for read */
-	in = fopen(file->path, "r");
-	if (in == NULL)
-	{
-		/* maybe deleted, it's not error */
-		if (errno == ENOENT)
-			return false;
-
-		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
-			 strerror(errno));
-	}
-
-	/* open backup file for write  */
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-
-	out = fopen(to_path, "w");
-	if (out == NULL)
-	{
-		int errno_tmp = errno;
-		fclose(in);
-		elog(ERROR, "cannot open destination file \"%s\": %s",
-			 to_path, strerror(errno_tmp));
-	}
-
-	/* stat source file to change mode of destination file */
-	if (fstat(fileno(in), &st) == -1)
-	{
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot stat \"%s\": %s", file->path,
-			 strerror(errno));
-	}
-
-	if (fseek(in, skip_size, SEEK_SET) < 0)
-		elog(ERROR, "cannot seek %lu of \"%s\": %s",
-				skip_size, file->path, strerror(errno));
-
-	/*
-	 * copy content
-	 * NOTE: Now CRC is not computed for compressed files now.
-	 */
-	for (;;)
-	{
-		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
-			break;
-
-		if (fwrite(buf, 1, read_len, out) != read_len)
-		{
-			errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR, "cannot write to \"%s\": %s", to_path,
-				 strerror(errno_tmp));
-		}
-
-		file->write_size += sizeof(buf);
-		file->read_size += sizeof(buf);
-	}
-
-	errno_tmp = errno;
-	if (!feof(in))
-	{
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot read backup mode file \"%s\": %s",
-			 file->path, strerror(errno_tmp));
-	}
-
-	/* copy odd part. */
-	if (read_len > 0)
-	{
-		if (fwrite(buf, 1, read_len, out) != read_len)
-		{
-			errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR, "cannot write to \"%s\": %s", to_path,
-				 strerror(errno_tmp));
-		}
-
-		file->write_size += read_len;
-		file->read_size += read_len;
-	}
-
-	/* update file permission */
-	if (chmod(to_path, st.st_mode) == -1)
-	{
-		errno_tmp = errno;
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
-			 strerror(errno_tmp));
-	}
-
-	/* add meta information needed for recovery */
-	file->is_partial_copy = true;
-
-	if (fflush(out) != 0 ||
-		fsync(fileno(out)) != 0 ||
-		fclose(out))
-		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
-	fclose(in);
-
-	return true;
-}
-
 
 /*
  * Calculate checksum of various files which are not copied from PGDATA,

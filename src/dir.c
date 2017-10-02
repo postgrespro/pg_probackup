@@ -159,7 +159,6 @@ pgFileInit(const char *path)
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 	file->is_cfs = false;
-	file->is_partial_copy = false;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }

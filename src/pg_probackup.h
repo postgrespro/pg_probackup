@@ -98,8 +98,6 @@ typedef struct pgFile
 	int		segno;			/* Segment number for ptrack */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
-	bool	is_partial_copy; /* If the file was backed up via copy_file_partly().
-							  * Only applies to is_cfs files. */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
@@ -420,8 +418,6 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
 extern void copy_wal_file(const char *from_root, const char *to_root);
-extern bool copy_file_partly(const char *from_root, const char *to_root,
-				 pgFile *file, size_t skip_size);
 
 extern bool calc_file_checksum(pgFile *file);
 
@@ -449,7 +445,6 @@ extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
-extern XLogRecPtr get_last_ptrack_lsn(void);
 extern uint32 get_data_checksum_version(bool safe);
 extern char *base36enc(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
