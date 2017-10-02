@@ -1,7 +1,6 @@
 import os
 
 from .cfs_backup_noenc import CfsBackupNoEncTest
-from .helpers.cfs_helpers import find_by_name
 
 module_name = 'cfs_backup_enc'
 tblspace_name = 'cfs_tblspace'

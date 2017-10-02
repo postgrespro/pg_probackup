@@ -12,7 +12,7 @@ import os
 import unittest
 import shutil
 
-from .helpers.cfs_helpers import find_by_extensions, find_by_name
+from .helpers.cfs_helpers import find_by_name
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
@@ -22,7 +22,7 @@ tblspace_name = 'cfs_tblspace_noenc'
 tblspace_name_new = 'cfs_tblspace_new'
 
 
-class CfsRestoreBaseTest(ProbackupTest, unittest.TestCase):
+class CfsRestoreBase(ProbackupTest, unittest.TestCase):
     def setUp(self):
         self.fname = self.id().split('.')[3]
         self.backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
@@ -67,7 +67,7 @@ class CfsRestoreBaseTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, self.fname)
 
 
-class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBaseTest):
+class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_restore_empty_tablespace_from_fullbackup(self):
@@ -111,7 +111,7 @@ class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBaseTest):
         )
 
 
-class CfsRestoreNoencTest(CfsRestoreBaseTest):
+class CfsRestoreNoencTest(CfsRestoreBase):
     def add_data_in_cluster(self):
         self.node.safe_psql(
             "postgres",
@@ -147,7 +147,7 @@ class CfsRestoreNoencTest(CfsRestoreBaseTest):
             )
         self.assertTrue(
             find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression']),
-            "ERROR: File pg_compression not found in backup dir"
+            "ERROR: File pg_compression not found in tablespace dir"
         )
         try:
             self.node.start()
@@ -285,14 +285,100 @@ class CfsRestoreNoencTest(CfsRestoreBaseTest):
         self.node_new.cleanup()
 
     # @unittest.expectedFailure
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_from_fullbackup_to_old_location_tablespace_new_location(self):
-        pass
+        self.node.stop(['-m', 'immediate'])
+        self.node.cleanup()
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
+
+        os.mkdir(self.get_tblspace_path(self.node, tblspace_name_new))
+
+        try:
+            self.restore_node(
+                self.backup_dir,
+                'node', self.node,
+                backup_id=self.backup_id,
+                options=[
+                    "-T %s = %s".format(
+                        self.get_tblspace_path(self.node, tblspace_name),
+                        self.get_tblspace_path(self.node, tblspace_name_new)
+                    )
+                ]
+            )
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Restore from full backup failed. \n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+        self.assertTrue(
+            find_by_name([self.get_tblspace_path(self.node, tblspace_name_new)], ['pg_compression']),
+            "ERROR: File pg_compression not found in new tablespace location"
+        )
+        try:
+            self.node.start()
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Instance not started after restore. \n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        self.assertEqual(
+            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
+            repr(self.table_t1)
+        )
 
     # @unittest.expectedFailure
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_restore_from_fullbackup_to_old_location_tablespace_new_location_3_jobs(self):
-        pass
+        self.node.stop(['-m', 'immediate'])
+        self.node.cleanup()
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
+
+        os.mkdir(self.get_tblspace_path(self.node, tblspace_name_new))
+
+        try:
+            self.restore_node(
+                self.backup_dir,
+                'node', self.node,
+                backup_id=self.backup_id,
+                options=[
+                    "j",
+                    "3",
+                    "-T %s = %s".format(
+                        self.get_tblspace_path(self.node, tblspace_name),
+                        self.get_tblspace_path(self.node, tblspace_name_new)
+                    )
+                ]
+            )
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Restore from full backup failed. \n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+        self.assertTrue(
+            find_by_name([self.get_tblspace_path(self.node, tblspace_name_new)], ['pg_compression']),
+            "ERROR: File pg_compression not found in new tablespace location"
+        )
+        try:
+            self.node.start()
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Instance not started after restore. \n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        self.assertEqual(
+            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
+            repr(self.table_t1)
+        )
 
     # @unittest.expectedFailure
     @unittest.skip("skip")
