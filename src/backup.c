@@ -783,13 +783,16 @@ do_backup(void)
 
 	is_ptrack_support = pg_ptrack_support();
 
-	if (!is_ptrack_support)
-		elog(ERROR, "This PostgreSQL instance does not support ptrack");
-	else
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		is_ptrack_enable = pg_ptrack_enable();
-		if(!is_ptrack_enable)
-			elog(ERROR, "Ptrack is disabled");
+		if (!is_ptrack_support)
+			elog(ERROR, "This PostgreSQL instance does not support ptrack");
+		else
+		{
+			is_ptrack_enable = pg_ptrack_enable();
+			if(!is_ptrack_enable)
+				elog(ERROR, "Ptrack is disabled");
+		}
 	}
 
 	/* archiving check */
@@ -1180,11 +1183,33 @@ static bool
 pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 {
 	char		*params[2];
+	PGresult	*res_db;
 	PGresult	*res;
 	char *result;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
+
+	sprintf(params[0], "%i", dbOid);
+	res_db = pgut_execute(backup_conn,
+							"SELECT datname FROM pg_database WHERE oid=$1",
+							1, (const char **) params);
+	/*
+	 * If database is not found, it's not an error.
+	 * It could have been deleted since previous backup.
+	 */
+	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
+		return false;
+
+	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
+	PQclear(res_db);
+
+	/* Always backup all files from template0 database */
+	if (strcmp(dbname, "template0") == 0)
+	{
+		pfree(dbname);
+		return true;
+	}
 
 	sprintf(params[0], "%i", dbOid);
 	sprintf(params[1], "%i", tblspcOid);
@@ -2178,7 +2203,6 @@ make_pagemap_from_ptrack(parray *files)
 	Oid dbOid_with_ptrack_init = 0;
 	Oid tblspcOid_with_ptrack_init = 0;
 	bool ignore_ptrack_for_db = false;
-	bool is_template = false;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -2195,24 +2219,17 @@ make_pagemap_from_ptrack(parray *files)
 		{
 			char *filename = strrchr(file->path, '/');
 			ignore_ptrack_for_db = false;
-			is_template = false;
 
 			Assert(filename != NULL);
 			filename++;
 
-			 /* Always backup all files from template0, template1 databases */
-			if((file->dbOid == 1) || //dbOid of template1 daatbase
-				(file->dbOid == 12442)) //dbOid of template0 daatbase
-			{
-				is_template = true;
-			}
 			/*
 			 * The function pg_ptrack_get_and_clear_db returns true
 			 * if there was a ptrack_init file.
 			 * Also ignore ptrack files for global tablespace,
 			 * to avoid any possible specific errors.
 			 */
-			else if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
+			if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
 				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid))
 			{
 				ignore_ptrack_for_db = true;
@@ -2221,7 +2238,7 @@ make_pagemap_from_ptrack(parray *files)
 			}
 		}
 
-		if (file->is_datafile && !is_template)
+		if (file->is_datafile)
 		{
 			/* get ptrack bitmap once for all segments of the file */
 			if (file->segno == 0)
