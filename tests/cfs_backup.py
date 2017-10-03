@@ -5,7 +5,7 @@ import random
 from .helpers.cfs_helpers import find_by_extensions, find_by_name, find_by_pattern, corrupt_file
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
-module_name = 'cfs_backup_noenc'
+module_name = 'cfs_backup'
 tblspace_name = 'cfs_tblspace'
 
 
@@ -777,49 +777,14 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    # --- Validation backup --- #
-    # @unittest.expectedFailure
-    @unittest.skip("skip")
-    def test_delete_random_cfm_file_from_backup_dir(self):
-        pass
-
-    # @unittest.expectedFailure
-    # @unittest.skip("skip")
-    def test_delete_file_pg_compression_from_backup_dir(self):
-        self.backup_node(self.backup_dir, 'node', self.node, backup_type = 'full')
-        show_backup = self.show_pb(self.backup_dir,'node')[0]
-
-        self.assertEqual(
-            "OK",
-            show_backup["Status"],
-            "ERROR: Backup is not valid. \n Backup status: %s" % show_backup["Status"]
-        )
-
-        os.remove(find_by_name([os.path.join(self.backup_dir, 'backups', 'node', show_backup["ID"])], ['pg_compression'])[0])
-
-        self.assertRaises(ProbackupException, self.validate_pb, self.backup_dir, 'node')
-
-    # @unittest.expectedFailure
-    @unittest.skip("skip")
-    def test_delete_random_data_file_from_backup_dir(self):
-        pass
-
-    # @unittest.expectedFailure
-    @unittest.skip("skip")
-    def test_broken_random_cfm_file_into_backup_dir(self):
-        pass
-
-    # @unittest.expectedFailure
-    @unittest.skip("skip")
-    def test_broken_random_data_file_into_backup_dir(self):
-        pass
-
-    # @unittest.expectedFailure
-    @unittest.skip("skip")
-    def test_broken_file_pg_compression_into_backup_dir(self):
-        pass
-
     # --- End ---#
     def tearDown(self):
         self.node.cleanup()
         self.del_test_dir(module_name, self.fname)
+
+
+class CfsBackupEncTest(CfsBackupNoEncTest):
+    # --- Begin --- #
+    def setUp(self):
+        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
+        super(CfsBackupEncTest, self).setUp()

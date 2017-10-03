@@ -16,9 +16,9 @@ from .helpers.cfs_helpers import find_by_name
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
-module_name = 'cfs_restore_noenc'
+module_name = 'cfs_restore'
 
-tblspace_name = 'cfs_tblspace_noenc'
+tblspace_name = 'cfs_tblspace'
 tblspace_name_new = 'cfs_tblspace_new'
 
 
@@ -132,7 +132,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         """
         Case: Restore instance from valid full backup to old location.
         """
-        self.node.stop(['-m', 'immediate'])
+        self.node.stop()
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
@@ -145,6 +145,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
                     repr(e.message)
                 )
             )
+
         self.assertTrue(
             find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression']),
             "ERROR: File pg_compression not found in tablespace dir"
@@ -435,3 +436,17 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         Case: Restore from backup to new location, four jobs
         """
         pass
+
+
+class CfsRestoreEncEmptyTablespaceTest(CfsRestoreNoencEmptyTablespaceTest):
+    # --- Begin --- #
+    def setUp(self):
+        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
+        super(CfsRestoreNoencEmptyTablespaceTest, self).setUp()
+
+
+class CfsRestoreEncTest(CfsRestoreNoencTest):
+    # --- Begin --- #
+    def setUp(self):
+        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
+        super(CfsRestoreNoencTest, self).setUp()
