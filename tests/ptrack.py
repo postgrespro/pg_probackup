@@ -12,7 +12,7 @@ module_name = 'ptrack'
 
 class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_enable(self):
         """make ptrack without full backup, should result in error"""
@@ -42,7 +42,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_ptrack_stream(self):
         """make node, make full and ptrack stream backups, restore them and check data correctness"""
         self.maxDiff = None
@@ -71,9 +71,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(100,200) i")
         ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        node.safe_psql("postgres", "checkpoint")
-        pgdata = self.pgdata_content(node.data_dir)
         ptrack_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream'])
+        pgdata = self.pgdata_content(node.data_dir)
 
         # Drop Node
         node.cleanup()
@@ -100,7 +99,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_ptrack_archive(self):
         """make archive node, make full and ptrack backups, check data correctness in restored instance"""
         self.maxDiff = None
@@ -129,9 +128,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(100,200) i")
         ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        node.safe_psql("postgres", "checkpoint")
-        pgdata = self.pgdata_content(node.data_dir)
         ptrack_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+        pgdata = self.pgdata_content(node.data_dir)
 
         # Drop Node
         node.cleanup()
@@ -159,7 +157,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_ptrack_pgpro417(self):
         """Make  node, take full backup, take ptrack backup, delete ptrack backup. Try to take ptrack backup, which should fail"""
         self.maxDiff = None
@@ -211,7 +209,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_page_pgpro417(self):
         """Make archive node, take full backup, take page backup, delete page backup. Try to take ptrack backup, which should fail"""
         self.maxDiff = None
@@ -262,7 +260,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         # self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_full_pgpro417(self):
         """Make node, take two full backups, delete full second backup. Try to take ptrack backup, which should fail"""
         self.maxDiff = None
@@ -312,7 +310,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_create_db(self):
         """Make node, take full backup, create database db1, take ptrack backup, restore database and check it presense"""
         self.maxDiff = None
@@ -339,11 +337,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("db1", "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
         # PTRACK BACKUP
-        node.safe_psql("postgres", "checkpoint")
-        pgdata_content = self.pgdata_content(node.data_dir)
-        sys.exit(1)
         backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
-        sys.exit(1)
+        pgdata_content = self.pgdata_content(node.data_dir)
 
         # RESTORE
         node_restored = self.make_simple_node(base_dir="{0}/{1}/node_restored".format(module_name, fname))
@@ -357,18 +352,14 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node_restored.append_conf("postgresql.auto.conf", "port = {0}".format(node_restored.port))
         node_restored.start()
         result_new =  node_restored.safe_psql("postgres", "select * from pg_class")
-        self.assertEqual(result, result_new)
 
 
         # DROP DATABASE DB1
         node.safe_psql(
             "postgres", "drop database db1")
         # SECOND PTRACK BACKUP
-        node.safe_psql("postgres", "select * from pg_class; select * from pg_index; select * from pg_attribute; checkpoint")
-        node.safe_psql("postgres", "vacuum pg_class")
-        node.safe_psql("postgres", "checkpoint")
-        pgdata_content = self.pgdata_content(node.data_dir)
         backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata_content = self.pgdata_content(node.data_dir)
 
         # RESTORE SECOND PTRACK BACKUP
         node_restored.cleanup()
@@ -394,7 +385,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_alter_table_set_tablespace_ptrack(self):
         """Make node, create tablespace with table, take full backup, alter tablespace location, take ptrack backup, restore database."""
         self.maxDiff = None
@@ -426,8 +417,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # PTRACK BACKUP
         result =  node.safe_psql("postgres", "select * from t_heap")
         node.safe_psql("postgres", "select * from pg_class; checkpoint")
-        pgdata_content = self.pgdata_content(node.data_dir)
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata_content = self.pgdata_content(node.data_dir)
         node.stop()
 
         # RESTORE
@@ -451,7 +442,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_alter_database_set_tablespace_ptrack(self):
         """Make node, create tablespace with database, take full backup, alter tablespace location, take ptrack backup, restore database."""
         self.maxDiff = None
@@ -478,9 +469,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "alter database postgres set tablespace somedata")
 
         # PTRACK BACKUP
-        node.safe_psql("template1", "select * from pg_database; checkpoint;")
-        pgdata_content = self.pgdata_content(node.data_dir)
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata_content = self.pgdata_content(node.data_dir)
         node.stop()
 
         # RESTORE
@@ -499,7 +489,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_drop_tablespace(self):
         """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
         self.maxDiff = None
@@ -559,7 +549,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_alter_tablespace(self):
         """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
         self.maxDiff = None
@@ -589,9 +579,9 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres", "alter table t_heap set tablespace somedata")
         # FIRTS PTRACK BACKUP
-        node.safe_psql("postgres", "select * from pg_class; checkpoint")
-        pgdata_content = self.pgdata_content(node.data_dir)
+        node.safe_psql("postgres", "checkpoint")
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata_content = self.pgdata_content(node.data_dir)
 
         # Restore ptrack backup and check table consistency
         restored_node = self.make_simple_node(base_dir="{0}/{1}/restored_node".format(module_name, fname))
@@ -602,7 +592,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
         result = node.safe_psql("postgres", "select * from t_heap")
 
-        pgdata_content_new = self.pgdata_content(node.data_dir)
+        pgdata_content_new = self.pgdata_content(restored_node.data_dir)
         self.compare_pgdata(pgdata_content, pgdata_content_new)
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
         restored_node.start()
@@ -617,13 +607,13 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "postgres", "alter table t_heap set tablespace pg_default")
         # SECOND PTRACK BACKUP
         node.safe_psql("template1", "checkpoint")
-        pgdata_content = self.pgdata_content(node.data_dir)
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata_content = self.pgdata_content(node.data_dir)
 
         # Restore second ptrack backup and check table consistency
         self.restore_node(backup_dir, 'node', restored_node, options=[
             "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
-        pgdata_content_new = self.pgdata_content(node.data_dir)
+        pgdata_content_new = self.pgdata_content(restored_node.data_dir)
         self.compare_pgdata(pgdata_content, pgdata_content_new)
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
         restored_node.start()
@@ -633,7 +623,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_relation_with_multiple_segments(self):
         """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
         self.maxDiff = None
@@ -657,25 +647,23 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # FULL BACKUP
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
-        pgbench = node.pgbench(options=['-T', '50', '-c', '2'])
+        pgbench = node.pgbench(options=['-T', '50', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
         # GET PHYSICAL CONTENT FROM NODE
-        node.safe_psql("postgres", "checkpoint")
-        pgdata = self.pgdata_content(node.data_dir)
         # FIRTS PTRACK BACKUP
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata = self.pgdata_content(node.data_dir)
 
-        # Restore ptrack backup and check table consistency
+        # RESTORE NODE
+#        self.restore_node(backup_dir, 'node', restored_node, options=[
+#            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
         restored_node = self.make_simple_node(base_dir="{0}/{1}/restored_node".format(module_name, fname))
         restored_node.cleanup()
 #        tblspc_path = self.get_tblspace_path(node, 'somedata')
 #        tblspc_path_new = self.get_tblspace_path(restored_node, 'somedata_restored')
 
-        # RESTORE NODE
-#        self.restore_node(backup_dir, 'node', restored_node, options=[
-#            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
         self.restore_node(backup_dir, 'node', restored_node, options=[
             "-j", "4"])
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
