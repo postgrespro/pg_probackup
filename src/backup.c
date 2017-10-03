@@ -2037,7 +2037,16 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 		/* Check files located inside database directories */
 		if (filename && file->dbOid != 0)
 		{
-			if (filename[0] == 't' && isdigit(filename[1]))
+			if (strcmp(filename, "pg_internal.init") == 0)
+			{
+				/* Do not pg_internal.init files
+				 * (they contain some cache entries, so it's fine) */
+				pgFileFree(file);
+				parray_remove(files, i);
+				i--;
+				continue;
+			}
+			else if (filename[0] == 't' && isdigit(filename[1]))
 			{
 				elog(VERBOSE, "temp file, filepath %s", relative);
 				/* Do not backup temp files */
