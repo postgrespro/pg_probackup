@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.4";
+const char *PROGRAM_VERSION	= "2.0.5";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -119,7 +119,8 @@ static pgut_option options[] =
 	{ 's', 15, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 16, "master-user",			&master_user,		SOURCE_CMDLINE, },
 	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE, },
-	{ 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, },
+	/* TODO not completed feature. Make it unavailiable from user level
+	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
 	{ 's', 20, "time",					&target_time,		SOURCE_CMDLINE },
 	{ 's', 21, "xid",					&target_xid,		SOURCE_CMDLINE },
