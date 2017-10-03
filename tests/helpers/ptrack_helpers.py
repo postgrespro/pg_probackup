@@ -599,7 +599,7 @@ class ProbackupTest(object):
     def pgdata_content(self, directory):
         """ return dict with directory content. TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = ['pg_xlog', 'pg_wal', 'pg_log', 'pg_stat_tmp', 'pg_subtrans', 'pg_notify']
-        files_to_ignore = ['postmaster.pid', 'postmaster.opts']
+        files_to_ignore = ['postmaster.pid', 'postmaster.opts', 'pg_internal.init']
         suffixes_to_ignore = ('_ptrack', 'ptrack_control', 'pg_control', 'ptrack_init')
         directory_dict = {}
         directory_dict['pgdata'] = directory
