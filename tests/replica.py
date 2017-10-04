@@ -13,7 +13,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_replica_stream_ptrack_backup(self):
-        """make full stream backup from replica"""
+        """make node, take full backup, restore it and make replica from it, take full stream backup from replica"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(base_dir="{0}/{1}/master".format(module_name, fname),
@@ -25,9 +25,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
 
-        replica = self.make_simple_node(base_dir="{0}/{1}/replica".format(module_name, fname))
-        replica.cleanup()
-
         # CREATE TABLE
         master.psql(
             "postgres",
@@ -36,6 +33,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # take full backup and restore it
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
+        replica = self.make_simple_node(base_dir="{0}/{1}/replica".format(module_name, fname))
+        replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
         self.set_replica(master, replica)
 
@@ -60,7 +59,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf('postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start({"-t": "600"})
+        node.start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -79,7 +78,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
         node.append_conf('postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start({"-t": "600"})
+        node.start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -89,10 +88,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_replica_archive_page_backup(self):
-        """make full archive backup from replica, set replica, make backup from replica"""
+        """make archive master, take full and page archive backups from master, set replica, make archive backup from replica"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(base_dir="{0}/{1}/master".format(module_name, fname),
+            set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
             )
@@ -142,7 +142,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf('postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start({"-t": "600"})
+        node.start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -161,7 +161,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
         node.append_conf('postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start({"-t": "600"})
+        node.start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)

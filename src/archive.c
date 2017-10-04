@@ -54,11 +54,6 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 					"Instance '%s' should have SYSTEM_ID = %ld instead of %ld",
 					wal_file_name, instance_name, config->system_identifier, system_id);
 
-	if (strcmp(current_dir, config->pgdata) != 0)
-		elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
-					"Instance '%s' should have PGDATA = %s instead of %s",
-					wal_file_name, instance_name, config->pgdata, current_dir);
-
 	/* Create 'archlog_path' directory. Do nothing if it already exists. */
 	dir_create_dir(arclog_path, DIR_PERMISSION);
 

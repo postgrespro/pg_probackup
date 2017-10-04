@@ -229,7 +229,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.expectedFailure
+    #@unittest.expectedFailure
     def test_replica_archive(self):
         """make node withput archiving, take stream backup and turn it into replica, set replica with archiving, make archive backup from replica"""
         fname = self.id().split('.')[3]
@@ -256,7 +256,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Settings for Replica
         self.restore_node(backup_dir, 'master', replica)
-        self.set_replica(master, replica)
+        self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.start({"-t": "600"})
 
@@ -280,7 +280,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf('postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start({"-t": "600"})
+        node.start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -299,7 +299,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
         node.append_conf('postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start({"-t": "600"})
+        node.start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)

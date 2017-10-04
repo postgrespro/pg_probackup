@@ -175,6 +175,7 @@ class ProbackupTest(object):
         # Allow replication in pg_hba.conf
         if set_replication:
             node.set_replication_conf()
+            node.append_conf("postgresql.auto.conf", "max_wal_senders = 10")
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, cfs=False):
@@ -295,27 +296,17 @@ class ProbackupTest(object):
                 idx_dict['type'], idx_dict))
 
     def check_ptrack_recovery(self, idx_dict):
-        success = True
         size = idx_dict['size']
         for PageNum in range(size):
             if idx_dict['ptrack'][PageNum] != 1:
-                if self.verbose:
-                    print('Recovery for Page Number {0} of Type {1} was conducted, but ptrack value is {2}. THIS IS BAD'.format(
-                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
-                    print(idx_dict)
-                success = False
-            self.assertEqual(success, True)
+                self.assertTrue(False, 'Recovery for Page Number {0} of Type {1} was conducted, but ptrack value is {2}. THIS IS BAD\n IDX_DICT: {3}'.format(
+                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum], idx_dict))
 
     def check_ptrack_clean(self, idx_dict, size):
-        success = True
         for PageNum in range(size):
             if idx_dict['ptrack'][PageNum] != 0:
-                if self.verbose:
-                    print('Ptrack for Page Number {0} of Type {1} should be clean, but ptrack value is {2}. THIS IS BAD'.format(
-                        PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
-                    print(idx_dict)
-                success = False
-            self.assertEqual(success, True, '')
+                self.assertTrue(False, 'Ptrack for Page Number {0} of Type {1} should be clean, but ptrack value is {2}.\n THIS IS BAD\n IDX_DICT: {3}'.format(
+                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum], idx_dict))
 
     def run_pb(self, command):
         try:
@@ -365,7 +356,7 @@ class ProbackupTest(object):
     def clean_pb(self, backup_dir):
         shutil.rmtree(backup_dir, ignore_errors=True)
 
-    def backup_node(self, backup_dir, instance, node=False, data_dir=False, backup_type="full", options=[]):
+    def backup_node(self, backup_dir, instance, node, data_dir=False, backup_type="full", options=[]):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
             exit(1)
@@ -379,7 +370,7 @@ class ProbackupTest(object):
         cmd_list = [
             "backup",
             "-B", backup_dir,
-            "-D", pgdata,
+#            "-D", pgdata,
             "-p", "%i" % node.port,
             "-d", "postgres",
             "--instance={0}".format(instance)
@@ -560,8 +551,8 @@ class ProbackupTest(object):
             "primary_conninfo = 'user={0} port={1} application_name={2} sslmode=prefer sslcompression=1'".format(
                 self.user, master.port, replica_name))
         if synchronous:
-            master.append_conf('postgresql.auto.conf', 'synchronous_standby_names="{0}"'.format(replica_name))
-            master.append_conf('postgresql.auto.conf', 'synchronous_commit="remote_apply"')
+            master.append_conf('postgresql.auto.conf', "synchronous_standby_names='{0}'".format(replica_name))
+            master.append_conf('postgresql.auto.conf', "synchronous_commit='remote_apply'")
             master.reload()
 
     def wrong_wal_clean(self, node, wal_size):
@@ -604,3 +595,39 @@ class ProbackupTest(object):
             os.rmdir(os.path.join(self.tmp_path, module_name))
         except:
             pass
+
+    def pgdata_content(self, directory):
+        """ return dict with directory content. TAKE IT AFTER CHECKPOINT or BACKUP"""
+        dirs_to_ignore = ['pg_xlog', 'pg_wal', 'pg_log', 'pg_stat_tmp', 'pg_subtrans', 'pg_notify']
+        files_to_ignore = ['postmaster.pid', 'postmaster.opts', 'pg_internal.init']
+        suffixes_to_ignore = ('_ptrack', 'ptrack_control', 'pg_control', 'ptrack_init')
+        directory_dict = {}
+        directory_dict['pgdata'] = directory
+        directory_dict['files'] = {}
+        for root, dirs, files in os.walk(directory, followlinks=True):
+            dirs[:] = [d for d in dirs if d not in dirs_to_ignore]
+            for file in files:
+                if file in files_to_ignore or file.endswith(suffixes_to_ignore):
+                    continue
+                file = os.path.join(root,file)
+                file_relpath = os.path.relpath(file, directory)
+                directory_dict['files'][file_relpath] = hashlib.md5(open(file, 'rb').read()).hexdigest()
+        return directory_dict
+
+    def compare_pgdata(self, original_pgdata, restored_pgdata):
+        """ return dict with directory content. DO IT BEFORE RECOVERY"""
+        fail = False
+        error_message = ''
+        for file in original_pgdata['files']:
+            if file in restored_pgdata['files']:
+                if original_pgdata['files'][file] != restored_pgdata['files'][file]:
+                    error_message += '\nChecksumm mismatch.\n File_old: {0}\n Checksumm_old: {1}\n File_new: {2}\n Checksumm_mew: {3}\n'.format(
+                        os.path.join(original_pgdata['pgdata'], file),
+                        original_pgdata['files'][file],
+                        os.path.join(restored_pgdata['pgdata'], file),
+                        restored_pgdata['files'][file])
+                    fail = True
+            else:
+                error_message += '\nFile dissappearance. File: {0}/{1}'.format(restored_pgdata['pgdata'], file)
+                fail = True
+        self.assertFalse(fail, error_message)

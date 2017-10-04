@@ -1015,12 +1015,12 @@ prompt_for_password(const char *username)
 PGconn *
 pgut_connect(const char *dbname)
 {
-	return pgut_connect_extended(host, port, dbname, username, password);
+	return pgut_connect_extended(host, port, dbname, username);
 }
 
 PGconn *
 pgut_connect_extended(const char *pghost, const char *pgport,
-					  const char *dbname, const char *login, const char *pwd)
+					  const char *dbname, const char *login)
 {
 	PGconn	   *conn;
 
@@ -1031,7 +1031,7 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 	for (;;)
 	{
 		conn = PQsetdbLogin(pghost, pgport, NULL, NULL,
-							dbname, login, pwd);
+							dbname, login, password);
 
 		if (PQstatus(conn) == CONNECTION_OK)
 			return conn;
@@ -1040,6 +1040,10 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 		{
 			PQfinish(conn);
 			prompt_for_password(username);
+
+			if (interrupted)
+				elog(ERROR, "interrupted");
+
 			continue;
 		}
 		elog(ERROR, "could not connect to database %s: %s",
@@ -1049,6 +1053,102 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 		return NULL;
 	}
 }
+
+PGconn *
+pgut_connect_replication(const char *dbname)
+{
+	return pgut_connect_replication_extended(host, port, dbname, username, password);
+}
+
+PGconn *
+pgut_connect_replication_extended(const char *pghost, const char *pgport,
+						 const char *dbname, const char *pguser, const char *pwd)
+{
+	PGconn	   *tmpconn;
+	int			argcount = 7;	/* dbname, replication, fallback_app_name,
+								 * host, user, port, password */
+	int			i;
+	const char **keywords;
+	const char **values;
+
+	if (interrupted && !in_cleanup)
+		elog(ERROR, "interrupted");
+
+	i = 0;
+
+	keywords = pg_malloc0((argcount + 1) * sizeof(*keywords));
+	values = pg_malloc0((argcount + 1) * sizeof(*values));
+
+
+	keywords[i] = "dbname";
+	values[i] = "replication";
+	i++;
+	keywords[i] = "replication";
+	values[i] = "true";
+	i++;
+	keywords[i] = "fallback_application_name";
+	values[i] = PROGRAM_NAME;
+	i++;
+
+	if (pghost)
+	{
+		keywords[i] = "host";
+		values[i] = pghost;
+		i++;
+	}
+	if (pguser)
+	{
+		keywords[i] = "user";
+		values[i] = pguser;
+		i++;
+	}
+	if (pgport)
+	{
+		keywords[i] = "port";
+		values[i] = pgport;
+		i++;
+	}
+
+	/* Use (or reuse, on a subsequent connection) password if we have it */
+	if (password)
+	{
+		keywords[i] = "password";
+		values[i] = password;
+	}
+	else
+	{
+		keywords[i] = NULL;
+		values[i] = NULL;
+	}
+
+	for (;;)
+	{
+		tmpconn = PQconnectdbParams(keywords, values, true);
+
+
+		if (PQstatus(tmpconn) == CONNECTION_OK)
+		{
+			free(values);
+			free(keywords);
+			return tmpconn;
+		}
+
+		if (tmpconn && PQconnectionNeedsPassword(tmpconn) && prompt_password)
+		{
+			PQfinish(tmpconn);
+			prompt_for_password(username);
+			continue;
+		}
+
+		elog(ERROR, "could not connect to database %s: %s",
+			 dbname, PQerrorMessage(tmpconn));
+		PQfinish(tmpconn);
+		free(values);
+		free(keywords);
+		return NULL;
+	}
+}
+
 
 void
 pgut_disconnect(PGconn *conn)
