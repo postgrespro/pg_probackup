@@ -4,7 +4,7 @@ from sys import exit, argv, version_info
 import subprocess
 import shutil
 import six
-from testgres import get_new_node, clean_all
+import testgres
 import hashlib
 import re
 import pwd
@@ -153,7 +153,7 @@ class ProbackupTest(object):
         real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
 
-        node = get_new_node('test', base_dir=real_base_dir)
+        node = testgres.get_new_node('test', base_dir=real_base_dir)
         node.init(initdb_params=initdb_params)
 
         # Sane default parameters, not a shit with fsync = off from testgres
@@ -585,7 +585,7 @@ class ProbackupTest(object):
     def del_test_dir(self, module_name, fname):
         """ Del testdir and optimistically try to del module dir"""
         try:
-            clean_all()
+            testgres.clean_all()
         except:
             pass
 
