@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.4";
+const char *PROGRAM_VERSION	= "2.0.6";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -48,6 +48,7 @@ char	   *replication_slot = NULL;
 bool		backup_logs = false;
 bool		smooth_checkpoint;
 bool		from_replica = false;
+bool		is_remote_backup = false;
 /* Wait timeout for WAL segment archiving */
 uint32		archive_timeout = 300;		/* default is 300 seconds */
 const char *master_db = NULL;
@@ -118,6 +119,8 @@ static pgut_option options[] =
 	{ 's', 15, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 16, "master-user",			&master_user,		SOURCE_CMDLINE, },
 	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE, },
+	/* TODO not completed feature. Make it unavailiable from user level
+	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
 	{ 's', 20, "time",					&target_time,		SOURCE_CMDLINE },
 	{ 's', 21, "xid",					&target_xid,		SOURCE_CMDLINE },

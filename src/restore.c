@@ -687,12 +687,7 @@ restore_files(void *arg)
 		 * copy the file from backup.
 		 */
 		if (file->is_datafile)
-		{
-			if (file->is_cfs)
-				restore_compressed_file(from_root, pgdata, file);
-			else
-				restore_data_file(from_root, pgdata, file, arguments->backup);
-		}
+			restore_data_file(from_root, pgdata, file, arguments->backup);
 		else
 			copy_file(from_root, pgdata, file);
 

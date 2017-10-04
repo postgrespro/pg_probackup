@@ -597,10 +597,10 @@ class ProbackupTest(object):
             pass
 
     def pgdata_content(self, directory):
-        """ return dict with directory content"""
+        """ return dict with directory content. TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = ['pg_xlog', 'pg_wal', 'pg_log', 'pg_stat_tmp', 'pg_subtrans', 'pg_notify']
-        files_to_ignore = ['postmaster.pid', 'postmaster.opts']
-        suffixes_to_ignore = ('_ptrack', '_vm', '_fsm')
+        files_to_ignore = ['postmaster.pid', 'postmaster.opts', 'pg_internal.init']
+        suffixes_to_ignore = ('_ptrack', 'ptrack_control', 'pg_control', 'ptrack_init')
         directory_dict = {}
         directory_dict['pgdata'] = directory
         directory_dict['files'] = {}
@@ -615,14 +615,17 @@ class ProbackupTest(object):
         return directory_dict
 
     def compare_pgdata(self, original_pgdata, restored_pgdata):
-        """ return dict with directory content"""
+        """ return dict with directory content. DO IT BEFORE RECOVERY"""
         fail = False
         error_message = ''
         for file in original_pgdata['files']:
             if file in restored_pgdata['files']:
                 if original_pgdata['files'][file] != restored_pgdata['files'][file]:
-                    error_message += '\nChecksumm mismatch.\n File_old: {0}\n File_new: {1}'.format(
-                        os.path.join(original_pgdata['pgdata'], file), os.path.join(restored_pgdata['pgdata'], file))
+                    error_message += '\nChecksumm mismatch.\n File_old: {0}\n Checksumm_old: {1}\n File_new: {2}\n Checksumm_mew: {3}\n'.format(
+                        os.path.join(original_pgdata['pgdata'], file),
+                        original_pgdata['files'][file],
+                        os.path.join(restored_pgdata['pgdata'], file),
+                        restored_pgdata['files'][file])
                     fail = True
             else:
                 error_message += '\nFile dissappearance. File: {0}/{1}'.format(restored_pgdata['pgdata'], file)

@@ -150,13 +150,15 @@ pgFileInit(const char *path)
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
 	file->pagemap.bitmapsize = 0;
-	file->ptrack_path = NULL;
+	file->tblspcOid = 0;
+	file->dbOid = 0;
+	file->relOid = 0;
 	file->segno = 0;
+	file->is_database = false;
+	file->forkName = pgut_malloc(MAXPGPATH);
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 	file->is_cfs = false;
-	file->generation = 0;
-	file->is_partial_copy = false;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }
@@ -241,9 +243,11 @@ pgFileFree(void *file)
 
 	if (file_ptr->linked)
 		free(file_ptr->linked);
+
+	if (file_ptr->forkName)
+		free(file_ptr->forkName);
+
 	free(file_ptr->path);
-	if (file_ptr->ptrack_path != NULL)
-		free(file_ptr->ptrack_path);
 	free(file);
 }
 
@@ -378,6 +382,7 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 	if (add_root)
 	{
 		/* Skip files */
+		/* TODO Consider moving this check to parse_backup_filelist_filenames */
 		if (!S_ISDIR(file->mode) && exclude)
 		{
 			char	    *file_name;
@@ -683,12 +688,6 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (S_ISLNK(file->mode))
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
-#ifdef PGPRO_EE
-		if (file->is_cfs)
-			fprintf(out, ",\"is_cfs\":\"%u\" ,\"CFS_generation\":\"" UINT64_FORMAT "\","
-					"\"is_partial_copy\":\"%u\"",
-					file->is_cfs?1:0, file->generation, file->is_partial_copy?1:0);
-#endif
 		fprintf(out, "}\n");
 	}
 }
@@ -856,11 +855,6 @@ dir_read_file_list(const char *root, const char *file_txt)
 					is_datafile,
 					crc,
 					segno;
-#ifdef PGPRO_EE
-		uint64		generation,
-					is_partial_copy,
-					is_cfs;
-#endif
 		pgFile	   *file;
 
 		get_control_value(buf, "path", path, NULL, true);
@@ -874,11 +868,6 @@ dir_read_file_list(const char *root, const char *file_txt)
 		get_control_value(buf, "segno", NULL, &segno, false);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 
-#ifdef PGPRO_EE
-		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
-		get_control_value(buf, "CFS_generation", NULL, &generation, false);
-		get_control_value(buf, "is_partial_copy", NULL, &is_partial_copy, false);
-#endif
 		if (root)
 			join_path_components(filepath, root, path);
 		else
@@ -894,11 +883,6 @@ dir_read_file_list(const char *root, const char *file_txt)
 		if (linked[0])
 			file->linked = pgut_strdup(linked);
 		file->segno = (int) segno;
-#ifdef PGPRO_EE
-		file->is_cfs = is_cfs ? true : false;
-		file->generation = generation;
-		file->is_partial_copy = is_partial_copy ? true : false;
-#endif
 
 		parray_append(files, file);
 	}

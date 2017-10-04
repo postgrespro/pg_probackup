@@ -27,6 +27,7 @@
 #include "storage/bufpage.h"
 #include "storage/checksum.h"
 #include "utils/pg_crc.h"
+#include "common/relpath.h"
 
 #include "utils/parray.h"
 #include "utils/pgut.h"
@@ -90,14 +91,13 @@ typedef struct pgFile
 	char	*linked;		/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
 	char	*path;			/* path of the file */
-	char	*ptrack_path;	/* path of the ptrack fork of the relation */
+	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
+	Oid		dbOid;			/* dbOid extracted from path, if applicable */
+	Oid		relOid;			/* relOid extracted from path, if applicable */
+	char	*forkName;		/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
-	uint64	generation;		/* Generation of the compressed file.If generation
-							 * has changed, we cannot backup compressed file
-							 * partially. Has no sense if (is_cfs == false). */
-	bool	is_partial_copy; /* If the file was backed up via copy_file_partly().
-							  * Only applies to is_cfs files. */
+	bool	is_database;
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
@@ -235,24 +235,6 @@ typedef union DataPage
 } DataPage;
 
 /*
- * This struct and function definitions mirror ones from cfs.h, but doesn't use
- * atomic variables, since they are not allowed in frontend code.
- */
-typedef struct
-{
-	uint32 physSize;
-	uint32 virtSize;
-	uint32 usedSize;
-	uint32 lock;
-	pid_t	postmasterPid;
-	uint64	generation;
-	uint64	inodes[RELSEG_SIZE];
-} FileMap;
-
-extern FileMap* cfs_mmap(int md);
-extern int cfs_munmap(FileMap* map);
-
-/*
  * return pointer that exceeds the length of prefix from character string.
  * ex. str="/xxx/yyy/zzz", prefix="/xxx/yyy", return="zzz".
  */
@@ -285,6 +267,7 @@ extern char *replication_slot;
 extern bool	smooth_checkpoint;
 extern uint32 archive_timeout;
 extern bool from_replica;
+extern bool is_remote_backup;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;
@@ -432,16 +415,9 @@ extern bool backup_data_file(const char *from_root, const char *to_root,
 							 pgFile *file, XLogRecPtr prev_backup_start_lsn);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
-extern void restore_compressed_file(const char *from_root,
-									const char *to_root, pgFile *file);
-extern bool backup_compressed_file_partially(pgFile *file,
-											 void *arg,
-											 size_t *skip_size);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
 extern void copy_wal_file(const char *from_root, const char *to_root);
-extern bool copy_file_partly(const char *from_root, const char *to_root,
-				 pgFile *file, size_t skip_size);
 
 extern bool calc_file_checksum(pgFile *file);
 
@@ -469,7 +445,6 @@ extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
-extern XLogRecPtr get_last_ptrack_lsn(void);
 extern uint32 get_data_checksum_version(bool safe);
 extern char *base36enc(long unsigned int value);
 extern long unsigned int base36dec(const char *text);

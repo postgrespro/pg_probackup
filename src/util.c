@@ -82,24 +82,6 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 }
 
 /*
- * Get lsn of the moment when ptrack was enabled the last time.
- */
-XLogRecPtr
-get_last_ptrack_lsn(void)
-{
-	char		*buffer;
-	size_t		size;
-	XLogRecPtr	lsn;
-
-	buffer = slurpFile(pgdata, "global/ptrack_control", &size, false);
-	if (buffer == NULL)
-		return 0;
-
-	lsn = *(XLogRecPtr *)buffer;
-	return lsn;
-}
-
-/*
  * Utility shared by backup and restore to fetch the current timeline
  * used by a node.
  */
