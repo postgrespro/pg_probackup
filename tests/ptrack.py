@@ -60,21 +60,21 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         # FULL BACKUP
-        print('START')
-        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
+#        print('START')
+#        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
-        print('AFTER FULL')
-        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
+#        print('AFTER FULL')
+#        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
         # DISABLE PTRACK
         node.safe_psql('postgres', "alter system set ptrack_enable to off")
         node.restart()
-        print('DISABLED')
-        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
+#        print('DISABLED')
+#        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
         # ENABLE PTRACK
         node.safe_psql('postgres', "alter system set ptrack_enable to on")
         node.restart()
-        print('ENABLED')
-        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
+#        print('ENABLED')
+#        print(node.safe_psql('postgres', "select pg_ptrack_control_lsn()"))
 
         # PTRACK BACKUP
         try:
@@ -685,7 +685,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.create_tblspace_in_node(node, 'somedata')
 
         # CREATE TABLE
-        node.pgbench_init(scale=30, options=['--tablespace=somedata'])
+        node.pgbench_init(scale=300, options=['--tablespace=somedata'])
         # FULL BACKUP
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
