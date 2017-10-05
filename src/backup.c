@@ -596,7 +596,7 @@ do_backup_instance(void)
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn();
 
-		if (ptrack_lsn > prev_backup->stop_lsn)
+		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
 			elog(ERROR, "LSN from ptrack_control %lx differs from STOP LSN of previous backup %lx.\n"
 						"Create new full backup before an incremental one.",
