@@ -598,9 +598,9 @@ do_backup_instance(void)
 
 		if (ptrack_lsn > prev_backup->stop_lsn)
 		{
-			elog(ERROR, "LSN from ptrack_control %lx differs from LSN of previous backup %lx.\n"
+			elog(ERROR, "LSN from ptrack_control %lx differs from STOP LSN of previous backup %lx.\n"
 						"Create new full backup before an incremental one.",
-						ptrack_lsn, prev_backup->start_lsn);
+						ptrack_lsn, prev_backup->stop_lsn);
 		}
 		parray_qsort(backup_files_list, pgFileComparePath);
 		make_pagemap_from_ptrack(backup_files_list);
@@ -782,6 +782,10 @@ do_backup(void)
 	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support();
+	if (is_ptrack_support)
+	{
+		is_ptrack_enable = pg_ptrack_enable();
+	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -789,7 +793,6 @@ do_backup(void)
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
 		else
 		{
-			is_ptrack_enable = pg_ptrack_enable();
 			if(!is_ptrack_enable)
 				elog(ERROR, "Ptrack is disabled");
 		}
