@@ -235,7 +235,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		pgBackup   *backup = parray_get(backup_list, i);
 		TimeLineID	parent_tli;
 		char	   *backup_id;
-		char		timestamp[20] = "----";
+		char		timestamp[100] = "----";
 		char		duration[20] = "----";
 		char		data_bytes_str[10] = "----";
 

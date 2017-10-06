@@ -1546,13 +1546,13 @@ pg_stop_backup(pgBackup *backup)
 		 */
 		sent = pgut_send(conn,
 						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamp"
+						   " current_timestamp(0)::timestamptz"
 						   " FROM pg_stop_backup(false)",
 						   0, NULL, WARNING);
 	else
 		sent = pgut_send(conn,
 						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamp"
+						   " current_timestamp(0)::timestamptz"
 						   " FROM pg_stop_backup()",
 						   0, NULL, WARNING);
 

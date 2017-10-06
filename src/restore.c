@@ -720,6 +720,7 @@ create_recovery_conf(time_t backup_id,
 		PROGRAM_VERSION);
 	fprintf(fp, "restore_command = 'pg_probackup archive-get -B %s --instance %s --wal-file-path %%p --wal-file-name %%f'\n",
 			backup_path, instance_name);
+	fprintf(fp, "recovery_target_action = 'promote'\n");
 
 	if (target_time)
 		fprintf(fp, "recovery_target_time = '%s'\n", target_time);
@@ -736,7 +737,6 @@ create_recovery_conf(time_t backup_id,
 		 * replayed.
 		 */
 		fprintf(fp, "recovery_target = 'immediate'\n");
-		fprintf(fp, "recovery_target_action = 'promote'\n");
 	}
 
 	if (target_inclusive)

@@ -381,7 +381,7 @@ pgBackupCreateDir(pgBackup *backup)
 void
 pgBackupWriteControl(FILE *out, pgBackup *backup)
 {
-	char		timestamp[20];
+	char		timestamp[100];
 
 	fprintf(out, "#Configuration\n");
 	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));

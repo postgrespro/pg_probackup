@@ -28,6 +28,10 @@
 #endif
 #endif
 
+#define MAX_TZDISP_HOUR		15	/* maximum allowed hour part */
+#define SECS_PER_MINUTE		60
+#define MINS_PER_HOUR		60
+
 const char *PROGRAM_NAME = NULL;
 
 const char	   *pgut_dbname = NULL;
@@ -496,19 +500,91 @@ parse_uint64(const char *value, uint64 *result)
  * Convert ISO-8601 format string to time_t value.
  */
 bool
-parse_time(const char *value, time_t *time)
+parse_time(const char *value, time_t *result)
 {
 	size_t		len;
+	int			fields_num,
+				tz = 0,
+				i;
 	char	   *tmp;
-	int			i;
 	struct tm	tm;
 	char		junk[2];
 
 	/* tmp = replace( value, !isalnum, ' ' ) */
 	tmp = pgut_malloc(strlen(value) + + 1);
 	len = 0;
-	for (i = 0; value[i]; i++)
-		tmp[len++] = (IsAlnum(value[i]) ? value[i] : ' ');
+	fields_num = 1;
+
+	while (*value)
+	{
+		if (IsAlnum(*value))
+		{
+			tmp[len++] = *value;
+			value++;
+		}
+		else if (fields_num < 6)
+		{
+			fields_num++;
+			tmp[len++] = ' ';
+			value++;
+		}
+		/* timezone field is 7th */
+		else if ((*value == '-' || *value == '+') && fields_num == 6)
+		{
+			int			hr,
+						min,
+						sec = 0;
+			char	   *cp;
+
+			errno = 0;
+			hr = strtol(value + 1, &cp, 10);
+			if ((value + 1) == cp || errno == ERANGE)
+				return false;
+
+			/* explicit delimiter? */
+			if (*cp == ':')
+			{
+				errno = 0;
+				min = strtol(cp + 1, &cp, 10);
+				if (errno == ERANGE)
+					return false;
+				if (*cp == ':')
+				{
+					errno = 0;
+					sec = strtol(cp + 1, &cp, 10);
+					if (errno == ERANGE)
+						return false;
+				}
+			}
+			/* otherwise, might have run things together... */
+			else if (*cp == '\0' && strlen(value) > 3)
+			{
+				min = hr % 100;
+				hr = hr / 100;
+				/* we could, but don't, support a run-together hhmmss format */
+			}
+			else
+				min = 0;
+
+			/* Range-check the values; see notes in datatype/timestamp.h */
+			if (hr < 0 || hr > MAX_TZDISP_HOUR)
+				return false;
+			if (min < 0 || min >= MINS_PER_HOUR)
+				return false;
+			if (sec < 0 || sec >= SECS_PER_MINUTE)
+				return false;
+
+			tz = (hr * MINS_PER_HOUR + min) * SECS_PER_MINUTE + sec;
+			if (*value == '-')
+				tz = -tz;
+
+			fields_num++;
+			value = cp;
+		}
+		/* wrong format */
+		else if (!IsSpace(*value))
+			return false;
+	}
 	tmp[len] = '\0';
 
 	/* parse for "YYYY-MM-DD HH:MI:SS" */
@@ -540,7 +616,25 @@ parse_time(const char *value, time_t *time)
 	/* determine whether Daylight Saving Time is in effect */
 	tm.tm_isdst = -1;
 
-	*time = mktime(&tm);
+	*result = mktime(&tm);
+
+	/* adjust time zone */
+	if (tz != 0)
+	{
+		time_t		ltime = time(NULL);
+		struct tm  *ptm = gmtime(&ltime);
+		time_t		gmt = mktime(ptm);
+		time_t		offset;
+
+		/* UTC time */
+		*result -= tz;
+
+		/* Get local time */
+		ptm = localtime(&ltime);
+		offset = ltime - gmt + (ptm->tm_isdst ? 3600 : 0);
+
+		*result += offset;
+	}
 
 	return true;
 }
