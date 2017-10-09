@@ -1063,7 +1063,7 @@ pg_ptrack_support(void)
 	PGresult   *res_db;
 
 	res_db = pgut_execute(backup_conn,
-						  "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'",
+						  "SELECT ptrack_version()",
 						  0, NULL);
 
 	if (PQntuples(res_db) == 0)
@@ -1071,8 +1071,15 @@ pg_ptrack_support(void)
 		PQclear(res_db);
 		return false;
 	}
-	PQclear(res_db);
 
+	/* Now we support only ptrack version 1.3 */
+	if (strcmp(PQgetvalue(res_db, 0, 0), "1.3") != 0)
+	{
+		PQclear(res_db);
+		return false;
+	}
+
+	PQclear(res_db);
 	return true;
 }
 
