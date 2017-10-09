@@ -36,6 +36,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         # Take FULL backup to clean every ptrack
         self.backup_node(backup_dir, 'node', node, options=['-j10', '--stream'])
+        node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
             # get fork size and calculate it in pages
@@ -53,6 +54,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         # Take PTRACK backup to clean every ptrack
         backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['-j100'])
+        node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
             # get new size of heap and indexes and calculate it in pages
@@ -125,6 +127,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Take FULL backup to clean every ptrack
         self.backup_node(backup_dir, 'replica', replica, options=['-j100', '--stream',
             '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
+        master.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
             # get fork size and calculate it in pages
@@ -143,8 +146,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Take PTRACK backup to clean every ptrack
         backup_id = self.backup_node(backup_dir, 'replica', replica, backup_type='ptrack', options=['-j100', '--stream',
             '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
-
         master.safe_psql('postgres', 'checkpoint')
+
         for i in idx_ptrack:
             # get new size of heap and indexes and calculate it in pages
             idx_ptrack[i]['size'] = self.get_fork_size(replica, i)
@@ -164,6 +167,9 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Take PAGE backup to clean every ptrack
         self.backup_node(backup_dir, 'replica', replica, backup_type='page', options=['-j100',
             '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
+        master.safe_psql('postgres', 'checkpoint')
+
+
         for i in idx_ptrack:
             # get new size of heap and indexes and calculate it in pages
             idx_ptrack[i]['size'] = self.get_fork_size(replica, i)

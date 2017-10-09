@@ -4,7 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
 from testgres import ClusterException
-import shutil, sys
+import shutil, sys, time
 
 
 module_name = 'ptrack'
@@ -129,6 +129,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             self.restore_node(backup_dir, 'node', node, backup_id=full_backup_id, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
         full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -140,6 +142,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
 
@@ -169,6 +173,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
         full_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
         full_backup_id = self.backup_node(backup_dir, 'node', node)
+        full_target_time = self.show_pb(backup_dir, 'node', full_backup_id)['recovery-time']
 
         # PTRACK BACKUP
         node.safe_psql(
@@ -176,6 +181,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(100,200) i")
         ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
         ptrack_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+        ptrack_target_time = self.show_pb(backup_dir, 'node', ptrack_backup_id)['recovery-time']
         pgdata = self.pgdata_content(node.data_dir)
 
         # Drop Node
@@ -183,20 +189,24 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         # Check full backup
         self.assertIn("INFO: Restore of backup {0} completed.".format(full_backup_id),
-            self.restore_node(backup_dir, 'node', node, backup_id=full_backup_id, options=["-j", "4"]),
+            self.restore_node(backup_dir, 'node', node, backup_id=full_backup_id, options=["-j", "4", "--time={0}".format(full_target_time)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
         full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
         # Check ptrack backup
         self.assertIn("INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
-            self.restore_node(backup_dir, 'node', node, backup_id=ptrack_backup_id, options=["-j", "4"]),
+            self.restore_node(backup_dir, 'node', node, backup_id=ptrack_backup_id, options=["-j", "4", "--time={0}".format(ptrack_target_time)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
         node.cleanup()
@@ -304,7 +314,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_full_pgpro417(self):
@@ -463,6 +473,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
         pgdata_content = self.pgdata_content(node.data_dir)
         node.stop()
+        node.cleanup()
 
         # RESTORE
         node_restored = self.make_simple_node(base_dir="{0}/{1}/node_restored".format(module_name, fname))
@@ -477,8 +488,12 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         pgdata_content_new = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata_content, pgdata_content_new)
         # START RESTORED NODE
+        node_restored.append_conf('postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
         node_restored.start()
-        result_new =  node.safe_psql("postgres", "select * from t_heap")
+        time.sleep(5)
+        while node_restored.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
+        result_new =  node_restored.safe_psql("postgres", "select * from t_heap")
 
         self.assertEqual(result, result_new, 'lost some data after restore')
 
@@ -593,7 +608,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_alter_tablespace(self):
+    def test_ptrack_alter_tablespace(self):
         """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
         self.maxDiff = None
         fname = self.id().split('.')[3]
@@ -622,9 +637,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres", "alter table t_heap set tablespace somedata")
         # FIRTS PTRACK BACKUP
-        node.safe_psql("postgres", "checkpoint")
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
-        pgdata_content = self.pgdata_content(node.data_dir)
+        pgdata = self.pgdata_content(node.data_dir)
 
         # Restore ptrack backup and check table consistency
         restored_node = self.make_simple_node(base_dir="{0}/{1}/restored_node".format(module_name, fname))
@@ -635,10 +649,14 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
         result = node.safe_psql("postgres", "select * from t_heap")
 
-        pgdata_content_new = self.pgdata_content(restored_node.data_dir)
-        self.compare_pgdata(pgdata_content, pgdata_content_new)
+        pgdata_new = self.pgdata_content(restored_node.data_dir)
+        # COMPARE PHYSICAL CONTENT
+        self.compare_pgdata(pgdata, pgdata_new)
+        # START RESTORED NODE
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
         restored_node.start()
+        while restored_node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
 
         result_new = restored_node.safe_psql("postgres", "select * from t_heap")
         self.assertEqual(result, result_new)
@@ -650,16 +668,22 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "postgres", "alter table t_heap set tablespace pg_default")
         # SECOND PTRACK BACKUP
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        pgdata = self.pgdata_content(node.data_dir)
 
         # Restore second ptrack backup and check table consistency
         self.restore_node(backup_dir, 'node', restored_node, options=[
             "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
+
         # COMPARE PHYSICAL CONTENT
-        #pgdata = self.pgdata_content(node.data_dir)
-        #pgdata_new = self.pgdata_content(restored_node.data_dir)
-        #self.compare_pgdata(pgdata, pgdata_new)
+        pgdata_new = self.pgdata_content(restored_node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_new)
+
+        # START RESTORED NODE
+        restored_node.start()
+        while restored_node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
+
         result_new = restored_node.safe_psql("postgres", "select * from t_heap")
         self.assertEqual(result, result_new)
 
@@ -675,7 +699,9 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB', 'maintenance_work_mem': '1GB'}
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2',
+            'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB',
+            'maintenance_work_mem': '1GB', 'autovacuum': 'off'}
             )
 
         self.init_pb(backup_dir)
@@ -685,17 +711,18 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.create_tblspace_in_node(node, 'somedata')
 
         # CREATE TABLE
-        node.pgbench_init(scale=300, options=['--tablespace=somedata'])
+        node.pgbench_init(scale=100, options=['--tablespace=somedata'])
         # FULL BACKUP
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
         pgbench = node.pgbench(options=['-T', '50', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
-        # GET PHYSICAL CONTENT FROM NODE
-        # FIRTS PTRACK BACKUP
+        # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
+        # FIRTS PTRACK BACKUP
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
         # RESTORE NODE
@@ -706,18 +733,19 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         self.restore_node(backup_dir, 'node', restored_node, options=[
             "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
-#        self.restore_node(backup_dir, 'node', restored_node, options=[
-#            "-j", "4"])
+
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
         restored_node.start()
+        while restored_node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
 
         result_new = restored_node.safe_psql("postgres", "select * from pgbench_accounts")
         self.assertEqual(result, result_new)
-        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

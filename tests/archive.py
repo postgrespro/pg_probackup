@@ -46,6 +46,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
 
         # Make backup
+        sleep(5)
         self.backup_node(backup_dir, 'node', node)
         node.cleanup()
 
@@ -59,8 +60,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.expectedFailure
     def test_pgpro434_2(self):
-        """Check that timelines are correct"""
+        """Check that timelines are correct. WAITING PGPRO-1053 for --immediate. replace time"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
@@ -81,15 +83,19 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         recovery_time = self.show_pb(backup_dir, 'node', backup_id)["recovery-time"]
         node.safe_psql(
             "postgres",
-            "insert into t_heap select 100501 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+            "insert into t_heap select 100501 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,1) i")
 
         # SECOND TIMELIN
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["--time={0}".format(recovery_time)])
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            sleep(1)
         if self.verbose:
             print('Second timeline')
             print(node.safe_psql("postgres","select redo_wal_file from pg_control_checkpoint()"))
+            self.assertFalse(node.execute("postgres","select exists(select 1 from t_heap where id = 100501)")[0][0],
+            'data after restore not equal to original data')
         node.safe_psql(
             "postgres",
             "insert into t_heap select 2 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(100,200) i")
@@ -103,6 +109,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["--time={0}".format(recovery_time)])
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            sleep(1)
         if self.verbose:
             print('third timeline')
             print(node.safe_psql("postgres","select redo_wal_file from pg_control_checkpoint()"))
@@ -120,6 +128,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["--time={0}".format(recovery_time)])
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            sleep(1)
         if self.verbose:
             print('Fourth timeline')
             print(node.safe_psql("postgres","select redo_wal_file from pg_control_checkpoint()"))
@@ -128,6 +138,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["--time={0}".format(recovery_time)])
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            sleep(1)
         if self.verbose:
             print('Fifth timeline')
             print(node.safe_psql("postgres","select redo_wal_file from pg_control_checkpoint()"))
@@ -136,6 +148,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["--time={0}".format(recovery_time)])
         node.start()
+        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            sleep(1)
         if self.verbose:
             print('Sixth timeline')
             print(node.safe_psql("postgres","select redo_wal_file from pg_control_checkpoint()"))
@@ -147,7 +161,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'data after restore not equal to original data')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_pgpro434_3(self):
@@ -219,7 +233,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         os.remove(file)
         sleep(5)
-        node.safe_psql('postgres', 'select pg_switch_xlog()')
+        node.safe_psql('postgres', 'select pg_switch_wal()')
 
         with open(log_file, 'r') as f:
             log_content = f.read()
@@ -229,9 +243,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    #@unittest.expectedFailure
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
     def test_replica_archive(self):
-        """make node withput archiving, take stream backup and turn it into replica, set replica with archiving, make archive backup from replica"""
+        """make node without archiving, take stream backup and turn it into replica, set replica with archiving, make archive backup from replica"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(base_dir="{0}/{1}/master".format(module_name, fname),
@@ -240,6 +255,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)
+        # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
         # force more frequent wal switch
         master.start()
@@ -258,7 +274,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'master', replica)
         self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start({"-t": "600"})
+        replica.start()
 
         # Check data correctness on replica
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -269,6 +285,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(256,512) i")
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        # ADD INSTANCE 'REPLICA'
         self.add_instance(backup_dir, 'replica', replica)
         backup_id = self.backup_node(backup_dir, 'replica', replica, options=['--archive-timeout=30',
             '--master-host=localhost', '--master-db=postgres','--master-port={0}'.format(master.port)])
@@ -306,3 +323,62 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_master_and_replica_concurrent_archiving(self):
+        """make node 'master 'with archiving, take archive backup and turn it into replica, set replica with archiving, make archive backup from replica, make archive backup from master"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(base_dir="{0}/{1}/master".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
+            )
+        replica = self.make_simple_node(base_dir="{0}/{1}/replica".format(module_name, fname))
+        replica.cleanup()
+
+        self.init_pb(backup_dir)
+        # ADD INSTANCE 'MASTER'
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+        master.start()
+
+        master.psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+
+        # TAKE FULL ARCHIVE BACKUP FROM MASTER
+        self.backup_node(backup_dir, 'master', master)
+        # GET LOGICAL CONTENT FROM MASTER
+        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        # GET PHYSICAL CONTENT FROM MASTER
+        pgdata_master = self.pgdata_content(master.data_dir)
+
+        # Settings for Replica
+        self.restore_node(backup_dir, 'master', replica)
+        # CHECK PHYSICAL CORRECTNESS on REPLICA
+        pgdata_replica = self.pgdata_content(replica.data_dir)
+        self.compare_pgdata(pgdata_master, pgdata_replica)
+
+        self.set_replica(master, replica, synchronous=True)
+        # ADD INSTANCE REPLICA
+        self.add_instance(backup_dir, 'replica', replica)
+        # SET ARCHIVING FOR REPLICA
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+        replica.start()
+
+        # CHECK LOGICAL CORRECTNESS on REPLICA
+        after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
+        self.assertEqual(before, after)
+
+        # TAKE FULL ARCHIVE BACKUP FROM REPLICA
+        backup_id = self.backup_node(backup_dir, 'replica', replica, options=['--archive-timeout=30',
+            '--master-host=localhost', '--master-db=postgres','--master-port={0}'.format(master.port)])
+        self.validate_pb(backup_dir, 'replica')
+        self.assertEqual('OK', self.show_pb(backup_dir, 'replica', backup_id)['status'])
+
+        # TAKE FULL ARCHIVE BACKUP FROM MASTER
+        backup_id = self.backup_node(backup_dir, 'master', master)
+        self.validate_pb(backup_dir, 'master')
+        self.assertEqual('OK', self.show_pb(backup_dir, 'master', backup_id)['status'])
