@@ -596,11 +596,11 @@ do_backup_instance(void)
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn();
 
-		if (ptrack_lsn > prev_backup->stop_lsn)
+		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
-			elog(ERROR, "LSN from ptrack_control %lx differs from LSN of previous backup %lx.\n"
+			elog(ERROR, "LSN from ptrack_control %lx differs from STOP LSN of previous backup %lx.\n"
 						"Create new full backup before an incremental one.",
-						ptrack_lsn, prev_backup->start_lsn);
+						ptrack_lsn, prev_backup->stop_lsn);
 		}
 		parray_qsort(backup_files_list, pgFileComparePath);
 		make_pagemap_from_ptrack(backup_files_list);
@@ -782,6 +782,10 @@ do_backup(void)
 	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support();
+	if (is_ptrack_support)
+	{
+		is_ptrack_enable = pg_ptrack_enable();
+	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -789,7 +793,6 @@ do_backup(void)
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
 		else
 		{
-			is_ptrack_enable = pg_ptrack_enable();
 			if(!is_ptrack_enable)
 				elog(ERROR, "Ptrack is disabled");
 		}
@@ -1060,7 +1063,7 @@ pg_ptrack_support(void)
 	PGresult   *res_db;
 
 	res_db = pgut_execute(backup_conn,
-						  "SELECT proname FROM pg_proc WHERE proname='pg_ptrack_clear'",
+						  "SELECT ptrack_version()",
 						  0, NULL);
 
 	if (PQntuples(res_db) == 0)
@@ -1068,8 +1071,15 @@ pg_ptrack_support(void)
 		PQclear(res_db);
 		return false;
 	}
-	PQclear(res_db);
 
+	/* Now we support only ptrack version 1.3 */
+	if (strcmp(PQgetvalue(res_db, 0, 0), "1.3") != 0)
+	{
+		PQclear(res_db);
+		return false;
+	}
+
+	PQclear(res_db);
 	return true;
 }
 
@@ -1546,13 +1556,13 @@ pg_stop_backup(pgBackup *backup)
 		 */
 		sent = pgut_send(conn,
 						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamp"
+						   " current_timestamp(0)::timestamptz"
 						   " FROM pg_stop_backup(false)",
 						   0, NULL, WARNING);
 	else
 		sent = pgut_send(conn,
 						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamp"
+						   " current_timestamp(0)::timestamptz"
 						   " FROM pg_stop_backup()",
 						   0, NULL, WARNING);
 

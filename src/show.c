@@ -226,16 +226,16 @@ show_backup_list(FILE *out, parray *backup_list)
 
 	/* if you add new fields here, fix the header */
 	/* show header */
-	fputs("===============================================================================================================================\n", out);
-	fputs(" Instance    ID      Recovery time        Mode    WAL      Current/Parent TLI    Time    Data    Start LSN    Stop LSN   Status  \n", out);
-	fputs("===============================================================================================================================\n", out);
+	fputs("==================================================================================================================================\n", out);
+	fputs(" Instance    ID      Recovery time           Mode    WAL      Current/Parent TLI    Time    Data    Start LSN    Stop LSN   Status\n", out);
+	fputs("==================================================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = parray_get(backup_list, i);
 		TimeLineID	parent_tli;
 		char	   *backup_id;
-		char		timestamp[20] = "----";
+		char		timestamp[100] = "----";
 		char		duration[20] = "----";
 		char		data_bytes_str[10] = "----";
 

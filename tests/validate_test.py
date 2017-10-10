@@ -47,13 +47,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate to real time
         self.assertIn("INFO: backup validation completed successfully",
-            self.validate_pb(backup_dir, 'node', options=["--time='{0}'".format(target_time)]),
+            self.validate_pb(backup_dir, 'node', options=["--time={0}".format(target_time)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         # Validate to unreal time
         unreal_time_1 = after_backup_time - timedelta(days=2)
         try:
-            self.validate_pb(backup_dir, 'node', options=["--time='{0}'".format(unreal_time_1)])
+            self.validate_pb(backup_dir, 'node', options=["--time={0}".format(unreal_time_1)])
             self.assertEqual(1, 0, "Expecting Error because of validation to unreal time.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
@@ -63,7 +63,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate to unreal time #2
         unreal_time_2 = after_backup_time + timedelta(days=2)
         try:
-            self.validate_pb(backup_dir, 'node', options=["--time='{0}'".format(unreal_time_2)])
+            self.validate_pb(backup_dir, 'node', options=["--time={0}".format(unreal_time_2)])
             self.assertEqual(1, 0, "Expecting Error because of validation to unreal time.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
@@ -76,7 +76,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
             target_xid = res[0][0]
-        node.execute("postgres", "SELECT pg_switch_xlog()")
+        node.execute("postgres", "SELECT pg_switch_wal()")
 
         self.assertIn("INFO: backup validation completed successfully",
             self.validate_pb(backup_dir, 'node', options=["--xid={0}".format(target_xid)]),
@@ -320,10 +320,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
-        recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
+        recovery_time = self.show_pb(backup_dir, 'node', backup_id=backup_id)['recovery-time']
 
-        self.assertIn("INFO: backup validation completed successfully on", 
-            self.validate_pb(backup_dir, 'node', node, options=["--time='{0}'".format(recovery_time)]))
+        try:
+            self.validate_pb(backup_dir, 'node', options=["--time={0}".format(recovery_time)])
+            self.assertEqual(1, 0, "Expecting Error because of wal segment disappearance.\n Output: {0} \n CMD: {1}".format(
+                self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn('WAL archive is empty. You cannot restore backup to a recovery target without WAL archive', e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -346,20 +351,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
         recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
 
-        # Uncommenting this section will make this test True Positive
-        #node.safe_psql("postgres", "select pg_create_restore_point('123')")
-        #node.safe_psql("postgres", "select txid_current()")
-        #node.safe_psql("postgres", "select pg_switch_xlog()")
-        ####
-
-        #try:
-        self.validate_pb(backup_dir, 'node', options=["--time='{0}'".format(recovery_time)])
-        # we should die here because exception is what we expect to happen
-        # self.assertEqual(1, 0, "Expecting Error because it should not be possible safely validate 'Recovery Time' without wal record with timestamp.\n Output: {0} \n CMD: {1}".format(
-        #    repr(self.output), self.cmd))
-        # except ProbackupException as e:
-        # self.assertTrue('WARNING: recovery can be done up to time {0}'.format(recovery_time) in e.message,
-        #    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.validate_pb(backup_dir, 'node', options=["--time={0}".format(recovery_time)])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -367,9 +359,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_pgpro561(self):
-        """
-        make node with archiving, make stream backup, restore it to node1,
-        check that archiving is not successful on node1
+        """make node with archiving, make stream backup, restore it to node1, check that archiving is not successful on node1
         """
         fname = self.id().split('.')[3]
         node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(module_name, fname),

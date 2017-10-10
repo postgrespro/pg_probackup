@@ -223,7 +223,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 	size_t		i;
 	char	   *backup_id;
 	char		path[MAXPGPATH];
-	char		timestamp[20];
+	char		timestamp[100];
 	parray	   *files;
 
 	/*

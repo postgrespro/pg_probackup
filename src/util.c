@@ -144,9 +144,29 @@ get_data_checksum_version(bool safe)
 void
 time2iso(char *buf, size_t len, time_t time)
 {
-	struct tm *tm = localtime(&time);
+	struct tm  *ptm = gmtime(&time);
+	time_t		gmt = mktime(ptm);
+	time_t		offset;
 
-	strftime(buf, len, "%Y-%m-%d %H:%M:%S", tm);
+	ptm = localtime(&time);
+	offset = time - gmt + (ptm->tm_isdst ? 3600 : 0);
+
+	strftime(buf, len, "%Y-%m-%d %H:%M:%S", ptm);
+
+	if (offset != 0)
+	{
+		buf += strlen(buf);
+		sprintf(buf, "%c%02d",
+				(offset >= 0) ? '+' : '-',
+				abs((int) offset) / SECS_PER_HOUR);
+
+		if (abs((int) offset) % SECS_PER_HOUR != 0)
+		{
+			buf += strlen(buf);
+			sprintf(buf, ":%02d",
+					abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
+		}
+	}
 }
 
 /* copied from timestamp.c */
