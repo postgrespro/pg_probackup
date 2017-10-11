@@ -1063,9 +1063,18 @@ pg_ptrack_support(void)
 	PGresult   *res_db;
 
 	res_db = pgut_execute(backup_conn,
+						  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
+						  0, NULL);
+	if (PQntuples(res_db) == 0)
+	{
+		PQclear(res_db);
+		return false;
+	}
+	PQclear(res_db);
+
+	res_db = pgut_execute(backup_conn,
 						  "SELECT ptrack_version()",
 						  0, NULL);
-
 	if (PQntuples(res_db) == 0)
 	{
 		PQclear(res_db);
