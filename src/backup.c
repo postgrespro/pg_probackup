@@ -237,12 +237,12 @@ ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
 			if (copybuf[156] == '5')
 			{
 				/* Directory */
-				pgfile->mode |= __S_IFDIR;
+				pgfile->mode |= S_IFDIR;
 			}
 			else if (copybuf[156] == '2')
 			{
 				/* Symlink */
-				pgfile->mode |= __S_IFLNK;
+				pgfile->mode |= S_IFLNK;
 			}
 			else
 				elog(ERROR, "Unrecognized link indicator \"%c\"\n",
@@ -251,7 +251,7 @@ ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
 		else
 		{
 			/* regular file */
-			pgfile->mode |= __S_IFREG;
+			pgfile->mode |= S_IFREG;
 		}
 
 		parray_append(files, pgfile);
