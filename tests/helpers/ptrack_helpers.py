@@ -4,7 +4,7 @@ from sys import exit, argv, version_info
 import subprocess
 import shutil
 import six
-from testgres import get_new_node, clean_all
+from testgres import get_new_node, clean_all, version_to_num
 import hashlib
 import re
 import pwd
@@ -123,6 +123,12 @@ class ProbackupTest(object):
 
         self.test_env["LC_MESSAGES"] = "C"
         self.test_env["LC_TIME"] = "C"
+
+        self.paranoia = False
+        if 'PGPRO_PARANOIA_MODE' in self.test_env:
+            if self.test_env['PGPRO_PARANOIA_MODE'] == 'ON':
+                self.paranoia = True
+
         self.helpers_path = os.path.dirname(os.path.realpath(__file__))
         self.dir_path = os.path.abspath(os.path.join(self.helpers_path, os.pardir))
         self.tmp_path = os.path.abspath(os.path.join(self.dir_path, 'tmp_dirs'))
@@ -581,6 +587,13 @@ class ProbackupTest(object):
     def get_username(self):
         """ Returns current user name """
         return pwd.getpwuid(os.getuid())[0]
+
+    def switch_wal_segment(self, node):
+        """ Execute pg_switch_wal/xlog() in given node"""
+        if version_to_num(node.safe_psql("postgres", "show server_version")) >= version_to_num('10.0'):
+            node.safe_psql("postgres", "select pg_switch_wal()")
+        else:
+            node.safe_psql("postgres", "select pg_switch_xlog()")
 
     def del_test_dir(self, module_name, fname):
         """ Del testdir and optimistically try to del module dir"""

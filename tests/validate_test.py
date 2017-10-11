@@ -76,7 +76,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
             target_xid = res[0][0]
-        node.execute("postgres", "SELECT pg_switch_wal()")
+        self.switch_wal_segment(node)
 
         self.assertIn("INFO: backup validation completed successfully",
             self.validate_pb(backup_dir, 'node', options=["--xid={0}".format(target_xid)]),

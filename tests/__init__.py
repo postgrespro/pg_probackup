@@ -52,3 +52,6 @@ def load_tests(loader, tests, pattern):
 #      ptrack backup on replica should work correctly
 # archive:
 #      immediate recovery and full recovery
+# 10vanilla_1.3ptrack +
+# 10vanilla+
+# 9.6vanilla_1.3ptrack +

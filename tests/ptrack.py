@@ -140,12 +140,14 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             self.restore_node(backup_dir, 'node', node, backup_id=ptrack_backup_id, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         pgdata_restored = self.pgdata_content(node.data_dir)
-        # self.compare_pgdata(pgdata, pgdata_restored)
         node.start()
         while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -203,12 +205,15 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             self.restore_node(backup_dir, 'node', node, backup_id=ptrack_backup_id, options=["-j", "4", "--time={0}".format(ptrack_target_time)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
         pgdata_restored = self.pgdata_content(node.data_dir)
-        # self.compare_pgdata(pgdata, pgdata_restored)
         node.start()
         while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
+
         node.cleanup()
 
         # Clean after yourself
@@ -401,8 +406,9 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
         # COMPARE PHYSICAL CONTENT
         self.restore_node(backup_dir, 'node', node_restored, backup_id=backup_id, options=["-j", "4"])
-        pgdata_new = self.pgdata_content(node_restored.data_dir)
-        # self.compare_pgdata(pgdata, pgdata_restored)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
         node_restored.append_conf("postgresql.auto.conf", "port = {0}".format(node_restored.port))
@@ -424,8 +430,9 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node_restored.start()
 
         # COMPARE PHYSICAL CONTENT
-        pgdata_new = self.pgdata_content(node_restored.data_dir)
-        # self.compare_pgdata(pgdata, pgdata_restored)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         try:
             node_restored.safe_psql('db1', 'select 1')
@@ -485,8 +492,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             ])
 
         # GET RESTORED PGDATA AND COMPARE
-        pgdata_new = self.pgdata_content(node_restored.data_dir)
-        # self.compare_pgdata(pgdata, pgdata_new)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
         # START RESTORED NODE
         node_restored.append_conf('postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
         node_restored.start()
@@ -496,6 +502,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         result_new =  node_restored.safe_psql("postgres", "select * from t_heap")
 
         self.assertEqual(result, result_new, 'lost some data after restore')
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -538,9 +546,10 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "-T", "{0}={1}".format(self.get_tblspace_path(node,'somedata'), self.get_tblspace_path(node_restored,'somedata'))])
 
         # GET PHYSICAL CONTENT
-        pgdata_new = self.pgdata_content(node_restored.data_dir)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
         # COMPARE PHYSICAL CONTENT
-        # self.compare_pgdata(pgdata, pgdata_restored)
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
         # START RESTORED NODE
         node_restored.start()
 
@@ -649,9 +658,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
         result = node.safe_psql("postgres", "select * from t_heap")
 
-        pgdata_new = self.pgdata_content(restored_node.data_dir)
-        # COMPARE PHYSICAL CONTENT
-        # self.compare_pgdata(pgdata, pgdata_restored)
+        pgdata_restored = self.pgdata_content(restored_node.data_dir)
+
         # START RESTORED NODE
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
         restored_node.start()
@@ -660,6 +668,11 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         result_new = restored_node.safe_psql("postgres", "select * from t_heap")
         self.assertEqual(result, result_new)
+
+        # COMPARE PHYSICAL CONTENT
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
+
         restored_node.cleanup()
         shutil.rmtree(tblspc_path_new, ignore_errors=True)
 
@@ -675,9 +688,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
 
-        # COMPARE PHYSICAL CONTENT
-        pgdata_new = self.pgdata_content(restored_node.data_dir)
-        # self.compare_pgdata(pgdata, pgdata_restored)
+        # GET PHYSICAL CONTENT
+        pgdata_restored = self.pgdata_content(restored_node.data_dir)
 
         # START RESTORED NODE
         restored_node.start()
@@ -687,13 +699,16 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         result_new = restored_node.safe_psql("postgres", "select * from t_heap")
         self.assertEqual(result, result_new)
 
+        if self.paranoia:
+            # COMPARE PHYSICAL CONTENT
+            self.compare_pgdata(pgdata, pgdata_restored)
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_relation_with_multiple_segments(self):
         """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
-        self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
@@ -736,7 +751,6 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
-        # self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
         restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
@@ -745,7 +759,12 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             time.sleep(1)
 
         result_new = restored_node.safe_psql("postgres", "select * from pgbench_accounts")
+
+        # COMPARE RESTORED FILES
         self.assertEqual(result, result_new)
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
