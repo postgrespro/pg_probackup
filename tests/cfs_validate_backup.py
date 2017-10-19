@@ -20,6 +20,6 @@ class CfsValidateBackupNoenc(ProbackupTest,unittest.TestCase):
         pass
 
 
-class CfsValidateBackupNoenc(CfsValidateBackupNoenc):
-    os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
-    super(CfsValidateBackupNoenc).setUp()
+#class CfsValidateBackupNoenc(CfsValidateBackupNoenc):
+#    os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
+#    super(CfsValidateBackupNoenc).setUp()

@@ -1,6 +1,7 @@
 import os
 import unittest
 import random
+import shutil
 
 from .helpers.cfs_helpers import find_by_extensions, find_by_name, find_by_pattern, corrupt_file
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
@@ -21,9 +22,10 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
-                'ptrack_enable': 'on',
+#                'ptrack_enable': 'on',
                 'cfs_encryption': 'off',
-                'max_wal_senders': '2'
+                'max_wal_senders': '2',
+                'shared_buffers': '200MB'
             }
         )
 
@@ -34,7 +36,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.node.start()
 
         self.create_tblspace_in_node(self.node, tblspace_name, True)
-        
+
         tblspace = self.node.safe_psql(
             "postgres",
             "SELECT * FROM pg_tablespace WHERE spcname='{0}'".format(tblspace_name)
@@ -95,6 +97,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
                     repr(e.message)
                 )
             )
+
         show_backup = self.show_pb(self.backup_dir, 'node', backup_id)
         self.assertEqual(
             "OK",
@@ -104,10 +107,6 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(
             find_by_name([os.path.join(self.backup_dir, 'backups', 'node', backup_id)], ['pg_compression']),
             "ERROR: File pg_compression not found in backup dir"
-        )
-        self.assertFalse(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['_ptrack']),
-            "ERROR: _ptrack files found in backup dir"
         )
 
     # @unittest.expectedFailure
@@ -131,11 +130,12 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             backup_id = self.backup_node(self.backup_dir, 'node', self.node, backup_type='full')
         except ProbackupException as e:
             self.fail(
-                "ERROR: Full backup failed.\n {0} \n {0}".format(
-                    repr(self.cmd),
-                    repr(e.message)
+                "\n ERROR: {0}\n CMD: {1}".format(
+                    repr(e.message),
+                    repr(self.cmd)
                 )
             )
+            return False
         show_backup = self.show_pb(self.backup_dir, 'node', backup_id)
         self.assertEqual(
             "OK",
@@ -147,15 +147,11 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: File pg_compression not found in {0}".format(os.path.join(self.backup_dir, 'node', backup_id))
         )
         self.assertTrue(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['.cfm']),
+            find_by_extensions([os.path.join(self.backup_dir, 'backups', 'node', backup_id)], ['.cfm']),
             "ERROR: .cfm files not found in backup dir"
         )
-        self.assertFalse(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['_ptrack']),
-            "ERROR: _ptrack files was found in backup dir"
-        )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     # PGPRO-1018 invalid file size
     def test_fullbackup_after_create_table_stream(self):
@@ -195,13 +191,9 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['.cfm']),
             "ERROR: .cfm files not found in backup dir"
         )
-        self.assertFalse(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['_ptrack']),
-            "ERROR: _ptrack files was found in backup dir"
-        )
 
     # --- Section: Incremental from empty tablespace --- #
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_empty_tablespace_ptrack_after_create_table(self):
         """
@@ -251,12 +243,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['.cfm']),
             "ERROR: .cfm files not found in backup dir"
         )
-        self.assertFalse(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['_ptrack']),
-            "ERROR: _ptrack files was found in backup dir"
-        )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_empty_tablespace_ptrack_after_create_table_stream(self):
         """
@@ -307,7 +295,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: .cfm files not found in backup dir"
         )
         self.assertFalse(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['_ptrack']),
+            find_by_extensions([os.path.join(self.backup_dir, 'backups', 'node', backup_id)], ['_ptrack']),
             "ERROR: _ptrack files was found in backup dir"
         )
 
@@ -358,12 +346,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: File pg_compression not found"
         )
         self.assertTrue(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['.cfm']),
+            find_by_extensions([os.path.join(self.backup_dir, 'backups', 'node', backup_id)], ['.cfm']),
             "ERROR: .cfm files not found in backup dir"
-        )
-        self.assertFalse(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['_ptrack']),
-            "ERROR: _ptrack files was found in backup dir"
         )
 
     # @unittest.expectedFailure
@@ -413,16 +397,16 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: File pg_compression not found"
         )
         self.assertTrue(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['.cfm']),
+            find_by_extensions([os.path.join(self.backup_dir, 'backups', 'node', backup_id)], ['.cfm']),
             "ERROR: .cfm files not found in backup dir"
         )
         self.assertFalse(
-            find_by_extensions([os.path.join(self.backup_dir, 'node', backup_id)], ['_ptrack']),
+            find_by_extensions([os.path.join(self.backup_dir, 'backups', 'node', backup_id)], ['_ptrack']),
             "ERROR: _ptrack files was found in backup dir"
         )
 
     # --- Section: Incremental from fill tablespace --- #
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_after_create_table_ptrack_after_create_table(self):
         """
@@ -480,7 +464,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             )
         )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_after_create_table_ptrack_after_create_table_stream(self):
         """
@@ -598,6 +582,83 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    def test_multiple_segments(self):
+        """
+        Case:   Make full backup before created table in the tablespace.
+                Make ptrack backup after create table.
+                Check: incremental backup will not greater as full
+        """
+
+        self.node.safe_psql(
+            "postgres",
+            "CREATE TABLE {0} TABLESPACE {1} \
+                AS SELECT i AS id, MD5(i::text) AS text, \
+                MD5(repeat(i::text,10))::tsvector AS tsvector \
+                FROM generate_series(0,10050000) i".format('t_heap', tblspace_name)
+        )
+
+        full_result = self.node.safe_psql("postgres", "SELECT * FROM t_heap")
+
+        try:
+            backup_id_full = self.backup_node(self.backup_dir, 'node', self.node, backup_type='full')
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        self.node.safe_psql(
+            "postgres",
+            'INSERT INTO {0} \
+                SELECT i AS id, MD5(i::text) AS text, \
+                MD5(repeat(i::text,10))::tsvector AS tsvector \
+                FROM generate_series(0,10050000) i'.format('t_heap')
+        )
+
+        page_result = self.node.safe_psql("postgres", "SELECT * FROM t_heap")
+
+        try:
+            backup_id_page = self.backup_node(self.backup_dir, 'node', self.node, backup_type='page')
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        show_backup_full = self.show_pb(self.backup_dir, 'node', backup_id_full)
+        show_backup_page = self.show_pb(self.backup_dir, 'node', backup_id_page)
+        self.assertGreater(
+            show_backup_page["data-bytes"],
+            show_backup_full["data-bytes"],
+            "ERROR: Size of incremental backup greater as full. \n INFO: {0} >{1}".format(
+                show_backup_page["data-bytes"],
+                show_backup_full["data-bytes"]
+            )
+        )
+
+        # CHECK FULL BACKUP
+        self.node.stop()
+        self.node.cleanup()
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name), ignore_errors=True)
+        self.restore_node(self.backup_dir, 'node', self.node, backup_id=backup_id_full, options=["-j", "4"])
+        self.node.start()
+        self.assertEqual(full_result, self.node.safe_psql("postgres", "SELECT * FROM t_heap"), 'Lost data after restore')
+
+        # CHECK PAGE BACKUP
+        self.node.stop()
+        self.node.cleanup()
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name), ignore_errors=True)
+        self.restore_node(self.backup_dir, 'node', self.node, backup_id=backup_id_page, options=["-j", "4"])
+        self.node.start()
+        self.assertEqual(page_result, self.node.safe_psql("postgres", "SELECT * FROM t_heap"), 'Lost data after restore')
+
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
     def test_fullbackup_after_create_table_page_after_create_table_stream(self):
         """
         Case:   Make full backup before created table in the tablespace(--stream).
@@ -655,7 +716,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
     # --- Make backup with not valid data(broken .cfm) --- #
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_delete_random_cfm_file_from_tablespace_dir(self):
         self.node.safe_psql(
@@ -679,7 +740,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_delete_file_pg_compression_from_tablespace_dir(self):
         os.remove(find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression'])[0])
@@ -689,7 +750,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_delete_random_data_file_from_tablespace_dir(self):
         self.node.safe_psql(
@@ -713,7 +774,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_broken_random_cfm_file_into_tablespace_dir(self):
         self.node.safe_psql(
@@ -724,7 +785,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
                 FROM generate_series(0,256) i'.format('t1', tblspace_name)
         )
 
-        list_cmf = find_by_extensions([self.get_tblspace_path(self.node,tblspace_name)],['.cfm'])
+        list_cmf = find_by_extensions([self.get_tblspace_path(self.node, tblspace_name)],['.cfm'])
         self.assertTrue(
             list_cmf,
             "ERROR: .cfm-files not found into tablespace dir"
@@ -737,7 +798,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_broken_random_data_file_into_tablespace_dir(self):
         self.node.safe_psql(
@@ -761,7 +822,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_broken_file_pg_compression_into_tablespace_dir(self):
 
@@ -783,8 +844,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, self.fname)
 
 
-class CfsBackupEncTest(CfsBackupNoEncTest):
-    # --- Begin --- #
-    def setUp(self):
-        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
-        super(CfsBackupEncTest, self).setUp()
+#class CfsBackupEncTest(CfsBackupNoEncTest):
+#    # --- Begin --- #
+#    def setUp(self):
+#        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
+#        super(CfsBackupEncTest, self).setUp()

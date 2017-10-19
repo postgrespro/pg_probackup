@@ -33,7 +33,7 @@ class CfsRestoreBase(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
-                'ptrack_enable': 'on',
+#                'ptrack_enable': 'on',
                 'cfs_encryption': 'off',
                 'max_wal_senders': '2'
             }
@@ -171,7 +171,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         """
         Case: Restore instance from valid full backup to old location.
         """
-        self.node.stop(['-m', 'immediate'])
+        self.node.stop()
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
@@ -209,11 +209,12 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         """
         Case: Restore instance from valid full backup to new location.
         """
-        self.node.stop(['-m', 'immediate'])
+        self.node.stop()
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
         self.node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
+        self.node_new.cleanup()
 
         try:
             self.restore_node(self.backup_dir, 'node', self.node_new, backup_id=self.backup_id)
@@ -225,7 +226,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
                 )
             )
         self.assertTrue(
-            find_by_name([self.get_tblspace_path(self.node_new, tblspace_name)], ['pg_compression']),
+            find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression']),
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
@@ -250,11 +251,12 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         """
         Case: Restore instance from valid full backup to new location.
         """
-        self.node.stop(['-m', 'immediate'])
+        self.node.stop()
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
         self.node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
+        self.node_new.cleanup()
 
         try:
             self.restore_node(self.backup_dir, 'node', self.node_new, backup_id=self.backup_id, options=['-j', '5'])
@@ -266,7 +268,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
                 )
             )
         self.assertTrue(
-            find_by_name([self.get_tblspace_path(self.node_new, tblspace_name)], ['pg_compression']),
+            find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression']),
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
@@ -288,7 +290,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_restore_from_fullbackup_to_old_location_tablespace_new_location(self):
-        self.node.stop(['-m', 'immediate'])
+        self.node.stop()
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
@@ -299,8 +301,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
                 self.backup_dir,
                 'node', self.node,
                 backup_id=self.backup_id,
-                options=[
-                    "-T %s = %s".format(
+                options=["-T", "{0}={1}".format(
                         self.get_tblspace_path(self.node, tblspace_name),
                         self.get_tblspace_path(self.node, tblspace_name_new)
                     )
@@ -335,7 +336,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_restore_from_fullbackup_to_old_location_tablespace_new_location_3_jobs(self):
-        self.node.stop(['-m', 'immediate'])
+        self.node.stop()
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
@@ -346,10 +347,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
                 self.backup_dir,
                 'node', self.node,
                 backup_id=self.backup_id,
-                options=[
-                    "j",
-                    "3",
-                    "-T %s = %s".format(
+                options=["-j", "3", "-T", "{0}={1}".format(
                         self.get_tblspace_path(self.node, tblspace_name),
                         self.get_tblspace_path(self.node, tblspace_name_new)
                     )
@@ -438,15 +436,15 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         pass
 
 
-class CfsRestoreEncEmptyTablespaceTest(CfsRestoreNoencEmptyTablespaceTest):
-    # --- Begin --- #
-    def setUp(self):
-        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
-        super(CfsRestoreNoencEmptyTablespaceTest, self).setUp()
-
-
-class CfsRestoreEncTest(CfsRestoreNoencTest):
-    # --- Begin --- #
-    def setUp(self):
-        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
-        super(CfsRestoreNoencTest, self).setUp()
+#class CfsRestoreEncEmptyTablespaceTest(CfsRestoreNoencEmptyTablespaceTest):
+#    # --- Begin --- #
+#    def setUp(self):
+#        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
+#        super(CfsRestoreNoencEmptyTablespaceTest, self).setUp()
+#
+#
+#class CfsRestoreEncTest(CfsRestoreNoencTest):
+#    # --- Begin --- #
+#    def setUp(self):
+#        os.environ["PG_CIPHER_KEY"] = "super_secret_cipher_key"
+#        super(CfsRestoreNoencTest, self).setUp()
