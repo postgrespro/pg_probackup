@@ -317,10 +317,13 @@ backup_data_file(const char *from_root, const char *to_root,
 			 file->path, strerror(errno));
 	}
 
-	if (file->size % BLCKSZ != 0)
+	if (!file->is_cfs)
 	{
-		fclose(in);
-		elog(ERROR, "File: %s, invalid file size %lu", file->path, file->size);
+		if (file->size % BLCKSZ != 0)
+		{
+			fclose(in);
+			elog(ERROR, "File: %s, invalid file size %lu", file->path, file->size);
+		}
 	}
 
 	/*
@@ -470,6 +473,7 @@ restore_data_file(const char *from_root,
 		if (header.block < blknum)
 			elog(ERROR, "backup is broken at block %u", blknum);
 
+		elog(VERBOSE, "file %s, header compressed size %d", file->path, header.compressed_size);
 		Assert(header.compressed_size <= BLCKSZ);
 
 		read_len = fread(compressed_page.data, 1,

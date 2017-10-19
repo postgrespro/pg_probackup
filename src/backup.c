@@ -118,6 +118,7 @@ static XLogRecPtr get_last_ptrack_lsn(void);
 static void check_server_version(void);
 static void check_system_identifiers(void);
 static void confirm_block_size(const char *name, int blcksz);
+static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 
 
 #define disconnect_and_exit(code)				\
@@ -1878,6 +1879,7 @@ backup_files(void *arg)
 		struct stat	buf;
 
 		pgFile *file = (pgFile *) parray_get(arguments->backup_files_list, i);
+		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
 			continue;
 
@@ -1918,8 +1920,9 @@ backup_files(void *arg)
 		if (S_ISREG(buf.st_mode))
 		{
 			/* copy the file into backup */
-			if (file->is_datafile)
+			if (file->is_datafile && !file->is_cfs)
 			{
+				/* backup block by block if datafile AND not compressed by cfs*/
 				if (!backup_data_file(arguments->from_root,
 									  arguments->to_root, file,
 									  arguments->prev_backup_start_lsn))
@@ -1965,12 +1968,14 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 		int 		sscanf_result;
 
 		relative = GetRelativePath(file->path, root);
+		file->is_cfs = false;
 
 		elog(VERBOSE, "-----------------------------------------------------: %s", relative);
 		if (path_is_prefix_of_path("global", relative))
 		{
 			file->tblspcOid = GLOBALTABLESPACE_OID;
 			sscanf_result = sscanf(relative, "global/%s", filename);
+			elog(VERBOSE, "global sscanf result: %i", sscanf_result);
 			if (strcmp(relative, "global") == 0)
 			{
 				Assert(S_ISDIR(file->mode));
@@ -1986,6 +1991,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 		{
 			file->tblspcOid = DEFAULTTABLESPACE_OID;
 			sscanf_result = sscanf(relative, "base/%u/%s", &(file->dbOid), filename);
+			elog(VERBOSE, "base sscanf result: %i", sscanf_result);
 			if (strcmp(relative, "base") == 0)
 			{
 				Assert(S_ISDIR(file->mode));
@@ -2007,6 +2013,8 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 			char	*temp_relative_path = palloc(MAXPGPATH);
 
 			sscanf_result = sscanf(relative, "pg_tblspc/%u/%s", &(file->tblspcOid), temp_relative_path);
+			elog(VERBOSE, "pg_tblspc sscanf result: %i", sscanf_result);
+
 			if (strcmp(relative, "pg_tblspc") == 0)
 			{
 				Assert(S_ISDIR(file->mode));
@@ -2022,10 +2030,28 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				/*continue parsing */
 				sscanf_result = sscanf(temp_relative_path+strlen(TABLESPACE_VERSION_DIRECTORY)+1, "%u/%s",
 									   &(file->dbOid), filename);
+				elog(VERBOSE, "TABLESPACE_VERSION_DIRECTORY sscanf result: %i", sscanf_result);
 
-				if (sscanf_result == 0)
+				if (sscanf_result == -1)
 				{
-					elog(VERBOSE, "the TABLESPACE_VERSION_DIRECTORY itself, filepath %s", relative);
+					elog(VERBOSE, "The TABLESPACE_VERSION_DIRECTORY itself, filepath %s", relative);
+				}
+				else if (sscanf_result == 0)
+				{
+					/* Found file in pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
+					   Legal only in case of 'pg_compression'
+					 */
+					if (strcmp(relative + strlen(relative) - strlen("pg_compression"), "pg_compression") == 0)
+					{
+						elog(VERBOSE, "Found pg_compression file in TABLESPACE_VERSION_DIRECTORY, filepath %s", relative);
+						/*Set every datafile in tablespace as is_cfs */
+						set_cfs_datafiles(files, root, relative, i);
+					}
+					else
+					{
+						elog(VERBOSE, "Found illegal file in TABLESPACE_VERSION_DIRECTORY, filepath %s", relative);
+					}
+
 				}
 				else if (sscanf_result == 1)
 				{
@@ -2033,9 +2059,13 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					elog(VERBOSE, "dboid %u, filepath %s", file->dbOid, relative);
 					file->is_database = true;
 				}
-				else
+				else if (sscanf_result == 2)
 				{
 					elog(VERBOSE, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
+				}
+				else
+				{
+					elog(VERBOSE, "Illegal file filepath %s", relative);
 				}
 			}
 		}
@@ -2081,7 +2111,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				 * Check that and do not mark them with 'is_datafile' flag.
 				 */
 				char *forkNameptr;
-				char *suffix = palloc(MAXPGPATH);;
+				char *suffix = palloc(MAXPGPATH);
 
 				forkNameptr = strstr(filename, "_");
 				if (forkNameptr != NULL)
@@ -2108,7 +2138,16 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				{
 					/* first segment of the relfile */
 					elog(VERBOSE, "relOid %u, segno %d, filepath %s", file->relOid, 0, relative);
-					file->is_datafile = true;
+					if (strcmp(relative + strlen(relative) - strlen("cfm"), "cfm") == 0)
+					{
+						/* reloid.cfm */
+						elog(VERBOSE, "Found cfm file %s", relative);
+					}
+					else
+					{
+						elog(VERBOSE, "Found first segment of the relfile %s", relative);
+						file->is_datafile = true;
+					}
 				}
 				else if (sscanf_result == 2)
 				{
@@ -2126,8 +2165,51 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				}
 			}
 		}
- 	}
+	}
 }
+
+/* If file is equal to pg_compression, then we consider this tablespace as
+ * cfs-compressed and should mark every file in this tablespace as cfs-file
+ * Setting is_cfs is done via going back through 'files' set every file
+ * that contain cfs_tablespace in his path as 'is_cfs'
+ * Goings back through array 'files' is valid option possible because of current
+ * sort rules:
+ * tblspcOid/TABLESPACE_VERSION_DIRECTORY
+ * tblspcOid/TABLESPACE_VERSION_DIRECTORY/dboid
+ * tblspcOid/TABLESPACE_VERSION_DIRECTORY/dboid/1
+ * tblspcOid/TABLESPACE_VERSION_DIRECTORY/dboid/1.cfm
+ * tblspcOid/TABLESPACE_VERSION_DIRECTORY/pg_compression
+ */
+static void
+set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
+{
+	int len;
+	size_t p;
+	char *cfs_tblspc_path;
+
+	cfs_tblspc_path = strdup(relative);
+	len = strlen("/pg_compression");
+	cfs_tblspc_path[strlen(cfs_tblspc_path) - len] = 0;
+	elog(VERBOSE, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
+
+	for (p = i; p != 0; p--)
+	{
+		char	   *relative_prev_file;
+		pgFile	   *prev_file = (pgFile *) parray_get(files, p);
+		relative_prev_file = GetRelativePath(prev_file->path, root);
+		//elog(VERBOSE, "P: %d, CHECKING file %s", p, relative_prev_file);
+		if (strstr(relative_prev_file, cfs_tblspc_path) != NULL)
+		{
+			if (S_ISREG(prev_file->mode) && prev_file->is_datafile)
+			{
+				elog(VERBOSE, "Setting as 'is_cfs' file %s, fork %s",
+				relative_prev_file, prev_file->forkName);
+				prev_file->is_cfs = true;
+			}
+		}
+	}
+}
+
 
 /*
  * Output the list of files to backup catalog DATABASE_FILE_LIST

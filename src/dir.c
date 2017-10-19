@@ -678,9 +678,11 @@ print_file_list(FILE *out, const parray *files, const char *root)
 			path = GetRelativePath(path, root);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\", \"crc\":\"%u\", \"compress_alg\":\"%s\"",
+					 "\"is_datafile\":\"%u\", \"is_cfs\":\"%u\", \"crc\":\"%u\","
+					 "\"compress_alg\":\"%s\"",
 				path, (unsigned long) file->write_size, file->mode,
-				file->is_datafile?1:0, file->crc, deparse_compress_alg(file->compress_alg));
+				file->is_datafile?1:0, file->is_cfs?1:0, file->crc,
+				deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
@@ -853,6 +855,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		uint64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
+					is_cfs,
 					crc,
 					segno;
 		pgFile	   *file;
@@ -861,6 +864,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		get_control_value(buf, "size", NULL, &write_size, true);
 		get_control_value(buf, "mode", NULL, &mode, true);
 		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
+		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
 		get_control_value(buf, "crc", NULL, &crc, true);
 
 		/* optional fields */
@@ -878,6 +882,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file->write_size = (size_t) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
+		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
 		if (linked[0])
