@@ -1964,11 +1964,12 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 		char	   *relative;
-		char		*filename = palloc(MAXPGPATH);
+		char		filename[MAXPGPATH];
 		int 		sscanf_result;
 
 		relative = GetRelativePath(file->path, root);
 		file->is_cfs = false;
+		filename[0] = '\0';
 
 		elog(VERBOSE, "-----------------------------------------------------: %s", relative);
 		if (path_is_prefix_of_path("global", relative))
@@ -2010,7 +2011,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 		}
 		else if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
 		{
-			char	*temp_relative_path = palloc(MAXPGPATH);
+			char		temp_relative_path[MAXPGPATH];
 
 			sscanf_result = sscanf(relative, "pg_tblspc/%u/%s", &(file->tblspcOid), temp_relative_path);
 			elog(VERBOSE, "pg_tblspc sscanf result: %i", sscanf_result);
@@ -2084,7 +2085,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 		}
 
 		/* Check files located inside database directories */
-		if (filename && file->dbOid != 0)
+		if (filename[0] != '\0' && file->dbOid != 0)
 		{
 			if (strcmp(filename, "pg_internal.init") == 0)
 			{
@@ -2111,7 +2112,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 				 * Check that and do not mark them with 'is_datafile' flag.
 				 */
 				char *forkNameptr;
-				char *suffix = palloc(MAXPGPATH);
+				char suffix[MAXPGPATH];
 
 				forkNameptr = strstr(filename, "_");
 				if (forkNameptr != NULL)
