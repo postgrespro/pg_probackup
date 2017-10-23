@@ -393,15 +393,20 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			if (file_name == NULL)
 				file_name = file->path;
 			else
+			{
 				file_name++;
+				file->name = file_name;
+			}
 
 			/* Check if we need to exclude file by name */
 			for (i = 0; pgdata_exclude_files[i]; i++)
-				if (strcmp(file_name, pgdata_exclude_files[i]) == 0)
+				if (strcmp(file->name, pgdata_exclude_files[i]) == 0)
+				{
 					/* Skip */
+					elog(VERBOSE, "Excluding file: %s", file->name);
 					return;
+				}
 		}
-
 		parray_append(files, file);
 	}
 
@@ -463,7 +468,10 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			if (dirname == NULL)
 				dirname = file->path;
 			else
+			{
 				dirname++;
+				file->name = dirname;
+			}
 
 			/*
 			 * If the item in the exclude list starts with '/', compare to the
@@ -472,6 +480,7 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			 */
 			for (i = 0; exclude && pgdata_exclude_dir[i]; i++)
 			{
+				/* Full-path exclude*/
 				if (pgdata_exclude_dir[i][0] == '/')
 				{
 					if (strcmp(file->path, pgdata_exclude_dir[i]) == 0)
@@ -480,14 +489,17 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 						break;
 					}
 				}
-				else if (strcmp(dirname, pgdata_exclude_dir[i]) == 0)
+				else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 				{
 					skip = true;
 					break;
 				}
 			}
 			if (skip)
+			{
+				elog(VERBOSE, "Excluding directory content: %s", file->name);
 				break;
+			}
 		}
 
 		/* open directory and list contents */

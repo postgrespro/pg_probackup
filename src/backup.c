@@ -1968,7 +1968,6 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 		int 		sscanf_result;
 
 		relative = GetRelativePath(file->path, root);
-		file->is_cfs = false;
 		filename[0] = '\0';
 
 		elog(VERBOSE, "-----------------------------------------------------: %s", relative);
@@ -2042,7 +2041,7 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					/* Found file in pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
 					   Legal only in case of 'pg_compression'
 					 */
-					if (strcmp(relative + strlen(relative) - strlen("pg_compression"), "pg_compression") == 0)
+					if (strcmp(file->name, "pg_compression") == 0)
 					{
 						elog(VERBOSE, "Found pg_compression file in TABLESPACE_VERSION_DIRECTORY, filepath %s", relative);
 						/*Set every datafile in tablespace as is_cfs */
@@ -2186,29 +2185,39 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 {
 	int len;
 	size_t p;
+	pgFile *prev_file;
 	char *cfs_tblspc_path;
+	char *relative_prev_file;
 
 	cfs_tblspc_path = strdup(relative);
 	len = strlen("/pg_compression");
 	cfs_tblspc_path[strlen(cfs_tblspc_path) - len] = 0;
 	elog(VERBOSE, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
 
-	for (p = i; p != 0; p--)
+	for (p = i; p >= 0; p--)
 	{
-		char	   *relative_prev_file;
-		pgFile	   *prev_file = (pgFile *) parray_get(files, p);
+		prev_file = (pgFile *) parray_get(files, p);
 		relative_prev_file = GetRelativePath(prev_file->path, root);
-		//elog(VERBOSE, "P: %d, CHECKING file %s", p, relative_prev_file);
+
+		//elog(VERBOSE, "P: %lu, Checking file in cfs tablespace %s", p, relative_prev_file);
+		elog(VERBOSE, "Checking file in cfs tablespace %s", relative_prev_file);
+
 		if (strstr(relative_prev_file, cfs_tblspc_path) != NULL)
 		{
 			if (S_ISREG(prev_file->mode) && prev_file->is_datafile)
 			{
-				elog(VERBOSE, "Setting as 'is_cfs' file %s, fork %s",
-				relative_prev_file, prev_file->forkName);
+				elog(VERBOSE, "Setting 'is_cfs' on file %s, name %s",
+					relative_prev_file, prev_file->name);
 				prev_file->is_cfs = true;
 			}
 		}
+		else
+		{
+			elog(VERBOSE, "Breaking on %s", relative_prev_file);
+			break;
+		}
 	}
+	free(cfs_tblspc_path);
 }
 
 

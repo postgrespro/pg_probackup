@@ -317,13 +317,10 @@ backup_data_file(const char *from_root, const char *to_root,
 			 file->path, strerror(errno));
 	}
 
-	if (!file->is_cfs)
+	if (file->size % BLCKSZ != 0)
 	{
-		if (file->size % BLCKSZ != 0)
-		{
-			fclose(in);
-			elog(ERROR, "File: %s, invalid file size %lu", file->path, file->size);
-		}
+		fclose(in);
+		elog(ERROR, "File: %s, invalid file size %lu", file->path, file->size);
 	}
 
 	/*

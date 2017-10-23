@@ -80,6 +80,7 @@ typedef enum CompressAlg
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
 {
+	char	*name;			/* file or directory name */
 	mode_t	mode;			/* protection (file type and permission) */
 	size_t	size;			/* size of the file */
 	size_t	read_size;		/* size of the portion read (if only some pages are
@@ -90,7 +91,7 @@ typedef struct pgFile
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char	*linked;		/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char	*path;			/* path of the file */
+	char	*path;			/* absolute path of the file */
 	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
 	Oid		dbOid;			/* dbOid extracted from path, if applicable */
 	Oid		relOid;			/* relOid extracted from path, if applicable */
