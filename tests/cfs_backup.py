@@ -659,6 +659,112 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    def test_multiple_segments_in_multiple_tablespaces(self):
+        """
+        Case:   Make full backup before created table in the tablespace.
+                Make ptrack backup after create table.
+                Check: incremental backup will not greater as full
+        """
+        tblspace_name_1 = 'tblspace_name_1'
+        tblspace_name_2 = 'tblspace_name_2'
+
+        self.create_tblspace_in_node(self.node, tblspace_name_1, True)
+        self.create_tblspace_in_node(self.node, tblspace_name_2, True)
+
+        self.node.safe_psql(
+            "postgres",
+            "CREATE TABLE {0} TABLESPACE {1} \
+                AS SELECT i AS id, MD5(i::text) AS text, \
+                MD5(repeat(i::text,10))::tsvector AS tsvector \
+                FROM generate_series(0,10050000) i".format('t_heap_1', tblspace_name_1)
+        )
+
+        self.node.safe_psql(
+            "postgres",
+            "CREATE TABLE {0} TABLESPACE {1} \
+                AS SELECT i AS id, MD5(i::text) AS text, \
+                MD5(repeat(i::text,10))::tsvector AS tsvector \
+                FROM generate_series(0,10050000) i".format('t_heap_2', tblspace_name_2)
+        )
+
+        full_result_1 = self.node.safe_psql("postgres", "SELECT * FROM t_heap_1")
+        full_result_2 = self.node.safe_psql("postgres", "SELECT * FROM t_heap_2")
+
+        try:
+            backup_id_full = self.backup_node(self.backup_dir, 'node', self.node, backup_type='full')
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        self.node.safe_psql(
+            "postgres",
+            'INSERT INTO {0} \
+                SELECT i AS id, MD5(i::text) AS text, \
+                MD5(repeat(i::text,10))::tsvector AS tsvector \
+                FROM generate_series(0,10050000) i'.format('t_heap_1')
+        )
+
+        self.node.safe_psql(
+            "postgres",
+            'INSERT INTO {0} \
+                SELECT i AS id, MD5(i::text) AS text, \
+                MD5(repeat(i::text,10))::tsvector AS tsvector \
+                FROM generate_series(0,10050000) i'.format('t_heap_2')
+        )
+
+        page_result_1 = self.node.safe_psql("postgres", "SELECT * FROM t_heap_1")
+        page_result_2 = self.node.safe_psql("postgres", "SELECT * FROM t_heap_2")
+
+        try:
+            backup_id_page = self.backup_node(self.backup_dir, 'node', self.node, backup_type='page')
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        show_backup_full = self.show_pb(self.backup_dir, 'node', backup_id_full)
+        show_backup_page = self.show_pb(self.backup_dir, 'node', backup_id_page)
+        self.assertGreater(
+            show_backup_page["data-bytes"],
+            show_backup_full["data-bytes"],
+            "ERROR: Size of incremental backup greater as full. \n INFO: {0} >{1}".format(
+                show_backup_page["data-bytes"],
+                show_backup_full["data-bytes"]
+            )
+        )
+
+        # CHECK FULL BACKUP
+        self.node.stop()
+        self.node.cleanup()
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name), ignore_errors=True)
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name_1), ignore_errors=True)
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name_2), ignore_errors=True)
+        self.restore_node(self.backup_dir, 'node', self.node, backup_id=backup_id_full, options=["-j", "4"])
+        self.node.start()
+        self.assertEqual(full_result_1, self.node.safe_psql("postgres", "SELECT * FROM t_heap_1"), 'Lost data after restore')
+        self.assertEqual(full_result_2, self.node.safe_psql("postgres", "SELECT * FROM t_heap_2"), 'Lost data after restore')
+
+        # CHECK PAGE BACKUP
+        self.node.stop()
+        self.node.cleanup()
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name), ignore_errors=True)
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name_1), ignore_errors=True)
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name_2), ignore_errors=True)
+        self.restore_node(self.backup_dir, 'node', self.node, backup_id=backup_id_page, options=["-j", "4"])
+        self.node.start()
+        self.assertEqual(page_result_1, self.node.safe_psql("postgres", "SELECT * FROM t_heap_1"), 'Lost data after restore')
+        self.assertEqual(page_result_2, self.node.safe_psql("postgres", "SELECT * FROM t_heap_2"), 'Lost data after restore')
+
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
     def test_fullbackup_after_create_table_page_after_create_table_stream(self):
         """
         Case:   Make full backup before created table in the tablespace(--stream).
