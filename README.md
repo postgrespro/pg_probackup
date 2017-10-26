@@ -6,6 +6,8 @@ The extension is compatible with:
 * PostgreSQL 9.5, 9.6, 10;
 
 `PTRACK` backup requires:
+* vanilla PostgreSQL with ptrack support. Currently there are patches for [PostgreSQL 9.6](https://gist.githubusercontent.com/gsmol/3d9ad9ea2568e0f4aaeeda62b59e30f8/raw/8f28e207c1aa172a9597fcda49e69b086c6b42bd/ptrack_9.6.5_v1.3.patch) and [PostgreSQL 10](https://gist.githubusercontent.com/gsmol/0ce69df847268333b72d72079bd48315/raw/d35d49c28446637ea3fe9dfc1a400bb298bf3318/ptrack_10.0_v1.3.patch);
+or
 * Postgres Pro Standard 9.5, 9.6;
 or
 * Postgres Pro Enterprise;
