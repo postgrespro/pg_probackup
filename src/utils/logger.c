@@ -86,6 +86,9 @@ write_elevel(FILE *stream, int elevel)
 {
 	switch (elevel)
 	{
+		case VERBOSE:
+			fputs("VERBOSE: ", stream);
+			break;
 		case LOG:
 			fputs("LOG: ", stream);
 			break;

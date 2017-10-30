@@ -24,7 +24,9 @@ include $(top_srcdir)/contrib/contrib-global.mk
 endif # USE_PGXS
 
 ifeq ($(top_srcdir),../..)
-srchome=$(top_srcdir)/..
+ ifeq ($(LN_S),ln -s)
+	srchome=$(top_srcdir)/..
+ endif
 else
 srchome=$(top_srcdir)
 endif

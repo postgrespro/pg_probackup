@@ -393,15 +393,20 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			if (file_name == NULL)
 				file_name = file->path;
 			else
+			{
 				file_name++;
+				file->name = file_name;
+			}
 
 			/* Check if we need to exclude file by name */
 			for (i = 0; pgdata_exclude_files[i]; i++)
-				if (strcmp(file_name, pgdata_exclude_files[i]) == 0)
+				if (strcmp(file->name, pgdata_exclude_files[i]) == 0)
+				{
 					/* Skip */
+					elog(VERBOSE, "Excluding file: %s", file->name);
 					return;
+				}
 		}
-
 		parray_append(files, file);
 	}
 
@@ -463,7 +468,10 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			if (dirname == NULL)
 				dirname = file->path;
 			else
+			{
 				dirname++;
+				file->name = dirname;
+			}
 
 			/*
 			 * If the item in the exclude list starts with '/', compare to the
@@ -472,6 +480,7 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			 */
 			for (i = 0; exclude && pgdata_exclude_dir[i]; i++)
 			{
+				/* Full-path exclude*/
 				if (pgdata_exclude_dir[i][0] == '/')
 				{
 					if (strcmp(file->path, pgdata_exclude_dir[i]) == 0)
@@ -480,14 +489,17 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 						break;
 					}
 				}
-				else if (strcmp(dirname, pgdata_exclude_dir[i]) == 0)
+				else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 				{
 					skip = true;
 					break;
 				}
 			}
 			if (skip)
+			{
+				elog(VERBOSE, "Excluding directory content: %s", file->name);
 				break;
+			}
 		}
 
 		/* open directory and list contents */
@@ -678,9 +690,11 @@ print_file_list(FILE *out, const parray *files, const char *root)
 			path = GetRelativePath(path, root);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\", \"crc\":\"%u\", \"compress_alg\":\"%s\"",
+					 "\"is_datafile\":\"%u\", \"is_cfs\":\"%u\", \"crc\":\"%u\","
+					 "\"compress_alg\":\"%s\"",
 				path, (unsigned long) file->write_size, file->mode,
-				file->is_datafile?1:0, file->crc, deparse_compress_alg(file->compress_alg));
+				file->is_datafile?1:0, file->is_cfs?1:0, file->crc,
+				deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
@@ -853,6 +867,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		uint64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
+					is_cfs,
 					crc,
 					segno;
 		pgFile	   *file;
@@ -861,6 +876,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		get_control_value(buf, "size", NULL, &write_size, true);
 		get_control_value(buf, "mode", NULL, &mode, true);
 		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
+		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
 		get_control_value(buf, "crc", NULL, &crc, true);
 
 		/* optional fields */
@@ -878,6 +894,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file->write_size = (size_t) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
+		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
 		if (linked[0])

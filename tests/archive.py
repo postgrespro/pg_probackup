@@ -233,7 +233,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         os.remove(file)
         sleep(5)
-        node.safe_psql('postgres', 'select pg_switch_wal()')
+        self.switch_wal_segment(node)
 
         with open(log_file, 'r') as f:
             log_content = f.read()
