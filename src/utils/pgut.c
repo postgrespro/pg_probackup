@@ -38,7 +38,7 @@ const char	   *pgut_dbname = NULL;
 const char	   *host = NULL;
 const char	   *port = NULL;
 const char	   *username = NULL;
-char		   *password = NULL;
+static char	   *password = NULL;
 bool			prompt_password = true;
 
 /* Database connections */
@@ -1086,6 +1086,7 @@ prompt_for_password(const char *username)
 	}
 
 #if PG_VERSION_NUM >= 100000
+	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
 		simple_prompt("Password: ", password, 100, false);
 	else

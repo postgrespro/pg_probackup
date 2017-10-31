@@ -101,7 +101,6 @@ extern const char  *pgut_dbname;
 extern const char  *host;
 extern const char  *port;
 extern const char  *username;
-extern char		   *password;
 extern bool			prompt_password;
 
 extern bool			interrupted;
