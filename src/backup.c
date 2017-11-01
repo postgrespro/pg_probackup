@@ -1939,7 +1939,8 @@ backup_files(void *arg)
 				/* backup block by block if datafile AND not compressed by cfs*/
 				if (!backup_data_file(arguments->from_root,
 									  arguments->to_root, file,
-									  arguments->prev_backup_start_lsn))
+									  arguments->prev_backup_start_lsn,
+									  current.backup_mode))
 				{
 					file->write_size = BYTES_INVALID;
 					elog(LOG, "File \"%s\" was not copied to backup", file->path);

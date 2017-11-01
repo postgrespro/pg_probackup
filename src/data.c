@@ -282,7 +282,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
  */
 bool
 backup_data_file(const char *from_root, const char *to_root,
-				 pgFile *file, XLogRecPtr prev_backup_start_lsn)
+				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
+				 BackupMode backup_mode)
 {
 	char			to_path[MAXPGPATH];
 	FILE			*in;
@@ -291,6 +292,17 @@ backup_data_file(const char *from_root, const char *to_root,
 	BlockNumber		nblocks = 0;
 	int n_blocks_skipped = 0;
 	int n_blocks_read = 0;
+
+	if ((backup_mode == BACKUP_MODE_DIFF_PAGE ||
+		backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+		file->pagemap.bitmapsize == 0)
+	{
+		/*
+		 * There are no changed blocks since last backup. We want make
+		 * incremental backup, so we should exit.
+		 */
+		return false;
+	}
 
 	/* reset size summary */
 	file->read_size = 0;

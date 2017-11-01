@@ -413,7 +413,8 @@ extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
 extern bool backup_data_file(const char *from_root, const char *to_root,
-							 pgFile *file, XLogRecPtr prev_backup_start_lsn);
+							 pgFile *file, XLogRecPtr prev_backup_start_lsn,
+							 BackupMode backup_mode);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern bool copy_file(const char *from_root, const char *to_root,
