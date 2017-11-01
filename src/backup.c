@@ -64,6 +64,8 @@ static int server_version = 0;
 static bool exclusive_backup = false;
 /* Is pg_start_backup() was executed */
 static bool backup_in_progress = false;
+/* Is pg_stop_backup() was sent */
+static bool pg_stop_backup_is_sent = false;
 
 typedef struct
 {
@@ -1558,182 +1560,189 @@ pg_stop_backup(pgBackup *backup)
 	 * postgres archive_command problem and in this case we will
 	 * wait for pg_stop_backup() forever.
 	 */
-	if (!exclusive_backup)
-		/*
-		 * Stop the non-exclusive backup. Besides stop_lsn it returns from
-		 * pg_stop_backup(false) copy of the backup label and tablespace map
-		 * so they can be written to disk by the caller.
-		 */
-		sent = pgut_send(conn,
-						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamptz"
-						   " FROM pg_stop_backup(false)",
-						   0, NULL, WARNING);
-	else
-		sent = pgut_send(conn,
-						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamptz"
-						   " FROM pg_stop_backup()",
-						   0, NULL, WARNING);
 
-	if (!sent)
-		elog(WARNING, "Failed to send pg_stop_backup query");
+	if (!pg_stop_backup_is_sent)
+	{
+		if (!exclusive_backup)
+			/*
+			 * Stop the non-exclusive backup. Besides stop_lsn it returns from
+			 * pg_stop_backup(false) copy of the backup label and tablespace map
+			 * so they can be written to disk by the caller.
+			 */
+			sent = pgut_send(conn,
+							   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
+							   " current_timestamp(0)::timestamptz"
+							   " FROM pg_stop_backup(false)",
+							   0, NULL, WARNING);
+		else
+			sent = pgut_send(conn,
+							   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
+							   " current_timestamp(0)::timestamptz"
+							   " FROM pg_stop_backup()",
+							   0, NULL, WARNING);
 
+		pg_stop_backup_is_sent = true;
+		if (!sent)
+			elog(ERROR, "Failed to send pg_stop_backup query");
+	}
 
 	/*
 	 * Wait for the result of pg_stop_backup(),
 	 * but no longer than PG_STOP_BACKUP_TIMEOUT seconds
 	 */
-	while (1)
+	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
-		if (!PQconsumeInput(conn) || PQisBusy(conn))
+		while (1)
 		{
-			pg_stop_backup_timeout++;
-			sleep(1);
-
-			if (interrupted)
+			if (!PQconsumeInput(conn) || PQisBusy(conn))
 			{
-				pgut_cancel(conn);
-				elog(ERROR, "interrupted during waiting for pg_stop_backup");
+				pg_stop_backup_timeout++;
+				sleep(1);
+
+				if (interrupted)
+				{
+					pgut_cancel(conn);
+					elog(ERROR, "interrupted during waiting for pg_stop_backup");
+				}
+
+				if (pg_stop_backup_timeout == 1)
+					elog(INFO, "wait for pg_stop_backup()");
+
+				/*
+				 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
+				 * send an interrupt.
+				 */
+				if (pg_stop_backup_timeout > PG_STOP_BACKUP_TIMEOUT)
+				{
+					pgut_cancel(conn);
+					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
+						 PG_STOP_BACKUP_TIMEOUT);
+				}
 			}
-
-			if (pg_stop_backup_timeout == 1)
-				elog(INFO, "wait for pg_stop_backup()");
-
-			/*
-			 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
-			 * send an interrupt.
-			 */
-			if (pg_stop_backup_timeout > PG_STOP_BACKUP_TIMEOUT)
+			else
 			{
-				pgut_cancel(conn);
-				elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
-					 PG_STOP_BACKUP_TIMEOUT);
+				res = PQgetResult(conn);
+				break;
 			}
 		}
-		else
-		{
-			res = PQgetResult(conn);
-			break;
-		}
+		if (!res)
+			elog(ERROR, "pg_stop backup() failed");
 	}
-
-	if (!res)
-		elog(ERROR, "pg_stop backup() failed");
 
 	backup_in_progress = false;
-
-	/* Extract timeline and LSN from results of pg_stop_backup() */
-	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
-	/* Calculate LSN */
-	stop_backup_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
-
-	if (!XRecOffIsValid(stop_backup_lsn))
+	/* If stop_backup was sent and we are here, it means that is was received */
+	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
-		stop_backup_lsn = restore_lsn;
-	}
+		/* Extract timeline and LSN from results of pg_stop_backup() */
+		XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+		/* Calculate LSN */
+		stop_backup_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 
-	if (!XRecOffIsValid(stop_backup_lsn))
-		elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
-			 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
-
-	/* Write backup_label and tablespace_map for backup from replica */
-	if (!exclusive_backup)
-	{
-		char		path[MAXPGPATH];
-		char		backup_label[MAXPGPATH];
-		FILE	   *fp;
-		pgFile	   *file;
-		size_t		len;
-
-		Assert(PQnfields(res) >= 5);
-
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-
-		/* Write backup_label */
-		join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-		fp = fopen(backup_label, "w");
-		if (fp == NULL)
-			elog(ERROR, "can't open backup label file \"%s\": %s",
-				 backup_label, strerror(errno));
-
-		len = strlen(PQgetvalue(res, 0, 1));
-		if (fwrite(PQgetvalue(res, 0, 1), 1, len, fp) != len ||
-			fflush(fp) != 0 ||
-			fsync(fileno(fp)) != 0 ||
-			fclose(fp))
-			elog(ERROR, "can't write backup label file \"%s\": %s",
-				 backup_label, strerror(errno));
-
-		/*
-		 * It's vital to check if backup_files_list is initialized,
-		 * because we could get here because the backup was interrupted
-		 */
-		if (backup_files_list)
+		if (!XRecOffIsValid(stop_backup_lsn))
 		{
-			file = pgFileNew(backup_label, true);
-			calc_file_checksum(file);
-			free(file->path);
-			file->path = strdup(PG_BACKUP_LABEL_FILE);
-			parray_append(backup_files_list, file);
+			stop_backup_lsn = restore_lsn;
 		}
 
-		/* Write tablespace_map */
-		if (strlen(PQgetvalue(res, 0, 2)) > 0)
+		if (!XRecOffIsValid(stop_backup_lsn))
+			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
+				 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
+
+		/* Write backup_label and tablespace_map for backup from replica */
+		if (!exclusive_backup)
 		{
-			char		tablespace_map[MAXPGPATH];
+			char		path[MAXPGPATH];
+			char		backup_label[MAXPGPATH];
+			FILE	   *fp;
+			pgFile	   *file;
+			size_t		len;
 
-			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fopen(tablespace_map, "w");
+			Assert(PQnfields(res) >= 5);
+
+			pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+
+			/* Write backup_label */
+			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
+			fp = fopen(backup_label, "w");
 			if (fp == NULL)
-				elog(ERROR, "can't open tablespace map file \"%s\": %s",
-					 tablespace_map, strerror(errno));
+				elog(ERROR, "can't open backup label file \"%s\": %s",
+					 backup_label, strerror(errno));
 
-			len = strlen(PQgetvalue(res, 0, 2));
-			if (fwrite(PQgetvalue(res, 0, 2), 1, len, fp) != len ||
+			len = strlen(PQgetvalue(res, 0, 1));
+			if (fwrite(PQgetvalue(res, 0, 1), 1, len, fp) != len ||
 				fflush(fp) != 0 ||
 				fsync(fileno(fp)) != 0 ||
 				fclose(fp))
-				elog(ERROR, "can't write tablespace map file \"%s\": %s",
-					 tablespace_map, strerror(errno));
+				elog(ERROR, "can't write backup label file \"%s\": %s",
+					 backup_label, strerror(errno));
 
+			/*
+			 * It's vital to check if backup_files_list is initialized,
+			 * because we could get here because the backup was interrupted
+			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true);
-				if (S_ISREG(file->mode))
-					calc_file_checksum(file);
+				file = pgFileNew(backup_label, true);
+				calc_file_checksum(file);
 				free(file->path);
-				file->path = strdup(PG_TABLESPACE_MAP_FILE);
+				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
 			}
+
+			/* Write tablespace_map */
+			if (strlen(PQgetvalue(res, 0, 2)) > 0)
+			{
+				char		tablespace_map[MAXPGPATH];
+
+				join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
+				fp = fopen(tablespace_map, "w");
+				if (fp == NULL)
+					elog(ERROR, "can't open tablespace map file \"%s\": %s",
+						 tablespace_map, strerror(errno));
+
+				len = strlen(PQgetvalue(res, 0, 2));
+				if (fwrite(PQgetvalue(res, 0, 2), 1, len, fp) != len ||
+					fflush(fp) != 0 ||
+					fsync(fileno(fp)) != 0 ||
+					fclose(fp))
+					elog(ERROR, "can't write tablespace map file \"%s\": %s",
+						 tablespace_map, strerror(errno));
+
+				if (backup_files_list)
+				{
+					file = pgFileNew(tablespace_map, true);
+					if (S_ISREG(file->mode))
+						calc_file_checksum(file);
+					free(file->path);
+					file->path = strdup(PG_TABLESPACE_MAP_FILE);
+					parray_append(backup_files_list, file);
+				}
+			}
+
+			if (sscanf(PQgetvalue(res, 0, 3), XID_FMT, &recovery_xid) != 1)
+				elog(ERROR,
+					 "result of txid_snapshot_xmax() is invalid: %s",
+					 PQerrorMessage(conn));
+			if (!parse_time(PQgetvalue(res, 0, 4), &recovery_time))
+				elog(ERROR,
+					 "result of current_timestamp is invalid: %s",
+					 PQerrorMessage(conn));
 		}
-
-		if (sscanf(PQgetvalue(res, 0, 3), XID_FMT, &recovery_xid) != 1)
-			elog(ERROR,
-				 "result of txid_snapshot_xmax() is invalid: %s",
-				 PQerrorMessage(conn));
-		if (!parse_time(PQgetvalue(res, 0, 4), &recovery_time))
-			elog(ERROR,
-				 "result of current_timestamp is invalid: %s",
-				 PQerrorMessage(conn));
+		else
+		{
+			if (sscanf(PQgetvalue(res, 0, 1), XID_FMT, &recovery_xid) != 1)
+				elog(ERROR,
+					 "result of txid_snapshot_xmax() is invalid: %s",
+					 PQerrorMessage(conn));
+			if (!parse_time(PQgetvalue(res, 0, 2), &recovery_time))
+				elog(ERROR,
+					 "result of current_timestamp is invalid: %s",
+					 PQerrorMessage(conn));
+		}
+		PQclear(res);
+		if (stream_wal)
+			/* Wait for the completion of stream */
+			pthread_join(stream_thread, NULL);
 	}
-	else
-	{
-		if (sscanf(PQgetvalue(res, 0, 1), XID_FMT, &recovery_xid) != 1)
-			elog(ERROR,
-				 "result of txid_snapshot_xmax() is invalid: %s",
-				 PQerrorMessage(conn));
-		if (!parse_time(PQgetvalue(res, 0, 2), &recovery_time))
-			elog(ERROR,
-				 "result of current_timestamp is invalid: %s",
-				 PQerrorMessage(conn));
-	}
-
-	PQclear(res);
-
-	if (stream_wal)
-		/* Wait for the completion of stream */
-		pthread_join(stream_thread, NULL);
 
 	/* Fill in fields if that is the correct end of backup. */
 	if (backup != NULL)

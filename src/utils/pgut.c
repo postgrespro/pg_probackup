@@ -45,8 +45,8 @@ bool			prompt_password = true;
 static PGcancel *volatile cancel_conn = NULL;
 
 /* Interrupted by SIGINT (Ctrl+C) ? */
-bool			interrupted = false;
-static bool		in_cleanup = false;
+bool		interrupted = false;
+bool		in_cleanup = false;
 
 static bool parse_pair(const char buffer[], char key[], char value[]);
 
