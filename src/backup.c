@@ -2183,23 +2183,22 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 static void
 set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 {
-	int len;
-	size_t p;
-	pgFile *prev_file;
-	char *cfs_tblspc_path;
-	char *relative_prev_file;
+	int			len;
+	int			p;
+	pgFile	   *prev_file;
+	char	   *cfs_tblspc_path;
+	char	   *relative_prev_file;
 
 	cfs_tblspc_path = strdup(relative);
 	len = strlen("/pg_compression");
 	cfs_tblspc_path[strlen(cfs_tblspc_path) - len] = 0;
 	elog(VERBOSE, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
 
-	for (p = i; p >= 0; p--)
+	for (p = (int) i; p >= 0; p--)
 	{
-		prev_file = (pgFile *) parray_get(files, p);
+		prev_file = (pgFile *) parray_get(files, (size_t) p);
 		relative_prev_file = GetRelativePath(prev_file->path, root);
 
-		//elog(VERBOSE, "P: %lu, Checking file in cfs tablespace %s", p, relative_prev_file);
 		elog(VERBOSE, "Checking file in cfs tablespace %s", relative_prev_file);
 
 		if (strstr(relative_prev_file, cfs_tblspc_path) != NULL)
