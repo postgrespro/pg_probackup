@@ -273,7 +273,9 @@ do_validate_instance(void)
 
 		if (current_backup->backup_mode != BACKUP_MODE_FULL)
 		{
-			for (int j = i + 1; j < parray_num(backups); j++)
+			int			j;
+
+			for (j = i + 1; j < parray_num(backups); j++)
 			{
 				pgBackup	   *backup = (pgBackup *) parray_get(backups, j);
 
