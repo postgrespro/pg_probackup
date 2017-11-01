@@ -2470,7 +2470,7 @@ StreamLog(void *arg)
 	 * Connect in replication mode to the server
 	 */
 	if (conn == NULL)
-		conn = GetConnection();
+		conn = pgut_connect_replication(pgut_dbname);
 	if (!conn)
 	{
 		pthread_mutex_unlock(&start_stream_mut);
