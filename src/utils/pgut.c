@@ -58,6 +58,7 @@ static void on_interrupt(void);
 static void on_cleanup(void);
 static void exit_or_abort(int exitcode);
 static const char *get_username(void);
+static pqsigfunc oldhandler = NULL;
 
 /*
  * Unit conversion tables.
@@ -1079,6 +1080,7 @@ parse_pair(const char buffer[], char key[], char value[])
 static void
 prompt_for_password(const char *username)
 {
+	pqsignal(SIGINT, oldhandler);
 	if (password)
 	{
 		free(password);
@@ -1105,6 +1107,7 @@ prompt_for_password(const char *username)
 		password = simple_prompt(message, 100, false);
 	}
 #endif
+	init_cancel_handler();
 }
 
 PGconn *
@@ -1820,7 +1823,7 @@ handle_sigint(SIGNAL_ARGS)
 static void
 init_cancel_handler(void)
 {
-	pqsignal(SIGINT, handle_sigint);
+	oldhandler = pqsignal(SIGINT, handle_sigint);
 }
 #else							/* WIN32 */
 
