@@ -928,10 +928,13 @@ check_system_identifiers(void)
 					   "SELECT system_identifier FROM pg_control_system()",
 					   0, NULL);
 	val = PQgetvalue(res, 0, 0);
-	PQclear(res);
 
 	if (!parse_uint64(val, &system_id_conn))
+	{
+		PQclear(res);
 		elog(ERROR, "%s is not system_identifier", val);
+	}
+	PQclear(res);
 
 	if (system_id_conn != system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
@@ -1204,10 +1207,11 @@ pg_ptrack_clear(void)
 static bool
 pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 {
-	char		*params[2];
-	PGresult	*res_db;
-	PGresult	*res;
-	char *result;
+	char	   *params[2];
+	char	   *dbname;
+	PGresult   *res_db;
+	PGresult   *res;
+	char	   *result;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -1223,15 +1227,15 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
 		return false;
 
-	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
-	PQclear(res_db);
+	dbname = PQgetvalue(res_db, 0, 0);
 
 	/* Always backup all files from template0 database */
 	if (strcmp(dbname, "template0") == 0)
 	{
-		pfree(dbname);
+		PQclear(res_db);
 		return true;
 	}
+	PQclear(res_db);
 
 	sprintf(params[0], "%i", dbOid);
 	sprintf(params[1], "%i", tblspcOid);
@@ -1262,16 +1266,17 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 	PGconn	   *tmp_conn;
 	PGresult   *res_db,
 			   *res;
-	char	   *dbname;
 	char	   *params[2];
 	char	   *result;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
 
-    /* regular file (not in directory 'global') */
+	/* regular file (not in directory 'global') */
 	if (db_oid != 0)
 	{
+		char	   *dbname;
+
 		sprintf(params[0], "%i", db_oid);
 		res_db = pgut_execute(backup_conn,
 							  "SELECT datname FROM pg_database WHERE oid=$1",
@@ -1283,12 +1288,11 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
 			return NULL;
 
-		dbname = pstrdup(PQgetvalue(res_db, 0, 0));
-		PQclear(res_db);
+		dbname = PQgetvalue(res_db, 0, 0);
 
 		if (strcmp(dbname, "template0") == 0)
 		{
-			pfree(dbname);
+			PQclear(res_db);
 			return NULL;
 		}
 
@@ -1300,10 +1304,9 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 
 		if (PQnfields(res) != 1)
 			elog(ERROR, "cannot get ptrack file from database \"%s\" by tablespace oid %u and relation oid %u",
-			 dbname, tablespace_oid, rel_filenode);
-		pfree(dbname);
+				 dbname, tablespace_oid, rel_filenode);
+		PQclear(res_db);
 		pgut_disconnect(tmp_conn);
-
 	}
 	/* file in directory 'global' */
 	else
@@ -1795,16 +1798,18 @@ checkpoint_timeout(void)
 
 	res = pgut_execute(backup_conn, "show checkpoint_timeout", 0, NULL);
 	val = PQgetvalue(res, 0, 0);
-	PQclear(res);
 
 	if (!parse_int(val, &val_int, OPTION_UNIT_S, &hintmsg))
 	{
+		PQclear(res);
 		if (hintmsg)
 			elog(ERROR, "Invalid value of checkout_timeout %s: %s", val,
 				 hintmsg);
 		else
 			elog(ERROR, "Invalid value of checkout_timeout %s", val);
 	}
+
+	PQclear(res);
 
 	return val_int;
 }
