@@ -1142,6 +1142,9 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 			if (interrupted)
 				elog(ERROR, "interrupted");
 
+			if (password == NULL || password[0] == '\0')
+				elog(ERROR, "no password supplied");
+
 			continue;
 		}
 		elog(ERROR, "could not connect to database %s: %s",
