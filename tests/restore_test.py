@@ -20,6 +20,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+        print(node.should_rm_dirs)
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
