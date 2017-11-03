@@ -119,7 +119,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
-        print(node._execute_utility("pg_controldata", ["-D",node.data_dir]))
+        print(node._execute_utility("pg_controldata", ["-D",node.data_dir]).splitlines())
 
         target_tli = int(node.get_control_data()["Latest checkpoint's TimeLineID"])
         node.stop()
