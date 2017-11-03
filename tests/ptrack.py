@@ -3,7 +3,7 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
-from testgres import ClusterException
+from testgres import ClusterTestgresException
 import shutil, sys, time
 
 
@@ -439,7 +439,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because we are connecting to deleted database.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
-        except ClusterException as e:
+        except ClusterTestgresException as e:
             self.assertTrue('FATAL:  database "db1" does not exist' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
