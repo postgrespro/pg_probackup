@@ -34,6 +34,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
 
         node.stop()
+        print(node.should_rm_dirs)
         node.cleanup()
 
         # 1 - Test recovery from latest
