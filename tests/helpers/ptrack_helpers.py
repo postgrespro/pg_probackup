@@ -165,7 +165,10 @@ class ProbackupTest(object):
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
         node.should_rm_dirs = True
-        node.init(initdb_params=initdb_params, allow_streaming=set_replication)
+        try:
+            node.init(initdb_params=initdb_params, allows_streaming=set_replication)
+        except:
+            node.init(initdb_params=initdb_params, allow_streaming=set_replication)
 
         # Sane default parameters, not a shit with fsync = off from testgres
         node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
