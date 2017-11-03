@@ -169,6 +169,7 @@ class ProbackupTest(object):
         shutil.rmtree(real_base_dir, ignore_errors=True)
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
+        node.should_rm_base_dir = True
         node.init(initdb_params=initdb_params)
 
         # Sane default parameters, not a shit with fsync = off from testgres
