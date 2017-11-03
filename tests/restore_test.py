@@ -119,6 +119,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
+        print(node.get_control_data())
         target_tli = int(node.get_control_data()["Latest checkpoint's TimeLineID"])
         node.stop()
         node.cleanup()
