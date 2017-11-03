@@ -9,6 +9,10 @@ import hashlib
 import re
 import pwd
 
+try:
+    from testgres import configure_testgres
+except:
+    pass
 
 idx_ptrack = {
 't_heap': {
@@ -129,6 +133,7 @@ class ProbackupTest(object):
             if self.test_env['PGPRO_PARANOIA_MODE'] == 'ON':
                 self.paranoia = True
 
+        configure_testgres(cache_initdb=False, cache_pg_config=False)
         self.helpers_path = os.path.dirname(os.path.realpath(__file__))
         self.dir_path = os.path.abspath(os.path.join(self.helpers_path, os.pardir))
         self.tmp_path = os.path.abspath(os.path.join(self.dir_path, 'tmp_dirs'))
