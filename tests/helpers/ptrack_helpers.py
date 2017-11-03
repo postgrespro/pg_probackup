@@ -612,16 +612,14 @@ class ProbackupTest(object):
         try:
             testgres.clean_all()
         except:
-            testgres.cleanup()
+            pass
 
-        """
         shutil.rmtree(os.path.join(self.tmp_path, module_name, fname),
             ignore_errors=True)
         try:
             os.rmdir(os.path.join(self.tmp_path, module_name))
         except:
             pass
-        """
 
     def pgdata_content(self, directory):
         """ return dict with directory content. TAKE IT AFTER CHECKPOINT or BACKUP"""
