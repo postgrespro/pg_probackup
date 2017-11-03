@@ -129,7 +129,7 @@ class ProbackupTest(object):
                 self.paranoia = True
 
         try:
-            testgres.configure_testgres(cache_initdb=False, cache_pg_config=False)
+            testgres.configure_testgres(cache_initdb=False, cache_pg_config=False, node_cleanup_full = False)
         except:
             pass
 
