@@ -133,7 +133,11 @@ class ProbackupTest(object):
             if self.test_env['PGPRO_PARANOIA_MODE'] == 'ON':
                 self.paranoia = True
 
-        configure_testgres(cache_initdb=False, cache_pg_config=False)
+        try:
+            configure_testgres(cache_initdb=False, cache_pg_config=False)
+        except:
+            pass
+
         self.helpers_path = os.path.dirname(os.path.realpath(__file__))
         self.dir_path = os.path.abspath(os.path.join(self.helpers_path, os.pardir))
         self.tmp_path = os.path.abspath(os.path.join(self.dir_path, 'tmp_dirs'))
@@ -185,7 +189,10 @@ class ProbackupTest(object):
 
         # Allow replication in pg_hba.conf
         if set_replication:
-            node.set_replication_conf()
+            try:
+                node.set_replication_conf()
+            except:
+                pass
             node.append_conf("postgresql.auto.conf", "max_wal_senders = 10")
         return node
 
