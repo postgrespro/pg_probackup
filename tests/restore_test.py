@@ -21,7 +21,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             pg_options={'wal_level': 'replica'}
             )
         print(node.should_rm_dirs)
-        node.should_rm_dirs = True
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

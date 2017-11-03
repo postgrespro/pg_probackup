@@ -9,11 +9,6 @@ import hashlib
 import re
 import pwd
 
-try:
-    from testgres import configure_testgres
-except:
-    pass
-
 idx_ptrack = {
 't_heap': {
     'type': 'heap'
@@ -134,7 +129,7 @@ class ProbackupTest(object):
                 self.paranoia = True
 
         try:
-            configure_testgres(cache_initdb=False, cache_pg_config=False)
+            testgres.configure_testgres(cache_initdb=False, cache_pg_config=False)
         except:
             pass
 
@@ -169,6 +164,7 @@ class ProbackupTest(object):
         shutil.rmtree(real_base_dir, ignore_errors=True)
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
+        node.should_rm_base_dir = True
         node.init(initdb_params=initdb_params, allow_streaming=set_replication)
 
         # Sane default parameters, not a shit with fsync = off from testgres
@@ -195,7 +191,6 @@ class ProbackupTest(object):
             except:
                 pass
 
-        node.should_rm_base_dir = True
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, cfs=False):
