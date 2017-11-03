@@ -170,7 +170,8 @@ class ProbackupTest(object):
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
         node.should_rm_base_dir = True
-        node.init(initdb_params=initdb_params)
+
+        node.init(initdb_params=initdb_params, allow_streaming=set_replication)
 
         # Sane default parameters, not a shit with fsync = off from testgres
         node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
@@ -192,9 +193,9 @@ class ProbackupTest(object):
         if set_replication:
             try:
                 node.set_replication_conf()
+                node.append_conf("postgresql.auto.conf", "max_wal_senders = 10")
             except:
                 pass
-            node.append_conf("postgresql.auto.conf", "max_wal_senders = 10")
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, cfs=False):
