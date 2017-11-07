@@ -9,43 +9,41 @@ import hashlib
 import re
 import pwd
 
-
 from distutils.version import LooseVersion
 
-
 idx_ptrack = {
-'t_heap': {
-    'type': 'heap'
+    't_heap': {
+        'type': 'heap'
     },
-'t_btree': {
-    'type': 'btree',
-    'column': 'text',
-    'relation': 't_heap'
+    't_btree': {
+        'type': 'btree',
+        'column': 'text',
+        'relation': 't_heap'
     },
-'t_seq': {
-    'type': 'seq',
-    'column': 't_seq',
-    'relation': 't_heap'
+    't_seq': {
+        'type': 'seq',
+        'column': 't_seq',
+        'relation': 't_heap'
     },
-'t_spgist': {
-    'type': 'spgist',
-    'column': 'text',
-    'relation': 't_heap'
+    't_spgist': {
+        'type': 'spgist',
+        'column': 'text',
+        'relation': 't_heap'
     },
-'t_brin': {
-    'type': 'brin',
-    'column': 'text',
-    'relation': 't_heap'
+    't_brin': {
+        'type': 'brin',
+        'column': 'text',
+        'relation': 't_heap'
     },
-'t_gist': {
-    'type': 'gist',
-    'column': 'tsvector',
-    'relation': 't_heap'
+    't_gist': {
+        'type': 'gist',
+        'column': 'tsvector',
+        'relation': 't_heap'
     },
-'t_gin': {
-    'type': 'gin',
-    'column': 'tsvector',
-    'relation': 't_heap'
+    't_gin': {
+        'type': 'gin',
+        'column': 'tsvector',
+        'relation': 't_heap'
     },
 }
 
@@ -74,12 +72,14 @@ Splitted Body
 {body_split}
 """
 
+
 # You can lookup error message and cmdline in exception object attributes
 class ProbackupException(Exception):
     def __init__(self, message, cmd):
         self.message = message
         self.cmd = cmd
-    #need that to make second raise
+
+    # need that to make second raise
     def __str__(self):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
 
@@ -93,6 +93,7 @@ def dir_files(base_dir):
             out_list.append(os.path.relpath(os.path.join(dir_name, fname), base_dir))
     out_list.sort()
     return out_list
+
 
 class ProbackupTest(object):
     def __init__(self, *args, **kwargs):
@@ -133,7 +134,7 @@ class ProbackupTest(object):
                 self.paranoia = True
 
         try:
-            testgres.configure_testgres(cache_initdb=False, cache_pg_config=False, node_cleanup_full = False)
+            testgres.configure_testgres(cache_initdb=False, cache_pg_config=False, node_cleanup_full=False)
         except:
             pass
 
@@ -221,53 +222,53 @@ class ProbackupTest(object):
 
     def get_fork_size(self, node, fork_name):
         return node.execute("postgres",
-            "select pg_relation_size('{0}')/8192".format(fork_name))[0][0]
+                            "select pg_relation_size('{0}')/8192".format(fork_name))[0][0]
 
     def get_fork_path(self, node, fork_name):
         return os.path.join(node.base_dir, 'data',
-            node.execute("postgres", "select pg_relation_filepath('{0}')".format(fork_name))[0][0])
+                            node.execute("postgres", "select pg_relation_filepath('{0}')".format(fork_name))[0][0])
 
     def get_md5_per_page_for_fork(self, file, size_in_pages):
         pages_per_segment = {}
         md5_per_page = {}
-        nsegments = size_in_pages/131072
-        if size_in_pages%131072 != 0:
+        nsegments = size_in_pages / 131072
+        if size_in_pages % 131072 != 0:
             nsegments = nsegments + 1
-        #print("Size: {0}".format(size_in_pages))
-        #print("Number of segments: {0}".format(nsegments))
+        # print("Size: {0}".format(size_in_pages))
+        # print("Number of segments: {0}".format(nsegments))
 
         size = size_in_pages
         for segment_number in range(nsegments):
-            if size-131072 > 0:
+            if size - 131072 > 0:
                 pages_per_segment[segment_number] = 131072
             else:
                 pages_per_segment[segment_number] = size
-            size = size-131072
+            size = size - 131072
 
-        #print(pages_per_segment)
+        # print(pages_per_segment)
 
         for segment_number in range(nsegments):
             offset = 0
-        #    print("Segno: {0}".format(segment_number))
-        #    print("Number of pages: {0}".format(pages_per_segment[segment_number]))
+            #    print("Segno: {0}".format(segment_number))
+            #    print("Number of pages: {0}".format(pages_per_segment[segment_number]))
             if segment_number == 0:
                 file_desc = os.open(file, os.O_RDONLY)
                 start_page = 0
                 end_page = pages_per_segment[segment_number]
             else:
-                file_desc = os.open(file+".{0}".format(segment_number), os.O_RDONLY)
-                start_page = max(md5_per_page)+1
+                file_desc = os.open(file + ".{0}".format(segment_number), os.O_RDONLY)
+                start_page = max(md5_per_page) + 1
                 end_page = end_page + pages_per_segment[segment_number]
 
-        #    print('Start Page: {0}'.format(start_page))
+                #    print('Start Page: {0}'.format(start_page))
             for page in range(start_page, end_page):
                 md5_per_page[page] = hashlib.md5(os.read(file_desc, 8192)).hexdigest()
                 offset += 8192
                 os.lseek(file_desc, offset, 0)
-        #    print('End Page: {0}'.format(max(md5_per_page)))
+                #    print('End Page: {0}'.format(max(md5_per_page)))
             os.close(file_desc)
 
-        #print("Total Size: {0}".format(len(md5_per_page)))
+        # print("Total Size: {0}".format(len(md5_per_page)))
         return md5_per_page
 
     def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
@@ -289,10 +290,10 @@ class ProbackupTest(object):
         file = os.open(file + '_ptrack', os.O_RDONLY)
         os.lseek(file, header_size, 0)
         lots_of_bytes = os.read(file, byte_size_minus_header)
-        byte_list = [lots_of_bytes[i:i+1] for i in range(len(lots_of_bytes))]
+        byte_list = [lots_of_bytes[i:i + 1] for i in range(len(lots_of_bytes))]
         for byte in byte_list:
-            #byte_inverted = bin(int(byte, base=16))[2:][::-1]
-            #bits = (byte >> x) & 1 for x in range(7, -1, -1)
+            # byte_inverted = bin(int(byte, base=16))[2:][::-1]
+            # bits = (byte >> x) & 1 for x in range(7, -1, -1)
             byte_inverted = bin(ord(byte))[2:].rjust(8, '0')[::-1]
             for bit in byte_inverted:
                 if len(ptrack_bits_for_fork) < size:
@@ -333,8 +334,9 @@ class ProbackupTest(object):
                     if self.verbose:
                         print('Page Number {0} of type {1} was changed, but ptrack value is {2}. THIS IS BAD'.format(
                             PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
-                        print("\n Old checksumm: {0}\n New checksumm: {1}".format(idx_dict['old_pages'][PageNum], idx_dict['new_pages'][PageNum]))
-                        #print(idx_dict)
+                        print("\n Old checksumm: {0}\n New checksumm: {1}".format(idx_dict['old_pages'][PageNum],
+                                                                                  idx_dict['new_pages'][PageNum]))
+                        # print(idx_dict)
                     if PageNum == 0 and idx_dict['type'] == 'spgist':
                         if self.verbose:
                             print('SPGIST is a special snowflake, so don`t fret about losing ptrack for blknum 0')
@@ -346,33 +348,35 @@ class ProbackupTest(object):
                     if self.verbose:
                         print('Page Number {0} of type {1} was not changed, but ptrack value is {2}'.format(
                             PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum]))
-                        #print(idx_dict)
-            #self.assertEqual(success, True, 'Ptrack does not correspond to state of its pages.\n Gory Details: \n{0}'.format(
-            #    idx_dict['type'], idx_dict))
+                        # print(idx_dict)
+                        # self.assertEqual(success, True, 'Ptrack does not correspond to state of its pages.\n Gory Details: \n{0}'.format(
+                        #    idx_dict['type'], idx_dict))
 
     def check_ptrack_recovery(self, idx_dict):
         size = idx_dict['size']
         for PageNum in range(size):
             if idx_dict['ptrack'][PageNum] != 1:
-                self.assertTrue(False, 'Recovery for Page Number {0} of Type {1} was conducted, but ptrack value is {2}. THIS IS BAD\n IDX_DICT: {3}'.format(
-                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum], idx_dict))
+                self.assertTrue(False,
+                                'Recovery for Page Number {0} of Type {1} was conducted, but ptrack value is {2}. THIS IS BAD\n IDX_DICT: {3}'.format(
+                                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum], idx_dict))
 
     def check_ptrack_clean(self, idx_dict, size):
         for PageNum in range(size):
             if idx_dict['ptrack'][PageNum] != 0:
-                self.assertTrue(False, 'Ptrack for Page Number {0} of Type {1} should be clean, but ptrack value is {2}.\n THIS IS BAD\n IDX_DICT: {3}'.format(
-                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum], idx_dict))
+                self.assertTrue(False,
+                                'Ptrack for Page Number {0} of Type {1} should be clean, but ptrack value is {2}.\n THIS IS BAD\n IDX_DICT: {3}'.format(
+                                    PageNum, idx_dict['type'], idx_dict['ptrack'][PageNum], idx_dict))
 
     def run_pb(self, command):
         try:
-            self.cmd = [' '.join(map(str,[self.probackup_path] + command))]
+            self.cmd = [' '.join(map(str, [self.probackup_path] + command))]
             if self.verbose:
                 print(self.cmd)
             self.output = subprocess.check_output(
                 [self.probackup_path] + command,
                 stderr=subprocess.STDOUT,
                 env=self.test_env
-                ).decode("utf-8")
+            ).decode("utf-8")
             if command[0] == 'backup':
                 # return backup ID
                 for line in self.output.splitlines():
@@ -381,7 +385,7 @@ class ProbackupTest(object):
             else:
                 return self.output
         except subprocess.CalledProcessError as e:
-            raise  ProbackupException(e.output.decode("utf-8"), self.cmd)
+            raise ProbackupException(e.output.decode("utf-8"), self.cmd)
 
     def init_pb(self, backup_dir):
 
@@ -425,7 +429,7 @@ class ProbackupTest(object):
         cmd_list = [
             "backup",
             "-B", backup_dir,
-#            "-D", pgdata,
+            #            "-D", pgdata,
             "-p", "%i" % node.port,
             "-d", "postgres",
             "--instance={0}".format(instance)
@@ -559,7 +563,6 @@ class ProbackupTest(object):
                 out_dict[name] = var
         return out_dict
 
-
     def get_recovery_conf(self, node):
         out_dict = {}
         with open(os.path.join(node.data_dir, "recovery.conf"), "r") as recovery_conf:
@@ -580,31 +583,31 @@ class ProbackupTest(object):
             archive_mode = 'on'
 
         node.append_conf(
-                "postgresql.auto.conf",
-                "wal_level = archive"
-                )
+            "postgresql.auto.conf",
+            "wal_level = archive"
+        )
         node.append_conf(
-                "postgresql.auto.conf",
-                "archive_mode = {0}".format(archive_mode)
-                )
+            "postgresql.auto.conf",
+            "archive_mode = {0}".format(archive_mode)
+        )
         if os.name == 'posix':
             node.append_conf(
-                    "postgresql.auto.conf",
-                    "archive_command = '{0} archive-push -B {1} --instance={2} --wal-file-path %p --wal-file-name %f'".format(
-                        self.probackup_path, backup_dir, instance))
-        #elif os.name == 'nt':
-        #    node.append_conf(
-        #            "postgresql.auto.conf",
-        #            "archive_command = 'copy %p {0}\\%f'".format(archive_dir)
-        #            )
+                "postgresql.auto.conf",
+                "archive_command = '{0} archive-push -B {1} --instance={2} --wal-file-path %p --wal-file-name %f'".format(
+                    self.probackup_path, backup_dir, instance))
+            # elif os.name == 'nt':
+            #    node.append_conf(
+            #            "postgresql.auto.conf",
+            #            "archive_command = 'copy %p {0}\\%f'".format(archive_dir)
+            #            )
 
     def set_replica(self, master, replica, replica_name='replica', synchronous=False):
         replica.append_conf('postgresql.auto.conf', 'port = {0}'.format(replica.port))
         replica.append_conf('postgresql.auto.conf', 'hot_standby = on')
         replica.append_conf('recovery.conf', "standby_mode = 'on'")
         replica.append_conf('recovery.conf',
-            "primary_conninfo = 'user={0} port={1} application_name={2} sslmode=prefer sslcompression=1'".format(
-                self.user, master.port, replica_name))
+                            "primary_conninfo = 'user={0} port={1} application_name={2} sslmode=prefer sslcompression=1'".format(
+                                self.user, master.port, replica_name))
         if synchronous:
             master.append_conf('postgresql.auto.conf', "synchronous_standby_names='{0}'".format(replica_name))
             master.append_conf('postgresql.auto.conf', "synchronous_commit='remote_apply'")
@@ -637,17 +640,16 @@ class ProbackupTest(object):
         """ Returns current user name """
         return pwd.getpwuid(os.getuid())[0]
 
-    """
-    def switch_wal_segment(self, node):
-        # Execute pg_switch_wal/xlog() in given node
-        if testgres.version_to_num(node.safe_psql("postgres", "show server_version")) >= testgres.version_to_num('10.0'):
-            node.safe_psql("postgres", "select pg_switch_wal()")
-        else:
-            node.safe_psql("postgres", "select pg_switch_xlog()")
-    """
+    @staticmethod
+    def switch_wal_segment(node):
+        min_ver = LooseVersion('10.0')
 
-    def switch_wal_segment(self, node):
-        if LooseVersion(testgres.get_pg_version()) >= LooseVersion('10.0'):
+        try:
+            cur_ver = LooseVersion(node.get_pg_version())
+        except Exception as e:
+            cur_ver = LooseVersion(node.safe_psql("postgres", "show server_version"))
+
+        if cur_ver >= min_ver:
             node.safe_psql("postgres", "select pg_switch_wal()")
         else:
             node.safe_psql("postgres", "select pg_switch_xlog()")
@@ -660,7 +662,7 @@ class ProbackupTest(object):
             pass
 
         shutil.rmtree(os.path.join(self.tmp_path, module_name, fname),
-            ignore_errors=True)
+                      ignore_errors=True)
         try:
             os.rmdir(os.path.join(self.tmp_path, module_name))
         except:
@@ -679,7 +681,7 @@ class ProbackupTest(object):
             for file in files:
                 if file in files_to_ignore or file.endswith(suffixes_to_ignore):
                     continue
-                file = os.path.join(root,file)
+                file = os.path.join(root, file)
                 file_relpath = os.path.relpath(file, directory)
                 directory_dict['files'][file_relpath] = hashlib.md5(open(file, 'rb').read()).hexdigest()
         return directory_dict
