@@ -710,6 +710,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.expectedFailure
     def test_relation_with_multiple_segments(self):
         """Make node, create table, alter table tablespace, take ptrack backup, move table from tablespace, take ptrack backup"""
         fname = self.id().split('.')[3]
