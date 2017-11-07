@@ -645,7 +645,7 @@ class ProbackupTest(object):
         min_ver = LooseVersion('10.0')
 
         try:
-            cur_ver = LooseVersion(node.get_pg_version())
+            cur_ver = LooseVersion(testgres.get_pg_version())
         except Exception as e:
             cur_ver = LooseVersion(node.safe_psql("postgres", "show server_version"))
 
