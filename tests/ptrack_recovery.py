@@ -40,7 +40,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         if self.verbose:
             print('Killing postmaster. Losing Ptrack changes')
-        node.pg_ctl('stop', ['-m', 'immediate', '-D', node.data_dir])
+        node.stop(['-m', 'immediate', '-D', node.data_dir])
         if not node.status():
             node.start()
         else:
