@@ -231,7 +231,7 @@ class ProbackupTest(object):
     def get_md5_per_page_for_fork(self, file, size_in_pages):
         pages_per_segment = {}
         md5_per_page = {}
-        nsegments = size_in_pages // 131072
+        nsegments = int(size_in_pages / 131072)
         if size_in_pages % 131072 != 0:
             nsegments = nsegments + 1
         # print("Size: {0}".format(size_in_pages))
