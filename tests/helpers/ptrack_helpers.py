@@ -647,7 +647,7 @@ class ProbackupTest(object):
     """
 
     def switch_wal_segment(self, node):
-        if LooseVersion(testgres.get_pg_version()) < LooseVersion('10.0'):
+        if LooseVersion(testgres.get_pg_version()) >= LooseVersion('10.0'):
             node.safe_psql("postgres", "select pg_switch_wal()")
         else:
             node.safe_psql("postgres", "select pg_switch_xlog()")
