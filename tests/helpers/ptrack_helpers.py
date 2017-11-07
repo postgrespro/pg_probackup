@@ -9,6 +9,10 @@ import hashlib
 import re
 import pwd
 
+
+from distutils.version import LooseVersion
+
+
 idx_ptrack = {
 't_heap': {
     'type': 'heap'
@@ -633,9 +637,17 @@ class ProbackupTest(object):
         """ Returns current user name """
         return pwd.getpwuid(os.getuid())[0]
 
+    """
     def switch_wal_segment(self, node):
-        """ Execute pg_switch_wal/xlog() in given node"""
+        # Execute pg_switch_wal/xlog() in given node
         if testgres.version_to_num(node.safe_psql("postgres", "show server_version")) >= testgres.version_to_num('10.0'):
+            node.safe_psql("postgres", "select pg_switch_wal()")
+        else:
+            node.safe_psql("postgres", "select pg_switch_xlog()")
+    """
+
+    def switch_wal_segment(self, node):
+        if LooseVersion(testgres.get_pg_version()) < LooseVersion('10.0'):
             node.safe_psql("postgres", "select pg_switch_wal()")
         else:
             node.safe_psql("postgres", "select pg_switch_xlog()")
