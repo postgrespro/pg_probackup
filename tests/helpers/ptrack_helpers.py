@@ -673,9 +673,8 @@ class ProbackupTest(object):
         dirs_to_ignore = ['pg_xlog', 'pg_wal', 'pg_log', 'pg_stat_tmp', 'pg_subtrans', 'pg_notify']
         files_to_ignore = ['postmaster.pid', 'postmaster.opts', 'pg_internal.init', 'postgresql.auto.conf']
         suffixes_to_ignore = ('_ptrack', 'ptrack_control', 'pg_control', 'ptrack_init')
-        directory_dict = {}
-        directory_dict['pgdata'] = directory
-        directory_dict['files'] = {}
+        directory_dict = {'pgdata': directory, 'files': {}}
+
         for root, dirs, files in os.walk(directory, followlinks=True):
             dirs[:] = [d for d in dirs if d not in dirs_to_ignore]
             for file in files:
@@ -683,7 +682,10 @@ class ProbackupTest(object):
                     continue
                 file = os.path.join(root, file)
                 file_relpath = os.path.relpath(file, directory)
-                directory_dict['files'][file_relpath] = hashlib.md5(open(file, 'rb').read()).hexdigest()
+
+                with open(file, 'rb') as f:
+                    directory_dict['files'][file_relpath] = hashlib.md5(f.read()).hexdigest()
+
         return directory_dict
 
     def compare_pgdata(self, original_pgdata, restored_pgdata):
