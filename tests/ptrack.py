@@ -443,8 +443,8 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because we are connecting to deleted database.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except QueryException as e:
-            self.assertTrue('FATAL:  database "db1" does not exist' in e.args,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.args), self.cmd))
+            self.assertTrue('FATAL:  database "db1" does not exist' in repr(e),
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
