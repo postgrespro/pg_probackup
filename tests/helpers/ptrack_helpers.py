@@ -176,6 +176,7 @@ class ProbackupTest(object):
             node.init(initdb_params=initdb_params, allow_streaming=set_replication)
 
         # Sane default parameters, not a shit with fsync = off from testgres
+        node.append_conf("postgresql.auto.conf", "max_connections = 100")
         node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
         node.append_conf("postgresql.auto.conf", "fsync = on")
         node.append_conf("postgresql.auto.conf", "wal_level = minimal")
