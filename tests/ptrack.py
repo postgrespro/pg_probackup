@@ -716,11 +716,12 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2',
             'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB',
-            'maintenance_work_mem': '1GB', 'autovacuum': 'off'}
+            'maintenance_work_mem': '1GB', 'autovacuum': 'off', 'full_page_writes': 'off'}
             )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
 
         self.create_tblspace_in_node(node, 'somedata')
@@ -728,17 +729,38 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # CREATE TABLE
         node.pgbench_init(scale=100, options=['--tablespace=somedata'])
         # FULL BACKUP
-        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+        #self.backup_node(backup_dir, 'node', node, options=["--stream"])
+        self.backup_node(backup_dir, 'node', node)
+
+        # PTRACK STUFF
+        idx_ptrack = {'type': 'heap'}
+
+        idx_ptrack['path'] = self.get_fork_path(node, 'pgbench_accounts')
+        idx_ptrack['old_size'] = self.get_fork_size(node, 'pgbench_accounts')
+        idx_ptrack['old_pages'] = self.get_md5_per_page_for_fork(
+            idx_ptrack['path'], idx_ptrack['old_size'])
 
         pgbench = node.pgbench(options=['-T', '50', '-c', '2', '--no-vacuum'])
         pgbench.wait()
+        #node.safe_psql("postgres", "update pgbench_accounts set bid = bid +1")
+        node.safe_psql("postgres", "checkpoint")
+
+        idx_ptrack['new_size'] = self.get_fork_size(node, 'pgbench_accounts')
+        idx_ptrack['new_pages'] = self.get_md5_per_page_for_fork(idx_ptrack['path'], idx_ptrack['new_size'])
+        idx_ptrack['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
+            node, idx_ptrack['path'], [idx_ptrack['old_size'], idx_ptrack['new_size']])
+
+        self.check_ptrack_sanity(idx_ptrack)
+        ## PTRACK STUFF
 
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # FIRTS PTRACK BACKUP
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        #self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
+        #get_md5_per_page_for_fork
 
         # RESTORE NODE
         restored_node = self.make_simple_node(base_dir="{0}/{1}/restored_node".format(module_name, fname))
@@ -761,10 +783,10 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         result_new = restored_node.safe_psql("postgres", "select * from pgbench_accounts")
 
         # COMPARE RESTORED FILES
-        self.assertEqual(result, result_new)
+        self.assertEqual(result, result_new, 'data is lost')
 
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # self.del_test_dir(module_name, fname)
