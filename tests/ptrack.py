@@ -442,7 +442,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(1, 0, "Expecting Error because we are connecting to deleted database.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
-        except QueryException as e:
+        except Exception as e:
             self.assertTrue('FATAL:  database "db1" does not exist' in repr(e),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e), self.cmd))
 
