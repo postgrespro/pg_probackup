@@ -233,7 +233,7 @@ class ProbackupTest(object):
         md5_per_page = {}
         nsegments = size_in_pages / 131072
         if size_in_pages % 131072 != 0:
-            nsegments = int(nsegments) + 1
+            nsegments = nsegments + 1
         # print("Size: {0}".format(size_in_pages))
         # print("Number of segments: {0}".format(nsegments))
 
