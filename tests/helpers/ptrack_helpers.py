@@ -133,10 +133,7 @@ class ProbackupTest(object):
             if self.test_env['PGPRO_PARANOIA_MODE'] == 'ON':
                 self.paranoia = True
 
-        try:
-            testgres.configure_testgres(cache_initdb=False, cache_pg_config=False, node_cleanup_full=False)
-        except:
-            pass
+        testgres.configure_testgres(cache_initdb=False, cache_pg_config=False, node_cleanup_full=False)
 
         self.helpers_path = os.path.dirname(os.path.realpath(__file__))
         self.dir_path = os.path.abspath(os.path.join(self.helpers_path, os.pardir))
@@ -191,14 +188,6 @@ class ProbackupTest(object):
         # Apply given parameters
         for key, value in six.iteritems(pg_options):
             node.append_conf("postgresql.auto.conf", "%s = %s" % (key, value))
-
-        # Allow replication in pg_hba.conf
-        if set_replication:
-            try:
-                node.set_replication_conf()
-                node.append_conf("postgresql.auto.conf", "max_wal_senders = 10")
-            except:
-                pass
 
         return node
 
@@ -644,11 +633,7 @@ class ProbackupTest(object):
     @staticmethod
     def switch_wal_segment(node):
         min_ver = LooseVersion('10.0')
-
-        try:
-            cur_ver = LooseVersion(testgres.get_pg_version())
-        except Exception as e:
-            cur_ver = LooseVersion(node.safe_psql("postgres", "show server_version"))
+        cur_ver = LooseVersion(testgres.get_pg_version())
 
         if cur_ver >= min_ver:
             node.safe_psql("postgres", "select pg_switch_wal()")
