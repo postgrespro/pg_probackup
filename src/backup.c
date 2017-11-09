@@ -60,6 +60,7 @@ static PGconn *backup_conn_replication = NULL;
 
 /* PostgreSQL server version from "backup_conn" */
 static int server_version = 0;
+static char server_version_str[100] = "";
 
 static bool exclusive_backup = false;
 /* Is pg_start_backup() was executed */
@@ -782,6 +783,8 @@ do_backup(void)
 	/* TODO fix it for remote backup*/
 	if (!is_remote_backup)
 		current.checksum_version = get_data_checksum_version(true);
+	StrNCpy(current.server_version, server_version_str,
+			sizeof(current.server_version));
 	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support();
@@ -887,6 +890,8 @@ do_backup(void)
 static void
 check_server_version(void)
 {
+	PGresult   *res;
+
 	/* confirm server version */
 	server_version = PQserverVersion(backup_conn);
 
@@ -906,6 +911,11 @@ check_server_version(void)
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
 	exclusive_backup = server_version < 90600;
+
+	/* Save server_version to use it in future */
+	res = pgut_execute(backup_conn, "show server_version", 0, NULL);
+	StrNCpy(server_version_str, PQgetvalue(res, 0, 0), sizeof(server_version_str));
+	PQclear(res);
 }
 
 /*

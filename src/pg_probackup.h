@@ -211,6 +211,8 @@ typedef struct pgBackup
 	uint32			wal_block_size;
 	uint32			checksum_version;
 
+	char			server_version[100];
+
 	bool			stream; 		/* Was this backup taken in stream mode?
 									 * i.e. does it include all needed WAL files? */
 	time_t			parent_backup; 	/* Identifier of the previous backup.
