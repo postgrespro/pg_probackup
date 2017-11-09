@@ -301,6 +301,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		 * There are no changed blocks since last backup. We want make
 		 * incremental backup, so we should exit.
 		 */
+		elog(VERBOSE, "Skipping file because it didn`t changed: %s", file->path);
 		return false;
 	}
 
@@ -357,7 +358,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	 * Read each page, verify checksum and write it to backup.
 	 * If page map is empty backup all pages of the relation.
 	 */
-	if (file->pagemap.bitmapsize == 0)
+	if (file->pagemap.bitmapsize == 0 || file->pagemap.bitmapsize == -1)
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
 		{

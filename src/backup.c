@@ -1268,6 +1268,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 			   *res;
 	char	   *params[2];
 	char	   *result;
+	char	   *val;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -1323,6 +1324,19 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		if (PQnfields(res) != 1)
 		elog(ERROR, "cannot get ptrack file from pg_global tablespace and relation oid %u",
 			 rel_filenode);
+	}
+
+	val = PQgetvalue(res, 0, 0);
+
+	if (strcmp("x", val+1) == 0)
+	{
+		/*
+		 * Ptrack file is missing!
+		 * TODO COMPARE FILE CHECKSUMM to this file version from previous backup
+		 * if they are equal, skip this file
+		 *
+		 */
+		return false;
 	}
 
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
@@ -2337,12 +2351,12 @@ make_pagemap_from_ptrack(parray *files)
 	Oid dbOid_with_ptrack_init = 0;
 	Oid tblspcOid_with_ptrack_init = 0;
 	bool ignore_ptrack_for_db = false;
+	char	   *ptrack_nonparsed = NULL;
+	size_t		ptrack_nonparsed_size = 0;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-		char	   *ptrack_nonparsed = NULL;
-		size_t		ptrack_nonparsed_size = 0;
 		size_t		start_addr;
 
 		/*
@@ -2374,42 +2388,66 @@ make_pagemap_from_ptrack(parray *files)
 
 		if (file->is_datafile)
 		{
+			if (file->tblspcOid == tblspcOid_with_ptrack_init
+					&& file->dbOid == dbOid_with_ptrack_init)
+				{
+					/* ignore ptrack */
+					Assert (ignore_ptrack_for_db);
+					elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
+					file->pagemap.bitmapsize = -1;
+					continue;
+				}
+
 			/* get ptrack bitmap once for all segments of the file */
 			if (file->segno == 0)
 			{
 				/* release previous value */
-				if (ptrack_nonparsed != NULL)
-					pg_free(ptrack_nonparsed);
+				pg_free(ptrack_nonparsed);
+				ptrack_nonparsed_size = 0;
 
 				ptrack_nonparsed = pg_ptrack_get_and_clear(file->tblspcOid, file->dbOid,
 											   file->relOid, &ptrack_nonparsed_size);
 			}
 
+			/* If ptrack file is missing, then copy entire file */
+			if (!ptrack_nonparsed)
+				{
+					elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
+					file->pagemap.bitmapsize = -1;
+					continue;
+				}
+
 			if (ptrack_nonparsed != NULL)
 			{
-				if (file->tblspcOid == tblspcOid_with_ptrack_init
-					&& file->dbOid == dbOid_with_ptrack_init)
+				/*
+				* TODO When do we cut VARHDR from ptrack_nonparsed?
+				*  pg_ptrack_get_and_clear returns ptrack with VARHDR cutted out.
+				* Compute the beginning of the ptrack map related to this segment
+				*
+				* HEAPBLOCKS_PER_BYTE. Number of heap pages one ptrack byte can track: 8
+				* RELSEG_SIZE. Number of Pages per segment: 131072
+				* RELSEG_SIZE/HEAPBLOCKS_PER_BYTE. number of bytes from ptrack file needed
+				*  to keep track on one relsegment: 16384
+				*/
+				start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
+
+				if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
 				{
-					/* ignore ptrack */
-					Assert (ignore_ptrack_for_db);
+					file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
+					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
 				}
+
 				else
 				{
-					/*
-					* TODO When do we cut VARHDR from ptrack_nonparsed?
-					* Compute the beginning of the ptrack map related to this segment
-					*/
-					start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
-
-					if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
-						file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
-					else
-						file->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
-
-					file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
-					memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
+					file->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
+					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
 				}
+
+				file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
+				memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
 			}
+			else
+				elog(ERROR, "Ptrack content should not be empty. File: %s", file->path);
 		}
 	}
 }
