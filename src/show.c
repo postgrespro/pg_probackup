@@ -226,15 +226,18 @@ show_backup_list(FILE *out, parray *backup_list)
 
 	/* if you add new fields here, fix the header */
 	/* show header */
-	fputs("==================================================================================================================================\n", out);
-	fputs(" Instance    ID      Recovery time           Mode    WAL      Current/Parent TLI    Time    Data    Start LSN    Stop LSN   Status\n", out);
-	fputs("==================================================================================================================================\n", out);
+	fputs("============================================================================================================================================\n", out);
+	fputs(" Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI    Time    Data   Start LSN    Stop LSN    Status \n", out);
+	fputs("============================================================================================================================================\n", out);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = parray_get(backup_list, i);
 		TimeLineID	parent_tli;
+		FILE	   *fp;
 		char	   *backup_id;
+		char		pg_version_path[MAXPGPATH];
+		char		pg_version[100] = "---";
 		char		timestamp[100] = "----";
 		char		duration[20] = "----";
 		char		data_bytes_str[10] = "----";
@@ -257,8 +260,27 @@ show_backup_list(FILE *out, parray *backup_list)
 		parent_tli = get_parent_tli(backup->tli);
 		backup_id = base36enc(backup->start_time);
 
-		fprintf(out, " %-11s %-6s  %-19s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%-8X  %2X/%-8X  %-8s\n",
-				instance_name, backup_id,
+		/* Read PG_VERSION file to show backup version */
+		pgBackupGetPath2(backup, pg_version_path, lengthof(pg_version_path),
+						 DATABASE_DIR, "PG_VERSION");
+		fp = pgut_fopen(pg_version_path, "rt", true);
+		if (fp)
+		{
+			if (fgets(pg_version, lengthof(pg_version), fp))
+			{
+				int			len = strlen(pg_version);
+
+				/* Remove trailing new line */
+				if (len > 0 && pg_version[len - 1] == '\n')
+					pg_version[len - 1] = '\0';
+			}
+			fclose(fp);
+		}
+
+		fprintf(out, " %-11s %-8s %-6s  %-19s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%-8X  %2X/%-8X  %-8s\n",
+				instance_name,
+				pg_version,
+				backup_id,
 				timestamp,
 				pgBackupGetBackupMode(backup),
 				backup->stream ? "STREAM": "ARCHIVE",
