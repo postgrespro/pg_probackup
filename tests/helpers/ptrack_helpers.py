@@ -255,32 +255,34 @@ class ProbackupTest(object):
         return md5_per_page
 
     def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
-        if len(size) > 1:
-            if size[0] > size[1]:
-                size = size[0]
-            else:
-                size = size[1]
-        else:
-            size = size[0]
 
         if self.get_pgpro_edition(node) == 'enterprise':
             header_size = 48
         else:
             header_size = 24
         ptrack_bits_for_fork = []
+
+        page_body_size = 8192-header_size
         byte_size = os.path.getsize(file + '_ptrack')
-        byte_size_minus_header = byte_size - header_size
+        npages = byte_size/8192
+        if byte_size%8192 != 0:
+            print('Ptrack page is not 8k aligned')
+            sys.exit(1)
+
         file = os.open(file + '_ptrack', os.O_RDONLY)
-        os.lseek(file, header_size, 0)
-        lots_of_bytes = os.read(file, byte_size_minus_header)
-        byte_list = [lots_of_bytes[i:i+1] for i in range(len(lots_of_bytes))]
-        for byte in byte_list:
-            #byte_inverted = bin(int(byte, base=16))[2:][::-1]
-            #bits = (byte >> x) & 1 for x in range(7, -1, -1)
-            byte_inverted = bin(ord(byte))[2:].rjust(8, '0')[::-1]
-            for bit in byte_inverted:
-                if len(ptrack_bits_for_fork) < size:
-                    ptrack_bits_for_fork.append(int(bit))
+
+        for page in range(npages):
+            offset = 8192*page+header_size
+            os.lseek(file, offset, 0)
+            lots_of_bytes = os.read(file, page_body_size)
+            byte_list = [lots_of_bytes[i:i+1] for i in range(len(lots_of_bytes))]
+            for byte in byte_list:
+                #byte_inverted = bin(int(byte, base=16))[2:][::-1]
+                #bits = (byte >> x) & 1 for x in range(7, -1, -1)
+                byte_inverted = bin(ord(byte))[2:].rjust(8, '0')[::-1]
+                for bit in byte_inverted:
+                #    if len(ptrack_bits_for_fork) < size:
+                        ptrack_bits_for_fork.append(int(bit))
         os.close(file)
         return ptrack_bits_for_fork
 
