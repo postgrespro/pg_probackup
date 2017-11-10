@@ -394,7 +394,8 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
 	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
-	fprintf(out, "server-version = %s\n", backup->server_version);
+	if (backup->server_version[0] != '\0')
+		fprintf(out, "server-version = %s\n", backup->server_version);
 
 	fprintf(out, "\n#Result backup info\n");
 	fprintf(out, "timelineid = %d\n", backup->tli);
