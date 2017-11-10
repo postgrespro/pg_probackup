@@ -104,6 +104,10 @@ typedef struct pgFile
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
 
+/* Special values of datapagemap_t bitmapsize */
+#define PageBitmapIsEmpty 0
+#define PageBitmapIsAbsent -1
+
 /* Current state of backup */
 typedef enum BackupStatus
 {
