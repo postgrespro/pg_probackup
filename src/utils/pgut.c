@@ -38,15 +38,15 @@ const char	   *pgut_dbname = NULL;
 const char	   *host = NULL;
 const char	   *port = NULL;
 const char	   *username = NULL;
-char		   *password = NULL;
+static char	   *password = NULL;
 bool			prompt_password = true;
 
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
 
 /* Interrupted by SIGINT (Ctrl+C) ? */
-bool			interrupted = false;
-static bool		in_cleanup = false;
+bool		interrupted = false;
+bool		in_cleanup = false;
 
 static bool parse_pair(const char buffer[], char key[], char value[]);
 
@@ -58,6 +58,7 @@ static void on_interrupt(void);
 static void on_cleanup(void);
 static void exit_or_abort(int exitcode);
 static const char *get_username(void);
+static pqsigfunc oldhandler = NULL;
 
 /*
  * Unit conversion tables.
@@ -1079,6 +1080,7 @@ parse_pair(const char buffer[], char key[], char value[])
 static void
 prompt_for_password(const char *username)
 {
+	pqsignal(SIGINT, oldhandler);
 	if (password)
 	{
 		free(password);
@@ -1086,6 +1088,7 @@ prompt_for_password(const char *username)
 	}
 
 #if PG_VERSION_NUM >= 100000
+	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
 		simple_prompt("Password: ", password, 100, false);
 	else
@@ -1104,6 +1107,7 @@ prompt_for_password(const char *username)
 		password = simple_prompt(message, 100, false);
 	}
 #endif
+	init_cancel_handler();
 }
 
 PGconn *
@@ -1137,6 +1141,9 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 
 			if (interrupted)
 				elog(ERROR, "interrupted");
+
+			if (password == NULL || password[0] == '\0')
+				elog(ERROR, "no password supplied");
 
 			continue;
 		}
@@ -1819,7 +1826,7 @@ handle_sigint(SIGNAL_ARGS)
 static void
 init_cancel_handler(void)
 {
-	pqsignal(SIGINT, handle_sigint);
+	oldhandler = pqsignal(SIGINT, handle_sigint);
 }
 #else							/* WIN32 */
 

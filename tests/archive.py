@@ -177,13 +177,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
-        archive_script = os.path.join(backup_dir,'archive_script.sh')
-        with open(archive_script, 'w+') as f:
+        archive_script_path = os.path.join(backup_dir,'archive_script.sh')
+        with open(archive_script_path, 'w+') as f:
             f.write(archive_script.format(backup_dir=backup_dir, node_name='node', count_limit=2))
 
-        st = os.stat(archive_script)
-        os.chmod(archive_script, st.st_mode | 0o111)
-        node.append_conf('postgresql.auto.conf', "archive_command  = '{0} %p %f'".format(archive_script))
+        st = os.stat(archive_script_path)
+        os.chmod(archive_script_path, st.st_mode | 0o111)
+        node.append_conf('postgresql.auto.conf', "archive_command  = '{0} %p %f'".format(archive_script_path))
         node.start()
         try:
             self.backup_node(backup_dir, 'node', node, options=["--stream"])

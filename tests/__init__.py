@@ -37,12 +37,13 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(compression))
     suite.addTests(loader.loadTestsFromModule(page))
     suite.addTests(loader.loadTestsFromModule(archive))
-    suite.addTests(loader.loadTestsFromModule(cfs_backup))
-    suite.addTests(loader.loadTestsFromModule(cfs_restore))
-    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
+#    suite.addTests(loader.loadTestsFromModule(cfs_backup))
+#    suite.addTests(loader.loadTestsFromModule(cfs_restore))
+#    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
 
     return suite
 
+#   test_pgpro434_2 unexpected success
 # ToDo:
 #  archive:
 #    discrepancy of instance`s SYSTEMID and node`s SYSTEMID should lead to archive-push refusal to work

@@ -60,10 +60,13 @@ static PGconn *backup_conn_replication = NULL;
 
 /* PostgreSQL server version from "backup_conn" */
 static int server_version = 0;
+static char server_version_str[100] = "";
 
 static bool exclusive_backup = false;
 /* Is pg_start_backup() was executed */
 static bool backup_in_progress = false;
+/* Is pg_stop_backup() was sent */
+static bool pg_stop_backup_is_sent = false;
 
 typedef struct
 {
@@ -780,6 +783,8 @@ do_backup(void)
 	/* TODO fix it for remote backup*/
 	if (!is_remote_backup)
 		current.checksum_version = get_data_checksum_version(true);
+	StrNCpy(current.server_version, server_version_str,
+			sizeof(current.server_version));
 	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support();
@@ -885,6 +890,8 @@ do_backup(void)
 static void
 check_server_version(void)
 {
+	PGresult   *res;
+
 	/* confirm server version */
 	server_version = PQserverVersion(backup_conn);
 
@@ -904,6 +911,11 @@ check_server_version(void)
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
 	exclusive_backup = server_version < 90600;
+
+	/* Save server_version to use it in future */
+	res = pgut_execute(backup_conn, "show server_version", 0, NULL);
+	StrNCpy(server_version_str, PQgetvalue(res, 0, 0), sizeof(server_version_str));
+	PQclear(res);
 }
 
 /*
@@ -926,10 +938,13 @@ check_system_identifiers(void)
 					   "SELECT system_identifier FROM pg_control_system()",
 					   0, NULL);
 	val = PQgetvalue(res, 0, 0);
-	PQclear(res);
 
 	if (!parse_uint64(val, &system_id_conn))
+	{
+		PQclear(res);
 		elog(ERROR, "%s is not system_identifier", val);
+	}
+	PQclear(res);
 
 	if (system_id_conn != system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
@@ -1202,10 +1217,11 @@ pg_ptrack_clear(void)
 static bool
 pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 {
-	char		*params[2];
-	PGresult	*res_db;
-	PGresult	*res;
-	char *result;
+	char	   *params[2];
+	char	   *dbname;
+	PGresult   *res_db;
+	PGresult   *res;
+	char	   *result;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -1221,15 +1237,15 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
 		return false;
 
-	dbname = pstrdup(PQgetvalue(res_db, 0, 0));
-	PQclear(res_db);
+	dbname = PQgetvalue(res_db, 0, 0);
 
 	/* Always backup all files from template0 database */
 	if (strcmp(dbname, "template0") == 0)
 	{
-		pfree(dbname);
+		PQclear(res_db);
 		return true;
 	}
+	PQclear(res_db);
 
 	sprintf(params[0], "%i", dbOid);
 	sprintf(params[1], "%i", tblspcOid);
@@ -1260,16 +1276,18 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 	PGconn	   *tmp_conn;
 	PGresult   *res_db,
 			   *res;
-	char	   *dbname;
 	char	   *params[2];
 	char	   *result;
+	char	   *val;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
 
-    /* regular file (not in directory 'global') */
+	/* regular file (not in directory 'global') */
 	if (db_oid != 0)
 	{
+		char	   *dbname;
+
 		sprintf(params[0], "%i", db_oid);
 		res_db = pgut_execute(backup_conn,
 							  "SELECT datname FROM pg_database WHERE oid=$1",
@@ -1281,12 +1299,11 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
 			return NULL;
 
-		dbname = pstrdup(PQgetvalue(res_db, 0, 0));
-		PQclear(res_db);
+		dbname = PQgetvalue(res_db, 0, 0);
 
 		if (strcmp(dbname, "template0") == 0)
 		{
-			pfree(dbname);
+			PQclear(res_db);
 			return NULL;
 		}
 
@@ -1298,10 +1315,9 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 
 		if (PQnfields(res) != 1)
 			elog(ERROR, "cannot get ptrack file from database \"%s\" by tablespace oid %u and relation oid %u",
-			 dbname, tablespace_oid, rel_filenode);
-		pfree(dbname);
+				 dbname, tablespace_oid, rel_filenode);
+		PQclear(res_db);
 		pgut_disconnect(tmp_conn);
-
 	}
 	/* file in directory 'global' */
 	else
@@ -1316,8 +1332,20 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 						   2, (const char **)params);
 
 		if (PQnfields(res) != 1)
-		elog(ERROR, "cannot get ptrack file from pg_global tablespace and relation oid %u",
+			elog(ERROR, "cannot get ptrack file from pg_global tablespace and relation oid %u",
 			 rel_filenode);
+	}
+
+	val = PQgetvalue(res, 0, 0);
+
+	/* TODO Now pg_ptrack_get_and_clear() returns bytea ending with \x.
+	 * It should be fixed in future ptrack releases, but till then we
+	 * can parse it.
+	 */
+	if (strcmp("x", val+1) == 0)
+	{
+		/* Ptrack file is missing */
+		return NULL;
 	}
 
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
@@ -1558,182 +1586,189 @@ pg_stop_backup(pgBackup *backup)
 	 * postgres archive_command problem and in this case we will
 	 * wait for pg_stop_backup() forever.
 	 */
-	if (!exclusive_backup)
-		/*
-		 * Stop the non-exclusive backup. Besides stop_lsn it returns from
-		 * pg_stop_backup(false) copy of the backup label and tablespace map
-		 * so they can be written to disk by the caller.
-		 */
-		sent = pgut_send(conn,
-						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamptz"
-						   " FROM pg_stop_backup(false)",
-						   0, NULL, WARNING);
-	else
-		sent = pgut_send(conn,
-						   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-						   " current_timestamp(0)::timestamptz"
-						   " FROM pg_stop_backup()",
-						   0, NULL, WARNING);
 
-	if (!sent)
-		elog(WARNING, "Failed to send pg_stop_backup query");
+	if (!pg_stop_backup_is_sent)
+	{
+		if (!exclusive_backup)
+			/*
+			 * Stop the non-exclusive backup. Besides stop_lsn it returns from
+			 * pg_stop_backup(false) copy of the backup label and tablespace map
+			 * so they can be written to disk by the caller.
+			 */
+			sent = pgut_send(conn,
+							   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
+							   " current_timestamp(0)::timestamptz"
+							   " FROM pg_stop_backup(false)",
+							   0, NULL, WARNING);
+		else
+			sent = pgut_send(conn,
+							   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
+							   " current_timestamp(0)::timestamptz"
+							   " FROM pg_stop_backup()",
+							   0, NULL, WARNING);
 
+		pg_stop_backup_is_sent = true;
+		if (!sent)
+			elog(ERROR, "Failed to send pg_stop_backup query");
+	}
 
 	/*
 	 * Wait for the result of pg_stop_backup(),
 	 * but no longer than PG_STOP_BACKUP_TIMEOUT seconds
 	 */
-	while (1)
+	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
-		if (!PQconsumeInput(conn) || PQisBusy(conn))
+		while (1)
 		{
-			pg_stop_backup_timeout++;
-			sleep(1);
-
-			if (interrupted)
+			if (!PQconsumeInput(conn) || PQisBusy(conn))
 			{
-				pgut_cancel(conn);
-				elog(ERROR, "interrupted during waiting for pg_stop_backup");
+				pg_stop_backup_timeout++;
+				sleep(1);
+
+				if (interrupted)
+				{
+					pgut_cancel(conn);
+					elog(ERROR, "interrupted during waiting for pg_stop_backup");
+				}
+
+				if (pg_stop_backup_timeout == 1)
+					elog(INFO, "wait for pg_stop_backup()");
+
+				/*
+				 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
+				 * send an interrupt.
+				 */
+				if (pg_stop_backup_timeout > PG_STOP_BACKUP_TIMEOUT)
+				{
+					pgut_cancel(conn);
+					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
+						 PG_STOP_BACKUP_TIMEOUT);
+				}
 			}
-
-			if (pg_stop_backup_timeout == 1)
-				elog(INFO, "wait for pg_stop_backup()");
-
-			/*
-			 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
-			 * send an interrupt.
-			 */
-			if (pg_stop_backup_timeout > PG_STOP_BACKUP_TIMEOUT)
+			else
 			{
-				pgut_cancel(conn);
-				elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
-					 PG_STOP_BACKUP_TIMEOUT);
+				res = PQgetResult(conn);
+				break;
 			}
 		}
-		else
-		{
-			res = PQgetResult(conn);
-			break;
-		}
+		if (!res)
+			elog(ERROR, "pg_stop backup() failed");
 	}
-
-	if (!res)
-		elog(ERROR, "pg_stop backup() failed");
 
 	backup_in_progress = false;
-
-	/* Extract timeline and LSN from results of pg_stop_backup() */
-	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
-	/* Calculate LSN */
-	stop_backup_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
-
-	if (!XRecOffIsValid(stop_backup_lsn))
+	/* If stop_backup was sent and we are here, it means that is was received */
+	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
-		stop_backup_lsn = restore_lsn;
-	}
+		/* Extract timeline and LSN from results of pg_stop_backup() */
+		XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+		/* Calculate LSN */
+		stop_backup_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 
-	if (!XRecOffIsValid(stop_backup_lsn))
-		elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
-			 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
-
-	/* Write backup_label and tablespace_map for backup from replica */
-	if (!exclusive_backup)
-	{
-		char		path[MAXPGPATH];
-		char		backup_label[MAXPGPATH];
-		FILE	   *fp;
-		pgFile	   *file;
-		size_t		len;
-
-		Assert(PQnfields(res) >= 5);
-
-		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
-
-		/* Write backup_label */
-		join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-		fp = fopen(backup_label, "w");
-		if (fp == NULL)
-			elog(ERROR, "can't open backup label file \"%s\": %s",
-				 backup_label, strerror(errno));
-
-		len = strlen(PQgetvalue(res, 0, 1));
-		if (fwrite(PQgetvalue(res, 0, 1), 1, len, fp) != len ||
-			fflush(fp) != 0 ||
-			fsync(fileno(fp)) != 0 ||
-			fclose(fp))
-			elog(ERROR, "can't write backup label file \"%s\": %s",
-				 backup_label, strerror(errno));
-
-		/*
-		 * It's vital to check if backup_files_list is initialized,
-		 * because we could get here because the backup was interrupted
-		 */
-		if (backup_files_list)
+		if (!XRecOffIsValid(stop_backup_lsn))
 		{
-			file = pgFileNew(backup_label, true);
-			calc_file_checksum(file);
-			free(file->path);
-			file->path = strdup(PG_BACKUP_LABEL_FILE);
-			parray_append(backup_files_list, file);
+			stop_backup_lsn = restore_lsn;
 		}
 
-		/* Write tablespace_map */
-		if (strlen(PQgetvalue(res, 0, 2)) > 0)
+		if (!XRecOffIsValid(stop_backup_lsn))
+			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
+				 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
+
+		/* Write backup_label and tablespace_map for backup from replica */
+		if (!exclusive_backup)
 		{
-			char		tablespace_map[MAXPGPATH];
+			char		path[MAXPGPATH];
+			char		backup_label[MAXPGPATH];
+			FILE	   *fp;
+			pgFile	   *file;
+			size_t		len;
 
-			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fopen(tablespace_map, "w");
+			Assert(PQnfields(res) >= 5);
+
+			pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+
+			/* Write backup_label */
+			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
+			fp = fopen(backup_label, "w");
 			if (fp == NULL)
-				elog(ERROR, "can't open tablespace map file \"%s\": %s",
-					 tablespace_map, strerror(errno));
+				elog(ERROR, "can't open backup label file \"%s\": %s",
+					 backup_label, strerror(errno));
 
-			len = strlen(PQgetvalue(res, 0, 2));
-			if (fwrite(PQgetvalue(res, 0, 2), 1, len, fp) != len ||
+			len = strlen(PQgetvalue(res, 0, 1));
+			if (fwrite(PQgetvalue(res, 0, 1), 1, len, fp) != len ||
 				fflush(fp) != 0 ||
 				fsync(fileno(fp)) != 0 ||
 				fclose(fp))
-				elog(ERROR, "can't write tablespace map file \"%s\": %s",
-					 tablespace_map, strerror(errno));
+				elog(ERROR, "can't write backup label file \"%s\": %s",
+					 backup_label, strerror(errno));
 
+			/*
+			 * It's vital to check if backup_files_list is initialized,
+			 * because we could get here because the backup was interrupted
+			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true);
-				if (S_ISREG(file->mode))
-					calc_file_checksum(file);
+				file = pgFileNew(backup_label, true);
+				calc_file_checksum(file);
 				free(file->path);
-				file->path = strdup(PG_TABLESPACE_MAP_FILE);
+				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
 			}
+
+			/* Write tablespace_map */
+			if (strlen(PQgetvalue(res, 0, 2)) > 0)
+			{
+				char		tablespace_map[MAXPGPATH];
+
+				join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
+				fp = fopen(tablespace_map, "w");
+				if (fp == NULL)
+					elog(ERROR, "can't open tablespace map file \"%s\": %s",
+						 tablespace_map, strerror(errno));
+
+				len = strlen(PQgetvalue(res, 0, 2));
+				if (fwrite(PQgetvalue(res, 0, 2), 1, len, fp) != len ||
+					fflush(fp) != 0 ||
+					fsync(fileno(fp)) != 0 ||
+					fclose(fp))
+					elog(ERROR, "can't write tablespace map file \"%s\": %s",
+						 tablespace_map, strerror(errno));
+
+				if (backup_files_list)
+				{
+					file = pgFileNew(tablespace_map, true);
+					if (S_ISREG(file->mode))
+						calc_file_checksum(file);
+					free(file->path);
+					file->path = strdup(PG_TABLESPACE_MAP_FILE);
+					parray_append(backup_files_list, file);
+				}
+			}
+
+			if (sscanf(PQgetvalue(res, 0, 3), XID_FMT, &recovery_xid) != 1)
+				elog(ERROR,
+					 "result of txid_snapshot_xmax() is invalid: %s",
+					 PQerrorMessage(conn));
+			if (!parse_time(PQgetvalue(res, 0, 4), &recovery_time))
+				elog(ERROR,
+					 "result of current_timestamp is invalid: %s",
+					 PQerrorMessage(conn));
 		}
-
-		if (sscanf(PQgetvalue(res, 0, 3), XID_FMT, &recovery_xid) != 1)
-			elog(ERROR,
-				 "result of txid_snapshot_xmax() is invalid: %s",
-				 PQerrorMessage(conn));
-		if (!parse_time(PQgetvalue(res, 0, 4), &recovery_time))
-			elog(ERROR,
-				 "result of current_timestamp is invalid: %s",
-				 PQerrorMessage(conn));
+		else
+		{
+			if (sscanf(PQgetvalue(res, 0, 1), XID_FMT, &recovery_xid) != 1)
+				elog(ERROR,
+					 "result of txid_snapshot_xmax() is invalid: %s",
+					 PQerrorMessage(conn));
+			if (!parse_time(PQgetvalue(res, 0, 2), &recovery_time))
+				elog(ERROR,
+					 "result of current_timestamp is invalid: %s",
+					 PQerrorMessage(conn));
+		}
+		PQclear(res);
+		if (stream_wal)
+			/* Wait for the completion of stream */
+			pthread_join(stream_thread, NULL);
 	}
-	else
-	{
-		if (sscanf(PQgetvalue(res, 0, 1), XID_FMT, &recovery_xid) != 1)
-			elog(ERROR,
-				 "result of txid_snapshot_xmax() is invalid: %s",
-				 PQerrorMessage(conn));
-		if (!parse_time(PQgetvalue(res, 0, 2), &recovery_time))
-			elog(ERROR,
-				 "result of current_timestamp is invalid: %s",
-				 PQerrorMessage(conn));
-	}
-
-	PQclear(res);
-
-	if (stream_wal)
-		/* Wait for the completion of stream */
-		pthread_join(stream_thread, NULL);
 
 	/* Fill in fields if that is the correct end of backup. */
 	if (backup != NULL)
@@ -1786,16 +1821,18 @@ checkpoint_timeout(void)
 
 	res = pgut_execute(backup_conn, "show checkpoint_timeout", 0, NULL);
 	val = PQgetvalue(res, 0, 0);
-	PQclear(res);
 
 	if (!parse_int(val, &val_int, OPTION_UNIT_S, &hintmsg))
 	{
+		PQclear(res);
 		if (hintmsg)
 			elog(ERROR, "Invalid value of checkout_timeout %s: %s", val,
 				 hintmsg);
 		else
 			elog(ERROR, "Invalid value of checkout_timeout %s", val);
 	}
+
+	PQclear(res);
 
 	return val_int;
 }
@@ -1925,7 +1962,8 @@ backup_files(void *arg)
 				/* backup block by block if datafile AND not compressed by cfs*/
 				if (!backup_data_file(arguments->from_root,
 									  arguments->to_root, file,
-									  arguments->prev_backup_start_lsn))
+									  arguments->prev_backup_start_lsn,
+									  current.backup_mode))
 				{
 					file->write_size = BYTES_INVALID;
 					elog(LOG, "File \"%s\" was not copied to backup", file->path);
@@ -2183,23 +2221,22 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 static void
 set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 {
-	int len;
-	size_t p;
-	pgFile *prev_file;
-	char *cfs_tblspc_path;
-	char *relative_prev_file;
+	int			len;
+	int			p;
+	pgFile	   *prev_file;
+	char	   *cfs_tblspc_path;
+	char	   *relative_prev_file;
 
 	cfs_tblspc_path = strdup(relative);
 	len = strlen("/pg_compression");
 	cfs_tblspc_path[strlen(cfs_tblspc_path) - len] = 0;
 	elog(VERBOSE, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
 
-	for (p = i; p >= 0; p--)
+	for (p = (int) i; p >= 0; p--)
 	{
-		prev_file = (pgFile *) parray_get(files, p);
+		prev_file = (pgFile *) parray_get(files, (size_t) p);
 		relative_prev_file = GetRelativePath(prev_file->path, root);
 
-		//elog(VERBOSE, "P: %lu, Checking file in cfs tablespace %s", p, relative_prev_file);
 		elog(VERBOSE, "Checking file in cfs tablespace %s", relative_prev_file);
 
 		if (strstr(relative_prev_file, cfs_tblspc_path) != NULL)
@@ -2322,13 +2359,12 @@ make_pagemap_from_ptrack(parray *files)
 	size_t		i;
 	Oid dbOid_with_ptrack_init = 0;
 	Oid tblspcOid_with_ptrack_init = 0;
-	bool ignore_ptrack_for_db = false;
+	char	   *ptrack_nonparsed = NULL;
+	size_t		ptrack_nonparsed_size = 0;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-		char	   *ptrack_nonparsed = NULL;
-		size_t		ptrack_nonparsed_size = 0;
 		size_t		start_addr;
 
 		/*
@@ -2338,7 +2374,6 @@ make_pagemap_from_ptrack(parray *files)
 		if (file->is_database)
 		{
 			char *filename = strrchr(file->path, '/');
-			ignore_ptrack_for_db = false;
 
 			Assert(filename != NULL);
 			filename++;
@@ -2352,7 +2387,6 @@ make_pagemap_from_ptrack(parray *files)
 			if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
 				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid))
 			{
-				ignore_ptrack_for_db = true;
 				dbOid_with_ptrack_init = file->dbOid;
 				tblspcOid_with_ptrack_init = file->tblspcOid;
 			}
@@ -2360,12 +2394,21 @@ make_pagemap_from_ptrack(parray *files)
 
 		if (file->is_datafile)
 		{
+			if (file->tblspcOid == tblspcOid_with_ptrack_init
+					&& file->dbOid == dbOid_with_ptrack_init)
+			{
+				/* ignore ptrack if ptrack_init exists */
+				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
+				file->pagemap.bitmapsize = PageBitmapIsAbsent;
+				continue;
+			}
+
 			/* get ptrack bitmap once for all segments of the file */
 			if (file->segno == 0)
 			{
 				/* release previous value */
-				if (ptrack_nonparsed != NULL)
-					pg_free(ptrack_nonparsed);
+				pg_free(ptrack_nonparsed);
+				ptrack_nonparsed_size = 0;
 
 				ptrack_nonparsed = pg_ptrack_get_and_clear(file->tblspcOid, file->dbOid,
 											   file->relOid, &ptrack_nonparsed_size);
@@ -2373,28 +2416,43 @@ make_pagemap_from_ptrack(parray *files)
 
 			if (ptrack_nonparsed != NULL)
 			{
-				if (file->tblspcOid == tblspcOid_with_ptrack_init
-					&& file->dbOid == dbOid_with_ptrack_init)
+				/*
+				 * pg_ptrack_get_and_clear() returns ptrack with VARHDR cutted out.
+				 * Compute the beginning of the ptrack map related to this segment
+				 *
+				 * HEAPBLOCKS_PER_BYTE. Number of heap pages one ptrack byte can track: 8
+				 * RELSEG_SIZE. Number of Pages per segment: 131072
+				 * RELSEG_SIZE/HEAPBLOCKS_PER_BYTE. number of bytes in ptrack file needed
+				 * to keep track on one relsegment: 16384
+				 */
+				start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
+
+				if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
 				{
-					/* ignore ptrack */
-					Assert (ignore_ptrack_for_db);
+					file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
+					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
 				}
 				else
 				{
-					/*
-					* TODO When do we cut VARHDR from ptrack_nonparsed?
-					* Compute the beginning of the ptrack map related to this segment
-					*/
-					start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
-
-					if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
-						file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
-					else
-						file->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
-
-					file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
-					memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
+					file->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
+					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
 				}
+
+				file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
+				memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
+			}
+			else
+			{
+				/*
+				 * If ptrack file is missing, try to copy the entire file.
+				 * It can happen in two cases:
+				 * - files were created by commands that bypass buffer manager
+				 * and, correspondingly, ptrack mechanism.
+				 * i.e. CREATE DATABASE
+				 * - target relation was deleted.
+				 */
+				elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
+				file->pagemap.bitmapsize = PageBitmapIsAbsent;
 			}
 		}
 	}
@@ -2471,7 +2529,7 @@ StreamLog(void *arg)
 	 * Connect in replication mode to the server
 	 */
 	if (conn == NULL)
-		conn = GetConnection();
+		conn = pgut_connect_replication(pgut_dbname);
 	if (!conn)
 	{
 		pthread_mutex_unlock(&start_stream_mut);

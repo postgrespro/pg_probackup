@@ -104,6 +104,10 @@ typedef struct pgFile
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
 
+/* Special values of datapagemap_t bitmapsize */
+#define PageBitmapIsEmpty 0
+#define PageBitmapIsAbsent -1
+
 /* Current state of backup */
 typedef enum BackupStatus
 {
@@ -210,6 +214,8 @@ typedef struct pgBackup
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
+
+	char			server_version[100];
 
 	bool			stream; 		/* Was this backup taken in stream mode?
 									 * i.e. does it include all needed WAL files? */
@@ -413,7 +419,8 @@ extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
 extern bool backup_data_file(const char *from_root, const char *to_root,
-							 pgFile *file, XLogRecPtr prev_backup_start_lsn);
+							 pgFile *file, XLogRecPtr prev_backup_start_lsn,
+							 BackupMode backup_mode);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern bool copy_file(const char *from_root, const char *to_root,

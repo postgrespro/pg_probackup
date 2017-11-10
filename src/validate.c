@@ -246,10 +246,9 @@ do_validate_all(void)
 static void
 do_validate_instance(void)
 {
-	int			i, j;
+	int			i;
 	parray	   *backups;
 	pgBackup   *current_backup = NULL;
-	pgBackup   *base_full_backup = NULL;
 
 	elog(INFO, "Validate backups of the instance '%s'", instance_name);
 
@@ -265,24 +264,27 @@ do_validate_instance(void)
 	for (i = 0; i < parray_num(backups); i++)
 	{
 		char	   *backup_id;
+		pgBackup   *base_full_backup = NULL;
 
 		current_backup = (pgBackup *) parray_get(backups, i);
 		backup_id = base36enc(current_backup->start_time);
 
 		elog(INFO, "Validate backup %s", backup_id);
 
-		free(backup_id);
-
 		if (current_backup->backup_mode != BACKUP_MODE_FULL)
 		{
-			j = i+1;
-			do
+			int			j;
+
+			for (j = i + 1; j < parray_num(backups); j++)
 			{
-				base_full_backup = (pgBackup *) parray_get(backups, j);
-				j++;
+				pgBackup	   *backup = (pgBackup *) parray_get(backups, j);
+
+				if (backup->backup_mode == BACKUP_MODE_FULL)
+				{
+					base_full_backup = backup;
+					break;
+				}
 			}
-			while (base_full_backup->backup_mode != BACKUP_MODE_FULL
-				   && j < parray_num(backups));
 		}
 		else
 			base_full_backup = current_backup;
@@ -292,6 +294,9 @@ do_validate_instance(void)
 		/* There is no point in wal validation for corrupted backup */
 		if (current_backup->status == BACKUP_STATUS_OK)
 		{
+			if (base_full_backup == NULL)
+				elog(ERROR, "Valid full backup for backup %s is not found.",
+					 backup_id);
 			/* Validate corresponding WAL files */
 			validate_wal(current_backup, arclog_path, 0,
 						0, base_full_backup->tli);
@@ -299,6 +304,8 @@ do_validate_instance(void)
 
 		if (current_backup->status != BACKUP_STATUS_OK)
 			corrupted_backup_found = true;
+
+		free(backup_id);
 	}
 
 	/* cleanup */

@@ -2,7 +2,7 @@ import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
-import subprocess
+import subprocess, time
 
 
 module_name = 'page'
@@ -145,6 +145,72 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_multiple_segments(self):
+        """Make node, create table with multiple segments, write some data to it, check page and data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2',
+            'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB',
+            'maintenance_work_mem': '1GB', 'autovacuum': 'off', 'full_page_writes': 'off'}
+            )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        # CREATE TABLE
+        node.pgbench_init(scale=100, options=['--tablespace=somedata'])
+        # FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # PGBENCH STUFF
+        pgbench = node.pgbench(options=['-T', '150', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+        node.safe_psql("postgres", "checkpoint")
+
+        # GET LOGICAL CONTENT FROM NODE
+        result = node.safe_psql("postgres", "select * from pgbench_accounts")
+        # PAGE BACKUP
+        self.backup_node(backup_dir, 'node', node, backup_type='page', options=["-l", "--log-level=verbose"])
+        # GET PHYSICAL CONTENT FROM NODE
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE NODE
+        restored_node = self.make_simple_node(base_dir="{0}/{1}/restored_node".format(module_name, fname))
+        restored_node.cleanup()
+        tblspc_path = self.get_tblspace_path(node, 'somedata')
+        tblspc_path_new = self.get_tblspace_path(restored_node, 'somedata_restored')
+
+        self.restore_node(backup_dir, 'node', restored_node, options=[
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+
+        # GET PHYSICAL CONTENT FROM NODE_RESTORED
+        pgdata_restored = self.pgdata_content(restored_node.data_dir)
+
+        # START RESTORED NODE
+        restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        restored_node.start()
+        while restored_node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
+
+        result_new = restored_node.safe_psql("postgres", "select * from pgbench_accounts")
+
+        # COMPARE RESTORED FILES
+        self.assertEqual(result, result_new, 'data is lost')
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
