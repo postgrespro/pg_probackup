@@ -1238,6 +1238,8 @@ pgut_connect_replication_extended(const char *pghost, const char *pgport,
 		{
 			PQfinish(tmpconn);
 			prompt_for_password(username);
+			keywords[i] = "password";
+			values[i] = password;
 			continue;
 		}
 
