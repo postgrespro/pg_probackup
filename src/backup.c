@@ -1990,6 +1990,7 @@ backup_files(void *arg)
 /*
  * Extract information about files in backup_list parsing their names:
  * - remove temp tables from the list
+ * - remove unlogged tables from the list (leave the _init fork)
  * - set flags for database directories
  * - set flags for datafiles
  */
@@ -1997,6 +1998,7 @@ static void
 parse_backup_filelist_filenames(parray *files, const char *root)
 {
 	size_t		i;
+	Oid unlogged_file_reloid = 0;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -2157,9 +2159,42 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					/* auxiliary fork of the relfile */
 					sscanf(filename, "%u_%s", &(file->relOid), file->forkName);
 					elog(VERBOSE, "relOid %u, forkName %s, filepath %s", file->relOid, file->forkName, relative);
-					if (strcmp(file->forkName, "ptrack") == 0)
+
+					/* handle unlogged relations */
+					if (strcmp(file->forkName, "init") == 0)
+					{
+						/*
+						 * Do not backup files of unlogged relations.
+						 * scan filelist backward and exclude these files.
+						 */
+						int unlogged_file_num = i-1;
+						pgFile	   *unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
+
+						unlogged_file_reloid = file->relOid;
+
+						while (unlogged_file_num >= 0 &&
+							   (unlogged_file_reloid != 0) &&
+							   (unlogged_file->relOid == unlogged_file_reloid))
+						{
+							unlogged_file->size = 0;
+							pgFileFree(unlogged_file);
+							parray_remove(files, unlogged_file_num);
+							unlogged_file_num--;
+							i--;
+							unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
+						}
+					}
+					else if (strcmp(file->forkName, "ptrack") == 0)
 					{
 						/* Do not backup ptrack files */
+						pgFileFree(file);
+						parray_remove(files, i);
+						i--;
+					}
+					else if ((unlogged_file_reloid != 0) &&
+							 (file->relOid == unlogged_file_reloid))
+					{
+						/* Do not backup forks of unlogged relations */
 						pgFileFree(file);
 						parray_remove(files, i);
 						i--;
@@ -2200,6 +2235,15 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					 * It is not datafile, because we cannot read it block by block
 					 */
 					elog(VERBOSE, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
+				}
+
+				if ((unlogged_file_reloid != 0) &&
+					(file->relOid == unlogged_file_reloid))
+				{
+					/* Do not backup segments of unlogged files */
+					pgFileFree(file);
+					parray_remove(files, i);
+					i--;
 				}
 			}
 		}
