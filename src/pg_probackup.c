@@ -93,7 +93,8 @@ ProbackupSubcmd backup_subcmd;
 bool		help = false;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
-static void opt_log_level(pgut_option *opt, const char *arg);
+static void opt_log_level_console(pgut_option *opt, const char *arg);
+static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
 
 static pgut_option options[] =
@@ -141,13 +142,13 @@ static pgut_option options[] =
 	{ 'u', 137, "compress-level",		&compress_level,	SOURCE_CMDLINE },
 	{ 'b', 138, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
 	/* logging options */
-	{ 'b', 'l', "log",					&log_to_file,		SOURCE_CMDLINE },
-	{ 'f', 140, "log-level",			opt_log_level,		SOURCE_CMDLINE },
-	{ 's', 141, "log-filename",			&log_filename,		SOURCE_CMDLINE },
-	{ 's', 142, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
-	{ 's', 143, "log-directory",		&log_directory,		SOURCE_CMDLINE },
-	{ 'u', 144, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE },
-	{ 'u', 145, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
+	{ 'f', 140, "log-level-console",	opt_log_level_console,	SOURCE_CMDLINE },
+	{ 'f', 141, "log-level-file",		opt_log_level_file,	SOURCE_CMDLINE },
+	{ 's', 142, "log-filename",			&log_filename,		SOURCE_CMDLINE },
+	{ 's', 143, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
+	{ 's', 144, "log-directory",		&log_directory,		SOURCE_CMDLINE },
+	{ 'u', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE },
+	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },
@@ -422,9 +423,15 @@ opt_backup_mode(pgut_option *opt, const char *arg)
 }
 
 static void
-opt_log_level(pgut_option *opt, const char *arg)
+opt_log_level_console(pgut_option *opt, const char *arg)
 {
-	log_level = parse_log_level(arg);
+	log_level_console = parse_log_level(arg);
+}
+
+static void
+opt_log_level_file(pgut_option *opt, const char *arg)
+{
+	log_level_file = parse_log_level(arg);
 }
 
 CompressAlg

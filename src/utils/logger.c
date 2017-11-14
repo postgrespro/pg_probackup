@@ -19,8 +19,8 @@
 
 /* Logger parameters */
 
-int			log_to_file = LOGGER_NONE;
-int			log_level = LOGGER_NONE;
+int			log_level_console = LOG_NONE;
+int			log_level_file = LOG_NONE;
 
 char	   *log_filename = NULL;
 char	   *error_log_filename = NULL;
@@ -72,7 +72,7 @@ void
 init_logger(const char *root_path)
 {
 	/* Set log path */
-	if (LOG_TO_FILE || error_log_filename)
+	if (LOG_LEVEL_FILE != LOG_OFF || error_log_filename)
 	{
 		if (log_directory)
 			strcpy(log_path, log_directory);
@@ -132,19 +132,17 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
-	write_to_file = log_path[0] != '\0' && !logging_to_file &&
-		(LOG_TO_FILE || error_log_filename);
+	write_to_file = !logging_to_file && elevel >= LOG_LEVEL_FILE;
+	write_to_error_log = !logging_to_file &&
+		elevel >= ERROR && error_log_filename;
+	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE;
 
 	/*
 	 * There is no need to lock if this is elog() from upper elog() and
 	 * logging is not initialized.
 	 */
-	if (write_to_file)
+	if (write_to_file || write_to_error_log)
 		pthread_mutex_lock(&log_file_mutex);
-
-	write_to_error_log =
-		elevel >= ERROR && error_log_filename && write_to_file;
-	write_to_stderr = elevel >= ERROR || !LOG_TO_FILE;
 
 	/* We need copy args only if we need write to error log file */
 	if (write_to_error_log)
@@ -156,7 +154,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	if (write_to_stderr && write_to_file)
 		va_copy(std_args, args);
 
-	if (write_to_file)
+	if (write_to_file || write_to_error_log)
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
 				 localtime(&log_time));
 
@@ -165,7 +163,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	 * Do not write to file if this error was raised during write previous
 	 * message.
 	 */
-	if (LOG_TO_FILE && write_to_file)
+	if (write_to_file)
 	{
 		logging_to_file = true;
 
@@ -229,7 +227,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 			va_end(std_args);
 	}
 
-	if (write_to_file)
+	if (write_to_file || write_to_error_log)
 		pthread_mutex_unlock(&log_file_mutex);
 
 	/* Exit with code if it is an error */
@@ -249,7 +247,7 @@ elog(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL && elevel < ERROR)
+	if (elevel < LOG_LEVEL_CONSOLE && elevel < LOG_LEVEL_FILE && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -290,7 +288,7 @@ pg_log(eLogType type, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL && elevel < ERROR)
+	if (elevel < LOG_LEVEL_CONSOLE && elevel < LOG_LEVEL_FILE && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -315,7 +313,9 @@ parse_log_level(const char *level)
 	if (len == 0)
 		elog(ERROR, "log-level is empty");
 
-	if (pg_strncasecmp("verbose", v, len) == 0)
+	if (pg_strncasecmp("off", v, len) == 0)
+		return LOG_OFF;
+	else if (pg_strncasecmp("verbose", v, len) == 0)
 		return VERBOSE;
 	else if (pg_strncasecmp("log", v, len) == 0)
 		return LOG;
@@ -345,6 +345,8 @@ deparse_log_level(int level)
 {
 	switch (level)
 	{
+		case LOG_OFF:
+			return "OFF";
 		case VERBOSE:
 			return "VERBOSE";
 		case LOG:

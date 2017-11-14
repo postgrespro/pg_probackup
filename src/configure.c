@@ -9,7 +9,8 @@
 
 #include "pg_probackup.h"
 
-static void opt_log_level(pgut_option *opt, const char *arg);
+static void opt_log_level_console(pgut_option *opt, const char *arg);
+static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
 
 static pgBackupConfig *cur_config = NULL;
@@ -41,10 +42,10 @@ do_configure(bool show_only)
 	if (replica_timeout != 300)		/* 300 is default value */
 		config->replica_timeout = replica_timeout;
 
-	if (log_to_file != LOGGER_NONE)
-		config->log_to_file = LOG_TO_FILE;
-	if (log_level != LOGGER_NONE)
-		config->log_level = LOG_LEVEL;
+	if (log_level_console != LOG_NONE)
+		config->log_level_console = LOG_LEVEL_CONSOLE;
+	if (log_level_file != LOG_NONE)
+		config->log_level_file = LOG_LEVEL_FILE;
 	if (log_filename)
 		config->log_filename = log_filename;
 	if (error_log_filename)
@@ -90,8 +91,8 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->master_user = NULL;
 	config->replica_timeout = INT_MIN;	/* INT_MIN means "undefined" */
 
-	config->log_to_file = INT_MIN;		/* INT_MIN means "undefined" */
-	config->log_level = INT_MIN;		/* INT_MIN means "undefined" */
+	config->log_level_console = INT_MIN;	/* INT_MIN means "undefined" */
+	config->log_level_file = INT_MIN;		/* INT_MIN means "undefined" */
 	config->log_filename = NULL;
 	config->error_log_filename = NULL;
 	config->log_directory = NULL;
@@ -135,10 +136,10 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "replica_timeout = %d\n", config->replica_timeout);
 
 	fprintf(out, "#Logging parameters:\n");
-	if (config->log_to_file != INT_MIN)
-		fprintf(out, "log = %d\n", config->log_to_file);
-	if (config->log_level != INT_MIN)
-		fprintf(out, "log-level = %s\n", deparse_log_level(config->log_level));
+	if (config->log_level_console != INT_MIN)
+		fprintf(out, "log-level-console = %s\n", deparse_log_level(config->log_level_console));
+	if (config->log_level_file != INT_MIN)
+		fprintf(out, "log-level-file = %s\n", deparse_log_level(config->log_level_file));
 	if (config->log_filename)
 		fprintf(out, "log-filename = %s\n", config->log_filename);
 	if (config->error_log_filename)
@@ -198,8 +199,8 @@ readBackupCatalogConfigFile(void)
 		{ 'f', 0, "compress-algorithm",		opt_compress_alg,				SOURCE_CMDLINE },
 		{ 'u', 0, "compress-level",			&(config->compress_level),		SOURCE_CMDLINE },
 		/* logging options */
-		{ 'b', 0, "log",					&(config->log_to_file),			SOURCE_CMDLINE },
-		{ 'f', 0, "log-level",				opt_log_level,					SOURCE_CMDLINE },
+		{ 'f', 0, "log-level-console",		opt_log_level_console,			SOURCE_CMDLINE },
+		{ 'f', 0, "log-level-file",			opt_log_level_file,				SOURCE_CMDLINE },
 		{ 's', 0, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
 		{ 's', 0, "error-log-filename",		&(config->error_log_filename),	SOURCE_CMDLINE },
 		{ 's', 0, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
@@ -234,9 +235,15 @@ readBackupCatalogConfigFile(void)
 }
 
 static void
-opt_log_level(pgut_option *opt, const char *arg)
+opt_log_level_console(pgut_option *opt, const char *arg)
 {
-	cur_config->log_level = parse_log_level(arg);
+	cur_config->log_level_console = parse_log_level(arg);
+}
+
+static void
+opt_log_level_file(pgut_option *opt, const char *arg)
+{
+	cur_config->log_level_file = parse_log_level(arg);
 }
 
 static void

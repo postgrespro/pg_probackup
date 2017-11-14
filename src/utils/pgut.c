@@ -1297,7 +1297,7 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG)
 	{
 		int		i;
 
@@ -1346,7 +1346,7 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG)
 	{
 		int		i;
 
