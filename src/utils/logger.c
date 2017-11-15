@@ -48,8 +48,8 @@ typedef enum
 
 void pg_log(eLogType type, const char *fmt,...) pg_attribute_printf(2, 3);
 
-static void elog_internal(int elevel, const char *fmt, va_list args)
-						  pg_attribute_printf(2, 0);
+static void elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
+						  pg_attribute_printf(3, 0);
 
 /* Functions to work with log files */
 static void open_logfile(FILE **file, const char *filename_format);
@@ -122,7 +122,7 @@ write_elevel(FILE *stream, int elevel)
  * Actual implementation for elog() and pg_log().
  */
 static void
-elog_internal(int elevel, const char *fmt, va_list args)
+elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 {
 	bool		write_to_file,
 				write_to_error_log,
@@ -135,7 +135,7 @@ elog_internal(int elevel, const char *fmt, va_list args)
 	write_to_file = !logging_to_file && elevel >= LOG_LEVEL_FILE;
 	write_to_error_log = !logging_to_file &&
 		elevel >= ERROR && error_log_filename;
-	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE;
+	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
 
 	/*
 	 * There is no need to lock if this is elog() from upper elog() and
@@ -251,7 +251,27 @@ elog(int elevel, const char *fmt, ...)
 		return;
 
 	va_start(args, fmt);
-	elog_internal(elevel, fmt, args);
+	elog_internal(elevel, false, fmt, args);
+	va_end(args);
+}
+
+/*
+ * Logs only to log file and exit if ERROR or FATAL.
+ */
+void
+elog_file(int elevel, const char *fmt, ...)
+{
+	va_list		args;
+
+	/*
+	 * Do not log message if severity level is less than log_level.
+	 * It is the little optimisation to put it here not in elog_internal().
+	 */
+	if (elevel < LOG_LEVEL_FILE && elevel < ERROR)
+		return;
+
+	va_start(args, fmt);
+	elog_internal(elevel, true, fmt, args);
 	va_end(args);
 }
 
@@ -292,7 +312,7 @@ pg_log(eLogType type, const char *fmt, ...)
 		return;
 
 	va_start(args, fmt);
-	elog_internal(elevel, fmt, args);
+	elog_internal(elevel, false, fmt, args);
 	va_end(args);
 }
 

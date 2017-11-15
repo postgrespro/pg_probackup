@@ -602,6 +602,24 @@ parse_backup_mode(const char *value)
 	return BACKUP_MODE_INVALID;
 }
 
+const char *
+deparse_backup_mode(BackupMode mode)
+{
+	switch (mode)
+	{
+		case BACKUP_MODE_FULL:
+			return "full";
+		case BACKUP_MODE_DIFF_PAGE:
+			return "page";
+		case BACKUP_MODE_DIFF_PTRACK:
+			return "ptrack";
+		case BACKUP_MODE_INVALID:
+			return "invalid";
+	}
+
+	return NULL;
+}
+
 /* free pgBackup object */
 void
 pgBackupFree(void *backup)

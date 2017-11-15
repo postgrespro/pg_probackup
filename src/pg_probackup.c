@@ -170,6 +170,7 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
+	char	   *command;
 	char		path[MAXPGPATH];
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
@@ -233,6 +234,33 @@ main(int argc, char *argv[])
 		}
 		else
 			elog(ERROR, "Unknown subcommand");
+	}
+
+	/*
+	 * Make command string before getopt_long() will call. It permutes the
+	 * content of argv.
+	 */
+	if (backup_subcmd == BACKUP)
+	{
+		int			i,
+					len = 0;
+
+		command = (char *) palloc(sizeof(char) * MAXPGPATH);
+		command[0] = '\0';
+
+		for (i = 0; i < argc; i++)
+		{
+			int			arglen = strlen(argv[i]);
+
+			if (arglen + len > MAXPGPATH)
+				break;
+
+			strncpy((command +len), argv[i], arglen);
+			len += arglen;
+			command[len++] = ' ';
+		}
+
+		command[len] = '\0';
 	}
 
 	/* Parse command line arguments */
@@ -382,7 +410,23 @@ main(int argc, char *argv[])
 		case INIT:
 			return do_init();
 		case BACKUP:
-			return do_backup();
+			{
+				char	   *backup_id;
+				const char *backup_mode;
+				time_t		start_time;
+
+				start_time = time(NULL);
+				backup_id = base36enc(start_time);
+				backup_mode = deparse_backup_mode(current.backup_mode);
+
+				elog_file(INFO, "pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s",
+						  PROGRAM_VERSION, backup_id, backup_mode, instance_name);
+				elog_file(INFO, "command: %s", command);
+
+				pfree(backup_id);
+
+				return do_backup(start_time);
+			}
 		case RESTORE:
 			return do_restore_or_validate(current.backup_id,
 						  target_time, target_xid,
