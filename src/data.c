@@ -140,7 +140,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	/*
 	 * Read the page and verify its header and checksum.
 	 * Under high write load it's possible that we've read partly
-	 * flushed page, so try several times befor throwing an error.
+	 * flushed page, so try several times before throwing an error.
 	 */
 	while(try_checksum--)
 	{
@@ -152,6 +152,13 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 		if (read_len != BLCKSZ)
 		{
+			if (read_len == 0)
+			{
+				elog(LOG, "File %s, block %u, file was truncated",
+					 file->path, blknum);
+				return;
+			}
+
 			elog(ERROR, "File: %s, invalid block size of block %u : %lu",
 				 file->path, blknum, read_len);
 		}
