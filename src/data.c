@@ -158,6 +158,13 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 					 file->path, blknum);
 				return;
 			}
+			else if (try_checksum)
+			{
+				elog(LOG, "File: %s, block %u, expected block size %lu, but read %d, try again",
+					 file->path, blknum, read_len, BLCKSZ);
+				usleep(100);
+				continue;
+			}
 
 			elog(ERROR, "File: %s, invalid block size of block %u : %lu",
 				 file->path, blknum, read_len);
