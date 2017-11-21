@@ -920,7 +920,7 @@ parseRecoveryTargetOptions(const char *target_time,
 #ifdef PGPRO_EE
 		if (parse_uint64(target_xid, &dummy_xid))
 #else
-		if (parse_uint32(target_xid, &dummy_xid))
+		if (parse_uint32(target_xid, &dummy_xid, 0))
 #endif
 			rt->recovery_target_xid = dummy_xid;
 		else

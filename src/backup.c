@@ -939,7 +939,7 @@ check_system_identifiers(void)
 					   0, NULL);
 	val = PQgetvalue(res, 0, 0);
 
-	if (!parse_uint64(val, &system_id_conn))
+	if (!parse_uint64(val, &system_id_conn, 0))
 	{
 		PQclear(res);
 		elog(ERROR, "%s is not system_identifier", val);

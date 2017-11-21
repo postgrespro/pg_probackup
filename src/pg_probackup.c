@@ -147,8 +147,8 @@ static pgut_option options[] =
 	{ 's', 142, "log-filename",			&log_filename,		SOURCE_CMDLINE },
 	{ 's', 143, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
 	{ 's', 144, "log-directory",		&log_directory,		SOURCE_CMDLINE },
-	{ 'u', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE },
-	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
+	{ 'u', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
+	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },

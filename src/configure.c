@@ -204,8 +204,8 @@ readBackupCatalogConfigFile(void)
 		{ 's', 0, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
 		{ 's', 0, "error-log-filename",		&(config->error_log_filename),	SOURCE_CMDLINE },
 		{ 's', 0, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
-		{ 'u', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE },
-		{ 'u', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE },
+		{ 'u', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
+		{ 'u', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		/* connection options */
 		{ 's', 0, "pgdata",					&(config->pgdata),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgdatabase",				&(config->pgdatabase),			SOURCE_FILE_STRICT },

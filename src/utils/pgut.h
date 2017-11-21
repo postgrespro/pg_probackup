@@ -63,6 +63,7 @@ typedef struct pgut_option
 	void	   *var;		/* pointer to variable */
 	pgut_optsrc	allowed;	/* allowed source */
 	pgut_optsrc	source;		/* actual source */
+	int			flags;		/* option unit */
 } pgut_option;
 
 typedef void (*pgut_optfn) (pgut_option *opt, const char *arg);
@@ -191,10 +192,10 @@ extern int appendStringInfoFd(StringInfo str, int fd);
 
 extern bool parse_bool(const char *value, bool *result);
 extern bool parse_bool_with_len(const char *value, size_t len, bool *result);
-extern bool parse_int32(const char *value, int32 *result);
-extern bool parse_uint32(const char *value, uint32 *result);
-extern bool parse_int64(const char *value, int64 *result);
-extern bool parse_uint64(const char *value, uint64 *result);
+extern bool parse_int32(const char *value, int32 *result, int flags);
+extern bool parse_uint32(const char *value, uint32 *result, int flags);
+extern bool parse_int64(const char *value, int64 *result, int flags);
+extern bool parse_uint64(const char *value, uint64 *result, int flags);
 extern bool parse_time(const char *value, time_t *result);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);

@@ -132,9 +132,10 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
-	write_to_file = !logging_to_file && elevel >= LOG_LEVEL_FILE;
-	write_to_error_log = !logging_to_file &&
-		elevel >= ERROR && error_log_filename;
+	write_to_file = !logging_to_file && elevel >= LOG_LEVEL_FILE &&
+		log_path[0] != '\0';
+	write_to_error_log = !logging_to_file && elevel >= ERROR &&
+		error_log_filename && log_path[0] != '\0';
 	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
 
 	/*
@@ -507,15 +508,15 @@ open_logfile(FILE **file, const char *filename_format)
 				{
 					time_t		creation_time;
 
-					if (!parse_int64(buf, (int64 *) &creation_time))
+					if (!parse_int64(buf, (int64 *) &creation_time, 0))
 						elog(ERROR, "rotation file \"%s\" has wrong "
 							 "creation timestamp \"%s\"",
 							 control, buf);
 					/* Parsed creation time */
 
 					rotation_requested = (cur_time - creation_time) >
-							/* convert to seconds */
-							log_rotation_age * 60;
+						/* convert to seconds */
+						log_rotation_age * 60;
 				}
 				else
 					elog(ERROR, "cannot read creation timestamp from "
@@ -528,8 +529,8 @@ open_logfile(FILE **file, const char *filename_format)
 		/* Check for rotation by size */
 		if (!rotation_requested && log_rotation_size > 0)
 			rotation_requested = st.st_size >=
-					/* convert to bytes */
-					log_rotation_size * 1024L;
+				/* convert to bytes */
+				log_rotation_size * 1024L;
 	}
 
 logfile_open:
