@@ -910,7 +910,8 @@ check_server_version(void)
 			 server_version % 100, "9.6");
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
-	exclusive_backup = server_version < 90600;
+	exclusive_backup = server_version < 90600 ||
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK;
 
 	/* Save server_version to use it in future */
 	res = pgut_execute(backup_conn, "show server_version", 0, NULL);
