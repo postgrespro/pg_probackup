@@ -200,6 +200,11 @@ extern bool parse_time(const char *value, time_t *result);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
 
+extern void convert_from_base_unit(int64 base_value, int base_unit,
+								   int64 *value, const char **unit);
+extern void convert_from_base_unit_u(uint64 base_value, int base_unit,
+									 uint64 *value, const char **unit);
+
 #define IsSpace(c)		(isspace((unsigned char)(c)))
 #define IsAlpha(c)		(isalpha((unsigned char)(c)))
 #define IsAlnum(c)		(isalnum((unsigned char)(c)))

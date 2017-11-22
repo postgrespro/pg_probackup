@@ -338,6 +338,97 @@ convert_to_base_unit_u(uint64 value, const char *unit,
 	return false;
 }
 
+/*
+ * Convert a value in some base unit to a human-friendly unit.  The output
+ * unit is chosen so that it's the greatest unit that can represent the value
+ * without loss.  For example, if the base unit is GUC_UNIT_KB, 1024 is
+ * converted to 1 MB, but 1025 is represented as 1025 kB.
+ */
+void
+convert_from_base_unit(int64 base_value, int base_unit,
+					   int64 *value, const char **unit)
+{
+	const unit_conversion *table;
+	int			i;
+
+	*unit = NULL;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit)
+		{
+			/*
+			 * Accept the first conversion that divides the value evenly. We
+			 * assume that the conversions for each base unit are ordered from
+			 * greatest unit to the smallest!
+			 */
+			if (table[i].multiplier < 0)
+			{
+				*value = base_value * (-table[i].multiplier);
+				*unit = table[i].unit;
+				break;
+			}
+			else if (base_value % table[i].multiplier == 0)
+			{
+				*value = base_value / table[i].multiplier;
+				*unit = table[i].unit;
+				break;
+			}
+		}
+	}
+
+	Assert(*unit != NULL);
+}
+
+/*
+ * Unsigned variant of convert_from_base_unit()
+ */
+void
+convert_from_base_unit_u(uint64 base_value, int base_unit,
+						 uint64 *value, const char **unit)
+{
+	const unit_conversion *table;
+	int			i;
+
+	*unit = NULL;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit)
+		{
+			/*
+			 * Accept the first conversion that divides the value evenly. We
+			 * assume that the conversions for each base unit are ordered from
+			 * greatest unit to the smallest!
+			 */
+			if (table[i].multiplier < 0)
+			{
+				*value = base_value * (-table[i].multiplier);
+				*unit = table[i].unit;
+				break;
+			}
+			else if (base_value % table[i].multiplier == 0)
+			{
+				*value = base_value / table[i].multiplier;
+				*unit = table[i].unit;
+				break;
+			}
+		}
+	}
+
+	Assert(*unit != NULL);
+}
+
 static bool
 parse_unit(char *unit_str, int flags, int64 value, int64 *base_value)
 {

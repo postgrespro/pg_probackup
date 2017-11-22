@@ -109,6 +109,9 @@ pgBackupConfigInit(pgBackupConfig *config)
 void
 writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 {
+	uint64		res;
+	const char *unit;
+
 	fprintf(out, "#Backup instance info\n");
 	fprintf(out, "PGDATA = %s\n", config->pgdata);
 	fprintf(out, "system-identifier = %li\n", config->system_identifier);
@@ -146,10 +149,24 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "error-log-filename = %s\n", config->error_log_filename);
 	if (config->log_directory)
 		fprintf(out, "log-directory = %s\n", config->log_directory);
+
+	/*
+	 * Convert values from base unit
+	 */
 	if (config->log_rotation_size)
-		fprintf(out, "log-rotation-size = %d\n", config->log_rotation_size);
+	{
+		convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
+								 &res, &unit);
+		fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n",
+				res, unit);
+	}
 	if (config->log_rotation_age)
-		fprintf(out, "log-rotation-age = %d\n", config->log_rotation_age);
+	{
+		convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
+								 &res, &unit);
+		fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n",
+				res, unit);
+	}
 
 	fprintf(out, "#Retention parameters:\n");
 	if (config->retention_redundancy)
