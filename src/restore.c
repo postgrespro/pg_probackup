@@ -132,6 +132,18 @@ do_restore_or_validate(time_t target_backup_id,
 			continue;
 
 		/*
+		 * [PGPRO-1164] If BACKUP_ID is not provided for restore command,
+		 *  we must find the first valid(!) backup.
+		 */
+
+		if (is_restore && target_backup_id == 0 && current_backup->status != BACKUP_STATUS_OK)
+		{
+			elog(WARNING, "Skipping backup %s, because it has non-valid status: %s",
+				base36enc(current_backup->start_time), status2str(current_backup->status));
+			continue;
+		}
+
+		/*
 		 * We found target backup. Check its status and
 		 * ensure that it satisfies recovery target.
 		 */
