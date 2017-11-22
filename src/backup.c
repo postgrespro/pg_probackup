@@ -867,8 +867,8 @@ do_backup(void)
 	current.status = BACKUP_STATUS_DONE;
 	pgBackupWriteBackupControlFile(&current);
 
-	elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
-		 current.data_bytes);
+	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
+	//		current.data_bytes);
 
 	pgBackupValidate(&current);
 
@@ -1402,6 +1402,11 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 		timeout = archive_timeout;
 	}
 
+	if (wait_prev_segment)
+		elog(LOG, "Looking for segment: %s", wal_segment);
+	else
+		elog(LOG, "Looking for LSN: %X/%X in segment: %s", (uint32) (lsn >> 32), (uint32) lsn, wal_segment);
+
 	/* Wait until target LSN is archived or streamed */
 	while (true)
 	{
@@ -1409,6 +1414,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 
 		if (file_exists)
 		{
+			elog(LOG, "Found segment: %s", wal_segment);
 			/* Do not check LSN for previous WAL segment */
 			if (wait_prev_segment)
 				return;
@@ -1419,7 +1425,10 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 			if ((stream_wal && wal_contains_lsn(wal_dir, lsn, tli)) ||
 				(!stream_wal && wal_contains_lsn(arclog_path, lsn, tli)))
 				/* Target LSN was found */
+			{
+				elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
 				return;
+			}
 		}
 
 		sleep(1);
@@ -1654,6 +1663,8 @@ pg_stop_backup(pgBackup *backup)
 		}
 		if (!res)
 			elog(ERROR, "pg_stop backup() failed");
+		else
+			elog(INFO, "pg_stop backup() successfully executed");
 	}
 
 	backup_in_progress = false;
