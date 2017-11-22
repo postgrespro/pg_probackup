@@ -135,8 +135,13 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "master-db = %s\n", config->master_db);
 	if (config->master_user)
 		fprintf(out, "master-user = %s\n", config->master_user);
+
 	if (config->replica_timeout != INT_MIN)
-		fprintf(out, "replica_timeout = %d\n", config->replica_timeout);
+	{
+		convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_S,
+								 &res, &unit);
+		fprintf(out, "replica-timeout = " UINT64_FORMAT "%s\n", res, unit);
+	}
 
 	fprintf(out, "#Logging parameters:\n");
 	if (config->log_level_console != INT_MIN)
@@ -157,15 +162,13 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	{
 		convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
 								 &res, &unit);
-		fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n",
-				res, unit);
+		fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n", res, unit);
 	}
 	if (config->log_rotation_age)
 	{
 		convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
 								 &res, &unit);
-		fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n",
-				res, unit);
+		fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n", res, unit);
 	}
 
 	fprintf(out, "#Retention parameters:\n");
@@ -234,7 +237,7 @@ readBackupCatalogConfigFile(void)
 		{ 's', 0, "master-port",			&(config->master_port),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-db",				&(config->master_db),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-user",			&(config->master_user),			SOURCE_FILE_STRICT },
-		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE },
+		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		/* other options */
 		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
 		{0}

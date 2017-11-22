@@ -119,7 +119,7 @@ static pgut_option options[] =
 	{ 's', 14, "master-host",			&master_host,		SOURCE_CMDLINE, },
 	{ 's', 15, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 16, "master-user",			&master_user,		SOURCE_CMDLINE, },
-	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE, },
+	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
