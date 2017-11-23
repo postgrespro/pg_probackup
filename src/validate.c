@@ -51,12 +51,12 @@ pgBackupValidate(pgBackup *backup)
 		return;
 	}
 
-	elog(LOG, "Validate backup %s", backup_id_string);
+	elog(INFO, "Validating backup %s", backup_id_string);
 
 	if (backup->backup_mode != BACKUP_MODE_FULL &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
-		elog(LOG, "Invalid backup_mode of backup %s", backup_id_string);
+		elog(INFO, "Invalid backup_mode of backup %s", backup_id_string);
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
@@ -99,7 +99,7 @@ pgBackupValidate(pgBackup *backup)
 	if (corrupted)
 		elog(WARNING, "Backup %s is corrupted", backup_id_string);
 	else
-		elog(LOG, "Backup %s is valid", backup_id_string);
+		elog(INFO, "Backup %s is valid", backup_id_string);
 	free(backup_id_string);
 }
 

@@ -47,6 +47,7 @@ static PGcancel *volatile cancel_conn = NULL;
 /* Interrupted by SIGINT (Ctrl+C) ? */
 bool		interrupted = false;
 bool		in_cleanup = false;
+bool		in_password = false;
 
 static bool parse_pair(const char buffer[], char key[], char value[]);
 
@@ -1080,7 +1081,8 @@ parse_pair(const char buffer[], char key[], char value[])
 static void
 prompt_for_password(const char *username)
 {
-	pqsignal(SIGINT, oldhandler);
+	in_password = true;
+
 	if (password)
 	{
 		free(password);
@@ -1107,7 +1109,8 @@ prompt_for_password(const char *username)
 		password = simple_prompt(message, 100, false);
 	}
 #endif
-	init_cancel_handler();
+
+	in_password = false;
 }
 
 PGconn *
@@ -1238,6 +1241,8 @@ pgut_connect_replication_extended(const char *pghost, const char *pgport,
 		{
 			PQfinish(tmpconn);
 			prompt_for_password(username);
+			keywords[i] = "password";
+			values[i] = password;
 			continue;
 		}
 
@@ -1524,6 +1529,15 @@ on_interrupt(void)
 
 	/* Set interruped flag */
 	interrupted = true;
+
+	/* User promts password, call on_cleanup() byhand */
+	if (in_password)
+	{
+		on_cleanup();
+
+		pqsignal(SIGINT, oldhandler);
+		kill(0, SIGINT);
+	}
 
 	/* Send QueryCancel if we are processing a database query */
 	if (!in_cleanup && cancel_conn != NULL &&

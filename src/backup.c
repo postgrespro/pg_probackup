@@ -867,8 +867,8 @@ do_backup(void)
 	current.status = BACKUP_STATUS_DONE;
 	pgBackupWriteBackupControlFile(&current);
 
-	elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
-		 current.data_bytes);
+	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
+	//		current.data_bytes);
 
 	pgBackupValidate(&current);
 
@@ -910,7 +910,8 @@ check_server_version(void)
 			 server_version % 100, "9.6");
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
-	exclusive_backup = server_version < 90600;
+	exclusive_backup = server_version < 90600 ||
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK;
 
 	/* Save server_version to use it in future */
 	res = pgut_execute(backup_conn, "show server_version", 0, NULL);
@@ -1401,6 +1402,11 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 		timeout = archive_timeout;
 	}
 
+	if (wait_prev_segment)
+		elog(LOG, "Looking for segment: %s", wal_segment);
+	else
+		elog(LOG, "Looking for LSN: %X/%X in segment: %s", (uint32) (lsn >> 32), (uint32) lsn, wal_segment);
+
 	/* Wait until target LSN is archived or streamed */
 	while (true)
 	{
@@ -1408,6 +1414,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 
 		if (file_exists)
 		{
+			elog(LOG, "Found segment: %s", wal_segment);
 			/* Do not check LSN for previous WAL segment */
 			if (wait_prev_segment)
 				return;
@@ -1418,7 +1425,10 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 			if ((stream_wal && wal_contains_lsn(wal_dir, lsn, tli)) ||
 				(!stream_wal && wal_contains_lsn(arclog_path, lsn, tli)))
 				/* Target LSN was found */
+			{
+				elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
 				return;
+			}
 		}
 
 		sleep(1);
@@ -1653,6 +1663,8 @@ pg_stop_backup(pgBackup *backup)
 		}
 		if (!res)
 			elog(ERROR, "pg_stop backup() failed");
+		else
+			elog(INFO, "pg_stop backup() successfully executed");
 	}
 
 	backup_in_progress = false;
@@ -1990,6 +2002,7 @@ backup_files(void *arg)
 /*
  * Extract information about files in backup_list parsing their names:
  * - remove temp tables from the list
+ * - remove unlogged tables from the list (leave the _init fork)
  * - set flags for database directories
  * - set flags for datafiles
  */
@@ -1997,6 +2010,7 @@ static void
 parse_backup_filelist_filenames(parray *files, const char *root)
 {
 	size_t		i;
+	Oid unlogged_file_reloid = 0;
 
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -2157,9 +2171,42 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					/* auxiliary fork of the relfile */
 					sscanf(filename, "%u_%s", &(file->relOid), file->forkName);
 					elog(VERBOSE, "relOid %u, forkName %s, filepath %s", file->relOid, file->forkName, relative);
-					if (strcmp(file->forkName, "ptrack") == 0)
+
+					/* handle unlogged relations */
+					if (strcmp(file->forkName, "init") == 0)
+					{
+						/*
+						 * Do not backup files of unlogged relations.
+						 * scan filelist backward and exclude these files.
+						 */
+						int unlogged_file_num = i-1;
+						pgFile	   *unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
+
+						unlogged_file_reloid = file->relOid;
+
+						while (unlogged_file_num >= 0 &&
+							   (unlogged_file_reloid != 0) &&
+							   (unlogged_file->relOid == unlogged_file_reloid))
+						{
+							unlogged_file->size = 0;
+							pgFileFree(unlogged_file);
+							parray_remove(files, unlogged_file_num);
+							unlogged_file_num--;
+							i--;
+							unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
+						}
+					}
+					else if (strcmp(file->forkName, "ptrack") == 0)
 					{
 						/* Do not backup ptrack files */
+						pgFileFree(file);
+						parray_remove(files, i);
+						i--;
+					}
+					else if ((unlogged_file_reloid != 0) &&
+							 (file->relOid == unlogged_file_reloid))
+					{
+						/* Do not backup forks of unlogged relations */
 						pgFileFree(file);
 						parray_remove(files, i);
 						i--;
@@ -2200,6 +2247,15 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					 * It is not datafile, because we cannot read it block by block
 					 */
 					elog(VERBOSE, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
+				}
+
+				if ((unlogged_file_reloid != 0) &&
+					(file->relOid == unlogged_file_reloid))
+				{
+					/* Do not backup segments of unlogged files */
+					pgFileFree(file);
+					parray_remove(files, i);
+					i--;
 				}
 			}
 		}

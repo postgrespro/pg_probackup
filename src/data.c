@@ -140,7 +140,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	/*
 	 * Read the page and verify its header and checksum.
 	 * Under high write load it's possible that we've read partly
-	 * flushed page, so try several times befor throwing an error.
+	 * flushed page, so try several times before throwing an error.
 	 */
 	while(try_checksum--)
 	{
@@ -152,6 +152,20 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 		if (read_len != BLCKSZ)
 		{
+			if (read_len == 0)
+			{
+				elog(LOG, "File %s, block %u, file was truncated",
+					 file->path, blknum);
+				return;
+			}
+			else if (try_checksum)
+			{
+				elog(LOG, "File: %s, block %u, expected block size %lu, but read %d, try again",
+					 file->path, blknum, read_len, BLCKSZ);
+				usleep(100);
+				continue;
+			}
+
 			elog(ERROR, "File: %s, invalid block size of block %u : %lu",
 				 file->path, blknum, read_len);
 		}
@@ -494,7 +508,7 @@ restore_data_file(const char *from_root,
 		if (header.block < blknum)
 			elog(ERROR, "backup is broken at block %u", blknum);
 
-		elog(VERBOSE, "file %s, header compressed size %d", file->path, header.compressed_size);
+		//elog(VERBOSE, "file %s, header compressed size %d", file->path, header.compressed_size);
 		Assert(header.compressed_size <= BLCKSZ);
 
 		read_len = fread(compressed_page.data, 1,
