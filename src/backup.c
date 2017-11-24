@@ -1099,8 +1099,9 @@ pg_ptrack_support(void)
 	}
 
 	/* Now we support only ptrack version 1.3 */
-	if (strcmp(PQgetvalue(res_db, 0, 0), "1.3") != 0)
+	if (strcmp(PQgetvalue(res_db, 0, 0), "1.4") != 0)
 	{
+		elog(WARNING, "Update your ptrack to the version 1.4. Current version is %s", PQgetvalue(res_db, 0, 0));
 		PQclear(res_db);
 		return false;
 	}
