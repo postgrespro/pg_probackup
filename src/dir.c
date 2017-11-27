@@ -149,7 +149,7 @@ pgFileInit(const char *path)
 	file->is_datafile = false;
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
-	file->pagemap.bitmapsize = PageBitmapIsAbsent;
+	file->pagemap.bitmapsize = (current.backup_mode == BACKUP_MODE_DIFF_PAGE) ? PageBitmapIsEmpty : PageBitmapIsAbsent;
 	file->tblspcOid = 0;
 	file->dbOid = 0;
 	file->relOid = 0;
