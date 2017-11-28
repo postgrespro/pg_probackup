@@ -26,9 +26,11 @@ class AuthTest(unittest.TestCase):
             base_dir="{}/node".format(module_name),
             set_replication=True,
             initdb_params=['--data-checksums', '--auth-host=md5'],
+            pg_options={
+                'wal_level': 'replica'
+            }
         )
 
-        cls.node.start()
         try:
             add_backup_user(cls.node)
         except QueryException:
@@ -37,19 +39,19 @@ class AuthTest(unittest.TestCase):
         cls.backup_dir = os.path.join(tempfile.tempdir, "backups")
         cls.pb.init_pb(cls.backup_dir)
         cls.pb.add_instance(cls.backup_dir, cls.node.name, cls.node)
-
         cls.pb.set_archiving(cls.backup_dir, cls.node.name, cls.node)
+        cls.node.start()
 
     @classmethod
     def tearDownClass(cls):
         cls.pb.del_test_dir(module_name, '')
 
     def setUp(self):
-        self.cmd = [self.pb.probackup_path, 'pg_probackup',
+        self.cmd = [self.pb.probackup_path, 'backup',
             '-B', self.backup_dir,
             '--instance', self.node.name,
             '-h', '127.0.0.1',
-            '-p', self.node.port,
+            '-p', str(self.node.port),
             '-U', 'backup'
             '-b', 'FULL'
             ]
