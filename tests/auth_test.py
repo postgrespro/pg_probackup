@@ -11,6 +11,7 @@ ptrack = False
 
 class AuthTest(unittest.TestCase):
     pb = None
+    node = None
 
     @classmethod
     def setUpClass(cls):
@@ -37,20 +38,26 @@ class AuthTest(unittest.TestCase):
         cls.pb.init_pb(cls.backup_dir)
         cls.pb.add_instance(cls.backup_dir, cls.node.name, cls.node)
 
+        cls.pb.set_archiving(cls.backup_dir, cls.node.name, cls.node)
+
     @classmethod
     def tearDownClass(cls):
         cls.pb.del_test_dir(module_name, '')
 
     def setUp(self):
         self.cmd = [self.pb.probackup_path, 'pg_probackup',
-             '-B', self.backup_dir,
-             '-h', '127.0.0.1',
-             '-U', 'backup'
-             ]
+            '-B', self.backup_dir,
+            '--instance', self.node.name,
+            '-h', '127.0.0.1',
+            '-p', self.node.port,
+            '-U', 'backup'
+            '-b', 'FULL'
+            ]
 
     def tearDown(self):
         pass
 
+    @unittest.skip
     def test_empty_password(self):
         try:
             run_pb_with_auth(self.cmd,'\0')
@@ -63,15 +70,17 @@ class AuthTest(unittest.TestCase):
         except:
             pass
 
+    @unittest.skip
     def test_ctrl_c_event(self):
         try:
-            run_pb_with_auth(self.cmd,'\0')
+            run_pb_with_auth(self.cmd,signal='CTRL_C_EVENT')
         except:
             pass
 
 
-def run_pb_with_auth(cmd, password, signal=None):
-    probackup = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, timeout=20)
+def run_pb_with_auth(cmd, password=None, signal=None):
+    probackup = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
     if probackup.stdout.readline() == "Password:":
         if signal:
             probackup.send_signal(signal)
@@ -82,10 +91,9 @@ def run_pb_with_auth(cmd, password, signal=None):
             raise ProbackupException
 
 
-
 def add_backup_user(node):
-    query = """
-    CREATE ROLE backup WITH LOGIN PASSWORD;
+    query = '''
+    CREATE ROLE backup WITH LOGIN PASSWORD 'password';
     GRANT USAGE ON SCHEMA pg_catalog TO backup;
     GRANT EXECUTE ON FUNCTION current_setting(text) TO backup;
     GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup;
@@ -99,5 +107,5 @@ def add_backup_user(node):
     GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;
     GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup;
     GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;
-    """
-    node.execute("postgres", query)
+    '''
+    node.psql("postgres", query.replace('\n',''))
