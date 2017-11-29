@@ -399,7 +399,7 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 				file->name = file_name;
 			}
 
-			/* Exclude tablespace_map from backup but we must be aware of it`s existance
+			/* Exclude tablespace_map from backup but we must be aware of its existence
 			 * for correct stop_backup procedure in exclusive mode
 			 */
 			if (strcmp(file->name, "tablespace_map") == 0)
