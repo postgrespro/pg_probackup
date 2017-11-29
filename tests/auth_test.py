@@ -3,11 +3,16 @@ import unittest
 import tempfile
 import signal
 
-from subprocess import Popen, PIPE, TimeoutExpired
+try:
+    import pexpect
+except:
+    unittest.TestCase.fail("Error: The module pexpect not found")
+
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from testgres import QueryException
+
+
 module_name = 'auth_test'
-ptrack = False
 
 
 class AuthTest(unittest.TestCase):
@@ -16,7 +21,6 @@ class AuthTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        global ptrack
 
         super(AuthTest, cls).setUpClass()
 
@@ -31,17 +35,17 @@ class AuthTest(unittest.TestCase):
                 'wal_level': 'replica'
             }
         )
-
-        try:
-            add_backup_user(cls.node)
-        except QueryException:
-            assert False, "Query error. The backup user cannot be added."
+        modify_pg_hba(cls.node)
 
         cls.backup_dir = os.path.join(tempfile.tempdir, "backups")
         cls.pb.init_pb(cls.backup_dir)
         cls.pb.add_instance(cls.backup_dir, cls.node.name, cls.node)
         cls.pb.set_archiving(cls.backup_dir, cls.node.name, cls.node)
         cls.node.start()
+        try:
+            add_backup_user(cls.node)
+        except QueryException:
+            assert False, "Query error. The backup user cannot be added."
 
     @classmethod
     def tearDownClass(cls):
@@ -54,49 +58,58 @@ class AuthTest(unittest.TestCase):
             '--instance', self.node.name,
             '-h', '127.0.0.1',
             '-p', str(self.node.port),
-            '-U', 'backup'
+            '-U', 'backup',
             '-b', 'FULL'
             ]
 
     def tearDown(self):
         pass
 
-    @unittest.skip
+    def tearDown(self):
+        pass
+
     def test_empty_password(self):
-        try:
-            run_pb_with_auth(self.cmd,'\0')
-        except:
-            pass
+        print(run_pb_pexpect(self.cmd, '\0\r\n'))
 
     def test_wrong_password(self):
-        try:
-            run_pb_with_auth(self.cmd,'wrong_password')
-        except ProbackupException as e:
-            self.fail(repr(e))
+        print(run_pb_pexpect(self.cmd, 'wrong_password\r\n'))
 
-    @unittest.skip
+    def test_right_password(self):
+        print(run_pb_pexpect(self.cmd, 'password\r\n'))
+
     def test_ctrl_c_event(self):
-        try:
-            run_pb_with_auth(self.cmd,kill=True)
-        except:
-            pass
+        print(run_pb_pexpect(self.cmd, kill=True))
 
 
-def run_pb_with_auth(cmd, password=None, kill=False):
-    probackup = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+def modify_pg_hba(node):
+    hba_conf = os.path.join(node.data_dir, "pg_hba.conf")
+    with open(hba_conf, 'r+', encoding='utf-8') as fio:
+        data = fio.read()
+        fio.seek(0)
+        fio.write('host\tall\tpostgres\t127.0.0.1/0\ttrust\n' + data)
 
-    if probackup.stdout.readline() == "Password as user :":
-        if signal:
-            os.kill(probackup.pid, signal.SIGINT)
-        try:
-            out, err = probackup.communicate(password, 10)
-            return probackup.returncode, out, err
-        except TimeoutExpired:
-            raise ProbackupException
+
+def run_pb_pexpect(cmd, password=None, kill=False):
+    try:
+        with pexpect.spawn(" ".join(cmd)) as probackup:
+            result = probackup.expect("Password .*:")
+            if kill:
+                try:
+                    probackup.kill(signal.SIGINT)
+                except TIMEOUT:
+                    raise ProbackupException("Error: Timeout exepired", " ".join(cmd))
+
+            elif result == 0:
+                probackup.sendline(password)
+                return probackup.readlines()
+            else:
+                raise ProbackupTest("Error: runtime error", " ".join(cmd))
+    except ProbackupTest:
+        raise ProbackupException("Error: pexpect error", " ".join(cmd))
 
 
 def add_backup_user(node):
-    query = '''
+    query = """
     CREATE ROLE backup WITH LOGIN PASSWORD 'password';
     GRANT USAGE ON SCHEMA pg_catalog TO backup;
     GRANT EXECUTE ON FUNCTION current_setting(text) TO backup;
@@ -111,19 +124,5 @@ def add_backup_user(node):
     GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;
     GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup;
     GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;
-    '''
-    node.psql("postgres", query.replace('\n',''))
-
-
-# dirty hack
-def modify_pg_hba(node):
-    hba_conf = os.path.join(node.data_dir, "pg_hba.conf")
-    with open(hba_conf, "w") as conf:
-        conf.write("# TYPE\tDATABASE\tUSER\tADDRESS\t\tMETHOD\n"
-                   "local\tall\t\tall\t\t\ttrust\n"
-                   "host\tall\t\tall\t127.0.0.1/32\tmd5\n"
-                   "host\tall\t\tall\t::1/128\t\ttrust\n"
-                   # replication
-                   "local\treplication\tall\t\t\ttrust\n"
-                   "host\treplication\tall\t127.0.0.1/32\ttrust\n"
-                   "host\treplication\tall\t::1/128\t\ttrust\n")
+    """
+    node.safe_psql("postgres", query)
