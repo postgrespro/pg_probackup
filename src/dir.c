@@ -75,6 +75,7 @@ static char *pgdata_exclude_files[] =
 	"recovery.conf",
 	"postmaster.pid",
 	"postmaster.opts",
+	"backup_label",
 	NULL
 };
 
@@ -396,6 +397,15 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			{
 				file_name++;
 				file->name = file_name;
+			}
+
+			/* Exclude tablespace_map from backup but we must be aware of it`s existance
+			 * for correct stop_backup procedure in exclusive mode
+			 */
+			if (strcmp(file->name, "tablespace_map") == 0)
+			{
+				current.tablespace_map_exists = true;
+				return;
 			}
 
 			/* Check if we need to exclude file by name */

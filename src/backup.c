@@ -457,6 +457,8 @@ do_backup_instance(void)
 	/* Initialize size summary */
 	current.data_bytes = 0;
 
+	current.tablespace_map_exists = false;
+
 	/* Obtain current timeline */
 	if (is_remote_backup)
 	{
@@ -519,24 +521,6 @@ do_backup_instance(void)
 	time2iso(label, lengthof(label), current.start_time);
 	strncat(label, " with pg_probackup", lengthof(label));
 	pg_start_backup(label, smooth_checkpoint, &current);
-
-	/*
-	 * If backup_label does not exist in $PGDATA, stop taking backup.
-	 * NOTE. We can check it only on master, though.
-	 */
-	if (exclusive_backup)
-	{
-		char		label_path[MAXPGPATH];
-		join_path_components(label_path, pgdata, PG_BACKUP_LABEL_FILE);
-
-		/* Leave if no backup file */
-		if (!fileExists(label_path))
-		{
-			elog(LOG, "%s does not exist, stopping backup", PG_BACKUP_LABEL_FILE);
-			pg_stop_backup(NULL);
-			elog(ERROR, "%s does not exist in PGDATA", PG_BACKUP_LABEL_FILE);
-		}
-	}
 
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
@@ -1541,13 +1525,20 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 static void
 pg_stop_backup(pgBackup *backup)
 {
-	PGconn	   *conn;
-	PGresult   *res;
+	PGconn		*conn;
+	PGresult	*res;
+	PGresult	*tablespace_map_content = NULL;
 	uint32		xlogid;
 	uint32		xrecoff;
 	XLogRecPtr	restore_lsn = InvalidXLogRecPtr;
-	bool sent = false;
-	int			pg_stop_backup_timeout = 0;
+	bool		sent = false;
+	int 		pg_stop_backup_timeout = 0;
+	char		path[MAXPGPATH];
+	char		backup_label[MAXPGPATH];
+	FILE		*fp;
+	pgFile		*file;
+	size_t		len;
+	char		*val = NULL;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
@@ -1601,23 +1592,39 @@ pg_stop_backup(pgBackup *backup)
 	if (!pg_stop_backup_is_sent)
 	{
 		if (!exclusive_backup)
+		{
 			/*
 			 * Stop the non-exclusive backup. Besides stop_lsn it returns from
 			 * pg_stop_backup(false) copy of the backup label and tablespace map
 			 * so they can be written to disk by the caller.
 			 */
 			sent = pgut_send(conn,
-							   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-							   " current_timestamp(0)::timestamptz"
-							   " FROM pg_stop_backup(false)",
-							   0, NULL, WARNING);
+								"SELECT"
+								" labelfile,"
+								" txid_snapshot_xmax(txid_current_snapshot()),"
+								" current_timestamp(0)::timestamptz,"
+								" lsn,"
+								" spcmapfile"
+								" FROM pg_stop_backup(false)",
+								0, NULL, WARNING);
+		}
 		else
+		{
+			if (current.tablespace_map_exists)
+			{
+				/* We cannot execute pg_read_file after pg_stop_backup */
+				tablespace_map_content = pgut_execute(conn,
+								"SELECT pg_read_file('tablespace_map')",
+								0, NULL);
+			}
 			sent = pgut_send(conn,
-							   "SELECT *, txid_snapshot_xmax(txid_current_snapshot()),"
-							   " current_timestamp(0)::timestamptz"
-							   " FROM pg_stop_backup()",
-							   0, NULL, WARNING);
-
+								"SELECT"
+								" pg_read_file('backup_label') as labelfile,"
+								" txid_snapshot_xmax(txid_current_snapshot()),"
+								" current_timestamp(0)::timestamptz,"
+								" pg_stop_backup() as lsn",
+								0, NULL, WARNING);
+		}
 		pg_stop_backup_is_sent = true;
 		if (!sent)
 			elog(ERROR, "Failed to send pg_stop_backup query");
@@ -1673,7 +1680,7 @@ pg_stop_backup(pgBackup *backup)
 	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
 		/* Extract timeline and LSN from results of pg_stop_backup() */
-		XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+		XLogDataFromLSN(PQgetvalue(res, 0, 3), &xlogid, &xrecoff);
 		/* Calculate LSN */
 		stop_backup_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 
@@ -1686,96 +1693,89 @@ pg_stop_backup(pgBackup *backup)
 			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
 				 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
 
-		/* Write backup_label and tablespace_map for backup from replica */
-		if (!exclusive_backup)
+		/* Write backup_label and tablespace_map */
+		Assert(PQnfields(res) >= 4);
+		pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+
+		/* Write backup_label */
+		join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
+		fp = fopen(backup_label, "w");
+		if (fp == NULL)
+			elog(ERROR, "can't open backup label file \"%s\": %s",
+				 backup_label, strerror(errno));
+
+		len = strlen(PQgetvalue(res, 0, 0));
+		if (fwrite(PQgetvalue(res, 0, 0), 1, len, fp) != len ||
+			fflush(fp) != 0 ||
+			fsync(fileno(fp)) != 0 ||
+			fclose(fp))
+			elog(ERROR, "can't write backup label file \"%s\": %s",
+				 backup_label, strerror(errno));
+
+		/*
+		 * It's vital to check if backup_files_list is initialized,
+		 * because we could get here because the backup was interrupted
+		 */
+		if (backup_files_list)
 		{
-			char		path[MAXPGPATH];
-			char		backup_label[MAXPGPATH];
-			FILE	   *fp;
-			pgFile	   *file;
-			size_t		len;
+			file = pgFileNew(backup_label, true);
+			calc_file_checksum(file);
+			free(file->path);
+			file->path = strdup(PG_BACKUP_LABEL_FILE);
+			parray_append(backup_files_list, file);
+		}
 
-			Assert(PQnfields(res) >= 5);
+		if (sscanf(PQgetvalue(res, 0, 1), XID_FMT, &recovery_xid) != 1)
+			elog(ERROR,
+				 "result of txid_snapshot_xmax() is invalid: %s",
+				 PQerrorMessage(conn));
+		if (!parse_time(PQgetvalue(res, 0, 2), &recovery_time))
+			elog(ERROR,
+				 "result of current_timestamp is invalid: %s",
+				 PQerrorMessage(conn));
 
-			pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+		/* Get content for tablespace_map from pg_read_file('tablespace_map') in case of exclusive
+		 * or from stop_backup results in case of non-exclusive backup
+		 */
+		if (exclusive_backup)
+		{
+			if (current.tablespace_map_exists)
+			{
+				val = PQgetvalue(tablespace_map_content, 0, 0);
+				PQclear(tablespace_map_content);
+			}
+		}
+		else
+			val = PQgetvalue(res, 0, 4);
 
-			/* Write backup_label */
-			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-			fp = fopen(backup_label, "w");
+		/* Write tablespace_map */
+		if (val && strlen(val) > 0)
+		{
+			char		tablespace_map[MAXPGPATH];
+
+			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
+			fp = fopen(tablespace_map, "w");
 			if (fp == NULL)
-				elog(ERROR, "can't open backup label file \"%s\": %s",
-					 backup_label, strerror(errno));
+				elog(ERROR, "can't open tablespace map file \"%s\": %s",
+					 tablespace_map, strerror(errno));
 
-			len = strlen(PQgetvalue(res, 0, 1));
-			if (fwrite(PQgetvalue(res, 0, 1), 1, len, fp) != len ||
+			len = strlen(val);
+			if (fwrite(val, 1, len, fp) != len ||
 				fflush(fp) != 0 ||
 				fsync(fileno(fp)) != 0 ||
 				fclose(fp))
-				elog(ERROR, "can't write backup label file \"%s\": %s",
-					 backup_label, strerror(errno));
+				elog(ERROR, "can't write tablespace map file \"%s\": %s",
+					 tablespace_map, strerror(errno));
 
-			/*
-			 * It's vital to check if backup_files_list is initialized,
-			 * because we could get here because the backup was interrupted
-			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true);
-				calc_file_checksum(file);
+				file = pgFileNew(tablespace_map, true);
+				if (S_ISREG(file->mode))
+					calc_file_checksum(file);
 				free(file->path);
-				file->path = strdup(PG_BACKUP_LABEL_FILE);
+				file->path = strdup(PG_TABLESPACE_MAP_FILE);
 				parray_append(backup_files_list, file);
 			}
-
-			/* Write tablespace_map */
-			if (strlen(PQgetvalue(res, 0, 2)) > 0)
-			{
-				char		tablespace_map[MAXPGPATH];
-
-				join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-				fp = fopen(tablespace_map, "w");
-				if (fp == NULL)
-					elog(ERROR, "can't open tablespace map file \"%s\": %s",
-						 tablespace_map, strerror(errno));
-
-				len = strlen(PQgetvalue(res, 0, 2));
-				if (fwrite(PQgetvalue(res, 0, 2), 1, len, fp) != len ||
-					fflush(fp) != 0 ||
-					fsync(fileno(fp)) != 0 ||
-					fclose(fp))
-					elog(ERROR, "can't write tablespace map file \"%s\": %s",
-						 tablespace_map, strerror(errno));
-
-				if (backup_files_list)
-				{
-					file = pgFileNew(tablespace_map, true);
-					if (S_ISREG(file->mode))
-						calc_file_checksum(file);
-					free(file->path);
-					file->path = strdup(PG_TABLESPACE_MAP_FILE);
-					parray_append(backup_files_list, file);
-				}
-			}
-
-			if (sscanf(PQgetvalue(res, 0, 3), XID_FMT, &recovery_xid) != 1)
-				elog(ERROR,
-					 "result of txid_snapshot_xmax() is invalid: %s",
-					 PQerrorMessage(conn));
-			if (!parse_time(PQgetvalue(res, 0, 4), &recovery_time))
-				elog(ERROR,
-					 "result of current_timestamp is invalid: %s",
-					 PQerrorMessage(conn));
-		}
-		else
-		{
-			if (sscanf(PQgetvalue(res, 0, 1), XID_FMT, &recovery_xid) != 1)
-				elog(ERROR,
-					 "result of txid_snapshot_xmax() is invalid: %s",
-					 PQerrorMessage(conn));
-			if (!parse_time(PQgetvalue(res, 0, 2), &recovery_time))
-				elog(ERROR,
-					 "result of current_timestamp is invalid: %s",
-					 PQerrorMessage(conn));
 		}
 		PQclear(res);
 		if (stream_wal)
