@@ -65,9 +65,6 @@ class AuthTest(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def tearDown(self):
-        pass
-
     def test_empty_password(self):
         print(run_pb_pexpect(self.cmd, '\0\r\n'))
 
