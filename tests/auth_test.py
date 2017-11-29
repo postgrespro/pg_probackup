@@ -1,6 +1,7 @@
 import os
 import unittest
 import tempfile
+import signal
 
 from subprocess import Popen, PIPE, TimeoutExpired
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
@@ -44,6 +45,7 @@ class AuthTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.node.cleanup()
         cls.pb.del_test_dir(module_name, '')
 
     def setUp(self):
@@ -69,23 +71,23 @@ class AuthTest(unittest.TestCase):
     def test_wrong_password(self):
         try:
             run_pb_with_auth(self.cmd,'wrong_password')
-        except:
-            pass
+        except ProbackupException as e:
+            self.fail(repr(e))
 
     @unittest.skip
     def test_ctrl_c_event(self):
         try:
-            run_pb_with_auth(self.cmd,signal='CTRL_C_EVENT')
+            run_pb_with_auth(self.cmd,kill=True)
         except:
             pass
 
 
-def run_pb_with_auth(cmd, password=None, signal=None):
+def run_pb_with_auth(cmd, password=None, kill=False):
     probackup = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
-    if probackup.stdout.readline() == "Password:":
+    if probackup.stdout.readline() == "Password as user :":
         if signal:
-            probackup.send_signal(signal)
+            os.kill(probackup.pid, signal.SIGINT)
         try:
             out, err = probackup.communicate(password, 10)
             return probackup.returncode, out, err
@@ -111,3 +113,17 @@ def add_backup_user(node):
     GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;
     '''
     node.psql("postgres", query.replace('\n',''))
+
+
+# dirty hack
+def modify_pg_hba(node):
+    hba_conf = os.path.join(node.data_dir, "pg_hba.conf")
+    with open(hba_conf, "w") as conf:
+        conf.write("# TYPE\tDATABASE\tUSER\tADDRESS\t\tMETHOD\n"
+                   "local\tall\t\tall\t\t\ttrust\n"
+                   "host\tall\t\tall\t127.0.0.1/32\tmd5\n"
+                   "host\tall\t\tall\t::1/128\t\ttrust\n"
+                   # replication
+                   "local\treplication\tall\t\t\ttrust\n"
+                   "host\treplication\tall\t127.0.0.1/32\ttrust\n"
+                   "host\treplication\tall\t::1/128\t\ttrust\n")
