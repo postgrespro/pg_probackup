@@ -222,8 +222,6 @@ typedef struct pgBackup
 	time_t			parent_backup; 	/* Identifier of the previous backup.
 									 * Which is basic backup for this
 									 * incremental backup. */
-	/* Is tablespace_map exists in PGDATA */
-	bool			tablespace_map_exists;
 } pgBackup;
 
 /* Recovery target for restore and validate subcommands */

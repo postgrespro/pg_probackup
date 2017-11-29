@@ -124,7 +124,7 @@ extern PGconn *pgut_connect_replication_extended(const char *pghost, const char 
 									 const char *dbname, const char *login,
 									 const char *pwd);
 extern void pgut_disconnect(PGconn *conn);
-extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams, const char **params);
+extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, bool exit_on_error);
 extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int elevel);
 extern void pgut_cancel(PGconn* conn);
 extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);

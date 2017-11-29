@@ -1289,7 +1289,7 @@ pgut_set_port(const char *new_port)
 }
 
 PGresult *
-pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
+pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, bool exit_on_error)
 {
 	PGresult   *res;
 
@@ -1322,16 +1322,19 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
 		res = PQexecParams(conn, query, nParams, NULL, params, NULL, NULL, 0);
 	on_after_exec();
 
-	switch (PQresultStatus(res))
+	if (exit_on_error)
 	{
-		case PGRES_TUPLES_OK:
-		case PGRES_COMMAND_OK:
-		case PGRES_COPY_IN:
-			break;
-		default:
-			elog(ERROR, "query failed: %squery was: %s",
-				 PQerrorMessage(conn), query);
-			break;
+		switch (PQresultStatus(res))
+		{
+			case PGRES_TUPLES_OK:
+			case PGRES_COMMAND_OK:
+			case PGRES_COPY_IN:
+				break;
+			default:
+				elog(ERROR, "query failed: %squery was: %s",
+					 PQerrorMessage(conn), query);
+				break;
+		}
 	}
 
 	return res;
