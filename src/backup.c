@@ -1531,7 +1531,6 @@ pg_stop_backup(pgBackup *backup)
 	uint32		xlogid;
 	uint32		xrecoff;
 	XLogRecPtr	restore_lsn = InvalidXLogRecPtr;
-	bool		sent = false;
 	int 		pg_stop_backup_timeout = 0;
 	char		path[MAXPGPATH];
 	char		backup_label[MAXPGPATH];
@@ -1591,6 +1590,8 @@ pg_stop_backup(pgBackup *backup)
 
 	if (!pg_stop_backup_is_sent)
 	{
+		bool		sent = false;
+
 		if (!exclusive_backup)
 		{
 			/*
@@ -1612,8 +1613,9 @@ pg_stop_backup(pgBackup *backup)
 		{
 
 			tablespace_map_content = pgut_execute(conn,
-							"SELECT pg_read_file('tablespace_map');",
-							0, NULL, false);
+								"SELECT pg_read_file('tablespace_map', 0, size, true)"
+								" FROM pg_stat_file('tablespace_map', true)",
+								0, NULL, true);
 
 			sent = pgut_send(conn,
 								"SELECT"
@@ -1671,12 +1673,9 @@ pg_stop_backup(pgBackup *backup)
 			elog(ERROR, "pg_stop backup() failed");
 		else
 			elog(INFO, "pg_stop backup() successfully executed");
-	}
 
-	backup_in_progress = false;
-	/* If stop_backup was sent and we are here, it means that is was received */
-	if (pg_stop_backup_is_sent && !in_cleanup)
-	{
+		backup_in_progress = false;
+
 		/* Extract timeline and LSN from results of pg_stop_backup() */
 		XLogDataFromLSN(PQgetvalue(res, 0, 3), &xlogid, &xrecoff);
 		/* Calculate LSN */
@@ -1737,6 +1736,8 @@ pg_stop_backup(pgBackup *backup)
 		 */
 		if (exclusive_backup)
 		{
+			Assert(tablespace_map_content);
+
 			if (PQresultStatus(tablespace_map_content) == PGRES_TUPLES_OK)
 				val = PQgetvalue(tablespace_map_content, 0, 0);
 		}
@@ -1771,9 +1772,12 @@ pg_stop_backup(pgBackup *backup)
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
 				parray_append(backup_files_list, file);
 			}
-			PQclear(tablespace_map_content);
 		}
+
+		if (tablespace_map_content)
+			PQclear(tablespace_map_content);
 		PQclear(res);
+
 		if (stream_wal)
 			/* Wait for the completion of stream */
 			pthread_join(stream_thread, NULL);

@@ -1289,7 +1289,8 @@ pgut_set_port(const char *new_port)
 }
 
 PGresult *
-pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, bool exit_on_error)
+pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
+			 bool exit_on_error)
 {
 	PGresult   *res;
 
