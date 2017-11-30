@@ -14,7 +14,12 @@
 #include "getopt_long.h"
 #include <limits.h>
 #include <time.h>
+#include <stdio.h>
 #include <unistd.h>
+
+#ifdef HAVE_TERMIOS_H
+#include <termios.h>
+#endif
 
 #include "logger.h"
 #include "pgut.h"
@@ -47,7 +52,6 @@ static PGcancel *volatile cancel_conn = NULL;
 /* Interrupted by SIGINT (Ctrl+C) ? */
 bool		interrupted = false;
 bool		in_cleanup = false;
-bool		in_password = false;
 
 static bool parse_pair(const char buffer[], char key[], char value[]);
 
@@ -224,22 +228,22 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				((pgut_optfn) opt->var)(opt, optarg);
 				return;
 			case 'i':
-				if (parse_int32(optarg, opt->var))
+				if (parse_int32(optarg, opt->var, opt->flags))
 					return;
 				message = "a 32bit signed integer";
 				break;
 			case 'u':
-				if (parse_uint32(optarg, opt->var))
+				if (parse_uint32(optarg, opt->var, opt->flags))
 					return;
 				message = "a 32bit unsigned integer";
 				break;
 			case 'I':
-				if (parse_int64(optarg, opt->var))
+				if (parse_int64(optarg, opt->var, opt->flags))
 					return;
 				message = "a 64bit signed integer";
 				break;
 			case 'U':
-				if (parse_uint64(optarg, opt->var))
+				if (parse_uint64(optarg, opt->var, opt->flags))
 					return;
 				message = "a 64bit unsigned integer";
 				break;
@@ -268,6 +272,236 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 	else
 		elog(ERROR, "option --%s should be %s: '%s'",
 			opt->lname, message, optarg);
+}
+
+/*
+ * Convert a value from one of the human-friendly units ("kB", "min" etc.)
+ * to the given base unit.  'value' and 'unit' are the input value and unit
+ * to convert from.  The converted value is stored in *base_value.
+ *
+ * Returns true on success, false if the input unit is not recognized.
+ */
+static bool
+convert_to_base_unit(int64 value, const char *unit,
+					 int base_unit, int64 *base_value)
+{
+	const unit_conversion *table;
+	int			i;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit &&
+			strcmp(unit, table[i].unit) == 0)
+		{
+			if (table[i].multiplier < 0)
+				*base_value = value / (-table[i].multiplier);
+			else
+				*base_value = value * table[i].multiplier;
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * Unsigned variant of convert_to_base_unit()
+ */
+static bool
+convert_to_base_unit_u(uint64 value, const char *unit,
+					   int base_unit, uint64 *base_value)
+{
+	const unit_conversion *table;
+	int			i;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit &&
+			strcmp(unit, table[i].unit) == 0)
+		{
+			if (table[i].multiplier < 0)
+				*base_value = value / (-table[i].multiplier);
+			else
+				*base_value = value * table[i].multiplier;
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * Convert a value in some base unit to a human-friendly unit.  The output
+ * unit is chosen so that it's the greatest unit that can represent the value
+ * without loss.  For example, if the base unit is GUC_UNIT_KB, 1024 is
+ * converted to 1 MB, but 1025 is represented as 1025 kB.
+ */
+void
+convert_from_base_unit(int64 base_value, int base_unit,
+					   int64 *value, const char **unit)
+{
+	const unit_conversion *table;
+	int			i;
+
+	*unit = NULL;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit)
+		{
+			/*
+			 * Accept the first conversion that divides the value evenly. We
+			 * assume that the conversions for each base unit are ordered from
+			 * greatest unit to the smallest!
+			 */
+			if (table[i].multiplier < 0)
+			{
+				*value = base_value * (-table[i].multiplier);
+				*unit = table[i].unit;
+				break;
+			}
+			else if (base_value % table[i].multiplier == 0)
+			{
+				*value = base_value / table[i].multiplier;
+				*unit = table[i].unit;
+				break;
+			}
+		}
+	}
+
+	Assert(*unit != NULL);
+}
+
+/*
+ * Unsigned variant of convert_from_base_unit()
+ */
+void
+convert_from_base_unit_u(uint64 base_value, int base_unit,
+						 uint64 *value, const char **unit)
+{
+	const unit_conversion *table;
+	int			i;
+
+	*unit = NULL;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit)
+		{
+			/*
+			 * Accept the first conversion that divides the value evenly. We
+			 * assume that the conversions for each base unit are ordered from
+			 * greatest unit to the smallest!
+			 */
+			if (table[i].multiplier < 0)
+			{
+				*value = base_value * (-table[i].multiplier);
+				*unit = table[i].unit;
+				break;
+			}
+			else if (base_value % table[i].multiplier == 0)
+			{
+				*value = base_value / table[i].multiplier;
+				*unit = table[i].unit;
+				break;
+			}
+		}
+	}
+
+	Assert(*unit != NULL);
+}
+
+static bool
+parse_unit(char *unit_str, int flags, int64 value, int64 *base_value)
+{
+	/* allow whitespace between integer and unit */
+	while (isspace((unsigned char) *unit_str))
+		unit_str++;
+
+	/* Handle possible unit */
+	if (*unit_str != '\0')
+	{
+		char		unit[MAX_UNIT_LEN + 1];
+		int			unitlen;
+		bool		converted = false;
+
+		if ((flags & OPTION_UNIT) == 0)
+			return false;		/* this setting does not accept a unit */
+
+		unitlen = 0;
+		while (*unit_str != '\0' && !isspace((unsigned char) *unit_str) &&
+			   unitlen < MAX_UNIT_LEN)
+			unit[unitlen++] = *(unit_str++);
+		unit[unitlen] = '\0';
+		/* allow whitespace after unit */
+		while (isspace((unsigned char) *unit_str))
+			unit_str++;
+
+		if (*unit_str == '\0')
+			converted = convert_to_base_unit(value, unit, (flags & OPTION_UNIT),
+											 base_value);
+		if (!converted)
+			return false;
+	}
+
+	return true;
+}
+
+/*
+ * Unsigned variant of parse_unit()
+ */
+static bool
+parse_unit_u(char *unit_str, int flags, uint64 value, uint64 *base_value)
+{
+	/* allow whitespace between integer and unit */
+	while (isspace((unsigned char) *unit_str))
+		unit_str++;
+
+	/* Handle possible unit */
+	if (*unit_str != '\0')
+	{
+		char		unit[MAX_UNIT_LEN + 1];
+		int			unitlen;
+		bool		converted = false;
+
+		if ((flags & OPTION_UNIT) == 0)
+			return false;		/* this setting does not accept a unit */
+
+		unitlen = 0;
+		while (*unit_str != '\0' && !isspace((unsigned char) *unit_str) &&
+			   unitlen < MAX_UNIT_LEN)
+			unit[unitlen++] = *(unit_str++);
+		unit[unitlen] = '\0';
+		/* allow whitespace after unit */
+		while (isspace((unsigned char) *unit_str))
+			unit_str++;
+
+		if (*unit_str == '\0')
+			converted = convert_to_base_unit_u(value, unit, (flags & OPTION_UNIT),
+											   base_value);
+		if (!converted)
+			return false;
+	}
+
+	return true;
 }
 
 /*
@@ -369,7 +603,7 @@ parse_bool_with_len(const char *value, size_t len, bool *result)
  * valid range: -2147483648 ~ 2147483647
  */
 bool
-parse_int32(const char *value, int32 *result)
+parse_int32(const char *value, int32 *result, int flags)
 {
 	int64	val;
 	char   *endptr;
@@ -382,10 +616,13 @@ parse_int32(const char *value, int32 *result)
 
 	errno = 0;
 	val = strtol(value, &endptr, 0);
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE || val != (int64) ((int32) val))
+		return false;
+
+	if (!parse_unit(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -398,7 +635,7 @@ parse_int32(const char *value, int32 *result)
  * valid range: 0 ~ 4294967295 (2^32-1)
  */
 bool
-parse_uint32(const char *value, uint32 *result)
+parse_uint32(const char *value, uint32 *result, int flags)
 {
 	uint64	val;
 	char   *endptr;
@@ -411,10 +648,13 @@ parse_uint32(const char *value, uint32 *result)
 
 	errno = 0;
 	val = strtoul(value, &endptr, 0);
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE || val != (uint64) ((uint32) val))
+		return false;
+
+	if (!parse_unit_u(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -427,7 +667,7 @@ parse_uint32(const char *value, uint32 *result)
  * valid range: -9223372036854775808 ~ 9223372036854775807
  */
 bool
-parse_int64(const char *value, int64 *result)
+parse_int64(const char *value, int64 *result, int flags)
 {
 	int64	val;
 	char   *endptr;
@@ -446,10 +686,13 @@ parse_int64(const char *value, int64 *result)
 #else
 	val = strtol(value, &endptr, 0);
 #endif
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE)
+		return false;
+
+	if (!parse_unit(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -462,7 +705,7 @@ parse_int64(const char *value, int64 *result)
  * valid range: 0 ~ (2^64-1)
  */
 bool
-parse_uint64(const char *value, uint64 *result)
+parse_uint64(const char *value, uint64 *result, int flags)
 {
 	uint64	val;
 	char   *endptr;
@@ -487,10 +730,13 @@ parse_uint64(const char *value, uint64 *result)
 #else
 	val = strtoul(value, &endptr, 0);
 #endif
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE)
+		return false;
+
+	if (!parse_unit_u(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -639,40 +885,6 @@ parse_time(const char *value, time_t *result)
 	}
 
 	return true;
-}
-
-/*
- * Convert a value from one of the human-friendly units ("kB", "min" etc.)
- * to the given base unit.  'value' and 'unit' are the input value and unit
- * to convert from.  The converted value is stored in *base_value.
- *
- * Returns true on success, false if the input unit is not recognized.
- */
-static bool
-convert_to_base_unit(int64 value, const char *unit,
-					 int base_unit, int64 *base_value)
-{
-	const unit_conversion *table;
-	int			i;
-
-	if (base_unit & OPTION_UNIT_MEMORY)
-		table = memory_unit_conversion_table;
-	else
-		table = time_unit_conversion_table;
-
-	for (i = 0; *table[i].unit; i++)
-	{
-		if (base_unit == table[i].base_unit &&
-			strcmp(unit, table[i].unit) == 0)
-		{
-			if (table[i].multiplier < 0)
-				*base_value = value / (-table[i].multiplier);
-			else
-				*base_value = value * table[i].multiplier;
-			return true;
-		}
-	}
-	return false;
 }
 
 /*
@@ -1074,6 +1286,235 @@ parse_pair(const char buffer[], char key[], char value[])
 }
 
 /*
+ * pgut_prompt
+ *
+ * Generalized function especially intended for reading in usernames and
+ * passwords interactively.  Reads from /dev/tty or stdin/stderr.
+ *
+ * prompt:		The prompt to print, or NULL if none (automatically localized)
+ * destination: buffer in which to store result
+ * destlen:		allocated length of destination
+ * echo:		Set to false if you want to hide what is entered (for passwords)
+ *
+ * The input (without trailing newline) is returned in the destination buffer,
+ * with a '\0' appended.
+ *
+ * Copy of simple_prompt().
+ */
+static void
+pgut_prompt(const char *prompt, char *destination, size_t destlen, bool echo)
+{
+	size_t		length = 0;
+	char	   *ptr = destination;
+	FILE	   *termin,
+			   *termout;
+	bool		exit_with_error = false;
+
+#ifdef HAVE_TERMIOS_H
+	struct termios t_orig,
+				t;
+#else
+#ifdef WIN32
+	HANDLE		t = NULL;
+	DWORD		t_orig = 0;
+#endif
+#endif
+
+#ifdef WIN32
+
+	/*
+	 * A Windows console has an "input code page" and an "output code page";
+	 * these usually match each other, but they rarely match the "Windows ANSI
+	 * code page" defined at system boot and expected of "char *" arguments to
+	 * Windows API functions.  The Microsoft CRT write() implementation
+	 * automatically converts text between these code pages when writing to a
+	 * console.  To identify such file descriptors, it calls GetConsoleMode()
+	 * on the underlying HANDLE, which in turn requires GENERIC_READ access on
+	 * the HANDLE.  Opening termout in mode "w+" allows that detection to
+	 * succeed.  Otherwise, write() would not recognize the descriptor as a
+	 * console, and non-ASCII characters would display incorrectly.
+	 *
+	 * XXX fgets() still receives text in the console's input code page.  This
+	 * makes non-ASCII credentials unportable.
+	 */
+	termin = fopen("CONIN$", "r");
+	termout = fopen("CONOUT$", "w+");
+#else
+
+	/*
+	 * Do not try to collapse these into one "w+" mode file. Doesn't work on
+	 * some platforms (eg, HPUX 10.20).
+	 */
+	termin = fopen("/dev/tty", "r");
+	termout = fopen("/dev/tty", "w");
+#endif
+	if (!termin || !termout
+#ifdef WIN32
+
+	/*
+	 * Direct console I/O does not work from the MSYS 1.0.10 console.  Writes
+	 * reach nowhere user-visible; reads block indefinitely.  XXX This affects
+	 * most Windows terminal environments, including rxvt, mintty, Cygwin
+	 * xterm, Cygwin sshd, and PowerShell ISE.  Switch to a more-generic test.
+	 */
+		|| (getenv("OSTYPE") && strcmp(getenv("OSTYPE"), "msys") == 0)
+#endif
+		)
+	{
+		if (termin)
+			fclose(termin);
+		if (termout)
+			fclose(termout);
+		termin = stdin;
+		termout = stderr;
+	}
+
+#ifdef HAVE_TERMIOS_H
+	if (!echo)
+	{
+		tcgetattr(fileno(termin), &t);
+		t_orig = t;
+		t.c_lflag &= ~ECHO;
+		tcsetattr(fileno(termin), TCSAFLUSH, &t);
+	}
+#else
+#ifdef WIN32
+	if (!echo)
+	{
+		/* get a new handle to turn echo off */
+		t = GetStdHandle(STD_INPUT_HANDLE);
+
+		/* save the old configuration first */
+		GetConsoleMode(t, &t_orig);
+
+		/* set to the new mode */
+		SetConsoleMode(t, ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
+	}
+#endif
+#endif
+
+	if (!pg_set_noblock(fileno(termin)))
+		elog(ERROR, "could not set terminal to nonblocking mode");
+
+	if (prompt)
+	{
+		fputs(_(prompt), termout);
+		fflush(termout);
+	}
+
+	if (interrupted)
+	{
+		exit_with_error = true;
+		goto cleanup;
+	}
+
+	do
+	{
+		int			selres;
+		struct timeval timeout;
+
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 100 * 1000L;	/* 100 milliseconds */
+
+		selres = wait_for_socket(fileno(termin), &timeout);
+		if (selres < 0 || interrupted)
+		{
+			exit_with_error = true;
+			goto cleanup;
+		}
+
+		if (selres > 0)
+		{
+			size_t		len = fread(ptr, sizeof(char), destlen - length, termin);
+
+			if (len <= 0)
+			{
+				exit_with_error = true;
+				goto cleanup;
+			}
+
+			length += len;
+			ptr += len;
+		}
+
+		if (length >0 && destination[length - 1] == '\n')
+			break;
+	} while (length < destlen);
+
+	if (length > 0 && destination[length - 1] != '\n')
+	{
+		/* eat rest of the line */
+		int			selres;
+		struct timeval timeout;
+
+		while (true)
+		{
+			timeout.tv_sec = 0;
+			timeout.tv_usec = 100 * 1000L;	/* 100 milliseconds */
+
+			selres = wait_for_socket(fileno(termin), &timeout);
+			if (selres < 0 || interrupted)
+			{
+				exit_with_error = true;
+				goto cleanup;
+			}
+
+			if (selres > 0)
+			{
+				char		buf[128];
+				size_t		len = fread(buf, sizeof(char), sizeof(buf), termin);
+
+				if (len <= 0)
+				{
+					exit_with_error = true;
+					goto cleanup;
+				}
+
+				if (buf[len - 1] == '\n')
+					break;
+			}
+		}
+	}
+
+	if (length > 0 && destination[length - 1] == '\n')
+		/* remove trailing newline */
+		destination[length - 1] = '\0';
+
+cleanup:
+
+#ifdef HAVE_TERMIOS_H
+	if (!echo)
+	{
+		tcsetattr(fileno(termin), TCSAFLUSH, &t_orig);
+		fputs("\n", termout);
+		fflush(termout);
+	}
+#else
+#ifdef WIN32
+	if (!echo)
+	{
+		/* reset to the original console mode */
+		SetConsoleMode(t, t_orig);
+		fputs("\n", termout);
+		fflush(termout);
+	}
+#endif
+#endif
+
+	if (!pg_set_block(fileno(termin)))
+		elog(ERROR, "could not set terminal to blocking mode");
+
+	if (termin != stdin)
+	{
+		fclose(termin);
+		fclose(termout);
+	}
+
+	if (exit_with_error)
+		exit_or_abort(ERROR);
+}
+
+/*
  * Ask the user for a password; 'username' is the username the
  * password is for, if one has been explicitly specified.
  * Set malloc'd string to the global variable 'password'.
@@ -1081,36 +1522,21 @@ parse_pair(const char buffer[], char key[], char value[])
 static void
 prompt_for_password(const char *username)
 {
-	in_password = true;
-
 	if (password)
 	{
 		free(password);
 		password = NULL;
 	}
 
-#if PG_VERSION_NUM >= 100000
 	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
-		simple_prompt("Password: ", password, 100, false);
+		pgut_prompt("Password: ", password, 100, false);
 	else
 	{
 		char	message[256];
 		snprintf(message, lengthof(message), "Password for user %s: ", username);
-		simple_prompt(message, password, 100, false);
+		pgut_prompt(message, password, 100, false);
 	}
-#else
-	if (username == NULL)
-		password = simple_prompt("Password: ", 100, false);
-	else
-	{
-		char	message[256];
-		snprintf(message, lengthof(message), "Password for user %s: ", username);
-		password = simple_prompt(message, 100, false);
-	}
-#endif
-
-	in_password = false;
 }
 
 PGconn *
@@ -1298,7 +1724,7 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG)
 	{
 		int		i;
 
@@ -1350,7 +1776,7 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG)
 	{
 		int		i;
 
@@ -1533,15 +1959,6 @@ on_interrupt(void)
 
 	/* Set interruped flag */
 	interrupted = true;
-
-	/* User promts password, call on_cleanup() byhand */
-	if (in_password)
-	{
-		on_cleanup();
-
-		pqsignal(SIGINT, oldhandler);
-		kill(0, SIGINT);
-	}
 
 	/* Send QueryCancel if we are processing a database query */
 	if (!in_cleanup && cancel_conn != NULL &&

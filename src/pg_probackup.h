@@ -165,8 +165,8 @@ typedef struct pgBackupConfig
 	const char *master_user;
 	int			replica_timeout;
 
-	int			log_to_file;
-	int			log_level;
+	int			log_level_console;
+	int			log_level_file;
 	char	   *log_filename;
 	char	   *error_log_filename;
 	char	   *log_directory;
@@ -313,8 +313,9 @@ extern ProbackupSubcmd	backup_subcmd;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(void);
+extern int do_backup(time_t start_time);
 extern BackupMode parse_backup_mode(const char *value);
+extern const char *deparse_backup_mode(BackupMode mode);
 extern bool fileExists(const char *path);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);

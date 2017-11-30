@@ -737,7 +737,7 @@ do_backup_instance(void)
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int
-do_backup(void)
+do_backup(time_t start_time)
 {
 	bool is_ptrack_support;
 
@@ -821,7 +821,7 @@ do_backup(void)
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
-	current.start_time = time(NULL);
+	current.start_time = start_time;
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
@@ -922,7 +922,7 @@ check_system_identifiers(void)
 					   0, NULL, true);
 	val = PQgetvalue(res, 0, 0);
 
-	if (!parse_uint64(val, &system_id_conn))
+	if (!parse_uint64(val, &system_id_conn, 0))
 	{
 		PQclear(res);
 		elog(ERROR, "%s is not system_identifier", val);
