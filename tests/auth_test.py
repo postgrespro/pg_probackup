@@ -69,7 +69,7 @@ class AuthTest(unittest.TestCase):
         cls.node.cleanup()
         cls.pb.del_test_dir(module_name, '')
 
-    @unittest.skipUnless(skip_test,"Module pexpect isn't installed. You need to install it.")
+    @unittest.skipIf(skip_test, "Module pexpect isn't installed. You need to install it.")
     def setUp(self):
         self.cmd = [self.pb.probackup_path, 'backup',
                     '-B', self.backup_dir,
@@ -130,7 +130,7 @@ def modify_pg_hba(node):
 
 def run_pb_with_auth(cmd, password=None, kill=False):
     try:
-        with pexpect.spawn(" ".join(cmd)) as probackup:
+        with pexpect.spawn(" ".join(cmd), timeout=10) as probackup:
             result = probackup.expect("Password for user .*:", 5)
             if kill:
                 probackup.kill(signal.SIGINT)
