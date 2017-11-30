@@ -3,15 +3,17 @@ import unittest
 import tempfile
 import signal
 
-try:
-    import pexpect
-except:
-    skip_test = True
-
 from .helpers.ptrack_helpers import ProbackupTest
 from testgres import StartNodeException, configure_testgres
 
 module_name = 'auth_test'
+skip_test = False
+
+
+try:
+    import pexpect
+except:
+    skip_test = True
 
 
 class AuthTest(unittest.TestCase):
