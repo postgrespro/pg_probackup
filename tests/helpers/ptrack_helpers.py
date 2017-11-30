@@ -469,6 +469,8 @@ class ProbackupTest(object):
             for i in header_split:
                 if i == '':
                     header_split.remove(i)
+                    continue
+            header_split = [header_element.rstrip() for header_element in header_split]
             for backup_record in body:
                 # split string in list with string for every backup record element
                 backup_record_split = re.split("  +", backup_record)
@@ -669,7 +671,7 @@ class ProbackupTest(object):
         for file in original_pgdata['files']:
             if file in restored_pgdata['files']:
                 if original_pgdata['files'][file] != restored_pgdata['files'][file]:
-                    error_message += '\nChecksumm mismatch.\n File_old: {0}\n Checksumm_old: {1}\n File_new: {2}\n Checksumm_mew: {3}\n'.format(
+                    error_message += '\nChecksumm mismatch.\n File_old: {0}\n Checksumm_old: {1}\n File_new: {2}\n Checksumm_new: {3}\n'.format(
                         os.path.join(original_pgdata['pgdata'], file),
                         original_pgdata['files'][file],
                         os.path.join(restored_pgdata['pgdata'], file),

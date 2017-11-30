@@ -93,7 +93,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    #@unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_incremental_backup_without_full(self):
         """page-level backup without validated full backup"""
         fname = self.id().split('.')[3]
@@ -134,7 +134,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.expectedFailure
+    # @unittest.skip("skip")
     def test_incremental_backup_corrupt_full(self):
         """page-level backup with corrupted full backup"""
         fname = self.id().split('.')[3]

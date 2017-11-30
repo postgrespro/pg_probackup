@@ -151,7 +151,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: .cfm files not found in backup dir"
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     # PGPRO-1018 invalid file size
     def test_fullbackup_after_create_table_stream(self):
@@ -193,7 +193,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
     # --- Section: Incremental from empty tablespace --- #
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_empty_tablespace_ptrack_after_create_table(self):
         """
@@ -244,7 +244,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: .cfm files not found in backup dir"
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_empty_tablespace_ptrack_after_create_table_stream(self):
         """
@@ -406,7 +406,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
     # --- Section: Incremental from fill tablespace --- #
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_after_create_table_ptrack_after_create_table(self):
         """
@@ -464,7 +464,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             )
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_fullbackup_after_create_table_ptrack_after_create_table_stream(self):
         """
@@ -822,7 +822,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
     # --- Make backup with not valid data(broken .cfm) --- #
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_delete_random_cfm_file_from_tablespace_dir(self):
         self.node.safe_psql(
@@ -846,7 +846,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_delete_file_pg_compression_from_tablespace_dir(self):
         os.remove(find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression'])[0])
@@ -856,7 +856,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_delete_random_data_file_from_tablespace_dir(self):
         self.node.safe_psql(
@@ -880,7 +880,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_broken_random_cfm_file_into_tablespace_dir(self):
         self.node.safe_psql(
@@ -904,7 +904,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_broken_random_data_file_into_tablespace_dir(self):
         self.node.safe_psql(
@@ -928,7 +928,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.backup_node,self.backup_dir, 'node', self.node, backup_type='full'
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_broken_file_pg_compression_into_tablespace_dir(self):
 
