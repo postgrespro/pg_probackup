@@ -6,9 +6,9 @@ import signal
 try:
     import pexpect
 except:
-    pass
+    skip_test = True
 
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest
 from testgres import StartNodeException, configure_testgres
 
 module_name = 'auth_test'
@@ -67,6 +67,7 @@ class AuthTest(unittest.TestCase):
         cls.node.cleanup()
         cls.pb.del_test_dir(module_name, '')
 
+    @unittest.skipUnless(skip_test,"Module pexpect isn't installed. You need to install it.")
     def setUp(self):
         self.cmd = [self.pb.probackup_path, 'backup',
                     '-B', self.backup_dir,
@@ -102,7 +103,7 @@ class AuthTest(unittest.TestCase):
 
     def test_right_password(self):
         try:
-            self.assertIn("complited",
+            self.assertIn("completed",
                           "".join(map(lambda x: x.decode("utf-8"),
                                       run_pb_with_auth(self.cmd, 'password\r\n'))
                                   )
@@ -112,7 +113,7 @@ class AuthTest(unittest.TestCase):
 
     def test_ctrl_c_event(self):
         try:
-            print(run_pb_with_auth(self.cmd, kill=True))
+            run_pb_with_auth(self.cmd, kill=True)
         except pexpect.TIMEOUT:
             self.fail("Error: CTRL+C event ignored")
 
