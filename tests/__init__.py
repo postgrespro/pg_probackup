@@ -7,19 +7,24 @@ from . import init_test, option_test, show_test, \
     ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
     false_positive, replica, compression, page, ptrack, archive, \
-    cfs_backup, cfs_restore, cfs_validate_backup
+    exclude, cfs_backup, cfs_restore, cfs_validate_backup
 
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
+    suite.addTests(loader.loadTestsFromModule(archive))
+    suite.addTests(loader.loadTestsFromModule(backup_test))
+#    suite.addTests(loader.loadTestsFromModule(cfs_backup))
+#    suite.addTests(loader.loadTestsFromModule(cfs_restore))
+#    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
+#    suite.addTests(loader.loadTestsFromModule(logging))
+    suite.addTests(loader.loadTestsFromModule(compression))
+    suite.addTests(loader.loadTestsFromModule(delete_test))
+    suite.addTests(loader.loadTestsFromModule(exclude))
+    suite.addTests(loader.loadTestsFromModule(false_positive))
     suite.addTests(loader.loadTestsFromModule(init_test))
     suite.addTests(loader.loadTestsFromModule(option_test))
-    suite.addTests(loader.loadTestsFromModule(show_test))
-    suite.addTests(loader.loadTestsFromModule(backup_test))
-    suite.addTests(loader.loadTestsFromModule(delete_test))
-    suite.addTests(loader.loadTestsFromModule(restore_test))
-    suite.addTests(loader.loadTestsFromModule(validate_test))
-    suite.addTests(loader.loadTestsFromModule(retention_test))
+    suite.addTests(loader.loadTestsFromModule(page))
     suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(ptrack_clean))
     suite.addTests(loader.loadTestsFromModule(ptrack_cluster))
@@ -31,15 +36,12 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_full))
     suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_truncate))
     suite.addTests(loader.loadTestsFromModule(replica))
+    suite.addTests(loader.loadTestsFromModule(restore_test))
+    suite.addTests(loader.loadTestsFromModule(retention_test))
+    suite.addTests(loader.loadTestsFromModule(show_test))
+    suite.addTests(loader.loadTestsFromModule(validate_test))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
-    suite.addTests(loader.loadTestsFromModule(false_positive))
-    suite.addTests(loader.loadTestsFromModule(compression))
-    suite.addTests(loader.loadTestsFromModule(page))
-    suite.addTests(loader.loadTestsFromModule(archive))
-#    suite.addTests(loader.loadTestsFromModule(cfs_backup))
-#    suite.addTests(loader.loadTestsFromModule(cfs_restore))
-#    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
 
     return suite
 
