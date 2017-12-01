@@ -106,6 +106,7 @@ extern bool			prompt_password;
 
 extern bool			interrupted;
 extern bool			in_cleanup;
+extern bool			in_password;	/* User prompts password */
 
 extern int pgut_getopt(int argc, char **argv, pgut_option options[]);
 extern void pgut_readopt(const char *path, pgut_option options[], int elevel);

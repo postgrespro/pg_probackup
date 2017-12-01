@@ -14,12 +14,7 @@
 #include "getopt_long.h"
 #include <limits.h>
 #include <time.h>
-#include <stdio.h>
 #include <unistd.h>
-
-#ifdef HAVE_TERMIOS_H
-#include <termios.h>
-#endif
 
 #include "logger.h"
 #include "pgut.h"
@@ -52,6 +47,7 @@ static PGcancel *volatile cancel_conn = NULL;
 /* Interrupted by SIGINT (Ctrl+C) ? */
 bool		interrupted = false;
 bool		in_cleanup = false;
+bool		in_password = false;
 
 static bool parse_pair(const char buffer[], char key[], char value[]);
 
@@ -1286,235 +1282,6 @@ parse_pair(const char buffer[], char key[], char value[])
 }
 
 /*
- * pgut_prompt
- *
- * Generalized function especially intended for reading in usernames and
- * passwords interactively.  Reads from /dev/tty or stdin/stderr.
- *
- * prompt:		The prompt to print, or NULL if none (automatically localized)
- * destination: buffer in which to store result
- * destlen:		allocated length of destination
- * echo:		Set to false if you want to hide what is entered (for passwords)
- *
- * The input (without trailing newline) is returned in the destination buffer,
- * with a '\0' appended.
- *
- * Copy of simple_prompt().
- */
-static void
-pgut_prompt(const char *prompt, char *destination, size_t destlen, bool echo)
-{
-	size_t		length = 0;
-	char	   *ptr = destination;
-	FILE	   *termin,
-			   *termout;
-	bool		exit_with_error = false;
-
-#ifdef HAVE_TERMIOS_H
-	struct termios t_orig,
-				t;
-#else
-#ifdef WIN32
-	HANDLE		t = NULL;
-	DWORD		t_orig = 0;
-#endif
-#endif
-
-#ifdef WIN32
-
-	/*
-	 * A Windows console has an "input code page" and an "output code page";
-	 * these usually match each other, but they rarely match the "Windows ANSI
-	 * code page" defined at system boot and expected of "char *" arguments to
-	 * Windows API functions.  The Microsoft CRT write() implementation
-	 * automatically converts text between these code pages when writing to a
-	 * console.  To identify such file descriptors, it calls GetConsoleMode()
-	 * on the underlying HANDLE, which in turn requires GENERIC_READ access on
-	 * the HANDLE.  Opening termout in mode "w+" allows that detection to
-	 * succeed.  Otherwise, write() would not recognize the descriptor as a
-	 * console, and non-ASCII characters would display incorrectly.
-	 *
-	 * XXX fgets() still receives text in the console's input code page.  This
-	 * makes non-ASCII credentials unportable.
-	 */
-	termin = fopen("CONIN$", "r");
-	termout = fopen("CONOUT$", "w+");
-#else
-
-	/*
-	 * Do not try to collapse these into one "w+" mode file. Doesn't work on
-	 * some platforms (eg, HPUX 10.20).
-	 */
-	termin = fopen("/dev/tty", "r");
-	termout = fopen("/dev/tty", "w");
-#endif
-	if (!termin || !termout
-#ifdef WIN32
-
-	/*
-	 * Direct console I/O does not work from the MSYS 1.0.10 console.  Writes
-	 * reach nowhere user-visible; reads block indefinitely.  XXX This affects
-	 * most Windows terminal environments, including rxvt, mintty, Cygwin
-	 * xterm, Cygwin sshd, and PowerShell ISE.  Switch to a more-generic test.
-	 */
-		|| (getenv("OSTYPE") && strcmp(getenv("OSTYPE"), "msys") == 0)
-#endif
-		)
-	{
-		if (termin)
-			fclose(termin);
-		if (termout)
-			fclose(termout);
-		termin = stdin;
-		termout = stderr;
-	}
-
-#ifdef HAVE_TERMIOS_H
-	if (!echo)
-	{
-		tcgetattr(fileno(termin), &t);
-		t_orig = t;
-		t.c_lflag &= ~ECHO;
-		tcsetattr(fileno(termin), TCSAFLUSH, &t);
-	}
-#else
-#ifdef WIN32
-	if (!echo)
-	{
-		/* get a new handle to turn echo off */
-		t = GetStdHandle(STD_INPUT_HANDLE);
-
-		/* save the old configuration first */
-		GetConsoleMode(t, &t_orig);
-
-		/* set to the new mode */
-		SetConsoleMode(t, ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
-	}
-#endif
-#endif
-
-	if (!pg_set_noblock(fileno(termin)))
-		elog(ERROR, "could not set terminal to nonblocking mode");
-
-	if (prompt)
-	{
-		fputs(_(prompt), termout);
-		fflush(termout);
-	}
-
-	if (interrupted)
-	{
-		exit_with_error = true;
-		goto cleanup;
-	}
-
-	do
-	{
-		int			selres;
-		struct timeval timeout;
-
-		timeout.tv_sec = 0;
-		timeout.tv_usec = 100 * 1000L;	/* 100 milliseconds */
-
-		selres = wait_for_socket(fileno(termin), &timeout);
-		if (selres < 0 || interrupted)
-		{
-			exit_with_error = true;
-			goto cleanup;
-		}
-
-		if (selres > 0)
-		{
-			size_t		len = fread(ptr, sizeof(char), destlen - length, termin);
-
-			if (len <= 0)
-			{
-				exit_with_error = true;
-				goto cleanup;
-			}
-
-			length += len;
-			ptr += len;
-		}
-
-		if (length >0 && destination[length - 1] == '\n')
-			break;
-	} while (length < destlen);
-
-	if (length > 0 && destination[length - 1] != '\n')
-	{
-		/* eat rest of the line */
-		int			selres;
-		struct timeval timeout;
-
-		while (true)
-		{
-			timeout.tv_sec = 0;
-			timeout.tv_usec = 100 * 1000L;	/* 100 milliseconds */
-
-			selres = wait_for_socket(fileno(termin), &timeout);
-			if (selres < 0 || interrupted)
-			{
-				exit_with_error = true;
-				goto cleanup;
-			}
-
-			if (selres > 0)
-			{
-				char		buf[128];
-				size_t		len = fread(buf, sizeof(char), sizeof(buf), termin);
-
-				if (len <= 0)
-				{
-					exit_with_error = true;
-					goto cleanup;
-				}
-
-				if (buf[len - 1] == '\n')
-					break;
-			}
-		}
-	}
-
-	if (length > 0 && destination[length - 1] == '\n')
-		/* remove trailing newline */
-		destination[length - 1] = '\0';
-
-cleanup:
-
-#ifdef HAVE_TERMIOS_H
-	if (!echo)
-	{
-		tcsetattr(fileno(termin), TCSAFLUSH, &t_orig);
-		fputs("\n", termout);
-		fflush(termout);
-	}
-#else
-#ifdef WIN32
-	if (!echo)
-	{
-		/* reset to the original console mode */
-		SetConsoleMode(t, t_orig);
-		fputs("\n", termout);
-		fflush(termout);
-	}
-#endif
-#endif
-
-	if (!pg_set_block(fileno(termin)))
-		elog(ERROR, "could not set terminal to blocking mode");
-
-	if (termin != stdin)
-	{
-		fclose(termin);
-		fclose(termout);
-	}
-
-	if (exit_with_error)
-		exit_or_abort(ERROR);
-}
-
-/*
  * Ask the user for a password; 'username' is the username the
  * password is for, if one has been explicitly specified.
  * Set malloc'd string to the global variable 'password'.
@@ -1522,21 +1289,36 @@ cleanup:
 static void
 prompt_for_password(const char *username)
 {
+	in_password = true;
+
 	if (password)
 	{
 		free(password);
 		password = NULL;
 	}
 
+#if PG_VERSION_NUM >= 100000
 	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
-		pgut_prompt("Password: ", password, 100, false);
+		simple_prompt("Password: ", password, 100, false);
 	else
 	{
 		char	message[256];
 		snprintf(message, lengthof(message), "Password for user %s: ", username);
-		pgut_prompt(message, password, 100, false);
+		simple_prompt(message, password, 100, false);
 	}
+#else
+	if (username == NULL)
+		password = simple_prompt("Password: ", 100, false);
+	else
+	{
+		char	message[256];
+		snprintf(message, lengthof(message), "Password for user %s: ", username);
+		password = simple_prompt(message, 100, false);
+	}
+#endif
+
+	in_password = false;
 }
 
 PGconn *
@@ -1959,6 +1741,15 @@ on_interrupt(void)
 
 	/* Set interruped flag */
 	interrupted = true;
+
+	/* User promts password, call on_cleanup() byhand */
+	if (in_password)
+	{
+		on_cleanup();
+
+		pqsignal(SIGINT, oldhandler);
+		kill(0, SIGINT);
+	}
 
 	/* Send QueryCancel if we are processing a database query */
 	if (!in_cleanup && cancel_conn != NULL &&
