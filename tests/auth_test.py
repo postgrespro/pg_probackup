@@ -11,8 +11,8 @@ skip_test = False
 
 
 try:
-    import pexpect
-except:
+    from pexpect import *
+except ImportError:
     skip_test = True
 
 
@@ -90,7 +90,7 @@ class AuthTest(unittest.TestCase):
                                       run_pb_with_auth(self.cmd, '\0\r\n'))
                                   )
                           )
-        except (pexpect.TIMEOUT, pexpect.ExceptionPexpect) as e:
+        except (TIMEOUT, ExceptionPexpect) as e:
             self.fail(e.value)
 
     def test_wrong_password(self):
@@ -100,7 +100,7 @@ class AuthTest(unittest.TestCase):
                                       run_pb_with_auth(self.cmd, 'wrong_password\r\n'))
                                   )
                           )
-        except (pexpect.TIMEOUT, pexpect.ExceptionPexpect) as e:
+        except (TIMEOUT, ExceptionPexpect) as e:
             self.fail(e.value)
 
     def test_right_password(self):
@@ -110,13 +110,13 @@ class AuthTest(unittest.TestCase):
                                       run_pb_with_auth(self.cmd, 'password\r\n'))
                                   )
                           )
-        except (pexpect.TIMEOUT, pexpect.ExceptionPexpect) as e:
+        except (TIMEOUT, ExceptionPexpect) as e:
             self.fail(e.value)
 
     def test_ctrl_c_event(self):
         try:
             run_pb_with_auth(self.cmd, kill=True)
-        except pexpect.TIMEOUT:
+        except TIMEOUT:
             self.fail("Error: CTRL+C event ignored")
 
 
@@ -130,7 +130,7 @@ def modify_pg_hba(node):
 
 def run_pb_with_auth(cmd, password=None, kill=False):
     try:
-        with pexpect.spawn(" ".join(cmd), timeout=10) as probackup:
+        with spawn(" ".join(cmd), timeout=10) as probackup:
             result = probackup.expect("Password for user .*:", 5)
             if kill:
                 probackup.kill(signal.SIGINT)
@@ -138,8 +138,8 @@ def run_pb_with_auth(cmd, password=None, kill=False):
                 probackup.sendline(password)
                 return probackup.readlines()
             else:
-                raise pexpect.TIMEOUT("")
-    except pexpect.TIMEOUT:
-        raise pexpect.TIMEOUT("Timeout error.")
-    except pexpect.ExceptionPexpect:
-        raise pexpect.ExceptionPexpect("Pexpect error.")
+                raise TIMEOUT("")
+    except TIMEOUT:
+        raise TIMEOUT("Timeout error.")
+    except ExceptionPexpect:
+        raise ExceptionPexpect("Pexpect error.")
