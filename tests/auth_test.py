@@ -122,7 +122,7 @@ class AuthTest(unittest.TestCase):
 
 def modify_pg_hba(node):
     hba_conf = os.path.join(node.data_dir, "pg_hba.conf")
-    with open(hba_conf, 'r+', encoding='utf-8') as fio:
+    with open(hba_conf, 'r+') as fio:
         data = fio.read()
         fio.seek(0)
         fio.write('host\tall\tpostgres\t127.0.0.1/0\ttrust\n' + data)
