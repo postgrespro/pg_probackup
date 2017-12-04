@@ -1,3 +1,8 @@
+"""
+Need to install pexpect.
+pip install pexpect
+"""
+
 import os
 import unittest
 import tempfile

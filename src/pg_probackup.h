@@ -104,6 +104,10 @@ typedef struct pgFile
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
 
+/* Special values of datapagemap_t bitmapsize */
+#define PageBitmapIsEmpty 0
+#define PageBitmapIsAbsent -1
+
 /* Current state of backup */
 typedef enum BackupStatus
 {
@@ -161,8 +165,8 @@ typedef struct pgBackupConfig
 	const char *master_user;
 	int			replica_timeout;
 
-	int			log_to_file;
-	int			log_level;
+	int			log_level_console;
+	int			log_level_file;
 	char	   *log_filename;
 	char	   *error_log_filename;
 	char	   *log_directory;
@@ -210,6 +214,8 @@ typedef struct pgBackup
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
+
+	char			server_version[100];
 
 	bool			stream; 		/* Was this backup taken in stream mode?
 									 * i.e. does it include all needed WAL files? */
@@ -307,8 +313,9 @@ extern ProbackupSubcmd	backup_subcmd;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(void);
+extern int do_backup(time_t start_time);
 extern BackupMode parse_backup_mode(const char *value);
+extern const char *deparse_backup_mode(BackupMode mode);
 extern bool fileExists(const char *path);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);

@@ -66,7 +66,8 @@ help_pg_probackup(void)
 	printf(_("\n  %s init -B backup-path [-l]\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--log-level=log-level]\n"));
+	printf(_("                 [--log-level-console=log-level-console]\n"));
+	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -130,9 +131,8 @@ help_pg_probackup(void)
 static void
 help_init(void)
 {
-	printf(_("%s init -B backup-path -D pgdata-dir [-l]\n\n"), PROGRAM_NAME);
+	printf(_("%s init -B backup-path [-l]\n\n"), PROGRAM_NAME);
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 }
 
 static void
@@ -153,7 +153,6 @@ help_backup(void)
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|PTRACK\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
 	printf(_("      --archive-timeout            wait timeout for WAL segment archiving\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
@@ -195,7 +194,6 @@ help_restore(void)
 	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to restore\n"));
 
 	printf(_("      --progress                   show progress\n"));
@@ -219,7 +217,6 @@ help_validate(void)
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
-	printf(_("  -l, --log                        store messages in a log file\n"));
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
@@ -250,14 +247,14 @@ help_delete(void)
 	printf(_("  -i, --backup-id=backup-id        backup to delete\n"));
 	printf(_("      --expired                    delete backups expired according to current\n"));
 	printf(_("                                   retention policy\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 }
 
 static void
 help_set_config(void)
 {
 	printf(_("%s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--log-level=log-level]\n"));
+	printf(_("                 [--log-level-console=log-level-console]\n"));
+	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -276,7 +273,10 @@ help_set_config(void)
 	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --log-level=log-level        controls which message levels are sent to the log\n"));
+	printf(_("      --log-level-console=log-level-console\n"
+			 "                                   controls which message levels are sent to the stderr\n"));
+	printf(_("      --log-level-file=log-level-file\n"
+			 "                                   controls which message levels are sent to a log file\n"));
 	printf(_("      --log-filename=log-filename  file names of the created log files which is treated as as strftime pattern\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   file names of the created log files for error messages\n"));

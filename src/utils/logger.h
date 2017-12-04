@@ -12,7 +12,7 @@
 
 #include "postgres_fe.h"
 
-#define LOGGER_NONE	(-10)
+#define LOG_NONE	(-10)
 
 /* Log level */
 #define VERBOSE		(-5)
@@ -23,11 +23,13 @@
 #define ERROR		1
 #define FATAL		2
 #define PANIC		3
+#define LOG_OFF		10
 
 /* Logger parameters */
 
 extern int			log_to_file;
-extern int			log_level;
+extern int			log_level_console;
+extern int			log_level_file;
 
 extern char		   *log_filename;
 extern char		   *error_log_filename;
@@ -37,11 +39,12 @@ extern char			log_path[MAXPGPATH];
 extern int			log_rotation_size;
 extern int			log_rotation_age;
 
-#define LOG_TO_FILE ((log_to_file == LOGGER_NONE) ? false : (bool) log_to_file)
-#define LOG_LEVEL ((log_level == LOGGER_NONE) ? INFO : log_level)
+#define LOG_LEVEL_CONSOLE ((log_level_console == LOG_NONE) ? INFO : log_level_console)
+#define LOG_LEVEL_FILE ((log_level_file == LOG_NONE) ? LOG_OFF : log_level_file)
 
 #undef elog
 extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
+extern void elog_file(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
 
 extern void init_logger(const char *root_path);
 

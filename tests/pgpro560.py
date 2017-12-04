@@ -73,14 +73,14 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node1', node1)
 
         try:
-            self.backup_node(backup_dir, 'node1', node1, data_dir=node2.data_dir, options=['--stream'])
+            self.backup_node(backup_dir, 'node1', node2, options=['--stream'])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because of of SYSTEM ID mismatch.\n Output: {0} \n CMD: {1}".format(
+            self.assertEqual(1, 0, "Expecting Error because of SYSTEM ID mismatch.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
                 'ERROR: Backup data directory was initialized for system id' in e.message
-                 and 'but target backup directory system id is' in e.message,
+                 and 'but connected instance system id is' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         try:

@@ -63,6 +63,7 @@ typedef struct pgut_option
 	void	   *var;		/* pointer to variable */
 	pgut_optsrc	allowed;	/* allowed source */
 	pgut_optsrc	source;		/* actual source */
+	int			flags;		/* option unit */
 } pgut_option;
 
 typedef void (*pgut_optfn) (pgut_option *opt, const char *arg);
@@ -105,6 +106,7 @@ extern bool			prompt_password;
 
 extern bool			interrupted;
 extern bool			in_cleanup;
+extern bool			in_password;	/* User prompts password */
 
 extern int pgut_getopt(int argc, char **argv, pgut_option options[]);
 extern void pgut_readopt(const char *path, pgut_option options[], int elevel);
@@ -123,7 +125,7 @@ extern PGconn *pgut_connect_replication_extended(const char *pghost, const char 
 									 const char *dbname, const char *login,
 									 const char *pwd);
 extern void pgut_disconnect(PGconn *conn);
-extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams, const char **params);
+extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams, const char **params, bool exit_on_error);
 extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int elevel);
 extern void pgut_cancel(PGconn* conn);
 extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);
@@ -191,13 +193,18 @@ extern int appendStringInfoFd(StringInfo str, int fd);
 
 extern bool parse_bool(const char *value, bool *result);
 extern bool parse_bool_with_len(const char *value, size_t len, bool *result);
-extern bool parse_int32(const char *value, int32 *result);
-extern bool parse_uint32(const char *value, uint32 *result);
-extern bool parse_int64(const char *value, int64 *result);
-extern bool parse_uint64(const char *value, uint64 *result);
+extern bool parse_int32(const char *value, int32 *result, int flags);
+extern bool parse_uint32(const char *value, uint32 *result, int flags);
+extern bool parse_int64(const char *value, int64 *result, int flags);
+extern bool parse_uint64(const char *value, uint64 *result, int flags);
 extern bool parse_time(const char *value, time_t *result);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
+
+extern void convert_from_base_unit(int64 base_value, int base_unit,
+								   int64 *value, const char **unit);
+extern void convert_from_base_unit_u(uint64 base_value, int base_unit,
+									 uint64 *value, const char **unit);
 
 #define IsSpace(c)		(isspace((unsigned char)(c)))
 #define IsAlpha(c)		(isalpha((unsigned char)(c)))

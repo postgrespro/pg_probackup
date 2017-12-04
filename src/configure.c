@@ -9,7 +9,8 @@
 
 #include "pg_probackup.h"
 
-static void opt_log_level(pgut_option *opt, const char *arg);
+static void opt_log_level_console(pgut_option *opt, const char *arg);
+static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
 
 static pgBackupConfig *cur_config = NULL;
@@ -41,10 +42,10 @@ do_configure(bool show_only)
 	if (replica_timeout != 300)		/* 300 is default value */
 		config->replica_timeout = replica_timeout;
 
-	if (log_to_file != LOGGER_NONE)
-		config->log_to_file = LOG_TO_FILE;
-	if (log_level != LOGGER_NONE)
-		config->log_level = LOG_LEVEL;
+	if (log_level_console != LOG_NONE)
+		config->log_level_console = LOG_LEVEL_CONSOLE;
+	if (log_level_file != LOG_NONE)
+		config->log_level_file = LOG_LEVEL_FILE;
 	if (log_filename)
 		config->log_filename = log_filename;
 	if (error_log_filename)
@@ -90,8 +91,8 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->master_user = NULL;
 	config->replica_timeout = INT_MIN;	/* INT_MIN means "undefined" */
 
-	config->log_to_file = INT_MIN;		/* INT_MIN means "undefined" */
-	config->log_level = INT_MIN;		/* INT_MIN means "undefined" */
+	config->log_level_console = INT_MIN;	/* INT_MIN means "undefined" */
+	config->log_level_file = INT_MIN;		/* INT_MIN means "undefined" */
 	config->log_filename = NULL;
 	config->error_log_filename = NULL;
 	config->log_directory = NULL;
@@ -108,6 +109,9 @@ pgBackupConfigInit(pgBackupConfig *config)
 void
 writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 {
+	uint64		res;
+	const char *unit;
+
 	fprintf(out, "#Backup instance info\n");
 	fprintf(out, "PGDATA = %s\n", config->pgdata);
 	fprintf(out, "system-identifier = %li\n", config->system_identifier);
@@ -131,24 +135,41 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "master-db = %s\n", config->master_db);
 	if (config->master_user)
 		fprintf(out, "master-user = %s\n", config->master_user);
+
 	if (config->replica_timeout != INT_MIN)
-		fprintf(out, "replica_timeout = %d\n", config->replica_timeout);
+	{
+		convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_S,
+								 &res, &unit);
+		fprintf(out, "replica-timeout = " UINT64_FORMAT "%s\n", res, unit);
+	}
 
 	fprintf(out, "#Logging parameters:\n");
-	if (config->log_to_file != INT_MIN)
-		fprintf(out, "log = %d\n", config->log_to_file);
-	if (config->log_level != INT_MIN)
-		fprintf(out, "log-level = %s\n", deparse_log_level(config->log_level));
+	if (config->log_level_console != INT_MIN)
+		fprintf(out, "log-level-console = %s\n", deparse_log_level(config->log_level_console));
+	if (config->log_level_file != INT_MIN)
+		fprintf(out, "log-level-file = %s\n", deparse_log_level(config->log_level_file));
 	if (config->log_filename)
 		fprintf(out, "log-filename = %s\n", config->log_filename);
 	if (config->error_log_filename)
 		fprintf(out, "error-log-filename = %s\n", config->error_log_filename);
 	if (config->log_directory)
 		fprintf(out, "log-directory = %s\n", config->log_directory);
+
+	/*
+	 * Convert values from base unit
+	 */
 	if (config->log_rotation_size)
-		fprintf(out, "log-rotation-size = %d\n", config->log_rotation_size);
+	{
+		convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
+								 &res, &unit);
+		fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n", res, unit);
+	}
 	if (config->log_rotation_age)
-		fprintf(out, "log-rotation-age = %d\n", config->log_rotation_age);
+	{
+		convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
+								 &res, &unit);
+		fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n", res, unit);
+	}
 
 	fprintf(out, "#Retention parameters:\n");
 	if (config->retention_redundancy)
@@ -198,13 +219,13 @@ readBackupCatalogConfigFile(void)
 		{ 'f', 0, "compress-algorithm",		opt_compress_alg,				SOURCE_CMDLINE },
 		{ 'u', 0, "compress-level",			&(config->compress_level),		SOURCE_CMDLINE },
 		/* logging options */
-		{ 'b', 0, "log",					&(config->log_to_file),			SOURCE_CMDLINE },
-		{ 'f', 0, "log-level",				opt_log_level,					SOURCE_CMDLINE },
+		{ 'f', 0, "log-level-console",		opt_log_level_console,			SOURCE_CMDLINE },
+		{ 'f', 0, "log-level-file",			opt_log_level_file,				SOURCE_CMDLINE },
 		{ 's', 0, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
 		{ 's', 0, "error-log-filename",		&(config->error_log_filename),	SOURCE_CMDLINE },
 		{ 's', 0, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
-		{ 'u', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE },
-		{ 'u', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE },
+		{ 'u', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
+		{ 'u', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		/* connection options */
 		{ 's', 0, "pgdata",					&(config->pgdata),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgdatabase",				&(config->pgdatabase),			SOURCE_FILE_STRICT },
@@ -216,7 +237,7 @@ readBackupCatalogConfigFile(void)
 		{ 's', 0, "master-port",			&(config->master_port),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-db",				&(config->master_db),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-user",			&(config->master_user),			SOURCE_FILE_STRICT },
-		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE },
+		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		/* other options */
 		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
 		{0}
@@ -234,9 +255,15 @@ readBackupCatalogConfigFile(void)
 }
 
 static void
-opt_log_level(pgut_option *opt, const char *arg)
+opt_log_level_console(pgut_option *opt, const char *arg)
 {
-	cur_config->log_level = parse_log_level(arg);
+	cur_config->log_level_console = parse_log_level(arg);
+}
+
+static void
+opt_log_level_file(pgut_option *opt, const char *arg)
+{
+	cur_config->log_level_file = parse_log_level(arg);
 }
 
 static void

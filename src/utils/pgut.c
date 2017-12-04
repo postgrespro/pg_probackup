@@ -47,6 +47,7 @@ static PGcancel *volatile cancel_conn = NULL;
 /* Interrupted by SIGINT (Ctrl+C) ? */
 bool		interrupted = false;
 bool		in_cleanup = false;
+bool		in_password = false;
 
 static bool parse_pair(const char buffer[], char key[], char value[]);
 
@@ -223,22 +224,22 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				((pgut_optfn) opt->var)(opt, optarg);
 				return;
 			case 'i':
-				if (parse_int32(optarg, opt->var))
+				if (parse_int32(optarg, opt->var, opt->flags))
 					return;
 				message = "a 32bit signed integer";
 				break;
 			case 'u':
-				if (parse_uint32(optarg, opt->var))
+				if (parse_uint32(optarg, opt->var, opt->flags))
 					return;
 				message = "a 32bit unsigned integer";
 				break;
 			case 'I':
-				if (parse_int64(optarg, opt->var))
+				if (parse_int64(optarg, opt->var, opt->flags))
 					return;
 				message = "a 64bit signed integer";
 				break;
 			case 'U':
-				if (parse_uint64(optarg, opt->var))
+				if (parse_uint64(optarg, opt->var, opt->flags))
 					return;
 				message = "a 64bit unsigned integer";
 				break;
@@ -267,6 +268,236 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 	else
 		elog(ERROR, "option --%s should be %s: '%s'",
 			opt->lname, message, optarg);
+}
+
+/*
+ * Convert a value from one of the human-friendly units ("kB", "min" etc.)
+ * to the given base unit.  'value' and 'unit' are the input value and unit
+ * to convert from.  The converted value is stored in *base_value.
+ *
+ * Returns true on success, false if the input unit is not recognized.
+ */
+static bool
+convert_to_base_unit(int64 value, const char *unit,
+					 int base_unit, int64 *base_value)
+{
+	const unit_conversion *table;
+	int			i;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit &&
+			strcmp(unit, table[i].unit) == 0)
+		{
+			if (table[i].multiplier < 0)
+				*base_value = value / (-table[i].multiplier);
+			else
+				*base_value = value * table[i].multiplier;
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * Unsigned variant of convert_to_base_unit()
+ */
+static bool
+convert_to_base_unit_u(uint64 value, const char *unit,
+					   int base_unit, uint64 *base_value)
+{
+	const unit_conversion *table;
+	int			i;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit &&
+			strcmp(unit, table[i].unit) == 0)
+		{
+			if (table[i].multiplier < 0)
+				*base_value = value / (-table[i].multiplier);
+			else
+				*base_value = value * table[i].multiplier;
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * Convert a value in some base unit to a human-friendly unit.  The output
+ * unit is chosen so that it's the greatest unit that can represent the value
+ * without loss.  For example, if the base unit is GUC_UNIT_KB, 1024 is
+ * converted to 1 MB, but 1025 is represented as 1025 kB.
+ */
+void
+convert_from_base_unit(int64 base_value, int base_unit,
+					   int64 *value, const char **unit)
+{
+	const unit_conversion *table;
+	int			i;
+
+	*unit = NULL;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit)
+		{
+			/*
+			 * Accept the first conversion that divides the value evenly. We
+			 * assume that the conversions for each base unit are ordered from
+			 * greatest unit to the smallest!
+			 */
+			if (table[i].multiplier < 0)
+			{
+				*value = base_value * (-table[i].multiplier);
+				*unit = table[i].unit;
+				break;
+			}
+			else if (base_value % table[i].multiplier == 0)
+			{
+				*value = base_value / table[i].multiplier;
+				*unit = table[i].unit;
+				break;
+			}
+		}
+	}
+
+	Assert(*unit != NULL);
+}
+
+/*
+ * Unsigned variant of convert_from_base_unit()
+ */
+void
+convert_from_base_unit_u(uint64 base_value, int base_unit,
+						 uint64 *value, const char **unit)
+{
+	const unit_conversion *table;
+	int			i;
+
+	*unit = NULL;
+
+	if (base_unit & OPTION_UNIT_MEMORY)
+		table = memory_unit_conversion_table;
+	else
+		table = time_unit_conversion_table;
+
+	for (i = 0; *table[i].unit; i++)
+	{
+		if (base_unit == table[i].base_unit)
+		{
+			/*
+			 * Accept the first conversion that divides the value evenly. We
+			 * assume that the conversions for each base unit are ordered from
+			 * greatest unit to the smallest!
+			 */
+			if (table[i].multiplier < 0)
+			{
+				*value = base_value * (-table[i].multiplier);
+				*unit = table[i].unit;
+				break;
+			}
+			else if (base_value % table[i].multiplier == 0)
+			{
+				*value = base_value / table[i].multiplier;
+				*unit = table[i].unit;
+				break;
+			}
+		}
+	}
+
+	Assert(*unit != NULL);
+}
+
+static bool
+parse_unit(char *unit_str, int flags, int64 value, int64 *base_value)
+{
+	/* allow whitespace between integer and unit */
+	while (isspace((unsigned char) *unit_str))
+		unit_str++;
+
+	/* Handle possible unit */
+	if (*unit_str != '\0')
+	{
+		char		unit[MAX_UNIT_LEN + 1];
+		int			unitlen;
+		bool		converted = false;
+
+		if ((flags & OPTION_UNIT) == 0)
+			return false;		/* this setting does not accept a unit */
+
+		unitlen = 0;
+		while (*unit_str != '\0' && !isspace((unsigned char) *unit_str) &&
+			   unitlen < MAX_UNIT_LEN)
+			unit[unitlen++] = *(unit_str++);
+		unit[unitlen] = '\0';
+		/* allow whitespace after unit */
+		while (isspace((unsigned char) *unit_str))
+			unit_str++;
+
+		if (*unit_str == '\0')
+			converted = convert_to_base_unit(value, unit, (flags & OPTION_UNIT),
+											 base_value);
+		if (!converted)
+			return false;
+	}
+
+	return true;
+}
+
+/*
+ * Unsigned variant of parse_unit()
+ */
+static bool
+parse_unit_u(char *unit_str, int flags, uint64 value, uint64 *base_value)
+{
+	/* allow whitespace between integer and unit */
+	while (isspace((unsigned char) *unit_str))
+		unit_str++;
+
+	/* Handle possible unit */
+	if (*unit_str != '\0')
+	{
+		char		unit[MAX_UNIT_LEN + 1];
+		int			unitlen;
+		bool		converted = false;
+
+		if ((flags & OPTION_UNIT) == 0)
+			return false;		/* this setting does not accept a unit */
+
+		unitlen = 0;
+		while (*unit_str != '\0' && !isspace((unsigned char) *unit_str) &&
+			   unitlen < MAX_UNIT_LEN)
+			unit[unitlen++] = *(unit_str++);
+		unit[unitlen] = '\0';
+		/* allow whitespace after unit */
+		while (isspace((unsigned char) *unit_str))
+			unit_str++;
+
+		if (*unit_str == '\0')
+			converted = convert_to_base_unit_u(value, unit, (flags & OPTION_UNIT),
+											   base_value);
+		if (!converted)
+			return false;
+	}
+
+	return true;
 }
 
 /*
@@ -368,7 +599,7 @@ parse_bool_with_len(const char *value, size_t len, bool *result)
  * valid range: -2147483648 ~ 2147483647
  */
 bool
-parse_int32(const char *value, int32 *result)
+parse_int32(const char *value, int32 *result, int flags)
 {
 	int64	val;
 	char   *endptr;
@@ -381,10 +612,13 @@ parse_int32(const char *value, int32 *result)
 
 	errno = 0;
 	val = strtol(value, &endptr, 0);
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE || val != (int64) ((int32) val))
+		return false;
+
+	if (!parse_unit(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -397,7 +631,7 @@ parse_int32(const char *value, int32 *result)
  * valid range: 0 ~ 4294967295 (2^32-1)
  */
 bool
-parse_uint32(const char *value, uint32 *result)
+parse_uint32(const char *value, uint32 *result, int flags)
 {
 	uint64	val;
 	char   *endptr;
@@ -410,10 +644,13 @@ parse_uint32(const char *value, uint32 *result)
 
 	errno = 0;
 	val = strtoul(value, &endptr, 0);
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE || val != (uint64) ((uint32) val))
+		return false;
+
+	if (!parse_unit_u(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -426,7 +663,7 @@ parse_uint32(const char *value, uint32 *result)
  * valid range: -9223372036854775808 ~ 9223372036854775807
  */
 bool
-parse_int64(const char *value, int64 *result)
+parse_int64(const char *value, int64 *result, int flags)
 {
 	int64	val;
 	char   *endptr;
@@ -445,10 +682,13 @@ parse_int64(const char *value, int64 *result)
 #else
 	val = strtol(value, &endptr, 0);
 #endif
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE)
+		return false;
+
+	if (!parse_unit(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -461,7 +701,7 @@ parse_int64(const char *value, int64 *result)
  * valid range: 0 ~ (2^64-1)
  */
 bool
-parse_uint64(const char *value, uint64 *result)
+parse_uint64(const char *value, uint64 *result, int flags)
 {
 	uint64	val;
 	char   *endptr;
@@ -486,10 +726,13 @@ parse_uint64(const char *value, uint64 *result)
 #else
 	val = strtoul(value, &endptr, 0);
 #endif
-	if (endptr == value || *endptr)
+	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
 	if (errno == ERANGE)
+		return false;
+
+	if (!parse_unit_u(endptr, flags, val, &val))
 		return false;
 
 	*result = val;
@@ -638,40 +881,6 @@ parse_time(const char *value, time_t *result)
 	}
 
 	return true;
-}
-
-/*
- * Convert a value from one of the human-friendly units ("kB", "min" etc.)
- * to the given base unit.  'value' and 'unit' are the input value and unit
- * to convert from.  The converted value is stored in *base_value.
- *
- * Returns true on success, false if the input unit is not recognized.
- */
-static bool
-convert_to_base_unit(int64 value, const char *unit,
-					 int base_unit, int64 *base_value)
-{
-	const unit_conversion *table;
-	int			i;
-
-	if (base_unit & OPTION_UNIT_MEMORY)
-		table = memory_unit_conversion_table;
-	else
-		table = time_unit_conversion_table;
-
-	for (i = 0; *table[i].unit; i++)
-	{
-		if (base_unit == table[i].base_unit &&
-			strcmp(unit, table[i].unit) == 0)
-		{
-			if (table[i].multiplier < 0)
-				*base_value = value / (-table[i].multiplier);
-			else
-				*base_value = value * table[i].multiplier;
-			return true;
-		}
-	}
-	return false;
 }
 
 /*
@@ -1080,7 +1289,8 @@ parse_pair(const char buffer[], char key[], char value[])
 static void
 prompt_for_password(const char *username)
 {
-	pqsignal(SIGINT, oldhandler);
+	in_password = true;
+
 	if (password)
 	{
 		free(password);
@@ -1107,7 +1317,8 @@ prompt_for_password(const char *username)
 		password = simple_prompt(message, 100, false);
 	}
 #endif
-	init_cancel_handler();
+
+	in_password = false;
 }
 
 PGconn *
@@ -1238,6 +1449,8 @@ pgut_connect_replication_extended(const char *pghost, const char *pgport,
 		{
 			PQfinish(tmpconn);
 			prompt_for_password(username);
+			keywords[i] = "password";
+			values[i] = password;
 			continue;
 		}
 
@@ -1284,7 +1497,8 @@ pgut_set_port(const char *new_port)
 }
 
 PGresult *
-pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
+pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
+			 bool exit_on_error)
 {
 	PGresult   *res;
 
@@ -1292,7 +1506,7 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG)
 	{
 		int		i;
 
@@ -1317,16 +1531,19 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
 		res = PQexecParams(conn, query, nParams, NULL, params, NULL, NULL, 0);
 	on_after_exec();
 
-	switch (PQresultStatus(res))
+	if (exit_on_error)
 	{
-		case PGRES_TUPLES_OK:
-		case PGRES_COMMAND_OK:
-		case PGRES_COPY_IN:
-			break;
-		default:
-			elog(ERROR, "query failed: %squery was: %s",
-				 PQerrorMessage(conn), query);
-			break;
+		switch (PQresultStatus(res))
+		{
+			case PGRES_TUPLES_OK:
+			case PGRES_COMMAND_OK:
+			case PGRES_COPY_IN:
+				break;
+			default:
+				elog(ERROR, "query failed: %squery was: %s",
+					 PQerrorMessage(conn), query);
+				break;
+		}
 	}
 
 	return res;
@@ -1341,7 +1558,7 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG)
 	{
 		int		i;
 
@@ -1524,6 +1741,15 @@ on_interrupt(void)
 
 	/* Set interruped flag */
 	interrupted = true;
+
+	/* User promts password, call on_cleanup() byhand */
+	if (in_password)
+	{
+		on_cleanup();
+
+		pqsignal(SIGINT, oldhandler);
+		kill(0, SIGINT);
+	}
 
 	/* Send QueryCancel if we are processing a database query */
 	if (!in_cleanup && cancel_conn != NULL &&

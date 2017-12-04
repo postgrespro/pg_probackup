@@ -132,6 +132,18 @@ do_restore_or_validate(time_t target_backup_id,
 			continue;
 
 		/*
+		 * [PGPRO-1164] If BACKUP_ID is not provided for restore command,
+		 *  we must find the first valid(!) backup.
+		 */
+
+		if (is_restore && target_backup_id == 0 && current_backup->status != BACKUP_STATUS_OK)
+		{
+			elog(WARNING, "Skipping backup %s, because it has non-valid status: %s",
+				base36enc(current_backup->start_time), status2str(current_backup->status));
+			continue;
+		}
+
+		/*
 		 * We found target backup. Check its status and
 		 * ensure that it satisfies recovery target.
 		 */
@@ -353,7 +365,7 @@ restore_backup(pgBackup *backup)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
 	{
 		char	   *backup_id;
 
@@ -396,7 +408,7 @@ remove_deleted_files(pgBackup *backup)
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
 			pgFileDelete(file);
-			if (LOG_LEVEL <= LOG)
+			if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
 				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
 		}
 	}
@@ -579,7 +591,7 @@ check_tablespace_mapping(pgBackup *backup)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	read_tablespace_map(links, this_backup_path);
 
-	if (LOG_LEVEL <= LOG)
+	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
 	{
 		char	   *backup_id;
 
@@ -918,9 +930,9 @@ parseRecoveryTargetOptions(const char *target_time,
 	{
 		rt->xid_specified = true;
 #ifdef PGPRO_EE
-		if (parse_uint64(target_xid, &dummy_xid))
+		if (parse_uint64(target_xid, &dummy_xid, 0))
 #else
-		if (parse_uint32(target_xid, &dummy_xid))
+		if (parse_uint32(target_xid, &dummy_xid, 0))
 #endif
 			rt->recovery_target_xid = dummy_xid;
 		else

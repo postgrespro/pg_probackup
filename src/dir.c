@@ -75,6 +75,8 @@ static char *pgdata_exclude_files[] =
 	"recovery.conf",
 	"postmaster.pid",
 	"postmaster.opts",
+	"backup_label",
+	"tablespace_map",
 	NULL
 };
 
@@ -149,7 +151,7 @@ pgFileInit(const char *path)
 	file->is_datafile = false;
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
-	file->pagemap.bitmapsize = 0;
+	file->pagemap.bitmapsize = (current.backup_mode == BACKUP_MODE_DIFF_PAGE) ? PageBitmapIsEmpty : PageBitmapIsAbsent;
 	file->tblspcOid = 0;
 	file->dbOid = 0;
 	file->relOid = 0;
@@ -793,7 +795,7 @@ get_control_value(const char *str, const char *name,
 								 name, str, DATABASE_FILE_LIST);
 
 						*buf_uint64_ptr = '\0';
-						if (!parse_uint64(buf_uint64, value_uint64))
+						if (!parse_uint64(buf_uint64, value_uint64, 0))
 							goto bad_format;
 					}
 

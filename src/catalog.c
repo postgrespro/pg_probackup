@@ -394,6 +394,8 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
 	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	if (backup->server_version[0] != '\0')
+		fprintf(out, "server-version = %s\n", backup->server_version);
 
 	fprintf(out, "\n#Result backup info\n");
 	fprintf(out, "timelineid = %d\n", backup->tli);
@@ -475,6 +477,7 @@ readBackupControlFile(const char *path)
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
 	char	   *compress_alg = NULL;
+	char	   *server_version = NULL;
 	int		   *compress_level;
 	bool	   *from_replica;
 
@@ -492,7 +495,8 @@ readBackupControlFile(const char *path)
 		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
-		{'u', 0, "checksum_version",	&backup->checksum_version, SOURCE_FILE_STRICT},
+		{'u', 0, "checksum-version",	&backup->checksum_version, SOURCE_FILE_STRICT},
+		{'s', 0, "server-version",		&server_version, SOURCE_FILE_STRICT},
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
@@ -565,6 +569,13 @@ readBackupControlFile(const char *path)
 		free(parent_backup);
 	}
 
+	if (server_version)
+	{
+		StrNCpy(backup->server_version, server_version,
+				sizeof(backup->server_version));
+		pfree(server_version);
+	}
+
 	return backup;
 }
 
@@ -589,6 +600,24 @@ parse_backup_mode(const char *value)
 	/* Backup mode is invalid, so leave with an error */
 	elog(ERROR, "invalid backup-mode \"%s\"", value);
 	return BACKUP_MODE_INVALID;
+}
+
+const char *
+deparse_backup_mode(BackupMode mode)
+{
+	switch (mode)
+	{
+		case BACKUP_MODE_FULL:
+			return "full";
+		case BACKUP_MODE_DIFF_PAGE:
+			return "page";
+		case BACKUP_MODE_DIFF_PTRACK:
+			return "ptrack";
+		case BACKUP_MODE_INVALID:
+			return "invalid";
+	}
+
+	return NULL;
 }
 
 /* free pgBackup object */
