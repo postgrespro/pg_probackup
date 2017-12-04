@@ -131,7 +131,7 @@ help_pg_probackup(void)
 static void
 help_init(void)
 {
-	printf(_("%s init -B backup-path -D pgdata-dir [-l]\n\n"), PROGRAM_NAME);
+	printf(_("%s init -B backup-path [-l]\n\n"), PROGRAM_NAME);
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 }
 
