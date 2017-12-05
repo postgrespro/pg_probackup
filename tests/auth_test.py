@@ -83,6 +83,11 @@ class AuthTest(unittest.TestCase):
                     '-U', 'backup',
                     '-b', 'FULL'
                     ]
+        self.pgpass_file = os.path.join(os.path.expanduser('~'), '.pgpass')
+        try:
+            os.remove(self.pgpass_file)
+        except FileNotFoundError:
+            pass
 
     def tearDown(self):
         pass
@@ -142,9 +147,8 @@ class AuthTest(unittest.TestCase):
             self.fail(e)
 
     def test_pgpass(self):
-        path = os.path.join(os.path.expanduser('~'), '.pgpass')
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'password'])
-        create_pgpass(path, line)
+        create_pgpass(self.pgpass_file, line)
         try:
             self.assertEqual(
                 "OK",
@@ -155,9 +159,8 @@ class AuthTest(unittest.TestCase):
             self.fail(e)
 
     def test_pgpassword(self):
-        path = os.path.join(os.path.expanduser('~'), '.pgpass')
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'wrong_password'])
-        create_pgpass(path, line)
+        create_pgpass(self.pgpass_file, line)
         os.environ["PGPASSWORD"] = 'password'
         try:
             self.assertEqual(
@@ -201,7 +204,7 @@ def modify_pg_hba(node):
 
 
 def create_pgpass(path, line):
-    with open(path, 'w+') as passfile:
+    with open(path, 'w') as passfile:
         # host:port:db:username:password
         passfile.write(line)
-    os.chmod(path, 0600)
+    os.chmod(path, 0o600)
