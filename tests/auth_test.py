@@ -186,6 +186,7 @@ class AuthTest(unittest.TestCase):
         except ExceptionPexpect:
             raise ExceptionPexpect("Pexpect error.")
 
+
 def modify_pg_hba(node):
     """
     Description:
@@ -199,7 +200,9 @@ def modify_pg_hba(node):
         fio.seek(0)
         fio.write('host\tall\tpostgres\t127.0.0.1/0\ttrust\n' + data)
 
+
 def create_pgpass(path, line):
-    with open(path, 'w', mode='0660') as passfile:
+    with open(path, 'w') as passfile:
         # host:port:db:username:password
         passfile.write(line)
+    os.chmod(path, 600)
