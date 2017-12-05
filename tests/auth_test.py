@@ -1,8 +1,6 @@
 """
-Description:
-    The Test suite check behavior of pg_probackup utility,
-    if password is required for connection to PostgreSQL instance.
-    - https://confluence.postgrespro.ru/pages/viewpage.action?pageId=16777522
+The Test suite check behavior of pg_probackup utility, if password is required for connection to PostgreSQL instance.
+ - https://confluence.postgrespro.ru/pages/viewpage.action?pageId=16777522
 """
 
 import os
@@ -94,7 +92,7 @@ class AuthTest(unittest.TestCase):
         try:
             self.assertIn("ERROR: no password supplied",
                           "".join(map(lambda x: x.decode("utf-8"),
-                                      self.run_pb_with_auth(self.cmd, '\0\r\n'))
+                                      run_pb_with_auth([self.pb.probackup_path] + self.cmd, '\0\r\n'))
                                   )
                           )
         except (TIMEOUT, ExceptionPexpect) as e:
@@ -105,7 +103,7 @@ class AuthTest(unittest.TestCase):
         try:
             self.assertIn("password authentication failed",
                           "".join(map(lambda x: x.decode("utf-8"),
-                                      self.run_pb_with_auth(self.cmd, 'wrong_password\r\n'))
+                                      run_pb_with_auth([self.pb.probackup_path] + self.cmd, 'wrong_password\r\n'))
                                   )
                           )
         except (TIMEOUT, ExceptionPexpect) as e:
@@ -116,7 +114,7 @@ class AuthTest(unittest.TestCase):
         try:
             self.assertIn("completed",
                           "".join(map(lambda x: x.decode("utf-8"),
-                                      self.run_pb_with_auth(self.cmd, 'password\r\n'))
+                                      run_pb_with_auth([self.pb.probackup_path] + self.cmd, 'password\r\n'))
                                   )
                           )
         except (TIMEOUT, ExceptionPexpect) as e:
@@ -125,7 +123,7 @@ class AuthTest(unittest.TestCase):
     def test_ctrl_c_event(self):
         """ Test case: PGPB_AUTH02 - send interrupt signal """
         try:
-            self.run_pb_with_auth(self.cmd, kill=True)
+            run_pb_with_auth([self.pb.probackup_path] + self.cmd, kill=True)
         except TIMEOUT:
             self.fail("Error: CTRL+C event ignored")
 
@@ -170,21 +168,22 @@ class AuthTest(unittest.TestCase):
         except ProbackupException as e:
             self.fail(e)
 
-    def run_pb_with_auth(self, password=None, kill=False):
-        try:
-            with spawn(" ".join([self.pb.probackup_path] + self.cmd), timeout=10) as probackup:
-                result = probackup.expect("Password for user .*:", 5)
-                if kill:
-                    probackup.kill(signal.SIGINT)
-                elif result == 0:
-                    probackup.sendline(password)
-                    return probackup.readlines()
-                else:
-                    raise TIMEOUT("")
-        except TIMEOUT:
-            raise TIMEOUT("Timeout error.")
-        except ExceptionPexpect:
-            raise ExceptionPexpect("Pexpect error.")
+
+def run_pb_with_auth(cmd, password=None, kill=False):
+    try:
+        with spawn(" ".join(cmd), timeout=10) as probackup:
+            result = probackup.expect("Password for user .*:", 5)
+            if kill:
+                probackup.kill(signal.SIGINT)
+            elif result == 0:
+                probackup.sendline(password)
+                return probackup.readlines()
+            else:
+                raise TIMEOUT("")
+    except TIMEOUT:
+        raise TIMEOUT("Timeout error.")
+    except ExceptionPexpect:
+        raise ExceptionPexpect("Pexpect error.")
 
 
 def modify_pg_hba(node):
@@ -202,7 +201,7 @@ def modify_pg_hba(node):
 
 
 def create_pgpass(path, line):
-    with open(path, 'w') as passfile:
+    with open(path, 'w+') as passfile:
         # host:port:db:username:password
         passfile.write(line)
-    os.chmod(path, 600)
+    os.chmod(path, 0600)
