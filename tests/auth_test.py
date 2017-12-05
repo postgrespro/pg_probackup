@@ -172,7 +172,7 @@ class AuthTest(unittest.TestCase):
 
     def run_pb_with_auth(self, password=None, kill=False):
         try:
-            with spawn(" ".join(self.pb.probackup_path + self.cmd), timeout=10) as probackup:
+            with spawn(" ".join([self.pb.probackup_path] + self.cmd), timeout=10) as probackup:
                 result = probackup.expect("Password for user .*:", 5)
                 if kill:
                     probackup.kill(signal.SIGINT)
@@ -200,6 +200,6 @@ def modify_pg_hba(node):
         fio.write('host\tall\tpostgres\t127.0.0.1/0\ttrust\n' + data)
 
 def create_pgpass(path, line):
-    with open(path, 'w') as passfile:
+    with open(path, 'w', mode='0660') as passfile:
         # host:port:db:username:password
         passfile.write(line)
