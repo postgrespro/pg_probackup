@@ -35,7 +35,6 @@ class AuthTest(unittest.TestCase):
         cls.pb = ProbackupTest()
         cls.backup_dir = os.path.join(cls.pb.tmp_path, module_name, 'backup')
 
-        configure_testgres(cache_pg_config=False, cache_initdb=False)
         cls.node = cls.pb.make_simple_node(
             base_dir="{}/node".format(module_name),
             set_replication=True,
