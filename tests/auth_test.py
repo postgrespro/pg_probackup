@@ -131,7 +131,7 @@ class AuthTest(unittest.TestCase):
 
     def test_pgpassfile_env(self):
         path = os.path.join(self.pb.tmp_path, module_name, 'pgpass.conf')
-        line = ":".join(['127.0.0.1', self.node.port, 'postgres', 'backup', 'password'])
+        line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'password'])
         create_pgpass(path, line)
         os.environ["PGPASSFILE"] = path
         try:
@@ -145,7 +145,7 @@ class AuthTest(unittest.TestCase):
 
     def test_pgpass(self):
         path = os.path.join(os.path.expanduser('~'), '.pgpass')
-        line = ":".join(['127.0.0.1', self.node.port, 'postgres', 'backup', 'password'])
+        line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'password'])
         create_pgpass(path, line)
         try:
             self.assertEqual(
@@ -158,7 +158,7 @@ class AuthTest(unittest.TestCase):
 
     def test_pgpassword(self):
         path = os.path.join(os.path.expanduser('~'), '.pgpass')
-        line = ":".join(['127.0.0.1', self.node.port, 'postgres', 'backup', 'wrong_password'])
+        line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'wrong_password'])
         create_pgpass(path, line)
         os.environ["PGPASSWORD"] = 'password'
         try:
