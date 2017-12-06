@@ -5,7 +5,6 @@ The Test suite check behavior of pg_probackup utility, if password is required f
 
 import os
 import unittest
-import tempfile
 import signal
 
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
@@ -84,6 +83,7 @@ class AuthTest(unittest.TestCase):
                     '-b', 'FULL'
                     ]
 
+    def tearDown(self):
         if "PGPASSWORD" in self.pb.test_env.keys():
             del self.pb.test_env["PGPASSWORD"]
 
@@ -94,9 +94,6 @@ class AuthTest(unittest.TestCase):
             os.remove(self.pgpass_file)
         except OSError:
             pass
-
-    def tearDown(self):
-        pass
 
     def test_empty_password(self):
         """ Test case: PGPB_AUTH03 - zero password length """
