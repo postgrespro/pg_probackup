@@ -66,6 +66,7 @@ class AuthTest(unittest.TestCase):
                        GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup; \
                        GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup; \
                        GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;")
+        cls.pgpass_file = os.path.join(os.path.expanduser('~'), '.pgpass')
 
     @classmethod
     def tearDownClass(cls):
@@ -82,7 +83,7 @@ class AuthTest(unittest.TestCase):
                     '-U', 'backup',
                     '-b', 'FULL'
                     ]
-        self.pgpass_file = os.path.join(os.path.expanduser('~'), '.pgpass')
+        os.unsetenv("PGPASSWORD")
         try:
             os.remove(self.pgpass_file)
         except OSError:
