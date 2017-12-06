@@ -63,7 +63,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s version\n"), PROGRAM_NAME);
 
-	printf(_("\n  %s init -B backup-path [-l]\n"), PROGRAM_NAME);
+	printf(_("\n  %s init -B backup-path\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--log-level-console=log-level-console]\n"));
@@ -85,7 +85,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [-l] [--stream [-S slot-name]] [--backup-pg-log]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
@@ -96,12 +96,12 @@ help_pg_probackup(void)
 	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("\n  %s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-dir] [-l] [-i backup-id] [--progress]\n"));
+	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 
 	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
-	printf(_("                 [-i backup-id] [-l] [--progress]\n"));
+	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
 
@@ -109,7 +109,7 @@ help_pg_probackup(void)
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
 
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--wal] [-i backup-id | --expired] [-l]\n"));
+	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
 
 	printf(_("\n  %s add-instance -B backup-dir -D pgdata-dir\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
@@ -131,7 +131,7 @@ help_pg_probackup(void)
 static void
 help_init(void)
 {
-	printf(_("%s init -B backup-path [-l]\n\n"), PROGRAM_NAME);
+	printf(_("%s init -B backup-path\n\n"), PROGRAM_NAME);
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 }
 
@@ -139,7 +139,7 @@ static void
 help_backup(void)
 {
 	printf(_("%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [-l] [--stream [-S slot-name]] [--backup-pg-log]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
