@@ -84,6 +84,7 @@ class AuthTest(unittest.TestCase):
                     '-b', 'FULL'
                     ]
         os.unsetenv("PGPASSWORD")
+        os.unsetenv("PGPASSFILE")
         try:
             os.remove(self.pgpass_file)
         except OSError:
