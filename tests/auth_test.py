@@ -154,6 +154,17 @@ class AuthTest(unittest.TestCase):
             self.fail(e)
 
     def test_pgpassword(self):
+        os.environ["PGPASSWORD"] = "password"
+        try:
+            self.assertEqual(
+                "OK",
+                self.pb.show_pb(self.backup_dir, self.node.name, self.pb.run_pb(self.cmd + ['-w']))["status"],
+                "ERROR: Full backup status is not valid."
+            )
+        except ProbackupException as e:
+            self.fail(e)
+
+    def test_pgpassword_and_wrong_pgpass(self):
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'wrong_password'])
         create_pgpass(self.pgpass_file, line)
         os.environ["PGPASSWORD"] = "password"
