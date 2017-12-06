@@ -139,6 +139,7 @@ class AuthTest(unittest.TestCase):
             self.fail("Error: CTRL+C event ignored")
 
     def test_pgpassfile_env(self):
+        """ Test case: PGPB_AUTH06 - set environment var PGPASSFILE """
         path = os.path.join(self.pb.tmp_path, module_name, 'pgpass.conf')
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'password'])
         create_pgpass(path, line)
@@ -153,6 +154,7 @@ class AuthTest(unittest.TestCase):
             self.fail(e)
 
     def test_pgpass(self):
+        """ Test case: PGPB_AUTH07 - Create file .pgpass in home dir. """
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'password'])
         create_pgpass(self.pgpass_file, line)
         try:
@@ -165,6 +167,7 @@ class AuthTest(unittest.TestCase):
             self.fail(e)
 
     def test_pgpassword(self):
+        """ Test case: PGPB_AUTH08 - set environment var PGPASSWORD """
         os.environ["PGPASSWORD"] = "password"
         try:
             self.assertEqual(
@@ -176,6 +179,7 @@ class AuthTest(unittest.TestCase):
             self.fail(e)
 
     def test_pgpassword_and_wrong_pgpass(self):
+        """ Test case: PGPB_AUTH09 - Check priority between PGPASSWORD and .pgpass file"""
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'wrong_password'])
         create_pgpass(self.pgpass_file, line)
         os.environ["PGPASSWORD"] = "password"
