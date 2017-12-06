@@ -120,6 +120,17 @@ class AuthTest(unittest.TestCase):
         except (TIMEOUT, ExceptionPexpect) as e:
             self.fail(e.value)
 
+    def test_right_password_and_wrong_pgpass(self):
+        """ Test case: PGPB_AUTH05 - correct password and incorrect .pgpass"""
+        line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'wrong_password'])
+        create_pgpass(self.pgpass_file, line)
+        try:
+            self.assertIn("completed",
+                          str(run_pb_with_auth([self.pb.probackup_path] + self.cmd, 'password\r\n'))
+                          )
+        except (TIMEOUT, ExceptionPexpect) as e:
+            self.fail(e.value)
+
     def test_ctrl_c_event(self):
         """ Test case: PGPB_AUTH02 - send interrupt signal """
         try:
