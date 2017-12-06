@@ -224,7 +224,14 @@ main(int argc, char *argv[])
 		{
 			if (argc == 2)
 			{
-				fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
+#ifdef PGPRO_VERSION
+				fprintf(stderr, "%s %s (PostgresPro %s %s)\n",
+						PROGRAM_NAME, PROGRAM_VERSION,
+						PGPRO_VERSION, PGPRO_EDITION);
+#else
+				fprintf(stderr, "%s %s (PostgreSQL %s)\n",
+						PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
+#endif
 				exit(0);
 			}
 			else if (strcmp(argv[2], "--help") == 0)
