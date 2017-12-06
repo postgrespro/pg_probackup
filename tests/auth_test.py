@@ -83,8 +83,13 @@ class AuthTest(unittest.TestCase):
                     '-U', 'backup',
                     '-b', 'FULL'
                     ]
-        os.unsetenv("PGPASSWORD")
-        os.unsetenv("PGPASSFILE")
+
+        if "PGPASSWORD" in self.pb.test_env.keys():
+            del self.pb.test_env["PGPASSWORD"]
+
+        if "PGPASSWORD" in self.pb.test_env.keys():
+            del self.pb.test_env["PGPASSFILE"]
+
         try:
             os.remove(self.pgpass_file)
         except OSError:
@@ -143,7 +148,7 @@ class AuthTest(unittest.TestCase):
         path = os.path.join(self.pb.tmp_path, module_name, 'pgpass.conf')
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'password'])
         create_pgpass(path, line)
-        os.environ["PGPASSFILE"] = path
+        self.pb.test_env["PGPASSFILE"] = path
         try:
             self.assertEqual(
                 "OK",
@@ -168,7 +173,7 @@ class AuthTest(unittest.TestCase):
 
     def test_pgpassword(self):
         """ Test case: PGPB_AUTH08 - set environment var PGPASSWORD """
-        os.environ["PGPASSWORD"] = "password"
+        self.pb.test_env["PGPASSWORD"] = "password"
         try:
             self.assertEqual(
                 "OK",
@@ -182,7 +187,7 @@ class AuthTest(unittest.TestCase):
         """ Test case: PGPB_AUTH09 - Check priority between PGPASSWORD and .pgpass file"""
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'wrong_password'])
         create_pgpass(self.pgpass_file, line)
-        os.environ["PGPASSWORD"] = "password"
+        self.pb.test_env["PGPASSWORD"] = "password"
         try:
             self.assertEqual(
                 "OK",
