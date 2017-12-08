@@ -1816,6 +1816,8 @@ pg_stop_backup(pgBackup *backup)
 		backup->tli = get_current_timeline(false);
 		backup->stop_lsn = stop_backup_lsn;
 
+		elog(LOG, "Getting the Recovery Time from WAL");
+
 		if (!read_recovery_info(xlog_path, backup->tli,
 								backup->start_lsn, backup->stop_lsn,
 								&backup->recovery_time, &backup->recovery_xid))
