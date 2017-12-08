@@ -511,6 +511,22 @@ do_backup_instance(void)
 		pgBackupWriteBackupControlFile(&current);
 	}
 
+	/*
+	 * It`s illegal to take PTRACK backup if LSN from ptrack_control() is not equal to
+	 * start_backup LSN of previous backup
+	 */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	{
+		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn();
+
+		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
+		{
+			elog(ERROR, "LSN from ptrack_control %lx differs from STOP LSN of previous backup %lx.\n"
+						"Create new full backup before an incremental one.",
+						ptrack_lsn, prev_backup->stop_lsn);
+		}
+	}
+
 	/* Clear ptrack files for FULL and PAGE backup */
 	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && is_ptrack_enable)
 		pg_ptrack_clear();
@@ -580,14 +596,6 @@ do_backup_instance(void)
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn();
-
-		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
-		{
-			elog(ERROR, "LSN from ptrack_control %lx differs from STOP LSN of previous backup %lx.\n"
-						"Create new full backup before an incremental one.",
-						ptrack_lsn, prev_backup->stop_lsn);
-		}
 		parray_qsort(backup_files_list, pgFileComparePath);
 		make_pagemap_from_ptrack(backup_files_list);
 	}
