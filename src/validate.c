@@ -145,7 +145,7 @@ pgBackupValidateFiles(void *arg)
 			continue;
 
 		/* print progress */
-		elog(LOG, "Validate files: (%d/%lu) %s",
+		elog(VERBOSE, "Validate files: (%d/%lu) %s",
 			 i + 1, (unsigned long) parray_num(arguments->files), file->path);
 
 		if (stat(file->path, &st) == -1)

@@ -426,8 +426,9 @@ main(int argc, char *argv[])
 				backup_id = base36enc(start_time);
 				backup_mode = deparse_backup_mode(current.backup_mode);
 
-				elog_file(INFO, "pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s",
-						  PROGRAM_VERSION, backup_id, backup_mode, instance_name);
+				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
+						  PROGRAM_VERSION, backup_id, backup_mode, instance_name,
+						  current.stream ? "true" : "false", is_remote_backup ? "true" : "false");
 				elog_file(INFO, "command: %s", command);
 
 				pfree(backup_id);

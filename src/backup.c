@@ -426,7 +426,7 @@ remote_backup_files(void *arg)
 		/* receive the data from stream and write to backup file */
 		remote_copy_file(file_backup_conn, file);
 
-		elog(LOG, "File \"%s\". Copied %lu bytes",
+		elog(VERBOSE, "File \"%s\". Copied %lu bytes",
 				 file->path, (unsigned long) file->write_size);
 		PQfinish(file_backup_conn);
 	}
@@ -823,9 +823,6 @@ do_backup(time_t start_time)
 	if (!is_remote_backup)
 		check_system_identifiers();
 
-	elog(LOG, "Backup start. backup-mode = %s, stream = %s, remote = %s",
-		pgBackupGetBackupMode(&current), current.stream ? "true" : "false",
-		 is_remote_backup ? "true" : "false");
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -1888,7 +1885,7 @@ backup_cleanup(bool fatal, void *userdata)
 	 */
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
 	{
-		elog(LOG, "Backup is running, update its status to ERROR");
+		elog(INFO, "Backup %s is running, setting its status to ERROR", base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
 		pgBackupWriteBackupControlFile(&current);
@@ -2000,7 +1997,7 @@ backup_files(void *arg)
 				continue;
 			}
 
-			elog(LOG, "File \"%s\". Copied %lu bytes",
+			elog(VERBOSE, "File \"%s\". Copied %lu bytes",
 				 file->path, (unsigned long) file->write_size);
 		}
 		else

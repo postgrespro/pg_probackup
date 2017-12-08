@@ -140,7 +140,10 @@ do_retention_purge(void)
 		elog(LOG, "WINDOW=%u", retention_window);
 
 	if (retention_redundancy == 0 && retention_window == 0)
-		elog(ERROR, "retention policy is not set");
+	{
+		elog(WARNING, "Retention policy is not set");
+		return 0;
+	}
 
 	/* Get exclusive lock of backup catalog */
 	catalog_lock();
