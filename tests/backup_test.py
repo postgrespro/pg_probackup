@@ -226,3 +226,52 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_checksumm_fail(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node, backup_type="full", options=["-j", "4", "--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql("postgres", "select pg_relation_filepath('t_heap')").rstrip()
+        node.stop()
+
+        with open(os.path.join(node.data_dir,heap_path), "rb+", 0) as f:
+                f.seek(9000)
+                f.write(b"bla")
+                f.flush()
+                f.close
+        node.start()
+
+        try:
+            self.backup_node(backup_dir, 'node', node, backup_type="full", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(1, 0, "Expecting Error because of page corruption in PostgreSQL instance.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn("ERROR: File", e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
+            self.assertIn("blknum", e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
+            self.assertIn("have wrong checksum", e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
