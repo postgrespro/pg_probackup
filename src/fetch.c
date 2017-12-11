@@ -82,3 +82,35 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
 		*filesize = len;
 	return buffer;
 }
+
+/*
+ * Receive a single file as a malloc'd buffer.
+ */
+char *
+fetchFile(PGconn *conn, const char *filename, size_t *filesize)
+{
+	PGresult   *res;
+	char	   *result;
+	const char *params[1];
+	int			len;
+
+	params[0] = filename;
+	res = pgut_execute(conn, "SELECT pg_read_binary_file($1)",
+					   1, params, false);
+
+	/* sanity check the result set */
+	if (PQntuples(res) != 1 || PQgetisnull(res, 0, 0))
+		elog(ERROR, "unexpected result set while fetching remote file \"%s\"",
+			 filename);
+
+	/* Read result to local variables */
+	len = PQgetlength(res, 0, 0);
+	result = pg_malloc(len + 1);
+	memcpy(result, PQgetvalue(res, 0, 0), len);
+	result[len] = '\0';
+
+	PQclear(res);
+	*filesize = len;
+
+	return result;
+}

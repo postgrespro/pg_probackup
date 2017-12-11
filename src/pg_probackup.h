@@ -367,6 +367,7 @@ extern char *slurpFile(const char *datadir,
 					   const char *path,
 					   size_t *filesize,
 					   bool safe);
+extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
 extern void help_pg_probackup(void);
@@ -458,6 +459,7 @@ extern uint32 get_data_checksum_version(bool safe);
 extern char *base36enc(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
 extern uint64 get_system_identifier(char *pgdata);
+extern uint64 get_remote_system_identifier(PGconn *conn);
 extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 extern void pgBackup_init(pgBackup *backup);
 
