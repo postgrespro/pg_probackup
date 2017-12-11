@@ -934,22 +934,24 @@ check_system_identifiers(void)
 
 	system_id_pgdata = get_system_identifier(pgdata);
 
-	res = pgut_execute(backup_conn,
+	if (server_version < 90600) {
+	} else {
+		res = pgut_execute(backup_conn,
 					   "SELECT system_identifier FROM pg_control_system()",
 					   0, NULL);
-	val = PQgetvalue(res, 0, 0);
+		val = PQgetvalue(res, 0, 0);
 
-	if (!parse_uint64(val, &system_id_conn))
-	{
+		if (!parse_uint64(val, &system_id_conn))
+		{
+			PQclear(res);
+			elog(ERROR, "%s is not system_identifier", val);
+		}
 		PQclear(res);
-		elog(ERROR, "%s is not system_identifier", val);
+
+		if (system_id_conn != system_identifier)
+			elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
+				 system_identifier, system_id_conn);
 	}
-	PQclear(res);
-
-	if (system_id_conn != system_identifier)
-		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
-			 system_identifier, system_id_conn);
-
 	if (system_id_pgdata != system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id %ld, but target backup directory system id is %ld",
 			 system_identifier, system_id_pgdata);
