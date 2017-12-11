@@ -918,6 +918,8 @@ check_system_identifiers(void)
 	system_id_pgdata = get_system_identifier(pgdata);
 
 	if (server_version < 90600) {
+		// Skip match system_identifier between backup data directory and DB connection as
+		// pg_control_system() exists only in 9.6 onwards
 	} else {
 		res = pgut_execute(backup_conn,
 					   "SELECT system_identifier FROM pg_control_system()",
