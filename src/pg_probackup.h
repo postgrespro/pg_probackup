@@ -256,44 +256,44 @@ typedef union DataPage
 	sscanf(data, "%X/%X", xlogid, xrecoff)
 
 /* directory options */
-extern char *backup_path;
-extern char backup_instance_path[MAXPGPATH];
-extern char *pgdata;
-extern char arclog_path[MAXPGPATH];
+extern char	   *backup_path;
+extern char		backup_instance_path[MAXPGPATH];
+extern char	   *pgdata;
+extern char		arclog_path[MAXPGPATH];
 
 /* common options */
-extern int num_threads;
-extern bool stream_wal;
-extern bool progress;
+extern int		num_threads;
+extern bool		stream_wal;
+extern bool		progress;
 #if PG_VERSION_NUM >= 100000
 /* In pre-10 'replication_slot' is defined in receivelog.h */
-extern char *replication_slot;
+extern char	   *replication_slot;
 #endif
 
 /* backup options */
-extern bool	smooth_checkpoint;
-extern uint32 archive_timeout;
-extern bool from_replica;
-extern bool is_remote_backup;
+extern bool		smooth_checkpoint;
+extern uint32	archive_timeout;
+extern bool		from_replica;
+extern bool		is_remote_backup;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;
 extern const char *master_user;
-extern uint32 replica_timeout;
+extern uint32	replica_timeout;
 
 /* delete options */
-extern bool delete_wal;
-extern bool	delete_expired;
-extern bool	apply_to_all;
-extern bool	force_delete;
+extern bool		delete_wal;
+extern bool		delete_expired;
+extern bool		apply_to_all;
+extern bool		force_delete;
 
 /* retention options */
-extern uint32 retention_redundancy;
-extern uint32 retention_window;
+extern uint32	retention_redundancy;
+extern uint32	retention_window;
 
 /* compression options */
 extern CompressAlg compress_alg;
-extern int    compress_level;
+extern int		compress_level;
 extern bool		compress_shortcut;
 
 #define DEFAULT_COMPRESS_LEVEL 6
@@ -427,7 +427,9 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
-extern void copy_wal_file(const char *from_root, const char *to_root);
+extern void push_wal_file(const char *from_path, const char *to_path,
+						  bool is_compress);
+extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern bool calc_file_checksum(pgFile *file);
 

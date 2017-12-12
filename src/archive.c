@@ -18,7 +18,7 @@
  * --wal-file-path %p --wal-file-name %f', to move backups into arclog_path.
  * Where archlog_path is $BACKUP_PATH/wal/system_id.
  * Currently it just copies wal files to the new location.
- * TODO: Planned options: compress, list the arclog content,
+ * TODO: Planned options: list the arclog content,
  * compute and validate checksums.
  */
 int
@@ -64,7 +64,8 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	if (access(backup_wal_file_path, F_OK) != -1)
 		elog(ERROR, "file '%s', already exists.", backup_wal_file_path);
 
-	copy_wal_file(absolute_wal_file_path, backup_wal_file_path);
+	push_wal_file(absolute_wal_file_path, backup_wal_file_path,
+				  compress_shortcut);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
 	return 0;
@@ -96,8 +97,9 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
 
-	elog(INFO, "pg_probackup archive-get from %s to %s", backup_wal_file_path, absolute_wal_file_path);
-	copy_wal_file(backup_wal_file_path, absolute_wal_file_path);
+	elog(INFO, "pg_probackup archive-get from %s to %s",
+		 backup_wal_file_path, absolute_wal_file_path);
+	get_wal_file(backup_wal_file_path, absolute_wal_file_path);
 	elog(INFO, "pg_probackup archive-get completed successfully");
 
 	return 0;
