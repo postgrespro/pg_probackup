@@ -733,17 +733,25 @@ get_gz_error(gzFile gzf)
  * Copy file attributes
  */
 static void
-copy_meta(const char *from_path, const char *to_path)
+copy_meta(const char *from_path, const char *to_path, bool unlink_on_error)
 {
 	struct stat st;
 
 	if (stat(from_path, &st) == -1)
+	{
+		if (unlink_on_error)
+			unlink(to_path);
 		elog(ERROR, "Cannot stat file \"%s\": %s",
 			 from_path, strerror(errno));
+	}
 
 	if (chmod(to_path, st.st_mode) == -1)
+	{
+		if (unlink_on_error)
+			unlink(to_path);
 		elog(ERROR, "Cannot change mode of file \"%s\": %s",
 			 to_path, strerror(errno));
+	}
 }
 
 /*
@@ -797,8 +805,11 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 		read_len = fread(buf, 1, sizeof(buf), in);
 
 		if (ferror(in))
+		{
+			unlink(to_path_p);
 			elog(ERROR, "Cannot read source WAL file \"%s\": %s",
 				 from_path, strerror(errno));
+		}
 
 		if (read_len > 0)
 		{
@@ -806,15 +817,21 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 			if (is_compress)
 			{
 				if (gzwrite(gz_out, buf, read_len) != read_len)
+				{
+					unlink(to_path_p);
 					elog(ERROR, "Cannot write to compressed WAL file \"%s\": %s",
 						 gz_to_path, get_gz_error(gz_out));
+				}
 			}
 			else
 #endif
 			{
 				if (fwrite(buf, 1, read_len, out) != read_len)
+				{
+					unlink(to_path_p);
 					elog(ERROR, "Cannot write to WAL file \"%s\": %s",
 						 to_path, strerror(errno));
+				}
 			}
 		}
 
@@ -826,8 +843,11 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 	if (is_compress)
 	{
 		if (gzclose(gz_out) != 0)
+		{
+			unlink(to_path_p);
 			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
 				 gz_to_path, get_gz_error(gz_out));
+		}
 		elog(INFO, "WAL file compressed to \"%s\"", gz_to_path);
 	}
 	else
@@ -836,16 +856,22 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 		if (fflush(out) != 0 ||
 			fsync(fileno(out)) != 0 ||
 			fclose(out))
+		{
+			unlink(to_path_p);
 			elog(ERROR, "Cannot write WAL file \"%s\": %s",
 				 to_path, strerror(errno));
+		}
 	}
 
 	if (fclose(in))
+	{
+		unlink(to_path_p);
 		elog(ERROR, "Cannot close source WAL file \"%s\": %s",
 			 from_path, strerror(errno));
+	}
 
 	/* update file permission. */
-	copy_meta(from_path, to_path_p);
+	copy_meta(from_path, to_path_p, true);
 }
 
 /*
@@ -916,23 +942,32 @@ get_wal_file(const char *from_path, const char *to_path)
 		{
 			read_len = gzread(gz_in, buf, sizeof(buf));
 			if (read_len != sizeof(buf) && !gzeof(gz_in))
+			{
+				unlink(to_path);
 				elog(ERROR, "Cannot read compressed WAL file \"%s\": %s",
 					 gz_from_path, get_gz_error(gz_in));
+			}
 		}
 		else
 #endif
 		{
 			read_len = fread(buf, 1, sizeof(buf), in);
 			if (ferror(in))
+			{
+				unlink(to_path);
 				elog(ERROR, "Cannot read source WAL file \"%s\": %s",
 					 from_path, strerror(errno));
+			}
 		}
 
 		if (read_len > 0)
 		{
 			if (fwrite(buf, 1, read_len, out) != read_len)
+			{
+				unlink(to_path);
 				elog(ERROR, "Cannot write to WAL file \"%s\": %s", to_path,
 					 strerror(errno));
+			}
 		}
 
 		/* Check for EOF */
@@ -953,27 +988,36 @@ get_wal_file(const char *from_path, const char *to_path)
 	if (fflush(out) != 0 ||
 		fsync(fileno(out)) != 0 ||
 		fclose(out))
+	{
+		unlink(to_path);
 		elog(ERROR, "Cannot write WAL file \"%s\": %s",
 			 to_path, strerror(errno));
+	}
 
 #ifdef HAVE_LIBZ
 	if (is_decompress)
 	{
 		if (gzclose(gz_in) != 0)
+		{
+			unlink(to_path);
 			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
 				 gz_from_path, get_gz_error(gz_in));
+		}
 		elog(INFO, "WAL file decompressed from \"%s\"", gz_from_path);
 	}
 	else
 #endif
 	{
 		if (fclose(in))
+		{
+			unlink(to_path);
 			elog(ERROR, "Cannot close source WAL file \"%s\": %s",
 				 from_path, strerror(errno));
+		}
 	}
 
 	/* update file permission. */
-	copy_meta(from_path_p, to_path);
+	copy_meta(from_path_p, to_path, true);
 }
 
 /*
