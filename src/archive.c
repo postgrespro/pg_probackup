@@ -31,13 +31,13 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	pgBackupConfig *config;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
-		elog(ERROR, "required parameters are not specified: --wal_file_name %%f --wal_file_path %%p");
+		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
 
 	if (wal_file_name == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_name %%f");
+		elog(ERROR, "required parameter not specified: --wal-file-name %%f");
 
 	if (wal_file_path == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_path %%p");
+		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
 
 	if (!getcwd(current_dir, sizeof(current_dir)))
 		elog(ERROR, "getcwd() error");
@@ -83,13 +83,13 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 	char		current_dir[MAXPGPATH];
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
-		elog(ERROR, "required parameters are not specified: --wal_file_name %%f --wal_file_path %%p");
+		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
 
 	if (wal_file_name == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_name %%f");
+		elog(ERROR, "required parameter not specified: --wal-file-name %%f");
 
 	if (wal_file_path == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_path %%p");
+		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
 
 	if (!getcwd(current_dir, sizeof(current_dir)))
 		elog(ERROR, "getcwd() error");

@@ -18,6 +18,8 @@ static void help_set_config(void);
 static void help_show_config(void);
 static void help_add_instance(void);
 static void help_del_instance(void);
+static void help_archive_push(void);
+static void help_archive_get(void);
 
 void
 help_command(char *command)
@@ -42,6 +44,10 @@ help_command(char *command)
 		help_add_instance();
 	else if (strcmp(command, "del-instance") == 0)
 		help_del_instance();
+	else if (strcmp(command, "archive-push") == 0)
+		help_archive_push();
+	else if (strcmp(command, "archive-get") == 0)
+		help_archive_get();
 	else if (strcmp(command, "--help") == 0
 			 || strcmp(command, "help") == 0
 			 || strcmp(command, "-?") == 0
@@ -116,6 +122,15 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s del-instance -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
+
+	printf(_("\n  %s archive-push -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--compress [--compress-level=compress-level]]\n"));
+
+	printf(_("\n  %s archive-get -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
@@ -308,7 +323,7 @@ help_set_config(void)
 	printf(_("\n  Replica options:\n"));
 	printf(_("      --master-db=db_name          database to connect to master\n"));
 	printf(_("      --master-host=host_name      database server host of master\n"));
-	printf(_("      --master-port=port=port           database server port of master\n"));
+	printf(_("      --master-port=port           database server port of master\n"));
 	printf(_("      --master-user=user_name      user name to connect to master\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
 }
@@ -341,4 +356,38 @@ help_del_instance(void)
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
+}
+
+static void
+help_archive_push(void)
+{
+	printf(_("\n  %s archive-push -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--compress [--compress-level=compress-level]]\n\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("      --instance=instance_name     name of the instance to delete\n"));
+	printf(_("      --wal-file-path=wal-file-path\n"));
+	printf(_("                                   relative path name of the WAL file on the server\n"));
+	printf(_("      --wal-file-name=wal-file-name\n"));
+	printf(_("                                   name of the WAL file to retrieve from the server\n"));
+	printf(_("      --compress                   compress WAL file during archiving\n"));
+	printf(_("      --compress-level=compress-level\n"));
+	printf(_("                                   level of compression [0-9]\n"));
+}
+
+static void
+help_archive_get(void)
+{
+	printf(_("\n  %s archive-get -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("      --instance=instance_name     name of the instance to delete\n"));
+	printf(_("      --wal-file-path=wal-file-path\n"));
+	printf(_("                                   relative destination path name of the WAL file on the server\n"));
+	printf(_("      --wal-file-name=wal-file-name\n"));
+	printf(_("                                   name of the WAL file to retrieve from the archive\n"));
 }
