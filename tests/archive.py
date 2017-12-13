@@ -26,8 +26,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        # force more frequent wal switch
-        node.append_conf('postgresql.auto.conf', 'archive_timeout  = 30')
         node.start()
 
         node.safe_psql(
@@ -206,7 +204,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'archive_timeout': '1'}
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -257,7 +255,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
-        # force more frequent wal switch
         master.start()
 
         replica = self.make_simple_node(base_dir="{0}/{1}/replica".format(module_name, fname))
@@ -386,6 +383,60 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     @unittest.skip("skip")
     def test_archive_compress(self):
+        """Test compression"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
+            )
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        node.start()
+
+        self.assertEqual(result, node.safe_psql("postgres", "SELECT * FROM t_heap"),
+            'data after restore not equal to original data')
+
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(10000,20000) i")
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        node.start()
+
+        self.assertEqual(result, node.safe_psql("postgres", "SELECT * FROM t_heap"),
+            'data after restore not equal to original data')
+
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    @unittest.skip("skip")
+    def test_archive_pg_receivexlog(self):
         """Description in jira issue PGPRO-434"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -397,8 +448,39 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        # force more frequent wal switch
-        node.append_conf('postgresql.auto.conf', 'archive_timeout  = 30')
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,100) i")
+
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        self.backup_node(backup_dir, 'node', node)
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node, backup_type='page')
+        node.start()
+
+        self.assertEqual(result, node.safe_psql("postgres", "SELECT * FROM t_heap"),
+            'data after restore not equal to original data')
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    @unittest.skip("skip")
+    def test_archive_pg_receivexlog_compression_pg_10(self):
+        """Description in jira issue PGPRO-434"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
+            )
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.start()
 
         node.safe_psql(

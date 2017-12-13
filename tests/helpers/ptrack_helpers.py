@@ -125,9 +125,13 @@ class ProbackupTest(object):
         self.test_env["LC_TIME"] = "C"
 
         self.paranoia = False
-        if 'PGPRO_PARANOIA_MODE' in self.test_env:
-            if self.test_env['PGPRO_PARANOIA_MODE'] == 'ON':
+        if 'PG_PROBACKUP_PARANOIA' in self.test_env:
+            if self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON':
                 self.paranoia = True
+
+        if 'ARCHIVE_COMPRESSION' in self.test_env:
+            if self.test_env['ARCHIVE_COMPRESSION'] == 'ON':
+                self.archive_compress = True
 
         self.helpers_path = os.path.dirname(os.path.realpath(__file__))
         self.dir_path = os.path.abspath(os.path.join(self.helpers_path, os.pardir))
@@ -559,7 +563,7 @@ class ProbackupTest(object):
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
         return out_dict
 
-    def set_archiving(self, backup_dir, instance, node, replica=False, compress=False):
+    def set_archiving(self, backup_dir, instance, node, replica=False):
 
         if replica:
             archive_mode = 'always'
@@ -576,7 +580,7 @@ class ProbackupTest(object):
                 "archive_mode = {0}".format(archive_mode)
                 )
         if os.name == 'posix':
-            if compress:
+            if self.archive_compress:
                 node.append_conf(
                     "postgresql.auto.conf",
                     "archive_command = '{0} archive-push -B {1} --instance={2} --compress --wal-file-path %p --wal-file-name %f'".format(
