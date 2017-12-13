@@ -109,7 +109,6 @@ static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
 static bool pg_ptrack_enable(void);
 static bool pg_is_in_recovery(void);
-static bool pg_archive_enabled(void);
 static bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
@@ -794,13 +793,6 @@ do_backup(time_t start_time)
 		}
 	}
 
-	/* archiving check */
-	if (!current.stream && !pg_archive_enabled())
-		elog(ERROR, "Archiving must be enabled for archive backup");
-
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE && !pg_archive_enabled())
-		elog(ERROR, "Archiving must be enabled for PAGE backup");
-
 	if (from_replica)
 	{
 		/* Check master connection options */
@@ -1117,34 +1109,6 @@ pg_is_in_recovery(void)
 	}
 	PQclear(res_db);
 	return false;
-}
-
-/*
- * Check if archiving is enabled
- */
-static bool
-pg_archive_enabled(void)
-{
-	PGresult   *res_db;
-
-	res_db = pgut_execute(backup_conn, "show archive_mode", 0, NULL, true);
-
-	if (strcmp(PQgetvalue(res_db, 0, 0), "off") == 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-	PQclear(res_db);
-
-	res_db = pgut_execute(backup_conn, "show archive_command", 0, NULL, true);
-	if (strlen(PQgetvalue(res_db, 0, 0)) == 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-	PQclear(res_db);
-
-	return true;
 }
 
 /* Clear ptrack files in all databases of the instance we connected to */
