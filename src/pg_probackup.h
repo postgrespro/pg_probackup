@@ -427,8 +427,7 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
-extern void push_wal_file(const char *from_path, const char *to_path,
-						  bool is_compress);
+extern void push_wal_file(const char *from_path, const char *to_path);
 extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern bool calc_file_checksum(pgFile *file);

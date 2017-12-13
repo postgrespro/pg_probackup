@@ -64,8 +64,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	if (access(backup_wal_file_path, F_OK) != -1)
 		elog(ERROR, "file '%s', already exists.", backup_wal_file_path);
 
-	push_wal_file(absolute_wal_file_path, backup_wal_file_path,
-				  compress_shortcut);
+	push_wal_file(absolute_wal_file_path, backup_wal_file_path);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
 	return 0;

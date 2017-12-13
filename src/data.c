@@ -750,7 +750,7 @@ copy_meta(const char *from_path, const char *to_path)
  * Copy WAL segment from pgdata to archive catalog with possible compression.
  */
 void
-push_wal_file(const char *from_path, const char *to_path, bool is_compress)
+push_wal_file(const char *from_path, const char *to_path)
 {
 	FILE	   *in = NULL;
 	FILE	   *out;
@@ -770,7 +770,10 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 
 	/* open backup file for write  */
 #ifdef HAVE_LIBZ
-	if (is_compress)
+	if (compress_alg == PGLZ_COMPRESS)
+		elog(ERROR, "pglz compression is not supported");
+
+	if (compress_alg == ZLIB_COMPRESS)
 	{
 		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
 		gz_out = gzopen(gz_to_path, "wb");
@@ -803,7 +806,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 		if (read_len > 0)
 		{
 #ifdef HAVE_LIBZ
-			if (is_compress)
+			if (compress_alg == ZLIB_COMPRESS)
 			{
 				if (gzwrite(gz_out, buf, read_len) != read_len)
 					elog(ERROR, "Cannot write to compressed WAL segment \"%s\": %s",
@@ -823,10 +826,10 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 	}
 
 #ifdef HAVE_LIBZ
-	if (is_compress && gzclose(gz_out) != 0)
+	if (compress_alg == ZLIB_COMPRESS && gzclose(gz_out) != 0)
 		elog(ERROR, "Cannot close compressed WAL segment \"%s\": %s",
 			 gz_to_path, get_gz_error(gz_out));
-	else if (!is_compress)
+	else if (compress_alg != ZLIB_COMPRESS)
 #endif
 	{
 		if (fflush(out) != 0 ||

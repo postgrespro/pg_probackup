@@ -403,6 +403,9 @@ main(int argc, char *argv[])
 	if (compress_level < 0 || compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
+	if (compress_level == 0)
+		compress_alg = NOT_DEFINED_COMPRESS;
+
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
