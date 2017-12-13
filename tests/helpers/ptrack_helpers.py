@@ -559,7 +559,7 @@ class ProbackupTest(object):
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
         return out_dict
 
-    def set_archiving(self, backup_dir, instance, node, replica=False):
+    def set_archiving(self, backup_dir, instance, node, replica=False, compress=False):
 
         if replica:
             archive_mode = 'always'
@@ -576,7 +576,13 @@ class ProbackupTest(object):
                 "archive_mode = {0}".format(archive_mode)
                 )
         if os.name == 'posix':
-            node.append_conf(
+            if compress:
+                node.append_conf(
+                    "postgresql.auto.conf",
+                    "archive_command = '{0} archive-push -B {1} --instance={2} --compress --wal-file-path %p --wal-file-name %f'".format(
+                        self.probackup_path, backup_dir, instance))
+            else:
+                node.append_conf(
                     "postgresql.auto.conf",
                     "archive_command = '{0} archive-push -B {1} --instance={2} --wal-file-path %p --wal-file-name %f'".format(
                         self.probackup_path, backup_dir, instance))

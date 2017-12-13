@@ -10,45 +10,6 @@ module_name = 'pgpro589'
 
 class ArchiveCheck(ProbackupTest, unittest.TestCase):
 
-    # @unittest.skip("skip")
-    # @unittest.expectedFailure
-    def test_archive_mode(self):
-        """
-        https://jira.postgrespro.ru/browse/PGPRO-589
-        make node without archive support, make backup which should fail
-        check ERROR text
-        """
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        node.start()
-
-        node.pgbench_init(scale=5)
-        pgbench = node.pgbench(
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            options=["-c", "4", "-T", "10"]
-        )
-        pgbench.wait()
-        pgbench.stdout.close()
-
-        try:
-            self.backup_node(backup_dir, 'node', node, options=['--archive-timeout=10'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because of disabled archive_mode.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertEqual(e.message, 'ERROR: Archiving must be enabled for archive backup\n',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_pgpro589(self):
         """
         https://jira.postgrespro.ru/browse/PGPRO-589

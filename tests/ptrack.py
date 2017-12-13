@@ -36,7 +36,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because ptrack disabled.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual('ERROR: Ptrack is disabled\n', e.message,
+            self.assertIn('ERROR: Ptrack is disabled\n', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
@@ -391,7 +391,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("postgres",
             "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
         node.safe_psql("postgres", "SELECT * FROM t_heap")
-        self.backup_node(backup_dir, 'node', node, options=["--stream", "-l", "--log-level=verbose"])
+        self.backup_node(backup_dir, 'node', node, options=["--stream", "--log-level-file=verbose"])
         #sys.exit(1)
 
         # CREATE DATABASE DB1
@@ -399,7 +399,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("db1", "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
         # PTRACK BACKUP
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "-l", "--log-level=verbose"])
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "--log-level-file=verbose"])
         pgdata = self.pgdata_content(node.data_dir)
 
         # RESTORE
@@ -479,7 +479,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # sys.exit(1)
         # PTRACK BACKUP
         result =  node.safe_psql("postgres", "select * from t_heap")
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "-l", "--log-level=verbose"])
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "--log-level-file=verbose"])
         pgdata = self.pgdata_content(node.data_dir)
         #node.stop()
         #node.cleanup()
@@ -538,7 +538,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         #sys.exit(1)
 
         # PTRACK BACKUP
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "-l", '--log-level=verbose'])
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", '--log-level-file=verbose'])
         pgdata= self.pgdata_content(node.data_dir)
         node.stop()
 
@@ -655,7 +655,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         result = node.safe_psql("postgres", "select * from t_heap")
 
         # FIRTS PTRACK BACKUP
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "-l", "--log-level=verbose"])
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "--log-level-file=verbose"])
 
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
@@ -691,7 +691,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres", "alter table t_heap set tablespace pg_default")
         # SECOND PTRACK BACKUP
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "-l", "--log-level=verbose"])
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "--log-level-file=verbose"])
         pgdata = self.pgdata_content(node.data_dir)
 
         # Restore second ptrack backup and check table consistency
@@ -762,7 +762,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # FIRTS PTRACK BACKUP
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["-l", "--log-level=verbose"])
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--log-level-file=verbose"])
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 

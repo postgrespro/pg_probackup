@@ -12,6 +12,7 @@ from . import init_test, option_test, show_test, \
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
+#    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup_test))
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))
@@ -42,7 +43,6 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(validate_test))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
-    suite.addTests(loader.loadTestsFromModule(auth_test))
 
     return suite
 

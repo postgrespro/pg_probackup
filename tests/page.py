@@ -10,34 +10,34 @@ module_name = 'page'
 
 class PageBackupTest(ProbackupTest, unittest.TestCase):
 
-    # @unittest.skip("skip")
-    # @unittest.expectedFailure
-    def test_page_check_archive_enabled(self):
-        """make node, take page backup without enabled archive, should result in error"""
-        self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
-            )
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        node.start()
-
-        try:
-            self.backup_node(backup_dir, 'node', node, backup_type='page', options=['--stream'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because archive_mode disabled.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertEqual('ERROR: Archiving must be enabled for PAGE backup\n', e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
+#    # @unittest.skip("skip")
+#    # @unittest.expectedFailure
+#    def test_page_check_archive_enabled(self):
+#        """make node, take page backup without enabled archive, should result in error"""
+#        self.maxDiff = None
+#        fname = self.id().split('.')[3]
+#        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+#        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+#            set_replication=True,
+#            initdb_params=['--data-checksums'],
+#            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
+#            )
+#
+#        self.init_pb(backup_dir)
+#        self.add_instance(backup_dir, 'node', node)
+#        node.start()
+#
+#        try:
+#            self.backup_node(backup_dir, 'node', node, backup_type='page', options=['--stream'])
+#            # we should die here because exception is what we expect to happen
+#            self.assertEqual(1, 0, "Expecting Error because archive_mode disabled.\n Output: {0} \n CMD: {1}".format(
+#                repr(self.output), self.cmd))
+#        except ProbackupException as e:
+#            self.assertIn('ERROR: Archiving must be enabled for PAGE backup\n', e.message,
+#                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+#
+#        # Clean after yourself
+#        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_page_stream(self):
@@ -182,7 +182,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # PAGE BACKUP
-        self.backup_node(backup_dir, 'node', node, backup_type='page', options=["-l", "--log-level=verbose"])
+        self.backup_node(backup_dir, 'node', node, backup_type='page', options=["--log-level-file=verbose"])
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
