@@ -129,6 +129,7 @@ class ProbackupTest(object):
             if self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON':
                 self.paranoia = True
 
+        self.archive_compress = False
         if 'ARCHIVE_COMPRESSION' in self.test_env:
             if self.test_env['ARCHIVE_COMPRESSION'] == 'ON':
                 self.archive_compress = True
