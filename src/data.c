@@ -758,7 +758,8 @@ copy_meta(const char *from_path, const char *to_path, bool unlink_on_error)
  * Copy WAL segment from pgdata to archive catalog with possible compression.
  */
 void
-push_wal_file(const char *from_path, const char *to_path, bool is_compress)
+push_wal_file(const char *from_path, const char *to_path, bool is_compress,
+			  bool overwrite)
 {
 	FILE	   *in = NULL;
 	FILE	   *out;
@@ -781,6 +782,10 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 	if (is_compress)
 	{
 		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
+
+		if (!overwrite && fileExists(gz_to_path))
+			elog(ERROR, "WAL segment \"%s\" already exists.", gz_to_path);
+
 		gz_out = gzopen(gz_to_path, "wb");
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
@@ -791,6 +796,9 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 	else
 #endif
 	{
+		if (!overwrite && fileExists(to_path))
+			elog(ERROR, "WAL segment \"%s\" already exists.", to_path);
+
 		out = fopen(to_path, "w");
 		if (out == NULL)
 			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",

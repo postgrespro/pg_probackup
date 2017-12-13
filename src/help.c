@@ -127,6 +127,7 @@ help_pg_probackup(void)
 	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
 	printf(_("                 [--compress [--compress-level=compress-level]]\n"));
+	printf(_("                 [--overwrite]\n"));
 
 	printf(_("\n  %s archive-get -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
@@ -365,6 +366,7 @@ help_archive_push(void)
 	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
 	printf(_("                 [--compress [--compress-level=compress-level]]\n\n"));
+	printf(_("                 [--overwrite]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
@@ -375,6 +377,7 @@ help_archive_push(void)
 	printf(_("      --compress                   compress WAL file during archiving\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9]\n"));
+	printf(_("      --overwrite                  overwrite archived WAL file\n"));
 }
 
 static void

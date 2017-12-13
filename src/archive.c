@@ -22,7 +22,7 @@
  * compute and validate checksums.
  */
 int
-do_archive_push(char *wal_file_path, char *wal_file_name)
+do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 {
 	char		backup_wal_file_path[MAXPGPATH];
 	char		absolute_wal_file_path[MAXPGPATH];
@@ -62,8 +62,6 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
 
 	elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
-	if (access(backup_wal_file_path, F_OK) != -1)
-		elog(ERROR, "file '%s', already exists.", backup_wal_file_path);
 
 #ifdef HAVE_LIBZ
 	if (compress_alg == PGLZ_COMPRESS)
@@ -72,7 +70,8 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 		is_compress = IsXLogFileName(wal_file_name);
 #endif
 
-	push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress);
+	push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress,
+				  overwrite);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
 	return 0;

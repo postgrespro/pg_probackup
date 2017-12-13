@@ -316,7 +316,6 @@ extern const char *pgdata_exclude_dir[];
 extern int do_backup(time_t start_time);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
-extern bool fileExists(const char *path);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
@@ -343,7 +342,8 @@ extern int do_init(void);
 extern int do_add_instance(void);
 
 /* in archive.c */
-extern int do_archive_push(char *wal_file_path, char *wal_file_name);
+extern int do_archive_push(char *wal_file_path, char *wal_file_name,
+						   bool overwrite);
 extern int do_archive_get(char *wal_file_path, char *wal_file_name);
 
 
@@ -409,6 +409,8 @@ extern parray *dir_read_file_list(const char *root, const char *file_txt);
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
 
+extern bool fileExists(const char *path);
+
 extern pgFile *pgFileNew(const char *path, bool omit_symlink);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
@@ -428,7 +430,7 @@ extern void restore_data_file(const char *from_root, const char *to_root,
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
 extern void push_wal_file(const char *from_path, const char *to_path,
-						  bool is_compress);
+						  bool is_compress, bool overwrite);
 extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern bool calc_file_checksum(pgFile *file);

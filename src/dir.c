@@ -80,7 +80,6 @@ static char *pgdata_exclude_files[] =
 	NULL
 };
 
-pgFile *pgFileNew(const char *path, bool omit_symlink);
 static int BlackListCompare(const void *str1, const void *str2);
 
 static void dir_list_file_internal(parray *files, const char *root,
@@ -946,4 +945,20 @@ dir_is_empty(const char *path)
 	closedir(dir);
 
 	return true;
+}
+
+/*
+ * Return true if the path is a existing regular file.
+ */
+bool
+fileExists(const char *path)
+{
+	struct stat buf;
+
+	if (stat(path, &buf) == -1 && errno == ENOENT)
+		return false;
+	else if (!S_ISREG(buf.st_mode))
+		return false;
+	else
+		return true;
 }

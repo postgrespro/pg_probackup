@@ -1868,22 +1868,6 @@ checkpoint_timeout(void)
 }
 
 /*
- * Return true if the path is a existing regular file.
- */
-bool
-fileExists(const char *path)
-{
-	struct stat buf;
-
-	if (stat(path, &buf) == -1 && errno == ENOENT)
-		return false;
-	else if (!S_ISREG(buf.st_mode))
-		return false;
-	else
-		return true;
-}
-
-/*
  * Notify end of backup to server when "backup_label" is in the root directory
  * of the DB cluster.
  * Also update backup status to ERROR when the backup is not finished.
