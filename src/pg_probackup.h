@@ -320,6 +320,8 @@ extern bool fileExists(const char *path);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
+extern char *pg_ptrack_get_block(Oid relOid, BlockNumber blknum,
+								 size_t *result_size);
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  const char *target_time,

@@ -121,11 +121,13 @@ static void
 backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BlockNumber blknum, BlockNumber nblocks,
 				 FILE *in, FILE *out,
-				 pg_crc32 *crc, int *n_skipped)
+				 pg_crc32 *crc, int *n_skipped,
+				 BackupMode backup_mode)
 {
 	BackupPageHeader	header;
 	off_t				offset;
 	DataPage			page; /* used as read buffer */
+	DataPage			*page_ptr = &page; /* used as read buffer */
 	DataPage			compressed_page; /* used as read buffer */
 	size_t				write_buffer_size;
 	/* maximum size of write buffer */
@@ -133,7 +135,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	size_t				read_len = 0;
 	XLogRecPtr			page_lsn;
 	int					try_checksum = 100;
-
+	bool				page_is_invalid = true;
 	header.block = blknum;
 	offset = blknum * BLCKSZ;
 
@@ -156,6 +158,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			{
 				elog(LOG, "File %s, block %u, file was truncated",
 					 file->path, blknum);
+				page_is_invalid = false;
 				return;
 			}
 			else if (try_checksum)
@@ -187,6 +190,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			if (i == BLCKSZ)
 			{
 				elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
+				page_is_invalid = false;
 				break;
 			}
 
@@ -238,10 +242,24 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 									file->path, blknum);
 			}
 			else
+			{
+				page_is_invalid = false;
 				break; /* page header and checksum are correct */
+			}
 		}
 		else
+		{
+			page_is_invalid = false;
 			break; /* page header is correct and checksum check is disabled */
+		}
+	}
+
+
+	if (page_is_invalid ||
+		(backup_mode == BACKUP_MODE_DIFF_PTRACK))
+	{
+		size_t page_size = 0;
+		page_ptr = pg_ptrack_get_block(file->relOid, blknum, &page_size);
 	}
 
 	file->read_size += read_len;
@@ -388,7 +406,8 @@ backup_data_file(const char *from_root, const char *to_root,
 		for (blknum = 0; blknum < nblocks; blknum++)
 		{
 			backup_data_page(file, prev_backup_start_lsn, blknum,
-							 nblocks, in, out, &(file->crc), &n_blocks_skipped);
+							 nblocks, in, out, &(file->crc),
+							 &n_blocks_skipped, backup_mode);
 			n_blocks_read++;
 		}
 	}
@@ -400,7 +419,8 @@ backup_data_file(const char *from_root, const char *to_root,
 		while (datapagemap_next(iter, &blknum))
 		{
 			backup_data_page(file, prev_backup_start_lsn, blknum,
-							 nblocks, in, out, &(file->crc), &n_blocks_skipped);
+							 nblocks, in, out, &(file->crc),
+							 &n_blocks_skipped, backup_mode);
 			n_blocks_read++;
 		}
 
