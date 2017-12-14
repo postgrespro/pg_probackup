@@ -20,8 +20,12 @@
 #include "storage/bufpage.h"
 #include "storage/checksum_impl.h"
 #include <common/pg_lzcompress.h>
-#include <zlib.h>
 
+#ifdef HAVE_LIBZ
+#include <zlib.h>
+#endif
+
+#ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
 static size_t zlib_compress(void* dst, size_t dst_size, void const* src, size_t src_size)
 {
@@ -37,6 +41,7 @@ static size_t zlib_decompress(void* dst, size_t dst_size, void const* src, size_
 	int rc = uncompress(dst, &dest_len, src, src_size);
 	return rc == Z_OK ? dest_len : rc;
 }
+#endif
 
 /*
  * Compresses source into dest using algorithm. Returns the number of bytes
@@ -50,8 +55,10 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size, Compre
 		case NONE_COMPRESS:
 		case NOT_DEFINED_COMPRESS:
 			return -1;
+#ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
 			return zlib_compress(dst, dst_size, src, src_size);
+#endif
 		case PGLZ_COMPRESS:
 			return pglz_compress(src, src_size, dst, PGLZ_strategy_always);
 	}
@@ -71,8 +78,10 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size, Comp
 		case NONE_COMPRESS:
 		case NOT_DEFINED_COMPRESS:
 			return -1;
+#ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
 			return zlib_decompress(dst, dst_size, src, src_size);
+#endif
 		case PGLZ_COMPRESS:
 			return pglz_decompress(src, src_size, dst, dst_size);
 	}
@@ -702,105 +711,321 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	return true;
 }
 
-/* Almost like copy file, except the fact we don't calculate checksum */
-void
-copy_wal_file(const char *from_path, const char *to_path)
+#ifdef HAVE_LIBZ
+/*
+ * Show error during work with compressed file
+ */
+static const char *
+get_gz_error(gzFile gzf)
 {
-	FILE	   *in;
+	int			errnum;
+	const char *errmsg;
+
+	errmsg = gzerror(gzf, &errnum);
+	if (errnum == Z_ERRNO)
+		return strerror(errno);
+	else
+		return errmsg;
+}
+#endif
+
+/*
+ * Copy file attributes
+ */
+static void
+copy_meta(const char *from_path, const char *to_path, bool unlink_on_error)
+{
+	struct stat st;
+
+	if (stat(from_path, &st) == -1)
+	{
+		if (unlink_on_error)
+			unlink(to_path);
+		elog(ERROR, "Cannot stat file \"%s\": %s",
+			 from_path, strerror(errno));
+	}
+
+	if (chmod(to_path, st.st_mode) == -1)
+	{
+		if (unlink_on_error)
+			unlink(to_path);
+		elog(ERROR, "Cannot change mode of file \"%s\": %s",
+			 to_path, strerror(errno));
+	}
+}
+
+/*
+ * Copy WAL segment from pgdata to archive catalog with possible compression.
+ */
+void
+push_wal_file(const char *from_path, const char *to_path, bool is_compress,
+			  bool overwrite)
+{
+	FILE	   *in = NULL;
 	FILE	   *out;
-	size_t		read_len = 0;
-	int			errno_tmp;
 	char		buf[XLOG_BLCKSZ];
-	struct stat	st;
+	const char *to_path_p = to_path;
+
+#ifdef HAVE_LIBZ
+	char		gz_to_path[MAXPGPATH];
+	gzFile		gz_out = NULL;
+#endif
+
+	/* open file for read */
+	in = fopen(from_path, "r");
+	if (in == NULL)
+		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
+			 strerror(errno));
+
+	/* open backup file for write  */
+#ifdef HAVE_LIBZ
+	if (is_compress)
+	{
+		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
+
+		if (!overwrite && fileExists(gz_to_path))
+			elog(ERROR, "WAL segment \"%s\" already exists.", gz_to_path);
+
+		gz_out = gzopen(gz_to_path, "wb");
+		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
+			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
+				 compress_level, gz_to_path, get_gz_error(gz_out));
+
+		to_path_p = gz_to_path;
+	}
+	else
+#endif
+	{
+		if (!overwrite && fileExists(to_path))
+			elog(ERROR, "WAL segment \"%s\" already exists.", to_path);
+
+		out = fopen(to_path, "w");
+		if (out == NULL)
+			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
+				 to_path, strerror(errno));
+	}
+
+	/* copy content */
+	for (;;)
+	{
+		size_t		read_len = 0;
+
+		read_len = fread(buf, 1, sizeof(buf), in);
+
+		if (ferror(in))
+		{
+			unlink(to_path_p);
+			elog(ERROR, "Cannot read source WAL file \"%s\": %s",
+				 from_path, strerror(errno));
+		}
+
+		if (read_len > 0)
+		{
+#ifdef HAVE_LIBZ
+			if (is_compress)
+			{
+				if (gzwrite(gz_out, buf, read_len) != read_len)
+				{
+					unlink(to_path_p);
+					elog(ERROR, "Cannot write to compressed WAL file \"%s\": %s",
+						 gz_to_path, get_gz_error(gz_out));
+				}
+			}
+			else
+#endif
+			{
+				if (fwrite(buf, 1, read_len, out) != read_len)
+				{
+					unlink(to_path_p);
+					elog(ERROR, "Cannot write to WAL file \"%s\": %s",
+						 to_path, strerror(errno));
+				}
+			}
+		}
+
+		if (feof(in) || read_len == 0)
+			break;
+	}
+
+#ifdef HAVE_LIBZ
+	if (is_compress)
+	{
+		if (gzclose(gz_out) != 0)
+		{
+			unlink(to_path_p);
+			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
+				 gz_to_path, get_gz_error(gz_out));
+		}
+		elog(INFO, "WAL file compressed to \"%s\"", gz_to_path);
+	}
+	else
+#endif
+	{
+		if (fflush(out) != 0 ||
+			fsync(fileno(out)) != 0 ||
+			fclose(out))
+		{
+			unlink(to_path_p);
+			elog(ERROR, "Cannot write WAL file \"%s\": %s",
+				 to_path, strerror(errno));
+		}
+	}
+
+	if (fclose(in))
+	{
+		unlink(to_path_p);
+		elog(ERROR, "Cannot close source WAL file \"%s\": %s",
+			 from_path, strerror(errno));
+	}
+
+	/* update file permission. */
+	copy_meta(from_path, to_path_p, true);
+}
+
+/*
+ * Copy WAL segment from archive catalog to pgdata with possible decompression.
+ */
+void
+get_wal_file(const char *from_path, const char *to_path)
+{
+	FILE	   *in = NULL;
+	FILE	   *out;
+	char		buf[XLOG_BLCKSZ];
+	const char *from_path_p = from_path;
+	bool		is_decompress = false;
+
+#ifdef HAVE_LIBZ
+	char		gz_from_path[MAXPGPATH];
+	gzFile		gz_in = NULL;
+#endif
 
 	/* open file for read */
 	in = fopen(from_path, "r");
 	if (in == NULL)
 	{
-		/* maybe deleted, it's not error */
-		if (errno == ENOENT)
-			elog(ERROR, "cannot open source WAL file \"%s\": %s", from_path,
-			 strerror(errno));
+#ifdef HAVE_LIBZ
+		/*
+		 * Maybe we need to decompress the file. Check it with .gz
+		 * extension.
+		 */
+		snprintf(gz_from_path, sizeof(gz_from_path), "%s.gz", from_path);
+		gz_in = gzopen(gz_from_path, "rb");
+		if (gz_in == NULL)
+		{
+			if (errno == ENOENT)
+			{
+				/* There is no compressed file too, raise an error below */
+			}
+			/* Cannot open compressed file for some reason */
+			else
+				elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
+					 gz_from_path, strerror(errno));
+		}
+		else
+		{
+			/* Found compressed file */
+			is_decompress = true;
+			from_path_p = gz_from_path;
+		}
+#endif
+		/* Didn't find compressed file */
+		if (!is_decompress)
+			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
+				 from_path, strerror(errno));
 	}
 
 	/* open backup file for write  */
 	out = fopen(to_path, "w");
 	if (out == NULL)
-	{
-		int errno_tmp = errno;
-		fclose(in);
-		elog(ERROR, "cannot open destination file \"%s\": %s",
-			 to_path, strerror(errno_tmp));
-	}
-
-	/* stat source file to change mode of destination file */
-	if (fstat(fileno(in), &st) == -1)
-	{
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot stat \"%s\": %s", from_path,
-			 strerror(errno));
-	}
-
-	if (st.st_size > XLOG_SEG_SIZE)
-		elog(ERROR, "Unexpected wal file size %s : %ld", from_path, st.st_size);
+		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
+			 to_path, strerror(errno));
 
 	/* copy content */
 	for (;;)
 	{
-		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
-			break;
+		size_t		read_len = 0;
 
-		if (fwrite(buf, 1, read_len, out) != read_len)
+#ifdef HAVE_LIBZ
+		if (is_decompress)
 		{
-			errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR, "cannot write to \"%s\": %s", to_path,
-				 strerror(errno_tmp));
+			read_len = gzread(gz_in, buf, sizeof(buf));
+			if (read_len != sizeof(buf) && !gzeof(gz_in))
+			{
+				unlink(to_path);
+				elog(ERROR, "Cannot read compressed WAL file \"%s\": %s",
+					 gz_from_path, get_gz_error(gz_in));
+			}
 		}
-	}
-
-	errno_tmp = errno;
-	if (!feof(in))
-	{
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot read backup mode file \"%s\": %s",
-			 from_path, strerror(errno_tmp));
-	}
-
-	/* copy odd part */
-	if (read_len > 0)
-	{
-		if (fwrite(buf, 1, read_len, out) != read_len)
+		else
+#endif
 		{
-			errno_tmp = errno;
-			/* oops */
-			fclose(in);
-			fclose(out);
-			elog(ERROR, "cannot write to \"%s\": %s", to_path,
-				 strerror(errno_tmp));
+			read_len = fread(buf, 1, sizeof(buf), in);
+			if (ferror(in))
+			{
+				unlink(to_path);
+				elog(ERROR, "Cannot read source WAL file \"%s\": %s",
+					 from_path, strerror(errno));
+			}
 		}
-	}
 
+		if (read_len > 0)
+		{
+			if (fwrite(buf, 1, read_len, out) != read_len)
+			{
+				unlink(to_path);
+				elog(ERROR, "Cannot write to WAL file \"%s\": %s", to_path,
+					 strerror(errno));
+			}
+		}
 
-	/* update file permission. */
-	if (chmod(to_path, st.st_mode) == -1)
-	{
-		errno_tmp = errno;
-		fclose(in);
-		fclose(out);
-		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
-			 strerror(errno_tmp));
+		/* Check for EOF */
+#ifdef HAVE_LIBZ
+		if (is_decompress)
+		{
+			if (gzeof(gz_in) || read_len == 0)
+				break;
+		}
+		else
+#endif
+		{
+			if (feof(in) || read_len == 0)
+				break;
+		}
 	}
 
 	if (fflush(out) != 0 ||
 		fsync(fileno(out)) != 0 ||
 		fclose(out))
-		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
-	fclose(in);
+	{
+		unlink(to_path);
+		elog(ERROR, "Cannot write WAL file \"%s\": %s",
+			 to_path, strerror(errno));
+	}
+
+#ifdef HAVE_LIBZ
+	if (is_decompress)
+	{
+		if (gzclose(gz_in) != 0)
+		{
+			unlink(to_path);
+			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
+				 gz_from_path, get_gz_error(gz_in));
+		}
+		elog(INFO, "WAL file decompressed from \"%s\"", gz_from_path);
+	}
+	else
+#endif
+	{
+		if (fclose(in))
+		{
+			unlink(to_path);
+			elog(ERROR, "Cannot close source WAL file \"%s\": %s",
+				 from_path, strerror(errno));
+		}
+	}
+
+	/* update file permission. */
+	copy_meta(from_path_p, to_path, true);
 }
 
 /*

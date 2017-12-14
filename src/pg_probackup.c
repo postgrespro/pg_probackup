@@ -85,6 +85,7 @@ uint64		system_identifier = 0;
 /* archive push options */
 static char *wal_file_path;
 static char *wal_file_name;
+static bool	file_overwrite = false;
 
 /* current settings */
 pgBackup	current;
@@ -161,6 +162,7 @@ static pgut_option options[] =
 	/* archive-push options */
 	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
 	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },
+	{ 'b', 162, "overwrite",			&file_overwrite,	SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -403,11 +405,14 @@ main(int argc, char *argv[])
 	if (compress_level < 0 || compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
+	if (compress_level == 0)
+		compress_alg = NOT_DEFINED_COMPRESS;
+
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH:
-			return do_archive_push(wal_file_path, wal_file_name);
+			return do_archive_push(wal_file_path, wal_file_name, file_overwrite);
 		case ARCHIVE_GET:
 			return do_archive_get(wal_file_path, wal_file_name);
 		case ADD_INSTANCE:
