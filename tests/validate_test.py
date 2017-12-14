@@ -3,6 +3,7 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
+from sys import exit
 
 
 module_name = 'validate'
@@ -114,6 +115,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.start()
 
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
         with node.connect("postgres") as con:
             con.execute("CREATE TABLE tbl0005 (a text)")
             con.commit()
@@ -137,8 +140,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of wal segments corruption.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue('Possible WAL CORRUPTION' in e.message),
-            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd)
+            self.assertTrue('Possible WAL CORRUPTION' in e.message,
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.assertEqual('CORRUPT', self.show_pb(backup_dir, 'node', backup_id)['status'], 'Backup STATUS should be "CORRUPT"')
 
@@ -255,7 +258,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         make node with archiving
         make archive backup
-        delete from archive wal segment which DO NOT belong to previous backup
+        delete from archive wal segment which DO NOT belong to this backup
         run validate, expecting error because of missing wal segment
         make sure that backup status is 'ERROR'
         """
@@ -285,16 +288,17 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
-        wals = map(int, wals)
-        file = os.path.join(wals_dir, '0000000' + str(max(wals)))
+        wals = map(str, wals)
+        file = os.path.join(wals_dir, max(wals))
         os.remove(file)
-
+        if self.archive_compress:
+            file = file[:-3]
         try:
             backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
             self.assertEqual(1, 0, "Expecting Error because of wal segment disappearance.\n Output: {0} \n CMD: {1}".format(
                 self.output, self.cmd))
         except ProbackupException as e:
-            self.assertTrue('INFO: wait for LSN' in e.message
+            self.assertTrue('INFO: Wait for LSN' in e.message
                 and 'in archived WAL segment' in e.message
                 and 'WARNING: could not read WAL record at' in e.message
                 and 'ERROR: WAL segment "{0}" is absent\n'.format(file) in e.message,
@@ -303,7 +307,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('ERROR', self.show_pb(backup_dir, 'node')[1]['Status'], 'Backup {0} should have STATUS "ERROR"')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_pgpro702_688(self):
@@ -359,8 +363,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_pgpro561(self):
-        """make node with archiving, make stream backup, restore it to node1, check that archiving is not successful on node1
-        """
+        """make node with archiving, make stream backup, restore it to node1, check that archiving is not successful on node1"""
         fname = self.id().split('.')[3]
         node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(module_name, fname),
             set_replication=True,
