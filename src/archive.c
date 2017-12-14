@@ -29,6 +29,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	char		current_dir[MAXPGPATH];
 	int64		system_id;
 	pgBackupConfig *config;
+	bool		is_compress = false;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
 		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
@@ -64,7 +65,14 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	if (access(backup_wal_file_path, F_OK) != -1)
 		elog(ERROR, "file '%s', already exists.", backup_wal_file_path);
 
-	push_wal_file(absolute_wal_file_path, backup_wal_file_path);
+#ifdef HAVE_LIBZ
+	if (compress_alg == PGLZ_COMPRESS)
+		elog(ERROR, "pglz compression is not supported");
+	if (compress_alg == ZLIB_COMPRESS)
+		is_compress = IsXLogFileName(wal_file_name);
+#endif
+
+	push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
 	return 0;

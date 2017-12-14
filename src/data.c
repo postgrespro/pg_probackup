@@ -750,7 +750,7 @@ copy_meta(const char *from_path, const char *to_path)
  * Copy WAL segment from pgdata to archive catalog with possible compression.
  */
 void
-push_wal_file(const char *from_path, const char *to_path)
+push_wal_file(const char *from_path, const char *to_path, bool is_compress)
 {
 	FILE	   *in = NULL;
 	FILE	   *out;
@@ -765,20 +765,17 @@ push_wal_file(const char *from_path, const char *to_path)
 	/* open file for read */
 	in = fopen(from_path, "r");
 	if (in == NULL)
-		elog(ERROR, "Cannot open source WAL segment \"%s\": %s", from_path,
+		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
 
 	/* open backup file for write  */
 #ifdef HAVE_LIBZ
-	if (compress_alg == PGLZ_COMPRESS)
-		elog(ERROR, "pglz compression is not supported");
-
-	if (compress_alg == ZLIB_COMPRESS)
+	if (is_compress)
 	{
 		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
 		gz_out = gzopen(gz_to_path, "wb");
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
-			elog(ERROR, "Cannot set compression level %d to segment \"%s\": %s",
+			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 compress_level, gz_to_path, get_gz_error(gz_out));
 
 		to_path_p = gz_to_path;
@@ -788,7 +785,7 @@ push_wal_file(const char *from_path, const char *to_path)
 	{
 		out = fopen(to_path, "w");
 		if (out == NULL)
-			elog(ERROR, "Cannot open destination WAL segment \"%s\": %s",
+			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 				 to_path, strerror(errno));
 	}
 
@@ -800,23 +797,23 @@ push_wal_file(const char *from_path, const char *to_path)
 		read_len = fread(buf, 1, sizeof(buf), in);
 
 		if (ferror(in))
-			elog(ERROR, "Cannot read source WAL segment \"%s\": %s",
+			elog(ERROR, "Cannot read source WAL file \"%s\": %s",
 				 from_path, strerror(errno));
 
 		if (read_len > 0)
 		{
 #ifdef HAVE_LIBZ
-			if (compress_alg == ZLIB_COMPRESS)
+			if (is_compress)
 			{
 				if (gzwrite(gz_out, buf, read_len) != read_len)
-					elog(ERROR, "Cannot write to compressed WAL segment \"%s\": %s",
+					elog(ERROR, "Cannot write to compressed WAL file \"%s\": %s",
 						 gz_to_path, get_gz_error(gz_out));
 			}
 			else
 #endif
 			{
 				if (fwrite(buf, 1, read_len, out) != read_len)
-					elog(ERROR, "Cannot write to WAL segment \"%s\": %s",
+					elog(ERROR, "Cannot write to WAL file \"%s\": %s",
 						 to_path, strerror(errno));
 			}
 		}
@@ -826,21 +823,25 @@ push_wal_file(const char *from_path, const char *to_path)
 	}
 
 #ifdef HAVE_LIBZ
-	if (compress_alg == ZLIB_COMPRESS && gzclose(gz_out) != 0)
-		elog(ERROR, "Cannot close compressed WAL segment \"%s\": %s",
-			 gz_to_path, get_gz_error(gz_out));
-	else if (compress_alg != ZLIB_COMPRESS)
+	if (is_compress)
+	{
+		if (gzclose(gz_out) != 0)
+			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
+				 gz_to_path, get_gz_error(gz_out));
+		elog(INFO, "WAL file compressed to \"%s\"", gz_to_path);
+	}
+	else
 #endif
 	{
 		if (fflush(out) != 0 ||
 			fsync(fileno(out)) != 0 ||
 			fclose(out))
-			elog(ERROR, "Cannot write WAL segment \"%s\": %s",
+			elog(ERROR, "Cannot write WAL file \"%s\": %s",
 				 to_path, strerror(errno));
 	}
 
 	if (fclose(in))
-		elog(ERROR, "Cannot close source WAL segment \"%s\": %s",
+		elog(ERROR, "Cannot close source WAL file \"%s\": %s",
 			 from_path, strerror(errno));
 
 	/* update file permission. */
@@ -883,7 +884,7 @@ get_wal_file(const char *from_path, const char *to_path)
 			}
 			/* Cannot open compressed file for some reason */
 			else
-				elog(ERROR, "Cannot open compressed WAL segment \"%s\": %s",
+				elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
 					 gz_from_path, strerror(errno));
 		}
 		else
@@ -895,14 +896,14 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 		/* Didn't find compressed file */
 		if (!is_decompress)
-			elog(ERROR, "Cannot open source WAL segment \"%s\": %s",
+			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
 				 from_path, strerror(errno));
 	}
 
 	/* open backup file for write  */
 	out = fopen(to_path, "w");
 	if (out == NULL)
-		elog(ERROR, "Cannot open destination WAL segment \"%s\": %s",
+		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 			 to_path, strerror(errno));
 
 	/* copy content */
@@ -915,7 +916,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		{
 			read_len = gzread(gz_in, buf, sizeof(buf));
 			if (read_len != sizeof(buf) && !gzeof(gz_in))
-				elog(ERROR, "Cannot read compressed WAL segment \"%s\": %s",
+				elog(ERROR, "Cannot read compressed WAL file \"%s\": %s",
 					 gz_from_path, get_gz_error(gz_in));
 		}
 		else
@@ -923,14 +924,14 @@ get_wal_file(const char *from_path, const char *to_path)
 		{
 			read_len = fread(buf, 1, sizeof(buf), in);
 			if (ferror(in))
-				elog(ERROR, "Cannot read source WAL segment \"%s\": %s",
+				elog(ERROR, "Cannot read source WAL file \"%s\": %s",
 					 from_path, strerror(errno));
 		}
 
 		if (read_len > 0)
 		{
 			if (fwrite(buf, 1, read_len, out) != read_len)
-				elog(ERROR, "Cannot write to WAL segment \"%s\": %s", to_path,
+				elog(ERROR, "Cannot write to WAL file \"%s\": %s", to_path,
 					 strerror(errno));
 		}
 
@@ -952,18 +953,22 @@ get_wal_file(const char *from_path, const char *to_path)
 	if (fflush(out) != 0 ||
 		fsync(fileno(out)) != 0 ||
 		fclose(out))
-		elog(ERROR, "Cannot write WAL segment \"%s\": %s",
+		elog(ERROR, "Cannot write WAL file \"%s\": %s",
 			 to_path, strerror(errno));
 
 #ifdef HAVE_LIBZ
-	if (is_decompress && gzclose(gz_in) != 0)
-		elog(ERROR, "Cannot close compressed WAL segment \"%s\": %s",
-			 gz_from_path, get_gz_error(gz_in));
-	else if (!is_decompress)
+	if (is_decompress)
+	{
+		if (gzclose(gz_in) != 0)
+			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
+				 gz_from_path, get_gz_error(gz_in));
+		elog(INFO, "WAL file decompressed from \"%s\"", gz_from_path);
+	}
+	else
 #endif
 	{
 		if (fclose(in))
-			elog(ERROR, "Cannot close source WAL segment \"%s\": %s",
+			elog(ERROR, "Cannot close source WAL file \"%s\": %s",
 				 from_path, strerror(errno));
 	}
 
