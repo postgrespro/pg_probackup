@@ -139,7 +139,7 @@ do_retention_purge(void)
 	if (retention_window > 0)
 		elog(LOG, "WINDOW=%u", retention_window);
 
-	if (retention_redundancy == 0 && retention_window == 0)
+	if (retention_redundancy == 0 && retention_window == 0 && !delete_wal)
 	{
 		elog(WARNING, "Retention policy is not set");
 		return 0;
