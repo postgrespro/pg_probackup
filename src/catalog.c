@@ -556,6 +556,8 @@ readBackupControlFile(const char *path)
 			backup->status = BACKUP_STATUS_DELETED;
 		else if (strcmp(status, "DONE") == 0)
 			backup->status = BACKUP_STATUS_DONE;
+		else if (strcmp(status, "ORPHAN") == 0)
+			backup->status = BACKUP_STATUS_ORPHAN;
 		else if (strcmp(status, "CORRUPT") == 0)
 			backup->status = BACKUP_STATUS_CORRUPT;
 		else

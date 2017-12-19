@@ -97,9 +97,9 @@ pgBackupValidate(pgBackup *backup)
 	pgBackupWriteBackupControlFile(backup);
 
 	if (corrupted)
-		elog(WARNING, "Backup %s is corrupted", backup_id_string);
+		elog(WARNING, "Backup %s data files are corrupted", backup_id_string);
 	else
-		elog(INFO, "Backup %s is valid", backup_id_string);
+		elog(INFO, "Backup %s data files are valid", backup_id_string);
 	free(backup_id_string);
 }
 
@@ -269,8 +269,6 @@ do_validate_instance(void)
 		current_backup = (pgBackup *) parray_get(backups, i);
 		backup_id = base36enc(current_backup->start_time);
 
-		elog(INFO, "Validate backup %s", backup_id);
-
 		if (current_backup->backup_mode != BACKUP_MODE_FULL)
 		{
 			int			j;
@@ -301,9 +299,27 @@ do_validate_instance(void)
 			validate_wal(current_backup, arclog_path, 0,
 						0, base_full_backup->tli);
 		}
-
+		/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
 		if (current_backup->status != BACKUP_STATUS_OK)
+		{
+			int			j;
 			corrupted_backup_found = true;
+			for (j = i - 1; j >= 0; j--)
+			{
+				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
+				if (backup->backup_mode == BACKUP_MODE_FULL)
+					break;
+				if (backup->status != BACKUP_STATUS_OK)
+					continue;
+				else
+				{
+					backup->status = BACKUP_STATUS_ORPHAN;
+					pgBackupWriteBackupControlFile(backup);
+					elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
+							base36enc(backup->start_time), base36enc(current_backup->start_time));
+				}
+			}
+		}
 
 		free(backup_id);
 	}
