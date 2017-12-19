@@ -374,6 +374,24 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise  ProbackupException(e.output.decode("utf-8"), self.cmd)
 
+    def run_binary(self, command, async=False):
+        try:
+            if async:
+                if self.verbose:
+                    print(command)
+                return subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.test_env)
+            else:
+                if self.verbose:
+                    print(command)
+                self.output = subprocess.check_output(
+                    command,
+                    stderr=subprocess.STDOUT,
+                    env=self.test_env
+                    ).decode("utf-8")
+                return self.output
+        except subprocess.CalledProcessError as e:
+            raise  ProbackupException(e.output.decode("utf-8"), command)
+
     def init_pb(self, backup_dir):
 
         shutil.rmtree(backup_dir, ignore_errors=True)
@@ -642,6 +660,9 @@ class ProbackupTest(object):
             node.safe_psql("postgres", "select pg_switch_wal()")
         else:
             node.safe_psql("postgres", "select pg_switch_xlog()")
+
+    def get_version(self, node):
+        return testgres.get_config()["VERSION_NUM"]
 
     def del_test_dir(self, module_name, fname):
         """ Del testdir and optimistically try to del module dir"""
