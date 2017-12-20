@@ -290,7 +290,7 @@ validate_wal(pgBackup *backup,
 			 TimeLineID tli)
 {
 	XLogRecPtr	startpoint = backup->start_lsn;
-	char	   *backup_id;
+	const char *backup_id;
 	XLogRecord *record;
 	XLogReaderState *xlogreader;
 	char	   *errormsg;
@@ -329,11 +329,9 @@ validate_wal(pgBackup *backup,
 	else
 		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, tli);
 
-	free(backup_id);
-
 	if (backup->status == BACKUP_STATUS_CORRUPT)
 	{
-		elog(WARNING, "Backup %s WAL segments are corrupted", base36enc(backup->start_time));
+		elog(WARNING, "Backup %s WAL segments are corrupted", backup_id);
 		return;
 	}
 	/*
@@ -343,7 +341,7 @@ validate_wal(pgBackup *backup,
 	if (!TransactionIdIsValid(target_xid) && target_time == 0)
 	{
 		/* Recovery target is not given so exit */
-		elog(INFO, "Backup %s WAL segments are valid", base36enc(backup->start_time));
+		elog(INFO, "Backup %s WAL segments are valid", backup_id);
 		return;
 	}
 
