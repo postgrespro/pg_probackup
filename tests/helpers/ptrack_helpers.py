@@ -91,7 +91,19 @@ def dir_files(base_dir):
     out_list.sort()
     return out_list
 
+def is_enterprise():
+# pg_config --help
+    p = subprocess.Popen([os.environ['PG_CONFIG'], '--help'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if 'postgrespro.ru' in p.communicate()[0]:
+        return True
+    else:
+        return False
+
+
 class ProbackupTest(object):
+    # Class attributes
+    enterprise = is_enterprise()
+
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
         if '-v' in argv or '--verbose' in argv:
@@ -222,8 +234,6 @@ class ProbackupTest(object):
         nsegments = size_in_pages/131072
         if size_in_pages%131072 != 0:
             nsegments = nsegments + 1
-        #print("Size: {0}".format(size_in_pages))
-        #print("Number of segments: {0}".format(nsegments))
 
         size = size_in_pages
         for segment_number in range(nsegments):
@@ -233,12 +243,8 @@ class ProbackupTest(object):
                 pages_per_segment[segment_number] = size
             size = size-131072
 
-        #print(pages_per_segment)
-
         for segment_number in range(nsegments):
             offset = 0
-        #    print("Segno: {0}".format(segment_number))
-        #    print("Number of pages: {0}".format(pages_per_segment[segment_number]))
             if segment_number == 0:
                 file_desc = os.open(file, os.O_RDONLY)
                 start_page = 0
@@ -248,15 +254,12 @@ class ProbackupTest(object):
                 start_page = max(md5_per_page)+1
                 end_page = end_page + pages_per_segment[segment_number]
 
-        #    print('Start Page: {0}'.format(start_page))
             for page in range(start_page, end_page):
                 md5_per_page[page] = hashlib.md5(os.read(file_desc, 8192)).hexdigest()
                 offset += 8192
                 os.lseek(file_desc, offset, 0)
-        #    print('End Page: {0}'.format(max(md5_per_page)))
             os.close(file_desc)
 
-        #print("Total Size: {0}".format(len(md5_per_page)))
         return md5_per_page
 
     def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
