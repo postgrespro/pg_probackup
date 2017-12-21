@@ -16,7 +16,6 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_ptrack_enable(self):
         """make ptrack without full backup, should result in error"""
-        self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
@@ -46,7 +45,6 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_ptrack_disable(self):
         """Take full backup, disable ptrack restart postgresql, enable ptrack, restart postgresql, take ptrack backup which should fail"""
-        self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
@@ -90,6 +88,59 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_ptrack_get_block(self):
+        """make node, make full and ptrack stream backups, restore them and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '300s', 'ptrack_enable': 'on'}
+            )
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id from generate_series(0,1) i")
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        gdb = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream', '--log-level-file=verbose'], gdb=True)
+
+        if gdb.set_breakpoint('make_pagemap_from_ptrack'):
+            result = gdb.run()
+        else:
+            self.assertTrue(False, 'Cannot set breakpoint')
+
+        if result != 'breakpoint-hit':
+            print('Error in hitting breaking point')
+            sys.exit(1)
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = 100500")
+        print(node.safe_psql(
+            "postgres",
+            "select * from t_heap"))
+
+        if not gdb.continue_execution():
+            print('Error in continue_execution')
+
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream'])
+
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        node.start()
+        self.assertEqual(result, node.safe_psql("postgres", "SELECT * FROM t_heap"))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_ptrack_stream(self):
         """make node, make full and ptrack stream backups, restore them and check data correctness"""
         self.maxDiff = None
@@ -118,7 +169,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(100,200) i")
         ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream'])
+        ptrack_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream', '--log-level-file=verbose'])
         pgdata = self.pgdata_content(node.data_dir)
 
         # Drop Node
@@ -450,7 +501,6 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_alter_table_set_tablespace_ptrack(self):
         """Make node, create tablespace with table, take full backup, alter tablespace location, take ptrack backup, restore database."""
-        self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
@@ -512,7 +562,9 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_alter_database_set_tablespace_ptrack(self):
-        """Make node, create tablespace with database, take full backup, alter tablespace location, take ptrack backup, restore database."""
+        """Make node, create tablespace with database,"
+        " take full backup, alter tablespace location,"
+        " take ptrack backup, restore database."""
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
