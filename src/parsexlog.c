@@ -20,6 +20,10 @@
 #include "catalog/storage_xlog.h"
 #include "access/transam.h"
 
+#ifdef HAVE_LIBZ
+#include <zlib.h>
+#endif
+
 /*
  * RmgrNames is an array of resource manager names, to make error messages
  * a bit nicer.
@@ -81,10 +85,15 @@ typedef struct xl_xact_abort
 static void extractPageInfo(XLogReaderState *record);
 static bool getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime);
 
-static int	xlogreadfd = -1;
+static int		xlogreadfd = -1;
 static XLogSegNo xlogreadsegno = -1;
-static char xlogfpath[MAXPGPATH];
-static bool xlogexists = false;
+static char		xlogfpath[MAXPGPATH];
+static bool		xlogexists = false;
+
+#ifdef HAVE_LIBZ
+static gzFile	gz_xlogread = NULL;
+static char		gz_xlogfpath[MAXPGPATH];
+#endif
 
 typedef struct XLogPageReadPrivate
 {
@@ -576,6 +585,24 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 	return res;
 }
 
+#ifdef HAVE_LIBZ
+/*
+ * Show error during work with compressed file
+ */
+static const char *
+get_gz_error(gzFile gzf)
+{
+	int			errnum;
+	const char *errmsg;
+
+	errmsg = gzerror(gzf, &errnum);
+	if (errnum == Z_ERRNO)
+		return strerror(errno);
+	else
+		return errmsg;
+}
+#endif
+
 /* XLogreader callback function, to read a WAL page */
 static int
 SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
@@ -591,16 +618,27 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	 * See if we need to switch to a new segment because the requested record
 	 * is not in the currently open one.
 	 */
-	if (xlogreadfd >= 0 && !XLByteInSeg(targetPagePtr, xlogreadsegno))
+	if (!XLByteInSeg(targetPagePtr, xlogreadsegno))
 	{
-		close(xlogreadfd);
-		xlogreadfd = -1;
-		xlogexists = false;
+		if (xlogreadfd >= 0)
+		{
+			close(xlogreadfd);
+			xlogreadfd = -1;
+			xlogexists = false;
+		}
+#ifdef HAVE_LIBZ
+		else if (gz_xlogread != NULL)
+		{
+			gzclose(gz_xlogread);
+			gz_xlogread = NULL;
+			xlogexists = false;
+		}
+#endif
 	}
 
 	XLByteToSeg(targetPagePtr, xlogreadsegno);
 
-	if (xlogreadfd < 0)
+	if (!xlogexists)
 	{
 		char		xlogfname[MAXFNAMELEN];
 
@@ -610,42 +648,84 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		if (fileExists(xlogfpath))
 		{
-			elog(LOG, "opening WAL segment \"%s\"", xlogfpath);
+			elog(LOG, "Opening WAL segment \"%s\"", xlogfpath);
 
 			xlogexists = true;
 			xlogreadfd = open(xlogfpath, O_RDONLY | PG_BINARY, 0);
 
 			if (xlogreadfd < 0)
 			{
-				elog(WARNING, "could not open WAL segment \"%s\": %s",
+				elog(WARNING, "Could not open WAL segment \"%s\": %s",
 					 xlogfpath, strerror(errno));
 				return -1;
 			}
 		}
-		/* Exit without error if WAL segment doesn't exist */
+#ifdef HAVE_LIBZ
+		/* Try to open compressed WAL segment */
 		else
+		{
+			snprintf(gz_xlogfpath, sizeof(gz_xlogfpath), "%s.gz", xlogfpath);
+			if (fileExists(gz_xlogfpath))
+			{
+				elog(LOG, "Opening compressed WAL segment \"%s\"", gz_xlogfpath);
+
+				xlogexists = true;
+				gz_xlogread = gzopen(gz_xlogfpath, "rb");
+				if (gz_xlogread == NULL)
+				{
+					elog(WARNING, "Could not open compressed WAL segment \"%s\": %s",
+						 gz_xlogfpath, strerror(errno));
+					return -1;
+				}
+			}
+		}
+#endif
+
+		/* Exit without error if WAL segment doesn't exist */
+		if (!xlogexists)
 			return -1;
 	}
 
 	/*
 	 * At this point, we have the right segment open.
 	 */
-	Assert(xlogreadfd != -1);
+	Assert(xlogexists);
 
 	/* Read the requested page */
-	if (lseek(xlogreadfd, (off_t) targetPageOff, SEEK_SET) < 0)
+	if (xlogreadfd != -1)
 	{
-		elog(WARNING, "could not seek in file \"%s\": %s", xlogfpath,
-			 strerror(errno));
-		return -1;
-	}
+		if (lseek(xlogreadfd, (off_t) targetPageOff, SEEK_SET) < 0)
+		{
+			elog(WARNING, "Could not seek in WAL segment \"%s\": %s",
+				 xlogfpath, strerror(errno));
+			return -1;
+		}
 
-	if (read(xlogreadfd, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
-	{
-		elog(WARNING, "could not read from file \"%s\": %s",
-			 xlogfpath, strerror(errno));
-		return -1;
+		if (read(xlogreadfd, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		{
+			elog(WARNING, "Could not read from WAL segment \"%s\": %s",
+				 xlogfpath, strerror(errno));
+			return -1;
+		}
 	}
+#ifdef HAVE_LIBZ
+	else
+	{
+		if (gzseek(gz_xlogread, (z_off_t) targetPageOff, SEEK_SET) == -1)
+		{
+			elog(WARNING, "Could not seek in compressed WAL segment \"%s\": %s",
+				 gz_xlogfpath, get_gz_error(gz_xlogread));
+			return -1;
+		}
+
+		if (gzread(gz_xlogread, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		{
+			elog(WARNING, "Could not read from compressed WAL segment \"%s\": %s",
+				 gz_xlogfpath, get_gz_error(gz_xlogread));
+			return -1;
+		}
+	}
+#endif
 
 	*pageTLI = private->tli;
 	return XLOG_BLCKSZ;

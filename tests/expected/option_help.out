@@ -5,10 +5,11 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup version
 
-  pg_probackup init -B backup-path [-l]
+  pg_probackup init -B backup-path
 
   pg_probackup set-config -B backup-dir --instance=instance_name
-                 [--log-level=log-level]
+                 [--log-level-console=log-level-console]
+                 [--log-level-file=log-level-file]
                  [--log-filename=log-filename]
                  [--error-log-filename=error-log-filename]
                  [--log-directory=log-directory]
@@ -26,7 +27,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup show-config -B backup-dir --instance=instance_name
 
   pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
-                 [-C] [-l] [--stream [-S slot-name]] [--backup-pg-log]
+                 [-C] [--stream [-S slot-name]] [--backup-pg-log]
                  [-j num-threads] [--archive-timeout=archive-timeout]
                  [--compress-algorithm=compress-algorithm]
                  [--compress-level=compress-level]
@@ -37,12 +38,12 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--replica-timeout=timeout]
 
   pg_probackup restore -B backup-dir --instance=instance_name
-                 [-D pgdata-dir] [-l] [-i backup-id] [--progress]
+                 [-D pgdata-dir] [-i backup-id] [--progress]
                  [--time=time|--xid=xid [--inclusive=boolean]]
                  [--timeline=timeline] [-T OLDDIR=NEWDIR]
 
   pg_probackup validate -B backup-dir [--instance=instance_name]
-                 [-i backup-id] [-l] [--progress]
+                 [-i backup-id] [--progress]
                  [--time=time|--xid=xid [--inclusive=boolean]]
                  [--timeline=timeline]
 
@@ -50,7 +51,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--instance=instance_name [-i backup-id]]
 
   pg_probackup delete -B backup-dir --instance=instance_name
-                 [--wal] [-i backup-id | --expired] [-l]
+                 [--wal] [-i backup-id | --expired]
 
   pg_probackup add-instance -B backup-dir -D pgdata-dir
                  --instance=instance_name

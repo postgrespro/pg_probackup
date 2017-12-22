@@ -26,9 +26,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split(".")[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         with open(os.path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
-            self.assertEqual(
-                self.run_pb(["--version"]),
-                version_out.read().decode("utf-8")
+            self.assertIn(
+                version_out.read().decode("utf-8"),
+                self.run_pb(["--version"])
             )
 
     # @unittest.skip("skip")
@@ -76,8 +76,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because '-b' parameter is not specified.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)\n',
+            self.assertIn('ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # backup command failure with invalid backup mode option

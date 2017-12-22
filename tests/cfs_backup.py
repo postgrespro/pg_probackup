@@ -12,10 +12,10 @@ tblspace_name = 'cfs_tblspace'
 
 class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
     # --- Begin --- #
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def setUp(self):
         self.fname = self.id().split('.')[3]
         self.backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
-
         self.node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, self.fname),
             set_replication=True,
@@ -54,10 +54,9 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
     # --- Section: Full --- #
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_empty_tablespace(self):
-        """
-        Case: Check fullbackup empty compressed tablespace
-        """
+        """Case: Check fullbackup empty compressed tablespace"""
 
         backup_id = None
         try:
@@ -82,10 +81,9 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_empty_tablespace_stream(self):
-        """
-        Case: Check fullbackup empty compressed tablespace with options stream
-        """
+        """Case: Check fullbackup empty compressed tablespace with options stream"""
 
         backup_id = None
         try:
@@ -111,11 +109,12 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     # PGPRO-1018 invalid file size
     def test_fullbackup_after_create_table(self):
-        """
-        Case: Make full backup after created table in the tablespace
-        """
+        """Case: Make full backup after created table in the tablespace"""
+        if not self.enterprise:
+            return
 
         self.node.safe_psql(
             "postgres",
@@ -153,6 +152,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     # PGPRO-1018 invalid file size
     def test_fullbackup_after_create_table_stream(self):
         """
@@ -195,6 +195,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
     # --- Section: Incremental from empty tablespace --- #
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_empty_tablespace_ptrack_after_create_table(self):
         """
         Case: Make full backup before created table in the tablespace.
@@ -246,6 +247,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_empty_tablespace_ptrack_after_create_table_stream(self):
         """
         Case: Make full backup before created table in the tablespace.
@@ -301,6 +303,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_empty_tablespace_page_after_create_table(self):
         """
         Case: Make full backup before created table in the tablespace.
@@ -352,6 +355,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_empty_tablespace_page_after_create_table_stream(self):
         """
         Case: Make full backup before created table in the tablespace.
@@ -408,6 +412,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
     # --- Section: Incremental from fill tablespace --- #
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_ptrack_after_create_table(self):
         """
         Case:   Make full backup before created table in the tablespace.
@@ -466,6 +471,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_ptrack_after_create_table_stream(self):
         """
         Case:   Make full backup before created table in the tablespace(--stream).
@@ -524,6 +530,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_page_after_create_table(self):
         """
         Case:   Make full backup before created table in the tablespace.
@@ -582,6 +589,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_multiple_segments(self):
         """
         Case:   Make full backup before created table in the tablespace.
@@ -659,6 +667,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_multiple_segments_in_multiple_tablespaces(self):
         """
         Case:   Make full backup before created table in the tablespace.
@@ -765,6 +774,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_page_after_create_table_stream(self):
         """
         Case:   Make full backup before created table in the tablespace(--stream).
@@ -824,6 +834,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
     # --- Make backup with not valid data(broken .cfm) --- #
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_delete_random_cfm_file_from_tablespace_dir(self):
         self.node.safe_psql(
             "postgres",
@@ -848,6 +859,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_delete_file_pg_compression_from_tablespace_dir(self):
         os.remove(find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression'])[0])
 
@@ -858,6 +870,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_delete_random_data_file_from_tablespace_dir(self):
         self.node.safe_psql(
             "postgres",
@@ -882,6 +895,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_broken_random_cfm_file_into_tablespace_dir(self):
         self.node.safe_psql(
             "postgres",
@@ -906,6 +920,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_broken_random_data_file_into_tablespace_dir(self):
         self.node.safe_psql(
             "postgres",
@@ -930,6 +945,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_broken_file_pg_compression_into_tablespace_dir(self):
 
         corrupted_file = find_by_name([self.get_tblspace_path(self.node, tblspace_name)], ['pg_compression'])[0]
@@ -945,6 +961,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
     # --- End ---#
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def tearDown(self):
         self.node.cleanup()
         self.del_test_dir(module_name, self.fname)

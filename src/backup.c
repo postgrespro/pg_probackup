@@ -109,7 +109,6 @@ static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
 static bool pg_ptrack_enable(void);
 static bool pg_is_in_recovery(void);
-static bool pg_archive_enabled(void);
 static bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
@@ -794,13 +793,6 @@ do_backup(time_t start_time)
 		}
 	}
 
-	/* archiving check */
-	if (!current.stream && !pg_archive_enabled())
-		elog(ERROR, "Archiving must be enabled for archive backup");
-
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE && !pg_archive_enabled())
-		elog(ERROR, "Archiving must be enabled for PAGE backup");
-
 	if (from_replica)
 	{
 		/* Check master connection options */
@@ -1119,34 +1111,6 @@ pg_is_in_recovery(void)
 	return false;
 }
 
-/*
- * Check if archiving is enabled
- */
-static bool
-pg_archive_enabled(void)
-{
-	PGresult   *res_db;
-
-	res_db = pgut_execute(backup_conn, "show archive_mode", 0, NULL, true);
-
-	if (strcmp(PQgetvalue(res_db, 0, 0), "off") == 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-	PQclear(res_db);
-
-	res_db = pgut_execute(backup_conn, "show archive_command", 0, NULL, true);
-	if (strlen(PQgetvalue(res_db, 0, 0)) == 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-	PQclear(res_db);
-
-	return true;
-}
-
 /* Clear ptrack files in all databases of the instance we connected to */
 static void
 pg_ptrack_clear(void)
@@ -1350,10 +1314,15 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 	TimeLineID	tli;
 	XLogSegNo	targetSegNo;
 	char		wal_dir[MAXPGPATH],
-				wal_segment_full_path[MAXPGPATH];
+				wal_segment_path[MAXPGPATH];
 	char		wal_segment[MAXFNAMELEN];
+	bool		file_exists = false;
 	uint32		try_count = 0,
 				timeout;
+
+#ifdef HAVE_LIBZ
+	char		gz_wal_segment_path[MAXPGPATH];
+#endif
 
 	tli = get_current_timeline(false);
 
@@ -1367,14 +1336,14 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 	{
 		pgBackupGetPath2(&current, wal_dir, lengthof(wal_dir),
 						 DATABASE_DIR, PG_XLOG_DIR);
-		join_path_components(wal_segment_full_path, wal_dir, wal_segment);
+		join_path_components(wal_segment_path, wal_dir, wal_segment);
 
 		timeout = (uint32) checkpoint_timeout();
 		timeout = timeout + timeout * 0.1;
 	}
 	else
 	{
-		join_path_components(wal_segment_full_path, arclog_path, wal_segment);
+		join_path_components(wal_segment_path, arclog_path, wal_segment);
 		timeout = archive_timeout;
 	}
 
@@ -1383,14 +1352,33 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 	else
 		elog(LOG, "Looking for LSN: %X/%X in segment: %s", (uint32) (lsn >> 32), (uint32) lsn, wal_segment);
 
+#ifdef HAVE_LIBZ
+	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
+			 wal_segment_path);
+#endif
+
 	/* Wait until target LSN is archived or streamed */
 	while (true)
 	{
-		bool		file_exists = fileExists(wal_segment_full_path);
+		if (!file_exists)
+		{
+			file_exists = fileExists(wal_segment_path);
+
+			/* Try to find compressed WAL file */
+			if (!file_exists)
+			{
+#ifdef HAVE_LIBZ
+				file_exists = fileExists(gz_wal_segment_path);
+				if (file_exists)
+					elog(LOG, "Found compressed WAL segment: %s", wal_segment_path);
+#endif
+			}
+			else
+				elog(LOG, "Found WAL segment: %s", wal_segment_path);
+		}
 
 		if (file_exists)
 		{
-			elog(LOG, "Found segment: %s", wal_segment);
 			/* Do not check LSN for previous WAL segment */
 			if (wait_prev_segment)
 				return;
@@ -1409,18 +1397,18 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 
 		sleep(1);
 		if (interrupted)
-			elog(ERROR, "interrupted during waiting for WAL archiving");
+			elog(ERROR, "Interrupted during waiting for WAL archiving");
 		try_count++;
 
 		/* Inform user if WAL segment is absent in first attempt */
 		if (try_count == 1)
 		{
 			if (wait_prev_segment)
-				elog(INFO, "wait for WAL segment %s to be archived",
-					 wal_segment_full_path);
+				elog(INFO, "Wait for WAL segment %s to be archived",
+					 wal_segment_path);
 			else
-				elog(INFO, "wait for LSN %X/%X in archived WAL segment %s",
-					 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_full_path);
+				elog(INFO, "Wait for LSN %X/%X in archived WAL segment %s",
+					 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_path);
 		}
 
 		if (timeout > 0 && try_count > timeout)
@@ -1432,7 +1420,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 			/* If WAL segment doesn't exist or we wait for previous segment */
 			else
 				elog(ERROR,
-					 "switched WAL segment %s could not be archived in %d seconds",
+					 "Switched WAL segment %s could not be archived in %d seconds",
 					 wal_segment, timeout);
 		}
 	}
@@ -1841,22 +1829,6 @@ checkpoint_timeout(void)
 	PQclear(res);
 
 	return val_int;
-}
-
-/*
- * Return true if the path is a existing regular file.
- */
-bool
-fileExists(const char *path)
-{
-	struct stat buf;
-
-	if (stat(path, &buf) == -1 && errno == ENOENT)
-		return false;
-	else if (!S_ISREG(buf.st_mode))
-		return false;
-	else
-		return true;
 }
 
 /*

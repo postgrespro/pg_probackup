@@ -113,9 +113,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because page backup should not be possible without valid full backup.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertIn(
+                "ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
 
         sleep(1)
 
@@ -125,9 +126,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because page backup should not be possible without valid full backup.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertIn(
+                "ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
 
         self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "ERROR")
 
@@ -170,8 +172,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because page backup should not be possible without valid full backup.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                "ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.\n",
+            self.assertIn(
+                "ERROR: Valid backup on current timeline is not found. Create new FULL backup before an incremental one.",
+                e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
 
         # sleep(1)

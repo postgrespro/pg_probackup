@@ -102,3 +102,51 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+#    @unittest.skip("123")
+    def test_retention_wal(self):
+        """purge backups using window-based retention policy"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,100500) i")
+
+        # Take FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,100500) i")
+
+        self.backup_node(backup_dir, 'node', node)
+
+        backups = os.path.join(backup_dir, 'backups', 'node')
+        days_delta = 5
+        for backup in os.listdir(backups):
+            if backup == 'pg_probackup.conf':
+                continue
+            with open(os.path.join(backups, backup, "backup.control"), "a") as conf:
+                conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                    datetime.now() - timedelta(days=days_delta)))
+                days_delta -= 1
+
+        # Make backup to be keeped
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+
+        # Purge backups
+        self.delete_expired(backup_dir, 'node')
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
