@@ -4,7 +4,9 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
 from testgres import ClusterException
-import shutil, sys, time
+import shutil
+import sys
+import time
 
 
 module_name = 'ptrack'
@@ -18,11 +20,15 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         """make ptrack without full backup, should result in error"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s'}
-            )
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s'
+            }
+        )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -30,13 +36,25 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         # PTRACK BACKUP
         try:
-            self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='ptrack', options=["--stream"]
+            )
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because ptrack disabled.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because ptrack disabled.\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd
+                )
+            )
         except ProbackupException as e:
-            self.assertIn('ERROR: Ptrack is disabled\n', e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertIn(
+                'ERROR: Ptrack is disabled\n',
+                e.message,
+                '\n Unexpected Error Message: {0}\n'
+                ' CMD: {1}'.format(repr(e.message), self.cmd)
+            )
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -44,14 +62,23 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_disable(self):
-        """Take full backup, disable ptrack restart postgresql, enable ptrack, restart postgresql, take ptrack backup which should fail"""
+        """
+        Take full backup, disable ptrack restart postgresql,
+        enable ptrack, restart postgresql, take ptrack backup
+        which should fail
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
-            )
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'ptrack_enable': 'on'
+            }
+        )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -76,27 +103,48 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         # PTRACK BACKUP
         try:
-            self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream"])
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='ptrack', options=["--stream"]
+            )
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because ptrack_enable was set to OFF at some point after previous backup.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because ptrack_enable was set to OFF at some"
+                " point after previous backup.\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd
+                )
+            )
         except ProbackupException as e:
-            self.assertIn('ERROR: LSN from ptrack_control', e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertIn(
+                'ERROR: LSN from ptrack_control',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd
+                )
+            )
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_get_block(self):
-        """make node, make full and ptrack stream backups, restore them and check data correctness"""
+        """make node, make full and ptrack stream backups,"
+        " restore them and check data correctness"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '300s', 'ptrack_enable': 'on'}
-            )
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'ptrack_enable': 'on'
+            }
+        )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -104,15 +152,21 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id from generate_series(0,1) i")
+            "create table t_heap as select i"
+            " as id from generate_series(0,1) i"
+        )
 
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
-        gdb = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream', '--log-level-file=verbose'], gdb=True)
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose'],
+            gdb=True
+        )
 
         if gdb.set_breakpoint('make_pagemap_from_ptrack'):
             result = gdb.run()
         else:
-            self.assertTrue(False, 'Cannot set breakpoint')
+            self.assertTrue(False, 'Failed to set gdb breakpoint')
 
         if result != 'breakpoint-hit':
             print('Error in hitting breaking point')
@@ -121,36 +175,53 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "update t_heap set id = 100500")
-        print(node.safe_psql(
-            "postgres",
-            "select * from t_heap"))
+#        print(node.safe_psql(
+#            "postgres",
+#            "select * from t_heap"))
 
         if not gdb.continue_execution():
-            print('Error in continue_execution')
+            self.assertTrue(
+                False,
+                'Failed to continue execution after breakpoint'
+            )
 
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['--stream']
+        )
 
         result = node.safe_psql("postgres", "SELECT * FROM t_heap")
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
 
         node.start()
-        self.assertEqual(result, node.safe_psql("postgres", "SELECT * FROM t_heap"))
+        self.assertEqual(
+            result,
+            node.safe_psql("postgres", "SELECT * FROM t_heap")
+        )
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_stream(self):
-        """make node, make full and ptrack stream backups, restore them and check data correctness"""
+        """make node, make full and ptrack stream backups,
+         restore them and check data correctness"""
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on', 'autovacuum': 'off'}
-            )
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'ptrack_enable': 'on',
+                'autovacuum': 'off'
+            }
+        )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -160,39 +231,66 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("postgres", "create sequence t_seq")
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+            "create table t_heap as select i as id, nextval('t_seq')"
+            " as t_seq, md5(i::text) as text, md5(i::text)::tsvector"
+            " as tsvector from generate_series(0,100) i"
+        )
         full_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        full_backup_id = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        full_backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
 
         # PTRACK BACKUP
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(100,200) i")
+            "insert into t_heap select i as id, nextval('t_seq') as t_seq,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(100,200) i"
+        )
         ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream', '--log-level-file=verbose'])
+        ptrack_backup_id = self.backup_node(
+            backup_dir, 'node',
+            node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
+            )
         pgdata = self.pgdata_content(node.data_dir)
 
         # Drop Node
         node.cleanup()
 
         # Restore and check full backup
-        self.assertIn("INFO: Restore of backup {0} completed.".format(full_backup_id),
-            self.restore_node(backup_dir, 'node', node, backup_id=full_backup_id, options=["-j", "4"]),
-            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(full_backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                backup_id=full_backup_id,
+                options=["-j", "4"]
+            ),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd)
+            )
         node.start()
-        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+        while node.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
         full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
         # Restore and check ptrack backup
-        self.assertIn("INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
-            self.restore_node(backup_dir, 'node', node, backup_id=ptrack_backup_id, options=["-j", "4"]),
-            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                backup_id=ptrack_backup_id,
+                options=["-j", "4"]
+            ),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd)
+        )
         pgdata_restored = self.pgdata_content(node.data_dir)
         node.start()
-        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+        while node.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
@@ -205,15 +303,22 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_ptrack_archive(self):
-        """make archive node, make full and ptrack backups, check data correctness in restored instance"""
+        """make archive node, make full and ptrack backups,
+            check data correctness in restored instance"""
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on', 'autovacuum': 'off'}
-            )
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'ptrack_enable': 'on',
+                'autovacuum': 'off'
+            }
+        )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -223,41 +328,69 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # FULL BACKUP
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+            "create table t_heap as"
+            " select i as id,"
+            " md5(i::text) as text,"
+            " md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
         full_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
         full_backup_id = self.backup_node(backup_dir, 'node', node)
-        full_target_time = self.show_pb(backup_dir, 'node', full_backup_id)['recovery-time']
+        full_target_time = self.show_pb(
+            backup_dir, 'node', full_backup_id)['recovery-time']
 
         # PTRACK BACKUP
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(100,200) i")
+            "insert into t_heap select i as id,"
+            " md5(i::text) as text,"
+            " md5(i::text)::tsvector as tsvector"
+            " from generate_series(100,200) i"
+        )
         ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
-        ptrack_target_time = self.show_pb(backup_dir, 'node', ptrack_backup_id)['recovery-time']
+        ptrack_backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack')
+        ptrack_target_time = self.show_pb(
+            backup_dir, 'node', ptrack_backup_id)['recovery-time']
         pgdata = self.pgdata_content(node.data_dir)
 
         # Drop Node
         node.cleanup()
 
         # Check full backup
-        self.assertIn("INFO: Restore of backup {0} completed.".format(full_backup_id),
-            self.restore_node(backup_dir, 'node', node, backup_id=full_backup_id, options=["-j", "4", "--time={0}".format(full_target_time)]),
-            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(full_backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                backup_id=full_backup_id,
+                options=["-j", "4", "--time={0}".format(full_target_time)]
+            ),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd)
+        )
         node.start()
-        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+        while node.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
         full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
         # Check ptrack backup
-        self.assertIn("INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
-            self.restore_node(backup_dir, 'node', node, backup_id=ptrack_backup_id, options=["-j", "4", "--time={0}".format(ptrack_target_time)]),
-            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                backup_id=ptrack_backup_id,
+                options=["-j", "4", "--time={0}".format(ptrack_target_time)]
+            ),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd)
+        )
         pgdata_restored = self.pgdata_content(node.data_dir)
         node.start()
-        while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+        while node.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
@@ -272,7 +405,9 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_ptrack_pgpro417(self):
-        """Make  node, take full backup, take ptrack backup, delete ptrack backup. Try to take ptrack backup, which should fail"""
+        """Make  node, take full backup, take ptrack backup,
+            delete ptrack backup. Try to take ptrack backup,
+            which should fail"""
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -391,16 +526,23 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         # FULL BACKUP
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+            "create table t_heap as select i as id, md5(i::text) as text,"
+            " md5(i::text)::tsvector as tsvector "
+            " from generate_series(0,100) i"
+        )
         node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
         # SECOND FULL BACKUP
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(100,200) i")
+            "insert into t_heap select i as id, md5(i::text) as text,"
+            " md5(i::text)::tsvector as tsvector"
+            " from generate_series(100,200) i"
+        )
         node.safe_psql("postgres", "SELECT * FROM t_heap")
-        backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=["--stream"])
 
         self.delete_pb(backup_dir, 'node', backup_id)
 
@@ -500,14 +642,21 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_alter_table_set_tablespace_ptrack(self):
-        """Make node, create tablespace with table, take full backup, alter tablespace location, take ptrack backup, restore database."""
+        """Make node, create tablespace with table, take full backup,
+         alter tablespace location, take ptrack backup, restore database."""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on', 'autovacuum': 'off'}
-            )
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'ptrack_enable': 'on',
+                'autovacuum': 'off'
+            }
+        )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -517,48 +666,73 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.create_tblspace_in_node(node, 'somedata')
         node.safe_psql(
             "postgres",
-            "create table t_heap tablespace somedata as select i as id, md5(i::text) as text, md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+            "create table t_heap tablespace somedata as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+        # FULL backup
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
         # ALTER TABLESPACE
         self.create_tblspace_in_node(node, 'somedata_new')
         node.safe_psql(
-            "postgres", "alter table t_heap set tablespace somedata_new")
+            "postgres",
+            "alter table t_heap set tablespace somedata_new"
+        )
 
         # sys.exit(1)
         # PTRACK BACKUP
-        result =  node.safe_psql("postgres", "select * from t_heap")
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=["--stream", "--log-level-file=verbose"])
+        result = node.safe_psql(
+            "postgres", "select * from t_heap")
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack',
+            options=["--stream", "--log-level-file=verbose"]
+        )
         pgdata = self.pgdata_content(node.data_dir)
-        #node.stop()
-        #node.cleanup()
+        # node.stop()
+        # node.cleanup()
 
         # RESTORE
-        node_restored = self.make_simple_node(base_dir="{0}/{1}/node_restored".format(module_name, fname))
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
         node_restored.cleanup()
 
-        self.restore_node(backup_dir, 'node', node_restored, options=["-j", "4",
-            "-T", "{0}={1}".format(self.get_tblspace_path(node,'somedata'), self.get_tblspace_path(node_restored,'somedata')),
-            "-T", "{0}={1}".format(self.get_tblspace_path(node,'somedata_new'), self.get_tblspace_path(node_restored,'somedata_new'))
-            ])
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4",
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata'),
+                    self.get_tblspace_path(node_restored, 'somedata')
+                ),
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata_new'),
+                    self.get_tblspace_path(node_restored, 'somedata_new')
+                )
+            ]
+        )
 
         # GET RESTORED PGDATA AND COMPARE
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         # START RESTORED NODE
-        node_restored.append_conf('postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        node_restored.append_conf(
+            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
         node_restored.start()
         time.sleep(5)
-        while node_restored.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+        while node_restored.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
-        result_new =  node_restored.safe_psql("postgres", "select * from t_heap")
+        result_new = node_restored.safe_psql(
+            "postgres", "select * from t_heap")
 
         self.assertEqual(result, result_new, 'lost some data after restore')
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_alter_database_set_tablespace_ptrack(self):
