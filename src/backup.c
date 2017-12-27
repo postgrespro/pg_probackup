@@ -2668,25 +2668,30 @@ get_last_ptrack_lsn(void)
 }
 
 char *
-pg_ptrack_get_block(Oid relOid,
+pg_ptrack_get_block(Oid tblsOid,
+					Oid relOid,
 					BlockNumber blknum,
 					size_t *result_size)
 {
 	PGresult   *res;
-	char	   *params[2];
+	char	   *params[3];
 	char	   *result;
 	char	   *val;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
+	params[2] = palloc(64);
 
 	/*
 	 * Use backup_conn, cause we can do it from any database.
 	 */
-	sprintf(params[0], "%i", relOid);
-	sprintf(params[1], "%u", blknum);
-	res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_block($1, $2)",
-					2, (const char **)params, true);
+	sprintf(params[0], "%i", tblsOid);
+	sprintf(params[1], "%i", relOid);
+	sprintf(params[2], "%u", blknum);
+
+// 	elog(WARNING, "pg_ptrack_get_block(%i, %i, %u)", tblsOid, relOid, blknum);
+	res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_block($1, $2, $3)",
+					3, (const char **)params, true);
 
 	if (PQnfields(res) != 1)
 		elog(WARNING, "cannot get file block for relation oid %u",
@@ -2695,16 +2700,14 @@ pg_ptrack_get_block(Oid relOid,
 	val = PQgetvalue(res, 0, 0);
 
 	if (strcmp("x", val+1) == 0)
-	{
-		/* Ptrack file is missing */
 		return NULL;
-	}
 
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
 									  result_size);
 	PQclear(res);
 	pfree(params[0]);
 	pfree(params[1]);
+	pfree(params[2]);
 
 	return result;
 }

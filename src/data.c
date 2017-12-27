@@ -227,7 +227,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 {
 	BackupPageHeader	header;
 	Page 				page = malloc(BLCKSZ);
-	Page 				compressed_page = malloc(BLCKSZ);
+	Page 				compressed_page;
 	size_t				write_buffer_size;
 	char				write_buffer[BLCKSZ+sizeof(header)];
 
@@ -243,9 +243,19 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	{
 		while(!page_is_valid && try_again)
 		{
+			int result = read_page_from_file(file, blknum,
+											 in, out, page);
+
 			try_again--;
-			page_is_valid = read_page_from_file(file, blknum,
-												in, out, page);
+			/* This block was truncated. Do nothing */
+			if (result == 0)
+			{
+				free(page);
+				return;
+			}
+
+			if (result == 1)
+				page_is_valid = true;
 		}
 	}
 
@@ -254,13 +264,27 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	{
 		size_t page_size = 0;
 		free(page);
-		page = (Page) pg_ptrack_get_block(file->relOid, blknum, &page_size);
-	}
+		page = NULL;
 
+		page = (Page) pg_ptrack_get_block(file->tblspcOid, file->relOid, blknum, &page_size);
+
+		if (page == NULL)
+		{
+			elog(WARNING, "File %s, block %u, file was truncated",
+					file->path, blknum);
+			return;
+		}
+
+		if (page_size != BLCKSZ)
+			elog(ERROR, "File: %s, block %u, expected block size %lu,"
+					  "but read %d, try again",
+					   file->path, blknum, page_size, BLCKSZ);
+	}
 
 
 	file->read_size += BLCKSZ;
 
+	compressed_page = malloc(BLCKSZ);
 	header.block = blknum;
 	header.compressed_size = do_compress(compressed_page, BLCKSZ,
 										 page, BLCKSZ, compress_alg);
