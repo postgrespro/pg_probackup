@@ -233,7 +233,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 	int					try_again = 100;
 	bool				page_is_valid = false;
-	
+	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
+
 	/*
 	 * Read the page and verify its header and checksum.
 	 * Under high write load it's possible that we've read partly
@@ -263,22 +264,26 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		(backup_mode == BACKUP_MODE_DIFF_PTRACK))
 	{
 		size_t page_size = 0;
+		PageHeader phdr = (PageHeader) page;
+
 		free(page);
 		page = NULL;
 
-		page = (Page) pg_ptrack_get_block(file->tblspcOid, file->relOid, blknum, &page_size);
+		page = (Page) pg_ptrack_get_block(file->tblspcOid, file->relOid, absolute_blknum, &page_size);
 
 		if (page == NULL)
 		{
 			elog(WARNING, "File %s, block %u, file was truncated",
-					file->path, blknum);
+					file->path, absolute_blknum);
 			return;
 		}
 
 		if (page_size != BLCKSZ)
 			elog(ERROR, "File: %s, block %u, expected block size %lu,"
 					  "but read %d, try again",
-					   file->path, blknum, page_size, BLCKSZ);
+					   file->path, absolute_blknum, page_size, BLCKSZ);
+
+		((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 	}
 
 
