@@ -451,7 +451,7 @@ class ProbackupTest(object):
             if self.verbose:
                 print(self.cmd)
             if gdb:
-                return GDBobj([self.probackup_path] + command, verbose=True)
+                return GDBobj([self.probackup_path] + command, self.verbose)
             if async:
                 return subprocess.Popen(
                     self.cmd,
@@ -913,13 +913,30 @@ class GdbException(Exception):
 
 class GDBobj(ProbackupTest):
     def __init__(self, cmd, verbose):
+        self.verbose = verbose
+
+        # Check gdb presense
+        try:
+            gdb_version, _ = subprocess.Popen(
+                ["gdb", "--version"],
+                stdout=subprocess.PIPE
+            ).communicate()
+        except OSError:
+            raise GdbException("Couldn't find gdb on the path")
+
         self.base_cmd = [
-            '/usr/bin/gdb',
+            'gdb',
             '--interpreter',
             'mi2',
             '--args'
             ] + cmd
-        self.verbose = verbose
+
+        # Get version
+        gdb_version_number = re.search(
+            b"^GNU gdb [^\d]*(\d+)\.(\d)",
+            gdb_version)
+        self.major_version = int(gdb_version_number.group(1))
+        self.minor_version = int(gdb_version_number.group(2))
         if self.verbose:
             print([' '.join(map(str, self.base_cmd))])
 
@@ -929,10 +946,11 @@ class GDBobj(ProbackupTest):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             bufsize=0, universal_newlines=True
-            )
+        )
         self.gdb_pid = self.proc.pid
 
-        # discard stuff
+        # discard data from pipe,
+        # is there a way to do it a less derpy way?
         while True:
             line = self.proc.stdout.readline()
             if not line.startswith('(gdb)'):
@@ -943,29 +961,26 @@ class GDBobj(ProbackupTest):
     def set_breakpoint(self, location):
         result = self._execute('break ' + location)
         success = False
-        for line in result.splitlines():
-            # Success
+        for line in result:
             if line.startswith('~"Breakpoint'):
                 success = True
                 break
             if line.startswith('^error') or line.startswith('(gdb)'):
                 break
-            # discard initial data from pipe,
-            # is there a way to do it a less derpy way?
-            if line.startswith('&'):
-                if line.startswith('&"break'):
-                    pass
-                if line.startswith('&"Function'):
-                    GdbBreakpointException = GdbException()
-                    raise GdbBreakpointException(line)
-                if line.startswith('&"No line'):
-                    GdbBreakpointException = GdbException()
-                    raise GdbBreakpointException(line)
+
+            if line.startswith('&"break'):
+                pass
+
+            if line.startswith('&"Function'):
+                raise GdbException(line)
+
+            if line.startswith('&"No line'):
+                raise GdbException(line)
         return success
 
     def run(self):
         result = self._execute('run')
-        for line in result.splitlines():
+        for line in result:
             if line.startswith('*stopped,reason="breakpoint-hit"'):
                 return 'breakpoint-hit'
             if line.startswith('*stopped,reason="exited-normally"'):
@@ -973,7 +988,7 @@ class GDBobj(ProbackupTest):
 
     def continue_execution(self, sync=True):
         result = self._execute('continue')
-        for line in result.splitlines():
+        for line in result:
             if line.startswith('*stopped,reason="breakpoint-hit"'):
                 return 'breakpoint-hit'
             if line.startswith('*stopped,reason="exited-normally"'):
@@ -981,14 +996,14 @@ class GDBobj(ProbackupTest):
 
     # use for breakpoint, run, continue
     def _execute(self, cmd):
-        output = ''
+        output = []
         self.proc.stdin.flush()
         self.proc.stdin.write(cmd + '\n')
         self.proc.stdin.flush()
 
         while True:
             line = self.proc.stdout.readline()
-            output = output + line
+            output += [line]
             if self.verbose:
                 print(line)
             if line == '^done\n' or line.startswith('*stopped'):

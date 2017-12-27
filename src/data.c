@@ -800,7 +800,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		if (!overwrite && fileExists(gz_to_path))
 			elog(ERROR, "WAL segment \"%s\" already exists.", gz_to_path);
 
-		snprintf(to_path_temp, sizeof(to_path_temp), "%s.temp", gz_to_path);
+		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
 		gz_out = gzopen(to_path_temp, "wb");
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
@@ -815,7 +815,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		if (!overwrite && fileExists(to_path))
 			elog(ERROR, "WAL segment \"%s\" already exists.", to_path);
 
-		snprintf(to_path_temp, sizeof(to_path_temp), "%s.temp", to_path);
+		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
 		out = fopen(to_path_temp, "w");
 		if (out == NULL)
@@ -974,7 +974,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	}
 
 	/* open backup file for write  */
-	snprintf(to_path_temp, sizeof(to_path_temp), "%s.temp", to_path);
+	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
 	out = fopen(to_path_temp, "w");
 	if (out == NULL)
