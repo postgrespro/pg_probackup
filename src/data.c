@@ -101,24 +101,116 @@ typedef struct BackupPageHeader
 
 /* Verify page's header */
 static bool
-parse_page(const DataPage *page, XLogRecPtr *lsn)
+parse_page(Page page, XLogRecPtr *lsn)
 {
-	const PageHeaderData *page_data = &page->page_data;
+	PageHeader	phdr = (PageHeader) page;
 
 	/* Get lsn from page header */
-	*lsn = PageXLogRecPtrGet(page_data->pd_lsn);
+	*lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
-	if (PageGetPageSize(page_data) == BLCKSZ &&
-		PageGetPageLayoutVersion(page_data) == PG_PAGE_LAYOUT_VERSION &&
-		(page_data->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
-		page_data->pd_lower >= SizeOfPageHeaderData &&
-		page_data->pd_lower <= page_data->pd_upper &&
-		page_data->pd_upper <= page_data->pd_special &&
-		page_data->pd_special <= BLCKSZ &&
-		page_data->pd_special == MAXALIGN(page_data->pd_special))
+	if (PageGetPageSize(phdr) == BLCKSZ &&
+		PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
+		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
+		phdr->pd_lower >= SizeOfPageHeaderData &&
+		phdr->pd_lower <= phdr->pd_upper &&
+		phdr->pd_upper <= phdr->pd_special &&
+		phdr->pd_special <= BLCKSZ &&
+		phdr->pd_special == MAXALIGN(phdr->pd_special))
 		return true;
 
 	return false;
+}
+
+/* Read one page from file directly accessing disk
+ * return value:
+ * 0  - if the page is not found
+ * 1  - if the page is found and valid
+ * -1 - if the page is found but invalid
+ */
+static int
+read_page_from_file(pgFile *file, BlockNumber blknum,
+					FILE *in, FILE *out, Page page)
+{
+	off_t				offset = blknum*BLCKSZ;
+	size_t				read_len = 0;
+	XLogRecPtr			page_lsn;
+
+	/* read the block */
+	if (fseek(in, offset, SEEK_SET) != 0)
+		elog(ERROR, "File: %s, could not seek to block %u: %s",
+				file->path, blknum, strerror(errno));
+
+	read_len = fread(page, 1, BLCKSZ, in);
+
+	if (read_len != BLCKSZ)
+	{
+		/* The block could have been truncated. It is fine. */
+		if (read_len == 0)
+		{
+			elog(LOG, "File %s, block %u, file was truncated",
+					file->path, blknum);
+			return 0;
+		}
+		else
+			elog(WARNING, "File: %s, block %u, expected block size %lu,"
+					  "but read %d, try again",
+					   file->path, blknum, read_len, BLCKSZ);
+	}
+
+	/*
+	 * If we found page with invalid header, at first check if it is zeroed,
+	 * which is a valid state for page. If it is not, read it and check header
+	 * again, because it's possible that we've read a partly flushed page.
+	 * If after several attempts page header is still invalid, throw an error.
+	 * The same idea is applied to checksum verification.
+	 */
+	if (!parse_page(page, &page_lsn))
+	{
+		int i;
+		/* Check if the page is zeroed. */
+		for(i = 0; i < BLCKSZ && page[i] == 0; i++);
+
+		/* Page is zeroed. No need to check header and checksum. */
+		if (i == BLCKSZ)
+		{
+			elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
+			return 1;
+		}
+
+		/*
+		 * If page is not completely empty and we couldn't parse it,
+		 * try again several times. If it didn't help, throw error
+		 */
+		elog(LOG, "File: %s blknum %u have wrong page header, try again",
+					   file->path, blknum);
+		return -1;
+	}
+
+	/* Verify checksum */
+	if(current.checksum_version)
+	{
+		/*
+		 * If checksum is wrong, sleep a bit and then try again
+		 * several times. If it didn't help, throw error
+		 */
+		if (pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
+			!= ((PageHeader) page)->pd_checksum)
+		{
+			elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
+						   file->path, blknum);
+			return -1;
+		}
+		else
+		{
+			/* page header and checksum are correct */
+			return 1;
+		}
+	}
+	else
+	{
+		/* page header is correct and checksum check is disabled */
+		return 1;
+	}
 }
 
 /*
@@ -134,147 +226,44 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BackupMode backup_mode)
 {
 	BackupPageHeader	header;
-	off_t				offset;
-	DataPage			page; /* used as read buffer */
-	DataPage			*page_ptr = &page; /* used as read buffer */
-	DataPage			compressed_page; /* used as read buffer */
+	Page 				page = malloc(BLCKSZ);
+	Page 				compressed_page = malloc(BLCKSZ);
 	size_t				write_buffer_size;
-	/* maximum size of write buffer */
 	char				write_buffer[BLCKSZ+sizeof(header)];
-	size_t				read_len = 0;
-	XLogRecPtr			page_lsn;
-	int					try_checksum = 100;
-	bool				page_is_invalid = true;
-	header.block = blknum;
-	offset = blknum * BLCKSZ;
 
+	int					try_again = 100;
+	bool				page_is_valid = false;
+	
 	/*
 	 * Read the page and verify its header and checksum.
 	 * Under high write load it's possible that we've read partly
 	 * flushed page, so try several times before throwing an error.
 	 */
-	while(try_checksum--)
+	if (backup_mode != BACKUP_MODE_DIFF_PTRACK)
 	{
-		if (fseek(in, offset, SEEK_SET) != 0)
-			elog(ERROR, "File: %s, could not seek to block %u: %s",
-				 file->path, blknum, strerror(errno));
-
-		read_len = fread(&page, 1, BLCKSZ, in);
-
-		if (read_len != BLCKSZ)
+		while(!page_is_valid && try_again)
 		{
-			if (read_len == 0)
-			{
-				elog(LOG, "File %s, block %u, file was truncated",
-					 file->path, blknum);
-				page_is_invalid = false;
-				return;
-			}
-			else if (try_checksum)
-			{
-				elog(LOG, "File: %s, block %u, expected block size %lu, but read %d, try again",
-					 file->path, blknum, read_len, BLCKSZ);
-				usleep(100);
-				continue;
-			}
-
-			elog(ERROR, "File: %s, invalid block size of block %u : %lu",
-				 file->path, blknum, read_len);
-		}
-
-		/*
-		 * If we found page with invalid header, at first check if it is zeroed,
-		 * which is valid state for page. If it is not, read it and check header
-		 * again, because it's possible that we've read a partly flushed page.
-		 * If after several attempts page header is still invalid, throw an error.
-		 * The same idea is applied to checksum verification.
-		 */
-		if (!parse_page(&page, &page_lsn))
-		{
-			int i;
-			/* Check if the page is zeroed. */
-			for(i = 0; i < BLCKSZ && page.data[i] == 0; i++);
-
-			/* Page is zeroed. No need to check header and checksum. */
-			if (i == BLCKSZ)
-			{
-				elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
-				page_is_invalid = false;
-				break;
-			}
-
-			/*
-			 * If page is not completely empty and we couldn't parse it,
-			 * try again several times. If it didn't help, throw error
-			 */
-
-			/* Try to read and verify this page again several times. */
-			if (try_checksum)
-			{
-				elog(WARNING, "File: %s blknum %u have wrong page header, try again",
-						file->path, blknum);
-				usleep(100);
-				continue;
-			}
-			else
-				elog(ERROR, "File: %s blknum %u have wrong page header.", file->path, blknum);
-		}
-
-// 		/* If the page hasn't changed since previous backup, don't backup it. */
-// 		if (!XLogRecPtrIsInvalid(prev_backup_start_lsn)
-// 			&& !XLogRecPtrIsInvalid(page_lsn)
-// 			&& page_lsn < prev_backup_start_lsn)
-// 		{
-// 			*n_skipped += 1;
-// 			return;
-// 		}
-
-		/* Verify checksum */
-		if(current.checksum_version)
-		{
-			/*
-			 * If checksum is wrong, sleep a bit and then try again
-			 * several times. If it didn't help, throw error
-			 */
-			if (pg_checksum_page(page.data, file->segno * RELSEG_SIZE + blknum)
-				!= ((PageHeader) page.data)->pd_checksum)
-			{
-				if (try_checksum)
-				{
-					elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
-						 file->path, blknum);
-					usleep(100);
-					continue;
-				}
-				else
-					elog(ERROR, "File: %s blknum %u have wrong checksum.",
-									file->path, blknum);
-			}
-			else
-			{
-				page_is_invalid = false;
-				break; /* page header and checksum are correct */
-			}
-		}
-		else
-		{
-			page_is_invalid = false;
-			break; /* page header is correct and checksum check is disabled */
+			try_again--;
+			page_is_valid = read_page_from_file(file, blknum,
+												in, out, page);
 		}
 	}
 
-
-	if (page_is_invalid ||
+	if (!page_is_valid ||
 		(backup_mode == BACKUP_MODE_DIFF_PTRACK))
 	{
 		size_t page_size = 0;
-		page_ptr = pg_ptrack_get_block(file->relOid, blknum, &page_size);
+		free(page);
+		page = (Page) pg_ptrack_get_block(file->relOid, blknum, &page_size);
 	}
 
-	file->read_size += read_len;
 
-	header.compressed_size = do_compress(compressed_page.data, sizeof(compressed_page.data),
-										 page.data, sizeof(page.data), compress_alg);
+
+	file->read_size += BLCKSZ;
+
+	header.block = blknum;
+	header.compressed_size = do_compress(compressed_page, BLCKSZ,
+										 page, BLCKSZ, compress_alg);
 
 	file->compress_alg = compress_alg;
 
@@ -285,7 +274,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	if (header.compressed_size > 0)
 	{
 		memcpy(write_buffer, &header, sizeof(header));
-		memcpy(write_buffer + sizeof(header), compressed_page.data, header.compressed_size);
+		memcpy(write_buffer + sizeof(header), compressed_page, header.compressed_size);
 		write_buffer_size += MAXALIGN(header.compressed_size);
 	}
 	/* The page compression failed. Write it as is. */
@@ -293,7 +282,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	{
 		header.compressed_size = BLCKSZ;
 		memcpy(write_buffer, &header, sizeof(header));
-		memcpy(write_buffer + sizeof(header), page.data, BLCKSZ);
+		memcpy(write_buffer + sizeof(header), page, BLCKSZ);
 		write_buffer_size += header.compressed_size;
 	}
 
@@ -311,6 +300,9 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	}
 
 	file->write_size += write_buffer_size;
+
+	free(page);
+	free(compressed_page);
 }
 
 /*

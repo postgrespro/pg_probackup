@@ -237,9 +237,10 @@ typedef struct pgRecoveryTarget
 /* Union to ease operations on relation pages */
 typedef union DataPage
 {
-	PageHeaderData	page_data;
-	char			data[BLCKSZ];
+       PageHeaderData  page_data;
+       char                    data[BLCKSZ];
 } DataPage;
+
 
 /*
  * return pointer that exceeds the length of prefix from character string.
