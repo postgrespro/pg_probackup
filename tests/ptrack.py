@@ -129,7 +129,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_page_get_block(self):
+    def test_ptrack_simple(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
         fname = self.id().split('.')[3]
@@ -157,24 +157,24 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         )
 
         self.backup_node(backup_dir, 'node', node)
-        gdb = self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=['--stream', '--log-level-file=verbose'],
-            gdb=True
-        )
-
-        node.safe_psql(
-            "postgres",
-            "update t_heap set id = 100500")
-
         self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='page', options=['--stream']
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
         )
-        pgdata = self.pgdata_content(node.data_dir)
 
+#        node.safe_psql(
+#            "postgres",
+#            "update t_heap set id = 100500")
+#
+#        self.backup_node(
+#            backup_dir, 'node', node,
+#            backup_type='ptrack', options=['--stream']
+#        )
+
+        pgdata = self.pgdata_content(node.data_dir)
         result = node.safe_psql("postgres", "SELECT * FROM t_heap")
         node.cleanup()
+
         self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
         pgdata_restored = self.pgdata_content(node.data_dir)
 
