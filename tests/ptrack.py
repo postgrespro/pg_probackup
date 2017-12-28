@@ -129,6 +129,69 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_page_get_block(self):
+        """make node, make full and ptrack stream backups,"
+        " restore them and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'ptrack_enable': 'on'
+            }
+        )
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,1) i"
+        )
+
+        self.backup_node(backup_dir, 'node', node)
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--stream', '--log-level-file=verbose'],
+            gdb=True
+        )
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = 100500")
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--stream']
+        )
+        pgdata = self.pgdata_content(node.data_dir)
+
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+        pgdata_restored = self.pgdata_content(node.data_dir)
+
+        node.start()
+        # Logical comparison
+        self.assertEqual(
+            result,
+            node.safe_psql("postgres", "SELECT * FROM t_heap")
+        )
+
+        # Physical comparison
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_ptrack_get_block(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
