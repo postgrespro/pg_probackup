@@ -476,10 +476,10 @@ class ProbackupTest(object):
             raise ProbackupException(e.output.decode("utf-8"), self.cmd)
 
     def run_binary(self, command, async=False):
+        if self.verbose:
+                print([' '.join(map(str, command))])
         try:
             if async:
-                if self.verbose:
-                    print(command)
                 return subprocess.Popen(
                     command,
                     stdin=subprocess.PIPE,
@@ -488,8 +488,6 @@ class ProbackupTest(object):
                     env=self.test_env
                 )
             else:
-                if self.verbose:
-                    print(command)
                 self.output = subprocess.check_output(
                     command,
                     stderr=subprocess.STDOUT,
@@ -859,7 +857,7 @@ class ProbackupTest(object):
         ]
         suffixes_to_ignore = (
             '_ptrack', 'ptrack_control',
-            'pg_control', 'ptrack_init'
+            'pg_control', 'ptrack_init', 'backup_label'
         )
         directory_dict = {}
         directory_dict['pgdata'] = directory
@@ -867,38 +865,84 @@ class ProbackupTest(object):
         for root, dirs, files in os.walk(directory, followlinks=True):
             dirs[:] = [d for d in dirs if d not in dirs_to_ignore]
             for file in files:
-                if file in files_to_ignore or file.endswith(
-                        suffixes_to_ignore
-                        ):
-                    continue
-                file = os.path.join(root, file)
-                file_relpath = os.path.relpath(file, directory)
-                directory_dict['files'][file_relpath] = hashlib.md5(
-                    open(file, 'rb').read()).hexdigest()
+                if (
+                    file in files_to_ignore or
+                    file.endswith(suffixes_to_ignore)
+                ):
+                        continue
+
+                file_fullpath = os.path.join(root, file)
+                file_relpath = os.path.relpath(file_fullpath, directory)
+                directory_dict['files'][file_relpath] = {'is_datafile': False}
+                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
+                    open(file_fullpath, 'rb').read()).hexdigest()
+
+                if file.isdigit():
+                    directory_dict['files'][file_relpath]['is_datafile'] = True
+                    size_in_pages = os.path.getsize(file_fullpath)/8192
+                    directory_dict['files'][file_relpath][
+                        'md5_per_page'] = self.get_md5_per_page_for_fork(
+                            file_fullpath, size_in_pages
+                        )
+
         return directory_dict
 
     def compare_pgdata(self, original_pgdata, restored_pgdata):
         """ return dict with directory content. DO IT BEFORE RECOVERY"""
         fail = False
         error_message = ''
+        for file in restored_pgdata['files']:
+            # File is present in RESTORED PGDATA
+            # but not present in ORIGINAL
+            if (
+                file not in original_pgdata['files'] and
+                not file.endswith('backup_label')
+            ):
+                fail = True
+                error_message += 'File is not present'
+                error_message += ' in original PGDATA:\n {0}'.format(
+                    os.path.join(restored_pgdata['pgdata'], file)
+                )
         for file in original_pgdata['files']:
             if file in restored_pgdata['files']:
+
                 if (
-                    original_pgdata['files'][file] !=
-                    restored_pgdata['files'][file]
+                    original_pgdata['files'][file]['md5'] !=
+                    restored_pgdata['files'][file]['md5']
                 ):
-                    error_message += '\nChecksumm mismatch.\n'
-                    ' File_old: {0}\n Checksumm_old: {1}\n'
-                    ' File_new: {2}\n Checksumm_new: {3}\n'.format(
+                    error_message += (
+                        '\nChecksumm mismatch.\n'
+                        ' File_old: {0}\n Checksumm_old: {1}\n'
+                        ' File_new: {2}\n Checksumm_new: {3}\n').format(
                         os.path.join(original_pgdata['pgdata'], file),
-                        original_pgdata['files'][file],
+                        original_pgdata['files'][file]['md5'],
                         os.path.join(restored_pgdata['pgdata'], file),
-                        restored_pgdata['files'][file]
-                        )
+                        restored_pgdata['files'][file]['md5']
+                    )
                     fail = True
+                    if original_pgdata['files'][file]['is_datafile']:
+                        for page in original_pgdata['files'][
+                                file]['md5_per_page']:
+                            if original_pgdata['files'][file][
+                                'md5_per_page'][page] != restored_pgdata[
+                                    'files'][file]['md5_per_page'][page]:
+                                    error_message += (
+                                        'PAGE: {0}\n'
+                                        ' PAGE Checksumm_old: {1}\n'
+                                        ' PAGE Checksumm_new: {2}\n'
+                                    ).format(
+                                        page,
+                                        original_pgdata['files'][file][
+                                            'md5_per_page'][page],
+                                        restored_pgdata['files'][file][
+                                            'md5_per_page'][page])
+
             else:
-                error_message += '\nFile dissappearance.'
-                ' File: {0}/{1}'.format(restored_pgdata['pgdata'], file)
+                error_message += (
+                    '\nFile dissappearance.'
+                    ' File: {0}').format(
+                    os.path.join(restored_pgdata['pgdata'], file)
+                    )
                 fail = True
         self.assertFalse(fail, error_message)
 

@@ -175,9 +175,6 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "update t_heap set id = 100500")
-#        print(node.safe_psql(
-#            "postgres",
-#            "select * from t_heap"))
 
         if not gdb.continue_execution():
             self.assertTrue(
@@ -189,16 +186,21 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='ptrack', options=['--stream']
         )
+        pgdata = self.pgdata_content(node.data_dir)
 
         result = node.safe_psql("postgres", "SELECT * FROM t_heap")
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+        pgdata_restored = self.pgdata_content(node.data_dir)
 
         node.start()
+        # Logical comparison
         self.assertEqual(
             result,
             node.safe_psql("postgres", "SELECT * FROM t_heap")
         )
+        # Physical comparison
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         # self.del_test_dir(module_name, fname)
