@@ -145,9 +145,14 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
                 'ptrack_enable': 'on'
             }
         )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
+        node_restored.cleanup()
         node.start()
 
         node.safe_psql(
@@ -173,16 +178,16 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
         result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        node.cleanup()
 
-        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
-        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.restore_node(backup_dir, 'node', node_restored, options=["-j", "4"])
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        node_restored.append_conf("postgresql.auto.conf", "port = {0}".format(node_restored.port))
 
-        node.start()
+        node_restored.start()
         # Logical comparison
         self.assertEqual(
             result,
-            node.safe_psql("postgres", "SELECT * FROM t_heap")
+            node_restored.safe_psql("postgres", "SELECT * FROM t_heap")
         )
 
         # Physical comparison
