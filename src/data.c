@@ -268,13 +268,15 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 		free(page);
 		page = NULL;
-
-		page = (Page) pg_ptrack_get_block(file->tblspcOid, file->relOid, absolute_blknum, &page_size);
+		page = (Page) pg_ptrack_get_block(file->dbOid, file->tblspcOid,
+										  file->relOid, absolute_blknum, &page_size);
 
 		if (page == NULL)
 		{
-			elog(WARNING, "File %s, block %u, file was truncated",
-					file->path, absolute_blknum);
+			/*
+			 * We may skip block for various reasons. It's fine.
+			 * Otherwise pg_ptrack_get_block would have failed with ERROR.
+			 */
 			return;
 		}
 

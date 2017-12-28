@@ -320,7 +320,7 @@ extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
-extern char *pg_ptrack_get_block(Oid tblsOid, Oid relOid, BlockNumber blknum,
+extern char *pg_ptrack_get_block(Oid dbOid, Oid tblsOid, Oid relOid, BlockNumber blknum,
 								 size_t *result_size);
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,

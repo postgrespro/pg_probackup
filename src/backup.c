@@ -2668,19 +2668,48 @@ get_last_ptrack_lsn(void)
 }
 
 char *
-pg_ptrack_get_block(Oid tblsOid,
+pg_ptrack_get_block(Oid dbOid,
+					Oid tblsOid,
 					Oid relOid,
 					BlockNumber blknum,
 					size_t *result_size)
 {
+	PGresult   *res_db;
 	PGresult   *res;
+	const char *dbname;
 	char	   *params[3];
 	char	   *result;
 	char	   *val;
+	PGconn	   *tmp_conn;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
 	params[2] = palloc(64);
+
+	sprintf(params[0], "%i", dbOid);
+	res_db = pgut_execute(backup_conn,
+							"SELECT datname FROM pg_database WHERE oid=$1",
+							1, (const char **) params, true);
+	/*
+	 * If database is not found, it's not an error.
+	 * It could have been deleted.
+	 */
+	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
+	{
+		//elog(LOG, "Database with oid %d is not found", dbOid);
+		return NULL;
+	}
+
+	dbname = PQgetvalue(res_db, 0, 0);
+	if (strcmp(dbname, "template0") == 0)
+	{
+		/*
+		 * There is no way to connect to the template0 database.
+		 * But it's totally OK, since files there can never be changed.
+		 */
+		return NULL;
+	}
+	tmp_conn = pgut_connect(dbname);
 
 	/*
 	 * Use backup_conn, cause we can do it from any database.
@@ -2689,8 +2718,9 @@ pg_ptrack_get_block(Oid tblsOid,
 	sprintf(params[1], "%i", relOid);
 	sprintf(params[2], "%u", blknum);
 
-// 	elog(WARNING, "pg_ptrack_get_block(%i, %i, %u)", tblsOid, relOid, blknum);
-	res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_block($1, $2, $3)",
+	//elog(WARNING, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
+
+	res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_block($1, $2, $3)",
 					3, (const char **)params, true);
 
 	if (PQnfields(res) != 1)
@@ -2704,7 +2734,10 @@ pg_ptrack_get_block(Oid tblsOid,
 
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
 									  result_size);
+
+	pgut_disconnect(tmp_conn);
 	PQclear(res);
+	PQclear(res_db);
 	pfree(params[0]);
 	pfree(params[1]);
 	pfree(params[2]);
