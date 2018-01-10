@@ -1020,8 +1020,6 @@ class GDBobj(ProbackupTest):
         if self.verbose:
             print([' '.join(map(str, self.cmd))])
 
-        print(self.cmd)
-
         self.proc = subprocess.Popen(
             self.cmd,
             stdin=subprocess.PIPE,
@@ -1048,7 +1046,6 @@ class GDBobj(ProbackupTest):
     def set_breakpoint(self, location):
         result = self._execute('break ' + location)
         for line in result:
-            print(line)
             if line.startswith('~"Breakpoint'):
                 return
 
