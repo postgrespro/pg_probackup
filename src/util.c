@@ -230,9 +230,9 @@ status2str(BackupStatus status)
 		"DELETING",
 		"DELETED",
 		"DONE",
+		"ORPHAN",
 		"CORRUPT"
 	};
-
 	if (status < BACKUP_STATUS_INVALID || BACKUP_STATUS_CORRUPT < status)
 		return "UNKNOWN";
 

@@ -118,6 +118,7 @@ typedef enum BackupStatus
 	BACKUP_STATUS_DELETING,		/* data files are being deleted */
 	BACKUP_STATUS_DELETED,		/* data files have been deleted */
 	BACKUP_STATUS_DONE,			/* completed but not validated yet */
+	BACKUP_STATUS_ORPHAN,		/* backup validity is unknown but at least one parent backup is corrupted */
 	BACKUP_STATUS_CORRUPT		/* files are corrupted, not available */
 } BackupStatus;
 
