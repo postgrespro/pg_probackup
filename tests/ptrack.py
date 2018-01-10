@@ -129,6 +129,245 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_ptrack_uncommited_xact(self):
+        """make ptrack backup while there is uncommited open transaction"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'ptrack_enable': 'on'
+            }
+        )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node_restored.cleanup()
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+        con = node.connect("postgres")
+        con.execute(
+            "create table t_heap as select i"
+            " as id from generate_series(0,1) i"
+            )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
+        )
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        self.restore_node(
+            backup_dir, 'node', node_restored, options=["-j", "4"])
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.start()
+
+        # Physical comparison
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_ptrack_vacuum_full(self):
+        """make node, make full and ptrack stream backups,
+          restore them and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'ptrack_enable': 'on'
+            }
+        )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node_restored.cleanup()
+        node.start()
+        self.create_tblspace_in_node(node, 'somedata')
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace somedata as select i"
+            " as id from generate_series(0,1000000) i"
+            )
+
+        # create async connection
+        conn = self.get_asyc_connect(port=node.port)
+
+        self.wait(conn)
+
+        acurs = conn.cursor()
+        acurs.execute("select pg_backend_pid()")
+
+        self.wait(conn)
+        pid = acurs.fetchall()[0][0]
+        print(pid)
+
+        gdb = self.gdb_attach(pid)
+        gdb.set_breakpoint('reform_and_rewrite_tuple')
+
+        if not gdb.continue_execution_until_running():
+            print('Failed gdb continue')
+            exit(1)
+
+        acurs.execute("VACUUM FULL t_heap")
+
+        if gdb.stopped_in_breakpoint():
+            if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
+                print('Failed to hit breakpoint')
+                exit(1)
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
+        )
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        old_tablespace = self.get_tblspace_path(node, 'somedata')
+        new_tablespace = self.get_tblspace_path(node_restored, 'somedata_new')
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=["-j", "4", "-T", "{0}={1}".format(
+                old_tablespace, new_tablespace)]
+        )
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.start()
+
+        # Physical comparison
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_ptrack_vacuum_truncate(self):
+        """make node, create table, take full backup,
+           delete last 3 pages, vacuum relation,
+           take ptrack backup, take second ptrack backup,
+           restore last ptrack backup and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'ptrack_enable': 'on'
+            }
+        )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node_restored.cleanup()
+        node.start()
+        self.create_tblspace_in_node(node, 'somedata')
+
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; "
+            "create table t_heap tablespace somedata as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1024) i;"
+        )
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap where ctid >= '(11,0)'"
+        )
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose']
+        )
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        old_tablespace = self.get_tblspace_path(node, 'somedata')
+        new_tablespace = self.get_tblspace_path(node_restored, 'somedata_new')
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=["-j", "4", "-T", "{0}={1}".format(
+                old_tablespace, new_tablespace)]
+        )
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.start()
+
+        # Physical comparison
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_ptrack_simple(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
@@ -179,9 +418,11 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
         result = node.safe_psql("postgres", "SELECT * FROM t_heap")
 
-        self.restore_node(backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.restore_node(
+            backup_dir, 'node', node_restored, options=["-j", "4"])
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
-        node_restored.append_conf("postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
 
         node_restored.start()
         # Logical comparison
@@ -194,7 +435,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_get_block(self):
@@ -231,24 +472,14 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             gdb=True
         )
 
-        if gdb.set_breakpoint('make_pagemap_from_ptrack'):
-            result = gdb.run()
-        else:
-            self.assertTrue(False, 'Failed to set gdb breakpoint')
-
-        if result != 'breakpoint-hit':
-            print('Error in hitting breaking point')
-            sys.exit(1)
+        gdb.set_breakpoint('make_pagemap_from_ptrack')
+        gdb.run_until_break()
 
         node.safe_psql(
             "postgres",
             "update t_heap set id = 100500")
 
-        if not gdb.continue_execution():
-            self.assertTrue(
-                False,
-                'Failed to continue execution after breakpoint'
-            )
+        gdb.continue_execution_until_exit()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -271,7 +502,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_stream(self):
@@ -802,7 +1033,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_alter_database_set_tablespace_ptrack(self):

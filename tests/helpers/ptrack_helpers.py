@@ -8,6 +8,9 @@ import testgres
 import hashlib
 import re
 import pwd
+import select
+import psycopg2
+from time import sleep
 
 
 idx_ptrack = {
@@ -946,6 +949,34 @@ class ProbackupTest(object):
                 fail = True
         self.assertFalse(fail, error_message)
 
+    def get_asyc_connect(self, database=None, host=None, port=5432):
+        if not database:
+            database = 'postgres'
+        if not host:
+            host = '127.0.0.1'
+
+        return psycopg2.connect(
+            database="postgres",
+            host='127.0.0.1',
+            port=port,
+            async=True
+        )
+
+    def wait(self, connection):
+        while True:
+            state = connection.poll()
+            if state == psycopg2.extensions.POLL_OK:
+                break
+            elif state == psycopg2.extensions.POLL_WRITE:
+                select.select([], [connection.fileno()], [])
+            elif state == psycopg2.extensions.POLL_READ:
+                select.select([connection.fileno()], [], [])
+            else:
+                raise psycopg2.OperationalError("poll() returned %s" % state)
+
+    def gdb_attach(self, pid):
+        return GDBobj([str(pid)], self.verbose, attach=True)
+
 
 class GdbException(Exception):
     def __init__(self, message=False):
@@ -956,7 +987,7 @@ class GdbException(Exception):
 
 
 class GDBobj(ProbackupTest):
-    def __init__(self, cmd, verbose):
+    def __init__(self, cmd, verbose, attach=False):
         self.verbose = verbose
 
         # Check gdb presense
@@ -972,8 +1003,12 @@ class GDBobj(ProbackupTest):
             'gdb',
             '--interpreter',
             'mi2',
-            '--args'
-            ] + cmd
+            ]
+
+        if attach:
+            self.cmd = self.base_cmd + ['--pid'] + cmd
+        else:
+            self.cmd = self.base_cmd + ['--args'] + cmd
 
         # Get version
         gdb_version_number = re.search(
@@ -981,15 +1016,19 @@ class GDBobj(ProbackupTest):
             gdb_version)
         self.major_version = int(gdb_version_number.group(1))
         self.minor_version = int(gdb_version_number.group(2))
+
         if self.verbose:
-            print([' '.join(map(str, self.base_cmd))])
+            print([' '.join(map(str, self.cmd))])
+
+        print(self.cmd)
 
         self.proc = subprocess.Popen(
-            self.base_cmd,
+            self.cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=0, universal_newlines=True
+            bufsize=0,
+            universal_newlines=True
         )
         self.gdb_pid = self.proc.pid
 
@@ -997,6 +1036,10 @@ class GDBobj(ProbackupTest):
         # is there a way to do it a less derpy way?
         while True:
             line = self.proc.stdout.readline()
+
+            if 'No such process' in line:
+                raise GdbException(line)
+
             if not line.startswith('(gdb)'):
                 pass
             else:
@@ -1004,52 +1047,115 @@ class GDBobj(ProbackupTest):
 
     def set_breakpoint(self, location):
         result = self._execute('break ' + location)
-        success = False
         for line in result:
+            print(line)
             if line.startswith('~"Breakpoint'):
-                success = True
-                break
-            if line.startswith('^error') or line.startswith('(gdb)'):
+                return
+
+            elif line.startswith('^error') or line.startswith('(gdb)'):
                 break
 
-            if line.startswith('&"break'):
+            elif line.startswith('&"break'):
                 pass
 
-            if line.startswith('&"Function'):
+            elif line.startswith('&"Function'):
                 raise GdbException(line)
 
-            if line.startswith('&"No line'):
+            elif line.startswith('&"No line'):
                 raise GdbException(line)
-        return success
 
-    def run(self):
-        result = self._execute('run')
+            elif line.startswith('~"Make breakpoint pending on future shared'):
+                raise GdbException(line)
+
+        raise GdbException(
+            'Failed to set breakpoint.\n Output:\n {0}'.format(result)
+        )
+
+    def run_until_break(self):
+        result = self._execute('run', False)
         for line in result:
             if line.startswith('*stopped,reason="breakpoint-hit"'):
-                return 'breakpoint-hit'
-            if line.startswith('*stopped,reason="exited-normally"'):
-                return 'exit correct'
+                return
+        raise GdbException(
+            'Failed to run until breakpoint.\n'
+        )
 
-    def continue_execution(self, sync=True):
+    def continue_execution_until_running(self):
         result = self._execute('continue')
+
+        running = False
         for line in result:
+            if line.startswith('*running'):
+                running = True
+                break
+            if line.startswith('*stopped,reason="breakpoint-hit"'):
+                running = False
+                continue
+            if line.startswith('*stopped,reason="exited-normally"'):
+                running = False
+                continue
+        return running
+
+    def continue_execution_until_exit(self):
+        result = self._execute('continue', False)
+
+        for line in result:
+            if line.startswith('*running'):
+                continue
+            if line.startswith('*stopped,reason="breakpoint-hit"'):
+                continue
+            if line.startswith('*stopped,reason="exited-normally"'):
+                return
+        raise GdbException(
+            'Failed to continue execution until exit.\n'
+        )
+
+    def continue_execution_until_break(self, ignore_count=0):
+        if ignore_count > 0:
+            result = self._execute(
+                'continue ' + str(ignore_count),
+                False
+            )
+        else:
+            result = self._execute('continue', False)
+
+        running = False
+        for line in result:
+            if line.startswith('*running'):
+                running = True
             if line.startswith('*stopped,reason="breakpoint-hit"'):
                 return 'breakpoint-hit'
             if line.startswith('*stopped,reason="exited-normally"'):
-                return 'exit correct'
+                return 'exited-normally'
+        if running:
+            return 'running'
+
+    def stopped_in_breakpoint(self):
+        output = []
+        while True:
+            line = self.proc.stdout.readline()
+            output += [line]
+            if self.verbose:
+                print(line)
+            if line.startswith('*stopped,reason="breakpoint-hit"'):
+                return True
+        return False
 
     # use for breakpoint, run, continue
-    def _execute(self, cmd):
+    def _execute(self, cmd, running=True):
         output = []
         self.proc.stdin.flush()
         self.proc.stdin.write(cmd + '\n')
         self.proc.stdin.flush()
 
         while True:
+            sleep(1)
             line = self.proc.stdout.readline()
             output += [line]
             if self.verbose:
                 print(line)
             if line == '^done\n' or line.startswith('*stopped'):
+                break
+            if running and line.startswith('*running'):
                 break
         return output
