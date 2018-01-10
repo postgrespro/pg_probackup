@@ -436,12 +436,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 	/* 'parent_backup' is set if it is incremental backup */
 	if (backup->parent_backup != 0)
-	{
-		char	   *parent_backup = base36enc(backup->parent_backup);
-
-		fprintf(out, "parent-backup-id = '%s'\n", parent_backup);
-		free(parent_backup);
-	}
+		fprintf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
 }
 
 /* create BACKUP_CONTROL_FILE */
@@ -669,21 +664,17 @@ void
 pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 				 const char *subdir1, const char *subdir2)
 {
-	char	   *datetime;
-
-	datetime = base36enc(backup->start_time);
-
 	/* If "subdir1" is NULL do not check "subdir2" */
 	if (!subdir1)
-		snprintf(path, len, "%s/%s", backup_instance_path, datetime);
+		snprintf(path, len, "%s/%s", backup_instance_path,
+				 base36enc(backup->start_time));
 	else if (!subdir2)
-		snprintf(path, len, "%s/%s/%s", backup_instance_path, datetime, subdir1);
+		snprintf(path, len, "%s/%s/%s", backup_instance_path,
+				 base36enc(backup->start_time), subdir1);
 	/* "subdir1" and "subdir2" is not NULL */
 	else
 		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
-				 datetime, subdir1, subdir2);
-
-	free(datetime);
+				 base36enc(backup->start_time), subdir1, subdir2);
 
 	make_native_path(path);
 }

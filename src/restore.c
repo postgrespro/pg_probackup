@@ -195,8 +195,8 @@ do_restore_or_validate(time_t target_backup_id,
 			{
 				if (current_backup->status != BACKUP_STATUS_OK)
 					elog(ERROR, "base backup %s for given backup %s is in %s status",
-						 base36enc(current_backup->start_time),
-						 base36enc(dest_backup->start_time),
+						 base36enc_dup(current_backup->start_time),
+						 base36enc_dup(dest_backup->start_time),
 						 status2str(current_backup->status));
 				else
 				{
@@ -264,10 +264,20 @@ do_restore_or_validate(time_t target_backup_id,
 				continue;
 			else
 			{
+				char	   *backup_id,
+						   *corrupted_backup_id;
+
 				backup->status = BACKUP_STATUS_ORPHAN;
 				pgBackupWriteBackupControlFile(backup);
+
+				backup_id = base36enc_dup(backup->start_time);
+				corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
+
 				elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
-						base36enc(backup->start_time), base36enc(corrupted_backup->start_time));
+					 backup_id, corrupted_backup_id);
+
+				free(backup_id);
+				free(corrupted_backup_id);
 			}
 		}
 	}
@@ -409,13 +419,7 @@ restore_backup(pgBackup *backup)
 	parray_free(files);
 
 	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
-	{
-		char	   *backup_id;
-
-		backup_id = base36enc(backup->start_time);
-		elog(LOG, "restore %s backup completed", backup_id);
-		free(backup_id);
-	}
+		elog(LOG, "restore %s backup completed", base36enc(backup->start_time));
 }
 
 /*
@@ -635,13 +639,8 @@ check_tablespace_mapping(pgBackup *backup)
 	read_tablespace_map(links, this_backup_path);
 
 	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
-	{
-		char	   *backup_id;
-
-		backup_id = base36enc(backup->start_time);
-		elog(LOG, "check tablespace directories of backup %s", backup_id);
-		pfree(backup_id);
-	}
+		elog(LOG, "check tablespace directories of backup %s",
+			 base36enc(backup->start_time));
 
 	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
 	for (cell = tablespace_dirs.head; cell; cell = cell->next)
