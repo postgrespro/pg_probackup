@@ -103,6 +103,7 @@ extern const char  *host;
 extern const char  *port;
 extern const char  *username;
 extern bool			prompt_password;
+extern bool			force_password;
 
 extern bool			interrupted;
 extern bool			in_cleanup;
@@ -122,8 +123,7 @@ extern PGconn *pgut_connect_extended(const char *pghost, const char *pgport,
 									 const char *dbname, const char *login);
 extern PGconn *pgut_connect_replication(const char *dbname);
 extern PGconn *pgut_connect_replication_extended(const char *pghost, const char *pgport,
-									 const char *dbname, const char *login,
-									 const char *pwd);
+									 const char *dbname, const char *pguser);
 extern void pgut_disconnect(PGconn *conn);
 extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams,
 							  const char **params, bool text_result);

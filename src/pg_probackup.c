@@ -156,6 +156,7 @@ static pgut_option options[] =
 	{ 's', 'p', "pgport",				&port,				SOURCE_CMDLINE },
 	{ 's', 'U', "pguser",				&username,			SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password",			&prompt_password,	SOURCE_CMDLINE },
+	{ 'b', 'W', "password",				&force_password,	SOURCE_CMDLINE },
 	/* other options */
 	{ 'U', 150, "system-identifier",	&system_identifier,	SOURCE_FILE_STRICT },
 	{ 's', 151, "instance",				&instance_name,		SOURCE_CMDLINE },
