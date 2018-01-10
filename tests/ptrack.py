@@ -224,7 +224,7 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             )
 
         # create async connection
-        conn = self.get_asyc_connect(port=node.port)
+        conn = self.get_async_connect(port=node.port)
 
         self.wait(conn)
 

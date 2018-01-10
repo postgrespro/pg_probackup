@@ -949,7 +949,7 @@ class ProbackupTest(object):
                 fail = True
         self.assertFalse(fail, error_message)
 
-    def get_asyc_connect(self, database=None, host=None, port=5432):
+    def get_async_connect(self, database=None, host=None, port=5432):
         if not database:
             database = 'postgres'
         if not host:
