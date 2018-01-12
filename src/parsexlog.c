@@ -258,7 +258,9 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 		 */
 			backup->status = BACKUP_STATUS_CORRUPT;
 			pgBackupWriteBackupControlFile(backup);
-			elog(ERROR, "there are not enough WAL records to restore from %X/%X to %X/%X",
+			elog(WARNING, "There are not enough WAL records to consistenly restore "
+				"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",
+				 base36enc(backup->start_time),
 				 (uint32) (backup->start_lsn >> 32),
 				 (uint32) (backup->start_lsn),
 				 (uint32) (backup->stop_lsn >> 32),
@@ -288,7 +290,7 @@ validate_wal(pgBackup *backup,
 			 TimeLineID tli)
 {
 	XLogRecPtr	startpoint = backup->start_lsn;
-	char	   *backup_id;
+	const char *backup_id;
 	XLogRecord *record;
 	XLogReaderState *xlogreader;
 	char	   *errormsg;
@@ -327,16 +329,19 @@ validate_wal(pgBackup *backup,
 	else
 		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, tli);
 
-	free(backup_id);
-
+	if (backup->status == BACKUP_STATUS_CORRUPT)
+	{
+		elog(WARNING, "Backup %s WAL segments are corrupted", backup_id);
+		return;
+	}
 	/*
 	 * If recovery target is provided check that we can restore backup to a
-	 * recoverty target time or xid.
+	 * recovery target time or xid.
 	 */
 	if (!TransactionIdIsValid(target_xid) && target_time == 0)
 	{
-		/* Recoverty target is not given so exit */
-		elog(INFO, "backup validation completed successfully");
+		/* Recovery target is not given so exit */
+		elog(INFO, "Backup %s WAL segments are valid", backup_id);
 		return;
 	}
 

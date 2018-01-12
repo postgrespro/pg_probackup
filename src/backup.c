@@ -1541,23 +1541,18 @@ pg_stop_backup(pgBackup *backup)
 	{
 		const char *params[1];
 		char		name[1024];
-		char	   *backup_id;
-
-		backup_id = base36enc(backup->start_time);
 
 		if (!from_replica)
 			snprintf(name, lengthof(name), "pg_probackup, backup_id %s",
-					 backup_id);
+					 base36enc(backup->start_time));
 		else
 			snprintf(name, lengthof(name), "pg_probackup, backup_id %s. Replica Backup",
-					 backup_id);
+					 base36enc(backup->start_time));
 		params[0] = name;
 
 		res = pgut_execute(conn, "SELECT pg_create_restore_point($1)",
 						   1, params, true);
 		PQclear(res);
-
-		pfree(backup_id);
 	}
 
 	/*
@@ -1845,7 +1840,8 @@ backup_cleanup(bool fatal, void *userdata)
 	 */
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
 	{
-		elog(INFO, "Backup %s is running, setting its status to ERROR", base36enc(current.start_time));
+		elog(INFO, "Backup %s is running, setting its status to ERROR",
+			 base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
 		pgBackupWriteBackupControlFile(&current);

@@ -118,6 +118,7 @@ typedef enum BackupStatus
 	BACKUP_STATUS_DELETING,		/* data files are being deleted */
 	BACKUP_STATUS_DELETED,		/* data files have been deleted */
 	BACKUP_STATUS_DONE,			/* completed but not validated yet */
+	BACKUP_STATUS_ORPHAN,		/* backup validity is unknown but at least one parent backup is corrupted */
 	BACKUP_STATUS_CORRUPT		/* files are corrupted, not available */
 } BackupStatus;
 
@@ -463,7 +464,8 @@ extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
 extern uint32 get_data_checksum_version(bool safe);
-extern char *base36enc(long unsigned int value);
+extern const char *base36enc(long unsigned int value);
+extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
 extern uint64 get_system_identifier(char *pgdata);
 extern uint64 get_remote_system_identifier(PGconn *conn);

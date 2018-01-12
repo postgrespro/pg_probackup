@@ -90,8 +90,10 @@ do_restore_or_validate(time_t target_backup_id,
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
+	pgBackup   *corrupted_backup = NULL;
 	int			dest_backup_index = 0;
 	int			base_full_backup_index = 0;
+	int			corrupted_backup_index = 0;
 	char 	   *action = is_restore ? "Restore":"Validate";
 
 	if (is_restore)
@@ -193,8 +195,8 @@ do_restore_or_validate(time_t target_backup_id,
 			{
 				if (current_backup->status != BACKUP_STATUS_OK)
 					elog(ERROR, "base backup %s for given backup %s is in %s status",
-						 base36enc(current_backup->start_time),
-						 base36enc(dest_backup->start_time),
+						 base36enc_dup(current_backup->start_time),
+						 base36enc_dup(dest_backup->start_time),
 						 status2str(current_backup->status));
 				else
 				{
@@ -205,7 +207,7 @@ do_restore_or_validate(time_t target_backup_id,
 				}
 			}
 			else
-				/* Skip differential backups are ok */
+				/* It`s ok to skip incremental backup */
 				continue;
 		}
 	}
@@ -220,6 +222,9 @@ do_restore_or_validate(time_t target_backup_id,
 	if (is_restore)
 		check_tablespace_mapping(dest_backup);
 
+	if (dest_backup->backup_mode != BACKUP_MODE_FULL)
+		elog(INFO, "Validating parents for backup %s", base36enc(dest_backup->start_time));
+
 	/*
 	 * Validate backups from base_full_backup to dest_backup.
 	 */
@@ -227,29 +232,77 @@ do_restore_or_validate(time_t target_backup_id,
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 		pgBackupValidate(backup);
+		if (backup->status == BACKUP_STATUS_CORRUPT)
+		{
+			corrupted_backup = backup;
+			corrupted_backup_index = i;
+			break;
+		}
+	}
+	/* There is no point in wal validation
+	 * if there is corrupted backup between base_backup and dest_backup
+	 */
+	if (!corrupted_backup)
+		/*
+		 * Validate corresponding WAL files.
+		 * We pass base_full_backup timeline as last argument to this function,
+		 * because it's needed to form the name of xlog file.
+		 */
+		validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
+					rt->recovery_target_xid, base_full_backup->tli);
+
+	/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
+	if (corrupted_backup)
+	{
+		for (i = corrupted_backup_index - 1; i >= 0; i--)
+		{
+			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			/* Mark incremental OK backup as orphan */
+			if (backup->backup_mode == BACKUP_MODE_FULL)
+				break;
+			if (backup->status != BACKUP_STATUS_OK)
+				continue;
+			else
+			{
+				char	   *backup_id,
+						   *corrupted_backup_id;
+
+				backup->status = BACKUP_STATUS_ORPHAN;
+				pgBackupWriteBackupControlFile(backup);
+
+				backup_id = base36enc_dup(backup->start_time);
+				corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
+
+				elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
+					 backup_id, corrupted_backup_id);
+
+				free(backup_id);
+				free(corrupted_backup_id);
+			}
+		}
 	}
 
 	/*
-	 * Validate corresponding WAL files.
-	 * We pass base_full_backup timeline as last argument to this function,
-	 * because it's needed to form the name of xlog file.
+	 * If dest backup is corrupted or was orphaned in previous check
+	 * produce corresponding error message
 	 */
-	validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-						 rt->recovery_target_xid, base_full_backup->tli);
-
+	if (dest_backup->status == BACKUP_STATUS_OK)
+		elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
+	else if (dest_backup->status == BACKUP_STATUS_CORRUPT)
+		elog(ERROR, "Backup %s is corrupt.", base36enc(dest_backup->start_time));
+	else if (dest_backup->status == BACKUP_STATUS_ORPHAN)
+		elog(ERROR, "Backup %s is orphan.", base36enc(dest_backup->start_time));
+	else
+		elog(ERROR, "Backup %s has status: %s",
+				base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
 	/* We ensured that all backups are valid, now restore if required */
 	if (is_restore)
 	{
-		pgBackup   *backup;
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
-			backup = (pgBackup *) parray_get(backups, i);
-			if (backup->status == BACKUP_STATUS_OK)
-				restore_backup(backup);
-			else
-				elog(ERROR, "backup %s is not valid",
-					 base36enc(backup->start_time));
+			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			restore_backup(backup);
 		}
 
 		/*
@@ -366,13 +419,7 @@ restore_backup(pgBackup *backup)
 	parray_free(files);
 
 	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
-	{
-		char	   *backup_id;
-
-		backup_id = base36enc(backup->start_time);
-		elog(LOG, "restore %s backup completed", backup_id);
-		free(backup_id);
-	}
+		elog(LOG, "restore %s backup completed", base36enc(backup->start_time));
 }
 
 /*
@@ -592,13 +639,8 @@ check_tablespace_mapping(pgBackup *backup)
 	read_tablespace_map(links, this_backup_path);
 
 	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
-	{
-		char	   *backup_id;
-
-		backup_id = base36enc(backup->start_time);
-		elog(LOG, "check tablespace directories of backup %s", backup_id);
-		pfree(backup_id);
-	}
+		elog(LOG, "check tablespace directories of backup %s",
+			 base36enc(backup->start_time));
 
 	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
 	for (cell = tablespace_dirs.head; cell; cell = cell->next)
