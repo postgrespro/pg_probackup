@@ -2727,6 +2727,13 @@ pg_ptrack_get_block(Oid dbOid,
 		return NULL;
 	}
 
+	if (PQgetisnull(res, 0, 0))
+	{
+		elog(LOG, "cannot get file block for relation oid %u",
+				   relOid);
+		return NULL;
+	}
+
 	val = PQgetvalue(res, 0, 0);
 
 	if (strcmp("x", val+1) == 0)

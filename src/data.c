@@ -248,11 +248,10 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 											 in, out, page);
 
 			try_again--;
-			/* This block was truncated. Do nothing */
+			/* This block was truncated.*/
 			if (result == 0)
 			{
-				free(page);
-				return;
+				header.compressed_size = -1;
 			}
 
 			if (result == 1)
@@ -273,11 +272,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 		if (page == NULL)
 		{
-			/*
-			 * We may skip block for various reasons. It's fine.
-			 * Otherwise pg_ptrack_get_block would have failed with ERROR.
-			 */
-			return;
+			/* This block was truncated.*/
+			header.compressed_size = -1;
 		}
 
 		if (page_size != BLCKSZ)
@@ -288,18 +284,20 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 	}
 
+	if (header.compressed_size != -1)
+	{
+		file->read_size += BLCKSZ;
 
-	file->read_size += BLCKSZ;
+		compressed_page = malloc(BLCKSZ);
+		header.block = blknum;
+		header.compressed_size = do_compress(compressed_page, BLCKSZ,
+											page, BLCKSZ, compress_alg);
 
-	compressed_page = malloc(BLCKSZ);
-	header.block = blknum;
-	header.compressed_size = do_compress(compressed_page, BLCKSZ,
-										 page, BLCKSZ, compress_alg);
+		file->compress_alg = compress_alg;
 
-	file->compress_alg = compress_alg;
-
-	Assert (header.compressed_size <= BLCKSZ);
-	write_buffer_size = sizeof(header);
+		Assert (header.compressed_size <= BLCKSZ);
+		write_buffer_size = sizeof(header);
+	}
 
 	/* The page was successfully compressed */
 	if (header.compressed_size > 0)
@@ -309,12 +307,17 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		write_buffer_size += MAXALIGN(header.compressed_size);
 	}
 	/* The page compression failed. Write it as is. */
-	else
+	else if (header.compressed_size == 0)
 	{
 		header.compressed_size = BLCKSZ;
 		memcpy(write_buffer, &header, sizeof(header));
 		memcpy(write_buffer + sizeof(header), page, BLCKSZ);
 		write_buffer_size += header.compressed_size;
+	}
+	/* The page is not found, it mean that it was truncated. */
+	else if (header.compressed_size == -1)
+	{
+		memcpy(write_buffer, &header, sizeof(header));
 	}
 
 	/* Update CRC */
@@ -589,7 +592,16 @@ restore_data_file(const char *from_root,
 			elog(ERROR, "cannot seek block %u of \"%s\": %s",
 				 blknum, to_path, strerror(errno));
 
-		if (header.compressed_size < BLCKSZ)
+		if (header.compressed_size == -1)
+		{
+			/*
+			 * Backup contains information that this block was truncated.
+			 * Truncate file to this length.
+			 */
+			ftruncate(out, blknum * BLCKSZ); 
+			break;
+		}
+		else if (header.compressed_size < BLCKSZ)
 		{
 			if (fwrite(page.data, 1, BLCKSZ, out) != BLCKSZ)
 				elog(ERROR, "cannot write block %u of \"%s\": %s",
