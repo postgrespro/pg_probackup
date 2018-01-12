@@ -128,7 +128,7 @@ class AuthTest(unittest.TestCase):
         create_pgpass(self.pgpass_file, line)
         try:
             self.assertIn("completed",
-                          str(run_pb_with_auth([self.pb.probackup_path] + self.cmd, 'password\r\n'))
+                          str(run_pb_with_auth([self.pb.probackup_path] + self.cmd + ['-W'], 'password\r\n'))
                           )
         except (TIMEOUT, ExceptionPexpect) as e:
             self.fail(e.value)
