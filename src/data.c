@@ -129,7 +129,7 @@ parse_page(Page page, XLogRecPtr *lsn)
  */
 static int
 read_page_from_file(pgFile *file, BlockNumber blknum,
-					FILE *in, FILE *out, Page page)
+					FILE *in, Page page)
 {
 	off_t				offset = blknum*BLCKSZ;
 	size_t				read_len = 0;
@@ -227,7 +227,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 {
 	BackupPageHeader	header;
 	Page 				page = malloc(BLCKSZ);
-	Page 				compressed_page;
+	Page 				compressed_page = NULL;
 	size_t				write_buffer_size;
 	char				write_buffer[BLCKSZ+sizeof(header)];
 
@@ -245,7 +245,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		while(!page_is_valid && try_again)
 		{
 			int result = read_page_from_file(file, blknum,
-											 in, out, page);
+											 in, page);
 
 			try_again--;
 			/* This block was truncated.*/
@@ -275,13 +275,16 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			/* This block was truncated.*/
 			header.compressed_size = -1;
 		}
-
-		if (page_size != BLCKSZ)
+		else if (page_size != BLCKSZ)
+		{
 			elog(ERROR, "File: %s, block %u, expected block size %lu,"
 					  "but read %d, try again",
 					   file->path, absolute_blknum, page_size, BLCKSZ);
-
-		((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
+		}
+		else
+		{
+			((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
+		}
 	}
 
 	if (header.compressed_size != -1)
@@ -335,8 +338,10 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 	file->write_size += write_buffer_size;
 
-	free(page);
-	free(compressed_page);
+	if (page != NULL)
+		free(page);
+	if (compressed_page != NULL)
+		free(compressed_page);
 }
 
 /*
@@ -563,25 +568,28 @@ restore_data_file(const char *from_root,
 		if (header.block < blknum)
 			elog(ERROR, "backup is broken at block %u", blknum);
 
-		//elog(VERBOSE, "file %s, header compressed size %d", file->path, header.compressed_size);
-		Assert(header.compressed_size <= BLCKSZ);
-
-		read_len = fread(compressed_page.data, 1,
-			MAXALIGN(header.compressed_size), in);
-		if (read_len != MAXALIGN(header.compressed_size))
-			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
-				 blknum, file->path, read_len, header.compressed_size);
-
-		if (header.compressed_size < BLCKSZ)
+		if (header.compressed_size != -1)
 		{
-			size_t uncompressed_size = 0;
+			//elog(VERBOSE, "file %s, header compressed size %d", file->path, header.compressed_size);
+			Assert(header.compressed_size <= BLCKSZ);
 
-			uncompressed_size = do_decompress(page.data, BLCKSZ,
-											  compressed_page.data,
-											  header.compressed_size, file->compress_alg);
+			read_len = fread(compressed_page.data, 1,
+				MAXALIGN(header.compressed_size), in);
+			if (read_len != MAXALIGN(header.compressed_size))
+				elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+					blknum, file->path, read_len, header.compressed_size);
 
-			if (uncompressed_size != BLCKSZ)
-				elog(ERROR, "page uncompressed to %ld bytes. != BLCKSZ", uncompressed_size);
+			if (header.compressed_size != BLCKSZ)
+			{
+				size_t uncompressed_size = 0;
+
+				uncompressed_size = do_decompress(page.data, BLCKSZ,
+												compressed_page.data,
+												header.compressed_size, file->compress_alg);
+
+				if (uncompressed_size != BLCKSZ)
+					elog(ERROR, "page uncompressed to %ld bytes. != BLCKSZ", uncompressed_size);
+			}
 		}
 
 		/*
@@ -598,7 +606,7 @@ restore_data_file(const char *from_root,
 			 * Backup contains information that this block was truncated.
 			 * Truncate file to this length.
 			 */
-			ftruncate(out, blknum * BLCKSZ); 
+			ftruncate(fileno(out), blknum * BLCKSZ);
 			break;
 		}
 		else if (header.compressed_size < BLCKSZ)
