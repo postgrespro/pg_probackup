@@ -2736,9 +2736,6 @@ pg_ptrack_get_block(Oid dbOid,
 
 	val = PQgetvalue(res, 0, 0);
 
-	if (strcmp("x", val+1) == 0)
-		return NULL;
-
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
 									  result_size);
 
