@@ -52,6 +52,7 @@ static pthread_mutex_t start_stream_mut = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t stream_thread;
 
 static int is_ptrack_enable = false;
+bool is_checksum_enabled = false;
 
 /* Backup connections */
 static PGconn *backup_conn = NULL;
@@ -108,6 +109,7 @@ static void	remote_copy_file(PGconn *conn, pgFile* file);
 static void pg_ptrack_clear(void);
 static bool pg_ptrack_support(void);
 static bool pg_ptrack_enable(void);
+static bool pg_checksum_enable(void);
 static bool pg_is_in_recovery(void);
 static bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
@@ -772,6 +774,9 @@ do_backup(time_t start_time)
 	/* TODO fix it for remote backup*/
 	if (!is_remote_backup)
 		current.checksum_version = get_data_checksum_version(true);
+
+	is_checksum_enabled = pg_checksum_enable();
+	
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
 	current.stream = stream_wal;
@@ -1084,6 +1089,23 @@ pg_ptrack_enable(void)
 	PGresult   *res_db;
 
 	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL, true);
+
+	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
+	{
+		PQclear(res_db);
+		return false;
+	}
+	PQclear(res_db);
+	return true;
+}
+
+/* Check if ptrack is enabled in target instance */
+static bool
+pg_checksum_enable(void)
+{
+	PGresult   *res_db;
+
+	res_db = pgut_execute(backup_conn, "show data_checksums", 0, NULL, true);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -2683,31 +2705,6 @@ pg_ptrack_get_block(Oid dbOid,
 	params[2] = palloc(64);
 	params[3] = palloc(64);
 
-// 	sprintf(params[0], "%i", dbOid);
-// 	res_db = pgut_execute(backup_conn,
-// 							"SELECT datname FROM pg_database WHERE oid=$1",
-// 							1, (const char **) params, true);
-// 	/*
-// 	 * If database is not found, it's not an error.
-// 	 * It could have been deleted.
-// 	 */
-// 	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
-// 	{
-// 		//elog(LOG, "Database with oid %d is not found", dbOid);
-// 		return NULL;
-// 	}
-// 
-// 	dbname = PQgetvalue(res_db, 0, 0);
-// 	if (strcmp(dbname, "template0") == 0)
-// 	{
-// 		/*
-// 		 * There is no way to connect to the template0 database.
-// 		 * But it's totally OK, since files there can never be changed.
-// 		 */
-// 		return NULL;
-// 	}
-// 	tmp_conn = pgut_connect(dbname);
-
 	/*
 	 * Use backup_conn, cause we can do it from any database.
 	 */
@@ -2738,9 +2735,6 @@ pg_ptrack_get_block(Oid dbOid,
 
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
 									  result_size);
-
-// 	pgut_disconnect(tmp_conn);
-// 	PQclear(res_db);
 
 	PQclear(res);
 	pfree(params[0]);

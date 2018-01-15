@@ -190,7 +190,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	}
 
 	/* Verify checksum */
-	if(current.checksum_version)
+	if(current.checksum_version && is_checksum_enabled)
 	{
 		/*
 		 * If checksum is wrong, sleep a bit and then try again
@@ -269,8 +269,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		}
 	}
 
-	if ((!page_is_valid)
-		 || (backup_mode == BACKUP_MODE_DIFF_PTRACK))
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		size_t page_size = 0;
 		PageHeader phdr = (PageHeader) page;
@@ -298,7 +297,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			 * We must set checksum here, because it is outdated
 			 * in the block recieved from shared buffers.
 			 */
-			((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
+			if (is_checksum_enabled)
+				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
 	}
 

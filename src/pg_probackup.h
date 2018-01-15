@@ -283,6 +283,8 @@ extern const char *master_port;
 extern const char *master_user;
 extern uint32	replica_timeout;
 
+extern bool is_checksum_enabled;
+
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
