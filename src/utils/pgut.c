@@ -40,6 +40,7 @@ const char	   *port = NULL;
 const char	   *username = NULL;
 static char	   *password = NULL;
 bool			prompt_password = true;
+bool			force_password = false;
 
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
@@ -1336,6 +1337,12 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
 
+	if (force_password && !prompt_password)
+		elog(ERROR, "You cannot specify --password and --no-password options together");
+
+	if (!password && force_password)
+		prompt_for_password(login);
+
 	/* Start the connection. Loop until we have a password if requested by backend. */
 	for (;;)
 	{
@@ -1348,7 +1355,7 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 		if (conn && PQconnectionNeedsPassword(conn) && prompt_password)
 		{
 			PQfinish(conn);
-			prompt_for_password(username);
+			prompt_for_password(login);
 
 			if (interrupted)
 				elog(ERROR, "interrupted");
@@ -1369,12 +1376,12 @@ pgut_connect_extended(const char *pghost, const char *pgport,
 PGconn *
 pgut_connect_replication(const char *dbname)
 {
-	return pgut_connect_replication_extended(host, port, dbname, username, password);
+	return pgut_connect_replication_extended(host, port, dbname, username);
 }
 
 PGconn *
 pgut_connect_replication_extended(const char *pghost, const char *pgport,
-						 const char *dbname, const char *pguser, const char *pwd)
+								  const char *dbname, const char *pguser)
 {
 	PGconn	   *tmpconn;
 	int			argcount = 7;	/* dbname, replication, fallback_app_name,
@@ -1385,6 +1392,12 @@ pgut_connect_replication_extended(const char *pghost, const char *pgport,
 
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
+
+	if (force_password && !prompt_password)
+		elog(ERROR, "You cannot specify --password and --no-password options together");
+
+	if (!password && force_password)
+		prompt_for_password(pguser);
 
 	i = 0;
 
@@ -1448,7 +1461,7 @@ pgut_connect_replication_extended(const char *pghost, const char *pgport,
 		if (tmpconn && PQconnectionNeedsPassword(tmpconn) && prompt_password)
 		{
 			PQfinish(tmpconn);
-			prompt_for_password(username);
+			prompt_for_password(pguser);
 			keywords[i] = "password";
 			values[i] = password;
 			continue;
