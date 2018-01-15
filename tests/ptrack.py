@@ -251,12 +251,12 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--log-level-file=verbose']
         )
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--log-level-file=verbose']
         )
 
         pgdata = self.pgdata_content(node.data_dir)
@@ -270,16 +270,17 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
                 old_tablespace, new_tablespace)]
         )
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
+
+        # Physical comparison
+        self.compare_pgdata(pgdata, pgdata_restored)
+
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
 
         node_restored.start()
 
-        # Physical comparison
-        self.compare_pgdata(pgdata, pgdata_restored)
-
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_vacuum_truncate(self):
@@ -337,12 +338,12 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--log-level-file=verbose']
         )
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--log-level-file=verbose']
         )
 
         pgdata = self.pgdata_content(node.data_dir)
@@ -356,13 +357,12 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
                 old_tablespace, new_tablespace)]
         )
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-
-        node_restored.start()
-
         # Physical comparison
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -856,11 +856,12 @@ class ProbackupTest(object):
         ]
         files_to_ignore = [
             'postmaster.pid', 'postmaster.opts',
-            'pg_internal.init', 'postgresql.auto.conf'
+            'pg_internal.init', 'postgresql.auto.conf',
+            'backup_label', 'tablespace_map', 'recovery.conf',
+            'ptrack_control', 'ptrack_init'
         ]
         suffixes_to_ignore = (
-            '_ptrack', 'ptrack_control',
-            'pg_control', 'ptrack_init', 'backup_label'
+            '_ptrack'
         )
         directory_dict = {}
         directory_dict['pgdata'] = directory
@@ -893,19 +894,17 @@ class ProbackupTest(object):
     def compare_pgdata(self, original_pgdata, restored_pgdata):
         """ return dict with directory content. DO IT BEFORE RECOVERY"""
         fail = False
-        error_message = ''
+        error_message = 'Restored PGDATA is not equal to original!\n'
         for file in restored_pgdata['files']:
             # File is present in RESTORED PGDATA
             # but not present in ORIGINAL
-            if (
-                file not in original_pgdata['files'] and
-                not file.endswith('backup_label')
-            ):
+            # only backup_label is allowed
+            if file not in original_pgdata['files']:
                 fail = True
-                error_message += 'File is not present'
-                error_message += ' in original PGDATA:\n {0}'.format(
-                    os.path.join(restored_pgdata['pgdata'], file)
-                )
+                error_message += '\nFile is not present'
+                error_message += ' in original PGDATA: {0}\n'.format(
+                    os.path.join(restored_pgdata['pgdata'], file))
+
         for file in original_pgdata['files']:
             if file in restored_pgdata['files']:
 
@@ -913,37 +912,56 @@ class ProbackupTest(object):
                     original_pgdata['files'][file]['md5'] !=
                     restored_pgdata['files'][file]['md5']
                 ):
+                    fail = True
                     error_message += (
-                        '\nChecksumm mismatch.\n'
-                        ' File_old: {0}\n Checksumm_old: {1}\n'
-                        ' File_new: {2}\n Checksumm_new: {3}\n').format(
+                        '\nFile Checksumm mismatch.\n'
+                        'File_old: {0}\nChecksumm_old: {1}\n'
+                        'File_new: {2}\nChecksumm_new: {3}\n').format(
                         os.path.join(original_pgdata['pgdata'], file),
                         original_pgdata['files'][file]['md5'],
                         os.path.join(restored_pgdata['pgdata'], file),
                         restored_pgdata['files'][file]['md5']
                     )
-                    fail = True
+
                     if original_pgdata['files'][file]['is_datafile']:
-                        for page in original_pgdata['files'][
-                                file]['md5_per_page']:
+                        for page in original_pgdata['files'][file]['md5_per_page']:
+                            if page not in restored_pgdata['files'][file]['md5_per_page']:
+                                error_message += (
+                                    '\n Page {0} dissappeared.\n '
+                                    'File: {1}\n').format(
+                                        page,
+                                        os.path.join(
+                                            restored_pgdata['pgdata'],
+                                            file
+                                        )
+                                    )
+                                continue
+
                             if original_pgdata['files'][file][
                                 'md5_per_page'][page] != restored_pgdata[
                                     'files'][file]['md5_per_page'][page]:
                                     error_message += (
-                                        'PAGE: {0}\n'
-                                        ' PAGE Checksumm_old: {1}\n'
-                                        ' PAGE Checksumm_new: {2}\n'
+                                        '\n Page checksumm mismatch: {0}\n '
+                                        ' PAGE Checksumm_old: {1}\n '
+                                        ' PAGE Checksumm_new: {2}\n '
+                                        ' File: {3}\n'
                                     ).format(
                                         page,
                                         original_pgdata['files'][file][
                                             'md5_per_page'][page],
                                         restored_pgdata['files'][file][
-                                            'md5_per_page'][page])
+                                            'md5_per_page'][page],
+                                        os.path.join(
+                                            restored_pgdata['pgdata'], file)
+                                        )
+                        for page in restored_pgdata['files'][file]['md5_per_page']:
+                            if page not in original_pgdata['files'][file]['md5_per_page']:
+                                error_message += '\n Extra page {0}\n File: {1}\n'.format(page, os.path.join(restored_pgdata['pgdata'], file))
 
             else:
                 error_message += (
-                    '\nFile dissappearance.'
-                    ' File: {0}').format(
+                    '\nFile dissappearance.\n '
+                    'File: {0}\n').format(
                     os.path.join(restored_pgdata['pgdata'], file)
                     )
                 fail = True
@@ -1146,7 +1164,7 @@ class GDBobj(ProbackupTest):
         self.proc.stdin.flush()
 
         while True:
-            sleep(1)
+#            sleep(1)
             line = self.proc.stdout.readline()
             output += [line]
             if self.verbose:
