@@ -2708,7 +2708,10 @@ pg_ptrack_get_block(backup_files_args *arguments,
 	sprintf(params[3], "%u", blknum);
 
 	if (arguments->thread_backup_conn == NULL)
+	{
 		arguments->thread_backup_conn = pgut_connect(pgut_dbname);
+	}
+	arguments->thread_cancel_conn = PQgetCancel(arguments->thread_backup_conn);
 
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
 	res = pgut_execute_parallel(arguments->thread_backup_conn,

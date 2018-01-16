@@ -250,7 +250,7 @@ typedef struct
 	parray *prev_backup_filelist;
 	XLogRecPtr prev_backup_start_lsn;
 	PGconn *thread_backup_conn;
-	PGconn *thread_cancel_conn;
+	PGcancel *thread_cancel_conn;
 } backup_files_args;
 
 /*
