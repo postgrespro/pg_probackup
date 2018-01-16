@@ -258,10 +258,9 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			{
 				/* This block was truncated.*/
 				header.compressed_size = PageIsTruncated;
-				page_is_valid = true;
 				/* Page is not actually valid, but it is absent
 				 * and we're not going to reread it or validate */
-// 				elog(WARNING, "backup blkno %u. PageIsTruncated", blknum);
+				page_is_valid = true;
 			}
 
 			if (result == 1)
@@ -272,7 +271,6 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		size_t page_size = 0;
-		PageHeader phdr = (PageHeader) page;
 
 		free(page);
 		page = NULL;
@@ -283,7 +281,6 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		{
 			/* This block was truncated.*/
 			header.compressed_size = PageIsTruncated;
-// 			elog(WARNING, "backup blkno %u. reread PageIsTruncated", blknum);
 		}
 		else if (page_size != BLCKSZ)
 		{
@@ -312,18 +309,18 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 		file->compress_alg = compress_alg;
 
-// 		elog(WARNING, "backup blkno %u. header.compressed_size %d", blknum, header.compressed_size);
 		Assert (header.compressed_size <= BLCKSZ);
 	}
 
 	write_buffer_size = sizeof(header);
 
-	/* The page was truncated. Write only header
-	/* to know that we must truncate restored file */
+	/*
+	 * The page was truncated. Write only header
+	 * to know that we must truncate restored file
+	 */
 	if (header.compressed_size == PageIsTruncated)
 	{
 		memcpy(write_buffer, &header, sizeof(header));
-// 		elog(WARNING, "page was truncated in file %s block %u", file->path, header.block);
 	}
 	/* The page compression failed. Write it as is. */
 	else if (header.compressed_size == -1)
@@ -341,8 +338,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		write_buffer_size += MAXALIGN(header.compressed_size);
 	}
 
-// 	elog(WARNING, "backup blkno %u, compressed_size %d write_buffer_size %ld",
-// 				  blknum, header.compressed_size, write_buffer_size);
+	/* elog(VERBOSE, "backup blkno %u, compressed_size %d write_buffer_size %ld",
+				  blknum, header.compressed_size, write_buffer_size); */
 
 	/* Update CRC */
 	COMP_CRC32C(*crc, &write_buffer, write_buffer_size);
@@ -590,7 +587,6 @@ restore_data_file(const char *from_root,
 			break;
 		}
 
-		//elog(VERBOSE, "file %s, header compressed size %d", file->path, header.compressed_size);
 		Assert(header.compressed_size <= BLCKSZ);
 
 		read_len = fread(compressed_page.data, 1,

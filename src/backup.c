@@ -1070,10 +1070,10 @@ pg_ptrack_support(void)
 		return false;
 	}
 
-	/* Now we support only ptrack version 1.3 */
-	if (strcmp(PQgetvalue(res_db, 0, 0), "1.4") != 0)
+	/* Now we support only ptrack version 1.5 */
+	if (strcmp(PQgetvalue(res_db, 0, 0), "1.5") != 0)
 	{
-		elog(WARNING, "Update your ptrack to the version 1.4. Current version is %s", PQgetvalue(res_db, 0, 0));
+		elog(WARNING, "Update your ptrack to the version 1.5. Current version is %s", PQgetvalue(res_db, 0, 0));
 		PQclear(res_db);
 		return false;
 	}
@@ -2692,13 +2692,10 @@ pg_ptrack_get_block(Oid dbOid,
 					BlockNumber blknum,
 					size_t *result_size)
 {
-	PGresult   *res_db;
 	PGresult   *res;
-	const char *dbname;
 	char	   *params[4];
 	char	   *result;
-	char	   *val;
-	PGconn	   *tmp_conn;
+	PGconn *tmp_conn = NULL;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -2706,37 +2703,40 @@ pg_ptrack_get_block(Oid dbOid,
 	params[3] = palloc(64);
 
 	/*
-	 * Use backup_conn, cause we can do it from any database.
+	 * Use tmp_conn, since we may work in parallel threads.
+	 * We can connect to any database.
 	 */
 	sprintf(params[0], "%i", tblsOid);
 	sprintf(params[1], "%i", dbOid);
 	sprintf(params[2], "%i", relOid);
 	sprintf(params[3], "%u", blknum);
 
+	tmp_conn = pgut_connect(pgut_dbname);
+
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
-	res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_block_2($1, $2, $3, $4)",
+	res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_block_2($1, $2, $3, $4)",
 					4, (const char **)params, true);
 
 	if (PQnfields(res) != 1)
 	{
-		elog(LOG, "cannot get file block for relation oid %u",
+		elog(VERBOSE, "cannot get file block for relation oid %u",
 					   relOid);
 		return NULL;
 	}
 
 	if (PQgetisnull(res, 0, 0))
 	{
-		elog(LOG, "cannot get file block for relation oid %u",
+		elog(VERBOSE, "cannot get file block for relation oid %u",
 				   relOid);
 		return NULL;
 	}
-
-	val = PQgetvalue(res, 0, 0);
 
 	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
 									  result_size);
 
 	PQclear(res);
+	pgut_disconnect(tmp_conn);
+
 	pfree(params[0]);
 	pfree(params[1]);
 	pfree(params[2]);
