@@ -69,15 +69,6 @@ static bool backup_in_progress = false;
 /* Is pg_stop_backup() was sent */
 static bool pg_stop_backup_is_sent = false;
 
-typedef struct
-{
-	const char *from_root;
-	const char *to_root;
-	parray *backup_files_list;
-	parray *prev_backup_filelist;
-	XLogRecPtr prev_backup_start_lsn;
-} backup_files_args;
-
 /*
  * Backup routines
  */
@@ -656,6 +647,8 @@ do_backup_instance(void)
 		arg->backup_files_list = backup_files_list;
 		arg->prev_backup_filelist = prev_backup_filelist;
 		arg->prev_backup_start_lsn = prev_backup_start_lsn;
+		arg->thread_backup_conn = NULL;
+		arg->thread_cancel_conn = NULL;
 		backup_threads_args[i] = arg;
 	}
 
@@ -678,6 +671,8 @@ do_backup_instance(void)
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(backup_threads[i], NULL);
+		if (backup_threads_args[i]->thread_backup_conn != NULL)
+			pgut_disconnect(backup_threads_args[i]->thread_backup_conn);
 		pg_free(backup_threads_args[i]);
 	}
 
@@ -1956,7 +1951,8 @@ backup_files(void *arg)
 			if (file->is_datafile && !file->is_cfs)
 			{
 				/* backup block by block if datafile AND not compressed by cfs*/
-				if (!backup_data_file(arguments->from_root,
+				if (!backup_data_file(arguments,
+									  arguments->from_root,
 									  arguments->to_root, file,
 									  arguments->prev_backup_start_lsn,
 									  current.backup_mode))
@@ -2686,7 +2682,8 @@ get_last_ptrack_lsn(void)
 }
 
 char *
-pg_ptrack_get_block(Oid dbOid,
+pg_ptrack_get_block(backup_files_args *arguments,
+					Oid dbOid,
 					Oid tblsOid,
 					Oid relOid,
 					BlockNumber blknum,
@@ -2695,7 +2692,6 @@ pg_ptrack_get_block(Oid dbOid,
 	PGresult   *res;
 	char	   *params[4];
 	char	   *result;
-	PGconn *tmp_conn = NULL;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -2711,10 +2707,13 @@ pg_ptrack_get_block(Oid dbOid,
 	sprintf(params[2], "%i", relOid);
 	sprintf(params[3], "%u", blknum);
 
-	tmp_conn = pgut_connect(pgut_dbname);
+	if (arguments->thread_backup_conn == NULL)
+		arguments->thread_backup_conn = pgut_connect(pgut_dbname);
 
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
-	res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_block_2($1, $2, $3, $4)",
+	res = pgut_execute_parallel(arguments->thread_backup_conn,
+								arguments->thread_cancel_conn,
+					"SELECT pg_ptrack_get_block_2($1, $2, $3, $4)",
 					4, (const char **)params, true);
 
 	if (PQnfields(res) != 1)
@@ -2735,7 +2734,6 @@ pg_ptrack_get_block(Oid dbOid,
 									  result_size);
 
 	PQclear(res);
-	pgut_disconnect(tmp_conn);
 
 	pfree(params[0]);
 	pfree(params[1]);

@@ -222,7 +222,8 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
  * to the backup file.
  */
 static void
-backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
+backup_data_page(backup_files_args *arguments, 
+				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BlockNumber blknum, BlockNumber nblocks,
 				 FILE *in, FILE *out,
 				 pg_crc32 *crc, int *n_skipped,
@@ -274,7 +275,7 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 		free(page);
 		page = NULL;
-		page = (Page) pg_ptrack_get_block(file->dbOid, file->tblspcOid,
+		page = (Page) pg_ptrack_get_block(arguments, file->dbOid, file->tblspcOid,
 										  file->relOid, absolute_blknum, &page_size);
 
 		if (page == NULL)
@@ -371,7 +372,8 @@ backup_data_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
  * backup with special header.
  */
 bool
-backup_data_file(const char *from_root, const char *to_root,
+backup_data_file(backup_files_args* arguments,
+				 const char *from_root, const char *to_root,
 				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BackupMode backup_mode)
 {
@@ -453,7 +455,7 @@ backup_data_file(const char *from_root, const char *to_root,
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
 		{
-			backup_data_page(file, prev_backup_start_lsn, blknum,
+			backup_data_page(arguments, file, prev_backup_start_lsn, blknum,
 							 nblocks, in, out, &(file->crc),
 							 &n_blocks_skipped, backup_mode);
 			n_blocks_read++;
@@ -466,7 +468,7 @@ backup_data_file(const char *from_root, const char *to_root,
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
 		{
-			backup_data_page(file, prev_backup_start_lsn, blknum,
+			backup_data_page(arguments, file, prev_backup_start_lsn, blknum,
 							 nblocks, in, out, &(file->crc),
 							 &n_blocks_skipped, backup_mode);
 			n_blocks_read++;

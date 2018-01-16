@@ -242,6 +242,16 @@ typedef union DataPage
        char                    data[BLCKSZ];
 } DataPage;
 
+typedef struct
+{
+	const char *from_root;
+	const char *to_root;
+	parray *backup_files_list;
+	parray *prev_backup_filelist;
+	XLogRecPtr prev_backup_start_lsn;
+	PGconn *thread_backup_conn;
+	PGconn *thread_cancel_conn;
+} backup_files_args;
 
 /*
  * return pointer that exceeds the length of prefix from character string.
@@ -323,7 +333,9 @@ extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
-extern char *pg_ptrack_get_block(Oid dbOid, Oid tblsOid, Oid relOid, BlockNumber blknum,
+extern char *pg_ptrack_get_block(backup_files_args *arguments,
+								 Oid dbOid, Oid tblsOid, Oid relOid, 
+								 BlockNumber blknum,
 								 size_t *result_size);
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
@@ -428,7 +440,8 @@ extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
-extern bool backup_data_file(const char *from_root, const char *to_root,
+extern bool backup_data_file(backup_files_args* arguments,
+							 const char *from_root, const char *to_root,
 							 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 							 BackupMode backup_mode);
 extern void restore_data_file(const char *from_root, const char *to_root,

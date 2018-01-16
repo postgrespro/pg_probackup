@@ -127,6 +127,9 @@ extern PGconn *pgut_connect_replication_extended(const char *pghost, const char 
 extern void pgut_disconnect(PGconn *conn);
 extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams,
 							  const char **params, bool text_result);
+extern PGresult *pgut_execute_parallel(PGconn* conn, PGconn* cancel_conn, 
+							  const char *query, int nParams,
+							  const char **params, bool text_result);
 extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int elevel);
 extern void pgut_cancel(PGconn* conn);
 extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);

@@ -1509,6 +1509,63 @@ pgut_set_port(const char *new_port)
 	port = new_port;
 }
 
+
+PGresult *
+pgut_execute_parallel(PGconn* conn, 
+					  PGconn* cancel_conn, const char *query, 
+					  int nParams, const char **params,
+					  bool text_result)
+{
+	PGresult   *res;
+
+	if (interrupted && !in_cleanup)
+		elog(ERROR, "interrupted");
+
+	/* write query to elog if verbose */
+	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	{
+		int		i;
+
+		if (strchr(query, '\n'))
+			elog(LOG, "(query)\n%s", query);
+		else
+			elog(LOG, "(query) %s", query);
+		for (i = 0; i < nParams; i++)
+			elog(LOG, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
+	}
+
+	if (conn == NULL)
+	{
+		elog(ERROR, "not connected");
+		return NULL;
+	}
+
+	//on_before_exec(conn);
+	if (nParams == 0)
+		res = PQexec(conn, query);
+	else
+		res = PQexecParams(conn, query, nParams, NULL, params, NULL, NULL,
+						   /*
+							* Specify zero to obtain results in text format,
+							* or one to obtain results in binary format.
+							*/
+						   (text_result) ? 0 : 1);
+	//on_after_exec();
+
+	switch (PQresultStatus(res))
+	{
+		case PGRES_TUPLES_OK:
+		case PGRES_COMMAND_OK:
+		case PGRES_COPY_IN:
+			break;
+		default:
+			elog(ERROR, "query failed: %squery was: %s",
+				 PQerrorMessage(conn), query);
+			break;
+	}
+
+	return res;
+}
 PGresult *
 pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
 			 bool text_result)
