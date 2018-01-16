@@ -321,7 +321,7 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 		while (errno = 0, (arcde = readdir(arcdir)) != NULL)
 		{
 			/*
-			 * We ignore the timeline part of the XLOG segment identifiers in
+			 * We ignore the timeline part of the WAL segment identifiers in
 			 * deciding whether a segment is still needed.  This ensures that
 			 * we won't prematurely remove a segment from a parent timeline.
 			 * We could probably be a little more proactive about removing
@@ -332,10 +332,13 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 			 * decide which ones are earlier than the exclusiveCleanupFileName
 			 * file. Note that this means files are not removed in the order
 			 * they were originally written, in case this worries you.
+			 *
+			 * We also should not forget that WAL segment can be compressed.
 			 */
 			if (IsXLogFileName(arcde->d_name) ||
 				IsPartialXLogFileName(arcde->d_name) ||
-				IsBackupHistoryFileName(arcde->d_name))
+				IsBackupHistoryFileName(arcde->d_name) ||
+				IsCompressedXLogFileName(arcde->d_name))
 			{
 				if (XLogRecPtrIsInvalid(oldest_lsn) ||
 					strncmp(arcde->d_name + 8, oldestSegmentNeeded + 8, 16) < 0)

@@ -267,6 +267,11 @@ typedef struct
 #define XLogDataFromLSN(data, xlogid, xrecoff)		\
 	sscanf(data, "%X/%X", xlogid, xrecoff)
 
+#define IsCompressedXLogFileName(fname) \
+	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz") &&			\
+	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
+	 strcmp((fname) + XLOG_FNAME_LEN, ".gz") == 0)
+
 /* directory options */
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
