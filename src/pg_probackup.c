@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.13";
+const char *PROGRAM_VERSION	= "2.0.14";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -85,6 +85,7 @@ uint64		system_identifier = 0;
 /* archive push options */
 static char *wal_file_path;
 static char *wal_file_name;
+static bool	file_overwrite = false;
 
 /* current settings */
 pgBackup	current;
@@ -93,7 +94,8 @@ ProbackupSubcmd backup_subcmd;
 bool		help = false;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
-static void opt_log_level(pgut_option *opt, const char *arg);
+static void opt_log_level_console(pgut_option *opt, const char *arg);
+static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
 
 static pgut_option options[] =
@@ -118,7 +120,7 @@ static pgut_option options[] =
 	{ 's', 14, "master-host",			&master_host,		SOURCE_CMDLINE, },
 	{ 's', 15, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 16, "master-user",			&master_user,		SOURCE_CMDLINE, },
-	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE, },
+	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
@@ -141,25 +143,27 @@ static pgut_option options[] =
 	{ 'u', 137, "compress-level",		&compress_level,	SOURCE_CMDLINE },
 	{ 'b', 138, "compress",				&compress_shortcut,	SOURCE_CMDLINE },
 	/* logging options */
-	{ 'b', 'l', "log",					&log_to_file,		SOURCE_CMDLINE },
-	{ 'f', 140, "log-level",			opt_log_level,		SOURCE_CMDLINE },
-	{ 's', 141, "log-filename",			&log_filename,		SOURCE_CMDLINE },
-	{ 's', 142, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
-	{ 's', 143, "log-directory",		&log_directory,		SOURCE_CMDLINE },
-	{ 'u', 144, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE },
-	{ 'u', 145, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE },
+	{ 'f', 140, "log-level-console",	opt_log_level_console,	SOURCE_CMDLINE },
+	{ 'f', 141, "log-level-file",		opt_log_level_file,	SOURCE_CMDLINE },
+	{ 's', 142, "log-filename",			&log_filename,		SOURCE_CMDLINE },
+	{ 's', 143, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
+	{ 's', 144, "log-directory",		&log_directory,		SOURCE_CMDLINE },
+	{ 'u', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
+	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },
 	{ 's', 'p', "pgport",				&port,				SOURCE_CMDLINE },
 	{ 's', 'U', "pguser",				&username,			SOURCE_CMDLINE },
 	{ 'B', 'w', "no-password",			&prompt_password,	SOURCE_CMDLINE },
+	{ 'b', 'W', "password",				&force_password,	SOURCE_CMDLINE },
 	/* other options */
 	{ 'U', 150, "system-identifier",	&system_identifier,	SOURCE_FILE_STRICT },
 	{ 's', 151, "instance",				&instance_name,		SOURCE_CMDLINE },
 	/* archive-push options */
 	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
 	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },
+	{ 'b', 162, "overwrite",			&file_overwrite,	SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -169,6 +173,7 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
+	char	   *command;
 	char		path[MAXPGPATH];
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
@@ -222,7 +227,14 @@ main(int argc, char *argv[])
 		{
 			if (argc == 2)
 			{
-				fprintf(stderr, "%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
+#ifdef PGPRO_VERSION
+				fprintf(stderr, "%s %s (PostgresPro %s %s)\n",
+						PROGRAM_NAME, PROGRAM_VERSION,
+						PGPRO_VERSION, PGPRO_EDITION);
+#else
+				fprintf(stderr, "%s %s (PostgreSQL %s)\n",
+						PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
+#endif
 				exit(0);
 			}
 			else if (strcmp(argv[2], "--help") == 0)
@@ -232,6 +244,33 @@ main(int argc, char *argv[])
 		}
 		else
 			elog(ERROR, "Unknown subcommand");
+	}
+
+	/*
+	 * Make command string before getopt_long() will call. It permutes the
+	 * content of argv.
+	 */
+	if (backup_subcmd == BACKUP)
+	{
+		int			i,
+					len = 0;
+
+		command = (char *) palloc(sizeof(char) * MAXPGPATH);
+		command[0] = '\0';
+
+		for (i = 0; i < argc; i++)
+		{
+			int			arglen = strlen(argv[i]);
+
+			if (arglen + len > MAXPGPATH)
+				break;
+
+			strncpy((command +len), argv[i], arglen);
+			len += arglen;
+			command[len++] = ' ';
+		}
+
+		command[len] = '\0';
 	}
 
 	/* Parse command line arguments */
@@ -367,11 +406,14 @@ main(int argc, char *argv[])
 	if (compress_level < 0 || compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
+	if (compress_level == 0)
+		compress_alg = NOT_DEFINED_COMPRESS;
+
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH:
-			return do_archive_push(wal_file_path, wal_file_name);
+			return do_archive_push(wal_file_path, wal_file_name, file_overwrite);
 		case ARCHIVE_GET:
 			return do_archive_get(wal_file_path, wal_file_name);
 		case ADD_INSTANCE:
@@ -381,7 +423,20 @@ main(int argc, char *argv[])
 		case INIT:
 			return do_init();
 		case BACKUP:
-			return do_backup();
+			{
+				const char *backup_mode;
+				time_t		start_time;
+
+				start_time = time(NULL);
+				backup_mode = deparse_backup_mode(current.backup_mode);
+
+				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
+						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
+						  current.stream ? "true" : "false", is_remote_backup ? "true" : "false");
+				elog_file(INFO, "command: %s", command);
+
+				return do_backup(start_time);
+			}
 		case RESTORE:
 			return do_restore_or_validate(current.backup_id,
 						  target_time, target_xid,
@@ -422,9 +477,15 @@ opt_backup_mode(pgut_option *opt, const char *arg)
 }
 
 static void
-opt_log_level(pgut_option *opt, const char *arg)
+opt_log_level_console(pgut_option *opt, const char *arg)
 {
-	log_level = parse_log_level(arg);
+	log_level_console = parse_log_level(arg);
+}
+
+static void
+opt_log_level_file(pgut_option *opt, const char *arg)
+{
+	log_level_file = parse_log_level(arg);
 }
 
 CompressAlg

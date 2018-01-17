@@ -118,6 +118,7 @@ typedef enum BackupStatus
 	BACKUP_STATUS_DELETING,		/* data files are being deleted */
 	BACKUP_STATUS_DELETED,		/* data files have been deleted */
 	BACKUP_STATUS_DONE,			/* completed but not validated yet */
+	BACKUP_STATUS_ORPHAN,		/* backup validity is unknown but at least one parent backup is corrupted */
 	BACKUP_STATUS_CORRUPT		/* files are corrupted, not available */
 } BackupStatus;
 
@@ -165,8 +166,8 @@ typedef struct pgBackupConfig
 	const char *master_user;
 	int			replica_timeout;
 
-	int			log_to_file;
-	int			log_level;
+	int			log_level_console;
+	int			log_level_file;
 	char	   *log_filename;
 	char	   *error_log_filename;
 	char	   *log_directory;
@@ -237,9 +238,20 @@ typedef struct pgRecoveryTarget
 /* Union to ease operations on relation pages */
 typedef union DataPage
 {
-	PageHeaderData	page_data;
-	char			data[BLCKSZ];
+       PageHeaderData  page_data;
+       char                    data[BLCKSZ];
 } DataPage;
+
+typedef struct
+{
+	const char *from_root;
+	const char *to_root;
+	parray *backup_files_list;
+	parray *prev_backup_filelist;
+	XLogRecPtr prev_backup_start_lsn;
+	PGconn *thread_backup_conn;
+	PGcancel *thread_cancel_conn;
+} backup_files_args;
 
 /*
  * return pointer that exceeds the length of prefix from character string.
@@ -255,45 +267,52 @@ typedef union DataPage
 #define XLogDataFromLSN(data, xlogid, xrecoff)		\
 	sscanf(data, "%X/%X", xlogid, xrecoff)
 
+#define IsCompressedXLogFileName(fname) \
+	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz") &&			\
+	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
+	 strcmp((fname) + XLOG_FNAME_LEN, ".gz") == 0)
+
 /* directory options */
-extern char *backup_path;
-extern char backup_instance_path[MAXPGPATH];
-extern char *pgdata;
-extern char arclog_path[MAXPGPATH];
+extern char	   *backup_path;
+extern char		backup_instance_path[MAXPGPATH];
+extern char	   *pgdata;
+extern char		arclog_path[MAXPGPATH];
 
 /* common options */
-extern int num_threads;
-extern bool stream_wal;
-extern bool progress;
+extern int		num_threads;
+extern bool		stream_wal;
+extern bool		progress;
 #if PG_VERSION_NUM >= 100000
 /* In pre-10 'replication_slot' is defined in receivelog.h */
-extern char *replication_slot;
+extern char	   *replication_slot;
 #endif
 
 /* backup options */
-extern bool	smooth_checkpoint;
-extern uint32 archive_timeout;
-extern bool from_replica;
-extern bool is_remote_backup;
+extern bool		smooth_checkpoint;
+extern uint32	archive_timeout;
+extern bool		from_replica;
+extern bool		is_remote_backup;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;
 extern const char *master_user;
-extern uint32 replica_timeout;
+extern uint32	replica_timeout;
+
+extern bool is_checksum_enabled;
 
 /* delete options */
-extern bool delete_wal;
-extern bool	delete_expired;
-extern bool	apply_to_all;
-extern bool	force_delete;
+extern bool		delete_wal;
+extern bool		delete_expired;
+extern bool		apply_to_all;
+extern bool		force_delete;
 
 /* retention options */
-extern uint32 retention_redundancy;
-extern uint32 retention_window;
+extern uint32	retention_redundancy;
+extern uint32	retention_window;
 
 /* compression options */
 extern CompressAlg compress_alg;
-extern int    compress_level;
+extern int		compress_level;
 extern bool		compress_shortcut;
 
 #define DEFAULT_COMPRESS_LEVEL 6
@@ -313,12 +332,16 @@ extern ProbackupSubcmd	backup_subcmd;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(void);
+extern int do_backup(time_t start_time);
 extern BackupMode parse_backup_mode(const char *value);
-extern bool fileExists(const char *path);
+extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
+extern char *pg_ptrack_get_block(backup_files_args *arguments,
+								 Oid dbOid, Oid tblsOid, Oid relOid, 
+								 BlockNumber blknum,
+								 size_t *result_size);
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  const char *target_time,
@@ -342,7 +365,8 @@ extern int do_init(void);
 extern int do_add_instance(void);
 
 /* in archive.c */
-extern int do_archive_push(char *wal_file_path, char *wal_file_name);
+extern int do_archive_push(char *wal_file_path, char *wal_file_name,
+						   bool overwrite);
 extern int do_archive_get(char *wal_file_path, char *wal_file_name);
 
 
@@ -366,6 +390,7 @@ extern char *slurpFile(const char *datadir,
 					   const char *path,
 					   size_t *filesize,
 					   bool safe);
+extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
 extern void help_pg_probackup(void);
@@ -407,6 +432,8 @@ extern parray *dir_read_file_list(const char *root, const char *file_txt);
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
 
+extern bool fileExists(const char *path);
+
 extern pgFile *pgFileNew(const char *path, bool omit_symlink);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
@@ -418,14 +445,17 @@ extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
-extern bool backup_data_file(const char *from_root, const char *to_root,
+extern bool backup_data_file(backup_files_args* arguments,
+							 const char *from_root, const char *to_root,
 							 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 							 BackupMode backup_mode);
 extern void restore_data_file(const char *from_root, const char *to_root,
 							  pgFile *file, pgBackup *backup);
 extern bool copy_file(const char *from_root, const char *to_root,
 					  pgFile *file);
-extern void copy_wal_file(const char *from_root, const char *to_root);
+extern void push_wal_file(const char *from_path, const char *to_path,
+						  bool is_compress, bool overwrite);
+extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern bool calc_file_checksum(pgFile *file);
 
@@ -454,9 +484,11 @@ extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
 extern uint32 get_data_checksum_version(bool safe);
-extern char *base36enc(long unsigned int value);
+extern const char *base36enc(long unsigned int value);
+extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
 extern uint64 get_system_identifier(char *pgdata);
+extern uint64 get_remote_system_identifier(PGconn *conn);
 extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 extern void pgBackup_init(pgBackup *backup);
 

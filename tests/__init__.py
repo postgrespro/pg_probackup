@@ -7,11 +7,12 @@ from . import init_test, option_test, show_test, \
     ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
     false_positive, replica, compression, page, ptrack, archive, \
-    exclude, cfs_backup, cfs_restore, cfs_validate_backup
+    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test
 
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
+#    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup_test))
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))

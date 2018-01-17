@@ -139,8 +139,11 @@ do_retention_purge(void)
 	if (retention_window > 0)
 		elog(LOG, "WINDOW=%u", retention_window);
 
-	if (retention_redundancy == 0 && retention_window == 0)
-		elog(ERROR, "retention policy is not set");
+	if (retention_redundancy == 0 && retention_window == 0 && !delete_wal)
+	{
+		elog(WARNING, "Retention policy is not set");
+		return 0;
+	}
 
 	/* Get exclusive lock of backup catalog */
 	catalog_lock();
@@ -221,7 +224,6 @@ static int
 pgBackupDeleteFiles(pgBackup *backup)
 {
 	size_t		i;
-	char	   *backup_id;
 	char		path[MAXPGPATH];
 	char		timestamp[100];
 	parray	   *files;
@@ -232,11 +234,9 @@ pgBackupDeleteFiles(pgBackup *backup)
 	if (backup->status == BACKUP_STATUS_DELETED)
 		return 0;
 
-	backup_id = base36enc(backup->start_time);
 	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 
-	elog(INFO, "delete: %s %s", backup_id, timestamp);
-	free(backup_id);
+	elog(INFO, "delete: %s %s", base36enc(backup->start_time), timestamp);
 
 	/*
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
@@ -321,7 +321,7 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 		while (errno = 0, (arcde = readdir(arcdir)) != NULL)
 		{
 			/*
-			 * We ignore the timeline part of the XLOG segment identifiers in
+			 * We ignore the timeline part of the WAL segment identifiers in
 			 * deciding whether a segment is still needed.  This ensures that
 			 * we won't prematurely remove a segment from a parent timeline.
 			 * We could probably be a little more proactive about removing
@@ -332,10 +332,13 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 			 * decide which ones are earlier than the exclusiveCleanupFileName
 			 * file. Note that this means files are not removed in the order
 			 * they were originally written, in case this worries you.
+			 *
+			 * We also should not forget that WAL segment can be compressed.
 			 */
 			if (IsXLogFileName(arcde->d_name) ||
 				IsPartialXLogFileName(arcde->d_name) ||
-				IsBackupHistoryFileName(arcde->d_name))
+				IsBackupHistoryFileName(arcde->d_name) ||
+				IsCompressedXLogFileName(arcde->d_name))
 			{
 				if (XLogRecPtrIsInvalid(oldest_lsn) ||
 					strncmp(arcde->d_name + 8, oldestSegmentNeeded + 8, 16) < 0)

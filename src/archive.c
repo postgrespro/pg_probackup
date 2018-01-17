@@ -18,26 +18,27 @@
  * --wal-file-path %p --wal-file-name %f', to move backups into arclog_path.
  * Where archlog_path is $BACKUP_PATH/wal/system_id.
  * Currently it just copies wal files to the new location.
- * TODO: Planned options: compress, list the arclog content,
+ * TODO: Planned options: list the arclog content,
  * compute and validate checksums.
  */
 int
-do_archive_push(char *wal_file_path, char *wal_file_name)
+do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 {
 	char		backup_wal_file_path[MAXPGPATH];
 	char		absolute_wal_file_path[MAXPGPATH];
 	char		current_dir[MAXPGPATH];
 	int64		system_id;
 	pgBackupConfig *config;
+	bool		is_compress = false;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
-		elog(ERROR, "required parameters are not specified: --wal_file_name %%f --wal_file_path %%p");
+		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
 
 	if (wal_file_name == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_name %%f");
+		elog(ERROR, "required parameter not specified: --wal-file-name %%f");
 
 	if (wal_file_path == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_path %%p");
+		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
 
 	if (!getcwd(current_dir, sizeof(current_dir)))
 		elog(ERROR, "getcwd() error");
@@ -61,10 +62,16 @@ do_archive_push(char *wal_file_path, char *wal_file_name)
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
 
 	elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
-	if (access(backup_wal_file_path, F_OK) != -1)
-		elog(ERROR, "file '%s', already exists.", backup_wal_file_path);
 
-	copy_wal_file(absolute_wal_file_path, backup_wal_file_path);
+#ifdef HAVE_LIBZ
+	if (compress_alg == PGLZ_COMPRESS)
+		elog(ERROR, "pglz compression is not supported");
+	if (compress_alg == ZLIB_COMPRESS)
+		is_compress = IsXLogFileName(wal_file_name);
+#endif
+
+	push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress,
+				  overwrite);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
 	return 0;
@@ -82,13 +89,13 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 	char		current_dir[MAXPGPATH];
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
-		elog(ERROR, "required parameters are not specified: --wal_file_name %%f --wal_file_path %%p");
+		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
 
 	if (wal_file_name == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_name %%f");
+		elog(ERROR, "required parameter not specified: --wal-file-name %%f");
 
 	if (wal_file_path == NULL)
-		elog(ERROR, "required parameter not specified: --wal_file_path %%p");
+		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
 
 	if (!getcwd(current_dir, sizeof(current_dir)))
 		elog(ERROR, "getcwd() error");
@@ -96,8 +103,9 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
 
-	elog(INFO, "pg_probackup archive-get from %s to %s", backup_wal_file_path, absolute_wal_file_path);
-	copy_wal_file(backup_wal_file_path, absolute_wal_file_path);
+	elog(INFO, "pg_probackup archive-get from %s to %s",
+		 backup_wal_file_path, absolute_wal_file_path);
+	get_wal_file(backup_wal_file_path, absolute_wal_file_path);
 	elog(INFO, "pg_probackup archive-get completed successfully");
 
 	return 0;

@@ -14,10 +14,29 @@
 
 #include "storage/bufpage.h"
 
-char *
+const char *
 base36enc(long unsigned int value)
 {
-	char		base36[36] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	const char	base36[36] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	/* log(2**64) / log(36) = 12.38 => max 13 char + '\0' */
+	static char	buffer[14];
+	unsigned int offset = sizeof(buffer);
+
+	buffer[--offset] = '\0';
+	do {
+		buffer[--offset] = base36[value % 36];
+	} while (value /= 36);
+
+	return &buffer[offset];
+}
+
+/*
+ * Same as base36enc(), but the result must be released by the user.
+ */
+char *
+base36enc_dup(long unsigned int value)
+{
+	const char	base36[36] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	/* log(2**64) / log(36) = 12.38 => max 13 char + '\0' */
 	char		buffer[14];
 	unsigned int offset = sizeof(buffer);
@@ -27,7 +46,7 @@ base36enc(long unsigned int value)
 		buffer[--offset] = base36[value % 36];
 	} while (value /= 36);
 
-	return strdup(&buffer[offset]); /* warning: this must be free-d by the user */
+	return strdup(&buffer[offset]);
 }
 
 long unsigned int
@@ -120,6 +139,39 @@ get_system_identifier(char *pgdata_path)
 	return ControlFile.system_identifier;
 }
 
+uint64
+get_remote_system_identifier(PGconn *conn)
+{
+#if PG_VERSION_NUM >= 90600
+	PGresult   *res;
+	uint64		system_id_conn;
+	char	   *val;
+
+	res = pgut_execute(conn,
+					   "SELECT system_identifier FROM pg_control_system()",
+					   0, NULL, true);
+	val = PQgetvalue(res, 0, 0);
+	if (!parse_uint64(val, &system_id_conn, 0))
+	{
+		PQclear(res);
+		elog(ERROR, "%s is not system_identifier", val);
+	}
+	PQclear(res);
+
+	return system_id_conn;
+#else
+	char	   *buffer;
+	size_t		size;
+	ControlFileData ControlFile;
+
+	buffer = fetchFile(conn, "global/pg_control", &size);
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.system_identifier;
+#endif
+}
+
 uint32
 get_data_checksum_version(bool safe)
 {
@@ -197,9 +249,9 @@ status2str(BackupStatus status)
 		"DELETING",
 		"DELETED",
 		"DONE",
+		"ORPHAN",
 		"CORRUPT"
 	};
-
 	if (status < BACKUP_STATUS_INVALID || BACKUP_STATUS_CORRUPT < status)
 		return "UNKNOWN";
 

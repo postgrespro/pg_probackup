@@ -18,6 +18,8 @@ static void help_set_config(void);
 static void help_show_config(void);
 static void help_add_instance(void);
 static void help_del_instance(void);
+static void help_archive_push(void);
+static void help_archive_get(void);
 
 void
 help_command(char *command)
@@ -42,6 +44,10 @@ help_command(char *command)
 		help_add_instance();
 	else if (strcmp(command, "del-instance") == 0)
 		help_del_instance();
+	else if (strcmp(command, "archive-push") == 0)
+		help_archive_push();
+	else if (strcmp(command, "archive-get") == 0)
+		help_archive_get();
 	else if (strcmp(command, "--help") == 0
 			 || strcmp(command, "help") == 0
 			 || strcmp(command, "-?") == 0
@@ -63,10 +69,11 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s version\n"), PROGRAM_NAME);
 
-	printf(_("\n  %s init -B backup-path [-l]\n"), PROGRAM_NAME);
+	printf(_("\n  %s init -B backup-path\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--log-level=log-level]\n"));
+	printf(_("                 [--log-level-console=log-level-console]\n"));
+	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -84,7 +91,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [-l] [--stream [-S slot-name]] [--backup-pg-log]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
@@ -95,12 +102,12 @@ help_pg_probackup(void)
 	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("\n  %s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-dir] [-l] [-i backup-id] [--progress]\n"));
+	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 
 	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
-	printf(_("                 [-i backup-id] [-l] [--progress]\n"));
+	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
 
@@ -108,13 +115,23 @@ help_pg_probackup(void)
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
 
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--wal] [-i backup-id | --expired] [-l]\n"));
+	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
 
 	printf(_("\n  %s add-instance -B backup-dir -D pgdata-dir\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
 
 	printf(_("\n  %s del-instance -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
+
+	printf(_("\n  %s archive-push -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--compress [--compress-level=compress-level]]\n"));
+	printf(_("                 [--overwrite]\n"));
+
+	printf(_("\n  %s archive-get -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
@@ -130,16 +147,15 @@ help_pg_probackup(void)
 static void
 help_init(void)
 {
-	printf(_("%s init -B backup-path -D pgdata-dir [-l]\n\n"), PROGRAM_NAME);
+	printf(_("%s init -B backup-path\n\n"), PROGRAM_NAME);
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 }
 
 static void
 help_backup(void)
 {
 	printf(_("%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [-l] [--stream [-S slot-name]] [--backup-pg-log]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
@@ -153,7 +169,6 @@ help_backup(void)
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|PTRACK\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
 	printf(_("      --archive-timeout            wait timeout for WAL segment archiving\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
@@ -195,7 +210,6 @@ help_restore(void)
 	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("  -D, --pgdata=pgdata-dir          location of the database storage area\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to restore\n"));
 
 	printf(_("      --progress                   show progress\n"));
@@ -219,7 +233,6 @@ help_validate(void)
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
-	printf(_("  -l, --log                        store messages in a log file\n"));
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
@@ -250,14 +263,14 @@ help_delete(void)
 	printf(_("  -i, --backup-id=backup-id        backup to delete\n"));
 	printf(_("      --expired                    delete backups expired according to current\n"));
 	printf(_("                                   retention policy\n"));
-	printf(_("  -l, --log                        store messages in a log file\n"));
 }
 
 static void
 help_set_config(void)
 {
 	printf(_("%s set-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--log-level=log-level]\n"));
+	printf(_("                 [--log-level-console=log-level-console]\n"));
+	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -276,7 +289,10 @@ help_set_config(void)
 	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --log-level=log-level        controls which message levels are sent to the log\n"));
+	printf(_("      --log-level-console=log-level-console\n"
+			 "                                   controls which message levels are sent to the stderr\n"));
+	printf(_("      --log-level-file=log-level-file\n"
+			 "                                   controls which message levels are sent to a log file\n"));
 	printf(_("      --log-filename=log-filename  file names of the created log files which is treated as as strftime pattern\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   file names of the created log files for error messages\n"));
@@ -308,7 +324,7 @@ help_set_config(void)
 	printf(_("\n  Replica options:\n"));
 	printf(_("      --master-db=db_name          database to connect to master\n"));
 	printf(_("      --master-host=host_name      database server host of master\n"));
-	printf(_("      --master-port=port=port           database server port of master\n"));
+	printf(_("      --master-port=port           database server port of master\n"));
 	printf(_("      --master-user=user_name      user name to connect to master\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
 }
@@ -341,4 +357,40 @@ help_del_instance(void)
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
+}
+
+static void
+help_archive_push(void)
+{
+	printf(_("\n  %s archive-push -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--compress [--compress-level=compress-level]]\n\n"));
+	printf(_("                 [--overwrite]\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("      --instance=instance_name     name of the instance to delete\n"));
+	printf(_("      --wal-file-path=wal-file-path\n"));
+	printf(_("                                   relative path name of the WAL file on the server\n"));
+	printf(_("      --wal-file-name=wal-file-name\n"));
+	printf(_("                                   name of the WAL file to retrieve from the server\n"));
+	printf(_("      --compress                   compress WAL file during archiving\n"));
+	printf(_("      --compress-level=compress-level\n"));
+	printf(_("                                   level of compression [0-9]\n"));
+	printf(_("      --overwrite                  overwrite archived WAL file\n"));
+}
+
+static void
+help_archive_get(void)
+{
+	printf(_("\n  %s archive-get -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 --wal-file-path=wal-file-path\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("      --instance=instance_name     name of the instance to delete\n"));
+	printf(_("      --wal-file-path=wal-file-path\n"));
+	printf(_("                                   relative destination path name of the WAL file on the server\n"));
+	printf(_("      --wal-file-name=wal-file-name\n"));
+	printf(_("                                   name of the WAL file to retrieve from the archive\n"));
 }
