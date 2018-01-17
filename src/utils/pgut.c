@@ -1758,7 +1758,7 @@ on_before_exec(PGconn *conn, PGcancel *thread_cancel_conn)
 
 	if (thread_cancel_conn)
 	{
-		elog(WARNING, "Handle tread_cancel_conn. on_before_exec");
+		//elog(WARNING, "Handle tread_cancel_conn. on_before_exec");
 		old = thread_cancel_conn;
 
 		/* be sure handle_sigint doesn't use pointer while freeing */
@@ -1807,7 +1807,7 @@ on_after_exec(PGcancel *thread_cancel_conn)
 
 	if (thread_cancel_conn)
 	{
-		elog(WARNING, "Handle tread_cancel_conn. on_after_exec");
+		//elog(WARNING, "Handle tread_cancel_conn. on_after_exec");
 		old = thread_cancel_conn;
 
 		/* be sure handle_sigint doesn't use pointer while freeing */
