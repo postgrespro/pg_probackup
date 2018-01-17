@@ -59,5 +59,15 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup del-instance -B backup-dir
                  --instance=instance_name
 
+  pg_probackup archive-push -B backup-dir --instance=instance_name
+                 --wal-file-path=wal-file-path
+                 --wal-file-name=wal-file-name
+                 [--compress [--compress-level=compress-level]]
+                 [--overwrite]
+
+  pg_probackup archive-get -B backup-dir --instance=instance_name
+                 --wal-file-path=wal-file-path
+                 --wal-file-name=wal-file-name
+
 Read the website for details. <https://github.com/postgrespro/pg_probackup>
 Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.

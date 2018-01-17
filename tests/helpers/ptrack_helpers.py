@@ -858,7 +858,7 @@ class ProbackupTest(object):
             'postmaster.pid', 'postmaster.opts',
             'pg_internal.init', 'postgresql.auto.conf',
             'backup_label', 'tablespace_map', 'recovery.conf',
-            'ptrack_control', 'ptrack_init'
+            'ptrack_control', 'ptrack_init', 'pg_control'
         ]
         suffixes_to_ignore = (
             '_ptrack'
@@ -1119,7 +1119,10 @@ class GDBobj(ProbackupTest):
                 continue
             if line.startswith('*stopped,reason="breakpoint-hit"'):
                 continue
-            if line.startswith('*stopped,reason="exited-normally"'):
+            if (
+                line.startswith('*stopped,reason="exited-normally"') or
+                line == '*stopped\n'
+            ):
                 return
         raise GdbException(
             'Failed to continue execution until exit.\n'
@@ -1164,11 +1167,10 @@ class GDBobj(ProbackupTest):
         self.proc.stdin.flush()
 
         while True:
-#            sleep(1)
             line = self.proc.stdout.readline()
             output += [line]
             if self.verbose:
-                print(line)
+                print(repr(line))
             if line == '^done\n' or line.startswith('*stopped'):
                 break
             if running and line.startswith('*running'):

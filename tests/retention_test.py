@@ -125,7 +125,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
         node.safe_psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,100500) i")
+            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,100500) i")
 
         self.backup_node(backup_dir, 'node', node)
 

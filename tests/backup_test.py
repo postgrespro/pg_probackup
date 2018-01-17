@@ -162,7 +162,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue("INFO: Validate backups of the instance 'node'\n" in e.message
                 and 'WARNING: Backup file "{0}" is not found\n'.format(file) in e.message
-                and "WARNING: Backup {0} is corrupted\n".format(backup_id) in e.message
+                and "WARNING: Backup {0} data files are corrupted\n".format(backup_id) in e.message
                 and "INFO: Some backups are not valid\n" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
 
@@ -231,32 +231,97 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_page_checksumm_fail(self):
+    def test_checksumm_fail_heal_via_ptrack(self):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
             )
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.start()
 
-        self.backup_node(backup_dir, 'node', node, backup_type="full", options=["-j", "4", "--stream"])
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
 
         node.safe_psql(
             "postgres",
-            "create table t_heap as select 1 as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,1000) i")
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
         node.safe_psql(
             "postgres",
             "CHECKPOINT;")
 
-        heap_path = node.safe_psql("postgres", "select pg_relation_filepath('t_heap')").rstrip()
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+                f.seek(9000)
+                f.write(b"bla")
+                f.flush()
+                f.close
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream", '--log-level-file=verbose'])
+
+        # open log file and check
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            self.assertIn('block 1, try fetching via SQL', log_content)
+            self.assertIn('SELECT pg_ptrack_get_block', log_content)
+            f.close
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK',
+            "Backup Status should be OK")
+
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_checksumm_fail_heal_via_ptrack_fail(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+        )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
         node.stop()
 
-        with open(os.path.join(node.data_dir,heap_path), "rb+", 0) as f:
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
                 f.seek(9000)
                 f.write(b"bla")
                 f.flush()
@@ -264,17 +329,27 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         try:
-            self.backup_node(backup_dir, 'node', node, backup_type="full", options=["-j", "4", "--stream"])
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="full", options=["-j", "4", "--stream"])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because of page corruption in PostgreSQL instance.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of page "
+                "corruption in PostgreSQL instance.\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn("ERROR: File", e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
-            self.assertIn("blknum", e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
-            self.assertIn("have wrong checksum", e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(repr(e.message), self.cmd))
+            self.assertTrue(
+                "WARNING: File" in e.message and
+                "blknum" in e.message and
+                "have wrong checksum" in e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        self.assertTrue(
+             self.show_pb(backup_dir, 'node')[1]['Status'] == 'ERROR',
+             "Backup Status should be ERROR")
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # self.del_test_dir(module_name, fname)
