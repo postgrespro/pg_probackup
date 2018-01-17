@@ -767,21 +767,38 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         wals.sort()
         for wal in wals:
             with open(os.path.join(wals_dir, wal), "rb+", 0) as f:
-                f.seek(0)
+                f.seek(128)
                 f.write(b"blablablaadssaaaaaaaaaaaaaaa")
                 f.flush()
                 f.close
 
         # Validate to xid
         try:
-            self.validate_pb(backup_dir, 'node', backup_id, options=['--xid={0}'.format(target_xid)])
-            self.assertEqual(1, 0, "Expecting Error because of wal segments corruption.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.validate_pb(
+                backup_dir,
+                'node',
+                backup_id,
+                options=[
+                    "--log-level-console=verbose",
+                    "--xid={0}".format(target_xid)])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of wal segments corruption.\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue('Possible WAL CORRUPTION' in e.message,
-            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertTrue(
+                'WARNING: Backup' in e.message and
+                'WAL segments are corrupted' in e.message and
+                "WARNING: There are not enough WAL "
+                "records to consistenly restore backup" in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
-        self.assertEqual('CORRUPT', self.show_pb(backup_dir, 'node', backup_id)['status'], 'Backup STATUS should be "CORRUPT"')
+        self.assertEqual(
+            'CORRUPT',
+            self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup STATUS should be "CORRUPT"')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
