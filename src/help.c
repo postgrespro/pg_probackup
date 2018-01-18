@@ -93,6 +93,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
+	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
@@ -158,6 +159,7 @@ help_backup(void)
 	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
 	printf(_("                 [--progress] [--delete-expired]\n"));
+	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
@@ -179,6 +181,8 @@ help_backup(void)
 	printf(_("                                   retention policy after successful backup completion\n"));
 
 	printf(_("\n  Compression options:\n"));
+	printf(_("                 [--compress]\n"));
+	printf(_("                                   compress data files\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
 	printf(_("                                   available options: 'zlib','pglz','none'\n"));
 	printf(_("      --compress-level=compress-level\n"));
