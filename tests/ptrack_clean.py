@@ -13,10 +13,14 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_clean(self):
         """Take backups of every available types and check that PTRACK is clean"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on', 'wal_level': 'replica', 'max_wal_senders': '2'})
+            pg_options={
+                'ptrack_enable': 'on',
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -53,7 +57,9 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'vacuum t_heap')
 
         # Take PTRACK backup to clean every ptrack
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['-j100'])
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['-j100', '--log-level-file=verbose'])
         node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:

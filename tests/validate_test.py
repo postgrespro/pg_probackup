@@ -967,7 +967,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Delete wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
-        file = os.path.join(backup_dir, 'wal', 'node', wals[1])
+        wals.sort()
+        file = os.path.join(backup_dir, 'wal', 'node', wals[3])
         os.remove(file)
 
         # cut out '.gz'

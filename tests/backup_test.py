@@ -403,7 +403,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 "WARNING: File" in e.message and
                 "blknum" in e.message and
-                "have wrong checksum" in e.message,
+                "have wrong checksum" in e.message and
+                "try to fetch via SQL" in e.message and
+                "WARNING:  page verification failed, "
+                "calculated checksum" in e.message and
+                "ERROR: query failed: "
+                "ERROR:  invalid page in block" in e.message and
+                "query was: SELECT pg_ptrack_get_block_2" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
