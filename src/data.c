@@ -190,7 +190,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	}
 
 	/* Verify checksum */
-	if(current.checksum_version && is_checksum_enabled)
+	if(current.checksum_version)
 	{
 		/*
 		 * If checksum is wrong, sleep a bit and then try again
@@ -266,10 +266,29 @@ backup_data_page(backup_files_args *arguments,
 
 			if (result == 1)
 				page_is_valid = true;
+
+			/*
+			 * If ptrack support is available use it to get invalid block
+			 * instead of rereading it 99 times
+			 */
+			//elog(WARNING, "Checksum_Version: %i", current.checksum_version ? 1 : 0);
+
+			if (result == -1 && is_ptrack_support)
+			{
+				elog(WARNING, "File %s, block %u, try to fetch via SQL",
+					file->path, blknum);
+				break;
+			}
 		}
+		/*
+		 * If page is not valid after 100 attempts to read it
+		 * throw an error.
+		 */
+		if(!page_is_valid && !is_ptrack_support)
+			elog(ERROR, "Data file checksum mismatch, canceling backup");
 	}
 
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK || (!page_is_valid && is_ptrack_support))
 	{
 		size_t page_size = 0;
 

@@ -298,6 +298,7 @@ extern const char *master_port;
 extern const char *master_user;
 extern uint32	replica_timeout;
 
+extern bool is_ptrack_support;
 extern bool is_checksum_enabled;
 
 /* delete options */

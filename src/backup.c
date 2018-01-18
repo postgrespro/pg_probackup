@@ -52,6 +52,7 @@ static pthread_mutex_t start_stream_mut = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t stream_thread;
 
 static int is_ptrack_enable = false;
+bool is_ptrack_support = false;
 bool is_checksum_enabled = false;
 
 /* Backup connections */
@@ -743,7 +744,6 @@ do_backup_instance(void)
 int
 do_backup(time_t start_time)
 {
-	bool is_ptrack_support;
 
 	/* PGDATA and BACKUP_MODE are always required */
 	if (pgdata == NULL)
