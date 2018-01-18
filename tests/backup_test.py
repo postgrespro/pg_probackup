@@ -336,7 +336,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # open log file and check
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
-            self.assertIn('block 1, try fetching via SQL', log_content)
+            self.assertIn('block 1, try to fetch via SQL', log_content)
             self.assertIn('SELECT pg_ptrack_get_block', log_content)
             f.close
 
