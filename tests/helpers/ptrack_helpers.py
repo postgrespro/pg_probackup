@@ -815,11 +815,14 @@ class ProbackupTest(object):
         """ Returns current user name """
         return pwd.getpwuid(os.getuid())[0]
 
+    def version_to_num(self, version):
+        return testgres.version_to_num(version)
+
     def switch_wal_segment(self, node):
         """ Execute pg_switch_wal/xlog() in given node"""
-        if testgres.version_to_num(
+        if self.version_to_num(
             node.safe_psql("postgres", "show server_version")
-                ) >= testgres.version_to_num('10.0'):
+                ) >= self.version_to_num('10.0'):
             node.safe_psql("postgres", "select pg_switch_wal()")
         else:
             node.safe_psql("postgres", "select pg_switch_xlog()")

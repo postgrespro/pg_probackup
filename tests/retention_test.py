@@ -71,7 +71,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.start()
 
-        with open(os.path.join(backup_dir, 'backups', 'node', "pg_probackup.conf"), "a") as conf:
+        with open(
+            os.path.join(
+                backup_dir,
+                'backups',
+                'node',
+                "pg_probackup.conf"), "a") as conf:
             conf.write("retention-redundancy = 1\n")
             conf.write("retention-window = 1\n")
 
@@ -86,7 +91,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         for backup in os.listdir(backups):
             if backup == 'pg_probackup.conf':
                 continue
-            with open(os.path.join(backups, backup, "backup.control"), "a") as conf:
+            with open(
+                    os.path.join(
+                        backups, backup, "backup.control"), "a") as conf:
                 conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
                     datetime.now() - timedelta(days=days_delta)))
                 days_delta -= 1
@@ -107,7 +114,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
     def test_retention_wal(self):
         """purge backups using window-based retention policy"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -119,13 +127,17 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,100500) i")
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100500) i")
 
         # Take FULL BACKUP
         self.backup_node(backup_dir, 'node', node)
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,100500) i")
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100500) i")
 
         self.backup_node(backup_dir, 'node', node)
 
@@ -134,7 +146,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         for backup in os.listdir(backups):
             if backup == 'pg_probackup.conf':
                 continue
-            with open(os.path.join(backups, backup, "backup.control"), "a") as conf:
+            with open(
+                    os.path.join(
+                        backups, backup, "backup.control"), "a") as conf:
                 conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
                     datetime.now() - timedelta(days=days_delta)))
                 days_delta -= 1
@@ -142,10 +156,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Make backup to be keeped
         self.backup_node(backup_dir, 'node', node, backup_type="page")
 
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
 
         # Purge backups
-        self.delete_expired(backup_dir, 'node')
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-window=2'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
         # Clean after yourself
