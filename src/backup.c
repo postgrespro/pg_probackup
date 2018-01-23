@@ -656,7 +656,7 @@ do_backup_instance(void)
 	/* Run threads */
 	for (i = 0; i < num_threads; i++)
 	{
-		elog(LOG, "Start thread num:%i", i);
+		elog(VERBOSE, "Start thread num: %i", i);
 
 		if (!is_remote_backup)
 			pthread_create(&backup_threads[i], NULL,

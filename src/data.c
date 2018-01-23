@@ -285,7 +285,7 @@ backup_data_page(backup_files_args *arguments,
 		 * throw an error.
 		 */
 		if(!page_is_valid && !is_ptrack_support)
-			elog(ERROR, "Data file checksum mismatch, canceling backup");
+			elog(ERROR, "Data file checksum mismatch. Canceling backup");
 	}
 
 	if (backup_mode == BACKUP_MODE_DIFF_PTRACK || (!page_is_valid && is_ptrack_support))
@@ -304,8 +304,7 @@ backup_data_page(backup_files_args *arguments,
 		}
 		else if (page_size != BLCKSZ)
 		{
-			elog(ERROR, "File: %s, block %u, expected block size %lu,"
-					  "but read %d, try again",
+			elog(ERROR, "File: %s, block %u, expected block size %lu, but read %d",
 					   file->path, absolute_blknum, page_size, BLCKSZ);
 		}
 		else
