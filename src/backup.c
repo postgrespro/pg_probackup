@@ -672,8 +672,6 @@ do_backup_instance(void)
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(backup_threads[i], NULL);
-		if (backup_threads_args[i]->thread_backup_conn != NULL)
-			pgut_disconnect(backup_threads_args[i]->thread_backup_conn);
 		pg_free(backup_threads_args[i]);
 	}
 
@@ -1977,6 +1975,11 @@ backup_files(void *arg)
 		else
 			elog(LOG, "unexpected file type %d", buf.st_mode);
 	}
+
+	/* Close connection */
+	if (arguments->thread_backup_conn)
+		pgut_disconnect(arguments->thread_backup_conn);
+
 }
 
 /*
@@ -2711,7 +2714,9 @@ pg_ptrack_get_block(backup_files_args *arguments,
 	{
 		arguments->thread_backup_conn = pgut_connect(pgut_dbname);
 	}
-	arguments->thread_cancel_conn = PQgetCancel(arguments->thread_backup_conn);
+
+	if (arguments->thread_cancel_conn == NULL)
+		arguments->thread_cancel_conn = PQgetCancel(arguments->thread_backup_conn);
 
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
 	res = pgut_execute_parallel(arguments->thread_backup_conn,
