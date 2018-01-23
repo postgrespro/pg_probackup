@@ -1527,11 +1527,11 @@ pgut_execute_parallel(PGconn* conn,
 		int		i;
 
 		if (strchr(query, '\n'))
-			elog(LOG, "(query)\n%s", query);
+			elog(VERBOSE, "(query)\n%s", query);
 		else
-			elog(LOG, "(query) %s", query);
+			elog(VERBOSE, "(query) %s", query);
 		for (i = 0; i < nParams; i++)
-			elog(LOG, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
+			elog(VERBOSE, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
 	}
 
 	if (conn == NULL)
@@ -1540,7 +1540,7 @@ pgut_execute_parallel(PGconn* conn,
 		return NULL;
 	}
 
-	on_before_exec(conn, thread_cancel_conn);
+	//on_before_exec(conn, thread_cancel_conn);
 	if (nParams == 0)
 		res = PQexec(conn, query);
 	else
@@ -1550,7 +1550,7 @@ pgut_execute_parallel(PGconn* conn,
 							* or one to obtain results in binary format.
 							*/
 						   (text_result) ? 0 : 1);
-	on_after_exec(thread_cancel_conn);
+	//on_after_exec(thread_cancel_conn);
 
 	switch (PQresultStatus(res))
 	{
@@ -1581,11 +1581,11 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
 		int		i;
 
 		if (strchr(query, '\n'))
-			elog(LOG, "(query)\n%s", query);
+			elog(VERBOSE, "(query)\n%s", query);
 		else
-			elog(LOG, "(query) %s", query);
+			elog(VERBOSE, "(query) %s", query);
 		for (i = 0; i < nParams; i++)
-			elog(LOG, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
+			elog(VERBOSE, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
 	}
 
 	if (conn == NULL)
