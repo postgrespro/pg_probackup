@@ -219,7 +219,7 @@ help_backup(void)
 	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 
 	printf(_("\n  Retention options:\n"));
 	printf(_("      --delete-expired             delete backups expired according to current\n"));
@@ -294,7 +294,7 @@ help_restore(void)
 	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 }
 
 static void
@@ -334,7 +334,7 @@ help_validate(void)
 	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 }
 
 static void
@@ -380,7 +380,7 @@ help_delete(void)
 	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 }
 
 static void
@@ -425,7 +425,7 @@ help_set_config(void)
 	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 
 	printf(_("\n  Retention options:\n"));
 	printf(_("      --retention-redundancy=retention-redundancy\n"));
