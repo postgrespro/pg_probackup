@@ -219,8 +219,7 @@ do_retention_purge(void)
 
 	/* Be paranoid */
 	if (XLogRecPtrIsInvalid(oldest_lsn))
-		elog(ERROR, "Not going to purge WAL because backup %s has invalid LSN",
-			base36enc(backup->start_time));
+		elog(ERROR, "Not going to purge WAL because LSN is invalid");
 
 	/* Purge WAL files */
 	if (delete_wal)
