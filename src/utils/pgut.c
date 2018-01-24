@@ -86,6 +86,7 @@ static const unit_conversion memory_unit_conversion_table[] =
 	{"TB", OPTION_UNIT_KB, 1024 * 1024 * 1024},
 	{"GB", OPTION_UNIT_KB, 1024 * 1024},
 	{"MB", OPTION_UNIT_KB, 1024},
+	{"KB", OPTION_UNIT_KB, 1},
 	{"kB", OPTION_UNIT_KB, 1},
 
 	{"TB", OPTION_UNIT_BLOCKS, (1024 * 1024 * 1024) / (BLCKSZ / 1024)},
