@@ -114,13 +114,14 @@ static pgut_option options[] =
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,	SOURCE_CMDLINE },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,	SOURCE_CMDLINE },
 	{ 's', 'S', "slot",					&replication_slot,	SOURCE_CMDLINE },
-	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE },
-	{ 'b', 12, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
-	{ 's', 13, "master-db",				&master_db,			SOURCE_CMDLINE, },
-	{ 's', 14, "master-host",			&master_host,		SOURCE_CMDLINE, },
-	{ 's', 15, "master-port",			&master_port,		SOURCE_CMDLINE, },
-	{ 's', 16, "master-user",			&master_user,		SOURCE_CMDLINE, },
-	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
+	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE, SOURCE_DEFAULT,	OPTION_UNIT_S },
+	{ 'b', 12, "delete-wal",			&delete_wal,		SOURCE_CMDLINE },
+	{ 'b', 13, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
+	{ 's', 14, "master-db",				&master_db,			SOURCE_CMDLINE, },
+	{ 's', 15, "master-host",			&master_host,		SOURCE_CMDLINE, },
+	{ 's', 16, "master-port",			&master_port,		SOURCE_CMDLINE, },
+	{ 's', 17, "master-user",			&master_user,		SOURCE_CMDLINE, },
+	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
@@ -457,6 +458,8 @@ main(int argc, char *argv[])
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
 			if (!delete_expired && !delete_wal && !backup_id_string_param)
 				elog(ERROR, "You must specify at least one of the delete options: --expired |--wal |--backup_id");
+			if (delete_wal && !delete_expired && !backup_id_string_param)
+				return do_retention_purge();
 			if (delete_expired)
 				return do_retention_purge();
 			else
