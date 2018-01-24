@@ -623,7 +623,7 @@ do_backup_instance(void)
 			else
 				dir_name = file->path;
 
-			elog(LOG, "Create directory \"%s\"", dir_name);
+			elog(VERBOSE, "Create directory \"%s\"", dir_name);
 			pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
 

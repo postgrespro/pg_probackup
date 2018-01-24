@@ -293,7 +293,7 @@ do_validate_instance(void)
 			validate_wal(current_backup, arclog_path, 0,
 						0, base_full_backup->tli);
 		}
-		/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
+		/* Mark every incremental backup between corrupted backup and nearest FULL backup as orphans */
 		if (current_backup->status != BACKUP_STATUS_OK)
 		{
 			int			j;
