@@ -207,8 +207,8 @@ do_retention_purge(void)
 	}
 
 	/*
-	 * If oldest_lsn wasn`t set in prevous step
-	 * get oldest backup LSN and TLI for WAL purging
+	 * If oldest_lsn and oldest_tli weren`t set because previous step was skipped
+	 * then set them now if we are going to purge WAL
 	 */
 	if (delete_wal && (XLogRecPtrIsInvalid(oldest_lsn)))
 	{
@@ -216,6 +216,11 @@ do_retention_purge(void)
 		oldest_lsn = backup->start_lsn;
 		oldest_tli = backup->tli;
 	}
+
+	/* Be paranoid */
+	if (XLogRecPtrIsInvalid(oldest_lsn))
+		elog(ERROR, "Not going to purge WAL because backup %s has invalid LSN",
+			base36enc(backup->start_time));
 
 	/* Purge WAL files */
 	if (delete_wal)
