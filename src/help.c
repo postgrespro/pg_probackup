@@ -93,14 +93,25 @@ help_pg_probackup(void)
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
+	printf(_("                 [--progress]\n"));
+	printf(_("                 [--log-level-console=log-level-console]\n"));
+	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-filename=log-filename]\n"));
+	printf(_("                 [--error-log-filename=error-log-filename]\n"));
+	printf(_("                 [--log-directory=log-directory]\n"));
+	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--delete-expired] [--delete-wal]\n"));
+	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
+	printf(_("                 [--retention-window=retention-window]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
-	printf(_("                 [--progress] [--delete-expired]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
-	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--replica-timeout=timeout]\n\n"));
 
 	printf(_("\n  %s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
@@ -158,47 +169,87 @@ help_backup(void)
 	printf(_("%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
 	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress] [--delete-expired]\n"));
+	printf(_("                 [--progress]\n"));
+	printf(_("                 [--log-level-console=log-level-console]\n"));
+	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-filename=log-filename]\n"));
+	printf(_("                 [--error-log-filename=error-log-filename]\n"));
+	printf(_("                 [--log-directory=log-directory]\n"));
+	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--delete-expired] [--delete-wal]\n"));
+	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
+	printf(_("                 [--retention-window=retention-window]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
-	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--replica-timeout=timeout]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|PTRACK\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
-	printf(_("      --archive-timeout            wait timeout for WAL segment archiving\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
 	printf(_("      --backup-pg-log              backup of pg_log directory\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+
+	printf(_("\n  Retention options:\n"));
 	printf(_("      --delete-expired             delete backups expired according to current\n"));
 	printf(_("                                   retention policy after successful backup completion\n"));
+	printf(_("      --delete-wal                 remove redundant archived wal files\n"));
+	printf(_("      --retention-redundancy=retention-redundancy\n"));
+	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
+	printf(_("      --retention-window=retention-window\n"));
+	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
 
 	printf(_("\n  Compression options:\n"));
-	printf(_("                 [--compress]\n"));
-	printf(_("                                   compress data files\n"));
+	printf(_("      --compress                   compress data files\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
-	printf(_("                                   available options: 'zlib','pglz','none'\n"));
+	printf(_("                                   available options: 'zlib', 'pglz', 'none' (default: zlib)\n"));
 	printf(_("      --compress-level=compress-level\n"));
-	printf(_("                                   level of compression [0-9]\n"));
+	printf(_("                                   level of compression [0-9] (default: 6)\n"));
 
 	printf(_("\n  Connection options:\n"));
-	printf(_("  -d, --dbname=DBNAME              database to connect\n"));
-	printf(_("  -h, --host=HOSTNAME              database server host or socket directory\n"));
-	printf(_("  -p, --port=PORT                  database server port\n"));
-	printf(_("  -U, --username=USERNAME          user name to connect as\n"));
+	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --dbname=DBNAME              database to connect (default: username)\n"));
+	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
+	printf(_("  -w, --no-password                never prompt for password\n"));
+	printf(_("  -W, --password                   force password prompt\n"));
 
 	printf(_("\n  Replica options:\n"));
+	printf(_("      --master-user=user_name      user name to connect to master\n"));
 	printf(_("      --master-db=db_name          database to connect to master\n"));
 	printf(_("      --master-host=host_name      database server host of master\n"));
 	printf(_("      --master-port=port           database server port of master\n"));
-	printf(_("      --master-user=user_name      user name to connect to master\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication in seconds\n"));
 }
 
@@ -223,6 +274,27 @@ help_restore(void)
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
 }
 
 static void
@@ -242,6 +314,27 @@ help_validate(void)
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
 }
 
 static void
@@ -259,14 +352,35 @@ static void
 help_delete(void)
 {
 	printf(_("%s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--wal] [-i backup-id | --expired]\n\n"));
+	printf(_("                 [-i backup-id | --expired] [--wal]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
-	printf(_("      --wal                        remove unnecessary wal files\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to delete\n"));
 	printf(_("      --expired                    delete backups expired according to current\n"));
 	printf(_("                                   retention policy\n"));
+	printf(_("      --wal                        remove unnecessary wal files in WAL ARCHIVE\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
 }
 
 static void
@@ -287,49 +401,55 @@ help_set_config(void)
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
-	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--replica-timeout=timeout]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --log-level-console=log-level-console\n"
-			 "                                   controls which message levels are sent to the stderr\n"));
-	printf(_("      --log-level-file=log-level-file\n"
-			 "                                   controls which message levels are sent to a log file\n"));
-	printf(_("      --log-filename=log-filename  file names of the created log files which is treated as as strftime pattern\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
-	printf(_("                                   file names of the created log files for error messages\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory in which log files will be created\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
-	printf(_("                                   maximum size of an individual log file in kilobytes\n"));
+	printf(_("                                   rotate logfile if its size exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
-	printf(_("                                   maximum lifetime of an individual log file in minutes\n"));
+	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
 
 	printf(_("\n  Retention options:\n"));
 	printf(_("      --retention-redundancy=retention-redundancy\n"));
-	printf(_("                                   number of full backups to keep\n"));
+	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
-	printf(_("                                   number of days of recoverability\n"));
+	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
 
 	printf(_("\n  Compression options:\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
 	printf(_("                                   available options: 'zlib','pglz','none'\n"));
 	printf(_("      --compress-level=compress-level\n"));
-	printf(_("                                   level of compression [0-9]\n"));
+	printf(_("                                   level of compression [0-9] (default: 6)\n"));
 
 	printf(_("\n  Connection options:\n"));
-	printf(_("  -d, --dbname=DBNAME              database to connect\n"));
-	printf(_("  -h, --host=HOSTNAME              database server host or socket directory\n"));
-	printf(_("  -p, --port=PORT                  database server port\n"));
-	printf(_("  -U, --username=USERNAME          user name to connect as\n"));
+	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --dbname=DBNAME              database to connect (default: username)\n"));
+	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
 
 	printf(_("\n  Replica options:\n"));
+	printf(_("      --master-user=user_name      user name to connect to master\n"));
 	printf(_("      --master-db=db_name          database to connect to master\n"));
 	printf(_("      --master-host=host_name      database server host of master\n"));
 	printf(_("      --master-port=port           database server port of master\n"));
-	printf(_("      --master-user=user_name      user name to connect to master\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
 }
 
@@ -356,8 +476,7 @@ help_add_instance(void)
 static void
 help_del_instance(void)
 {
-	printf(_("%s del-instance -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                 --instance=instance_name\n\n"));
+	printf(_("%s del-instance -B backup-dir --instance=instance_name\n\n"), PROGRAM_NAME);
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
@@ -369,8 +488,8 @@ help_archive_push(void)
 	printf(_("\n  %s archive-push -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
-	printf(_("                 [--compress [--compress-level=compress-level]]\n\n"));
-	printf(_("                 [--overwrite]\n"));
+	printf(_("                 [--compress [--compress-level=compress-level]]\n"));
+	printf(_("                 [--overwrite]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
