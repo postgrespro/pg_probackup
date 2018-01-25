@@ -221,7 +221,7 @@ class ProbackupTest(object):
             node.append_conf("postgresql.auto.conf", "max_wal_senders = 10")
         return node
 
-    def create_tblspace_in_node(self, node, tblspc_name, cfs=False):
+    def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
         res = node.execute(
             "postgres",
             "select exists"
@@ -234,7 +234,8 @@ class ProbackupTest(object):
             'Tablespace "{0}" already exists'.format(tblspc_name)
             )
 
-        tblspc_path = os.path.join(node.base_dir, '{0}'.format(tblspc_name))
+        if not tblspc_path:
+            tblspc_path = os.path.join(node.base_dir, '{0}'.format(tblspc_name))
         cmd = "CREATE TABLESPACE {0} LOCATION '{1}'".format(
             tblspc_name, tblspc_path)
         if cfs:
@@ -710,7 +711,8 @@ class ProbackupTest(object):
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
         return out_dict
 
-    def set_archiving(self, backup_dir, instance, node, replica=False):
+    def set_archiving(
+            self, backup_dir, instance, node, replica=False, overwrite=False):
 
         if replica:
             archive_mode = 'always'
@@ -726,23 +728,22 @@ class ProbackupTest(object):
                 "postgresql.auto.conf",
                 "archive_mode = {0}".format(archive_mode)
                 )
+        archive_command = "{0} archive-push -B {1} --instance={2} ".format(
+            self.probackup_path, backup_dir, instance)
+
         if os.name == 'posix':
             if self.archive_compress:
-                node.append_conf(
+                archive_command = archive_command + "--compress "
+
+            if overwrite:
+                archive_command = archive_command + "--overwrite "
+
+            archive_command = archive_command + "--wal-file-path %p --wal-file-name %f"
+
+        node.append_conf(
                     "postgresql.auto.conf",
-                    "archive_command = '{0} archive-push -B {1}"
-                    " --instance={2} --compress --wal-file-path"
-                    " %p --wal-file-name %f'".format(
-                        self.probackup_path, backup_dir, instance)
-                )
-            else:
-                node.append_conf(
-                    "postgresql.auto.conf",
-                    "archive_command = '{0} archive-push"
-                    " -B {1} --instance={2} --wal-file-path"
-                    " %p --wal-file-name %f'".format(
-                        self.probackup_path, backup_dir, instance)
-                )
+                    "archive_command = '{0}'".format(
+                        archive_command))
         # elif os.name == 'nt':
         #    node.append_conf(
         #            "postgresql.auto.conf",
