@@ -15,7 +15,7 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup_test))
-#    suite.addTests(loader.loadTestsFromModule(cfs_backup))
+    suite.addTests(loader.loadTestsFromModule(cfs_backup))
 #    suite.addTests(loader.loadTestsFromModule(cfs_restore))
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
 #    suite.addTests(loader.loadTestsFromModule(logging))
