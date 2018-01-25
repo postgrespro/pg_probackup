@@ -2,6 +2,7 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.cfs_helpers import find_by_name
 
 
 module_name = 'backup'
@@ -345,7 +346,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "Backup Status should be OK")
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_checksumm_fail_heal_via_ptrack_fail(self):
@@ -418,4 +419,57 @@ class BackupTest(ProbackupTest, unittest.TestCase):
              "Backup Status should be ERROR")
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_tablespace_in_pgdata(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+        )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.create_tblspace_in_node(
+            node, 'tblspace1',
+            tblspc_path=(os.path.join(node.data_dir, 'pg_clog', '100500'))
+            )
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace tblspace1 as select 1 as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        relfilenode = node.safe_psql(
+            "postgres",
+            "select 't_heap'::regclass::oid"
+            ).rstrip()
+
+        list = []
+        for root, dirs, files in os.walk(backup_dir):
+            for file in files:
+                if file == relfilenode:
+                    path = os.path.join(root, file)
+                    list = list + [path]
+
+        if len(list) > 0:
+            message = ""
+            for string in list:
+                message = message + string + "\n"
+            self.assertEqual(
+                1, 0, "Following file copied twice by backup:\n {1}".format(
+                    message)
+                )
