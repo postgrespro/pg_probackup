@@ -12,7 +12,7 @@ import time
 module_name = 'ptrack'
 
 
-class PtrackBackupTest(ProbackupTest, unittest.TestCase):
+class PtrackTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -489,6 +489,186 @@ class PtrackBackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='ptrack', options=['--stream']
         )
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        # Physical comparison
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        node.start()
+        # Logical comparison
+        self.assertEqual(
+            result,
+            node.safe_psql("postgres", "SELECT * FROM t_heap")
+        )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_ptrack_concurrent_get_and_clear_1(self):
+        """make node, make full and ptrack stream backups,"
+        " restore them and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'ptrack_enable': 'on'
+            }
+        )
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,1) i"
+        )
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose'],
+            gdb=True
+        )
+
+        gdb.set_breakpoint('make_pagemap_from_ptrack')
+        gdb.run_until_break()
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = 100500")
+
+        tablespace_oid = node.safe_psql(
+            "postgres",
+            "select oid from pg_tablespace where spcname = 'pg_default'").rstrip()
+
+        relfilenode = node.safe_psql(
+            "postgres",
+            "select 't_heap'::regclass::oid").rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "SELECT pg_ptrack_get_and_clear({0}, {1})".format(
+                tablespace_oid, relfilenode))
+
+        gdb.continue_execution_until_exit()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['--stream']
+        )
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        # Physical comparison
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        node.start()
+        # Logical comparison
+        self.assertEqual(
+            result,
+            node.safe_psql("postgres", "SELECT * FROM t_heap")
+        )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_ptrack_concurrent_get_and_clear_2(self):
+        """make node, make full and ptrack stream backups,"
+        " restore them and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'ptrack_enable': 'on'
+            }
+        )
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,1) i"
+        )
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream', '--log-level-file=verbose'],
+            gdb=True
+        )
+
+        gdb.set_breakpoint('pthread_create')
+        gdb.run_until_break()
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = 100500")
+
+        tablespace_oid = node.safe_psql(
+            "postgres",
+            "select oid from pg_tablespace where spcname = 'pg_default'").rstrip()
+
+        relfilenode = node.safe_psql(
+            "postgres",
+            "select 't_heap'::regclass::oid").rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "SELECT pg_ptrack_get_and_clear({0}, {1})".format(
+                tablespace_oid, relfilenode))
+
+        gdb._execute("delete breakpoints")
+        gdb.continue_execution_until_exit()
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='ptrack', options=['--stream']
+            )
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of LSN mismatch from ptrack_control "
+                "and previous backup ptrack_lsn.\n"
+                " Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: LSN from ptrack_control' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
