@@ -470,6 +470,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             for string in list:
                 message = message + string + "\n"
             self.assertEqual(
-                1, 0, "Following file copied twice by backup:\n {1}".format(
+                1, 0,
+                "Following file copied twice by backup:\n {0}".format(
                     message)
                 )
