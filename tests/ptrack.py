@@ -3,7 +3,8 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
-from testgres import ClusterException
+from testgres import ClusterTestgresException as ClusterException
+from testgres import QueryException
 import shutil
 import sys
 import time
@@ -1233,7 +1234,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd)
             )
-        except ClusterException as e:
+        except QueryException as e:
             self.assertTrue(
                 'FATAL:  database "db1" does not exist' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(

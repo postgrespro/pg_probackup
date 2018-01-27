@@ -11,7 +11,7 @@ import pwd
 import select
 import psycopg2
 from time import sleep
-
+import re
 
 idx_ptrack = {
     't_heap': {
@@ -156,6 +156,14 @@ class ProbackupTest(object):
         if 'ARCHIVE_COMPRESSION' in self.test_env:
             if self.test_env['ARCHIVE_COMPRESSION'] == 'ON':
                 self.archive_compress = True
+        try:
+            testgres.configure_testgres(
+                cache_initdb=False,
+                cached_initdb_dir=False,
+                cache_pg_config=False,
+                node_cleanup_full=False)
+        except:
+            pass
 
         self.helpers_path = os.path.dirname(os.path.realpath(__file__))
         self.dir_path = os.path.abspath(
@@ -193,11 +201,16 @@ class ProbackupTest(object):
 
         real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
+        os.makedirs(real_base_dir)
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
-        node.init(initdb_params=initdb_params)
+        node.should_rm_dirs = True
+        node.init(
+           initdb_params=initdb_params, allow_streaming=set_replication)
+        print(node.data_dir)
 
         # Sane default parameters, not a shit with fsync = off from testgres
+        node.append_conf("postgresql.auto.conf", "max_connections = 100")
         node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
         node.append_conf("postgresql.auto.conf", "fsync = on")
         node.append_conf("postgresql.auto.conf", "wal_level = minimal")
@@ -217,8 +230,13 @@ class ProbackupTest(object):
 
         # Allow replication in pg_hba.conf
         if set_replication:
-            node.set_replication_conf()
-            node.append_conf("postgresql.auto.conf", "max_wal_senders = 10")
+            node.append_conf(
+                "pg_hba.conf",
+                "local replication all trust\n")
+            node.append_conf(
+                "postgresql.auto.conf",
+                "max_wal_senders = 10")
+
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
@@ -235,7 +253,8 @@ class ProbackupTest(object):
             )
 
         if not tblspc_path:
-            tblspc_path = os.path.join(node.base_dir, '{0}'.format(tblspc_name))
+            tblspc_path = os.path.join(
+                node.base_dir, '{0}'.format(tblspc_name))
         cmd = "CREATE TABLESPACE {0} LOCATION '{1}'".format(
             tblspc_name, tblspc_path)
         if cfs:
@@ -272,11 +291,11 @@ class ProbackupTest(object):
 
         size = size_in_pages
         for segment_number in range(nsegments):
-            if size-131072 > 0:
+            if size - 131072 > 0:
                 pages_per_segment[segment_number] = 131072
             else:
                 pages_per_segment[segment_number] = size
-            size = size-131072
+            size = size - 131072
 
         for segment_number in range(nsegments):
             offset = 0
@@ -369,6 +388,7 @@ class ProbackupTest(object):
                                 idx_dict['ptrack'][PageNum])
                         )
                 continue
+
             # Ok, all pages in new_pages that do not have
             # corresponding page in old_pages are been dealt with.
             # We can now safely proceed to comparing old and new pages
@@ -394,7 +414,7 @@ class ProbackupTest(object):
                     if PageNum == 0 and idx_dict['type'] == 'spgist':
                         if self.verbose:
                             print(
-                                'SPGIST is a special snowflake, so don`t'
+                                'SPGIST is a special snowflake, so don`t '
                                 'fret about losing ptrack for blknum 0'
                             )
                         continue
@@ -721,9 +741,9 @@ class ProbackupTest(object):
             archive_mode = 'on'
 
         node.append_conf(
-                "postgresql.auto.conf",
-                "wal_level = archive"
-                )
+            "postgresql.auto.conf",
+            "wal_level = archive"
+        )
         node.append_conf(
                 "postgresql.auto.conf",
                 "archive_mode = {0}".format(archive_mode)
@@ -817,7 +837,15 @@ class ProbackupTest(object):
         return pwd.getpwuid(os.getuid())[0]
 
     def version_to_num(self, version):
-        return testgres.version_to_num(version)
+        if not version:
+            return 0
+        parts = version.split(".")
+        while len(parts) < 3:
+            parts.append("0")
+        num = 0
+        for part in parts:
+            num = num * 100 + int(re.sub("[^\d]", "", part))
+        return num
 
     def switch_wal_segment(self, node):
         """ Execute pg_switch_wal/xlog() in given node"""
@@ -829,7 +857,11 @@ class ProbackupTest(object):
             node.safe_psql("postgres", "select pg_switch_xlog()")
 
     def get_version(self, node):
-        return testgres.get_config()["VERSION_NUM"]
+        return self.version_to_num(
+            testgres.get_pg_config()["VERSION"].split(" ")[1])
+
+    def get_bin_path(self, binary):
+        return testgres.get_bin_path(binary)
 
     def del_test_dir(self, module_name, fname):
         """ Del testdir and optimistically try to del module dir"""
@@ -960,7 +992,11 @@ class ProbackupTest(object):
                                         )
                         for page in restored_pgdata['files'][file]['md5_per_page']:
                             if page not in original_pgdata['files'][file]['md5_per_page']:
-                                error_message += '\n Extra page {0}\n File: {1}\n'.format(page, os.path.join(restored_pgdata['pgdata'], file))
+                                error_message += '\n Extra page {0}\n '
+                                'File: {1}\n'.format(
+                                    page,
+                                    os.path.join(
+                                        restored_pgdata['pgdata'], file))
 
             else:
                 error_message += (
