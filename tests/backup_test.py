@@ -422,8 +422,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_tablespace_in_pgdata(self):
-        """make node, corrupt some page, check that backup failed"""
+    @unittest.expectedFailure
+    def test_tablespace_in_pgdata_pgpro_1376(self):
+        """PGPRO-1376 """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),

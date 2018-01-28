@@ -713,9 +713,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.start()
         if self.get_version(node) < 100000:
-            pg_receivexlog_path = node.get_bin_path('pg_receivexlog')
+            pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
         else:
-            pg_receivexlog_path = node.get_bin_path('pg_receivewal')
+            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         pg_receivexlog = self.run_binary(
             [

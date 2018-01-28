@@ -1614,7 +1614,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica', 'max_wal_senders': '2',
-                'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB',
+                'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '128MB',
                 'maintenance_work_mem': '1GB', 'autovacuum': 'off',
                 'full_page_writes': 'off'}
             )

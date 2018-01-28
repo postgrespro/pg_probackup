@@ -698,7 +698,7 @@ class ProbackupTest(object):
 
     def delete_expired(self, backup_dir, instance, options=[]):
         cmd_list = [
-            "delete", "--expired",
+            "delete", "--expired", "--wal",
             "-B", backup_dir,
             "--instance={0}".format(instance)
         ]
@@ -855,6 +855,7 @@ class ProbackupTest(object):
             node.safe_psql("postgres", "select pg_switch_wal()")
         else:
             node.safe_psql("postgres", "select pg_switch_xlog()")
+        sleep(1)
 
     def get_version(self, node):
         return self.version_to_num(

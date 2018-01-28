@@ -36,7 +36,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         self.node.start()
 
-        self.create_tblspace_in_node(self.node, tblspace_name, True)
+        self.create_tblspace_in_node(self.node, tblspace_name, cfs=True)
 
         tblspace = self.node.safe_psql(
             "postgres",
@@ -778,8 +778,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         tblspace_name_1 = 'tblspace_name_1'
         tblspace_name_2 = 'tblspace_name_2'
 
-        self.create_tblspace_in_node(self.node, tblspace_name_1, True)
-        self.create_tblspace_in_node(self.node, tblspace_name_2, True)
+        self.create_tblspace_in_node(self.node, tblspace_name_1, cfs=True)
+        self.create_tblspace_in_node(self.node, tblspace_name_2, cfs=True)
 
         self.node.safe_psql(
             "postgres",

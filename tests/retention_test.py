@@ -48,6 +48,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 min_wal = line[31:-1]
             elif line.startswith("INFO: removed max WAL segment"):
                 max_wal = line[31:-1]
+
+        if not min_wal:
+            self.assertTrue(False, "min_wal is empty")
+
+        if not max_wal:
+            self.assertTrue(False, "max_wal is not set")
+
         for wal_name in os.listdir(os.path.join(backup_dir, 'wal', 'node')):
             if not wal_name.endswith(".backup"):
                 #wal_name_b = wal_name.encode('ascii')

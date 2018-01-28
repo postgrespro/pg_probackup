@@ -1,6 +1,6 @@
 import os
 import unittest
-from .helpers.ptrack_helpers import ProbackupTest
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
 module_name = 'show'
@@ -14,7 +14,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         """Status DONE and OK"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -25,7 +26,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         self.assertEqual(
-            self.backup_node(backup_dir, 'node', node, options=["--log-level-console=panic"]),
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=["--log-level-console=panic"]),
             None
         )
         self.assertIn("OK", self.show_pb(backup_dir, 'node', as_text=True))
@@ -38,7 +41,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         """Status CORRUPT"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -51,10 +55,28 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
 
         # delete file which belong to backup
-        file = os.path.join(backup_dir, "backups", "node", backup_id, "database", "postgresql.conf")
+        file = os.path.join(
+            backup_dir, "backups", "node",
+            backup_id, "database", "postgresql.conf")
         os.remove(file)
 
-        self.validate_pb(backup_dir, 'node', backup_id)
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup corrupted.\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd
+                )
+            )
+        except ProbackupException as e:
+            self.assertIn(
+                'data files are corrupted\n',
+                e.message,
+                '\n Unexpected Error Message: {0}\n'
+                ' CMD: {1}'.format(repr(e.message), self.cmd)
+            )
         self.assertIn("CORRUPT", self.show_pb(backup_dir, as_text=True))
 
         # Clean after yourself
