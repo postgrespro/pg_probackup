@@ -98,6 +98,8 @@ static void opt_log_level_console(pgut_option *opt, const char *arg);
 static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
 
+static void compress_init(void);
+
 static pgut_option options[] =
 {
 	/* directory options */
@@ -394,27 +396,7 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
-	if (compress_shortcut)
-		compress_alg = ZLIB_COMPRESS;
-
-	if (backup_subcmd != SET_CONFIG)
-	{
-		if (compress_level != DEFAULT_COMPRESS_LEVEL
-			&& compress_alg == NONE_COMPRESS)
-			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
-	}
-
-	if (compress_level < 0 || compress_level > 9)
-		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
-
-	if (compress_level == 0)
-		compress_alg = NOT_DEFINED_COMPRESS;
-
-#ifndef HAVE_LIBZ
-	if ((backup_subcmd == BACKUP || backup_subcmd == ARCHIVE_PUSH) &&
-		compress_alg == ZLIB_COMPRESS)
-		elog(ERROR, "This build does not support zlib compression");
-#endif
+	compress_init();
 
 	/* do actual operation */
 	switch (backup_subcmd)
@@ -543,4 +525,39 @@ void
 opt_compress_alg(pgut_option *opt, const char *arg)
 {
 	compress_alg = parse_compress_alg(arg);
+}
+
+/*
+ * Initialize compress and sanity checks for compress.
+ */
+static
+void compress_init(void)
+{
+	/* Default algorithm is zlib */
+	if (compress_shortcut)
+		compress_alg = ZLIB_COMPRESS;
+
+	if (backup_subcmd != SET_CONFIG)
+	{
+		if (compress_level != DEFAULT_COMPRESS_LEVEL
+			&& compress_alg == NONE_COMPRESS)
+			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
+	}
+
+	if (compress_level < 0 || compress_level > 9)
+		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
+
+	if (compress_level == 0)
+		compress_alg = NOT_DEFINED_COMPRESS;
+
+	if (backup_subcmd == BACKUP || backup_subcmd == ARCHIVE_PUSH)
+	{
+#ifndef HAVE_LIBZ
+		if (compress_alg == ZLIB_COMPRESS)
+			elog(ERROR, "This build does not support zlib compression");
+		else
+#endif
+		if (compress_alg == PGLZ_COMPRESS && num_threads > 1)
+			elog(ERROR, "Multithread backup does not support pglz compression");
+	}
 }
