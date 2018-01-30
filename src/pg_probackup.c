@@ -410,6 +410,12 @@ main(int argc, char *argv[])
 	if (compress_level == 0)
 		compress_alg = NOT_DEFINED_COMPRESS;
 
+#ifndef HAVE_LIBZ
+	if ((backup_subcmd == BACKUP || backup_subcmd == ARCHIVE_PUSH) &&
+		compress_alg == ZLIB_COMPRESS)
+		elog(ERROR, "This build does not support zlib compression");
+#endif
+
 	/* do actual operation */
 	switch (backup_subcmd)
 	{

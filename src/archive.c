@@ -63,9 +63,10 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 
 	elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
 
-#ifdef HAVE_LIBZ
 	if (compress_alg == PGLZ_COMPRESS)
 		elog(ERROR, "pglz compression is not supported");
+
+#ifdef HAVE_LIBZ
 	if (compress_alg == ZLIB_COMPRESS)
 		is_compress = IsXLogFileName(wal_file_name);
 #endif
