@@ -2267,6 +2267,8 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 	char	   *relative_prev_file;
 
 	cfs_tblspc_path = strdup(relative);
+	if(!cfs_tblspc_path)
+		elog(ERROR, "Out of memory");
 	len = strlen("/pg_compression");
 	cfs_tblspc_path[strlen(cfs_tblspc_path) - len] = 0;
 	elog(VERBOSE, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
