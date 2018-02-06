@@ -506,7 +506,7 @@ do_backup_instance(void)
 
 	/*
 	 * It`s illegal to take PTRACK backup if LSN from ptrack_control() is not equal to
-	 * start_backup LSN of previous backup
+	 * stort_backup LSN of previous backup
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -654,6 +654,7 @@ do_backup_instance(void)
 	}
 
 	/* Run threads */
+	elog(LOG, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
 		elog(VERBOSE, "Start thread num: %i", i);
@@ -674,6 +675,7 @@ do_backup_instance(void)
 		pthread_join(backup_threads[i], NULL);
 		pg_free(backup_threads_args[i]);
 	}
+	elog(LOG, "Data files are transfered");
 
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
@@ -769,6 +771,14 @@ do_backup(time_t start_time)
 		current.checksum_version = get_data_checksum_version(true);
 
 	is_checksum_enabled = pg_checksum_enable();
+
+	if (is_checksum_enabled)
+		elog(LOG, "This PostgreSQL instance initialized with data block checksums. "
+					"Data block corruption will be detected");
+	else
+		elog(WARNING, "This PostgreSQL instance initialized without data block checksums. "
+						"pg_probackup have no way to detect data block corruption without them. "
+						"Reinitialize PGDATA with option '--data-checksums'.");
 	
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
@@ -1956,7 +1966,7 @@ backup_files(void *arg)
 									  current.backup_mode))
 				{
 					file->write_size = BYTES_INVALID;
-					elog(LOG, "File \"%s\" was not copied to backup", file->path);
+					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
 					continue;
 				}
 			}
@@ -1965,7 +1975,7 @@ backup_files(void *arg)
 							   file))
 			{
 				file->write_size = BYTES_INVALID;
-				elog(LOG, "File \"%s\" was not copied to backup", file->path);
+				elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
 				continue;
 			}
 
@@ -2403,6 +2413,7 @@ make_pagemap_from_ptrack(parray *files)
 	char	   *ptrack_nonparsed = NULL;
 	size_t		ptrack_nonparsed_size = 0;
 
+	elog(LOG, "Compiling pagemap");
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
@@ -2497,6 +2508,9 @@ make_pagemap_from_ptrack(parray *files)
 			}
 		}
 	}
+	elog(LOG, "Pagemap compiled");
+//	res = pgut_execute(backup_conn, "SET client_min_messages = warning;", 0, NULL, true);
+//	PQclear(pgut_execute(backup_conn, "CHECKPOINT;", 0, NULL, true));
 }
 
 
