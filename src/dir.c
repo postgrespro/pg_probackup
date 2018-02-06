@@ -75,6 +75,12 @@ static char *pgdata_exclude_files[] =
 	"recovery.conf",
 	"postmaster.pid",
 	"postmaster.opts",
+	NULL
+};
+
+static char *pgdata_exclude_files_non_exclusive[] =
+{
+	/*skip in non-exclusive backup */
 	"backup_label",
 	"tablespace_map",
 	NULL
@@ -397,6 +403,18 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 			{
 				file_name++;
 				file->name = file_name;
+			}
+
+			/* exclude backup_label and tablespace_map in non-exclusive backup */
+			if (!exclusive_backup)
+			{
+				for (i = 0; pgdata_exclude_files_non_exclusive[i]; i++)
+					if (strcmp(file->name, pgdata_exclude_files_non_exclusive[i]) == 0)
+					{
+						/* Skip */
+						elog(VERBOSE, "Excluding file: %s", file->name);
+						return;
+					}
 			}
 
 			/* Check if we need to exclude file by name */
