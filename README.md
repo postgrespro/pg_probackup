@@ -57,7 +57,7 @@ echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_re
 ```shell
 #RPM Centos Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
-yum install -y pg_probackup-(10|9.6|9.5)
+yum install pg_probackup-(10|9.6|9.5)
 ```
 
 To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. To install `pg_probackup`, execute this in the module's directory:
