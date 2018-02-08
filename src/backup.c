@@ -877,7 +877,6 @@ do_backup(time_t start_time)
 static void
 check_server_version(void)
 {
-	PGresult   *res;
 
 	/* confirm server version */
 	server_version = PQserverVersion(backup_conn);
@@ -901,9 +900,7 @@ check_server_version(void)
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK;
 
 	/* Save server_version to use it in future */
-	res = pgut_execute(backup_conn, "show server_version", 0, NULL, true);
-	StrNCpy(server_version_str, PQgetvalue(res, 0, 0), sizeof(server_version_str));
-	PQclear(res);
+	sprintf(server_version_str, "%d.%d", server_version / 10000,  (server_version / 100) % 100);
 }
 
 /*
