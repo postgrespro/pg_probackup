@@ -877,30 +877,33 @@ do_backup(time_t start_time)
 static void
 check_server_version(void)
 {
-
 	/* confirm server version */
 	server_version = PQserverVersion(backup_conn);
 
+	if (server_version == 0)
+		elog(ERROR, "Unknown server version %d", server_version);
+
+	if (server_version < 100000)
+		sprintf(server_version_str, "%d.%d",
+				server_version / 10000,
+				(server_version / 100) % 100);
+	else
+		sprintf(server_version_str, "%d",
+				server_version / 10000);
+
 	if (server_version < 90500)
 		elog(ERROR,
-			 "server version is %d.%d.%d, must be %s or higher",
-			 server_version / 10000,
-			 (server_version / 100) % 100,
-			 server_version % 100, "9.5");
+			 "server version is %s, must be %s or higher",
+			 server_version_str, "9.5");
 
 	if (from_replica && server_version < 90600)
 		elog(ERROR,
-			 "server version is %d.%d.%d, must be %s or higher for backup from replica",
-			 server_version / 10000,
-			 (server_version / 100) % 100,
-			 server_version % 100, "9.6");
+			 "server version is %s, must be %s or higher for backup from replica",
+			 server_version_str, "9.6");
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
 	exclusive_backup = server_version < 90600 ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK;
-
-	/* Save server_version to use it in future */
-	sprintf(server_version_str, "%d.%d", server_version / 10000,  (server_version / 100) % 100);
 }
 
 /*
