@@ -602,7 +602,9 @@ restore_data_file(const char *from_root,
 			 * Backup contains information that this block was truncated.
 			 * Truncate file to this length.
 			 */
-			ftruncate(fileno(out), header.block * BLCKSZ);
+			if (ftruncate(fileno(out), header.block * BLCKSZ) != 0)
+				elog(ERROR, "cannot truncate \"%s\": %s",
+					 file->path, strerror(errno));
 			elog(VERBOSE, "truncate file %s to block %u", file->path, header.block);
 			break;
 		}
