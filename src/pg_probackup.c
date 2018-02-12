@@ -323,7 +323,7 @@ main(int argc, char *argv[])
 	}
 
 	/* Option --instance is required for all commands except init and show */
-	if (backup_subcmd != INIT && backup_subcmd != SHOW && backup_subcmd != VALIDATE)
+	if (backup_subcmd != INIT && backup_subcmd != SHOW)
 	{
 		if (instance_name == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
