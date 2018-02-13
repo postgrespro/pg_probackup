@@ -752,6 +752,7 @@ parse_time(const char *value, time_t *result)
 	int			fields_num,
 				tz = 0,
 				i;
+	bool		tz_set = false;
 	char	   *tmp;
 	struct tm	tm;
 	char		junk[2];
@@ -824,6 +825,8 @@ parse_time(const char *value, time_t *result)
 			if (*value == '-')
 				tz = -tz;
 
+			tz_set = true;
+
 			fields_num++;
 			value = cp;
 		}
@@ -865,7 +868,7 @@ parse_time(const char *value, time_t *result)
 	*result = mktime(&tm);
 
 	/* adjust time zone */
-	if (tz != 0)
+	if (tz_set)
 	{
 		time_t		ltime = time(NULL);
 		struct tm  *ptm = gmtime(&ltime);
