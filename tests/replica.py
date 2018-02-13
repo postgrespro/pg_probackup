@@ -39,7 +39,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master, replica)
 
         # Check data correctness on replica
-        replica.start({"-t": "600"})
+        replica.start(["-t", "600"])
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
@@ -120,7 +120,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Settings for Replica
         self.set_replica(master, replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start({"-t": "600"})
+        replica.start(["-t", "600"])
 
         # Check data correctness on replica
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")

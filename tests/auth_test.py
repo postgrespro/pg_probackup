@@ -8,7 +8,7 @@ import unittest
 import signal
 
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from testgres import ClusterException as StartNodeException
+from testgres import StartNodeException
 
 module_name = 'auth_test'
 skip_test = False
@@ -123,7 +123,7 @@ class AuthTest(unittest.TestCase):
             self.fail(e.value)
 
     def test_right_password_and_wrong_pgpass(self):
-        """ Test case: PGPB_AUTH05 - correct password and incorrect .pgpass"""
+        """ Test case: PGPB_AUTH05 - correct password and incorrect .pgpass (-W)"""
         line = ":".join(['127.0.0.1', str(self.node.port), 'postgres', 'backup', 'wrong_password'])
         create_pgpass(self.pgpass_file, line)
         try:
@@ -197,7 +197,7 @@ class AuthTest(unittest.TestCase):
 
 def run_pb_with_auth(cmd, password=None, kill=False):
     try:
-        with spawn(" ".join(cmd), timeout=10) as probackup:
+        with spawn(" ".join(cmd), encoding='utf-8', timeout=10) as probackup:
             result = probackup.expect("Password for user .*:", 5)
             if kill:
                 probackup.kill(signal.SIGINT)

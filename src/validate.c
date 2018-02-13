@@ -31,7 +31,6 @@ typedef struct
 void
 pgBackupValidate(pgBackup *backup)
 {
-	const char *backup_id_string;
 	char		base_path[MAXPGPATH];
 	char		path[MAXPGPATH];
 	parray	   *files;
@@ -40,23 +39,20 @@ pgBackupValidate(pgBackup *backup)
 	validate_files_args *validate_threads_args[num_threads];
 	int			i;
 
-	/* We need free() this later */
-	backup_id_string = base36enc(backup->start_time);
-
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE)
 	{
 		elog(INFO, "Backup %s has status %s. Skip validation.",
-					backup_id_string, status2str(backup->status));
+					base36enc(backup->start_time), status2str(backup->status));
 		return;
 	}
 
-	elog(INFO, "Validating backup %s", backup_id_string);
+	elog(INFO, "Validating backup %s", base36enc(backup->start_time));
 
 	if (backup->backup_mode != BACKUP_MODE_FULL &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
-		elog(INFO, "Invalid backup_mode of backup %s", backup_id_string);
+		elog(INFO, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
@@ -97,9 +93,9 @@ pgBackupValidate(pgBackup *backup)
 	pgBackupWriteBackupControlFile(backup);
 
 	if (corrupted)
-		elog(WARNING, "Backup %s data files are corrupted", backup_id_string);
+		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
 	else
-		elog(INFO, "Backup %s data files are valid", backup_id_string);
+		elog(INFO, "Backup %s data files are valid", base36enc(backup->start_time));
 }
 
 /*
@@ -245,6 +241,7 @@ do_validate_all(void)
 static void
 do_validate_instance(void)
 {
+	char *current_backup_id;
 	int			i;
 	parray	   *backups;
 	pgBackup   *current_backup = NULL;
@@ -296,11 +293,12 @@ do_validate_instance(void)
 			validate_wal(current_backup, arclog_path, 0,
 						0, base_full_backup->tli);
 		}
-		/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
+		/* Mark every incremental backup between corrupted backup and nearest FULL backup as orphans */
 		if (current_backup->status != BACKUP_STATUS_OK)
 		{
 			int			j;
 			corrupted_backup_found = true;
+			current_backup_id = base36enc_dup(current_backup->start_time);
 			for (j = i - 1; j >= 0; j--)
 			{
 				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
@@ -310,22 +308,15 @@ do_validate_instance(void)
 					continue;
 				else
 				{
-					char	   *backup_id,
-							   *current_backup_id;
 
 					backup->status = BACKUP_STATUS_ORPHAN;
 					pgBackupWriteBackupControlFile(backup);
 
-					backup_id = base36enc_dup(backup->start_time);
-					current_backup_id = base36enc_dup(current_backup->start_time);
-
 					elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
-						 backup_id, current_backup_id);
-
-					free(backup_id);
-					free(current_backup_id);
+						 base36enc(backup->start_time), current_backup_id);
 				}
 			}
+			free(current_backup_id);
 		}
 	}
 

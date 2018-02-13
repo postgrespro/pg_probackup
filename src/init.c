@@ -15,15 +15,6 @@
 #include <sys/stat.h>
 
 /*
- * selects function for scandir.
- * Select all files except hidden.
- */
-static int selects(const struct dirent *dir)
-{
-	return dir->d_name[0] != '.';
-}
-
-/*
  * Initialize backup catalog.
  */
 int
@@ -31,14 +22,16 @@ do_init(void)
 {
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
-	struct dirent **dp;
 	int results;
 
-	if (access(backup_path, F_OK) == 0)
+	results = pg_check_dir(backup_path);
+	if (results == 4)	/* exists and not empty*/
+		elog(ERROR, "backup catalog already exist and it's not empty");
+	else if (results == -1) /*trouble accessing directory*/
 	{
-		results = scandir(backup_path, &dp, selects, NULL);
-		if (results != 0)
-			elog(ERROR, "backup catalog already exist and it's not empty");
+		int errno_tmp = errno;
+		elog(ERROR, "cannot open backup catalog directory \"%s\": %s",
+			backup_path, strerror(errno_tmp));
 	}
 
 	/* create backup catalog root directory */

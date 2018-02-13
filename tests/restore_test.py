@@ -20,6 +20,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -126,7 +127,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
-        node.start(params={'-t':'10'})
+        node.start(params=['-t','10'])
         while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
 

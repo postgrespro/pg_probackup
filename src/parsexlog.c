@@ -124,6 +124,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	XLogSegNo	endSegNo,
 				nextSegNo = 0;
 
+	elog(LOG, "Compiling pagemap");
 	if (!XRecOffIsValid(startpoint))
 		elog(ERROR, "Invalid startpoint value %X/%X",
 			 (uint32) (startpoint >> 32), (uint32) (startpoint));
@@ -186,6 +187,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		xlogreadfd = -1;
 		xlogexists = false;
 	}
+	elog(LOG, "Pagemap compiled");
 }
 
 /*

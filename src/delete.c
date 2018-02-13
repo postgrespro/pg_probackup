@@ -134,15 +134,19 @@ do_retention_purge(void)
 	bool		keep_next_backup = true;	/* Do not delete first full backup */
 	bool		backup_deleted = false;		/* At least one backup was deleted */
 
-	if (retention_redundancy > 0)
-		elog(LOG, "REDUNDANCY=%u", retention_redundancy);
-	if (retention_window > 0)
-		elog(LOG, "WINDOW=%u", retention_window);
-
-	if (retention_redundancy == 0 && retention_window == 0 && !delete_wal)
+	if (delete_expired)
 	{
-		elog(WARNING, "Retention policy is not set");
-		return 0;
+		if (retention_redundancy > 0)
+			elog(LOG, "REDUNDANCY=%u", retention_redundancy);
+		if (retention_window > 0)
+			elog(LOG, "WINDOW=%u", retention_window);
+
+		if (retention_redundancy == 0 && retention_window == 0)
+		{
+			elog(WARNING, "Retention policy is not set");
+			if (!delete_wal)
+				return 0;
+		}
 	}
 
 	/* Get exclusive lock of backup catalog */
@@ -157,52 +161,71 @@ do_retention_purge(void)
 	}
 
 	/* Find target backups to be deleted */
-	backup_num = 0;
-	for (i = 0; i < parray_num(backup_list); i++)
+	if (delete_expired && (retention_redundancy > 0 || retention_window > 0))
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
-		uint32		backup_num_evaluate = backup_num;
-
-		/* Consider only validated and correct backups */
-		if (backup->status != BACKUP_STATUS_OK)
-			continue;
-
-		/*
-		 * When a validate full backup was found, we can delete the
-		 * backup that is older than it using the number of generations.
-		 */
-		if (backup->backup_mode == BACKUP_MODE_FULL)
-			backup_num++;
-
-		/* Evaluate if this backup is eligible for removal */
-		if (keep_next_backup ||
-			backup_num_evaluate + 1 <= retention_redundancy ||
-			(retention_window > 0 && backup->recovery_time >= days_threshold))
+		backup_num = 0;
+		for (i = 0; i < parray_num(backup_list); i++)
 		{
-			/* Save LSN and Timeline to remove unnecessary WAL segments */
-			oldest_lsn = backup->start_lsn;
-			oldest_tli = backup->tli;
+			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+			uint32		backup_num_evaluate = backup_num;
 
-			/* Save parent backup of this incremental backup */
-			if (backup->backup_mode != BACKUP_MODE_FULL)
-				keep_next_backup = true;
+			/* Consider only validated and correct backups */
+			if (backup->status != BACKUP_STATUS_OK)
+				continue;
 			/*
-			 * Previous incremental backup was kept or this is first backup
-			 * so do not delete this backup.
+			 * When a validate full backup was found, we can delete the
+			 * backup that is older than it using the number of generations.
 			 */
-			else
-				keep_next_backup = false;
+			if (backup->backup_mode == BACKUP_MODE_FULL)
+				backup_num++;
 
-			continue;
+			/* Evaluateretention_redundancy if this backup is eligible for removal */
+			if (keep_next_backup ||
+				retention_redundancy >= backup_num_evaluate + 1 ||
+				(retention_window > 0 && backup->recovery_time >= days_threshold))
+			{
+				/* Save LSN and Timeline to remove unnecessary WAL segments */
+				oldest_lsn = backup->start_lsn;
+				oldest_tli = backup->tli;
+
+				/* Save parent backup of this incremental backup */
+				if (backup->backup_mode != BACKUP_MODE_FULL)
+					keep_next_backup = true;
+				/*
+				 * Previous incremental backup was kept or this is first backup
+				 * so do not delete this backup.
+				 */
+				else
+					keep_next_backup = false;
+
+				continue;
+			}
+			/* Delete backup and update status to DELETED */
+			pgBackupDeleteFiles(backup);
+			backup_deleted = true;
 		}
-
-		/* Delete backup and update status to DELETED */
-		pgBackupDeleteFiles(backup);
-		backup_deleted = true;
 	}
 
+	/*
+	 * If oldest_lsn and oldest_tli weren`t set because previous step was skipped
+	 * then set them now if we are going to purge WAL
+	 */
+	if (delete_wal && (XLogRecPtrIsInvalid(oldest_lsn)))
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, parray_num(backup_list) - 1);
+		oldest_lsn = backup->start_lsn;
+		oldest_tli = backup->tli;
+	}
+
+	/* Be paranoid */
+	if (XLogRecPtrIsInvalid(oldest_lsn))
+		elog(ERROR, "Not going to purge WAL because LSN is invalid");
+
 	/* Purge WAL files */
-	delete_walfiles(oldest_lsn, oldest_tli);
+	if (delete_wal)
+	{
+		delete_walfiles(oldest_lsn, oldest_tli);
+	}
 
 	/* Cleanup */
 	parray_walk(backup_list, pgBackupFree);
@@ -257,7 +280,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
 		/* print progress */
-		elog(LOG, "delete file(%zd/%lu) \"%s\"", i + 1,
+		elog(VERBOSE, "delete file(%zd/%lu) \"%s\"", i + 1,
 				(unsigned long) parray_num(files), file->path);
 
 		if (remove(file->path))

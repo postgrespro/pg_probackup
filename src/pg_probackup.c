@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.14";
+const char *PROGRAM_VERSION	= "2.0.15";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -98,6 +98,8 @@ static void opt_log_level_console(pgut_option *opt, const char *arg);
 static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
 
+static void compress_init(void);
+
 static pgut_option options[] =
 {
 	/* directory options */
@@ -114,13 +116,14 @@ static pgut_option options[] =
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,	SOURCE_CMDLINE },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,	SOURCE_CMDLINE },
 	{ 's', 'S', "slot",					&replication_slot,	SOURCE_CMDLINE },
-	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE },
-	{ 'b', 12, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
-	{ 's', 13, "master-db",				&master_db,			SOURCE_CMDLINE, },
-	{ 's', 14, "master-host",			&master_host,		SOURCE_CMDLINE, },
-	{ 's', 15, "master-port",			&master_port,		SOURCE_CMDLINE, },
-	{ 's', 16, "master-user",			&master_user,		SOURCE_CMDLINE, },
-	{ 'u', 17, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
+	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE, SOURCE_DEFAULT,	OPTION_UNIT_S },
+	{ 'b', 12, "delete-wal",			&delete_wal,		SOURCE_CMDLINE },
+	{ 'b', 13, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
+	{ 's', 14, "master-db",				&master_db,			SOURCE_CMDLINE, },
+	{ 's', 15, "master-host",			&master_host,		SOURCE_CMDLINE, },
+	{ 's', 16, "master-port",			&master_port,		SOURCE_CMDLINE, },
+	{ 's', 17, "master-user",			&master_user,		SOURCE_CMDLINE, },
+	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
@@ -149,7 +152,7 @@ static pgut_option options[] =
 	{ 's', 143, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
 	{ 's', 144, "log-directory",		&log_directory,		SOURCE_CMDLINE },
 	{ 'u', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
-	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
+	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MIN },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },
@@ -393,21 +396,7 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
-	if (compress_shortcut)
-		compress_alg = ZLIB_COMPRESS;
-
-	if (backup_subcmd != SET_CONFIG)
-	{
-		if (compress_level != DEFAULT_COMPRESS_LEVEL
-			&& compress_alg == NONE_COMPRESS)
-			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
-	}
-
-	if (compress_level < 0 || compress_level > 9)
-		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
-
-	if (compress_level == 0)
-		compress_alg = NOT_DEFINED_COMPRESS;
+	compress_init();
 
 	/* do actual operation */
 	switch (backup_subcmd)
@@ -457,6 +446,8 @@ main(int argc, char *argv[])
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
 			if (!delete_expired && !delete_wal && !backup_id_string_param)
 				elog(ERROR, "You must specify at least one of the delete options: --expired |--wal |--backup_id");
+			if (delete_wal && !delete_expired && !backup_id_string_param)
+				return do_retention_purge();
 			if (delete_expired)
 				return do_retention_purge();
 			else
@@ -534,4 +525,39 @@ void
 opt_compress_alg(pgut_option *opt, const char *arg)
 {
 	compress_alg = parse_compress_alg(arg);
+}
+
+/*
+ * Initialize compress and sanity checks for compress.
+ */
+static
+void compress_init(void)
+{
+	/* Default algorithm is zlib */
+	if (compress_shortcut)
+		compress_alg = ZLIB_COMPRESS;
+
+	if (backup_subcmd != SET_CONFIG)
+	{
+		if (compress_level != DEFAULT_COMPRESS_LEVEL
+			&& compress_alg == NONE_COMPRESS)
+			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
+	}
+
+	if (compress_level < 0 || compress_level > 9)
+		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
+
+	if (compress_level == 0)
+		compress_alg = NOT_DEFINED_COMPRESS;
+
+	if (backup_subcmd == BACKUP || backup_subcmd == ARCHIVE_PUSH)
+	{
+#ifndef HAVE_LIBZ
+		if (compress_alg == ZLIB_COMPRESS)
+			elog(ERROR, "This build does not support zlib compression");
+		else
+#endif
+		if (compress_alg == PGLZ_COMPRESS && num_threads > 1)
+			elog(ERROR, "Multithread backup does not support pglz compression");
+	}
 }

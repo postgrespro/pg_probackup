@@ -96,7 +96,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         node_restored.start()
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_page_stream(self):

@@ -44,7 +44,7 @@ class CfsRestoreBase(ProbackupTest, unittest.TestCase):
         self.set_archiving(self.backup_dir, 'node', self.node)
 
         self.node.start()
-        self.create_tblspace_in_node(self.node, tblspace_name, True)
+        self.create_tblspace_in_node(self.node, tblspace_name, cfs=True)
 
         self.add_data_in_cluster()
 

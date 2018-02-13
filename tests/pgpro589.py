@@ -18,7 +18,8 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         check that no files where copied to backup catalogue
         """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -39,25 +40,41 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         )
         pgbench.wait()
         pgbench.stdout.close()
-        path = node.safe_psql("postgres", "select pg_relation_filepath('pgbench_accounts')").rstrip().decode("utf-8")
+        path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('pgbench_accounts')").rstrip().decode(
+            "utf-8")
 
         try:
-            self.backup_node(backup_dir, 'node', node, options=['--archive-timeout=10'])
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=['--archive-timeout=10'])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because of missing archive wal segment with start_lsn.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of missing archive wal "
+                "segment with start_lsn.\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: wait for WAL segment' in e.message
-                 and 'ERROR: switched WAL segment' in e.message
-                 and 'could not be archived' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+                'INFO: Wait for WAL segment' in e.message and
+                'ERROR: Switched WAL segment' in e.message and
+                'could not be archived' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         backup_id = self.show_pb(backup_dir, 'node')[0]['ID']
-        self.assertEqual('ERROR', self.show_pb(backup_dir, 'node', backup_id)['status'], 'Backup should have ERROR status')
-        file = os.path.join(backup_dir, 'backups', 'node', backup_id, 'database', path)
-        self.assertFalse(os.path.isfile(file),
-            '\n Start LSN was not found in archive but datafiles where copied to backup catalogue.\n For example: {0}\n It is not optimal'.format(file))
+        self.assertEqual(
+            'ERROR', self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup should have ERROR status')
+        file = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', path)
+        self.assertFalse(
+            os.path.isfile(file),
+            "\n Start LSN was not found in archive but datafiles where "
+            "copied to backup catalogue.\n For example: {0}\n "
+            "It is not optimal".format(file))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
