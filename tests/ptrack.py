@@ -295,7 +295,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
-                'ptrack_enable': 'on'
+                'ptrack_enable': 'on',
+                'autovacuum': 'off'
             }
         )
         node_restored = self.make_simple_node(
