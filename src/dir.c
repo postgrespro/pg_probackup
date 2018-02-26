@@ -380,7 +380,13 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 	 * Add to files list only files, links and directories. Skip sockets and
 	 * other unexpected file formats.
 	 */
-	if (!S_ISDIR(file->mode) && !S_ISLNK(file->mode) &&	!S_ISREG(file->mode))
+	if (!S_ISDIR(file->mode) && !S_ISREG(file->mode) &&
+#ifndef WIN32
+		!(S_ISLNK(file->mode))
+#else
+		!(pgwin32_is_junction(file->path))
+#endif
+		)
 	{
 		elog(WARNING, "Skip file \"%s\": unexpected file format", file->path);
 		return;
@@ -430,7 +436,11 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 	}
 
 	/* chase symbolic link chain and find regular file or directory */
+	#ifndef WIN32
 	while (S_ISLNK(file->mode))
+	#else
+	while (pgwin32_is_junction(file->path))
+	#endif
 	{
 		ssize_t	len;
 		char	linked[MAXPGPATH];
@@ -718,7 +728,11 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
+#ifndef WIN32
 		if (S_ISLNK(file->mode))
+#else
+		if (pgwin32_is_junction(file->path))
+#endif
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		fprintf(out, "}\n");

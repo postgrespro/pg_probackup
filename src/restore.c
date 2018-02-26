@@ -85,7 +85,7 @@ do_restore_or_validate(time_t target_backup_id,
 {
 	int			i;
 	parray	   *backups;
-	parray	   *timelines;
+	parray	   *timelines = NULL;
 	pgRecoveryTarget *rt = NULL;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;

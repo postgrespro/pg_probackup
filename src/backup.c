@@ -239,7 +239,11 @@ ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
 			else if (copybuf[156] == '2')
 			{
 				/* Symlink */
+#ifndef WIN32
 				pgfile->mode |= S_IFLNK;
+#else
+				pgfile->mode |= S_IFDIR;
+#endif
 			}
 			else
 				elog(ERROR, "Unrecognized link indicator \"%c\"\n",
