@@ -479,7 +479,8 @@ do_backup_instance(void)
 	 * backup on current timeline exists and get its filelist.
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
-		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		parray	   *backup_list;
 		/* get list of backups already taken */

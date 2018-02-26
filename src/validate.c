@@ -51,7 +51,8 @@ pgBackupValidate(pgBackup *backup)
 
 	if (backup->backup_mode != BACKUP_MODE_FULL &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
-		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
+		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK &&
+		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
 		elog(INFO, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);

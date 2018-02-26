@@ -83,6 +83,7 @@ typedef struct pgFile
 	char	*name;			/* file or directory name */
 	mode_t	mode;			/* protection (file type and permission) */
 	size_t	size;			/* size of the file */
+	int	n_blocks;			/* size of the file in blocks, readed during DELTA backup */
 	size_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up, it's different from size) */
 	size_t	write_size;		/* size of the backed-up file. BYTES_INVALID means
@@ -126,7 +127,8 @@ typedef enum BackupMode
 {
 	BACKUP_MODE_INVALID = 0,
 	BACKUP_MODE_DIFF_PAGE,		/* incremental page backup */
-	BACKUP_MODE_DIFF_PTRACK,	/* incremental page backup with ptrack system*/
+	BACKUP_MODE_DIFF_PTRACK,	/* incremental page backup with ptrack system */
+	BACKUP_MODE_DIFF_DELTA,		/* incremental page backup with lsn comparison */
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
 
