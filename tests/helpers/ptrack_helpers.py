@@ -993,8 +993,7 @@ class ProbackupTest(object):
                                         )
                         for page in restored_pgdata['files'][file]['md5_per_page']:
                             if page not in original_pgdata['files'][file]['md5_per_page']:
-                                error_message += '\n Extra page {0}\n '
-                                'File: {1}\n'.format(
+                                error_message += '\n Extra page {0}\n File: {1}\n'.format(
                                     page,
                                     os.path.join(
                                         restored_pgdata['pgdata'], file))
