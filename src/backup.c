@@ -438,8 +438,9 @@ do_backup_instance(void)
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
 
-	pthread_t	backup_threads[num_threads];
-	backup_files_args *backup_threads_args[num_threads];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t	*backup_threads;
+	backup_files_args *backup_threads_args;
 
 	pgBackup   *prev_backup = NULL;
 	char		prev_backup_filelist_path[MAXPGPATH];
@@ -639,9 +640,12 @@ do_backup_instance(void)
 	parray_qsort(backup_files_list, pgFileCompareSize);
 
 	/* init thread args with own file lists */
+	backup_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
+	backup_threads_args = (backup_files_args *) palloc(sizeof(backup_files_args)*num_threads);
+
 	for (i = 0; i < num_threads; i++)
 	{
-		backup_files_args *arg = pg_malloc(sizeof(backup_files_args));
+		backup_files_args *arg = &(backup_threads_args[i]);
 
 		arg->from_root = pgdata;
 		arg->to_root = database_path;
@@ -650,30 +654,29 @@ do_backup_instance(void)
 		arg->prev_backup_start_lsn = prev_backup_start_lsn;
 		arg->thread_backup_conn = NULL;
 		arg->thread_cancel_conn = NULL;
-		backup_threads_args[i] = arg;
 	}
 
 	/* Run threads */
 	elog(LOG, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
+		backup_files_args *arg = &(backup_threads_args[i]);
 		elog(VERBOSE, "Start thread num: %i", i);
 
 		if (!is_remote_backup)
 			pthread_create(&backup_threads[i], NULL,
 						   (void *(*)(void *)) backup_files,
-						   backup_threads_args[i]);
+						   arg);
 		else
 			pthread_create(&backup_threads[i], NULL,
 						   (void *(*)(void *)) remote_backup_files,
-						   backup_threads_args[i]);
+						   arg);
 	}
 
 	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(backup_threads[i], NULL);
-		pg_free(backup_threads_args[i]);
 	}
 	elog(LOG, "Data files are transfered");
 
