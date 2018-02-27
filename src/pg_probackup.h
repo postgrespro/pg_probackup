@@ -17,6 +17,9 @@
 
 #ifndef WIN32
 #include <sys/mman.h>
+#include <pthread.h>
+#else
+#include "port/pthread-win32.h"
 #endif
 
 #include "access/timeline.h"
@@ -29,6 +32,7 @@
 #include "utils/pg_crc.h"
 #include "common/relpath.h"
 #include "port.h"
+
 
 #include "utils/parray.h"
 #include "utils/pgut.h"

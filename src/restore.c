@@ -14,9 +14,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #include "catalog/pg_control.h"
+
+#ifdef WIN32
+typedef struct win32_pthread *pthread_t;
+typedef int pthread_attr_t;
+#endif
 
 typedef struct
 {

@@ -18,7 +18,6 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <time.h>
-#include <pthread.h>
 
 #include "libpq/pqsignal.h"
 #include "storage/bufpage.h"
@@ -28,6 +27,16 @@
 #include "receivelog.h"
 #include "streamutil.h"
 #include "pgtar.h"
+
+#ifdef WIN32
+typedef struct win32_pthread *pthread_t;
+typedef int pthread_attr_t;
+#define PTHREAD_MUTEX_INITIALIZER NULL //{ NULL, 0 }
+#define PTHREAD_ONCE_INIT false
+
+int pthread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *), void *arg);
+int pthread_join(pthread_t th, void **thread_return);
+#endif
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
@@ -2763,3 +2772,96 @@ pg_ptrack_get_block(backup_files_args *arguments,
 
 	return result;
 }
+
+#ifdef WIN32 /* WIN32 */
+volatile bool timer_exceeded = false; /* flag from signal handler */
+
+static VOID CALLBACK
+win32_timer_callback(PVOID lpParameter, BOOLEAN TimerOrWaitFired)
+{ timer_exceeded = true; }
+
+static void
+setalarm(int seconds)
+{
+	HANDLE queue;
+	HANDLE timer;
+
+	/* This function will be called at most once, so we can cheat a bit. */
+	queue = CreateTimerQueue();
+	if (seconds > ((DWORD)-1) / 1000 ||
+		!CreateTimerQueueTimer(&timer, queue,
+		win32_timer_callback, NULL, seconds * 1000, 0,
+		WT_EXECUTEINTIMERTHREAD | WT_EXECUTEONLYONCE))
+	{
+		fprintf(stderr, "failed to set timer\n"); exit(1);
+	}
+}
+
+/* partial pthread implementation for Windows */
+
+typedef struct win32_pthread
+{
+	HANDLE handle;
+	void *(*routine) (void *);
+	void *arg;
+	void *result;
+}
+
+win32_pthread;
+
+static unsigned __stdcall
+win32_pthread_run(void *arg)
+{
+	win32_pthread *th = (win32_pthread *)arg;
+	th->result = th->routine(th->arg);
+	return 0;
+}
+
+int
+pthread_create(pthread_t *thread,
+				pthread_attr_t *attr,
+				void *(*start_routine) (void *),
+				void *arg)
+{
+	int save_errno;
+	win32_pthread *th;
+
+	th = (win32_pthread *)pg_malloc(sizeof(win32_pthread));
+	th->routine = start_routine;
+	th->arg = arg;
+	th->result = NULL;
+
+	th->handle = (HANDLE)_beginthreadex(NULL, 0,
+										win32_pthread_run, th, 0, NULL);
+	if (th->handle == NULL)
+	{
+		save_errno = errno;
+		free(th);
+		return save_errno;
+	}
+
+	*thread = th;
+	return 0;
+}
+
+int
+pthread_join(pthread_t th, void **thread_return)
+{
+	if (th == NULL || th->handle == NULL)
+	return errno = EINVAL;
+
+	if (WaitForSingleObject(th->handle, INFINITE) != WAIT_OBJECT_0)
+	{
+		_dosmaperr(GetLastError());
+		return errno;
+	}
+
+	if (thread_return)
+	*thread_return = th->result;
+
+	CloseHandle(th->handle);
+	free(th);
+	return 0;
+}
+
+#endif /* WIN32 */
