@@ -210,7 +210,7 @@ main(int argc, char *argv[])
 		else if (strcmp(argv[1], "show") == 0)
 			backup_subcmd = SHOW;
 		else if (strcmp(argv[1], "delete") == 0)
-			backup_subcmd = DELETE;
+			backup_subcmd = DELETE_SUBCMD;
 		else if (strcmp(argv[1], "set-config") == 0)
 			backup_subcmd = SET_CONFIG;
 		else if (strcmp(argv[1], "show-config") == 0)
@@ -256,7 +256,7 @@ main(int argc, char *argv[])
 	if (backup_subcmd == BACKUP ||
 		backup_subcmd == RESTORE ||
 		backup_subcmd == VALIDATE ||
-		backup_subcmd == DELETE)
+		backup_subcmd == DELETE_SUBCMD)
 	{
 		int			i,
 					len = 0,
@@ -377,7 +377,7 @@ main(int argc, char *argv[])
 	{
 		if (backup_subcmd != RESTORE
 			&& backup_subcmd != VALIDATE
-			&& backup_subcmd != DELETE
+			&& backup_subcmd != DELETE_SUBCMD
 			&& backup_subcmd != SHOW)
 			elog(ERROR, "Cannot use -i (--backup-id) option together with the '%s' command",
 						argv[1]);
@@ -456,7 +456,7 @@ main(int argc, char *argv[])
 						  false);
 		case SHOW:
 			return do_show(current.backup_id);
-		case DELETE:
+		case DELETE_SUBCMD:
 			if (delete_expired && backup_id_string_param)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
 			if (!delete_expired && !delete_wal && !backup_id_string_param)

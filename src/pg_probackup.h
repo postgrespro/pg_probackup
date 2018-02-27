@@ -141,7 +141,7 @@ typedef enum ProbackupSubcmd
 	RESTORE,
 	VALIDATE,
 	SHOW,
-	DELETE,
+	DELETE_SUBCMD,
 	SET_CONFIG,
 	SHOW_CONFIG
 } ProbackupSubcmd;
