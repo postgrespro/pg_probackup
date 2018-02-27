@@ -437,7 +437,7 @@ main(int argc, char *argv[])
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  current.stream ? "true" : "false", is_remote_backup ? "true" : "false");
+						  stream_wal ? "true" : "false", is_remote_backup ? "true" : "false");
 
 				return do_backup(start_time);
 			}
