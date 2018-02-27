@@ -10,7 +10,6 @@
 
 #include "pg_probackup.h"
 
-#include <libgen.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -99,10 +98,12 @@ int
 dir_create_dir(const char *dir, mode_t mode)
 {
 	char		copy[MAXPGPATH];
-	char		parent[MAXPGPATH];
+	char		*parent;
 
 	strncpy(copy, dir, MAXPGPATH);
-	strncpy(parent, dirname(copy), MAXPGPATH);
+
+	parent = pstrdup(dir);
+	get_parent_directory(parent);
 
 	/* Create parent first */
 	if (access(parent, F_OK) == -1)
@@ -116,6 +117,7 @@ dir_create_dir(const char *dir, mode_t mode)
 		elog(ERROR, "cannot create directory \"%s\": %s", dir, strerror(errno));
 	}
 
+	pfree(parent);
 	return 0;
 }
 

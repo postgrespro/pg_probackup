@@ -28,6 +28,7 @@
 #include "storage/checksum.h"
 #include "utils/pg_crc.h"
 #include "common/relpath.h"
+#include "port.h"
 
 #include "utils/parray.h"
 #include "utils/pgut.h"
