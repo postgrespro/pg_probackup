@@ -514,6 +514,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.expectedFailure
     def test_ptrack_concurrent_get_and_clear_1(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
@@ -597,6 +598,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.expectedFailure
     def test_ptrack_concurrent_get_and_clear_2(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
