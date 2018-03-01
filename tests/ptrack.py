@@ -172,7 +172,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node_restored.append_conf(
@@ -268,7 +268,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node_restored.append_conf(
@@ -358,7 +358,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(
+                node_restored.data_dir,
+                ignore_ptrack=False
+                )
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node_restored.append_conf(
@@ -427,7 +430,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node_restored.append_conf(
@@ -500,7 +503,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
+            pgdata_restored = self.pgdata_content(node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.start()
@@ -584,7 +587,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
+            pgdata_restored = self.pgdata_content(node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.start()
@@ -682,7 +685,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
+            pgdata_restored = self.pgdata_content(node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.start()
@@ -783,7 +786,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         )
 
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
+            pgdata_restored = self.pgdata_content(node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.start()
@@ -885,7 +888,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         )
 
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
+            pgdata_restored = self.pgdata_content(node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.start()
@@ -1191,7 +1194,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # COMPARE PHYSICAL CONTENT
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
@@ -1220,7 +1223,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # COMPARE PHYSICAL CONTENT
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
@@ -1324,7 +1327,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # GET RESTORED PGDATA AND COMPARE
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
@@ -1402,7 +1405,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # GET PHYSICAL CONTENT and COMPARE PHYSICAL CONTENT
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
@@ -1551,7 +1554,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # GET PHYSICAL CONTENT FROM RESTORED NODE and COMPARE PHYSICAL CONTENT
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(restored_node.data_dir)
+            pgdata_restored = self.pgdata_content(restored_node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
@@ -1587,7 +1590,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # GET PHYSICAL CONTENT FROM RESTORED NODE and COMPARE PHYSICAL CONTENT
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(restored_node.data_dir)
+            pgdata_restored = self.pgdata_content(restored_node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
@@ -1684,7 +1687,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(restored_node.data_dir)
+            pgdata_restored = self.pgdata_content(restored_node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE

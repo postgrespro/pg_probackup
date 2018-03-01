@@ -250,12 +250,20 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         """Make node, create table with multiple segments, write some data to it, check page and data correctness"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2',
-            'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB',
-            'maintenance_work_mem': '1GB', 'autovacuum': 'off', 'full_page_writes': 'off'}
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'ptrack_enable': 'on',
+                'fsync': 'off',
+                'shared_buffers': '1GB',
+                'maintenance_work_mem': '1GB',
+                'autovacuum': 'off',
+                'full_page_writes': 'off'
+                }
             )
 
         self.init_pb(backup_dir)
@@ -271,7 +279,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         # PGBENCH STUFF
-        pgbench = node.pgbench(options=['-T', '150', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '50', '-c', '1', '--no-vacuum'])
         pgbench.wait()
         node.safe_psql("postgres", "checkpoint")
 
