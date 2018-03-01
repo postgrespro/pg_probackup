@@ -2118,8 +2118,8 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 			continue;
 		}
 
-		/* Check files located inside database directories */
-		if (filename[0] != '\0' && file->dbOid != 0)
+		/* Check files located inside database directories including directory 'global' */
+		if (filename[0] != '\0' && file->tblspcOid != 0)
 		{
 			if (strcmp(filename, "pg_internal.init") == 0)
 			{
