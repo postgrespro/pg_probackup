@@ -292,7 +292,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_checksumm_fail_heal_via_ptrack(self):
+    def test_page_corruption_heal_via_ptrack_1(self):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -349,7 +349,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_checksumm_fail_heal_via_ptrack_fail(self):
+    def test_page_corruption_heal_via_ptrack_2(self):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(

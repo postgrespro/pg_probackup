@@ -14,7 +14,7 @@ Check archive compression:
  export ARCHIVE_COMPRESSION=ON
 
 Usage:
- pip install testgres==0.4.0
+ pip install testgres
  pip install psycopg2
  export PG_CONFIG=/path/to/pg_config
  python -m unittest [-v] tests[.specific_module][.class.test]

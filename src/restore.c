@@ -106,6 +106,9 @@ do_restore_or_validate(time_t target_backup_id,
 			elog(ERROR, "restore destination is not empty: \"%s\"", pgdata);
 	}
 
+	if (instance_name == NULL)
+		elog(ERROR, "required parameter not specified: --instance");
+
 	rt = parseRecoveryTargetOptions(target_time, target_xid, target_inclusive);
 
 	elog(LOG, "%s begin.", action);

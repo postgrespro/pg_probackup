@@ -139,22 +139,22 @@ pretty_size(int64 size, char *buf, size_t len)
 	switch (exp)
 	{
 		case 0:
-			snprintf(buf, len, INT64_FORMAT "B", size);
+			snprintf(buf, len, "%dB", (int) size);
 			break;
 		case 1:
-			snprintf(buf, len, INT64_FORMAT "kB", size);
+			snprintf(buf, len, "%dkB", (int) size);
 			break;
 		case 2:
-			snprintf(buf, len, INT64_FORMAT "MB", size);
+			snprintf(buf, len, "%dMB", (int) size);
 			break;
 		case 3:
-			snprintf(buf, len, INT64_FORMAT "GB", size);
+			snprintf(buf, len, "%dGB", (int) size);
 			break;
 		case 4:
-			snprintf(buf, len, INT64_FORMAT "TB", size);
+			snprintf(buf, len, "%dTB", (int) size);
 			break;
 		case 5:
-			snprintf(buf, len, INT64_FORMAT "PB", size);
+			snprintf(buf, len, "%dPB", (int) size);
 			break;
 		default:
 			strncpy(buf, "***", len);
@@ -250,7 +250,7 @@ show_backup_list(FILE *out, parray *backup_list)
 		 * the difference of data accumulated.
 		 */
 		pretty_size(backup->data_bytes, data_bytes_str,
-				lengthof(data_bytes_str));
+					lengthof(data_bytes_str));
 
 		/* Get parent timeline before printing */
 		parent_tli = get_parent_tli(backup->tli);

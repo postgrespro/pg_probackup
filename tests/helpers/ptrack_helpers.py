@@ -884,7 +884,7 @@ class ProbackupTest(object):
         except:
             pass
 
-    def pgdata_content(self, directory):
+    def pgdata_content(self, directory, ignore_ptrack=True):
         """ return dict with directory content. "
         " TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = [
@@ -897,9 +897,9 @@ class ProbackupTest(object):
             'backup_label', 'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control'
         ]
-        suffixes_to_ignore = (
-            '_ptrack'
-        )
+#        suffixes_to_ignore = (
+#            '_ptrack'
+#        )
         directory_dict = {}
         directory_dict['pgdata'] = directory
         directory_dict['files'] = {}
@@ -908,7 +908,7 @@ class ProbackupTest(object):
             for file in files:
                 if (
                     file in files_to_ignore or
-                    file.endswith(suffixes_to_ignore)
+                    (ignore_ptrack and file.endswith('_ptrack'))
                 ):
                         continue
 
@@ -993,8 +993,7 @@ class ProbackupTest(object):
                                         )
                         for page in restored_pgdata['files'][file]['md5_per_page']:
                             if page not in original_pgdata['files'][file]['md5_per_page']:
-                                error_message += '\n Extra page {0}\n '
-                                'File: {1}\n'.format(
+                                error_message += '\n Extra page {0}\n File: {1}\n'.format(
                                     page,
                                     os.path.join(
                                         restored_pgdata['pgdata'], file))

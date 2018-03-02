@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.15";
+const char *PROGRAM_VERSION	= "2.0.16";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -176,7 +176,7 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
-	char	   *command;
+	char	   *command = NULL;
 	char		path[MAXPGPATH];
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
@@ -253,22 +253,29 @@ main(int argc, char *argv[])
 	 * Make command string before getopt_long() will call. It permutes the
 	 * content of argv.
 	 */
-	if (backup_subcmd == BACKUP)
+	if (backup_subcmd == BACKUP ||
+		backup_subcmd == RESTORE ||
+		backup_subcmd == VALIDATE ||
+		backup_subcmd == DELETE)
 	{
 		int			i,
-					len = 0;
+					len = 0,
+					allocated = 0;
 
-		command = (char *) palloc(sizeof(char) * MAXPGPATH);
-		command[0] = '\0';
+		allocated = sizeof(char) * MAXPGPATH;
+		command = (char *) palloc(allocated);
 
 		for (i = 0; i < argc; i++)
 		{
 			int			arglen = strlen(argv[i]);
 
-			if (arglen + len > MAXPGPATH)
-				break;
+			if (arglen + len > allocated)
+			{
+				allocated *= 2;
+				command = repalloc(command, allocated);
+			}
 
-			strncpy((command +len), argv[i], arglen);
+			strncpy(command + len, argv[i], arglen);
 			len += arglen;
 			command[len++] = ' ';
 		}
@@ -302,6 +309,18 @@ main(int argc, char *argv[])
 	rc = stat(backup_path, &stat_buf);
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
+
+	/* Initialize logger */
+	init_logger(backup_path);
+
+	/* command was initialized for a few commands */
+	if (command)
+	{
+		elog_file(INFO, "command: %s", command);
+
+		pfree(command);
+		command = NULL;
+	}
 
 	/* Option --instance is required for all commands except init and show */
 	if (backup_subcmd != INIT && backup_subcmd != SHOW && backup_subcmd != VALIDATE)
@@ -352,9 +371,6 @@ main(int argc, char *argv[])
 	 */
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
-
-	/* Initialize logger */
-	init_logger(backup_path);
 
 	/* Sanity check of --backup-id option */
 	if (backup_id_string_param != NULL)
@@ -421,8 +437,7 @@ main(int argc, char *argv[])
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  current.stream ? "true" : "false", is_remote_backup ? "true" : "false");
-				elog_file(INFO, "command: %s", command);
+						  stream_wal ? "true" : "false", is_remote_backup ? "true" : "false");
 
 				return do_backup(start_time);
 			}

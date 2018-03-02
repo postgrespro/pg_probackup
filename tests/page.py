@@ -26,7 +26,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
-                'checkpoint_timeout': '300s'
+                'checkpoint_timeout': '300s',
+                'autovacuum': 'off'
             }
         )
         node_restored = self.make_simple_node(
@@ -70,8 +71,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         )
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=['--log-level-file=verbose']
+            backup_dir, 'node', node, backup_type='page'
         )
 
         if self.paranoia:
@@ -94,6 +94,21 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
         node_restored.start()
+
+        while node_restored.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
+
+        # Logical comparison
+        result1 = node.safe_psql(
+            "postgres",
+            "select * from t_heap"
+            )
+        result2 = node_restored.safe_psql(
+            "postgres",
+            "select * from t_heap"
+            )
+        self.assertEqual(result1, result2)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -235,12 +250,20 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         """Make node, create table with multiple segments, write some data to it, check page and data correctness"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2',
-            'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB',
-            'maintenance_work_mem': '1GB', 'autovacuum': 'off', 'full_page_writes': 'off'}
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'ptrack_enable': 'on',
+                'fsync': 'off',
+                'shared_buffers': '1GB',
+                'maintenance_work_mem': '1GB',
+                'autovacuum': 'off',
+                'full_page_writes': 'off'
+                }
             )
 
         self.init_pb(backup_dir)
@@ -256,7 +279,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         # PGBENCH STUFF
-        pgbench = node.pgbench(options=['-T', '150', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '50', '-c', '1', '--no-vacuum'])
         pgbench.wait()
         node.safe_psql("postgres", "checkpoint")
 
@@ -280,12 +303,15 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
 
         # START RESTORED NODE
-        restored_node.append_conf("postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        restored_node.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(restored_node.port))
         restored_node.start()
-        while restored_node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':
+        while restored_node.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
             time.sleep(1)
 
-        result_new = restored_node.safe_psql("postgres", "select * from pgbench_accounts")
+        result_new = restored_node.safe_psql(
+            "postgres", "select * from pgbench_accounts")
 
         # COMPARE RESTORED FILES
         self.assertEqual(result, result_new, 'data is lost')
