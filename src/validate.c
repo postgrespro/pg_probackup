@@ -62,7 +62,7 @@ pgBackupValidate(pgBackup *backup)
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-		__sync_lock_release(&file->lock);
+		pg_atomic_clear_flag(&file->lock);
 	}
 
 	/* Validate files */
@@ -116,7 +116,7 @@ pgBackupValidateFiles(void *arg)
 		struct stat st;
 
 		pgFile *file = (pgFile *) parray_get(arguments->files, i);
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		if (interrupted)

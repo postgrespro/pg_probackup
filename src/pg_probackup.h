@@ -33,6 +33,7 @@
 #include "common/relpath.h"
 #include "port.h"
 
+#include "atomics.h"
 
 #include "utils/parray.h"
 #include "utils/pgut.h"
@@ -105,7 +106,7 @@ typedef struct pgFile
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
-	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
+	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
 

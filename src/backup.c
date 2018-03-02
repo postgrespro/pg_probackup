@@ -383,7 +383,7 @@ remote_backup_files(void *arg)
 		if (S_ISDIR(file->mode))
 			continue;
 
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		file_backup_conn = pgut_connect_replication(pgut_dbname);
@@ -646,7 +646,7 @@ do_backup_instance(void)
 		}
 
 		/* setup threads */
-		__sync_lock_release(&file->lock);
+		pg_atomic_clear_flag(&file->lock);
 	}
 
 	/* sort by size for load balancing */
@@ -1922,7 +1922,7 @@ backup_files(void *arg)
 
 		pgFile *file = (pgFile *) parray_get(arguments->backup_files_list, i);
 		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		/* check for interrupt */
