@@ -58,15 +58,9 @@ apt-get source pg-probackup-{10,9.6,9.5}
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
 yum install pg_probackup-{10,9.6,9.5}
 
-#SRPM Centos Packages
-yumdownloader --source pg_probackup-{10,9.6,9.5}
-
 #RPM RHEL Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-rhel.noarch.rpm
 yum install pg_probackup-{10,9.6,9.5}
-
-#SRPM RHEL Packages
-yumdownloader --source pg_probackup-{10,9.6,9.5}
 
 #RPM Oracle Linux Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-oraclelinux.noarch.rpm
