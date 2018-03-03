@@ -96,7 +96,7 @@ def is_enterprise():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if 'postgrespro.ru' in p.communicate()[0]:
+    if b'postgrespro.ru' in p.communicate()[0]:
         return True
     else:
         return False

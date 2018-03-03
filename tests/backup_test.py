@@ -338,7 +338,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
             self.assertIn('block 1, try to fetch via SQL', log_content)
-            self.assertIn('SELECT pg_ptrack_get_block', log_content)
+            self.assertIn('SELECT pg_catalog.pg_ptrack_get_block', log_content)
             f.close
 
         self.assertTrue(
@@ -410,7 +410,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "calculated checksum" in e.message and
                 "ERROR: query failed: "
                 "ERROR:  invalid page in block" in e.message and
-                "query was: SELECT pg_ptrack_get_block_2" in e.message,
+                "query was: SELECT pg_catalog.pg_ptrack_get_block_2" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
