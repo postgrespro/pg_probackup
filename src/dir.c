@@ -166,7 +166,8 @@ pgFileInit(const char *path)
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 	file->is_cfs = false;
-	file->n_blocks = -1;			/* can change only in DELTA backups */
+	file->exists_in_prev = false;	/* can change only in Incremental backup. */
+	file->n_blocks = -1;			/* can change only in DELTA backup. Number of blocks readed during backup */
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }

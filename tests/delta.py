@@ -2,6 +2,7 @@ import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
+from testgres import QueryException
 import subprocess
 import time
 
@@ -12,7 +13,93 @@ module_name = 'delta'
 class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
-    def test_delta_vacuum_truncate(self):
+    def test_delta_vacuum_truncate_1(self):
+        """make node, create table, take full backup,
+           delete last 3 pages, vacuum relation,
+           take delta backup, take second delta backup,
+           restore latest delta backup and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'autovacuum': 'off'
+            }
+        )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node_restored.cleanup()
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; "
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1024) i;"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap where ctid >= '(11,0)'"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        self.restore_node(
+            backup_dir,
+            'node',
+            node_restored,
+            options=[
+                "-j", "1",
+                "--log-level-file=verbose"
+            ]
+        )
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delta_vacuum_truncate_2(self):
         """make node, create table, take full backup,
            delete last 3 pages, vacuum relation,
            take delta backup, take second delta backup,
@@ -68,13 +155,13 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         )
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--log-level-file=verbose']
+            backup_dir, 'node', node, backup_type='delta'
+#            options=['--log-level-file=verbose']
         )
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--log-level-file=verbose']
+            backup_dir, 'node', node, backup_type='delta'
+#            options=['--log-level-file=verbose']
         )
 
         pgdata = self.pgdata_content(node.data_dir)
@@ -83,18 +170,103 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         new_tablespace = self.get_tblspace_path(node_restored, 'somedata_new')
 
         self.restore_node(
-            backup_dir, 'node', node_restored,
-            options=["-j", "4", "-T", "{0}={1}".format(
-                old_tablespace, new_tablespace)]
+            backup_dir,
+            'node',
+            node_restored,
+            options=[
+                "-j", "1",
+                "--log-level-file=verbose",
+                "-T", "{0}={1}".format(
+                    old_tablespace, new_tablespace)]
         )
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-#        node_restored.append_conf(
-#            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-#        node_restored.start()
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
+
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delta_vacuum_truncate_3(self):
+        """make node, create table, take full backup,
+           delete last 3 pages, vacuum relation,
+           take delta backup, take second delta backup,
+           restore latest delta backup and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s',
+                'autovacuum': 'off'
+            }
+        )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node_restored.cleanup()
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10100000) i;"
+        )
+        filepath = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')"
+        ).rstrip()
+
+
+        self.backup_node(backup_dir, 'node', node)
+
+        print(os.path.join(node.data_dir, filepath + '.1'))
+        os.unlink(os.path.join(node.data_dir, filepath + '.1'))
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+#            options=['--log-level-file=verbose']
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+#            options=['--log-level-file=verbose']
+        )
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+
+        self.restore_node(
+            backup_dir,
+            'node',
+            node_restored,
+            options=[
+                "-j", "1",
+                "--log-level-file=verbose"
+            ]
+        )
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
 
         # Clean after yourself
         # self.del_test_dir(module_name, fname)
@@ -112,8 +284,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
+                'checkpoint_timeout': '30s'
+                }
             )
 
         self.init_pb(backup_dir)
@@ -187,8 +359,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s'
+                }
             )
 
         self.init_pb(backup_dir)
@@ -258,11 +432,15 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
-                'ptrack_enable': 'on', 'fsync': 'off', 'shared_buffers': '1GB',
-                'maintenance_work_mem': '1GB', 'autovacuum': 'off',
-                'full_page_writes': 'off'}
-            )
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'fsync': 'off',
+                'shared_buffers': '1GB',
+                'maintenance_work_mem': '1GB',
+                'autovacuum': 'off',
+                'full_page_writes': 'off'
+            }
+        )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -279,7 +457,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         # PGBENCH STUFF
-        pgbench = node.pgbench(options=['-T', '50', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '50', '-c', '1', '--no-vacuum'])
         pgbench.wait()
         node.safe_psql("postgres", "checkpoint")
 
@@ -288,7 +466,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # delta BACKUP
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
-            options=["--log-level-file=verbose", '--stream'])
+            options=['--stream'])
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -322,6 +500,640 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delta_vacuum_full(self):
+        """make node, make full and delta stream backups,
+          restore them and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '300s'
+            }
+        )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node_restored.cleanup()
+        node.start()
+        self.create_tblspace_in_node(node, 'somedata')
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace somedata as select i"
+            " as id from generate_series(0,1000000) i"
+            )
+
+        # create async connection
+        conn = self.get_async_connect(port=node.port)
+
+        self.wait(conn)
+
+        acurs = conn.cursor()
+        acurs.execute("select pg_backend_pid()")
+
+        self.wait(conn)
+        pid = acurs.fetchall()[0][0]
+        print(pid)
+
+        gdb = self.gdb_attach(pid)
+        gdb.set_breakpoint('reform_and_rewrite_tuple')
+
+        if not gdb.continue_execution_until_running():
+            print('Failed gdb continue')
+            exit(1)
+
+        acurs.execute("VACUUM FULL t_heap")
+
+        if gdb.stopped_in_breakpoint():
+            if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
+                print('Failed to hit breakpoint')
+                exit(1)
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream']
+        )
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream']
+        )
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        old_tablespace = self.get_tblspace_path(node, 'somedata')
+        new_tablespace = self.get_tblspace_path(node_restored, 'somedata_new')
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=["-j", "4", "-T", "{0}={1}".format(
+                old_tablespace, new_tablespace)]
+        )
+
+        # Physical comparison
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_create_db(self):
+        """
+        Make node, take full backup, create database db1, take delta backup,
+        restore database and check it presense
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_size': '10GB',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '5min',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        # FULL BACKUP
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+
+        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=["--stream"])
+
+        # CREATE DATABASE DB1
+        node.safe_psql("postgres", "create database db1")
+        node.safe_psql(
+            "db1",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+
+        # DELTA BACKUP
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=["--stream"]
+        )
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
+
+        node_restored.cleanup()
+        self.restore_node(
+            backup_dir,
+            'node',
+            node_restored,
+            backup_id=backup_id,
+            options=["-j", "4", "--log-level-file=verbose"])
+
+        # COMPARE PHYSICAL CONTENT
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
+
+        # DROP DATABASE DB1
+        node.safe_psql(
+            "postgres", "drop database db1")
+        # SECOND DELTA BACKUP
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=["--stream"]
+        )
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE SECOND DELTA BACKUP
+        node_restored.cleanup()
+        self.restore_node(
+            backup_dir,
+            'node',
+            node_restored,
+            backup_id=backup_id,
+            options=["-j", "4", "--log-level-file=verbose"]
+        )
+
+        # COMPARE PHYSICAL CONTENT
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
+
+        try:
+            node_restored.safe_psql('db1', 'select 1')
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because we are connecting to deleted database"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd)
+            )
+        except QueryException as e:
+            self.assertTrue(
+                'FATAL:  database "db1" does not exist' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd)
+            )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_exists_in_previous_backup(self):
+        """
+        Make node, take full backup, create table, take page backup,
+        take delta backup, check that file is no fully copied to delta backup
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_size': '10GB',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '5min',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        # FULL BACKUP
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+
+        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        filepath = node.safe_psql(
+            "postgres",
+            "SELECT pg_relation_filepath('t_heap')").rstrip()
+        self.backup_node(
+            backup_dir,
+            'node',
+            node,
+            options=["--stream"])
+
+        # PAGE BACKUP
+        backup_id = self.backup_node(
+            backup_dir,
+            'node',
+            node,
+            backup_type='page'
+        )
+
+        fullpath = os.path.join(
+            backup_dir, 'backups', 'node', backup_id, 'database', filepath)
+        self.assertFalse(os.path.exists(fullpath))
+
+#        if self.paranoia:
+#            pgdata_page = self.pgdata_content(
+#                os.path.join(
+#                    backup_dir, 'backups',
+#                    'node', backup_id, 'database'))
+
+        # DELTA BACKUP
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=["--stream", "--log-level-file=verbose"]
+        )
+#        if self.paranoia:
+#            pgdata_delta = self.pgdata_content(
+#                os.path.join(
+#                    backup_dir, 'backups',
+#                    'node', backup_id, 'database'))
+#            self.compare_pgdata(
+#                pgdata_page, pgdata_delta)
+
+        fullpath = os.path.join(
+            backup_dir, 'backups', 'node', backup_id, 'database', filepath)
+        self.assertFalse(os.path.exists(fullpath))
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
+
+        node_restored.cleanup()
+        self.restore_node(
+            backup_dir,
+            'node',
+            node_restored,
+            backup_id=backup_id,
+            options=["-j", "4", "--log-level-file=verbose"])
+
+        # COMPARE PHYSICAL CONTENT
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_alter_table_set_tablespace_delta(self):
+        """Make node, create tablespace with table, take full backup,
+         alter tablespace location, take delta backup, restore database."""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        # FULL BACKUP
+        self.create_tblspace_in_node(node, 'somedata')
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace somedata as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+
+        # ALTER TABLESPACE
+        self.create_tblspace_in_node(node, 'somedata_new')
+        node.safe_psql(
+            "postgres",
+            "alter table t_heap set tablespace somedata_new"
+        )
+
+        # DELTA BACKUP
+        result = node.safe_psql(
+            "postgres", "select * from t_heap")
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=["--stream"]
+        )
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4",
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata'),
+                    self.get_tblspace_path(node_restored, 'somedata')
+                ),
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata_new'),
+                    self.get_tblspace_path(node_restored, 'somedata_new')
+                )
+            ]
+        )
+
+        # GET RESTORED PGDATA AND COMPARE
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        node_restored.start()
+
+        while node_restored.safe_psql(
+                "postgres", "select pg_is_in_recovery()") == 't\n':
+            time.sleep(1)
+        result_new = node_restored.safe_psql(
+            "postgres", "select * from t_heap")
+
+        self.assertEqual(result, result_new, 'lost some data after restore')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delta_delete(self):
+        """Make node, create tablespace with table, take full backup,
+         alter tablespace location, take delta backup, restore database."""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace somedata as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=["--stream"]
+        )
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4",
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata'),
+                    self.get_tblspace_path(node_restored, 'somedata')
+                )
+            ]
+        )
+
+        # GET RESTORED PGDATA AND COMPARE
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        node_restored.start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_corruption_heal_via_ptrack_1(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+                f.seek(9000)
+                f.write(b"bla")
+                f.flush()
+                f.close
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="delta",
+            options=["-j", "4", "--stream", "--log-level-file=verbose"])
+
+        # open log file and check
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            self.assertIn('block 1, try to fetch via SQL', log_content)
+            self.assertIn('SELECT pg_ptrack_get_block', log_content)
+            f.close
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK',
+            "Backup Status should be OK")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_corruption_heal_via_ptrack_2(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+        )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+        node.stop()
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+                f.seek(9000)
+                f.write(b"bla")
+                f.flush()
+                f.close
+        node.start()
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="delta", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of page "
+                "corruption in PostgreSQL instance.\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "WARNING: File" in e.message and
+                "blknum" in e.message and
+                "have wrong checksum" in e.message and
+                "try to fetch via SQL" in e.message and
+                "WARNING:  page verification failed, "
+                "calculated checksum" in e.message and
+                "ERROR: query failed: "
+                "ERROR:  invalid page in block" in e.message and
+                "query was: SELECT pg_ptrack_get_block_2" in e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        self.assertTrue(
+             self.show_pb(backup_dir, 'node')[1]['Status'] == 'ERROR',
+             "Backup Status should be ERROR")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -496,7 +496,8 @@ do_backup_instance(void)
 
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path, lengthof(prev_backup_filelist_path),
 						DATABASE_FILE_LIST);
-		prev_backup_filelist = dir_read_file_list(pgdata, prev_backup_filelist_path);
+		/* Files of previous backup needed by DELTA backup */
+		prev_backup_filelist = dir_read_file_list(NULL, prev_backup_filelist_path);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;
@@ -1946,6 +1947,25 @@ backup_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
+			/* Check that file exist in previous backup */
+			if (current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+			{
+				int			p;
+				char	   *relative;
+				int n_prev_backup_files_list = parray_num(arguments->prev_backup_filelist);
+				relative = GetRelativePath(file->path, arguments->from_root);
+				for (p = 0; p < n_prev_backup_files_list; p++)
+				{
+					pgFile *prev_file = (pgFile *) parray_get(arguments->prev_backup_filelist, p);
+					if (strcmp(relative, prev_file->path) == 0)
+					{
+						/* File exists in previous backup */
+						file->exists_in_prev = true;
+						elog(INFO, "File exists at the time of previous backup %s", relative);
+						break;
+					}
+				}
+			}
 			/* copy the file into backup */
 			if (file->is_datafile && !file->is_cfs)
 			{

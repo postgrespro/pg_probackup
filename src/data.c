@@ -317,17 +317,22 @@ backup_data_page(backup_files_args *arguments,
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
 		/* get lsn from page */
-		if (!parse_page(page, &page_lsn))
+		if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
+				file->exists_in_prev &&
+					header.compressed_size != PageIsTruncated &&
+						!parse_page(page, &page_lsn))
 			elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
 							"Possible risk of a memory corruption");
 
 	}
 
 	if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
+			file->exists_in_prev &&
 				header.compressed_size != PageIsTruncated &&
-								page_lsn < prev_backup_start_lsn)
+						page_lsn < prev_backup_start_lsn)
 	{
 		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
+		(*n_skipped)++;
 		free(page);
 		return;
 	}
@@ -557,18 +562,22 @@ restore_data_file(const char *from_root,
 				  pgBackup *backup)
 {
 	char				to_path[MAXPGPATH];
-	FILE			   *in;
-	FILE			   *out;
+	FILE			   *in = NULL;
+	FILE			   *out = NULL;
 	BackupPageHeader	header;
 	BlockNumber			blknum;
 	size_t              file_size;
 
-	/* open backup mode file for read */
-	in = fopen(file->path, "r");
-	if (in == NULL)
+	/* BYTES_INVALID allowed only in case of restoring file from DELTA backup */
+	if (file->write_size != BYTES_INVALID)
 	{
-		elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
-			 strerror(errno));
+		/* open backup mode file for read */
+		in = fopen(file->path, "r");
+		if (in == NULL)
+		{
+			elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
+				 strerror(errno));
+		}
 	}
 
 	/*
@@ -593,6 +602,10 @@ restore_data_file(const char *from_root,
 		size_t		read_len;
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
+
+		/* File didn`t changed. Nothig to copy */
+		if (file->write_size == BYTES_INVALID)
+			break;
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -670,9 +683,10 @@ restore_data_file(const char *from_root,
 	}
 
     /*
-     * DELTA backup has no knowledge about truncated blocks as PAGE or PTRACK do
-     * but knows file size at the time of backup.
-     * So when restoring file from delta backup we, knowning it`s size at
+     * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
+     * But during DELTA backup we read every file in PGDATA and thus DELTA backup
+     * knows exact size of every file at the time of backup.
+     * So when restoring file from DELTA backup we, knowning it`s size at
      * a time of a backup, can truncate file to this size.
      */
 
@@ -681,7 +695,6 @@ restore_data_file(const char *from_root,
 		/* get file current size */
 		fseek(out, 0, SEEK_END);
 		file_size = ftell(out);
-
 		if (file_size > file->n_blocks * BLCKSZ)
 		{
 			/*
@@ -699,7 +712,8 @@ restore_data_file(const char *from_root,
 	{
 		int errno_tmp = errno;
 
-		fclose(in);
+		if (in)
+			fclose(in);
 		fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
@@ -709,7 +723,8 @@ restore_data_file(const char *from_root,
 		fsync(fileno(out)) != 0 ||
 		fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
-	fclose(in);
+	if (in)
+		fclose(in);
 }
 
 /*

@@ -83,7 +83,6 @@ typedef struct pgFile
 	char	*name;			/* file or directory name */
 	mode_t	mode;			/* protection (file type and permission) */
 	size_t	size;			/* size of the file */
-	int	n_blocks;			/* size of the file in blocks, readed during DELTA backup */
 	size_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up, it's different from size) */
 	size_t	write_size;		/* size of the backed-up file. BYTES_INVALID means
@@ -98,8 +97,10 @@ typedef struct pgFile
 	Oid		relOid;			/* relOid extracted from path, if applicable */
 	char	*forkName;		/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
+	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
+	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */

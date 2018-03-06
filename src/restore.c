@@ -378,16 +378,25 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(database_path, list_path);
-	for (i = parray_num(files) - 1; i >= 0; i--)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
 
-		/*
-		 * Remove files which haven't changed since previous backup
-		 * and was not backed up
-		 */
-		if (file->write_size == BYTES_INVALID)
-			pgFileFree(parray_remove(files, i));
+	/*
+	 * For PAGE and PTRACK backups remove files which haven't changed
+	 * since previous backup and thus were not backed up.
+	 * We can`t do the same when restoring DELTA backup because we need information
+	 * about every file to correctly truncate them.
+	 */
+	if (backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
+			backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	{
+		for (i = parray_num(files) - 1; i >= 0; i--)
+		{
+			pgFile *file = (pgFile *) parray_get(files, i);
+			if (file->write_size == BYTES_INVALID)
+			{
+				elog(VERBOSE, "The file didn`t changed. Skip restore: %s", file->path);
+				pgFileFree(parray_remove(files, i));
+			}
+		}
 	}
 
 	/* setup threads */
@@ -719,21 +728,14 @@ restore_files(void *arg)
 		/* Directories was created before */
 		if (S_ISDIR(file->mode))
 		{
-			elog(LOG, "directory, skip");
-			continue;
-		}
-
-		/* not backed up */
-		if (file->write_size == BYTES_INVALID)
-		{
-			elog(LOG, "not backed up, skip");
+			elog(VERBOSE, "directory, skip");
 			continue;
 		}
 
 		/* Do not restore tablespace_map file */
 		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, rel_path))
 		{
-			elog(LOG, "skip tablespace_map");
+			elog(VERBOSE, "skip tablespace_map");
 			continue;
 		}
 
@@ -750,8 +752,9 @@ restore_files(void *arg)
 			copy_file(from_root, pgdata, file);
 
 		/* print size of restored file */
-		elog(LOG, "Restored file %s : %lu bytes",
-			 file->path, (unsigned long) file->write_size);
+		if (file->write_size != BYTES_INVALID)
+			elog(LOG, "Restored file %s : %lu bytes",
+				file->path, (unsigned long) file->write_size);
 	}
 }
 
