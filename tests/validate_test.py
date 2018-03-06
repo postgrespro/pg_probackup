@@ -968,7 +968,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
         wals.sort()
-        file = os.path.join(backup_dir, 'wal', 'node', wals[3])
+        file = os.path.join(backup_dir, 'wal', 'node', wals[-1])
         os.remove(file)
 
         # cut out '.gz'
@@ -1237,7 +1237,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    # @unittest.expectedFailure
+    @unittest.expectedFailure
     def test_pgpro561(self):
         """make node with archiving, make stream backup, restore it to node1, check that archiving is not successful on node1"""
         fname = self.id().split('.')[3]
@@ -1290,60 +1290,4 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    # @unittest.expectedFailure
-    def test_pgpro561(self):
-        """make node with archiving, make stream backup, restore it to node1, check that archiving is not successful on node1"""
-        fname = self.id().split('.')[3]
-        node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node1', node1)
-        self.set_archiving(backup_dir, 'node1', node1)
-        node1.start()
-
-        backup_id = self.backup_node(backup_dir, 'node1', node1, options=["--stream"])
-
-        node2 = self.make_simple_node(base_dir="{0}/{1}/node2".format(module_name, fname))
-        node2.cleanup()
-
-        node1.psql(
-            "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
-
-        self.backup_node(backup_dir, 'node1', node1, backup_type='page', options=["--stream"])
-        self.restore_node(backup_dir, 'node1', data_dir=node2.data_dir)
-        node2.append_conf('postgresql.auto.conf', 'port = {0}'.format(node2.port))
-        node2.start()
-
-        timeline_node1 = node1.get_control_data()["Latest checkpoint's TimeLineID"]
-        timeline_node2 = node2.get_control_data()["Latest checkpoint's TimeLineID"]
-        self.assertEqual(timeline_node1, timeline_node2, "Timelines on Master and Node1 should be equal. This is unexpected")
-
-        archive_command_node1 = node1.safe_psql("postgres", "show archive_command")
-        archive_command_node2 = node2.safe_psql("postgres", "show archive_command")
-        self.assertEqual(archive_command_node1, archive_command_node2, "Archive command on Master and Node should be equal. This is unexpected")
-
-        #result = node2.safe_psql("postgres", "select last_failed_wal from pg_stat_get_archiver() where last_failed_wal is not NULL")
-        ## self.assertEqual(res, six.b(""), 'Restored Node1 failed to archive segment {0} due to having the same archive command as Master'.format(res.rstrip()))
-        #if result == "":
-        #    self.assertEqual(1, 0, 'Error is expected due to Master and Node1 having the common archive and archive_command')
-
-        log_file = os.path.join(node2.logs_dir, 'postgresql.log')
-        with open(log_file, 'r') as f:
-            log_content = f.read()
-            self.assertTrue('LOG:  archive command failed with exit code 1' in log_content
-             and 'DETAIL:  The failed archive command was:' in log_content
-             and 'INFO: pg_probackup archive-push from' in log_content,
-             'Expecting error messages about failed archive_command'
-            )
-            self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
-
-        # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)

@@ -96,7 +96,7 @@ def is_enterprise():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if 'postgrespro.ru' in p.communicate()[0]:
+    if b'postgrespro.ru' in p.communicate()[0]:
         return True
     else:
         return False
@@ -884,7 +884,7 @@ class ProbackupTest(object):
         except:
             pass
 
-    def pgdata_content(self, directory):
+    def pgdata_content(self, directory, ignore_ptrack=True):
         """ return dict with directory content. "
         " TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = [
@@ -897,9 +897,9 @@ class ProbackupTest(object):
             'backup_label', 'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control'
         ]
-        suffixes_to_ignore = (
-            '_ptrack'
-        )
+#        suffixes_to_ignore = (
+#            '_ptrack'
+#        )
         directory_dict = {}
         directory_dict['pgdata'] = directory
         directory_dict['files'] = {}
@@ -908,7 +908,7 @@ class ProbackupTest(object):
             for file in files:
                 if (
                     file in files_to_ignore or
-                    file.endswith(suffixes_to_ignore)
+                    (ignore_ptrack and file.endswith('_ptrack'))
                 ):
                         continue
 

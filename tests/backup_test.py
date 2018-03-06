@@ -292,7 +292,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_checksumm_fail_heal_via_ptrack(self):
+    def test_page_corruption_heal_via_ptrack_1(self):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -338,7 +338,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
             self.assertIn('block 1, try to fetch via SQL', log_content)
-            self.assertIn('SELECT pg_ptrack_get_block', log_content)
+            self.assertIn('SELECT pg_catalog.pg_ptrack_get_block', log_content)
             f.close
 
         self.assertTrue(
@@ -349,7 +349,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_checksumm_fail_heal_via_ptrack_fail(self):
+    def test_page_corruption_heal_via_ptrack_2(self):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -410,7 +410,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "calculated checksum" in e.message and
                 "ERROR: query failed: "
                 "ERROR:  invalid page in block" in e.message and
-                "query was: SELECT pg_ptrack_get_block_2" in e.message,
+                "query was: SELECT pg_catalog.pg_ptrack_get_block_2" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 

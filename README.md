@@ -47,18 +47,27 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 #DEB Ubuntu|Debian Packages
 echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
 wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
-apt-get install pg-probackup-(10|9.6|9.5)
+apt-get install pg-probackup-{10,9.6,9.5}
 
 #DEB-SRC Packages
 echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
   /etc/apt/sources.list.d/pg_probackup.list
+apt-get source pg-probackup-{10,9.6,9.5}
 
 #RPM Centos Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
-yum install pg_probackup-(10|9.6|9.5)
+yum install pg_probackup-{10,9.6,9.5}
 
-#SRPM Centos Packages
-yumdownloader --source pg_probackup-(10|9.6|9.5)
+#RPM RHEL Packages
+rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-rhel.noarch.rpm
+yum install pg_probackup-{10,9.6,9.5}
+
+#RPM Oracle Linux Packages
+rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-oraclelinux.noarch.rpm
+yum install pg_probackup-{10,9.6,9.5}
+
+#SRPM Oracle Linux Packages
+yumdownloader --source pg_probackup-{10,9.6,9.5}
 ```
 
 To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. To install `pg_probackup`, execute this in the module's directory:

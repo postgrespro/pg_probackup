@@ -148,7 +148,7 @@ get_remote_system_identifier(PGconn *conn)
 	char	   *val;
 
 	res = pgut_execute(conn,
-					   "SELECT system_identifier FROM pg_control_system()",
+					   "SELECT system_identifier FROM pg_catalog.pg_control_system()",
 					   0, NULL, true);
 	val = PQgetvalue(res, 0, 0);
 	if (!parse_uint64(val, &system_id_conn, 0))

@@ -942,7 +942,7 @@ confirm_block_size(const char *name, int blcksz)
 	char	   *endp;
 	int			block_size;
 
-	res = pgut_execute(backup_conn, "SELECT current_setting($1)", 1, &name, true);
+	res = pgut_execute(backup_conn, "SELECT pg_catalog.current_setting($1)", 1, &name, true);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
 
@@ -976,13 +976,13 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	params[1] = smooth ? "false" : "true";
 	if (!exclusive_backup)
 		res = pgut_execute(conn,
-						   "SELECT pg_start_backup($1, $2, false)",
+						   "SELECT pg_catalog.pg_start_backup($1, $2, false)",
 						   2,
 						   params,
 						   true);
 	else
 		res = pgut_execute(conn,
-						   "SELECT pg_start_backup($1, $2)",
+						   "SELECT pg_catalog.pg_start_backup($1, $2)",
 						   2,
 						   params,
 						   true);
@@ -1040,9 +1040,9 @@ pg_switch_wal(PGconn *conn)
 	PQclear(res);
 
 	if (server_version >= 100000)
-		res = pgut_execute(conn, "SELECT * FROM pg_switch_wal()", 0, NULL, true);
+		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL, true);
 	else
-		res = pgut_execute(conn, "SELECT * FROM pg_switch_xlog()", 0, NULL, true);
+		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL, true);
 
 	PQclear(res);
 }
@@ -1067,7 +1067,7 @@ pg_ptrack_support(void)
 	PQclear(res_db);
 
 	res_db = pgut_execute(backup_conn,
-						  "SELECT ptrack_version()",
+						  "SELECT pg_catalog.ptrack_version()",
 						  0, NULL, true);
 	if (PQntuples(res_db) == 0)
 	{
@@ -1127,7 +1127,7 @@ pg_is_in_recovery(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "SELECT pg_is_in_recovery()", 0, NULL, true);
+	res_db = pgut_execute(backup_conn, "SELECT pg_catalog.pg_is_in_recovery()", 0, NULL, true);
 
 	if (PQgetvalue(res_db, 0, 0)[0] == 't')
 	{
@@ -1166,11 +1166,11 @@ pg_ptrack_clear(void)
 		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
 
 		tmp_conn = pgut_connect(dbname);
-		res = pgut_execute(tmp_conn, "SELECT pg_ptrack_clear()", 0, NULL, true);
+		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()", 0, NULL, true);
 
 		sprintf(params[0], "%i", dbOid);
 		sprintf(params[1], "%i", tblspcOid);
-		res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_and_clear_db($1, $2)",
+		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear_db($1, $2)",
 						   2, (const char **)params, true);
 		PQclear(res);
 
@@ -1217,7 +1217,7 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 
 	sprintf(params[0], "%i", dbOid);
 	sprintf(params[1], "%i", tblspcOid);
-	res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_and_clear_db($1, $2)",
+	res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear_db($1, $2)",
 						2, (const char **)params, true);
 
 	if (PQnfields(res) != 1)
@@ -1278,7 +1278,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		tmp_conn = pgut_connect(dbname);
 		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
-		res = pgut_execute(tmp_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
+		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
 						   2, (const char **)params, true);
 
 		if (PQnfields(res) != 1)
@@ -1296,7 +1296,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		 */
 		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
-		res = pgut_execute(backup_conn, "SELECT pg_ptrack_get_and_clear($1, $2)",
+		res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
 						   2, (const char **)params, true);
 
 		if (PQnfields(res) != 1)
@@ -1477,10 +1477,10 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		if (is_start_backup)
 		{
 			if (server_version >= 100000)
-				res = pgut_execute(backup_conn, "SELECT pg_last_wal_replay_lsn()",
+				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_replay_lsn()",
 								   0, NULL, true);
 			else
-				res = pgut_execute(backup_conn, "SELECT pg_last_xlog_replay_location()",
+				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_replay_location()",
 								   0, NULL, true);
 		}
 		/*
@@ -1490,10 +1490,10 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		else
 		{
 			if (server_version >= 100000)
-				res = pgut_execute(backup_conn, "SELECT pg_last_wal_receive_lsn()",
+				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_receive_lsn()",
 								   0, NULL, true);
 			else
-				res = pgut_execute(backup_conn, "SELECT pg_last_xlog_receive_location()",
+				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_receive_location()",
 								   0, NULL, true);
 		}
 
@@ -1577,7 +1577,7 @@ pg_stop_backup(pgBackup *backup)
 					 base36enc(backup->start_time));
 		params[0] = name;
 
-		res = pgut_execute(conn, "SELECT pg_create_restore_point($1)",
+		res = pgut_execute(conn, "SELECT pg_catalog.pg_create_restore_point($1)",
 						   1, params, true);
 		PQclear(res);
 	}
@@ -1602,12 +1602,12 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			sent = pgut_send(conn,
 								"SELECT"
-								" txid_snapshot_xmax(txid_current_snapshot()),"
+								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 								" current_timestamp(0)::timestamptz,"
 								" lsn,"
 								" labelfile,"
 								" spcmapfile"
-								" FROM pg_stop_backup(false)",
+								" FROM pg_catalog.pg_stop_backup(false)",
 								0, NULL, WARNING);
 		}
 		else
@@ -1615,9 +1615,9 @@ pg_stop_backup(pgBackup *backup)
 
 			sent = pgut_send(conn,
 								"SELECT"
-								" txid_snapshot_xmax(txid_current_snapshot()),"
+								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 								" current_timestamp(0)::timestamptz,"
-								" pg_stop_backup() as lsn",
+								" pg_catalog.pg_stop_backup() as lsn",
 								0, NULL, WARNING);
 		}
 		pg_stop_backup_is_sent = true;
@@ -2139,8 +2139,8 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 			continue;
 		}
 
-		/* Check files located inside database directories */
-		if (filename[0] != '\0' && file->dbOid != 0)
+		/* Check files located inside database directories including directory 'global' */
+		if (filename[0] != '\0' && file->tblspcOid != 0)
 		{
 			if (strcmp(filename, "pg_internal.init") == 0)
 			{
@@ -2700,7 +2700,7 @@ get_last_ptrack_lsn(void)
 	uint32		xrecoff;
 	XLogRecPtr	lsn;
 
-	res = pgut_execute(backup_conn, "select pg_ptrack_control_lsn()", 0, NULL, true);
+	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()", 0, NULL, true);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
@@ -2748,7 +2748,7 @@ pg_ptrack_get_block(backup_files_args *arguments,
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
 	res = pgut_execute_parallel(arguments->thread_backup_conn,
 								arguments->thread_cancel_conn,
-					"SELECT pg_ptrack_get_block_2($1, $2, $3, $4)",
+					"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
 					4, (const char **)params, true);
 
 	if (PQnfields(res) != 1)

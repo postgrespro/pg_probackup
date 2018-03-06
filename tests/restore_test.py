@@ -837,6 +837,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
         node.safe_psql("postgres", "create table t_heap(a int)")
         node.stop()
         node.cleanup()
@@ -847,6 +850,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.restore_node(backup_dir, 'node', node, 
                 options=["-j", "4", '--time={0}'.format(recovery_time)]),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         node.start()
         while node.safe_psql("postgres", "select pg_is_in_recovery()") == 't\n':

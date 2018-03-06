@@ -198,7 +198,7 @@ class AuthTest(unittest.TestCase):
 def run_pb_with_auth(cmd, password=None, kill=False):
     try:
         with spawn(" ".join(cmd), encoding='utf-8', timeout=10) as probackup:
-            result = probackup.expect("Password for user .*:", 5)
+            result = probackup.expect(u"Password for user .*:", 5)
             if kill:
                 probackup.kill(signal.SIGINT)
             elif result == 0:
