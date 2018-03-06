@@ -925,6 +925,99 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_alter_database_set_tablespace_delta(self):
+        """
+        Make node, take full backup, create database,
+        take delta backup, alter database tablespace location, take delta backup
+        restore last delta backup.
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+        self.create_tblspace_in_node(node, 'somedata')
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+
+        # CREATE DATABASE DB1
+        node.safe_psql("postgres", "create database db1 tablespace = 'somedata'")
+        node.safe_psql(
+            "db1",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=["--stream"]
+        )
+
+        # ALTER TABLESPACE
+        self.create_tblspace_in_node(node, 'somedata_new')
+        node.safe_psql(
+            "postgres",
+            "alter database db1 set tablespace somedata_new"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=["--stream"]
+        )
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4",
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata'),
+                    self.get_tblspace_path(node_restored, 'somedata')
+                ),
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata_new'),
+                    self.get_tblspace_path(node_restored, 'somedata_new')
+                )
+            ]
+        )
+
+        # GET RESTORED PGDATA AND COMPARE
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        node_restored.start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_delta_delete(self):
         """Make node, create tablespace with table, take full backup,
          alter tablespace location, take delta backup, restore database."""
@@ -1055,7 +1148,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
             self.assertIn('block 1, try to fetch via SQL', log_content)
-            self.assertIn('SELECT pg_ptrack_get_block', log_content)
+            self.assertIn('SELECT pg_catalog.pg_ptrack_get_block', log_content)
             f.close
 
         self.assertTrue(
@@ -1127,7 +1220,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 "calculated checksum" in e.message and
                 "ERROR: query failed: "
                 "ERROR:  invalid page in block" in e.message and
-                "query was: SELECT pg_ptrack_get_block_2" in e.message,
+                "query was: SELECT pg_catalog.pg_ptrack_get_block" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
