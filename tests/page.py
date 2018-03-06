@@ -321,3 +321,85 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_delete(self):
+        """Make node, create tablespace with table, take full backup,
+         alter tablespace location, take page backup, restore database."""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=["--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace somedata as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        # PAGE BACKUP
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page',
+            options=["--stream"]
+        )
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4",
+                "-T", "{0}={1}".format(
+                    self.get_tblspace_path(node, 'somedata'),
+                    self.get_tblspace_path(node_restored, 'somedata')
+                )
+            ]
+        )
+
+        # GET RESTORED PGDATA AND COMPARE
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        node_restored.start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
