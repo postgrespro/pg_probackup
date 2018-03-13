@@ -20,6 +20,16 @@
 #include "port/pthread-win32.h"
 #endif
 
+#ifdef WIN32
+typedef struct win32_pthread *pthread_t;
+typedef int pthread_attr_t;
+#define PTHREAD_MUTEX_INITIALIZER NULL //{ NULL, 0 }
+#define PTHREAD_ONCE_INIT false
+
+int pthread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *), void *arg);
+int pthread_join(pthread_t th, void **thread_return);
+#endif
+
 static void pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);
 
@@ -41,8 +51,9 @@ pgBackupValidate(pgBackup *backup)
 	char		path[MAXPGPATH];
 	parray	   *files;
 	bool		corrupted = false;
-	pthread_t	validate_threads[num_threads];
-	validate_files_args *validate_threads_args[num_threads];
+	/* arrays with meta info for multi threaded validate */
+	pthread_t	*validate_threads;
+	validate_files_args *validate_threads_args;
 	int			i;
 
 	if (backup->status != BACKUP_STATUS_OK &&
@@ -71,24 +82,30 @@ pgBackupValidate(pgBackup *backup)
 		pg_atomic_clear_flag(&file->lock);
 	}
 
+	/* init thread args with own file lists */
+	validate_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
+	validate_threads_args = (validate_files_args *) palloc(sizeof(validate_files_args)*num_threads);
+
 	/* Validate files */
 	for (i = 0; i < num_threads; i++)
 	{
-		validate_files_args *arg = pg_malloc(sizeof(validate_files_args));
+		validate_files_args *arg = &(validate_threads_args[i]);
 		arg->files = files;
 		arg->corrupted = false;
-		validate_threads_args[i] = arg;
 		pthread_create(&validate_threads[i], NULL, (void *(*)(void *)) pgBackupValidateFiles, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
+		validate_files_args *arg = &(validate_threads_args[i]);
 		pthread_join(validate_threads[i], NULL);
-		if (validate_threads_args[i]->corrupted)
+		if (arg->corrupted)
 			corrupted = true;
-		pg_free(validate_threads_args[i]);
 	}
+
+	pfree(validate_threads);
+	pfree(validate_threads_args);
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
