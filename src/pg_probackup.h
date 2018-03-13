@@ -33,7 +33,11 @@
 #include "common/relpath.h"
 #include "port.h"
 
-#include "atomics.h"
+#ifdef FRONTEND
+#undef FRONTEND
+	#include "port/atomics.h"
+#define FRONTEND
+#endif
 
 #include "utils/parray.h"
 #include "utils/pgut.h"

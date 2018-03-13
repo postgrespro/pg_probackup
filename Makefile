@@ -7,10 +7,9 @@ OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
 	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o
 
 EXTRA_CLEAN = src/datapagemap.c src/datapagemap.h src/xlogreader.c \
-	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h src/logging.h \
-	src/atomics.h
+	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h src/logging.h
 
-INCLUDES = src/datapagemap.h src/logging.h src/receivelog.h src/streamutil.h src/atomics.h
+INCLUDES = src/datapagemap.h src/logging.h src/receivelog.h src/streamutil.h
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -62,8 +61,7 @@ src/streamutil.c: $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.c $@
 src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.h $@
-src/atomics.h: $(top_srcdir)/src/include/port/atomics.h
-	rm -f $@ && $(LN_S) $(srchome)/src/include/port/atomics.h $@
+
 
 ifeq ($(MAJORVERSION),10)
 src/walmethods.c: $(top_srcdir)/src/bin/pg_basebackup/walmethods.c
