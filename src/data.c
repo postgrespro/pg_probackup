@@ -853,7 +853,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			  bool overwrite)
 {
 	FILE	   *in = NULL;
-	FILE	   *out;
+	FILE	   *out=NULL;
 	char		buf[XLOG_BLCKSZ];
 	const char *to_path_p = to_path;
 	char		to_path_temp[MAXPGPATH];

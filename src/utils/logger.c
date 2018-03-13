@@ -143,8 +143,8 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	bool		write_to_file,
 				write_to_error_log,
 				write_to_stderr;
-	va_list		error_args,
-				std_args;
+	va_list		error_args=NULL,
+				std_args=NULL;
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
