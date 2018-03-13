@@ -23,6 +23,16 @@
 #include "port/pthread-win32.h"
 #endif
 
+#ifdef WIN32
+typedef struct win32_pthread *pthread_t;
+typedef int pthread_attr_t;
+#define PTHREAD_MUTEX_INITIALIZER NULL //{ NULL, 0 }
+#define PTHREAD_ONCE_INIT false
+
+int pthread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *), void *arg);
+int pthread_join(pthread_t th, void **thread_return);
+#endif
+
 /* Logger parameters */
 
 int			log_level_console = LOG_NONE;
