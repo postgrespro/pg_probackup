@@ -349,8 +349,10 @@ restore_backup(pgBackup *backup)
 	char		list_path[MAXPGPATH];
 	parray	   *files;
 	int			i;
-	pthread_t	restore_threads[num_threads];
-	restore_files_args *restore_threads_args[num_threads];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t			*restore_threads;
+	restore_files_args	*restore_threads_args;
+
 
 	if (backup->status != BACKUP_STATUS_OK)
 		elog(ERROR, "Backup %s cannot be restored because it is not valid",
@@ -394,6 +396,9 @@ restore_backup(pgBackup *backup)
 			pgFileFree(parray_remove(files, i));
 	}
 
+	restore_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
+	restore_threads_args = (restore_files_args *) palloc(sizeof(restore_files_args)*num_threads);
+
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -404,13 +409,13 @@ restore_backup(pgBackup *backup)
 	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
 	{
-		restore_files_args *arg = pg_malloc(sizeof(restore_files_args));
+		restore_files_args *arg = &(restore_threads_args[i]);
+
 		arg->files = files;
 		arg->backup = backup;
 
 		elog(LOG, "Start thread for num:%li", parray_num(files));
 
-		restore_threads_args[i] = arg;
 		pthread_create(&restore_threads[i], NULL, (void *(*)(void *)) restore_files, arg);
 	}
 
@@ -418,8 +423,10 @@ restore_backup(pgBackup *backup)
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(restore_threads[i], NULL);
-		pg_free(restore_threads_args[i]);
 	}
+
+	pfree(restore_threads);
+	pfree(restore_threads_args);
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
