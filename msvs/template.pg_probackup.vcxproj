@@ -68,22 +68,22 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;$(IncludePath)</IncludePath>
+    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;@PGSRC@;$(IncludePath)</IncludePath>
     <LibraryPath>@PGROOT@\lib;@$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;$(IncludePath)</IncludePath>
+    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;@PGSRC@;$(IncludePath)</IncludePath>
     <LibraryPath>@PGROOT@\lib;@$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;$(IncludePath)</IncludePath>
+    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;@PGSRC@;$(IncludePath)</IncludePath>
     <LibraryPath>@PGROOT@\lib;@$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;$(IncludePath)</IncludePath>
+    <IncludePath>../;@PGSRC@\include;@PGSRC@\bin\pg_basebackup;@PGSRC@\bin\pg_rewind;@PGSRC@\include\port\win32_msvc;@PGSRC@\interfaces\libpq;@PGSRC@\include\port\win32;@PGSRC@\port;@ADDINCLUDE@;@PGSRC@;$(IncludePath)</IncludePath>
     <LibraryPath>@PGROOT@\lib;@$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
