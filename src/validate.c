@@ -11,8 +11,14 @@
 #include "pg_probackup.h"
 
 #include <sys/stat.h>
-#include <pthread.h>
 #include <dirent.h>
+
+#ifndef WIN32
+#include <sys/mman.h>
+#include <pthread.h>
+#else
+#include "port/pthread-win32.h"
+#endif
 
 static void pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);

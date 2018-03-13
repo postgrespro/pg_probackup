@@ -8,7 +8,6 @@
  */
 
 #include <errno.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -16,6 +15,13 @@
 
 #include "logger.h"
 #include "pgut.h"
+
+#ifndef WIN32
+#include <sys/mman.h>
+#include <pthread.h>
+#else
+#include "port/pthread-win32.h"
+#endif
 
 /* Logger parameters */
 
