@@ -316,20 +316,20 @@ backup_data_page(backup_files_args *arguments,
 			if (is_checksum_enabled)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
-		/* get lsn from page */
+		/* get lsn from page, provided by pg_ptrack_get_block() */
 		if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
-				file->exists_in_prev &&
-					header.compressed_size != PageIsTruncated &&
-						!parse_page(page, &page_lsn))
-			elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
-							"Possible risk of a memory corruption");
+			file->exists_in_prev &&
+			header.compressed_size != PageIsTruncated &&
+			!parse_page(page, &page_lsn))
+				elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
+								"Possible risk of a memory corruption");
 
 	}
 
 	if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
-			file->exists_in_prev &&
-				header.compressed_size != PageIsTruncated &&
-						page_lsn < prev_backup_start_lsn)
+		file->exists_in_prev &&
+		header.compressed_size != PageIsTruncated &&
+		page_lsn < prev_backup_start_lsn)
 	{
 		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
 		(*n_skipped)++;

@@ -379,26 +379,6 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(database_path, list_path);
 
-	/*
-	 * For PAGE and PTRACK backups remove files which haven't changed
-	 * since previous backup and thus were not backed up.
-	 * We can`t do the same when restoring DELTA backup because we need information
-	 * about every file to correctly truncate them.
-	 */
-	if (backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
-			backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)
-	{
-		for (i = parray_num(files) - 1; i >= 0; i--)
-		{
-			pgFile *file = (pgFile *) parray_get(files, i);
-			if (file->write_size == BYTES_INVALID)
-			{
-				elog(VERBOSE, "The file didn`t changed. Skip restore: %s", file->path);
-				pgFileFree(parray_remove(files, i));
-			}
-		}
-	}
-
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -724,6 +704,20 @@ restore_files(void *arg)
 			elog(LOG, "Progress: (%d/%lu). Process file %s ",
 				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
 
+
+		/*
+		 * For PAGE and PTRACK backups skip files which haven't changed
+		 * since previous backup and thus were not backed up.
+		 * We cannot do the same when restoring DELTA backup because we need information
+		 * about every file to correctly truncate them.
+		 */
+		if (file->write_size == BYTES_INVALID &&
+			(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE
+			|| arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK))
+		{
+			elog(VERBOSE, "The file didn`t changed. Skip restore: %s", file->path);
+			continue;
+		}
 
 		/* Directories was created before */
 		if (S_ISDIR(file->mode))

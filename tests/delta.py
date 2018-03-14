@@ -156,12 +156,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta'
-#            options=['--log-level-file=verbose']
         )
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta'
-#            options=['--log-level-file=verbose']
         )
 
         pgdata = self.pgdata_content(node.data_dir)
@@ -231,7 +229,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "select pg_relation_filepath('t_heap')"
         ).rstrip()
 
-
         self.backup_node(backup_dir, 'node', node)
 
         print(os.path.join(node.data_dir, filepath + '.1'))
@@ -239,16 +236,13 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta'
-#            options=['--log-level-file=verbose']
         )
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta'
-#            options=['--log-level-file=verbose']
         )
 
         pgdata = self.pgdata_content(node.data_dir)
-
 
         self.restore_node(
             backup_dir,
@@ -273,8 +267,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delta_stream(self):
-        """make archive node, take full and delta stream backups, restore them and check data correctness"""
-        self.maxDiff = None
+        """
+        make archive node, take full and delta stream backups,
+        restore them and check data correctness
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -350,7 +346,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delta_archive(self):
-        """make archive node, take full and delta archive backups, restore them and check data correctness"""
+        """
+        make archive node, take full and delta archive backups,
+        restore them and check data correctness
+        """
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -422,9 +421,12 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_delta_multiple_segments(self):
-        """Make node, create table with multiple segments, write some data to it, check delta and data correctness"""
+        """
+        Make node, create table with multiple segments,
+        write some data to it, check delta and data correctness
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -928,8 +930,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
     def test_alter_database_set_tablespace_delta(self):
         """
         Make node, take full backup, create database,
-        take delta backup, alter database tablespace location, take delta backup
-        restore last delta backup.
+        take delta backup, alter database tablespace location,
+        take delta backup restore last delta backup.
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -953,7 +955,9 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
         # CREATE DATABASE DB1
-        node.safe_psql("postgres", "create database db1 tablespace = 'somedata'")
+        node.safe_psql(
+            "postgres",
+            "create database db1 tablespace = 'somedata'")
         node.safe_psql(
             "db1",
             "create table t_heap as select i as id, md5(i::text) as text, "
