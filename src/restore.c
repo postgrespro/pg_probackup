@@ -160,7 +160,10 @@ do_restore_or_validate(time_t target_backup_id,
 			&& !dest_backup)
 		{
 
-			/* backup is not ok, but in case of CORRUPT, ORPHAN or DONE revalidation can be done */
+			/* backup is not ok,
+			 * but in case of CORRUPT, ORPHAN or DONE revalidation can be done,
+			 * in other cases throw an error.
+			 */
 			if (current_backup->status != BACKUP_STATUS_OK)
 			{
 				if (current_backup->status == BACKUP_STATUS_DONE ||
@@ -262,6 +265,9 @@ do_restore_or_validate(time_t target_backup_id,
 			corrupted_backup_index = i;
 			break;
 		}
+		/* We do not validate WAL files of intermediate backups
+		 * It`s done to speed up restore
+		 */
 	}
 	/* There is no point in wal validation
 	 * if there is corrupted backup between base_backup and dest_backup
