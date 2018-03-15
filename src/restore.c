@@ -141,7 +141,10 @@ do_restore_or_validate(time_t target_backup_id,
 		 *  we must find the first valid(!) backup.
 		 */
 
-		if (is_restore && target_backup_id == 0 && current_backup->status != BACKUP_STATUS_OK)
+		if (is_restore &&
+			!dest_backup &&
+			target_backup_id == INVALID_BACKUP_ID &&
+			current_backup->status != BACKUP_STATUS_OK)
 		{
 			elog(WARNING, "Skipping backup %s, because it has non-valid status: %s",
 				base36enc(current_backup->start_time), status2str(current_backup->status));
@@ -156,9 +159,19 @@ do_restore_or_validate(time_t target_backup_id,
 			|| target_backup_id == INVALID_BACKUP_ID)
 			&& !dest_backup)
 		{
+
+			/* backup is not ok, but in case of CORRUPT, ORPHAN or DONE revalidation can be done */
 			if (current_backup->status != BACKUP_STATUS_OK)
-				elog(ERROR, "Backup %s has status: %s",
-					 base36enc(current_backup->start_time), status2str(current_backup->status));
+			{
+				if (current_backup->status == BACKUP_STATUS_DONE ||
+					current_backup->status == BACKUP_STATUS_ORPHAN ||
+					current_backup->status == BACKUP_STATUS_CORRUPT)
+					elog(WARNING, "Backup %s has status: %s",
+						 base36enc(current_backup->start_time), status2str(current_backup->status));
+				else
+					elog(ERROR, "Backup %s has status: %s",
+						 base36enc(current_backup->start_time), status2str(current_backup->status));
+			}
 
 			if (target_tli)
 			{
@@ -197,17 +210,24 @@ do_restore_or_validate(time_t target_backup_id,
 			if (current_backup->backup_mode == BACKUP_MODE_FULL)
 			{
 				if (current_backup->status != BACKUP_STATUS_OK)
-					elog(ERROR, "base backup %s for given backup %s is in %s status",
-						 base36enc_dup(current_backup->start_time),
-						 base36enc_dup(dest_backup->start_time),
-						 status2str(current_backup->status));
-				else
 				{
-					/* We found both dest and base backups. */
-					base_full_backup = current_backup;
-					base_full_backup_index = i;
-					break;
+					/* Full backup revalidation can be done only for DONE and CORRUPT */
+					if (current_backup->status == BACKUP_STATUS_DONE ||
+							current_backup->status == BACKUP_STATUS_CORRUPT)
+						elog(WARNING, "base backup %s for given backup %s is in %s status, trying to revalidate",
+							base36enc_dup(current_backup->start_time),
+							base36enc_dup(dest_backup->start_time),
+							status2str(current_backup->status));
+					else
+						elog(ERROR, "base backup %s for given backup %s is in %s status",
+							base36enc_dup(current_backup->start_time),
+							base36enc_dup(dest_backup->start_time),
+							status2str(current_backup->status));
 				}
+				/* We found both dest and base backups. */
+				base_full_backup = current_backup;
+				base_full_backup_index = i;
+				break;
 			}
 			else
 				/* It`s ok to skip incremental backup */
@@ -235,6 +255,7 @@ do_restore_or_validate(time_t target_backup_id,
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 		pgBackupValidate(backup);
+		/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
 		if (backup->status == BACKUP_STATUS_CORRUPT)
 		{
 			corrupted_backup = backup;

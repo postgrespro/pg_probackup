@@ -636,6 +636,7 @@ class ProbackupTest(object):
                 header_element.rstrip() for header_element in header_split
                 ]
             for backup_record in body:
+                backup_record = backup_record.rstrip()
                 # split list with str for every backup record element
                 backup_record_split = re.split("  +", backup_record)
                 # Remove empty items
