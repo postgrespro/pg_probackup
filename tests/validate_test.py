@@ -1432,11 +1432,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_corrupted_full_1(self):
         """
         make node with archiving, take full backup, and three page backups,
-        take another full backup and three page backups
+        take another full backup and four page backups
         corrupt second full backup, run validate, check that
         second full backup became CORRUPT and his page backups are ORPHANs
-        remove corruption and run valudate again, check that
-        second full backup and his page backups are OK
+        remove corruption from full backup and corrupt his second page backup
+        run valudate again, check that
+        second full backup and his firts page backups are OK,
+        second page should be CORRUPT
+        third page should be ORPHAN
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -1524,5 +1527,4 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ORPHAN')
 
         # Clean after yourself
-        exit(1)
         self.del_test_dir(module_name, fname)
