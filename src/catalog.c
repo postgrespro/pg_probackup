@@ -21,7 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 
-static const char *backupModes[] = {"", "PAGE", "PTRACK", "FULL"};
+static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
 
 static bool exit_hook_registered = false;
@@ -593,6 +593,8 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_DIFF_PAGE;
 	else if (len > 0 && pg_strncasecmp("ptrack", v, len) == 0)
 		return BACKUP_MODE_DIFF_PTRACK;
+	else if (len > 0 && pg_strncasecmp("delta", v, len) == 0)
+		return BACKUP_MODE_DIFF_DELTA;
 
 	/* Backup mode is invalid, so leave with an error */
 	elog(ERROR, "invalid backup-mode \"%s\"", value);
@@ -610,6 +612,8 @@ deparse_backup_mode(BackupMode mode)
 			return "page";
 		case BACKUP_MODE_DIFF_PTRACK:
 			return "ptrack";
+		case BACKUP_MODE_DIFF_DELTA:
+			return "delta";
 		case BACKUP_MODE_INVALID:
 			return "invalid";
 	}

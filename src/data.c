@@ -132,11 +132,10 @@ parse_page(Page page, XLogRecPtr *lsn)
  */
 static int
 read_page_from_file(pgFile *file, BlockNumber blknum,
-					FILE *in, Page page)
+					FILE *in, Page page, XLogRecPtr *page_lsn)
 {
 	off_t				offset = blknum*BLCKSZ;
 	size_t				read_len = 0;
-	XLogRecPtr			page_lsn;
 
 	/* read the block */
 	if (fseek(in, offset, SEEK_SET) != 0)
@@ -167,7 +166,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	 * If after several attempts page header is still invalid, throw an error.
 	 * The same idea is applied to checksum verification.
 	 */
-	if (!parse_page(page, &page_lsn))
+	if (!parse_page(page, page_lsn))
 	{
 		int i;
 		/* Check if the page is zeroed. */
@@ -232,6 +231,7 @@ backup_data_page(backup_files_args *arguments,
 	BackupPageHeader	header;
 	Page 				page = malloc(BLCKSZ);
 	Page 				compressed_page = NULL;
+	XLogRecPtr			page_lsn = 0;
 	size_t				write_buffer_size;
 	char				write_buffer[BLCKSZ+sizeof(header)];
 
@@ -252,7 +252,7 @@ backup_data_page(backup_files_args *arguments,
 		while(!page_is_valid && try_again)
 		{
 			int result = read_page_from_file(file, blknum,
-											 in, page);
+											 in, page, &page_lsn);
 
 			try_again--;
 			if (result == 0)
@@ -316,6 +316,25 @@ backup_data_page(backup_files_args *arguments,
 			if (is_checksum_enabled)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
+		/* get lsn from page, provided by pg_ptrack_get_block() */
+		if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
+			file->exists_in_prev &&
+			header.compressed_size != PageIsTruncated &&
+			!parse_page(page, &page_lsn))
+				elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
+								"Possible risk of a memory corruption");
+
+	}
+
+	if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
+		file->exists_in_prev &&
+		header.compressed_size != PageIsTruncated &&
+		page_lsn < prev_backup_start_lsn)
+	{
+		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
+		(*n_skipped)++;
+		free(page);
+		return;
 	}
 
 	if (header.compressed_size != PageIsTruncated)
@@ -478,6 +497,8 @@ backup_data_file(backup_files_args* arguments,
 							 &n_blocks_skipped, backup_mode);
 			n_blocks_read++;
 		}
+		if (backup_mode == BACKUP_MODE_DIFF_DELTA)
+			file->n_blocks = n_blocks_read;
 	}
 	/* If page map is not empty we scan only changed blocks, */
 	else
@@ -541,17 +562,22 @@ restore_data_file(const char *from_root,
 				  pgBackup *backup)
 {
 	char				to_path[MAXPGPATH];
-	FILE			   *in;
-	FILE			   *out;
+	FILE			   *in = NULL;
+	FILE			   *out = NULL;
 	BackupPageHeader	header;
 	BlockNumber			blknum;
+	size_t              file_size;
 
-	/* open backup mode file for read */
-	in = fopen(file->path, "r");
-	if (in == NULL)
+	/* BYTES_INVALID allowed only in case of restoring file from DELTA backup */
+	if (file->write_size != BYTES_INVALID)
 	{
-		elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
-			 strerror(errno));
+		/* open backup mode file for read */
+		in = fopen(file->path, "r");
+		if (in == NULL)
+		{
+			elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
+				 strerror(errno));
+		}
 	}
 
 	/*
@@ -576,6 +602,10 @@ restore_data_file(const char *from_root,
 		size_t		read_len;
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
+
+		/* File didn`t changed. Nothig to copy */
+		if (file->write_size == BYTES_INVALID)
+			break;
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -652,12 +682,38 @@ restore_data_file(const char *from_root,
 		}
 	}
 
+    /*
+     * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
+     * But during DELTA backup we read every file in PGDATA and thus DELTA backup
+     * knows exact size of every file at the time of backup.
+     * So when restoring file from DELTA backup we, knowning it`s size at
+     * a time of a backup, can truncate file to this size.
+     */
+
+	if (backup->backup_mode == BACKUP_MODE_DIFF_DELTA)
+	{
+		/* get file current size */
+		fseek(out, 0, SEEK_END);
+		file_size = ftell(out);
+		if (file_size > file->n_blocks * BLCKSZ)
+		{
+			/*
+			 * Truncate file to this length.
+			 */
+			if (ftruncate(fileno(out), file->n_blocks * BLCKSZ) != 0)
+				elog(ERROR, "cannot truncate \"%s\": %s",
+					 file->path, strerror(errno));
+			elog(INFO, "Delta truncate file %s to block %u", file->path, file->n_blocks);
+		}
+	}
+
 	/* update file permission */
 	if (chmod(to_path, file->mode) == -1)
 	{
 		int errno_tmp = errno;
 
-		fclose(in);
+		if (in)
+			fclose(in);
 		fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
@@ -667,7 +723,8 @@ restore_data_file(const char *from_root,
 		fsync(fileno(out)) != 0 ||
 		fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
-	fclose(in);
+	if (in)
+		fclose(in);
 }
 
 /*

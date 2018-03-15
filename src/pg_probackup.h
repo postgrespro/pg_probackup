@@ -97,8 +97,10 @@ typedef struct pgFile
 	Oid		relOid;			/* relOid extracted from path, if applicable */
 	char	*forkName;		/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
+	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
+	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
@@ -126,7 +128,8 @@ typedef enum BackupMode
 {
 	BACKUP_MODE_INVALID = 0,
 	BACKUP_MODE_DIFF_PAGE,		/* incremental page backup */
-	BACKUP_MODE_DIFF_PTRACK,	/* incremental page backup with ptrack system*/
+	BACKUP_MODE_DIFF_PTRACK,	/* incremental page backup with ptrack system */
+	BACKUP_MODE_DIFF_DELTA,		/* incremental page backup with lsn comparison */
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
 

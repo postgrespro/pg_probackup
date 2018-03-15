@@ -166,6 +166,8 @@ pgFileInit(const char *path)
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 	file->is_cfs = false;
+	file->exists_in_prev = false;	/* can change only in Incremental backup. */
+	file->n_blocks = -1;			/* can change only in DELTA backup. Number of blocks readed during backup */
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }
@@ -721,6 +723,9 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (S_ISLNK(file->mode))
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
+		if (file->n_blocks != -1)
+			fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
+
 		fprintf(out, "}\n");
 	}
 }
@@ -888,7 +893,8 @@ dir_read_file_list(const char *root, const char *file_txt)
 					is_datafile,
 					is_cfs,
 					crc,
-					segno;
+					segno,
+					n_blocks;
 		pgFile	   *file;
 
 		get_control_value(buf, "path", path, NULL, true);
@@ -902,6 +908,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		get_control_value(buf, "linked", linked, NULL, false);
 		get_control_value(buf, "segno", NULL, &segno, false);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
+		get_control_value(buf, "n_blocks", NULL, &n_blocks, false);
 
 		if (root)
 			join_path_components(filepath, root, path);
@@ -919,6 +926,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		if (linked[0])
 			file->linked = pgut_strdup(linked);
 		file->segno = (int) segno;
+		file->n_blocks = (int) n_blocks;
 
 		parray_append(files, file);
 	}
