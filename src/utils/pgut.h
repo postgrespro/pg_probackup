@@ -58,7 +58,7 @@ typedef enum pgut_optsrc
 typedef struct pgut_option
 {
 	char		type;
-	char		sname;		/* short name */
+	unsigned char		sname;		/* short name */
 	const char *lname;		/* long name */
 	void	   *var;		/* pointer to variable */
 	pgut_optsrc	allowed;	/* allowed source */
