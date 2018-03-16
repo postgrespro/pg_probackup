@@ -14,10 +14,12 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delta_vacuum_truncate_1(self):
-        """make node, create table, take full backup,
-           delete last 3 pages, vacuum relation,
-           take delta backup, take second delta backup,
-           restore latest delta backup and check data correctness"""
+        """
+        make node, create table, take full backup,
+        delete last 3 pages, vacuum relation,
+        take delta backup, take second delta backup,
+        restore latest delta backup and check data correctness
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -100,10 +102,12 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delta_vacuum_truncate_2(self):
-        """make node, create table, take full backup,
-           delete last 3 pages, vacuum relation,
-           take delta backup, take second delta backup,
-           restore latest delta backup and check data correctness"""
+        """
+        make node, create table, take full backup,
+        delete last 3 pages, vacuum relation,
+        take delta backup, take second delta backup,
+        restore latest delta backup and check data correctness
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -191,10 +195,12 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delta_vacuum_truncate_3(self):
-        """make node, create table, take full backup,
-           delete last 3 pages, vacuum relation,
-           take delta backup, take second delta backup,
-           restore latest delta backup and check data correctness"""
+        """
+        make node, create table, take full backup,
+        delete last 3 pages, vacuum relation,
+        take delta backup, take second delta backup,
+        restore latest delta backup and check data correctness
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -421,7 +427,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_delta_multiple_segments(self):
         """
         Make node, create table with multiple segments,
@@ -508,8 +514,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delta_vacuum_full(self):
-        """make node, make full and delta stream backups,
-          restore them and check data correctness"""
+        """
+        make node, make full and delta stream backups,
+        restore them and check data correctness
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -836,8 +844,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_alter_table_set_tablespace_delta(self):
-        """Make node, create tablespace with table, take full backup,
-         alter tablespace location, take delta backup, restore database."""
+        """
+        Make node, create tablespace with table, take full backup,
+        alter tablespace location, take delta backup, restore database.
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1023,8 +1033,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delta_delete(self):
-        """Make node, create tablespace with table, take full backup,
-         alter tablespace location, take delta backup, restore database."""
+        """
+        Make node, create tablespace with table, take full backup,
+        alter tablespace location, take delta backup, restore database.
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

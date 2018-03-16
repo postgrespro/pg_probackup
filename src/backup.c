@@ -586,7 +586,7 @@ do_backup_instance(void)
 						* For backup from master wait for previous segment.
 						* For backup from replica wait for current segment.
 						*/
-					   !from_replica);
+					   !from_replica, backup_files_list);
 	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
@@ -1948,7 +1948,7 @@ backup_files(void *arg)
 		if (S_ISREG(buf.st_mode))
 		{
 			/* Check that file exist in previous backup */
-			if (current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+			if (current.backup_mode != BACKUP_MODE_FULL)
 			{
 				int			p;
 				char	   *relative;
@@ -1961,7 +1961,7 @@ backup_files(void *arg)
 					{
 						/* File exists in previous backup */
 						file->exists_in_prev = true;
-						elog(INFO, "File exists at the time of previous backup %s", relative);
+						// elog(VERBOSE, "File exists at the time of previous backup %s", relative);
 						break;
 					}
 				}
@@ -1981,7 +1981,17 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (!copy_file(arguments->from_root,
+			else
+				/* TODO:
+				 * Check if file exists in previous backup
+				 * If exists:
+				 *   if mtime > start_backup_time of parent backup,
+				 *    copy file to backup
+				 *   if mtime < start_backup_time
+				 *    calculate crc, compare crc to old file
+				 *      if crc is the same -> skip file
+				 */
+				if (!copy_file(arguments->from_root,
 							   arguments->to_root,
 							   file))
 			{

@@ -107,8 +107,8 @@ typedef struct pgFile
 } pgFile;
 
 /* Special values of datapagemap_t bitmapsize */
-#define PageBitmapIsEmpty 0
-#define PageBitmapIsAbsent -1
+#define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
+#define PageBitmapIsAbsent -1	/* Used to mark files with unknown state of pagemap, i.e. datafiles without _ptrack */
 
 /* Current state of backup */
 typedef enum BackupStatus
@@ -468,7 +468,8 @@ extern bool calc_file_checksum(pgFile *file);
 extern void extractPageMap(const char *datadir,
 						   XLogRecPtr startpoint,
 						   TimeLineID tli,
-						   XLogRecPtr endpoint, bool prev_segno);
+						   XLogRecPtr endpoint, bool prev_segno,
+						   parray *backup_files_list);
 extern void validate_wal(pgBackup *backup,
 						 const char *archivedir,
 						 time_t target_time,

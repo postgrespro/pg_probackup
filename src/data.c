@@ -422,15 +422,21 @@ backup_data_file(backup_files_args* arguments,
 	int n_blocks_skipped = 0;
 	int n_blocks_read = 0;
 
+	/*
+	 * Skip unchanged file only if it exists in previous backup.
+	 * This way we can correctly handle null-sized files which are
+	 * not tracked by pagemap and thus always marked as unchanged.
+	 */
 	if ((backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
-		file->pagemap.bitmapsize == PageBitmapIsEmpty)
+		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
+		file->exists_in_prev)
 	{
 		/*
 		 * There are no changed blocks since last backup. We want make
 		 * incremental backup, so we should exit.
 		 */
-		elog(VERBOSE, "Skipping the file because it didn`t changed: %s", file->path);
+		elog(VERBOSE, "Skipping the unchanged file: %s", file->path);
 		return false;
 	}
 
@@ -485,10 +491,12 @@ backup_data_file(backup_files_args* arguments,
 
 	/*
 	 * Read each page, verify checksum and write it to backup.
-	 * If page map is empty backup all pages of the relation.
+	 * If page map is empty or file is not present in previous backup
+	 * backup all pages of the relation.
 	 */
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty
-		|| file->pagemap.bitmapsize == PageBitmapIsAbsent)
+		|| file->pagemap.bitmapsize == PageBitmapIsAbsent
+		|| !file->exists_in_prev)
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
 		{
