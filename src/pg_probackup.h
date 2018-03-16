@@ -151,7 +151,7 @@ typedef enum ProbackupSubcmd
 
 
 /* special values of pgBackup fields */
-#define INVALID_BACKUP_ID	 0
+#define INVALID_BACKUP_ID	 0    /* backup ID is not provided by user */
 #define BYTES_INVALID		(-1)
 
 typedef struct pgBackupConfig

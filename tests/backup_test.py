@@ -204,7 +204,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     file) in e.message and
                 "WARNING: Backup {0} data files are corrupted\n".format(
                     backup_id) in e.message and
-                "INFO: Some backups are not valid\n" in e.message,
+                "WARNING: Some backups are not valid\n" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 

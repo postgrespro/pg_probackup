@@ -39,21 +39,28 @@ pgBackupValidate(pgBackup *backup)
 	validate_files_args *validate_threads_args[num_threads];
 	int			i;
 
+	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
 	if (backup->status != BACKUP_STATUS_OK &&
-		backup->status != BACKUP_STATUS_DONE)
+		backup->status != BACKUP_STATUS_DONE &&
+		backup->status != BACKUP_STATUS_ORPHAN &&
+		backup->status != BACKUP_STATUS_CORRUPT)
 	{
-		elog(INFO, "Backup %s has status %s. Skip validation.",
+		elog(WARNING, "Backup %s has status %s. Skip validation.",
 					base36enc(backup->start_time), status2str(backup->status));
+		corrupted_backup_found = true;
 		return;
 	}
 
-	elog(INFO, "Validating backup %s", base36enc(backup->start_time));
+	if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE)
+		elog(INFO, "Validating backup %s", base36enc(backup->start_time));
+	else
+		elog(INFO, "Revalidating backup %s", base36enc(backup->start_time));
 
 	if (backup->backup_mode != BACKUP_MODE_FULL &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK &&
 		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
-		elog(INFO, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
+		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
@@ -227,7 +234,7 @@ do_validate_all(void)
 
 	if (corrupted_backup_found)
 	{
-		elog(INFO, "Some backups are not valid");
+		elog(WARNING, "Some backups are not valid");
 		return 1;
 	}
 	else
@@ -295,7 +302,7 @@ do_validate_instance(void)
 						0, base_full_backup->tli);
 		}
 		/* Mark every incremental backup between corrupted backup and nearest FULL backup as orphans */
-		if (current_backup->status != BACKUP_STATUS_OK)
+		if (current_backup->status == BACKUP_STATUS_CORRUPT)
 		{
 			int			j;
 			corrupted_backup_found = true;
@@ -309,7 +316,6 @@ do_validate_instance(void)
 					continue;
 				else
 				{
-
 					backup->status = BACKUP_STATUS_ORPHAN;
 					pgBackupWriteBackupControlFile(backup);
 
