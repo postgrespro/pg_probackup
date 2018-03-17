@@ -1046,6 +1046,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	struct option *longopts;
 	size_t		len;
 
+
 	len = option_length(options);
 	longopts = pgut_newarray(struct option, len + 1);
 	option_copy(longopts, options, len);
@@ -1053,7 +1054,8 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	optstring = longopts_to_optstring(longopts, len);
 
 	/* Assign named options */
-	while ((c = getopt_long(argc>2 ? argc - 1 : argc, argc>2 ? argv + 1: argv, optstring, longopts, &optindex)) != -1)
+	optind = 2;
+	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)
 	{
 		opt = option_find(c, options);
 		if (opt && opt->allowed < SOURCE_CMDLINE)
