@@ -989,7 +989,7 @@ longopts_to_optstring(const struct option opts[], const size_t len)
 	s = result;
 	for (i = 0; i < len; i++)
 	{
-		if (!isprint(opts[i].val))
+		if (opts[i].val > 128 || !isprint(opts[i].val))
 			continue;
 		*s++ = opts[i].val;
 		if (opts[i].has_arg != no_argument)
@@ -1053,7 +1053,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	optstring = longopts_to_optstring(longopts, len);
 
 	/* Assign named options */
-	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)
+	while ((c = getopt_long(argc>2 ? argc - 1 : argc, argc>2 ? argv + 1: argv, optstring, longopts, &optindex)) != -1)
 	{
 		opt = option_find(c, options);
 		if (opt && opt->allowed < SOURCE_CMDLINE)
