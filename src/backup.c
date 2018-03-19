@@ -1544,6 +1544,7 @@ pg_stop_backup(pgBackup *backup)
 	pgFile		*file;
 	size_t		len;
 	char		*val = NULL;
+	char 	*stop_backup_query;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
@@ -1600,26 +1601,25 @@ pg_stop_backup(pgBackup *backup)
 			 * pg_stop_backup(false) copy of the backup label and tablespace map
 			 * so they can be written to disk by the caller.
 			 */
-			sent = pgut_send(conn,
-								"SELECT"
+			stop_backup_query = "SELECT"
 								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 								" current_timestamp(0)::timestamptz,"
 								" lsn,"
 								" labelfile,"
 								" spcmapfile"
-								" FROM pg_catalog.pg_stop_backup(false)",
-								0, NULL, WARNING);
+								" FROM pg_catalog.pg_stop_backup(false)";
+
 		}
 		else
 		{
 
-			sent = pgut_send(conn,
-								"SELECT"
+			stop_backup_query =	"SELECT"
 								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 								" current_timestamp(0)::timestamptz,"
-								" pg_catalog.pg_stop_backup() as lsn",
-								0, NULL, WARNING);
+								" pg_catalog.pg_stop_backup() as lsn";
 		}
+
+		sent = pgut_send(conn, stop_backup_query, 0, NULL, WARNING);
 		pg_stop_backup_is_sent = true;
 		if (!sent)
 			elog(ERROR, "Failed to send pg_stop_backup query");
@@ -1664,10 +1664,23 @@ pg_stop_backup(pgBackup *backup)
 				break;
 			}
 		}
+
+		/* Check successfull execution of pg_stop_backup() */
 		if (!res)
 			elog(ERROR, "pg_stop backup() failed");
 		else
+		{
+			switch (PQresultStatus(res))
+			{
+				case PGRES_TUPLES_OK:
+				case PGRES_COMMAND_OK:
+					break;
+				default:
+					elog(ERROR, "query failed: %s query was: %s",
+						 PQerrorMessage(conn), stop_backup_query);
+			}
 			elog(INFO, "pg_stop backup() successfully executed");
+		}
 
 		backup_in_progress = false;
 

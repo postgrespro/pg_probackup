@@ -6,6 +6,7 @@ The Test suite check behavior of pg_probackup utility, if password is required f
 import os
 import unittest
 import signal
+import time
 
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from testgres import StartNodeException
@@ -18,6 +19,100 @@ try:
     from pexpect import *
 except ImportError:
     skip_test = True
+
+
+class SimpleAuthTest(ProbackupTest, unittest.TestCase):
+
+    # @unittest.skip("skip")
+    def test_backup_via_unpriviledged_user(self):
+        """
+            Make node, create unpriviledged user, try to
+            run a backups without EXECUTE rights on
+            certain functions
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql("postgres", "CREATE ROLE backup with LOGIN")
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, options=['-U', 'backup'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error due to missing grant on EXECUTE.")
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: query failed: ERROR:  permission denied "
+                "for function pg_start_backup", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        node.safe_psql(
+            "postgres",
+            "GRANT EXECUTE ON FUNCTION"
+            " pg_start_backup(text, boolean, boolean) TO backup;")
+
+        time.sleep(1)
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, options=['-U', 'backup'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error due to missing grant on EXECUTE.")
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: query failed: ERROR:  permission denied for function "
+                "pg_create_restore_point\nquery was: "
+                "SELECT pg_catalog.pg_create_restore_point($1)", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        node.safe_psql(
+            "postgres",
+            "GRANT EXECUTE ON FUNCTION"
+            " pg_create_restore_point(text) TO backup;")
+
+        time.sleep(1)
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, options=['-U', 'backup'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error due to missing grant on EXECUTE.")
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: query failed: ERROR:  permission denied "
+                "for function pg_stop_backup", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup")
+        else:
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION "
+                "pg_stop_backup(boolean, boolean) TO backup")
+
+        self.backup_node(
+                backup_dir, 'node', node, options=['-U', 'backup'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
 
 class AuthTest(unittest.TestCase):
