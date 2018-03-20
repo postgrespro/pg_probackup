@@ -437,6 +437,10 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* 'parent_backup' is set if it is incremental backup */
 	if (backup->parent_backup != 0)
 		fprintf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
+
+	/* print connection info except password */
+	if (backup->primary_conninfo)
+		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 }
 
 /* create BACKUP_CONTROL_FILE */
@@ -498,6 +502,7 @@ readBackupControlFile(const char *path)
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
 		{'u', 0, "compress-level",		&compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&from_replica, SOURCE_FILE_STRICT},
+		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{0}
 	};
 

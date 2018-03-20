@@ -226,6 +226,8 @@ typedef struct pgBackup
 	time_t			parent_backup; 	/* Identifier of the previous backup.
 									 * Which is basic backup for this
 									 * incremental backup. */
+	char			*primary_conninfo; /* Connection parameters of the backup
+										* in the format suitable for recovery.conf */
 } pgBackup;
 
 /* Recovery target for restore and validate subcommands */
@@ -233,9 +235,18 @@ typedef struct pgRecoveryTarget
 {
 	bool			time_specified;
 	time_t			recovery_target_time;
+	/* add one more field in order to avoid deparsing recovery_target_time back */
+	const char		*target_time_string;
 	bool			xid_specified;
 	TransactionId	recovery_target_xid;
+	/* add one more field in order to avoid deparsing recovery_target_xid back */
+	const char		*target_xid_string;
+	TimeLineID		recovery_target_tli;
 	bool			recovery_target_inclusive;
+	bool			inclusive_specified;
+	bool			recovery_target_immediate;
+	const char		*recovery_target_name;
+	const char		*recovery_target_action;
 } pgRecoveryTarget;
 
 /* Union to ease operations on relation pages */
@@ -305,6 +316,9 @@ extern bool is_ptrack_support;
 extern bool is_checksum_enabled;
 extern bool exclusive_backup;
 
+/* restore options */
+extern bool restore_as_replica;
+
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
@@ -349,19 +363,16 @@ extern char *pg_ptrack_get_block(backup_files_args *arguments,
 								 size_t *result_size);
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
-					  const char *target_time,
-					  const char *target_xid,
-					  const char *target_inclusive,
-					  TimeLineID target_tli,
+					  pgRecoveryTarget *rt,
 					  bool is_restore);
 extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
 extern parray * readTimeLineHistory_probackup(TimeLineID targetTLI);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
-	const char *target_time,
-	const char *target_xid,
-	const char *target_inclusive);
+	const char *target_time, const char *target_xid,
+	const char *target_inclusive, TimeLineID target_tli, bool target_immediate,
+	const char *target_name, const char *target_action);
 
 extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 

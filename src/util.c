@@ -315,5 +315,6 @@ pgBackup_init(pgBackup *backup)
 	backup->wal_block_size = XLOG_BLCKSZ;
 	backup->stream = false;
 	backup->parent_backup = 0;
+	backup->primary_conninfo = NULL;
 	backup->server_version[0] = '\0';
 }

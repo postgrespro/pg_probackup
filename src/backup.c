@@ -759,6 +759,7 @@ do_backup(time_t start_time)
 	backup_conn = pgut_connect(pgut_dbname);
 	pgut_atexit_push(backup_disconnect, NULL);
 
+	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
 	/* Confirm data block size and xlog block size are compatible */
 	confirm_block_size("block_size", BLCKSZ);
 	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
