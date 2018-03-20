@@ -1543,8 +1543,8 @@ pg_stop_backup(pgBackup *backup)
 	FILE		*fp;
 	pgFile		*file;
 	size_t		len;
-	char		*val = NULL;
-	char 	*stop_backup_query;
+	char	   *val = NULL;
+	char	   *stop_backup_query = NULL;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
