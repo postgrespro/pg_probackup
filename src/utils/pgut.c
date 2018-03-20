@@ -989,7 +989,7 @@ longopts_to_optstring(const struct option opts[], const size_t len)
 	s = result;
 	for (i = 0; i < len; i++)
 	{
-		if (opts[i].val > 128 || !isprint(opts[i].val))
+		if (!isprint(opts[i].val)) //opts[i].val > 128 ||
 			continue;
 		*s++ = opts[i].val;
 		if (opts[i].has_arg != no_argument)
