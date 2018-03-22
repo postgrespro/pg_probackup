@@ -552,9 +552,16 @@ do_backup_instance(void)
 		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
 		dir_create_dir(dst_backup_path, DIR_PERMISSION);
 
+		if (start_stream_mut == NULL){
+			pthread_mutex_init(&start_stream_mut,NULL);
+		}
+
 		pthread_mutex_lock(&start_stream_mut);
 		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
 		pthread_mutex_lock(&start_stream_mut);
+#ifdef WIN32
+		sleep(10);
+#endif
 		if (conn == NULL)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
 
@@ -936,7 +943,7 @@ check_system_identifiers(void)
 
 	system_id_pgdata = get_system_identifier(pgdata);
 	system_id_conn = get_remote_system_identifier(backup_conn);
-
+	
 	if (system_id_conn != system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
 			 system_identifier, system_id_conn);
@@ -959,14 +966,15 @@ confirm_block_size(const char *name, int blcksz)
 	res = pgut_execute(backup_conn, "SELECT current_setting($1)", 1, &name, true);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
-
+	
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
-	PQclear(res);
-
 	if ((endp && *endp) || block_size != blcksz)
 		elog(ERROR,
 			 "%s(%d) is not compatible(%d expected)",
 			 name, block_size, blcksz);
+	
+	PQclear(res);//bad pointer to endp
+
 }
 
 /*
@@ -2863,5 +2871,6 @@ pthread_join(pthread_t th, void **thread_return)
 	free(th);
 	return 0;
 }
+
 
 #endif /* WIN32 */

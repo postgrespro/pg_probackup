@@ -150,6 +150,8 @@ pgFileInit(const char *path)
 	pgFile		   *file;
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
+	file->name = 0;
+
 	file->size = 0;
 	file->mode = 0;
 	file->read_size = 0;
@@ -520,7 +522,7 @@ dir_list_file_internal(parray *files, const char *root, bool exclude,
 						break;
 					}
 				}
-				else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
+				else if (file->name!=0 && strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 				{
 					skip = true;
 					break;

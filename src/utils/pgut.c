@@ -1221,7 +1221,7 @@ get_next_token(const char *src, char *dst, const char *line)
 	}
 	else
 	{
-		i = j = strcspn(s, "# \n\r\t\v");
+		i = j = strcspn(s, "#\n\r\t\v");//removed space 
 		memcpy(dst, s, j);
 	}
 

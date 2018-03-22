@@ -434,6 +434,7 @@ main(int argc, char *argv[])
 
 				start_time = time(NULL);
 				backup_mode = deparse_backup_mode(current.backup_mode);
+				current.stream = stream_wal;
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,

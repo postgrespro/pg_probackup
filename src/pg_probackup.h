@@ -506,5 +506,15 @@ extern void pgBackup_init(pgBackup *backup);
 
 /* in status.c */
 extern bool is_pg_running(void);
+#ifdef WIN32
+#ifdef _DEBUG
+#define lseek _lseek
+#define open _open
+#define fstat _fstat
+#define read _read
+#define close _close
+#define write _write
+#endif
+#endif
 
 #endif /* PG_PROBACKUP_H */
