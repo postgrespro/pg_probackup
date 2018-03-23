@@ -76,9 +76,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     def test_pgpro434_2(self):
-        """Check that timelines are correct. WAITING PGPRO-1053 for --immediate. replace time"""
+        """
+        Check that timelines are correct.
+        WAITING PGPRO-1053 for --immediate
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -110,7 +113,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # SECOND TIMELIN
         node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=['--immediate', '--recovery-target-action=promote'])
         node.start()
         while node.safe_psql(
             "postgres",
@@ -134,8 +139,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(100,200) i")
 
         backup_id = self.backup_node(backup_dir, 'node', node)
-        recovery_time = self.show_pb(
-            backup_dir, 'node', backup_id)["recovery-time"]
+
         node.safe_psql(
             "postgres",
             "insert into t_heap select 100502 as id, md5(i::text) as text, "
@@ -144,7 +148,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # THIRD TIMELINE
         node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=['--immediate', '--recovery-target-action=promote'])
         node.start()
         while node.safe_psql(
             "postgres",
@@ -164,8 +170,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "from generate_series(200,300) i")
 
         backup_id = self.backup_node(backup_dir, 'node', node)
-        recovery_time = self.show_pb(
-            backup_dir, 'node', backup_id)["recovery-time"]
+
         result = node.safe_psql("postgres", "SELECT * FROM t_heap")
         node.safe_psql(
             "postgres",
@@ -175,7 +180,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # FOURTH TIMELINE
         node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=['--immediate', '--recovery-target-action=promote'])
         node.start()
         while node.safe_psql(
                 "postgres",
@@ -189,7 +196,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # FIFTH TIMELINE
         node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=['--immediate', '--recovery-target-action=promote'])
         node.start()
         while node.safe_psql(
                 "postgres", "select pg_is_in_recovery()") == 't\n':
@@ -202,7 +211,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # SIXTH TIMELINE
         node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=['--immediate', '--recovery-target-action=promote'])
         node.start()
         while node.safe_psql(
                 "postgres", "select pg_is_in_recovery()") == 't\n':

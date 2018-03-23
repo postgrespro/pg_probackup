@@ -1079,6 +1079,11 @@ parseRecoveryTargetOptions(const char *target_time,
 			&& (strcmp(target_action, "shutdown") != 0))
 				elog(ERROR, "Invalid value of --recovery-target-action option %s", target_action);
 	}
+	else
+	{
+		/* Default recovery target action is pause */
+		rt->recovery_target_action = "pause";
+	}
 
 	/* More than one mutually exclusive option was defined. */
 	if (recovery_target_specified > 1)

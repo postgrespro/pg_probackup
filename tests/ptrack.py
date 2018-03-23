@@ -3,7 +3,6 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
-from testgres import ClusterTestgresException as ClusterException
 from testgres import QueryException
 import shutil
 import sys

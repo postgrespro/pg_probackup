@@ -119,14 +119,12 @@ help_pg_probackup(void)
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--write-recovery-conf]\n"));
+	printf(_("                 [--restore-as-replica]\n"));
 
 	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
-	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
-	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 
 	printf(_("\n  %s show -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
@@ -266,8 +264,8 @@ help_restore(void)
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
-	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n\n"));
-	printf(_("                 [--write-recovery-conf]\n"));
+	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
+	printf(_("                 [--restore-as-replica]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -288,8 +286,9 @@ help_restore(void)
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
 	printf(_("                                   action the server should take once the recovery target is reached\n"));
+	printf(_("                                   (default: pause)\n"));
 
-	printf(_("  -R, --write-recovery-conf        write a minimal recovery.conf in the output directory\n"));
+	printf(_("  -R, --restore-as-replica         write a minimal recovery.conf in the output directory\n"));
 	printf(_("                                   to ease setting up a standby server\n"));
 
 	printf(_("\n  Logging options:\n"));
@@ -320,9 +319,7 @@ help_validate(void)
 	printf(_("%s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline]\n"));
-	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
-	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n\n"));
+	printf(_("                 [--timeline=timeline]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -333,12 +330,6 @@ help_validate(void)
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
-
-	printf(_("      --immediate                  end recovery as soon as a consistent state is reached\n"));
-	printf(_("      --recovery-target-name=target-name\n"));
-	printf(_("                                   the named restore point to which recovery will proceed\n"));
-	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
-	printf(_("                                   action the server should take once the recovery target is reached\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));

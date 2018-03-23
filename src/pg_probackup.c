@@ -142,7 +142,7 @@ static pgut_option options[] =
 	{ 'b', 24, "immediate",				&target_immediate,	SOURCE_CMDLINE },
 	{ 's', 25, "recovery-target-name",	&target_name,		SOURCE_CMDLINE },
 	{ 's', 26, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
-	{ 'b', 'R', "write-recovery-conf",	&restore_as_replica,	SOURCE_CMDLINE },
+	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
