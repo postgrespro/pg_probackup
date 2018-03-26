@@ -775,10 +775,10 @@ do_backup(time_t start_time)
 	is_checksum_enabled = pg_checksum_enable();
 
 	if (is_checksum_enabled)
-		elog(LOG, "This PostgreSQL instance initialized with data block checksums. "
+		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
 					"Data block corruption will be detected");
 	else
-		elog(WARNING, "This PostgreSQL instance initialized without data block checksums. "
+		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
 						"pg_probackup have no way to detect data block corruption without them. "
 						"Reinitialize PGDATA with option '--data-checksums'.");
 	
@@ -1870,7 +1870,7 @@ backup_cleanup(bool fatal, void *userdata)
 	 */
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
 	{
-		elog(INFO, "Backup %s is running, setting its status to ERROR",
+		elog(WARNING, "Backup %s is running, setting its status to ERROR",
 			 base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
@@ -1882,7 +1882,7 @@ backup_cleanup(bool fatal, void *userdata)
 	 */
 	if (backup_in_progress)
 	{
-		elog(LOG, "backup in progress, stop backup");
+		elog(WARNING, "backup in progress, stop backup");
 		pg_stop_backup(NULL);	/* don't care stop_lsn on error case */
 	}
 }
@@ -2560,7 +2560,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
-		elog(LOG, _("finished segment at %X/%X (timeline %u)\n"),
+		elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
 			 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
 	/*
@@ -2664,7 +2664,7 @@ StreamLog(void *arg)
 	/*
 	 * Start the replication
 	 */
-	elog(LOG, _("starting log streaming at %X/%X (timeline %u)\n"),
+	elog(LOG, _("started streaming WAL at %X/%X (timeline %u)"),
 		 (uint32) (startpos >> 32), (uint32) startpos, starttli);
 
 #if PG_VERSION_NUM >= 90600

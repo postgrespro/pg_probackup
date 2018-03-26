@@ -1526,7 +1526,7 @@ pgut_execute_parallel(PGconn* conn,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
 	{
 		int		i;
 
@@ -1580,7 +1580,7 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
 	{
 		int		i;
 
@@ -1634,16 +1634,16 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= LOG)
+	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
 	{
 		int		i;
 
 		if (strchr(query, '\n'))
-			elog(LOG, "(query)\n%s", query);
+			elog(VERBOSE, "(query)\n%s", query);
 		else
-			elog(LOG, "(query) %s", query);
+			elog(VERBOSE, "(query) %s", query);
 		for (i = 0; i < nParams; i++)
-			elog(LOG, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
+			elog(VERBOSE, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
 	}
 
 	if (conn == NULL)
