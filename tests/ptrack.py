@@ -1753,10 +1753,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 ' CMD: {1}'.format(repr(e.message), self.cmd)
             )
 
-        self.assertFalse(
+        self.assertEqual(
             node.safe_psql(
                 "postgres",
-                "select * from pg_is_in_backup()").rstrip())
+                "select * from pg_is_in_backup()").rstrip(),
+            "f")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
