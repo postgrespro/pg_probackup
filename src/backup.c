@@ -2560,7 +2560,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
-		elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
+		elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
 			 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
 	/*
@@ -2578,7 +2578,11 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	if (!XLogRecPtrIsInvalid(stop_backup_lsn))
 	{
 		if (xlogpos > stop_backup_lsn)
+		{
+			elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
+				 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 			return true;
+		}
 
 		/* pg_stop_backup() was executed, wait for the completion of stream */
 		if (stream_stop_timeout == 0)
