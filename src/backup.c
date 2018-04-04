@@ -31,6 +31,7 @@
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
+static XLogRecPtr stop_stream_lsn = InvalidXLogRecPtr;
 
 /*
  * How long we should wait for streaming end in seconds.
@@ -2579,8 +2580,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	{
 		if (xlogpos > stop_backup_lsn)
 		{
-			elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
-				 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
+			stop_stream_lsn = xlogpos;
 			return true;
 		}
 
@@ -2710,6 +2710,10 @@ StreamLog(void *arg)
 					  false, false) == false)
 		elog(ERROR, "Problem in receivexlog");
 #endif
+
+	Assert(XRecOffIsValid(stop_stream_lsn));
+	elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
+		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, starttli);
 
 	PQfinish(conn);
 	conn = NULL;
