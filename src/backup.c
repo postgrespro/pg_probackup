@@ -2711,7 +2711,6 @@ StreamLog(void *arg)
 		elog(ERROR, "Problem in receivexlog");
 #endif
 
-	Assert(XRecOffIsValid(stop_stream_lsn));
 	elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
 		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, starttli);
 
