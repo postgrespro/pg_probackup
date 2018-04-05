@@ -42,6 +42,8 @@ static char	   *password = NULL;
 bool			prompt_password = true;
 bool			force_password = false;
 
+pthread_t main_tid = 0;
+
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
 
@@ -1065,6 +1067,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 
 	init_cancel_handler();
 	atexit(on_cleanup);
+	main_tid = pthread_self();
 
 	return optind;
 }

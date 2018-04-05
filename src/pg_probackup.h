@@ -241,19 +241,25 @@ typedef struct pgRecoveryTarget
 /* Union to ease operations on relation pages */
 typedef union DataPage
 {
-       PageHeaderData  page_data;
-       char                    data[BLCKSZ];
+	PageHeaderData page_data;
+	char		data[BLCKSZ];
 } DataPage;
 
 typedef struct
 {
 	const char *from_root;
 	const char *to_root;
-	parray *backup_files_list;
-	parray *prev_backup_filelist;
-	XLogRecPtr prev_backup_start_lsn;
-	PGconn *thread_backup_conn;
-	PGcancel *thread_cancel_conn;
+	parray	   *backup_files_list;
+	parray	   *prev_backup_filelist;
+	XLogRecPtr	prev_backup_start_lsn;
+	PGconn	   *thread_backup_conn;
+	PGcancel   *thread_cancel_conn;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
 } backup_files_args;
 
 /*

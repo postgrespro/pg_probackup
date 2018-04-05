@@ -22,6 +22,12 @@ typedef struct
 {
 	parray *files;
 	pgBackup *backup;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
 } restore_files_args;
 
 /* Tablespace mapping structures */
@@ -374,6 +380,7 @@ restore_backup(pgBackup *backup)
 	int			i;
 	pthread_t	restore_threads[num_threads];
 	restore_files_args *restore_threads_args[num_threads];
+	bool		restore_isok = true;
 
 	if (backup->status != BACKUP_STATUS_OK)
 		elog(ERROR, "Backup %s cannot be restored because it is not valid",
@@ -419,19 +426,27 @@ restore_backup(pgBackup *backup)
 		restore_files_args *arg = pg_malloc(sizeof(restore_files_args));
 		arg->files = files;
 		arg->backup = backup;
+		/* By default there are some error */
+		arg->ret = 1;
 
 		elog(LOG, "Start thread for num:%li", parray_num(files));
 
 		restore_threads_args[i] = arg;
-		pthread_create(&restore_threads[i], NULL, (void *(*)(void *)) restore_files, arg);
+		pthread_create(&restore_threads[i], NULL,
+					   (void *(*)(void *)) restore_files, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(restore_threads[i], NULL);
+		if (restore_threads_args[i]->ret == 1)
+			restore_isok = false;
+
 		pg_free(restore_threads_args[i]);
 	}
+	if (!restore_isok)
+		elog(ERROR, "Data files restoring failed");
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
@@ -777,6 +792,9 @@ restore_files(void *arg)
 			elog(LOG, "Restored file %s : %lu bytes",
 				file->path, (unsigned long) file->write_size);
 	}
+
+	/* Data files restoring is successful */
+	arguments->ret = 0;
 }
 
 static void

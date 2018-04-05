@@ -23,6 +23,12 @@ typedef struct
 {
 	parray *files;
 	bool corrupted;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
 } validate_files_args;
 
 /*
@@ -35,6 +41,7 @@ pgBackupValidate(pgBackup *backup)
 	char		path[MAXPGPATH];
 	parray	   *files;
 	bool		corrupted = false;
+	bool		validation_isok = true;
 	pthread_t	validate_threads[num_threads];
 	validate_files_args *validate_threads_args[num_threads];
 	int			i;
@@ -79,8 +86,12 @@ pgBackupValidate(pgBackup *backup)
 		validate_files_args *arg = pg_malloc(sizeof(validate_files_args));
 		arg->files = files;
 		arg->corrupted = false;
+		/* By default there are some error */
+		arg->ret = 1;
+
 		validate_threads_args[i] = arg;
-		pthread_create(&validate_threads[i], NULL, (void *(*)(void *)) pgBackupValidateFiles, arg);
+		pthread_create(&validate_threads[i], NULL,
+					   (void *(*)(void *)) pgBackupValidateFiles, arg);
 	}
 
 	/* Wait theads */
@@ -89,8 +100,12 @@ pgBackupValidate(pgBackup *backup)
 		pthread_join(validate_threads[i], NULL);
 		if (validate_threads_args[i]->corrupted)
 			corrupted = true;
+		if (validate_threads_args[i]->ret == 1)
+			validation_isok = false;
 		pg_free(validate_threads_args[i]);
 	}
+	if (!validation_isok)
+		elog(ERROR, "Data files validation failed");
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
@@ -159,7 +174,7 @@ pgBackupValidateFiles(void *arg)
 				elog(WARNING, "Cannot stat backup file \"%s\": %s",
 					file->path, strerror(errno));
 			arguments->corrupted = true;
-			return;
+			break;
 		}
 
 		if (file->write_size != st.st_size)
@@ -168,7 +183,7 @@ pgBackupValidateFiles(void *arg)
 				 file->path, (unsigned long) file->write_size,
 				 (unsigned long) st.st_size);
 			arguments->corrupted = true;
-			return;
+			break;
 		}
 
 		crc = pgFileGetCRC(file);
@@ -177,9 +192,12 @@ pgBackupValidateFiles(void *arg)
 			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
 					file->path, file->crc, crc);
 			arguments->corrupted = true;
-			return;
+			break;
 		}
 	}
+
+	/* Data files validation is successful */
+	arguments->ret = 0;
 }
 
 /*

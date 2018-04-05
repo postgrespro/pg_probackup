@@ -142,7 +142,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	 * There is no need to lock if this is elog() from upper elog() and
 	 * logging is not initialized.
 	 */
-	if (write_to_file || write_to_error_log)
+	if (write_to_file || write_to_error_log || write_to_stderr)
 		pthread_mutex_lock(&log_file_mutex);
 
 	/* We need copy args only if we need write to error log file */
@@ -228,12 +228,25 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 			va_end(std_args);
 	}
 
-	if (write_to_file || write_to_error_log)
+	if (write_to_file || write_to_error_log || write_to_stderr)
 		pthread_mutex_unlock(&log_file_mutex);
 
-	/* Exit with code if it is an error */
-	if (elevel > WARNING)
-		exit(elevel);
+	/*
+	 * Exit with code if it is an error.
+	 * Check for in_cleanup flag to avoid deadlock in case of ERROR in cleanup
+	 * routines.
+	 */
+	if (elevel > WARNING && !in_cleanup)
+	{
+		/* Interrupt other possible routines */
+		interrupted = true;
+
+		/* If this is not the main thread then don't call exit() */
+		if (!pthread_equal(main_tid, pthread_self()))
+			pthread_exit(NULL);
+		else
+			exit(elevel);
+	}
 }
 
 /*

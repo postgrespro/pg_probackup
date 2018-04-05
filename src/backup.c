@@ -47,10 +47,22 @@ const char *progname = "pg_probackup";
 static parray *backup_files_list = NULL;
 
 static pthread_mutex_t start_stream_mut = PTHREAD_MUTEX_INITIALIZER;
+
 /*
  * We need to wait end of WAL streaming before execute pg_stop_backup().
  */
+typedef struct
+{
+	const char *basedir;
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
+} StreamThreadArg;
+
 static pthread_t stream_thread;
+static StreamThreadArg stream_thread_arg = {"", 1};
 
 static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
@@ -424,6 +436,9 @@ remote_backup_files(void *arg)
 				 file->path, (unsigned long) file->write_size);
 		PQfinish(file_backup_conn);
 	}
+
+	/* Data files transferring is successful */
+	arguments->ret = 0;
 }
 
 /*
@@ -441,6 +456,7 @@ do_backup_instance(void)
 
 	pthread_t	backup_threads[num_threads];
 	backup_files_args *backup_threads_args[num_threads];
+	bool		backup_isok = true;
 
 	pgBackup   *prev_backup = NULL;
 	char		prev_backup_filelist_path[MAXPGPATH];
@@ -541,8 +557,13 @@ do_backup_instance(void)
 		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
 		dir_create_dir(dst_backup_path, DIR_PERMISSION);
 
+		stream_thread_arg.basedir = dst_backup_path;
+		/* By default there are some error */
+		stream_thread_arg.ret = 1;
+
 		pthread_mutex_lock(&start_stream_mut);
-		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
+		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog,
+					   &stream_thread_arg);
 		pthread_mutex_lock(&start_stream_mut);
 		if (conn == NULL)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
@@ -653,6 +674,8 @@ do_backup_instance(void)
 		arg->prev_backup_start_lsn = prev_backup_start_lsn;
 		arg->thread_backup_conn = NULL;
 		arg->thread_cancel_conn = NULL;
+		/* By default there are some error */
+		arg->ret = 1;
 		backup_threads_args[i] = arg;
 	}
 
@@ -676,9 +699,15 @@ do_backup_instance(void)
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(backup_threads[i], NULL);
+		if (backup_threads_args[i]->ret == 1)
+			backup_isok = false;
+
 		pg_free(backup_threads_args[i]);
 	}
-	elog(LOG, "Data files are transfered");
+	if (backup_isok)
+		elog(LOG, "Data files are transfered");
+	else
+		elog(ERROR, "Data files transferring failed");
 
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
@@ -1784,8 +1813,12 @@ pg_stop_backup(pgBackup *backup)
 		PQclear(res);
 
 		if (stream_wal)
+		{
 			/* Wait for the completion of stream */
 			pthread_join(stream_thread, NULL);
+			if (stream_thread_arg.ret == 1)
+				elog(ERROR, "WAL streaming failed");
+		}
 	}
 
 	/* Fill in fields if that is the correct end of backup. */
@@ -2025,6 +2058,8 @@ backup_files(void *arg)
 	if (arguments->thread_backup_conn)
 		pgut_disconnect(arguments->thread_backup_conn);
 
+	/* Data files transferring is successful */
+	arguments->ret = 0;
 }
 
 /*
@@ -2616,7 +2651,7 @@ StreamLog(void *arg)
 {
 	XLogRecPtr	startpos;
 	TimeLineID	starttli;
-	char	   *basedir = (char *)arg;
+	StreamThreadArg *stream_arg = (StreamThreadArg *) arg;
 
 	/*
 	 * Connect in replication mode to the server
@@ -2682,7 +2717,7 @@ StreamLog(void *arg)
 		ctl.sysidentifier = NULL;
 
 #if PG_VERSION_NUM >= 100000
-		ctl.walmethod = CreateWalDirectoryMethod(basedir, 0, true);
+		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 #else
@@ -2713,6 +2748,7 @@ StreamLog(void *arg)
 
 	elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
 		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, starttli);
+	stream_arg->ret = 0;
 
 	PQfinish(conn);
 	conn = NULL;
