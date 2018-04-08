@@ -2721,7 +2721,7 @@ StreamLog(void *arg)
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 #else
-		ctl.basedir = basedir;
+		ctl.basedir = (char *) stream_arg->basedir;
 #endif
 
 		ctl.stream_stop = stop_streaming;
