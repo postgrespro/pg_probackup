@@ -865,7 +865,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "r");
+	in = fopen(from_path, "rb");
 	if (in == NULL)
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
@@ -896,7 +896,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fopen(to_path_temp, "w");
+		out = fopen(to_path_temp, "wb");
 		if (out == NULL)
 			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
@@ -1018,7 +1018,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "r");
+	in = fopen(from_path, "rb");
 	if (in == NULL)
 	{
 #ifdef HAVE_LIBZ
@@ -1055,7 +1055,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-	out = fopen(to_path_temp, "w");
+	out = fopen(to_path_temp, "wb");
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 			 to_path_temp, strerror(errno));

@@ -514,6 +514,7 @@ extern bool is_pg_running(void);
 #define read _read
 #define close _close
 #define write _write
+#define mkdir(dir,mode) _mkdir(dir)
 #endif
 #endif
 
