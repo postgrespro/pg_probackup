@@ -1736,7 +1736,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(
                 backup_dir, 'node', node, backup_type='ptrack',
-                options=["--stream", "-j 200"]
+                options=["--stream", "-j 300"]
             )
             # we should die here because exception is what we expect to happen
             self.assertEqual(
