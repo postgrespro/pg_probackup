@@ -321,9 +321,6 @@ main(int argc, char *argv[])
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
-	/* Initialize logger */
-	init_logger(backup_path);
-
 	/* command was initialized for a few commands */
 	if (command)
 	{
@@ -375,6 +372,9 @@ main(int argc, char *argv[])
 		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
 		pgut_readopt(path, options, ERROR);
 	}
+
+	/* Initialize logger */
+	init_logger(backup_path);
 
 	/*
 	 * We have read pgdata path from command line or from configuration file.

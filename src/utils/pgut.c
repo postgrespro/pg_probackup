@@ -42,6 +42,8 @@ static char	   *password = NULL;
 bool			prompt_password = true;
 bool			force_password = false;
 
+pthread_t main_tid = 0;
+
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
 
@@ -1065,6 +1067,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 
 	init_cancel_handler();
 	atexit(on_cleanup);
+	main_tid = pthread_self();
 
 	return optind;
 }
@@ -1640,7 +1643,7 @@ pgut_execute_parallel(PGconn* conn,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
 	{
 		int		i;
 
@@ -1694,7 +1697,7 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
 	{
 		int		i;
 
@@ -1748,16 +1751,16 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= LOG)
+	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
 	{
 		int		i;
 
 		if (strchr(query, '\n'))
-			elog(LOG, "(query)\n%s", query);
+			elog(VERBOSE, "(query)\n%s", query);
 		else
-			elog(LOG, "(query) %s", query);
+			elog(VERBOSE, "(query) %s", query);
 		for (i = 0; i < nParams; i++)
-			elog(LOG, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
+			elog(VERBOSE, "\t(param:%d) = %s", i, params[i] ? params[i] : "(null)");
 	}
 
 	if (conn == NULL)

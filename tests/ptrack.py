@@ -1708,3 +1708,56 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_atexit_fail(self):
+        """
+        Take backups of every available types and check that PTRACK is clean
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'ptrack_enable': 'on',
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        # Take FULL backup to clean every ptrack
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='ptrack',
+                options=["--stream", "-j 300"]
+            )
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because we are opening too many connections"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd)
+            )
+        except ProbackupException as e:
+            self.assertIn(
+                'setting its status to ERROR',
+                e.message,
+                '\n Unexpected Error Message: {0}\n'
+                ' CMD: {1}'.format(repr(e.message), self.cmd)
+            )
+
+        self.assertEqual(
+            node.safe_psql(
+                "postgres",
+                "select * from pg_is_in_backup()").rstrip(),
+            "f")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
