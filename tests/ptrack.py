@@ -1732,7 +1732,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'ptrack_enable': 'on',
                 'wal_level': 'replica',
-                'max_wal_senders': '2'})
+                'max_wal_senders': '2',
+                'max_connections': '15'})
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1745,7 +1746,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(
                 backup_dir, 'node', node, backup_type='ptrack',
-                options=["--stream", "-j 300"]
+                options=["--stream", "-j 30"]
             )
             # we should die here because exception is what we expect to happen
             self.assertEqual(
