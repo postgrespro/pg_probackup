@@ -1067,7 +1067,6 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 
 	init_cancel_handler();
 	atexit(on_cleanup);
-	main_tid = pthread_self();
 
 	return optind;
 }

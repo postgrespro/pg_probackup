@@ -188,6 +188,11 @@ main(int argc, char *argv[])
 	PROGRAM_NAME = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], "pgscripts");
 
+	/*
+	 * Save main thread's tid. It is used call exit() in case of errors.
+	 */
+	main_tid = pthread_self();
+
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
 	{
