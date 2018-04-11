@@ -1328,6 +1328,120 @@ prompt_for_password(const char *username)
 	in_password = false;
 }
 
+/*
+ * Copied from pg_basebackup.c
+ * Escape a parameter value so that it can be used as part of a libpq
+ * connection string, e.g. in:
+ *
+ * application_name=<value>
+ *
+ * The returned string is malloc'd. Return NULL on out-of-memory.
+ */
+static char *
+escapeConnectionParameter(const char *src)
+{
+	bool		need_quotes = false;
+	bool		need_escaping = false;
+	const char *p;
+	char	   *dstbuf;
+	char	   *dst;
+
+	/*
+	 * First check if quoting is needed. Any quote (') or backslash (\)
+	 * characters need to be escaped. Parameters are separated by whitespace,
+	 * so any string containing whitespace characters need to be quoted. An
+	 * empty string is represented by ''.
+	 */
+	if (strchr(src, '\'') != NULL || strchr(src, '\\') != NULL)
+		need_escaping = true;
+
+	for (p = src; *p; p++)
+	{
+		if (isspace((unsigned char) *p))
+		{
+			need_quotes = true;
+			break;
+		}
+	}
+
+	if (*src == '\0')
+		return pg_strdup("''");
+
+	if (!need_quotes && !need_escaping)
+		return pg_strdup(src);	/* no quoting or escaping needed */
+
+	/*
+	 * Allocate a buffer large enough for the worst case that all the source
+	 * characters need to be escaped, plus quotes.
+	 */
+	dstbuf = pg_malloc(strlen(src) * 2 + 2 + 1);
+
+	dst = dstbuf;
+	if (need_quotes)
+		*(dst++) = '\'';
+	for (; *src; src++)
+	{
+		if (*src == '\'' || *src == '\\')
+			*(dst++) = '\\';
+		*(dst++) = *src;
+	}
+	if (need_quotes)
+		*(dst++) = '\'';
+	*dst = '\0';
+
+	return dstbuf;
+}
+
+/* Construct a connection string for possible future use in recovery.conf */
+char *
+pgut_get_conninfo_string(PGconn *conn)
+{
+	PQconninfoOption *connOptions;
+	PQconninfoOption *option;
+	PQExpBuffer buf = createPQExpBuffer();
+	char	   *connstr;
+	bool		firstkeyword = true;
+	char	   *escaped;
+
+	connOptions = PQconninfo(conn);
+	if (connOptions == NULL)
+		elog(ERROR, "out of memory");
+
+	/* Construct a new connection string in key='value' format. */
+	for (option = connOptions; option && option->keyword; option++)
+	{
+		/*
+		 * Do not emit this setting if: - the setting is "replication",
+		 * "dbname" or "fallback_application_name", since these would be
+		 * overridden by the libpqwalreceiver module anyway. - not set or
+		 * empty.
+		 */
+		if (strcmp(option->keyword, "replication") == 0 ||
+			strcmp(option->keyword, "dbname") == 0 ||
+			strcmp(option->keyword, "fallback_application_name") == 0 ||
+			(option->val == NULL) ||
+			(option->val != NULL && option->val[0] == '\0'))
+			continue;
+
+		/* do not print password into the file */
+		if (strcmp(option->keyword, "password") == 0)
+			continue;
+
+		if (!firstkeyword)
+			appendPQExpBufferChar(buf, ' ');
+
+		firstkeyword = false;
+
+		escaped = escapeConnectionParameter(option->val);
+		appendPQExpBuffer(buf, "%s=%s", option->keyword, escaped);
+		free(escaped);
+	}
+
+	connstr = pg_strdup(buf->data);
+	destroyPQExpBuffer(buf);
+	return connstr;
+}
+
 PGconn *
 pgut_connect(const char *dbname)
 {

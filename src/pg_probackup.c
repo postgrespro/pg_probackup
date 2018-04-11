@@ -62,6 +62,13 @@ static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
+static bool			target_immediate;
+static char		   *target_name = NULL;
+static char		   *target_action = NULL;;
+
+static pgRecoveryTarget *recovery_target_options = NULL;
+
+bool restore_as_replica = false;
 
 /* delete options */
 bool		delete_wal = false;
@@ -132,6 +139,10 @@ static pgut_option options[] =
 	{ 's', 22, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
 	{ 'u', 23, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
+	{ 'b', 24, "immediate",				&target_immediate,	SOURCE_CMDLINE },
+	{ 's', 25, "recovery-target-name",	&target_name,		SOURCE_CMDLINE },
+	{ 's', 26, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
+	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
@@ -411,8 +422,13 @@ main(int argc, char *argv[])
 		pgdata_exclude_dir[i] = "pg_log";
 	}
 
-	if (target_time != NULL && target_xid != NULL)
-		elog(ERROR, "You can't specify recovery-target-time and recovery-target-xid at the same time");
+	if (backup_subcmd == VALIDATE || backup_subcmd == RESTORE)
+	{
+		/* parse all recovery target options into recovery_target_options structure */
+		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
+								   target_inclusive, target_tli, target_immediate,
+								   target_name, target_action);
+	}
 
 	if (num_threads < 1)
 		num_threads = 1;
@@ -448,16 +464,14 @@ main(int argc, char *argv[])
 			}
 		case RESTORE:
 			return do_restore_or_validate(current.backup_id,
-						  target_time, target_xid,
-						  target_inclusive, target_tli,
+						  recovery_target_options,
 						  true);
 		case VALIDATE:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
 				return do_validate_all();
 			else
 				return do_restore_or_validate(current.backup_id,
-						  target_time, target_xid,
-						  target_inclusive, target_tli,
+						  recovery_target_options,
 						  false);
 		case SHOW:
 			return do_show(current.backup_id);

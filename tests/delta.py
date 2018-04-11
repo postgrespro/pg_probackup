@@ -487,7 +487,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             restored_node, 'somedata_restored')
 
         self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
+            "--recovery-target-action=promote"])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
@@ -911,7 +912,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 "-T", "{0}={1}".format(
                     self.get_tblspace_path(node, 'somedata_new'),
                     self.get_tblspace_path(node_restored, 'somedata_new')
-                )
+                ),
+                "--recovery-target-action=promote"
             ]
         )
 

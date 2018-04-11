@@ -759,7 +759,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=full_backup_id,
-                options=["-j", "4"]
+                options=["-j", "4", "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -778,7 +778,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=ptrack_backup_id,
-                options=["-j", "4"]
+                options=["-j", "4", "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -861,7 +861,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=full_backup_id,
-                options=["-j", "4", "--time={0}".format(full_target_time)]
+                options=[
+                    "-j", "4", "--recovery-target-action=promote",
+                    "--time={0}".format(full_target_time)]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -880,7 +882,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=ptrack_backup_id,
-                options=["-j", "4", "--time={0}".format(ptrack_target_time)]
+                options=[
+                    "-j", "4",
+                    "--time={0}".format(ptrack_target_time),
+                    "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -1320,7 +1325,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "-T", "{0}={1}".format(
                     self.get_tblspace_path(node, 'somedata_new'),
                     self.get_tblspace_path(node_restored, 'somedata_new')
-                )
+                ),
+                "--recovery-target-action=promote"
             ]
         )
 
@@ -1549,7 +1555,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         tblspc_path_new = self.get_tblspace_path(
             restored_node, 'somedata_restored')
         self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
+            "--recovery-target-action=promote"])
 
         # GET PHYSICAL CONTENT FROM RESTORED NODE and COMPARE PHYSICAL CONTENT
         if self.paranoia:
@@ -1585,7 +1592,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Restore second ptrack backup and check table consistency
         self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
+            "--recovery-target-action=promote"])
 
         # GET PHYSICAL CONTENT FROM RESTORED NODE and COMPARE PHYSICAL CONTENT
         if self.paranoia:
@@ -1682,7 +1690,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         )
 
         self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
+            "--recovery-target-action=promote"])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         if self.paranoia:

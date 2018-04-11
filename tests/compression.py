@@ -297,10 +297,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s',
+                'ptrack_enable': 'on'}
             )
 
         self.init_pb(backup_dir)
@@ -309,14 +314,21 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         try:
-            self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--compress-algorithm=bla-blah'])
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='full', options=['--compress-algorithm=bla-blah'])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because restore destionation is not empty.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because compress-algorithm is invalid.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
+            self.assertEqual(
+                e.message,
                 'ERROR: invalid compress algorithm value "bla-blah"\n',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
