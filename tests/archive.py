@@ -44,7 +44,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             options=["--log-level-file=verbose"])
         node.cleanup()
 
-        self.restore_node(backup_dir, 'node', node)
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=["--recovery-target-action=promote"])
         node.start()
         while node.safe_psql(
             "postgres",
@@ -62,7 +64,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
 
         # Restore Database
-        self.restore_node(backup_dir, 'node', node)
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=["--recovery-target-action=promote"])
         node.start()
         while node.safe_psql(
             "postgres",

@@ -84,8 +84,10 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         self.restore_node(
             backup_dir, 'node', node_restored,
-            options=["-j", "4", "-T", "{0}={1}".format(
-                old_tablespace, new_tablespace)]
+            options=[
+                "-j", "4",
+                "-T", "{0}={1}".format(old_tablespace, new_tablespace),
+                "--recovery-target-action=promote"]
         )
 
         # Physical comparison
@@ -331,8 +333,12 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         tblspc_path_new = self.get_tblspace_path(
             restored_node, 'somedata_restored')
 
-        self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+        self.restore_node(
+            backup_dir, 'node', restored_node,
+            options=[
+                "-j", "4",
+                "--recovery-target-action=promote",
+                "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         pgdata_restored = self.pgdata_content(restored_node.data_dir)

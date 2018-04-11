@@ -43,7 +43,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # 1 - Test recovery from latest
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -96,7 +98,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -139,7 +143,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -164,7 +170,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-j", "4", "--timeline={0}".format(target_tli)]),
+                options=[
+                    "-j", "4", "--timeline={0}".format(target_tli),
+                    "--recovery-target-action=promote"]
+            ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -217,7 +226,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-j", "4", '--time={0}'.format(target_time)]),
+                options=[
+                    "-j", "4", '--time={0}'.format(target_time),
+                    "--recovery-target-action=promote"
+                    ]
+                ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -277,7 +290,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-j", "4", '--xid={0}'.format(target_xid)]),
+                options=[
+                    "-j", "4", '--xid={0}'.format(target_xid),
+                    "--recovery-target-action=promote"]
+            ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -345,7 +361,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 options=[
                     "-j", "4",
                     '--xid={0}'.format(target_xid),
-                    "--inclusive=false"]),
+                    "--inclusive=false",
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -396,7 +413,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    "-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -452,7 +472,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    "-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -506,7 +529,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -571,7 +596,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -642,7 +669,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
-            self.restore_node(backup_dir, 'node', node, options=["-j", "4"]),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.start()
@@ -733,7 +762,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]),
+                options=[
+                    "-T", "%s=%s" % (tblspc_path, tblspc_path_new),
+                    "--recovery-target-action=promote"]
+            ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -764,7 +796,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)]),
+                options=[
+                    "-T", "%s=%s" % (tblspc_path_new, tblspc_path_page),
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -804,7 +838,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.connection.autocommit = True
             con.execute("CREATE TABLESPACE tblspc LOCATION '%s'" % tblspc_path)
             con.connection.autocommit = False
-            con.execute("CREATE TABLE tbl AS SELECT * FROM generate_series(0,3) AS integer")
+            con.execute(
+                "CREATE TABLE tbl AS SELECT * "
+                "FROM generate_series(0,3) AS integer")
             con.commit()
 
         # First page backup
@@ -818,7 +854,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.execute("CHECKPOINT")
             con.connection.autocommit = False
             con.execute("CREATE TABLE tbl1 (a int) TABLESPACE tblspc")
-            con.execute("INSERT INTO tbl1 SELECT * FROM generate_series(0,3) AS integer")
+            con.execute(
+                "INSERT INTO tbl1 SELECT * "
+                "FROM generate_series(0,3) AS integer")
             con.commit()
 
         # Second page backup
@@ -836,7 +874,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-T", "%s=%s" % (tblspc_path, tblspc_path_new)]),
+                options=[
+                    "-T", "%s=%s" % (tblspc_path, tblspc_path_new),
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.start()
@@ -885,7 +925,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-j", "4", '--time={0}'.format(recovery_time)]),
+                options=[
+                    "-j", "4", '--time={0}'.format(recovery_time),
+                    "--recovery-target-action=promote"
+                    ]
+            ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -933,7 +977,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-j", "4", '--time={0}'.format(recovery_time)]),
+                options=[
+                    "-j", "4", '--time={0}'.format(recovery_time),
+                    "--recovery-target-action=promote"
+                ]
+            ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -981,7 +1029,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-j", "4", '--time={0}'.format(recovery_time)]),
+                options=[
+                    "-j", "4", '--time={0}'.format(recovery_time),
+                    "--recovery-target-action=promote"
+                    ]
+            ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -1031,7 +1083,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=["-j", "4", '--time={0}'.format(recovery_time)]),
+                options=[
+                    "-j", "4", '--time={0}'.format(recovery_time),
+                    "--recovery-target-action=promote"
+                    ]
+            ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
