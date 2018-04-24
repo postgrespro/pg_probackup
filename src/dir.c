@@ -17,6 +17,8 @@
 #include <dirent.h>
 #include <time.h>
 
+#include "catalog/catalog.h"
+#include "catalog/pg_tablespace.h"
 #include "datapagemap.h"
 
 /*
@@ -88,9 +90,10 @@ static char *pgdata_exclude_files_non_exclusive[] =
 
 static int BlackListCompare(const void *str1, const void *str2);
 
+static bool dir_check_file(const char *root, pgFile *file, bool exclude);
 static void dir_list_file_internal(parray *files, const char *root,
-								   bool exclude, bool omit_symlink,
-								   bool add_root, parray *black_list);
+								   pgFile *parent, bool exclude,
+								   bool omit_symlink, parray *black_list);
 
 /*
  * Create directory, also create parent directories if necessary.
@@ -145,7 +148,9 @@ pgFileNew(const char *path, bool omit_symlink)
 pgFile *
 pgFileInit(const char *path)
 {
-	pgFile		   *file;
+	pgFile	   *file;
+	char	   *file_name;
+
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
 	file->size = 0;
@@ -163,8 +168,21 @@ pgFileInit(const char *path)
 	file->segno = 0;
 	file->is_database = false;
 	file->forkName = pgut_malloc(MAXPGPATH);
+	file->forkName[0] = '\0';
+
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
+
+	/* Get file name from the path */
+	file_name = strrchr(file->path, '/');
+	if (file_name == NULL)
+		file->name = file->path;
+	else
+	{
+		file_name++;
+		file->name = file_name;
+	}
+
 	file->is_cfs = false;
 	file->exists_in_prev = false;	/* can change only in Incremental backup. */
 	file->n_blocks = -1;			/* can change only in DELTA backup. Number of blocks readed during backup */
@@ -319,6 +337,7 @@ void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 			  bool add_root)
 {
+	pgFile	   *file;
 	parray	   *black_list = NULL;
 	char		path[MAXPGPATH];
 
@@ -353,213 +372,303 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	dir_list_file_internal(files, root, exclude, omit_symlink, add_root,
-						   black_list);
+	file = pgFileNew(root, false);
+	if (file == NULL)
+		return;
+
+	if (!S_ISDIR(file->mode))
+	{
+		elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
+		return;
+	}
+	if (add_root)
+		parray_append(files, file);
+
+	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list);
 	parray_qsort(files, pgFileComparePath);
 }
 
 /*
- * TODO Add comment
+ * Check file or directory.
+ *
+ * Check for exclude.
+ * Extract information about the file parsing its name.
+ * Skip files:
+ * - skip temp tables files
+ * - skip unlogged tables files
+ * Set flags for:
+ * - database directories
+ * - datafiles
  */
-static void
-dir_list_file_internal(parray *files, const char *root, bool exclude,
-					   bool omit_symlink, bool add_root, parray *black_list)
+static bool
+dir_check_file(const char *root, pgFile *file, bool exclude)
 {
-	pgFile *file;
+	const char *rel_path;
+	int			i;
+	int			sscanf_res;
 
-	file = pgFileNew(root, omit_symlink);
-	if (file == NULL)
-		return;
-
-	/* skip if the file is in black_list defined by user */
-	if (black_list && parray_bsearch(black_list, root, BlackListCompare))
+	if (exclude)
 	{
-		elog(LOG, "Skip file \"%s\": file is in the user's black list", file->path);
-		return;
-	}
-
-	/*
-	 * Add to files list only files, links and directories. Skip sockets and
-	 * other unexpected file formats.
-	 */
-	if (!S_ISDIR(file->mode) && !S_ISLNK(file->mode) &&	!S_ISREG(file->mode))
-	{
-		elog(WARNING, "Skip file \"%s\": unexpected file format", file->path);
-		return;
-	}
-
-	if (add_root)
-	{
-		/* Skip files */
-		/* TODO Consider moving this check to parse_backup_filelist_filenames */
-		if (!S_ISDIR(file->mode) && exclude)
+		/* Check if we need to exclude file by name */
+		if (S_ISREG(file->mode))
 		{
-			char	    *file_name;
-			int			i;
-
-			/* Extract file name */
-			file_name = strrchr(file->path, '/');
-			if (file_name == NULL)
-				file_name = file->path;
-			else
-			{
-				file_name++;
-				file->name = file_name;
-			}
-
-			/* exclude backup_label and tablespace_map in non-exclusive backup */
 			if (!exclusive_backup)
 			{
 				for (i = 0; pgdata_exclude_files_non_exclusive[i]; i++)
-					if (strcmp(file->name, pgdata_exclude_files_non_exclusive[i]) == 0)
+					if (strcmp(file->name,
+							   pgdata_exclude_files_non_exclusive[i]) == 0)
 					{
 						/* Skip */
 						elog(VERBOSE, "Excluding file: %s", file->name);
-						return;
+						return false;
 					}
 			}
 
-			/* Check if we need to exclude file by name */
 			for (i = 0; pgdata_exclude_files[i]; i++)
 				if (strcmp(file->name, pgdata_exclude_files[i]) == 0)
 				{
 					/* Skip */
 					elog(VERBOSE, "Excluding file: %s", file->name);
-					return;
+					return false;
 				}
 		}
-		parray_append(files, file);
-	}
-
-	/* chase symbolic link chain and find regular file or directory */
-	while (S_ISLNK(file->mode))
-	{
-		ssize_t	len;
-		char	linked[MAXPGPATH];
-
-		len = readlink(file->path, linked, sizeof(linked));
-		if (len < 0)
-			elog(ERROR, "cannot read link \"%s\": %s", file->path,
-				strerror(errno));
-		if (len >= sizeof(linked))
-			elog(ERROR, "symbolic link \"%s\" target is too long\n",
-				 file->path);
-
-		linked[len] = '\0';
-		file->linked = pgut_strdup(linked);
-
-		/* make absolute path to read linked file */
-		if (linked[0] != '/')
+		/*
+		 * If the directory name is in the exclude list, do not list the
+		 * contents.
+		 */
+		else if (S_ISDIR(file->mode))
 		{
-			char	dname[MAXPGPATH];
-			char	absolute[MAXPGPATH];
-
-			strncpy(dname, file->path, lengthof(dname));
-			join_path_components(absolute, dname, linked);
-			file = pgFileNew(absolute, omit_symlink);
-		}
-		else
-			file = pgFileNew(file->linked, omit_symlink);
-
-		/* linked file is not found, stop following link chain */
-		if (file == NULL)
-			return;
-
-		parray_append(files, file);
-	}
-
-	/*
-	 * If the entry was a directory, add it to the list and add call this
-	 * function recursivelly.
-	 * If the directory name is in the exclude list, do not list the contents.
-	 */
-	while (S_ISDIR(file->mode))
-	{
-		bool			skip = false;
-		DIR			    *dir;
-		struct dirent   *dent;
-
-		if (exclude)
-		{
-			int			i;
-			char	    *dirname;
-
-			/* skip entry which matches exclude list */
-			dirname = strrchr(file->path, '/');
-			if (dirname == NULL)
-				dirname = file->path;
-			else
-			{
-				dirname++;
-				file->name = dirname;
-			}
-
 			/*
-			 * If the item in the exclude list starts with '/', compare to the
-			 * absolute path of the directory. Otherwise compare to the directory
-			 * name portion.
+			 * If the item in the exclude list starts with '/', compare to
+			 * the absolute path of the directory. Otherwise compare to the
+			 * directory name portion.
 			 */
-			for (i = 0; exclude && pgdata_exclude_dir[i]; i++)
+			for (i = 0; pgdata_exclude_dir[i]; i++)
 			{
 				/* Full-path exclude*/
 				if (pgdata_exclude_dir[i][0] == '/')
 				{
 					if (strcmp(file->path, pgdata_exclude_dir[i]) == 0)
 					{
-						skip = true;
-						break;
+						elog(VERBOSE, "Excluding directory content: %s",
+							 file->name);
+						return false;
 					}
 				}
 				else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 				{
-					skip = true;
-					break;
+					elog(VERBOSE, "Excluding directory content: %s",
+						 file->name);
+					return false;
 				}
 			}
-			if (skip)
-			{
-				elog(VERBOSE, "Excluding directory content: %s", file->name);
-				break;
-			}
 		}
-
-		/* open directory and list contents */
-		dir = opendir(file->path);
-		if (dir == NULL)
-		{
-			if (errno == ENOENT)
-			{
-				/* maybe the direcotry was removed */
-				return;
-			}
-			elog(ERROR, "cannot open directory \"%s\": %s",
-				file->path, strerror(errno));
-		}
-
-		errno = 0;
-		while ((dent = readdir(dir)))
-		{
-			char child[MAXPGPATH];
-
-			/* skip entries point current dir or parent dir */
-			if (strcmp(dent->d_name, ".") == 0 ||
-				strcmp(dent->d_name, "..") == 0)
-				continue;
-
-			join_path_components(child, file->path, dent->d_name);
-			dir_list_file_internal(files, child, exclude, omit_symlink, true, black_list);
-		}
-		if (errno && errno != ENOENT)
-		{
-			int errno_tmp = errno;
-			closedir(dir);
-			elog(ERROR, "cannot read directory \"%s\": %s",
-				file->path, strerror(errno_tmp));
-		}
-		closedir(dir);
-
-		break;	/* pseudo loop */
 	}
+
+	rel_path = GetRelativePath(file->path, root);
+
+	/*
+	 * Do not copy tablespaces twice. It may happen if the tablespace is located
+	 * inside the PGDATA.
+	 */
+	if (S_ISDIR(file->mode) &&
+		strcmp(file->name, TABLESPACE_VERSION_DIRECTORY) == 0)
+	{
+		Oid			tblspcOid;
+		char		tmp_rel_path[MAXPGPATH];
+
+		/*
+		 * Valid path for the tablespace is
+		 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
+		 */
+		if (!path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path))
+			return false;
+		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%s",
+							&tblspcOid, tmp_rel_path);
+		if (sscanf_res == 0)
+			return false;
+	}
+
+	if (path_is_prefix_of_path("global", rel_path))
+	{
+		file->tblspcOid = GLOBALTABLESPACE_OID;
+
+		if (S_ISDIR(file->mode) && strcmp(file->name, "global") == 0)
+			file->is_database = true;
+	}
+	else if (path_is_prefix_of_path("base", rel_path))
+	{
+		file->tblspcOid = DEFAULTTABLESPACE_OID;
+
+		sscanf_res = sscanf(rel_path, "base/%u/", &(file->dbOid));
+
+		if (S_ISDIR(file->mode) && strcmp(file->name, "base") != 0)
+		{
+			file->is_database = true;
+			sscanf(rel_path, "base/%u/", &(file->dbOid));
+		}
+	}
+	else if (path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path))
+	{
+		char		tmp_rel_path[MAXPGPATH];
+
+		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%s/%u/",
+							&(file->tblspcOid), tmp_rel_path,
+							&(file->dbOid));
+
+		if (sscanf_res == 3 && S_ISDIR(file->mode) &&
+			strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
+			file->is_database = true;
+	}
+	else if (S_ISREG(file->mode) && strcmp(file->name, "ptrack_init") == 0)
+		return false;
+
+	/*
+	 * Check files located inside database directories including directory
+	 * 'global'
+	 */
+	if (S_ISREG(file->mode) && file->tblspcOid != 0 &&
+		file->name && file->name[0])
+	{
+		if (strcmp(file->name, "pg_internal.init") == 0)
+			return false;
+		/* Do not backup temp files */
+		else if (file->name[0] == 't' && isdigit(file->name[1]))
+			return false;
+		else if (isdigit(file->name[0]))
+		{
+			char	   *fork_name;
+			int			len;
+			char		suffix[MAXPGPATH];
+
+			fork_name = strstr(file->name, "_");
+			if (fork_name)
+			{
+				/* Auxiliary fork of the relfile */
+				sscanf(file->name, "%u_%s", &(file->relOid), file->forkName);
+
+				/* Do not backup ptrack files */
+				if (strcmp(file->forkName, "ptrack") == 0)
+					return false;
+			}
+
+			len = strlen(file->name);
+			/* reloid.cfm */
+			if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
+				return true;
+
+			sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
+								&(file->segno), suffix);
+			if (sscanf_res == 0)
+				elog(ERROR, "Cannot parse file name \"%s\"", file->name);
+			else if (sscanf_res == 1 || sscanf_res == 2)
+				file->is_datafile = true;
+		}
+	}
+
+	return true;
+}
+
+/*
+ * List files in "root" directory.  If "exclude" is true do not add into "files"
+ * files from pgdata_exclude_files and directories from pgdata_exclude_dir.
+ */
+static void
+dir_list_file_internal(parray *files, const char *root, pgFile *parent,
+					   bool exclude, bool omit_symlink, parray *black_list)
+{
+	DIR		    *dir;
+	struct dirent *dent;
+
+	if (!S_ISDIR(parent->mode))
+		elog(ERROR, "\"%s\" is not a directory", parent->path);
+
+	/* Open directory and list contents */
+	dir = opendir(parent->path);
+	if (dir == NULL)
+	{
+		if (errno == ENOENT)
+		{
+			/* Maybe the directory was removed */
+			return;
+		}
+		elog(ERROR, "cannot open directory \"%s\": %s",
+			 parent->path, strerror(errno));
+	}
+
+	errno = 0;
+	while ((dent = readdir(dir)))
+	{
+		pgFile	   *file;
+		char		child[MAXPGPATH];
+
+		join_path_components(child, parent->path, dent->d_name);
+
+		file = pgFileNew(child, omit_symlink);
+		if (file == NULL)
+			continue;
+
+		/* Skip entries point current dir or parent dir */
+		if (S_ISDIR(file->mode) &&
+			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
+		{
+			pgFileFree(file);
+			continue;
+		}
+
+		/*
+		 * Add only files, directories and links. Skip sockets and other
+		 * unexpected file formats.
+		 */
+		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode))
+		{
+			elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
+			pgFileFree(file);
+			continue;
+		}
+
+		/* Skip if the directory is in black_list defined by user */
+		if (black_list && parray_bsearch(black_list, file->path,
+										 BlackListCompare))
+		{
+			elog(LOG, "Skip \"%s\": it is in the user's black list", file->path);
+			pgFileFree(file);
+			continue;
+		}
+
+		/* We add the directory anyway */
+		if (S_ISDIR(file->mode))
+			parray_append(files, file);
+
+		if (!dir_check_file(root, file, exclude))
+		{
+			if (S_ISREG(file->mode))
+				pgFileFree(file);
+			/* Skip */
+			continue;
+		}
+
+		/* At least add the file */
+		if (S_ISREG(file->mode))
+			parray_append(files, file);
+
+		/*
+		 * If the entry is a directory call dir_list_file_internal()
+		 * recursively.
+		 */
+		if (S_ISDIR(file->mode))
+			dir_list_file_internal(files, root, file, exclude, omit_symlink,
+								   black_list);
+	}
+
+	if (errno && errno != ENOENT)
+	{
+		int			errno_tmp = errno;
+		closedir(dir);
+		elog(ERROR, "cannot read directory \"%s\": %s",
+			 parent->path, strerror(errno_tmp));
+	}
+	closedir(dir);
 }
 
 /*

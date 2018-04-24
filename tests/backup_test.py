@@ -422,7 +422,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    @unittest.expectedFailure
     def test_tablespace_in_pgdata_pgpro_1376(self):
         """PGPRO-1376 """
         fname = self.id().split('.')[3]
@@ -466,7 +465,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     path = os.path.join(root, file)
                     list = list + [path]
 
-        if len(list) > 0:
+        # We expect that relfilenode occures only once
+        if len(list) > 1:
             message = ""
             for string in list:
                 message = message + string + "\n"

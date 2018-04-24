@@ -99,6 +99,7 @@ static void pg_switch_wal(PGconn *conn);
 static void pg_stop_backup(pgBackup *backup);
 static int checkpoint_timeout(void);
 
+//static void backup_list_file(parray *files, const char *root, )
 static void parse_backup_filelist_filenames(parray *files, const char *root);
 static void write_backup_file_list(parray *files, const char *root);
 static void wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment);
@@ -273,7 +274,8 @@ ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
 
 /* read one file via replication protocol
  * and write it to the destination subdir in 'backup_path' */
-static void	remote_copy_file(PGconn *conn, pgFile* file)
+static void
+remote_copy_file(PGconn *conn, pgFile* file)
 {
 	PGresult	*res;
 	char		*copybuf = NULL;
@@ -2095,256 +2097,80 @@ backup_files(void *arg)
 static void
 parse_backup_filelist_filenames(parray *files, const char *root)
 {
-	size_t		i;
-	Oid unlogged_file_reloid = 0;
+	size_t		i = 0;
+	Oid			unlogged_file_reloid = 0;
 
-	for (i = 0; i < parray_num(files); i++)
+	while (i < parray_num(files))
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 		char	   *relative;
-		char		filename[MAXPGPATH];
 		int 		sscanf_result;
 
 		relative = GetRelativePath(file->path, root);
-		filename[0] = '\0';
 
-		elog(VERBOSE, "-----------------------------------------------------: %s", relative);
-		if (path_is_prefix_of_path("global", relative))
+		if (S_ISREG(file->mode) &&
+			path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
 		{
-			file->tblspcOid = GLOBALTABLESPACE_OID;
-			sscanf_result = sscanf(relative, "global/%s", filename);
-			elog(VERBOSE, "global sscanf result: %i", sscanf_result);
-			if (strcmp(relative, "global") == 0)
+			/*
+			 * Found file in pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
+			 * Legal only in case of 'pg_compression'
+			 */
+			if (strcmp(file->name, "pg_compression") == 0)
 			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "the global itself, filepath %s", relative);
-				file->is_database = true; /* TODO add an explanation */
-			}
-			else if (sscanf_result == 1)
-			{
-				elog(VERBOSE, "filename %s, filepath %s", filename, relative);
+				Oid			tblspcOid;
+				Oid			dbOid;
+				char		tmp_rel_path[MAXPGPATH];
+				/*
+				 * Check that the file is located under
+				 * TABLESPACE_VERSION_DIRECTORY
+				 */
+				sscanf_result = sscanf(relative, PG_TBLSPC_DIR "/%u/%s/%u",
+									   &tblspcOid, tmp_rel_path, &dbOid);
+
+				/* Yes, it is */
+				if (sscanf_result == 2 &&
+					strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
+					set_cfs_datafiles(files, root, relative, i);
 			}
 		}
-		else if (path_is_prefix_of_path("base", relative))
+
+		if (S_ISREG(file->mode) && file->tblspcOid != 0 &&
+			file->name && file->name[0])
 		{
-			file->tblspcOid = DEFAULTTABLESPACE_OID;
-			sscanf_result = sscanf(relative, "base/%u/%s", &(file->dbOid), filename);
-			elog(VERBOSE, "base sscanf result: %i", sscanf_result);
-			if (strcmp(relative, "base") == 0)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "the base itself, filepath %s", relative);
-			}
-			else if (sscanf_result == 1)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "dboid %u, filepath %s", file->dbOid, relative);
-				file->is_database = true;
-			}
-			else
-			{
-				elog(VERBOSE, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
-			}
-		}
-		else if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
-		{
-			char		temp_relative_path[MAXPGPATH];
-
-			sscanf_result = sscanf(relative, "pg_tblspc/%u/%s", &(file->tblspcOid), temp_relative_path);
-			elog(VERBOSE, "pg_tblspc sscanf result: %i", sscanf_result);
-
-			if (strcmp(relative, "pg_tblspc") == 0)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "the pg_tblspc itself, filepath %s", relative);
-			}
-			else if (sscanf_result == 1)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "tblspcOid %u, filepath %s", file->tblspcOid, relative);
-			}
-			else
-			{
-				/*continue parsing */
-				sscanf_result = sscanf(temp_relative_path+strlen(TABLESPACE_VERSION_DIRECTORY)+1, "%u/%s",
-									   &(file->dbOid), filename);
-				elog(VERBOSE, "TABLESPACE_VERSION_DIRECTORY sscanf result: %i", sscanf_result);
-
-				if (sscanf_result == -1)
-				{
-					elog(VERBOSE, "The TABLESPACE_VERSION_DIRECTORY itself, filepath %s", relative);
-				}
-				else if (sscanf_result == 0)
-				{
-					/* Found file in pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
-					   Legal only in case of 'pg_compression'
-					 */
-					if (strcmp(file->name, "pg_compression") == 0)
-					{
-						elog(VERBOSE, "Found pg_compression file in TABLESPACE_VERSION_DIRECTORY, filepath %s", relative);
-						/*Set every datafile in tablespace as is_cfs */
-						set_cfs_datafiles(files, root, relative, i);
-					}
-					else
-					{
-						elog(VERBOSE, "Found illegal file in TABLESPACE_VERSION_DIRECTORY, filepath %s", relative);
-					}
-
-				}
-				else if (sscanf_result == 1)
-				{
-					Assert(S_ISDIR(file->mode));
-					elog(VERBOSE, "dboid %u, filepath %s", file->dbOid, relative);
-					file->is_database = true;
-				}
-				else if (sscanf_result == 2)
-				{
-					elog(VERBOSE, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
-				}
-				else
-				{
-					elog(VERBOSE, "Illegal file filepath %s", relative);
-				}
-			}
-		}
-		else
-		{
-			elog(VERBOSE,"other dir or file, filepath %s", relative);
-		}
-
-		if (strcmp(filename, "ptrack_init") == 0)
-		{
-			/* Do not backup ptrack_init files */
-			pgFileFree(file);
-			parray_remove(files, i);
-			i--;
-			continue;
-		}
-
-		/* Check files located inside database directories including directory 'global' */
-		if (filename[0] != '\0' && file->tblspcOid != 0)
-		{
-			if (strcmp(filename, "pg_internal.init") == 0)
-			{
-				/* Do not pg_internal.init files
-				 * (they contain some cache entries, so it's fine) */
-				pgFileFree(file);
-				parray_remove(files, i);
-				i--;
-				continue;
-			}
-			else if (filename[0] == 't' && isdigit(filename[1]))
-			{
-				elog(VERBOSE, "temp file, filepath %s", relative);
-				/* Do not backup temp files */
-				pgFileFree(file);
-				parray_remove(files, i);
-				i--;
-				continue;
-			}
-			else if (isdigit(filename[0]))
+			if (strcmp(file->forkName, "init") == 0)
 			{
 				/*
-				 * TODO TODO TODO Files of this type can be compressed by cfs.
-				 * Check that and do not mark them with 'is_datafile' flag.
+				 * Do not backup files of unlogged relations.
+				 * scan filelist backward and exclude these files.
 				 */
-				char *forkNameptr;
-				char suffix[MAXPGPATH];
+				int			unlogged_file_num = i - 1;
+				pgFile	   *unlogged_file = (pgFile *) parray_get(files,
+																  unlogged_file_num);
 
-				forkNameptr = strstr(filename, "_");
-				if (forkNameptr != NULL)
-				{
-					/* auxiliary fork of the relfile */
-					sscanf(filename, "%u_%s", &(file->relOid), file->forkName);
-					elog(VERBOSE, "relOid %u, forkName %s, filepath %s", file->relOid, file->forkName, relative);
+				unlogged_file_reloid = file->relOid;
 
-					/* handle unlogged relations */
-					if (strcmp(file->forkName, "init") == 0)
-					{
-						/*
-						 * Do not backup files of unlogged relations.
-						 * scan filelist backward and exclude these files.
-						 */
-						int unlogged_file_num = i-1;
-						pgFile	   *unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
+				pgFileFree(file);
+				parray_remove(files, i);
 
-						unlogged_file_reloid = file->relOid;
+				while (unlogged_file_num >= 0 &&
+					   (unlogged_file_reloid != 0) &&
+					   (unlogged_file->relOid == unlogged_file_reloid))
+				{
+					pgFileFree(unlogged_file);
+					parray_remove(files, unlogged_file_num);
 
-						while (unlogged_file_num >= 0 &&
-							   (unlogged_file_reloid != 0) &&
-							   (unlogged_file->relOid == unlogged_file_reloid))
-						{
-							unlogged_file->size = 0;
-							pgFileFree(unlogged_file);
-							parray_remove(files, unlogged_file_num);
-							unlogged_file_num--;
-							i--;
-							unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
-						}
-					}
-					else if (strcmp(file->forkName, "ptrack") == 0)
-					{
-						/* Do not backup ptrack files */
-						pgFileFree(file);
-						parray_remove(files, i);
-						i--;
-					}
-					else if ((unlogged_file_reloid != 0) &&
-							 (file->relOid == unlogged_file_reloid))
-					{
-						/* Do not backup forks of unlogged relations */
-						pgFileFree(file);
-						parray_remove(files, i);
-						i--;
-					}
-					continue;
-				}
-
-				sscanf_result = sscanf(filename, "%u.%d.%s", &(file->relOid), &(file->segno), suffix);
-				if (sscanf_result == 0)
-				{
-					elog(ERROR, "cannot parse filepath %s", relative);
-				}
-				else if (sscanf_result == 1)
-				{
-					/* first segment of the relfile */
-					elog(VERBOSE, "relOid %u, segno %d, filepath %s", file->relOid, 0, relative);
-					if (strcmp(relative + strlen(relative) - strlen("cfm"), "cfm") == 0)
-					{
-						/* reloid.cfm */
-						elog(VERBOSE, "Found cfm file %s", relative);
-					}
-					else
-					{
-						elog(VERBOSE, "Found first segment of the relfile %s", relative);
-						file->is_datafile = true;
-					}
-				}
-				else if (sscanf_result == 2)
-				{
-					/* not first segment of the relfile */
-					elog(VERBOSE, "relOid %u, segno %d, filepath %s", file->relOid, file->segno, relative);
-					file->is_datafile = true;
-				}
-				else
-				{
-					/*
-					 * some cfs specific file.
-					 * It is not datafile, because we cannot read it block by block
-					 */
-					elog(VERBOSE, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
-				}
-
-				if ((unlogged_file_reloid != 0) &&
-					(file->relOid == unlogged_file_reloid))
-				{
-					/* Do not backup segments of unlogged files */
-					pgFileFree(file);
-					parray_remove(files, i);
+					unlogged_file_num--;
 					i--;
+
+					unlogged_file = (pgFile *) parray_get(files,
+														  unlogged_file_num);
 				}
+
+				continue;
 			}
 		}
+
+		i++;
 	}
 }
 
