@@ -259,7 +259,9 @@ class ProbackupTest(object):
             tblspc_name, tblspc_path)
         if cfs:
             cmd += " with (compression=true)"
-        os.makedirs(tblspc_path)
+
+        if not os.path.exists(tblspc_path):
+            os.makedirs(tblspc_path)
         res = node.safe_psql("postgres", cmd)
         # Check that tablespace was successfully created
         # self.assertEqual(
