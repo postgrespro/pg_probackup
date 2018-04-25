@@ -95,7 +95,11 @@ extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
 
 /* ID of the main thread */
+#ifdef WIN32
+extern DWORD main_tid;
+#else
 extern pthread_t main_tid;
+#endif
 
 extern void	pgut_help(bool details);
 
