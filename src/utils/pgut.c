@@ -42,7 +42,11 @@ static char	   *password = NULL;
 bool			prompt_password = true;
 bool			force_password = false;
 
+#ifdef WIN32
+DWORD main_tid = 0;
+#else
 pthread_t main_tid = 0;
+#endif
 
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;

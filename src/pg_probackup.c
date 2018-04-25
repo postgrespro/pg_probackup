@@ -202,7 +202,11 @@ main(int argc, char *argv[])
 	/*
 	 * Save main thread's tid. It is used call exit() in case of errors.
 	 */
+#ifdef WIN32
+	main_tid = GetCurrentThreadId();
+#else
 	main_tid = pthread_self();
+#endif
 
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
