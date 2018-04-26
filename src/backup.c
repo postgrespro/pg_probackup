@@ -692,7 +692,7 @@ do_backup_instance(void)
 						   (void *(*)(void *)) remote_backup_files,
 						   arg);
 	}
-
+	
 	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
@@ -1930,7 +1930,7 @@ backup_files(void *arg)
 
 		pgFile *file = (pgFile *) parray_get(arguments->backup_files_list, i);
 		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
-		if (pg_atomic_test_set_flag(&file->lock))
+		if (!pg_atomic_test_set_flag(&file->lock)) 
 			continue;
 
 		/* check for interrupt */
