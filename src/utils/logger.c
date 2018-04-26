@@ -131,6 +131,9 @@ exit_if_necessary(int elevel)
 		/* Interrupt other possible routines */
 		interrupted = true;
 
+		if (loggin_in_progress)
+			pthread_mutex_unlock(&log_file_mutex);
+
 		/* If this is not the main thread then don't call exit() */
 #ifdef WIN32
 		if (main_tid != GetCurrentThreadId())
@@ -250,13 +253,13 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 			va_end(std_args);
 	}
 
+	exit_if_necessary(elevel);
+
 	if (loggin_in_progress)
 	{
 		pthread_mutex_unlock(&log_file_mutex);
 		loggin_in_progress = false;
 	}
-
-	exit_if_necessary(elevel);
 }
 
 /*

@@ -2443,6 +2443,10 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	static uint32 prevtimeline = 0;
 	static XLogRecPtr prevpos = InvalidXLogRecPtr;
 
+	/* check for interrupt */
+	if (interrupted)
+		elog(ERROR, "Interrupted during backup");
+
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
 		elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
