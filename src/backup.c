@@ -383,7 +383,7 @@ remote_backup_files(void *arg)
 		if (S_ISDIR(file->mode))
 			continue;
 
-		if (pg_atomic_test_set_flag(&file->lock))
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		file_backup_conn = pgut_connect_replication(pgut_dbname);

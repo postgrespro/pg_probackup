@@ -139,7 +139,7 @@ pgBackupValidateFiles(void *arg)
 		struct stat st;
 
 		pgFile *file = (pgFile *) parray_get(arguments->files, i);
-		if (pg_atomic_test_set_flag(&file->lock))
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		if (interrupted)
