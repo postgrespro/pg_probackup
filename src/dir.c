@@ -90,7 +90,7 @@ static char *pgdata_exclude_files_non_exclusive[] =
 
 static int BlackListCompare(const void *str1, const void *str2);
 
-static bool dir_check_file(const char *root, pgFile *file, bool exclude);
+static bool dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
 								   bool omit_symlink, parray *black_list);
@@ -401,66 +401,63 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
  * - datafiles
  */
 static bool
-dir_check_file(const char *root, pgFile *file, bool exclude)
+dir_check_file(const char *root, pgFile *file)
 {
 	const char *rel_path;
 	int			i;
 	int			sscanf_res;
 
-	if (exclude)
+	/* Check if we need to exclude file by name */
+	if (S_ISREG(file->mode))
 	{
-		/* Check if we need to exclude file by name */
-		if (S_ISREG(file->mode))
+		if (!exclusive_backup)
 		{
-			if (!exclusive_backup)
-			{
-				for (i = 0; pgdata_exclude_files_non_exclusive[i]; i++)
-					if (strcmp(file->name,
-							   pgdata_exclude_files_non_exclusive[i]) == 0)
-					{
-						/* Skip */
-						elog(VERBOSE, "Excluding file: %s", file->name);
-						return false;
-					}
-			}
-
-			for (i = 0; pgdata_exclude_files[i]; i++)
-				if (strcmp(file->name, pgdata_exclude_files[i]) == 0)
+			for (i = 0; pgdata_exclude_files_non_exclusive[i]; i++)
+				if (strcmp(file->name,
+						   pgdata_exclude_files_non_exclusive[i]) == 0)
 				{
 					/* Skip */
 					elog(VERBOSE, "Excluding file: %s", file->name);
 					return false;
 				}
 		}
-		/*
-		 * If the directory name is in the exclude list, do not list the
-		 * contents.
-		 */
-		else if (S_ISDIR(file->mode))
-		{
-			/*
-			 * If the item in the exclude list starts with '/', compare to
-			 * the absolute path of the directory. Otherwise compare to the
-			 * directory name portion.
-			 */
-			for (i = 0; pgdata_exclude_dir[i]; i++)
+
+		for (i = 0; pgdata_exclude_files[i]; i++)
+			if (strcmp(file->name, pgdata_exclude_files[i]) == 0)
 			{
-				/* Full-path exclude*/
-				if (pgdata_exclude_dir[i][0] == '/')
-				{
-					if (strcmp(file->path, pgdata_exclude_dir[i]) == 0)
-					{
-						elog(VERBOSE, "Excluding directory content: %s",
-							 file->name);
-						return false;
-					}
-				}
-				else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
+				/* Skip */
+				elog(VERBOSE, "Excluding file: %s", file->name);
+				return false;
+			}
+	}
+	/*
+	 * If the directory name is in the exclude list, do not list the
+	 * contents.
+	 */
+	else if (S_ISDIR(file->mode))
+	{
+		/*
+		 * If the item in the exclude list starts with '/', compare to
+		 * the absolute path of the directory. Otherwise compare to the
+		 * directory name portion.
+		 */
+		for (i = 0; pgdata_exclude_dir[i]; i++)
+		{
+			/* Full-path exclude*/
+			if (pgdata_exclude_dir[i][0] == '/')
+			{
+				if (strcmp(file->path, pgdata_exclude_dir[i]) == 0)
 				{
 					elog(VERBOSE, "Excluding directory content: %s",
 						 file->name);
 					return false;
 				}
+			}
+			else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
+			{
+				elog(VERBOSE, "Excluding directory content: %s",
+					 file->name);
+				return false;
 			}
 		}
 	}
@@ -500,19 +497,16 @@ dir_check_file(const char *root, pgFile *file, bool exclude)
 	{
 		file->tblspcOid = DEFAULTTABLESPACE_OID;
 
-		sscanf_res = sscanf(rel_path, "base/%u/", &(file->dbOid));
+		sscanf(rel_path, "base/%u/", &(file->dbOid));
 
 		if (S_ISDIR(file->mode) && strcmp(file->name, "base") != 0)
-		{
 			file->is_database = true;
-			sscanf(rel_path, "base/%u/", &(file->dbOid));
-		}
 	}
 	else if (path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path))
 	{
 		char		tmp_rel_path[MAXPGPATH];
 
-		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%s/%u/",
+		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
 							&(file->tblspcOid), tmp_rel_path,
 							&(file->dbOid));
 
@@ -520,7 +514,9 @@ dir_check_file(const char *root, pgFile *file, bool exclude)
 			strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
 			file->is_database = true;
 	}
-	else if (S_ISREG(file->mode) && strcmp(file->name, "ptrack_init") == 0)
+
+	/* Do not backup ptrack_init files */
+	if (S_ISREG(file->mode) && strcmp(file->name, "ptrack_init") == 0)
 		return false;
 
 	/*
@@ -642,7 +638,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		if (S_ISDIR(file->mode))
 			parray_append(files, file);
 
-		if (!dir_check_file(root, file, exclude))
+		if (exclude && !dir_check_file(root, file))
 		{
 			if (S_ISREG(file->mode))
 				pgFileFree(file);
