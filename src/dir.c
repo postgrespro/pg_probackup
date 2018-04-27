@@ -551,18 +551,20 @@ dir_check_file(const char *root, pgFile *file, bool exclude)
 				if (strcmp(file->forkName, "ptrack") == 0)
 					return false;
 			}
+			else
+			{
+				len = strlen(file->name);
+				/* reloid.cfm */
+				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
+					return true;
 
-			len = strlen(file->name);
-			/* reloid.cfm */
-			if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
-				return true;
-
-			sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
-								&(file->segno), suffix);
-			if (sscanf_res == 0)
-				elog(ERROR, "Cannot parse file name \"%s\"", file->name);
-			else if (sscanf_res == 1 || sscanf_res == 2)
-				file->is_datafile = true;
+				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
+									&(file->segno), suffix);
+				if (sscanf_res == 0)
+					elog(ERROR, "Cannot parse file name \"%s\"", file->name);
+				else if (sscanf_res == 1 || sscanf_res == 2)
+					file->is_datafile = true;
+			}
 		}
 	}
 
