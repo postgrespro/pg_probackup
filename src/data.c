@@ -154,9 +154,9 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 			return 0;
 		}
 		else
-			elog(WARNING, "File: %s, block %u, expected block size %lu,"
-					  "but read %d, try again",
-					   file->path, blknum, read_len, BLCKSZ);
+			elog(WARNING, "File: %s, block %u, expected block size %d,"
+					  "but read %lu, try again",
+					   file->path, blknum, BLCKSZ, read_len);
 	}
 
 	/*
@@ -304,8 +304,8 @@ backup_data_page(backup_files_args *arguments,
 		}
 		else if (page_size != BLCKSZ)
 		{
-			elog(ERROR, "File: %s, block %u, expected block size %lu, but read %d",
-					   file->path, absolute_blknum, page_size, BLCKSZ);
+			elog(ERROR, "File: %s, block %u, expected block size %d, but read %lu",
+					   file->path, absolute_blknum, BLCKSZ, page_size);
 		}
 		else
 		{
