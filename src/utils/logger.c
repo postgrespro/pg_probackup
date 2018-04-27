@@ -132,7 +132,10 @@ exit_if_necessary(int elevel)
 		interrupted = true;
 
 		if (loggin_in_progress)
+		{
+			loggin_in_progress = false;
 			pthread_mutex_unlock(&log_file_mutex);
+		}
 
 		/* If this is not the main thread then don't call exit() */
 #ifdef WIN32
@@ -171,11 +174,8 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	/*
 	 * There is no need to lock if this is elog() from upper elog().
 	 */
-	if (!loggin_in_progress)
-	{
-		pthread_mutex_lock(&log_file_mutex);
-		loggin_in_progress = true;
-	}
+	pthread_mutex_lock(&log_file_mutex);
+	loggin_in_progress = true;
 
 	/* We need copy args only if we need write to error log file */
 	if (write_to_error_log)
@@ -255,11 +255,8 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 
 	exit_if_necessary(elevel);
 
-	if (loggin_in_progress)
-	{
-		pthread_mutex_unlock(&log_file_mutex);
-		loggin_in_progress = false;
-	}
+	loggin_in_progress = false;
+	pthread_mutex_unlock(&log_file_mutex);
 }
 
 /*
