@@ -2162,8 +2162,6 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 					unlogged_file = (pgFile *) parray_get(files,
 														  unlogged_file_num);
 				}
-
-				continue;
 			}
 		}
 
