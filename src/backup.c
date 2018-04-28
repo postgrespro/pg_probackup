@@ -1244,7 +1244,7 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 	char	   *dbname;
 	PGresult   *res_db;
 	PGresult   *res;
-	char	   *result;
+	bool		result;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -1277,13 +1277,17 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 
 	if (PQnfields(res) != 1)
 		elog(ERROR, "cannot perform pg_ptrack_get_and_clear_db()");
-	
-	result = PQgetvalue(res, 0, 0);
+
+	if (!parse_bool(PQgetvalue(res, 0, 0), &result))
+		elog(ERROR,
+			 "result of pg_ptrack_get_and_clear_db() is invalid: %s",
+			 PQgetvalue(res, 0, 0));
+
 	PQclear(res);
 	pfree(params[0]);
 	pfree(params[1]);
 
-	return (strcmp(result, "t") == 0);
+	return result;
 }
 
 /* Read and clear ptrack files of the target relation.
@@ -1791,11 +1795,11 @@ pg_stop_backup(pgBackup *backup)
 		if (sscanf(PQgetvalue(res, 0, 0), XID_FMT, &recovery_xid) != 1)
 			elog(ERROR,
 				 "result of txid_snapshot_xmax() is invalid: %s",
-				 PQerrorMessage(conn));
+				 PQgetvalue(res, 0, 0));
 		if (!parse_time(PQgetvalue(res, 0, 1), &recovery_time))
 			elog(ERROR,
 				 "result of current_timestamp is invalid: %s",
-				 PQerrorMessage(conn));
+				 PQgetvalue(res, 0, 1));
 
 		/* Get content for tablespace_map from stop_backup results
 		 * in case of non-exclusive backup
