@@ -2149,9 +2149,6 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 
 				unlogged_file_reloid = file->relOid;
 
-				pgFileFree(file);
-				parray_remove(files, i);
-
 				while (unlogged_file_num >= 0 &&
 					   (unlogged_file_reloid != 0) &&
 					   (unlogged_file->relOid == unlogged_file_reloid))
