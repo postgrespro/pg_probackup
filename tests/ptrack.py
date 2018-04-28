@@ -171,7 +171,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
+            pgdata_restored = self.pgdata_content(
+                node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node_restored.append_conf(
@@ -1746,7 +1747,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(
                 backup_dir, 'node', node, backup_type='ptrack',
-                options=["--stream", "-j 30"]
+                options=[
+                    "--stream", "-j 30",
+                    "--log-level-file=verbose"]
             )
             # we should die here because exception is what we expect to happen
             self.assertEqual(

@@ -94,7 +94,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         conn = node.connect()
         with node.connect("postgres") as conn:
 
-            conn.execute("create unlogged table test as select generate_series(0,50050000)::text")
+            conn.execute("create unlogged table test as select generate_series(0,5005000)::text")
             conn.commit()
 
             conn.execute("create index test_idx on test (generate_series)")

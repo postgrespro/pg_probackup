@@ -207,7 +207,6 @@ class ProbackupTest(object):
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
-        print(node.data_dir)
 
         # Sane default parameters, not a shit with fsync = off from testgres
         node.append_conf("postgresql.auto.conf", "max_connections = 100")

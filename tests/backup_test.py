@@ -439,7 +439,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.create_tblspace_in_node(
             node, 'tblspace1',
-            tblspc_path=(os.path.join(node.data_dir, 'pg_clog', '100500'))
+            tblspc_path=(
+                os.path.join(
+                    node.data_dir, 'somedirectory', '100500'))
             )
 
         self.create_tblspace_in_node(

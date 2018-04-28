@@ -246,7 +246,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_pgpro434_3(self):
-        """Check pg_stop_backup_timeout"""
+        """Check pg_stop_backup_timeout, needed backup_timeout"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -466,6 +466,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Settings for Replica
         self.restore_node(backup_dir, 'master', replica)
         self.set_replica(master, replica, synchronous=True)
+        self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.start()
 
@@ -481,7 +482,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(256,512) i")
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
         # ADD INSTANCE 'REPLICA'
-        self.add_instance(backup_dir, 'replica', replica)
+
+        sleep(1)
+
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
             options=[
