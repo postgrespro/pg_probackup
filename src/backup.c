@@ -2560,9 +2560,9 @@ StreamLog(void *arg)
 #endif
 	}
 #else
-	if(ReceiveXlogStream(stream_arg->conn, startpos, starttli, NULL, basedir,
-						 stop_streaming, standby_message_timeout, NULL,
-						 false, false) == false)
+	if(ReceiveXlogStream(stream_arg->conn, startpos, starttli, NULL,
+						 (char *) stream_arg->basedir, stop_streaming,
+						 standby_message_timeout, NULL, false, false) == false)
 		elog(ERROR, "Problem in receivexlog");
 #endif
 
