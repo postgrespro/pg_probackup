@@ -208,11 +208,12 @@ class ProbackupTest(object):
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
 
-        # Sane default parameters, not a shit with fsync = off from testgres
+        # Sane default parameters
         node.append_conf("postgresql.auto.conf", "max_connections = 100")
         node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
         node.append_conf("postgresql.auto.conf", "fsync = on")
         node.append_conf("postgresql.auto.conf", "wal_level = minimal")
+        node.append_conf("postgresql.auto.conf", "hot_standby = 'off'")
 
         node.append_conf(
             "postgresql.auto.conf", "log_line_prefix = '%t [%p]: [%l-1] '")
@@ -742,10 +743,10 @@ class ProbackupTest(object):
         else:
             archive_mode = 'on'
 
-        node.append_conf(
-            "postgresql.auto.conf",
-            "wal_level = archive"
-        )
+        # node.append_conf(
+        #     "postgresql.auto.conf",
+        #     "wal_level = archive"
+        # )
         node.append_conf(
                 "postgresql.auto.conf",
                 "archive_mode = {0}".format(archive_mode)

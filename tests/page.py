@@ -133,8 +133,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
+                'checkpoint_timeout': '30s'}
             )
 
         self.init_pb(backup_dir)
@@ -213,8 +212,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
+                'checkpoint_timeout': '30s'}
             )
 
         self.init_pb(backup_dir)
@@ -250,7 +248,10 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=full_backup_id,
-                options=["-j", "4"]),
+                options=[
+                    "-j", "4",
+                    "--immediate",
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.start()
@@ -264,7 +265,10 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=page_backup_id,
-                options=["-j", "4"]),
+                options=[
+                    "-j", "4",
+                    "--immediate",
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.start()
@@ -290,7 +294,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
-                'ptrack_enable': 'on',
                 'fsync': 'off',
                 'shared_buffers': '1GB',
                 'maintenance_work_mem': '1GB',

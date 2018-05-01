@@ -640,7 +640,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
+                'wal_level': 'logical',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
@@ -668,7 +668,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         pgdata_master = self.pgdata_content(master.data_dir)
 
         # Settings for Replica
-        self.restore_node(backup_dir, 'master', replica)
+        self.restore_node(
+            backup_dir, 'master', replica,
+            options=['--recovery-target-action=promote'])
         # CHECK PHYSICAL CORRECTNESS on REPLICA
         pgdata_replica = self.pgdata_content(replica.data_dir)
         self.compare_pgdata(pgdata_master, pgdata_replica)
@@ -723,7 +725,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
+                'wal_level': 'logical',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
