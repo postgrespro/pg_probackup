@@ -834,16 +834,6 @@ create_recovery_conf(time_t backup_id,
 		if (rt->recovery_target_immediate)
 			fprintf(fp, "recovery_target = 'immediate'\n");
 
-		/*
-		 * If 'backup_id' is provided and no other recovery target option is specified,
-		 * end recovery as soon as a consistent state is reached.
-		 */
-		if ((backup_id != 0) &&
-			(!(rt->time_specified || rt->xid_specified || rt->recovery_target_name)))
-		{
-			fprintf(fp, "recovery_target = 'immediate'\n");
-		}
-
 		if (rt->inclusive_specified)
 			fprintf(fp, "recovery_target_inclusive = '%s'\n",
 					rt->recovery_target_inclusive?"true":"false");
