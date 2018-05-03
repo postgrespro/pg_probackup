@@ -188,7 +188,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('ORPHAN', self.show_pb(backup_dir, 'node', backup_id_3)['status'], 'Backup STATUS should be "ORPHAN"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups(self):
@@ -271,7 +271,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('ORPHAN', self.show_pb(backup_dir, 'node', backup_id_3)['status'], 'Backup STATUS should be "ORPHAN"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups_1(self):
@@ -468,7 +468,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_specific_target_corrupted_intermediate_backups(self):
@@ -598,7 +598,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_8)['status'], 'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_page(self):
@@ -746,7 +746,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_full(self):
@@ -822,7 +822,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_5)['status'], 'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_corrupt_wal_1(self):
@@ -1212,7 +1212,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup {0} should have STATUS "ERROR"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_pgpro702_688(self):

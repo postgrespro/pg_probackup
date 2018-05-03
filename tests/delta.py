@@ -191,7 +191,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node_restored.start()
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_delta_vacuum_truncate_3(self):
@@ -269,7 +269,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node_restored.start()
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_delta_stream(self):
@@ -326,7 +326,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(full_backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                backup_id=full_backup_id, options=["-j", "4"]),
+                backup_id=full_backup_id,
+                options=[
+                    "-j", "4", "--immediate",
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
         node.start()
@@ -339,7 +342,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(delta_backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                backup_id=delta_backup_id, options=["-j", "4"]),
+                backup_id=delta_backup_id,
+                options=[
+                    "-j", "4", "--immediate",
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
         node.start()
@@ -403,7 +409,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(full_backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                backup_id=full_backup_id, options=["-j", "4"]),
+                backup_id=full_backup_id,
+                options=[
+                    "-j", "4", "--immediate",
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.start()
@@ -416,7 +425,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(delta_backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                backup_id=delta_backup_id, options=["-j", "4"]),
+                backup_id=delta_backup_id,
+                options=[
+                    "-j", "4", "--immediate",
+                    "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.start()
@@ -673,7 +685,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             'node',
             node_restored,
             backup_id=backup_id,
-            options=["-j", "4", "--log-level-file=verbose"])
+            options=[
+                "-j", "4", "--log-level-file=verbose",
+                "--immediate",
+                "--recovery-target-action=promote"])
 
         # COMPARE PHYSICAL CONTENT
         if self.paranoia:
@@ -704,7 +719,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             'node',
             node_restored,
             backup_id=backup_id,
-            options=["-j", "4", "--log-level-file=verbose"]
+            options=[
+                "-j", "4", "--log-level-file=verbose",
+                "--immediate",
+                "--recovery-target-action=promote"]
         )
 
         # COMPARE PHYSICAL CONTENT
@@ -828,7 +846,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             'node',
             node_restored,
             backup_id=backup_id,
-            options=["-j", "4", "--log-level-file=verbose"])
+            options=[
+                "-j", "4", "--log-level-file=verbose",
+                "--immediate",
+                "--recovery-target-action=promote"])
 
         # COMPARE PHYSICAL CONTENT
         if self.paranoia:

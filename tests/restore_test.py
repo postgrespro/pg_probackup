@@ -243,7 +243,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(before, after)
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_restore_to_xid_inclusive(self):
@@ -1161,4 +1161,4 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(result, result_new)
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
