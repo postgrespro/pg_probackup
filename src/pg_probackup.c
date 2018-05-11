@@ -181,12 +181,12 @@ main(int argc, char *argv[])
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
 	int			rc;
-
 	/* initialize configuration */
 	pgBackup_init(&current);
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], "pgscripts");
+
 
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)

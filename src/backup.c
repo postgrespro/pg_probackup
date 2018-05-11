@@ -287,7 +287,7 @@ static void	remote_copy_file(PGconn *conn, pgFile* file)
 					DATABASE_DIR);
 	join_path_components(to_path, database_path, file->path);
 
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -562,6 +562,7 @@ do_backup_instance(void)
 #ifdef WIN32
 		sleep(10);
 #endif
+
 		if (conn == NULL)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
 
@@ -1715,7 +1716,7 @@ pg_stop_backup(pgBackup *backup)
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-			fp = fopen(backup_label, "w");
+			fp = fopen(backup_label, PG_BINARY_W);
 			if (fp == NULL)
 				elog(ERROR, "can't open backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
@@ -1763,7 +1764,7 @@ pg_stop_backup(pgBackup *backup)
 			char		tablespace_map[MAXPGPATH];
 
 			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fopen(tablespace_map, "w");
+			fp = fopen(tablespace_map, PG_BINARY_W);
 			if (fp == NULL)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));

@@ -216,7 +216,7 @@ pgFileGetCRC(pgFile *file)
 	int			errno_tmp;
 
 	/* open file in binary read mode */
-	fp = fopen(file->path, "r");
+	fp = fopen(file->path, PG_BINARY_R);
 	if (fp == NULL)
 		elog(ERROR, "cannot open file \"%s\": %s",
 			file->path, strerror(errno));
@@ -333,7 +333,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fopen(path, "r");
+		black_list_file = fopen(path, PG_BINARY_R);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));

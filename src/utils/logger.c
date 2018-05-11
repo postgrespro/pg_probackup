@@ -515,7 +515,7 @@ open_logfile(FILE **file, const char *filename_format)
 			{
 				char		buf[1024];
 
-				control_file = fopen(control, "r");
+				control_file = fopen(control, PG_BINARY_R);
 				if (control_file == NULL)
 					elog(ERROR, "cannot open rotation file \"%s\": %s",
 						 control, strerror(errno));
@@ -561,7 +561,7 @@ logfile_open:
 	{
 		time_t		timestamp = time(NULL);
 
-		control_file = fopen(control, "w");
+		control_file = fopen(control, PG_BINARY_W);
 		if (control_file == NULL)
 			elog(ERROR, "cannot open rotation file \"%s\": %s",
 				 control, strerror(errno));

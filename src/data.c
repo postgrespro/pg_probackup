@@ -421,7 +421,7 @@ backup_data_file(backup_files_args* arguments,
 	INIT_CRC32C(file->crc);
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(file->crc);
@@ -455,7 +455,7 @@ backup_data_file(backup_files_args* arguments,
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -547,7 +547,7 @@ restore_data_file(const char *from_root,
 	BlockNumber			blknum;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
@@ -562,7 +562,7 @@ restore_data_file(const char *from_root,
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	out = fopen(to_path, "r+");
 	if (out == NULL && errno == ENOENT)
-		out = fopen(to_path, "w");
+		out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -694,7 +694,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(crc);
@@ -710,7 +710,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -1189,7 +1189,7 @@ calc_file_checksum(pgFile *file)
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(crc);
