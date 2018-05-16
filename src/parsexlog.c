@@ -333,7 +333,7 @@ validate_wal(pgBackup *backup,
 	 */
 	if (backup->stream)
 	{
-		sprintf(backup_xlog_path, "/%s/%s/%s/%s",
+		snprintf(backup_xlog_path, sizeof(backup_xlog_path), "/%s/%s/%s/%s",
 				backup_instance_path, backup_id, DATABASE_DIR, PG_XLOG_DIR);
 
 		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli);
