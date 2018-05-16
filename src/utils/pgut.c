@@ -1690,11 +1690,19 @@ pgut_execute_parallel(PGconn* conn,
 
 	return res;
 }
+
 PGresult *
-pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
-			 bool text_result)
+pgut_execute(PGconn* conn, const char *query, int nParams, const char **params)
+{
+	return pgut_execute_extended(conn, query, nParams, params, true, false);
+}
+
+PGresult *
+pgut_execute_extended(PGconn* conn, const char *query, int nParams,
+					  const char **params, bool text_result, bool ok_error)
 {
 	PGresult   *res;
+	ExecStatusType res_status;
 
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
@@ -1730,13 +1738,17 @@ pgut_execute(PGconn* conn, const char *query, int nParams, const char **params,
 						   (text_result) ? 0 : 1);
 	on_after_exec(NULL);
 
-	switch (PQresultStatus(res))
+	res_status = PQresultStatus(res);
+	switch (res_status)
 	{
 		case PGRES_TUPLES_OK:
 		case PGRES_COMMAND_OK:
 		case PGRES_COPY_IN:
 			break;
 		default:
+			if (ok_error && res_status == PGRES_FATAL_ERROR)
+				break;
+
 			elog(ERROR, "query failed: %squery was: %s",
 				 PQerrorMessage(conn), query);
 			break;

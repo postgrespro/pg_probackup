@@ -251,7 +251,7 @@ main(int argc, char *argv[])
 			if (argc == 2)
 			{
 #ifdef PGPRO_VERSION
-				fprintf(stderr, "%s %s (PostgresPro %s %s)\n",
+				fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
 						PROGRAM_NAME, PROGRAM_VERSION,
 						PGPRO_VERSION, PGPRO_EDITION);
 #else

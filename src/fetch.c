@@ -95,8 +95,8 @@ fetchFile(PGconn *conn, const char *filename, size_t *filesize)
 	int			len;
 
 	params[0] = filename;
-	res = pgut_execute(conn, "SELECT pg_catalog.pg_read_binary_file($1)",
-					   1, params, false);
+	res = pgut_execute_extended(conn, "SELECT pg_catalog.pg_read_binary_file($1)",
+								1, params, false, false);
 
 	/* sanity check the result set */
 	if (PQntuples(res) != 1 || PQgetisnull(res, 0, 0))
