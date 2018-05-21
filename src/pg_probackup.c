@@ -47,7 +47,6 @@ char	   *replication_slot = NULL;
 /* backup options */
 bool		backup_logs = false;
 bool		smooth_checkpoint;
-bool		from_replica = false;
 bool		is_remote_backup = false;
 /* Wait timeout for WAL segment archiving */
 uint32		archive_timeout = 300;		/* default is 300 seconds */
@@ -83,7 +82,7 @@ uint32		retention_window = 0;
 /* compression options */
 CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
 int			compress_level = DEFAULT_COMPRESS_LEVEL;
-bool 		compress_shortcut = false;
+bool		compress_shortcut = false;
 
 /* other options */
 char	   *instance_name;
@@ -93,6 +92,9 @@ uint64		system_identifier = 0;
 static char *wal_file_path;
 static char *wal_file_name;
 static bool	file_overwrite = false;
+
+/* show options */
+ShowFormat show_format = SHOW_PLAIN;
 
 /* current settings */
 pgBackup	current;
@@ -104,6 +106,7 @@ static void opt_backup_mode(pgut_option *opt, const char *arg);
 static void opt_log_level_console(pgut_option *opt, const char *arg);
 static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
+static void opt_show_format(pgut_option *opt, const char *arg);
 
 static void compress_init(void);
 
@@ -178,6 +181,8 @@ static pgut_option options[] =
 	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
 	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },
 	{ 'b', 162, "overwrite",			&file_overwrite,	SOURCE_CMDLINE },
+	/* show options */
+	{ 'f', 170, "format",				opt_show_format,	SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -517,49 +522,31 @@ opt_log_level_file(pgut_option *opt, const char *arg)
 	log_level_file = parse_log_level(arg);
 }
 
-CompressAlg
-parse_compress_alg(const char *arg)
+static void
+opt_show_format(pgut_option *opt, const char *arg)
 {
+	const char *v = arg;
 	size_t		len;
 
 	/* Skip all spaces detected */
-	while (isspace((unsigned char)*arg))
-		arg++;
-	len = strlen(arg);
+	while (IsSpace(*v))
+		v++;
+	len = strlen(v);
 
-	if (len == 0)
-		elog(ERROR, "compress algrorithm is empty");
-
-	if (pg_strncasecmp("zlib", arg, len) == 0)
-		return ZLIB_COMPRESS;
-	else if (pg_strncasecmp("pglz", arg, len) == 0)
-		return PGLZ_COMPRESS;
-	else if (pg_strncasecmp("none", arg, len) == 0)
-		return NONE_COMPRESS;
-	else
-		elog(ERROR, "invalid compress algorithm value \"%s\"", arg);
-
-	return NOT_DEFINED_COMPRESS;
-}
-
-const char*
-deparse_compress_alg(int alg)
-{
-	switch (alg)
+	if (len > 0)
 	{
-		case NONE_COMPRESS:
-		case NOT_DEFINED_COMPRESS:
-			return "none";
-		case ZLIB_COMPRESS:
-			return "zlib";
-		case PGLZ_COMPRESS:
-			return "pglz";
+		if (pg_strncasecmp("plain", v, len) == 0)
+			show_format = SHOW_PLAIN;
+		else if (pg_strncasecmp("json", v, len) == 0)
+			show_format = SHOW_JSON;
+		else
+			elog(ERROR, "Invalid show format \"%s\"", arg);
 	}
-
-	return NULL;
+	else
+		elog(ERROR, "Invalid show format \"%s\"", arg);
 }
 
-void
+static void
 opt_compress_alg(pgut_option *opt, const char *arg)
 {
 	compress_alg = parse_compress_alg(arg);
@@ -568,8 +555,8 @@ opt_compress_alg(pgut_option *opt, const char *arg)
 /*
  * Initialize compress and sanity checks for compress.
  */
-static
-void compress_init(void)
+static void
+compress_init(void)
 {
 	/* Default algorithm is zlib */
 	if (compress_shortcut)

@@ -128,6 +128,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s show -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
+	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
@@ -362,6 +363,7 @@ help_show(void)
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     show info about specific intstance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
+	printf(_("      --format=format              show format=PLAIN|JSON\n"));
 }
 
 static void

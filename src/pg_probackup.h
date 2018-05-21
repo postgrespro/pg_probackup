@@ -149,6 +149,12 @@ typedef enum ProbackupSubcmd
 	SHOW_CONFIG
 } ProbackupSubcmd;
 
+typedef enum ShowFormat
+{
+	SHOW_PLAIN,
+	SHOW_JSON
+} ShowFormat;
+
 
 /* special values of pgBackup fields */
 #define INVALID_BACKUP_ID	 0    /* backup ID is not provided by user */
@@ -214,6 +220,9 @@ typedef struct pgBackup
 	/* Size of WAL files in archive needed to restore this backup */
 	int64			wal_bytes;
 
+	CompressAlg		compress_alg;
+	int				compress_level;
+
 	/* Fields needed for compatibility check */
 	uint32			block_size;
 	uint32			wal_block_size;
@@ -221,13 +230,14 @@ typedef struct pgBackup
 
 	char			server_version[100];
 
-	bool			stream; 		/* Was this backup taken in stream mode?
+	bool			stream;			/* Was this backup taken in stream mode?
 									 * i.e. does it include all needed WAL files? */
+	bool			from_replica;	/* Was this backup taken from replica */
 	time_t			parent_backup; 	/* Identifier of the previous backup.
 									 * Which is basic backup for this
 									 * incremental backup. */
-	char			*primary_conninfo; /* Connection parameters of the backup
-										* in the format suitable for recovery.conf */
+	char		   *primary_conninfo; /* Connection parameters of the backup
+									   * in the format suitable for recovery.conf */
 } pgBackup;
 
 /* Recovery target for restore and validate subcommands */
@@ -310,7 +320,6 @@ extern char	   *replication_slot;
 /* backup options */
 extern bool		smooth_checkpoint;
 extern uint32	archive_timeout;
-extern bool		from_replica;
 extern bool		is_remote_backup;
 extern const char *master_db;
 extern const char *master_host;
@@ -347,6 +356,9 @@ extern const char* deparse_compress_alg(int alg);
 /* other options */
 extern char *instance_name;
 extern uint64 system_identifier;
+
+/* show options */
+extern ShowFormat show_format;
 
 /* current settings */
 extern pgBackup current;
