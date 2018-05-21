@@ -15,6 +15,7 @@
 #include "pqexpbuffer.h"
 
 #include <assert.h>
+#include <pthread.h>
 #include <sys/time.h>
 
 #include "logger.h"
@@ -93,6 +94,13 @@ extern const char  *PROGRAM_VERSION;
 extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
 
+/* ID of the main thread */
+#ifdef WIN32
+extern DWORD main_tid;
+#else
+extern pthread_t main_tid;
+#endif
+
 extern void	pgut_help(bool details);
 
 /*
@@ -118,6 +126,7 @@ extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
 /*
  * Database connections
  */
+extern char *pgut_get_conninfo_string(PGconn *conn);
 extern PGconn *pgut_connect(const char *dbname);
 extern PGconn *pgut_connect_extended(const char *pghost, const char *pgport,
 									 const char *dbname, const char *login);
@@ -126,7 +135,9 @@ extern PGconn *pgut_connect_replication_extended(const char *pghost, const char 
 									 const char *dbname, const char *pguser);
 extern void pgut_disconnect(PGconn *conn);
 extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams,
-							  const char **params, bool text_result);
+							  const char **params);
+extern PGresult *pgut_execute_extended(PGconn* conn, const char *query, int nParams,
+							  const char **params, bool text_result, bool ok_error);
 extern PGresult *pgut_execute_parallel(PGconn* conn, PGcancel* thread_cancel_conn, 
 							  const char *query, int nParams,
 							  const char **params, bool text_result);

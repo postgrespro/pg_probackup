@@ -204,7 +204,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     file) in e.message and
                 "WARNING: Backup {0} data files are corrupted\n".format(
                     backup_id) in e.message and
-                "INFO: Some backups are not valid\n" in e.message,
+                "WARNING: Some backups are not valid\n" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -338,7 +338,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
             self.assertIn('block 1, try to fetch via SQL', log_content)
-            self.assertIn('SELECT pg_ptrack_get_block', log_content)
+            self.assertIn('SELECT pg_catalog.pg_ptrack_get_block', log_content)
             f.close
 
         self.assertTrue(
@@ -410,7 +410,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "calculated checksum" in e.message and
                 "ERROR: query failed: "
                 "ERROR:  invalid page in block" in e.message and
-                "query was: SELECT pg_ptrack_get_block_2" in e.message,
+                "query was: SELECT pg_catalog.pg_ptrack_get_block_2" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -422,7 +422,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    @unittest.expectedFailure
     def test_tablespace_in_pgdata_pgpro_1376(self):
         """PGPRO-1376 """
         fname = self.id().split('.')[3]
@@ -440,23 +439,63 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.create_tblspace_in_node(
             node, 'tblspace1',
-            tblspc_path=(os.path.join(node.data_dir, 'pg_clog', '100500'))
+            tblspc_path=(
+                os.path.join(
+                    node.data_dir, 'somedirectory', '100500'))
+            )
+
+        self.create_tblspace_in_node(
+            node, 'tblspace2',
+            tblspc_path=(os.path.join(node.data_dir))
             )
 
         node.safe_psql(
             "postgres",
-            "create table t_heap tablespace tblspace1 as select 1 as id, "
+            "create table t_heap1 tablespace tblspace1 as select 1 as id, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1000) i")
 
+        node.safe_psql(
+            "postgres",
+            "create table t_heap2 tablespace tblspace2 as select 1 as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type="full",
+                options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of too many levels "
+                "of symbolic linking\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'Too many levels of symbolic links' in e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        node.safe_psql(
+            "postgres",
+            "drop table t_heap2")
+        node.safe_psql(
+            "postgres",
+            "drop tablespace tblspace2")
+
         self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
-            options=["-j", "4", "--stream"])
+                backup_dir, 'node', node, backup_type="full",
+                options=["-j", "4", "--stream"])
+
+        pgdata = self.pgdata_content(node.data_dir)
 
         relfilenode = node.safe_psql(
             "postgres",
-            "select 't_heap'::regclass::oid"
+            "select 't_heap1'::regclass::oid"
             ).rstrip()
 
         list = []
@@ -466,7 +505,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     path = os.path.join(root, file)
                     list = list + [path]
 
-        if len(list) > 0:
+        # We expect that relfilenode occures only once
+        if len(list) > 1:
             message = ""
             for string in list:
                 message = message + string + "\n"
@@ -475,3 +515,12 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "Following file copied twice by backup:\n {0}".format(
                     message)
                 )
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4"])
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)

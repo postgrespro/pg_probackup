@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.16";
+const char *PROGRAM_VERSION	= "2.0.17";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -62,6 +62,13 @@ static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
+static bool			target_immediate;
+static char		   *target_name = NULL;
+static char		   *target_action = NULL;;
+
+static pgRecoveryTarget *recovery_target_options = NULL;
+
+bool restore_as_replica = false;
 
 /* delete options */
 bool		delete_wal = false;
@@ -132,6 +139,10 @@ static pgut_option options[] =
 	{ 's', 22, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
 	{ 'u', 23, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
+	{ 'b', 24, "immediate",				&target_immediate,	SOURCE_CMDLINE },
+	{ 's', 25, "recovery-target-name",	&target_name,		SOURCE_CMDLINE },
+	{ 's', 26, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
+	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
@@ -188,6 +199,15 @@ main(int argc, char *argv[])
 	PROGRAM_NAME = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], "pgscripts");
 
+	/*
+	 * Save main thread's tid. It is used call exit() in case of errors.
+	 */
+#ifdef WIN32
+	main_tid = GetCurrentThreadId();
+#else
+	main_tid = pthread_self();
+#endif
+
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
 	{
@@ -231,7 +251,7 @@ main(int argc, char *argv[])
 			if (argc == 2)
 			{
 #ifdef PGPRO_VERSION
-				fprintf(stderr, "%s %s (PostgresPro %s %s)\n",
+				fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
 						PROGRAM_NAME, PROGRAM_VERSION,
 						PGPRO_VERSION, PGPRO_EDITION);
 #else
@@ -310,9 +330,6 @@ main(int argc, char *argv[])
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
-	/* Initialize logger */
-	init_logger(backup_path);
-
 	/* command was initialized for a few commands */
 	if (command)
 	{
@@ -365,6 +382,9 @@ main(int argc, char *argv[])
 		pgut_readopt(path, options, ERROR);
 	}
 
+	/* Initialize logger */
+	init_logger(backup_path);
+
 	/*
 	 * We have read pgdata path from command line or from configuration file.
 	 * Ensure that pgdata is an absolute path.
@@ -406,8 +426,13 @@ main(int argc, char *argv[])
 		pgdata_exclude_dir[i] = "pg_log";
 	}
 
-	if (target_time != NULL && target_xid != NULL)
-		elog(ERROR, "You can't specify recovery-target-time and recovery-target-xid at the same time");
+	if (backup_subcmd == VALIDATE || backup_subcmd == RESTORE)
+	{
+		/* parse all recovery target options into recovery_target_options structure */
+		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
+								   target_inclusive, target_tli, target_immediate,
+								   target_name, target_action);
+	}
 
 	if (num_threads < 1)
 		num_threads = 1;
@@ -443,16 +468,14 @@ main(int argc, char *argv[])
 			}
 		case RESTORE:
 			return do_restore_or_validate(current.backup_id,
-						  target_time, target_xid,
-						  target_inclusive, target_tli,
+						  recovery_target_options,
 						  true);
 		case VALIDATE:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
 				return do_validate_all();
 			else
 				return do_restore_or_validate(current.backup_id,
-						  target_time, target_xid,
-						  target_inclusive, target_tli,
+						  recovery_target_options,
 						  false);
 		case SHOW:
 			return do_show(current.backup_id);

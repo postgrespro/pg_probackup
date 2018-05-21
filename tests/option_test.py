@@ -50,12 +50,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         """check options test"""
         fname = self.id().split(".")[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'})
-        try:
-            node.stop()
-        except:
-            pass
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -115,13 +111,16 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    #@unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_options_5(self):
         """check options test"""
         fname = self.id().split(".")[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'})
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            pg_options={
+                'wal_level': 'logical',
+                'max_wal_senders': '2'})
 
         self.assertEqual("INFO: Backup catalog '{0}' successfully inited\n".format(backup_dir),
             self.init_pb(backup_dir))

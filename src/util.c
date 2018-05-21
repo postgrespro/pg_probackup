@@ -149,7 +149,7 @@ get_remote_system_identifier(PGconn *conn)
 
 	res = pgut_execute(conn,
 					   "SELECT system_identifier FROM pg_catalog.pg_control_system()",
-					   0, NULL, true);
+					   0, NULL);
 	val = PQgetvalue(res, 0, 0);
 	if (!parse_uint64(val, &system_id_conn, 0))
 	{
@@ -315,5 +315,6 @@ pgBackup_init(pgBackup *backup)
 	backup->wal_block_size = XLOG_BLCKSZ;
 	backup->stream = false;
 	backup->parent_backup = 0;
+	backup->primary_conninfo = NULL;
 	backup->server_version[0] = '\0';
 }

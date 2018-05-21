@@ -21,7 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 
-static const char *backupModes[] = {"", "PAGE", "PTRACK", "FULL"};
+static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
 
 static bool exit_hook_registered = false;
@@ -437,6 +437,10 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* 'parent_backup' is set if it is incremental backup */
 	if (backup->parent_backup != 0)
 		fprintf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
+
+	/* print connection info except password */
+	if (backup->primary_conninfo)
+		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 }
 
 /* create BACKUP_CONTROL_FILE */
@@ -498,6 +502,7 @@ readBackupControlFile(const char *path)
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
 		{'u', 0, "compress-level",		&compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&from_replica, SOURCE_FILE_STRICT},
+		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -593,6 +598,8 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_DIFF_PAGE;
 	else if (len > 0 && pg_strncasecmp("ptrack", v, len) == 0)
 		return BACKUP_MODE_DIFF_PTRACK;
+	else if (len > 0 && pg_strncasecmp("delta", v, len) == 0)
+		return BACKUP_MODE_DIFF_DELTA;
 
 	/* Backup mode is invalid, so leave with an error */
 	elog(ERROR, "invalid backup-mode \"%s\"", value);
@@ -610,6 +617,8 @@ deparse_backup_mode(BackupMode mode)
 			return "page";
 		case BACKUP_MODE_DIFF_PTRACK:
 			return "ptrack";
+		case BACKUP_MODE_DIFF_DELTA:
+			return "delta";
 		case BACKUP_MODE_INVALID:
 			return "invalid";
 	}

@@ -74,7 +74,7 @@ class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
         """
         Case: Restore empty tablespace from valid full backup.
         """
-        self.node.stop({"-m": "immediate"})
+        self.node.stop(["-m", "immediate"])
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 

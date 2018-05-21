@@ -4,6 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
 from sys import exit
+import time
 
 
 module_name = 'validate'
@@ -14,9 +15,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_validate_wal_unreal_values(self):
-        """make node with archiving, make archive backup, validate to both real and unreal values"""
+        """
+        make node with archiving, make archive backup
+        validate to both real and unreal values
+        """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -43,23 +48,36 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        target_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
+        target_time = self.show_pb(
+            backup_dir, 'node', backup_id)['recovery-time']
         after_backup_time = datetime.now().replace(second=0, microsecond=0)
 
         # Validate to real time
-        self.assertIn("INFO: backup validation completed successfully",
-            self.validate_pb(backup_dir, 'node', options=["--time={0}".format(target_time)]),
-            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
+        self.assertIn(
+            "INFO: backup validation completed successfully",
+            self.validate_pb(
+                backup_dir, 'node',
+                options=["--time={0}".format(target_time)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
 
         # Validate to unreal time
         unreal_time_1 = after_backup_time - timedelta(days=2)
         try:
-            self.validate_pb(backup_dir, 'node', options=["--time={0}".format(unreal_time_1)])
-            self.assertEqual(1, 0, "Expecting Error because of validation to unreal time.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.validate_pb(
+                backup_dir, 'node', options=["--time={0}".format(
+                    unreal_time_1)])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of validation to unreal time.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message, 'ERROR: Full backup satisfying target options is not found.\n',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertEqual(
+                e.message,
+                'ERROR: Full backup satisfying target options is not found.\n',
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Validate to unreal time #2
         unreal_time_2 = after_backup_time + timedelta(days=2)
@@ -170,7 +188,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('ORPHAN', self.show_pb(backup_dir, 'node', backup_id_3)['status'], 'Backup STATUS should be "ORPHAN"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups(self):
@@ -253,7 +271,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('ORPHAN', self.show_pb(backup_dir, 'node', backup_id_3)['status'], 'Backup STATUS should be "ORPHAN"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups_1(self):
@@ -450,7 +468,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_specific_target_corrupted_intermediate_backups(self):
@@ -580,7 +598,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_8)['status'], 'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_page(self):
@@ -707,7 +725,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
             self.assertTrue(
-                'INFO: Some backups are not valid' in e.message,
+                'WARNING: Some backups are not valid' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -728,7 +746,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_full(self):
@@ -804,7 +822,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_5)['status'], 'Backup STATUS should be "OK"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_corrupt_wal_1(self):
@@ -944,7 +962,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         make sure that backup status is 'CORRUPT'
         """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -990,7 +1009,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 "restore backup {0}".format(backup_id) in e.message and
                 "WARNING: Backup {0} WAL segments are corrupted".format(
                     backup_id) in e.message and
-                "INFO: Some backups are not valid" in e.message,
+                "WARNING: Some backups are not valid" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -999,9 +1018,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id)['status'],
             'Backup {0} should have STATUS "CORRUPT"')
 
-        # Be paranoid and run validate again
+        # Run validate again
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', backup_id)
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup corruption.\n"
@@ -1009,8 +1028,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'INFO: Backup {0} has status CORRUPT. '
-                'Skip validation.\n'.format(backup_id), e.message,
+                'INFO: Revalidating backup {0}'.format(backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                'ERROR: Backup {0} is corrupt.'.format(backup_id), e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1157,39 +1179,47 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
-        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
+            wals_dir, f)) and not f.endswith('.backup')]
         wals = map(str, wals)
         file = os.path.join(wals_dir, max(wals))
         os.remove(file)
         if self.archive_compress:
             file = file[:-3]
 
-        # Try to validate
-
-
-
         # Try to restore
         try:
-            backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
-            self.assertEqual(1, 0, "Expecting Error because of wal segment disappearance.\n Output: {0} \n CMD: {1}".format(
-                self.output, self.cmd))
+            backup_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='page')
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of wal segment disappearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
         except ProbackupException as e:
-            self.assertTrue('INFO: Wait for LSN' in e.message
-                and 'in archived WAL segment' in e.message
-                and 'WARNING: could not read WAL record at' in e.message
-                and 'ERROR: WAL segment "{0}" is absent\n'.format(file) in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertTrue(
+                'INFO: Wait for LSN' in e.message and
+                'in archived WAL segment' in e.message and
+                'WARNING: could not read WAL record at' in e.message and
+                'ERROR: WAL segment "{0}" is absent\n'.format(
+                    file) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
-        self.assertEqual('ERROR', self.show_pb(backup_dir, 'node')[1]['Status'], 'Backup {0} should have STATUS "ERROR"')
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[1]['Status'],
+            'Backup {0} should have STATUS "ERROR"')
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_pgpro702_688(self):
         """make node without archiving, make stream backup, get Recovery Time, validate to Recovery Time"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1199,16 +1229,26 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.start()
 
-        backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
-        recovery_time = self.show_pb(backup_dir, 'node', backup_id=backup_id)['recovery-time']
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=["--stream"])
+        recovery_time = self.show_pb(
+            backup_dir, 'node', backup_id=backup_id)['recovery-time']
 
         try:
-            self.validate_pb(backup_dir, 'node', options=["--time={0}".format(recovery_time)])
-            self.assertEqual(1, 0, "Expecting Error because of wal segment disappearance.\n Output: {0} \n CMD: {1}".format(
-                self.output, self.cmd))
+            self.validate_pb(
+                backup_dir, 'node',
+                options=["--time={0}".format(recovery_time)])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of wal segment disappearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
         except ProbackupException as e:
-            self.assertIn('WAL archive is empty. You cannot restore backup to a recovery target without WAL archive', e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            self.assertIn(
+                'WAL archive is empty. You cannot restore backup to a '
+                'recovery target without WAL archive', e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1217,7 +1257,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_pgpro688(self):
         """make node with archiving, make backup, get Recovery Time, validate to Recovery Time. Waiting PGPRO-688. RESOLVED"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1237,11 +1278,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     def test_pgpro561(self):
-        """make node with archiving, make stream backup, restore it to node1, check that archiving is not successful on node1"""
+        """
+        make node with archiving, make stream backup,
+        restore it to node1, check that archiving is not successful on node1
+        """
         fname = self.id().split('.')[3]
-        node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(module_name, fname),
+        node1 = self.make_simple_node(
+            base_dir="{0}/{1}/node1".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1252,42 +1297,278 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node1', node1)
         node1.start()
 
-        backup_id = self.backup_node(backup_dir, 'node1', node1, options=["--stream"])
+        backup_id = self.backup_node(
+            backup_dir, 'node1', node1, options=["--stream"])
 
-        node2 = self.make_simple_node(base_dir="{0}/{1}/node2".format(module_name, fname))
+        node2 = self.make_simple_node(
+            base_dir="{0}/{1}/node2".format(module_name, fname))
         node2.cleanup()
 
         node1.psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,256) i")
 
-        self.backup_node(backup_dir, 'node1', node1, backup_type='page', options=["--stream"])
+        self.backup_node(
+            backup_dir, 'node1', node1,
+            backup_type='page', options=["--stream"])
         self.restore_node(backup_dir, 'node1', data_dir=node2.data_dir)
-        node2.append_conf('postgresql.auto.conf', 'port = {0}'.format(node2.port))
+        node2.append_conf(
+            'postgresql.auto.conf', 'port = {0}'.format(node2.port))
         node2.start()
 
         timeline_node1 = node1.get_control_data()["Latest checkpoint's TimeLineID"]
         timeline_node2 = node2.get_control_data()["Latest checkpoint's TimeLineID"]
-        self.assertEqual(timeline_node1, timeline_node2, "Timelines on Master and Node1 should be equal. This is unexpected")
+        self.assertEqual(
+            timeline_node1, timeline_node2,
+            "Timelines on Master and Node1 should be equal. "
+            "This is unexpected")
 
-        archive_command_node1 = node1.safe_psql("postgres", "show archive_command")
-        archive_command_node2 = node2.safe_psql("postgres", "show archive_command")
-        self.assertEqual(archive_command_node1, archive_command_node2, "Archive command on Master and Node should be equal. This is unexpected")
+        archive_command_node1 = node1.safe_psql(
+            "postgres", "show archive_command")
+        archive_command_node2 = node2.safe_psql(
+            "postgres", "show archive_command")
+        self.assertEqual(
+            archive_command_node1, archive_command_node2,
+            "Archive command on Master and Node should be equal. "
+            "This is unexpected")
 
-        #result = node2.safe_psql("postgres", "select last_failed_wal from pg_stat_get_archiver() where last_failed_wal is not NULL")
+        # result = node2.safe_psql("postgres", "select last_failed_wal from pg_stat_get_archiver() where last_failed_wal is not NULL")
         ## self.assertEqual(res, six.b(""), 'Restored Node1 failed to archive segment {0} due to having the same archive command as Master'.format(res.rstrip()))
-        #if result == "":
+        # if result == "":
         #    self.assertEqual(1, 0, 'Error is expected due to Master and Node1 having the common archive and archive_command')
+
+        self.switch_wal_segment(node1)
+        self.switch_wal_segment(node2)
+        time.sleep(5)
 
         log_file = os.path.join(node2.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertTrue('LOG:  archive command failed with exit code 1' in log_content
-             and 'DETAIL:  The failed archive command was:' in log_content
-             and 'INFO: pg_probackup archive-push from' in log_content,
-             'Expecting error messages about failed archive_command'
+            self.assertTrue(
+                'LOG:  archive command failed with exit code 1' in log_content and
+                'DETAIL:  The failed archive command was:' in log_content and
+                'INFO: pg_probackup archive-push from' in log_content,
+                'Expecting error messages about failed archive_command'
             )
-            self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
+            self.assertFalse(
+                'pg_probackup archive-push completed successfully' in log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_validate_corrupted_full(self):
+        """
+        make node with archiving, take full backup, and three page backups,
+        take another full backup and three page backups
+        corrupt second full backup, run validate, check that
+        second full backup became CORRUPT and his page backups are ORPHANs
+        remove corruption and run valudate again, check that
+        second full backup and his page backups are OK
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        node.safe_psql(
+            "postgres",
+            "alter system set archive_command = 'false'")
+        node.reload()
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page', options=['--archive-timeout=1s'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of data file dissapearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            pass
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
+        self.set_archiving(backup_dir, 'node', node)
+        node.reload()
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        file = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'postgresql.auto.conf')
+
+        file_new = os.path.join(backup_dir, 'postgresql.auto.conf')
+        os.rename(file, file_new)
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of data file dissapearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'Validating backup {0}'.format(backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                'WARNING: Backup {0} data files are corrupted'.format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                'WARNING: Some backups are not valid'.format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'CORRUPT')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['Status'] == 'ORPHAN')
+
+        os.rename(file_new, file)
+        try:
+            self.validate_pb(backup_dir, options=['--log-level-file=verbose'])
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Some backups are not valid'.format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['Status'] == 'OK')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_validate_corrupted_full_1(self):
+        """
+        make node with archiving, take full backup, and three page backups,
+        take another full backup and four page backups
+        corrupt second full backup, run validate, check that
+        second full backup became CORRUPT and his page backups are ORPHANs
+        remove corruption from full backup and corrupt his second page backup
+        run valudate again, check that
+        second full backup and his firts page backups are OK,
+        second page should be CORRUPT
+        third page should be ORPHAN
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id_page = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        file = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'postgresql.auto.conf')
+
+        file_new = os.path.join(backup_dir, 'postgresql.auto.conf')
+        os.rename(file, file_new)
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of data file dissapearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'Validating backup {0}'.format(backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                'WARNING: Backup {0} data files are corrupted'.format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                'WARNING: Some backups are not valid'.format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'CORRUPT')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ORPHAN')
+
+        os.rename(file_new, file)
+        file = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id_page, 'database', 'postgresql.auto.conf')
+
+        file_new = os.path.join(backup_dir, 'postgresql.auto.conf')
+        os.rename(file, file_new)
+
+        try:
+            self.validate_pb(backup_dir, options=['--log-level-file=verbose'])
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Some backups are not valid'.format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'CORRUPT')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ORPHAN')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

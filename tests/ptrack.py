@@ -3,7 +3,6 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
-from testgres import ClusterTestgresException as ClusterException
 from testgres import QueryException
 import shutil
 import sys
@@ -172,7 +171,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Physical comparison
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir, ignore_ptrack=False)
+            pgdata_restored = self.pgdata_content(
+                node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node_restored.append_conf(
@@ -277,7 +277,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node_restored.start()
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_ptrack_vacuum_truncate(self):
@@ -517,188 +517,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    @unittest.expectedFailure
-    def test_ptrack_concurrent_get_and_clear_1(self):
-        """make node, make full and ptrack stream backups,"
-        " restore them and check data correctness"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'checkpoint_timeout': '300s',
-                'ptrack_enable': 'on'
-            }
-        )
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.start()
-
-        node.safe_psql(
-            "postgres",
-            "create table t_heap as select i"
-            " as id from generate_series(0,1) i"
-        )
-
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
-        gdb = self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose'],
-            gdb=True
-        )
-
-        gdb.set_breakpoint('make_pagemap_from_ptrack')
-        gdb.run_until_break()
-
-        node.safe_psql(
-            "postgres",
-            "update t_heap set id = 100500")
-
-        tablespace_oid = node.safe_psql(
-            "postgres",
-            "select oid from pg_tablespace where spcname = 'pg_default'").rstrip()
-
-        relfilenode = node.safe_psql(
-            "postgres",
-            "select 't_heap'::regclass::oid").rstrip()
-
-        node.safe_psql(
-            "postgres",
-            "SELECT pg_ptrack_get_and_clear({0}, {1})".format(
-                tablespace_oid, relfilenode))
-
-        gdb.continue_execution_until_exit()
-
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='ptrack', options=['--stream']
-        )
-        if self.paranoia:
-            pgdata = self.pgdata_content(node.data_dir)
-
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        node.cleanup()
-        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
-
-        # Physical comparison
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir, ignore_ptrack=False)
-            self.compare_pgdata(pgdata, pgdata_restored)
-
-        node.start()
-        # Logical comparison
-        self.assertEqual(
-            result,
-            node.safe_psql("postgres", "SELECT * FROM t_heap")
-        )
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    @unittest.expectedFailure
-    def test_ptrack_concurrent_get_and_clear_2(self):
-        """make node, make full and ptrack stream backups,"
-        " restore them and check data correctness"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'checkpoint_timeout': '300s',
-                'ptrack_enable': 'on'
-            }
-        )
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.start()
-
-        node.safe_psql(
-            "postgres",
-            "create table t_heap as select i"
-            " as id from generate_series(0,1) i"
-        )
-
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
-        gdb = self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose'],
-            gdb=True
-        )
-
-        gdb.set_breakpoint('pthread_create')
-        gdb.run_until_break()
-
-        node.safe_psql(
-            "postgres",
-            "update t_heap set id = 100500")
-
-        tablespace_oid = node.safe_psql(
-            "postgres",
-            "select oid from pg_tablespace where spcname = 'pg_default'").rstrip()
-
-        relfilenode = node.safe_psql(
-            "postgres",
-            "select 't_heap'::regclass::oid").rstrip()
-
-        node.safe_psql(
-            "postgres",
-            "SELECT pg_ptrack_get_and_clear({0}, {1})".format(
-                tablespace_oid, relfilenode))
-
-        gdb._execute("delete breakpoints")
-        gdb.continue_execution_until_exit()
-
-        try:
-            self.backup_node(
-                backup_dir, 'node', node,
-                backup_type='ptrack', options=['--stream']
-            )
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of LSN mismatch from ptrack_control "
-                "and previous backup ptrack_lsn.\n"
-                " Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: LSN from ptrack_control' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
-        if self.paranoia:
-            pgdata = self.pgdata_content(node.data_dir)
-
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        node.cleanup()
-        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
-
-        # Physical comparison
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir, ignore_ptrack=False)
-            self.compare_pgdata(pgdata, pgdata_restored)
-
-        node.start()
-        # Logical comparison
-        self.assertEqual(
-            result,
-            node.safe_psql("postgres", "SELECT * FROM t_heap")
-        )
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
     def test_ptrack_stream(self):
         """make node, make full and ptrack stream backups,
          restore them and check data correctness"""
@@ -760,7 +578,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=full_backup_id,
-                options=["-j", "4"]
+                options=["-j", "4", "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -779,7 +597,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=ptrack_backup_id,
-                options=["-j", "4"]
+                options=["-j", "4", "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -862,7 +680,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=full_backup_id,
-                options=["-j", "4", "--time={0}".format(full_target_time)]
+                options=[
+                    "-j", "4", "--recovery-target-action=promote",
+                    "--time={0}".format(full_target_time)]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -881,7 +701,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 backup_id=ptrack_backup_id,
-                options=["-j", "4", "--time={0}".format(ptrack_target_time)]
+                options=[
+                    "-j", "4",
+                    "--time={0}".format(ptrack_target_time),
+                    "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -1321,7 +1144,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "-T", "{0}={1}".format(
                     self.get_tblspace_path(node, 'somedata_new'),
                     self.get_tblspace_path(node_restored, 'somedata_new')
-                )
+                ),
+                "--recovery-target-action=promote"
             ]
         )
 
@@ -1550,7 +1374,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         tblspc_path_new = self.get_tblspace_path(
             restored_node, 'somedata_restored')
         self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
+            "--recovery-target-action=promote"])
 
         # GET PHYSICAL CONTENT FROM RESTORED NODE and COMPARE PHYSICAL CONTENT
         if self.paranoia:
@@ -1586,7 +1411,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Restore second ptrack backup and check table consistency
         self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
+            "--recovery-target-action=promote"])
 
         # GET PHYSICAL CONTENT FROM RESTORED NODE and COMPARE PHYSICAL CONTENT
         if self.paranoia:
@@ -1683,7 +1509,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         )
 
         self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
+            "--recovery-target-action=promote"])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         if self.paranoia:
@@ -1706,6 +1533,62 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # COMPARE RESTORED FILES
         self.assertEqual(result, result_new, 'data is lost')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_atexit_fail(self):
+        """
+        Take backups of every available types and check that PTRACK is clean
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'ptrack_enable': 'on',
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'max_connections': '15'})
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        # Take FULL backup to clean every ptrack
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='ptrack',
+                options=[
+                    "--stream", "-j 30",
+                    "--log-level-file=verbose"]
+            )
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because we are opening too many connections"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd)
+            )
+        except ProbackupException as e:
+            self.assertIn(
+                'setting its status to ERROR',
+                e.message,
+                '\n Unexpected Error Message: {0}\n'
+                ' CMD: {1}'.format(repr(e.message), self.cmd)
+            )
+
+        self.assertEqual(
+            node.safe_psql(
+                "postgres",
+                "select * from pg_is_in_backup()").rstrip(),
+            "f")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

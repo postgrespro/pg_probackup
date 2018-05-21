@@ -96,7 +96,7 @@ def is_enterprise():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if 'postgrespro.ru' in p.communicate()[0]:
+    if b'postgrespro.ru' in p.communicate()[0]:
         return True
     else:
         return False
@@ -207,13 +207,13 @@ class ProbackupTest(object):
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
-        print(node.data_dir)
 
-        # Sane default parameters, not a shit with fsync = off from testgres
+        # Sane default parameters
         node.append_conf("postgresql.auto.conf", "max_connections = 100")
         node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
         node.append_conf("postgresql.auto.conf", "fsync = on")
-        node.append_conf("postgresql.auto.conf", "wal_level = minimal")
+        node.append_conf("postgresql.auto.conf", "wal_level = logical")
+        node.append_conf("postgresql.auto.conf", "hot_standby = 'off'")
 
         node.append_conf(
             "postgresql.auto.conf", "log_line_prefix = '%t [%p]: [%l-1] '")
@@ -259,7 +259,9 @@ class ProbackupTest(object):
             tblspc_name, tblspc_path)
         if cfs:
             cmd += " with (compression=true)"
-        os.makedirs(tblspc_path)
+
+        if not os.path.exists(tblspc_path):
+            os.makedirs(tblspc_path)
         res = node.safe_psql("postgres", cmd)
         # Check that tablespace was successfully created
         # self.assertEqual(
@@ -636,6 +638,7 @@ class ProbackupTest(object):
                 header_element.rstrip() for header_element in header_split
                 ]
             for backup_record in body:
+                backup_record = backup_record.rstrip()
                 # split list with str for every backup record element
                 backup_record_split = re.split("  +", backup_record)
                 # Remove empty items
@@ -740,10 +743,10 @@ class ProbackupTest(object):
         else:
             archive_mode = 'on'
 
-        node.append_conf(
-            "postgresql.auto.conf",
-            "wal_level = archive"
-        )
+        # node.append_conf(
+        #     "postgresql.auto.conf",
+        #     "wal_level = archive"
+        # )
         node.append_conf(
                 "postgresql.auto.conf",
                 "archive_mode = {0}".format(archive_mode)

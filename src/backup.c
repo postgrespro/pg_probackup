@@ -31,6 +31,7 @@
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
+static XLogRecPtr stop_stream_lsn = InvalidXLogRecPtr;
 
 /*
  * How long we should wait for streaming end in seconds.
@@ -45,11 +46,23 @@ const char *progname = "pg_probackup";
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
 
-static pthread_mutex_t start_stream_mut = PTHREAD_MUTEX_INITIALIZER;
 /*
  * We need to wait end of WAL streaming before execute pg_stop_backup().
  */
+typedef struct
+{
+	const char *basedir;
+	PGconn	   *conn;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
+} StreamThreadArg;
+
 static pthread_t stream_thread;
+static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
 static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
@@ -86,6 +99,7 @@ static void pg_switch_wal(PGconn *conn);
 static void pg_stop_backup(pgBackup *backup);
 static int checkpoint_timeout(void);
 
+//static void backup_list_file(parray *files, const char *root, )
 static void parse_backup_filelist_filenames(parray *files, const char *root);
 static void write_backup_file_list(parray *files, const char *root);
 static void wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment);
@@ -260,7 +274,8 @@ ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
 
 /* read one file via replication protocol
  * and write it to the destination subdir in 'backup_path' */
-static void	remote_copy_file(PGconn *conn, pgFile* file)
+static void
+remote_copy_file(PGconn *conn, pgFile* file)
 {
 	PGresult	*res;
 	char		*copybuf = NULL;
@@ -423,6 +438,9 @@ remote_backup_files(void *arg)
 				 file->path, (unsigned long) file->write_size);
 		PQfinish(file_backup_conn);
 	}
+
+	/* Data files transferring is successful */
+	arguments->ret = 0;
 }
 
 /*
@@ -440,6 +458,7 @@ do_backup_instance(void)
 
 	pthread_t	backup_threads[num_threads];
 	backup_files_args *backup_threads_args[num_threads];
+	bool		backup_isok = true;
 
 	pgBackup   *prev_backup = NULL;
 	char		prev_backup_filelist_path[MAXPGPATH];
@@ -479,7 +498,8 @@ do_backup_instance(void)
 	 * backup on current timeline exists and get its filelist.
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
-		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		parray	   *backup_list;
 		/* get list of backups already taken */
@@ -495,7 +515,8 @@ do_backup_instance(void)
 
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path, lengthof(prev_backup_filelist_path),
 						DATABASE_FILE_LIST);
-		prev_backup_filelist = dir_read_file_list(pgdata, prev_backup_filelist_path);
+		/* Files of previous backup needed by DELTA backup */
+		prev_backup_filelist = dir_read_file_list(NULL, prev_backup_filelist_path);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;
@@ -526,7 +547,8 @@ do_backup_instance(void)
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
-	strncat(label, " with pg_probackup", lengthof(label));
+	strncat(label, " with pg_probackup", lengthof(label) -
+			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
@@ -538,13 +560,40 @@ do_backup_instance(void)
 		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
 		dir_create_dir(dst_backup_path, DIR_PERMISSION);
 
-		pthread_mutex_lock(&start_stream_mut);
-		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog, dst_backup_path);
-		pthread_mutex_lock(&start_stream_mut);
-		if (conn == NULL)
-			elog(ERROR, "Cannot continue backup because stream connect has failed.");
+		stream_thread_arg.basedir = dst_backup_path;
 
-		pthread_mutex_unlock(&start_stream_mut);
+		/*
+		 * Connect in replication mode to the server.
+		 */
+		stream_thread_arg.conn = pgut_connect_replication(pgut_dbname);
+
+		if (!CheckServerVersionForStreaming(stream_thread_arg.conn))
+		{
+			PQfinish(stream_thread_arg.conn);
+			/*
+			 * Error message already written in CheckServerVersionForStreaming().
+			 * There's no hope of recovering from a version mismatch, so don't
+			 * retry.
+			 */
+			elog(ERROR, "Cannot continue backup because stream connect has failed.");
+		}
+
+		/*
+		 * Identify server, obtaining start LSN position and current timeline ID
+		 * at the same time, necessary if not valid data can be found in the
+		 * existing output directory.
+		 */
+		if (!RunIdentifySystem(stream_thread_arg.conn, NULL, NULL, NULL, NULL))
+		{
+			PQfinish(stream_thread_arg.conn);
+			elog(ERROR, "Cannot continue backup because stream connect has failed.");
+		}
+
+		/* By default there are some error */
+		stream_thread_arg.ret = 1;
+
+		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog,
+					   &stream_thread_arg);
 	}
 
 	/* initialize backup list */
@@ -584,7 +633,7 @@ do_backup_instance(void)
 						* For backup from master wait for previous segment.
 						* For backup from replica wait for current segment.
 						*/
-					   !from_replica);
+					   !from_replica, backup_files_list);
 	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
@@ -650,6 +699,8 @@ do_backup_instance(void)
 		arg->prev_backup_start_lsn = prev_backup_start_lsn;
 		arg->thread_backup_conn = NULL;
 		arg->thread_cancel_conn = NULL;
+		/* By default there are some error */
+		arg->ret = 1;
 		backup_threads_args[i] = arg;
 	}
 
@@ -673,9 +724,15 @@ do_backup_instance(void)
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(backup_threads[i], NULL);
+		if (backup_threads_args[i]->ret == 1)
+			backup_isok = false;
+
 		pg_free(backup_threads_args[i]);
 	}
-	elog(LOG, "Data files are transfered");
+	if (backup_isok)
+		elog(LOG, "Data files are transfered");
+	else
+		elog(ERROR, "Data files transferring failed");
 
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
@@ -757,6 +814,7 @@ do_backup(time_t start_time)
 	backup_conn = pgut_connect(pgut_dbname);
 	pgut_atexit_push(backup_disconnect, NULL);
 
+	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
 	/* Confirm data block size and xlog block size are compatible */
 	confirm_block_size("block_size", BLCKSZ);
 	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
@@ -773,10 +831,10 @@ do_backup(time_t start_time)
 	is_checksum_enabled = pg_checksum_enable();
 
 	if (is_checksum_enabled)
-		elog(LOG, "This PostgreSQL instance initialized with data block checksums. "
+		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
 					"Data block corruption will be detected");
 	else
-		elog(WARNING, "This PostgreSQL instance initialized without data block checksums. "
+		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
 						"pg_probackup have no way to detect data block corruption without them. "
 						"Reinitialize PGDATA with option '--data-checksums'.");
 	
@@ -877,6 +935,8 @@ do_backup(time_t start_time)
 static void
 check_server_version(void)
 {
+	PGresult   *res;
+
 	/* confirm server version */
 	server_version = PQserverVersion(backup_conn);
 
@@ -900,6 +960,39 @@ check_server_version(void)
 		elog(ERROR,
 			 "server version is %s, must be %s or higher for backup from replica",
 			 server_version_str, "9.6");
+
+	res = pgut_execute_extended(backup_conn, "SELECT pgpro_edition()",
+								0, NULL, true, true);
+
+	/*
+	 * Check major version of connected PostgreSQL and major version of
+	 * compiled PostgreSQL.
+	 */
+#ifdef PGPRO_VERSION
+	if (PQresultStatus(res) == PGRES_FATAL_ERROR)
+		/* It seems we connected to PostgreSQL (not Postgres Pro) */
+		elog(ERROR, "%s was built with Postgres Pro %s %s, "
+					"but connection made with PostgreSQL %s",
+			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, server_version_str);
+	else if (strcmp(server_version_str, PG_MAJORVERSION) != 0 &&
+			 strcmp(PQgetvalue(res, 0, 0), PGPRO_EDITION) != 0)
+		elog(ERROR, "%s was built with Postgres Pro %s %s, "
+					"but connection made with Postgres Pro %s %s",
+			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION,
+			 server_version_str, PQgetvalue(res, 0, 0));
+#else
+	if (PQresultStatus(res) != PGRES_FATAL_ERROR)
+		/* It seems we connected to Postgres Pro (not PostgreSQL) */
+		elog(ERROR, "%s was built with PostgreSQL %s, "
+					"but connection made with Postgres Pro %s %s",
+			 PROGRAM_NAME, PG_MAJORVERSION,
+			 server_version_str, PQgetvalue(res, 0, 0));
+	else if (strcmp(server_version_str, PG_MAJORVERSION) != 0)
+		elog(ERROR, "%s was built with PostgreSQL %s, but connection made with %s",
+			 PROGRAM_NAME, PG_MAJORVERSION, server_version_str);
+#endif
+
+	PQclear(res);
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
 	exclusive_backup = server_version < 90600 ||
@@ -940,7 +1033,7 @@ confirm_block_size(const char *name, int blcksz)
 	char	   *endp;
 	int			block_size;
 
-	res = pgut_execute(backup_conn, "SELECT pg_catalog.current_setting($1)", 1, &name, true);
+	res = pgut_execute(backup_conn, "SELECT pg_catalog.current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
 
@@ -976,14 +1069,12 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 		res = pgut_execute(conn,
 						   "SELECT pg_catalog.pg_start_backup($1, $2, false)",
 						   2,
-						   params,
-						   true);
+						   params);
 	else
 		res = pgut_execute(conn,
 						   "SELECT pg_catalog.pg_start_backup($1, $2)",
 						   2,
-						   params,
-						   true);
+						   params);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
@@ -1034,13 +1125,13 @@ pg_switch_wal(PGconn *conn)
 	PGresult   *res;
 
 	/* Remove annoying NOTICE messages generated by backend */
-	res = pgut_execute(conn, "SET client_min_messages = warning;", 0, NULL, true);
+	res = pgut_execute(conn, "SET client_min_messages = warning;", 0, NULL);
 	PQclear(res);
 
 	if (server_version >= 100000)
-		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL, true);
+		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL);
 	else
-		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL, true);
+		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL);
 
 	PQclear(res);
 }
@@ -1056,7 +1147,7 @@ pg_ptrack_support(void)
 
 	res_db = pgut_execute(backup_conn,
 						  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
-						  0, NULL, true);
+						  0, NULL);
 	if (PQntuples(res_db) == 0)
 	{
 		PQclear(res_db);
@@ -1066,17 +1157,17 @@ pg_ptrack_support(void)
 
 	res_db = pgut_execute(backup_conn,
 						  "SELECT pg_catalog.ptrack_version()",
-						  0, NULL, true);
+						  0, NULL);
 	if (PQntuples(res_db) == 0)
 	{
 		PQclear(res_db);
 		return false;
 	}
 
-	/* Now we support only ptrack version 1.5 */
-	if (strcmp(PQgetvalue(res_db, 0, 0), "1.5") != 0)
+	/* Now we support only ptrack versions upper than 1.5 */
+	if (strverscmp(PQgetvalue(res_db, 0, 0), "1.5") < 0)
 	{
-		elog(WARNING, "Update your ptrack to the version 1.5. Current version is %s", PQgetvalue(res_db, 0, 0));
+		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s", PQgetvalue(res_db, 0, 0));
 		PQclear(res_db);
 		return false;
 	}
@@ -1091,7 +1182,7 @@ pg_ptrack_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL, true);
+	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -1108,7 +1199,7 @@ pg_checksum_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show data_checksums", 0, NULL, true);
+	res_db = pgut_execute(backup_conn, "show data_checksums", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -1125,7 +1216,7 @@ pg_is_in_recovery(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "SELECT pg_catalog.pg_is_in_recovery()", 0, NULL, true);
+	res_db = pgut_execute(backup_conn, "SELECT pg_catalog.pg_is_in_recovery()", 0, NULL);
 
 	if (PQgetvalue(res_db, 0, 0)[0] == 't')
 	{
@@ -1150,7 +1241,7 @@ pg_ptrack_clear(void)
 	params[0] = palloc(64);
 	params[1] = palloc(64);
 	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
-						  0, NULL, true);
+						  0, NULL);
 
 	for(i = 0; i < PQntuples(res_db); i++)
 	{
@@ -1164,12 +1255,12 @@ pg_ptrack_clear(void)
 		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
 
 		tmp_conn = pgut_connect(dbname);
-		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()", 0, NULL, true);
+		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()", 0, NULL);
 
 		sprintf(params[0], "%i", dbOid);
 		sprintf(params[1], "%i", tblspcOid);
 		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear_db($1, $2)",
-						   2, (const char **)params, true);
+						   2, (const char **)params);
 		PQclear(res);
 
 		pgut_disconnect(tmp_conn);
@@ -1187,7 +1278,7 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 	char	   *dbname;
 	PGresult   *res_db;
 	PGresult   *res;
-	char	   *result;
+	bool		result;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -1195,7 +1286,7 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 	sprintf(params[0], "%i", dbOid);
 	res_db = pgut_execute(backup_conn,
 							"SELECT datname FROM pg_database WHERE oid=$1",
-							1, (const char **) params, true);
+							1, (const char **) params);
 	/*
 	 * If database is not found, it's not an error.
 	 * It could have been deleted since previous backup.
@@ -1216,17 +1307,21 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
 	sprintf(params[0], "%i", dbOid);
 	sprintf(params[1], "%i", tblspcOid);
 	res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear_db($1, $2)",
-						2, (const char **)params, true);
+						2, (const char **)params);
 
 	if (PQnfields(res) != 1)
 		elog(ERROR, "cannot perform pg_ptrack_get_and_clear_db()");
-	
-	result = PQgetvalue(res, 0, 0);
+
+	if (!parse_bool(PQgetvalue(res, 0, 0), &result))
+		elog(ERROR,
+			 "result of pg_ptrack_get_and_clear_db() is invalid: %s",
+			 PQgetvalue(res, 0, 0));
+
 	PQclear(res);
 	pfree(params[0]);
 	pfree(params[1]);
 
-	return (strcmp(result, "t") == 0);
+	return result;
 }
 
 /* Read and clear ptrack files of the target relation.
@@ -1257,7 +1352,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		sprintf(params[0], "%i", db_oid);
 		res_db = pgut_execute(backup_conn,
 							  "SELECT datname FROM pg_database WHERE oid=$1",
-							  1, (const char **) params, true);
+							  1, (const char **) params);
 		/*
 		 * If database is not found, it's not an error.
 		 * It could have been deleted since previous backup.
@@ -1277,7 +1372,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
 		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
-						   2, (const char **)params, true);
+						   2, (const char **)params);
 
 		if (PQnfields(res) != 1)
 			elog(ERROR, "cannot get ptrack file from database \"%s\" by tablespace oid %u and relation oid %u",
@@ -1295,7 +1390,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
 		res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
-						   2, (const char **)params, true);
+						   2, (const char **)params);
 
 		if (PQnfields(res) != 1)
 			elog(ERROR, "cannot get ptrack file from pg_global tablespace and relation oid %u",
@@ -1476,10 +1571,10 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		{
 			if (server_version >= 100000)
 				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_replay_lsn()",
-								   0, NULL, true);
+								   0, NULL);
 			else
 				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_replay_location()",
-								   0, NULL, true);
+								   0, NULL);
 		}
 		/*
 		 * For lsn from pg_stop_backup() we need it only to be received by
@@ -1489,10 +1584,10 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		{
 			if (server_version >= 100000)
 				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_receive_lsn()",
-								   0, NULL, true);
+								   0, NULL);
 			else
 				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_receive_location()",
-								   0, NULL, true);
+								   0, NULL);
 		}
 
 		/* Extract timeline and LSN from result */
@@ -1541,7 +1636,8 @@ pg_stop_backup(pgBackup *backup)
 	FILE		*fp;
 	pgFile		*file;
 	size_t		len;
-	char		*val = NULL;
+	char	   *val = NULL;
+	char	   *stop_backup_query = NULL;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
@@ -1558,7 +1654,7 @@ pg_stop_backup(pgBackup *backup)
 
 	/* Remove annoying NOTICE messages generated by backend */
 	res = pgut_execute(conn, "SET client_min_messages = warning;",
-					   0, NULL, true);
+					   0, NULL);
 	PQclear(res);
 
 	/* Create restore point */
@@ -1576,7 +1672,7 @@ pg_stop_backup(pgBackup *backup)
 		params[0] = name;
 
 		res = pgut_execute(conn, "SELECT pg_catalog.pg_create_restore_point($1)",
-						   1, params, true);
+						   1, params);
 		PQclear(res);
 	}
 
@@ -1598,26 +1694,25 @@ pg_stop_backup(pgBackup *backup)
 			 * pg_stop_backup(false) copy of the backup label and tablespace map
 			 * so they can be written to disk by the caller.
 			 */
-			sent = pgut_send(conn,
-								"SELECT"
+			stop_backup_query = "SELECT"
 								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 								" current_timestamp(0)::timestamptz,"
 								" lsn,"
 								" labelfile,"
 								" spcmapfile"
-								" FROM pg_catalog.pg_stop_backup(false)",
-								0, NULL, WARNING);
+								" FROM pg_catalog.pg_stop_backup(false)";
+
 		}
 		else
 		{
 
-			sent = pgut_send(conn,
-								"SELECT"
+			stop_backup_query =	"SELECT"
 								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 								" current_timestamp(0)::timestamptz,"
-								" pg_catalog.pg_stop_backup() as lsn",
-								0, NULL, WARNING);
+								" pg_catalog.pg_stop_backup() as lsn";
 		}
+
+		sent = pgut_send(conn, stop_backup_query, 0, NULL, WARNING);
 		pg_stop_backup_is_sent = true;
 		if (!sent)
 			elog(ERROR, "Failed to send pg_stop_backup query");
@@ -1662,10 +1757,23 @@ pg_stop_backup(pgBackup *backup)
 				break;
 			}
 		}
+
+		/* Check successfull execution of pg_stop_backup() */
 		if (!res)
 			elog(ERROR, "pg_stop backup() failed");
 		else
+		{
+			switch (PQresultStatus(res))
+			{
+				case PGRES_TUPLES_OK:
+				case PGRES_COMMAND_OK:
+					break;
+				default:
+					elog(ERROR, "query failed: %s query was: %s",
+						 PQerrorMessage(conn), stop_backup_query);
+			}
 			elog(INFO, "pg_stop backup() successfully executed");
+		}
 
 		backup_in_progress = false;
 
@@ -1721,11 +1829,11 @@ pg_stop_backup(pgBackup *backup)
 		if (sscanf(PQgetvalue(res, 0, 0), XID_FMT, &recovery_xid) != 1)
 			elog(ERROR,
 				 "result of txid_snapshot_xmax() is invalid: %s",
-				 PQerrorMessage(conn));
+				 PQgetvalue(res, 0, 0));
 		if (!parse_time(PQgetvalue(res, 0, 1), &recovery_time))
 			elog(ERROR,
 				 "result of current_timestamp is invalid: %s",
-				 PQerrorMessage(conn));
+				 PQgetvalue(res, 0, 1));
 
 		/* Get content for tablespace_map from stop_backup results
 		 * in case of non-exclusive backup
@@ -1768,8 +1876,12 @@ pg_stop_backup(pgBackup *backup)
 		PQclear(res);
 
 		if (stream_wal)
+		{
 			/* Wait for the completion of stream */
 			pthread_join(stream_thread, NULL);
+			if (stream_thread_arg.ret == 1)
+				elog(ERROR, "WAL streaming failed");
+		}
 	}
 
 	/* Fill in fields if that is the correct end of backup. */
@@ -1823,7 +1935,7 @@ checkpoint_timeout(void)
 	const char *hintmsg;
 	int			val_int;
 
-	res = pgut_execute(backup_conn, "show checkpoint_timeout", 0, NULL, true);
+	res = pgut_execute(backup_conn, "show checkpoint_timeout", 0, NULL);
 	val = PQgetvalue(res, 0, 0);
 
 	if (!parse_int(val, &val_int, OPTION_UNIT_S, &hintmsg))
@@ -1855,7 +1967,7 @@ backup_cleanup(bool fatal, void *userdata)
 	 */
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
 	{
-		elog(INFO, "Backup %s is running, setting its status to ERROR",
+		elog(WARNING, "Backup %s is running, setting its status to ERROR",
 			 base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
@@ -1867,7 +1979,7 @@ backup_cleanup(bool fatal, void *userdata)
 	 */
 	if (backup_in_progress)
 	{
-		elog(LOG, "backup in progress, stop backup");
+		elog(WARNING, "backup in progress, stop backup");
 		pg_stop_backup(NULL);	/* don't care stop_lsn on error case */
 	}
 }
@@ -1945,6 +2057,25 @@ backup_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
+			/* Check that file exist in previous backup */
+			if (current.backup_mode != BACKUP_MODE_FULL)
+			{
+				int			p;
+				char	   *relative;
+				int n_prev_backup_files_list = parray_num(arguments->prev_backup_filelist);
+				relative = GetRelativePath(file->path, arguments->from_root);
+				for (p = 0; p < n_prev_backup_files_list; p++)
+				{
+					pgFile *prev_file = (pgFile *) parray_get(arguments->prev_backup_filelist, p);
+					if (strcmp(relative, prev_file->path) == 0)
+					{
+						/* File exists in previous backup */
+						file->exists_in_prev = true;
+						// elog(VERBOSE, "File exists at the time of previous backup %s", relative);
+						break;
+					}
+				}
+			}
 			/* copy the file into backup */
 			if (file->is_datafile && !file->is_cfs)
 			{
@@ -1960,7 +2091,17 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (!copy_file(arguments->from_root,
+			else
+				/* TODO:
+				 * Check if file exists in previous backup
+				 * If exists:
+				 *   if mtime > start_backup_time of parent backup,
+				 *    copy file to backup
+				 *   if mtime < start_backup_time
+				 *    calculate crc, compare crc to old file
+				 *      if crc is the same -> skip file
+				 */
+				if (!copy_file(arguments->from_root,
 							   arguments->to_root,
 							   file))
 			{
@@ -1980,6 +2121,8 @@ backup_files(void *arg)
 	if (arguments->thread_backup_conn)
 		pgut_disconnect(arguments->thread_backup_conn);
 
+	/* Data files transferring is successful */
+	arguments->ret = 0;
 }
 
 /*
@@ -1992,256 +2135,75 @@ backup_files(void *arg)
 static void
 parse_backup_filelist_filenames(parray *files, const char *root)
 {
-	size_t		i;
-	Oid unlogged_file_reloid = 0;
+	size_t		i = 0;
+	Oid			unlogged_file_reloid = 0;
 
-	for (i = 0; i < parray_num(files); i++)
+	while (i < parray_num(files))
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 		char	   *relative;
-		char		filename[MAXPGPATH];
 		int 		sscanf_result;
 
 		relative = GetRelativePath(file->path, root);
-		filename[0] = '\0';
 
-		elog(VERBOSE, "-----------------------------------------------------: %s", relative);
-		if (path_is_prefix_of_path("global", relative))
+		if (S_ISREG(file->mode) &&
+			path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
 		{
-			file->tblspcOid = GLOBALTABLESPACE_OID;
-			sscanf_result = sscanf(relative, "global/%s", filename);
-			elog(VERBOSE, "global sscanf result: %i", sscanf_result);
-			if (strcmp(relative, "global") == 0)
+			/*
+			 * Found file in pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
+			 * Legal only in case of 'pg_compression'
+			 */
+			if (strcmp(file->name, "pg_compression") == 0)
 			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "the global itself, filepath %s", relative);
-				file->is_database = true; /* TODO add an explanation */
-			}
-			else if (sscanf_result == 1)
-			{
-				elog(VERBOSE, "filename %s, filepath %s", filename, relative);
+				Oid			tblspcOid;
+				Oid			dbOid;
+				char		tmp_rel_path[MAXPGPATH];
+				/*
+				 * Check that the file is located under
+				 * TABLESPACE_VERSION_DIRECTORY
+				 */
+				sscanf_result = sscanf(relative, PG_TBLSPC_DIR "/%u/%s/%u",
+									   &tblspcOid, tmp_rel_path, &dbOid);
+
+				/* Yes, it is */
+				if (sscanf_result == 2 &&
+					strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
+					set_cfs_datafiles(files, root, relative, i);
 			}
 		}
-		else if (path_is_prefix_of_path("base", relative))
+
+		if (S_ISREG(file->mode) && file->tblspcOid != 0 &&
+			file->name && file->name[0])
 		{
-			file->tblspcOid = DEFAULTTABLESPACE_OID;
-			sscanf_result = sscanf(relative, "base/%u/%s", &(file->dbOid), filename);
-			elog(VERBOSE, "base sscanf result: %i", sscanf_result);
-			if (strcmp(relative, "base") == 0)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "the base itself, filepath %s", relative);
-			}
-			else if (sscanf_result == 1)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "dboid %u, filepath %s", file->dbOid, relative);
-				file->is_database = true;
-			}
-			else
-			{
-				elog(VERBOSE, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
-			}
-		}
-		else if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
-		{
-			char		temp_relative_path[MAXPGPATH];
-
-			sscanf_result = sscanf(relative, "pg_tblspc/%u/%s", &(file->tblspcOid), temp_relative_path);
-			elog(VERBOSE, "pg_tblspc sscanf result: %i", sscanf_result);
-
-			if (strcmp(relative, "pg_tblspc") == 0)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "the pg_tblspc itself, filepath %s", relative);
-			}
-			else if (sscanf_result == 1)
-			{
-				Assert(S_ISDIR(file->mode));
-				elog(VERBOSE, "tblspcOid %u, filepath %s", file->tblspcOid, relative);
-			}
-			else
-			{
-				/*continue parsing */
-				sscanf_result = sscanf(temp_relative_path+strlen(TABLESPACE_VERSION_DIRECTORY)+1, "%u/%s",
-									   &(file->dbOid), filename);
-				elog(VERBOSE, "TABLESPACE_VERSION_DIRECTORY sscanf result: %i", sscanf_result);
-
-				if (sscanf_result == -1)
-				{
-					elog(VERBOSE, "The TABLESPACE_VERSION_DIRECTORY itself, filepath %s", relative);
-				}
-				else if (sscanf_result == 0)
-				{
-					/* Found file in pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
-					   Legal only in case of 'pg_compression'
-					 */
-					if (strcmp(file->name, "pg_compression") == 0)
-					{
-						elog(VERBOSE, "Found pg_compression file in TABLESPACE_VERSION_DIRECTORY, filepath %s", relative);
-						/*Set every datafile in tablespace as is_cfs */
-						set_cfs_datafiles(files, root, relative, i);
-					}
-					else
-					{
-						elog(VERBOSE, "Found illegal file in TABLESPACE_VERSION_DIRECTORY, filepath %s", relative);
-					}
-
-				}
-				else if (sscanf_result == 1)
-				{
-					Assert(S_ISDIR(file->mode));
-					elog(VERBOSE, "dboid %u, filepath %s", file->dbOid, relative);
-					file->is_database = true;
-				}
-				else if (sscanf_result == 2)
-				{
-					elog(VERBOSE, "dboid %u, filename %s, filepath %s", file->dbOid, filename, relative);
-				}
-				else
-				{
-					elog(VERBOSE, "Illegal file filepath %s", relative);
-				}
-			}
-		}
-		else
-		{
-			elog(VERBOSE,"other dir or file, filepath %s", relative);
-		}
-
-		if (strcmp(filename, "ptrack_init") == 0)
-		{
-			/* Do not backup ptrack_init files */
-			pgFileFree(file);
-			parray_remove(files, i);
-			i--;
-			continue;
-		}
-
-		/* Check files located inside database directories including directory 'global' */
-		if (filename[0] != '\0' && file->tblspcOid != 0)
-		{
-			if (strcmp(filename, "pg_internal.init") == 0)
-			{
-				/* Do not pg_internal.init files
-				 * (they contain some cache entries, so it's fine) */
-				pgFileFree(file);
-				parray_remove(files, i);
-				i--;
-				continue;
-			}
-			else if (filename[0] == 't' && isdigit(filename[1]))
-			{
-				elog(VERBOSE, "temp file, filepath %s", relative);
-				/* Do not backup temp files */
-				pgFileFree(file);
-				parray_remove(files, i);
-				i--;
-				continue;
-			}
-			else if (isdigit(filename[0]))
+			if (strcmp(file->forkName, "init") == 0)
 			{
 				/*
-				 * TODO TODO TODO Files of this type can be compressed by cfs.
-				 * Check that and do not mark them with 'is_datafile' flag.
+				 * Do not backup files of unlogged relations.
+				 * scan filelist backward and exclude these files.
 				 */
-				char *forkNameptr;
-				char suffix[MAXPGPATH];
+				int			unlogged_file_num = i - 1;
+				pgFile	   *unlogged_file = (pgFile *) parray_get(files,
+																  unlogged_file_num);
 
-				forkNameptr = strstr(filename, "_");
-				if (forkNameptr != NULL)
-				{
-					/* auxiliary fork of the relfile */
-					sscanf(filename, "%u_%s", &(file->relOid), file->forkName);
-					elog(VERBOSE, "relOid %u, forkName %s, filepath %s", file->relOid, file->forkName, relative);
+				unlogged_file_reloid = file->relOid;
 
-					/* handle unlogged relations */
-					if (strcmp(file->forkName, "init") == 0)
-					{
-						/*
-						 * Do not backup files of unlogged relations.
-						 * scan filelist backward and exclude these files.
-						 */
-						int unlogged_file_num = i-1;
-						pgFile	   *unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
+				while (unlogged_file_num >= 0 &&
+					   (unlogged_file_reloid != 0) &&
+					   (unlogged_file->relOid == unlogged_file_reloid))
+				{
+					pgFileFree(unlogged_file);
+					parray_remove(files, unlogged_file_num);
 
-						unlogged_file_reloid = file->relOid;
-
-						while (unlogged_file_num >= 0 &&
-							   (unlogged_file_reloid != 0) &&
-							   (unlogged_file->relOid == unlogged_file_reloid))
-						{
-							unlogged_file->size = 0;
-							pgFileFree(unlogged_file);
-							parray_remove(files, unlogged_file_num);
-							unlogged_file_num--;
-							i--;
-							unlogged_file = (pgFile *) parray_get(files, unlogged_file_num);
-						}
-					}
-					else if (strcmp(file->forkName, "ptrack") == 0)
-					{
-						/* Do not backup ptrack files */
-						pgFileFree(file);
-						parray_remove(files, i);
-						i--;
-					}
-					else if ((unlogged_file_reloid != 0) &&
-							 (file->relOid == unlogged_file_reloid))
-					{
-						/* Do not backup forks of unlogged relations */
-						pgFileFree(file);
-						parray_remove(files, i);
-						i--;
-					}
-					continue;
-				}
-
-				sscanf_result = sscanf(filename, "%u.%d.%s", &(file->relOid), &(file->segno), suffix);
-				if (sscanf_result == 0)
-				{
-					elog(ERROR, "cannot parse filepath %s", relative);
-				}
-				else if (sscanf_result == 1)
-				{
-					/* first segment of the relfile */
-					elog(VERBOSE, "relOid %u, segno %d, filepath %s", file->relOid, 0, relative);
-					if (strcmp(relative + strlen(relative) - strlen("cfm"), "cfm") == 0)
-					{
-						/* reloid.cfm */
-						elog(VERBOSE, "Found cfm file %s", relative);
-					}
-					else
-					{
-						elog(VERBOSE, "Found first segment of the relfile %s", relative);
-						file->is_datafile = true;
-					}
-				}
-				else if (sscanf_result == 2)
-				{
-					/* not first segment of the relfile */
-					elog(VERBOSE, "relOid %u, segno %d, filepath %s", file->relOid, file->segno, relative);
-					file->is_datafile = true;
-				}
-				else
-				{
-					/*
-					 * some cfs specific file.
-					 * It is not datafile, because we cannot read it block by block
-					 */
-					elog(VERBOSE, "relOid %u, segno %d, suffix %s, filepath %s", file->relOid, file->segno, suffix, relative);
-				}
-
-				if ((unlogged_file_reloid != 0) &&
-					(file->relOid == unlogged_file_reloid))
-				{
-					/* Do not backup segments of unlogged files */
-					pgFileFree(file);
-					parray_remove(files, i);
+					unlogged_file_num--;
 					i--;
+
+					unlogged_file = (pgFile *) parray_get(files,
+														  unlogged_file_num);
 				}
 			}
 		}
+
+		i++;
 	}
 }
 
@@ -2514,9 +2476,13 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	static uint32 prevtimeline = 0;
 	static XLogRecPtr prevpos = InvalidXLogRecPtr;
 
+	/* check for interrupt */
+	if (interrupted)
+		elog(ERROR, "Interrupted during backup");
+
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
-		elog(LOG, _("finished segment at %X/%X (timeline %u)\n"),
+		elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
 			 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
 	/*
@@ -2534,7 +2500,10 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	if (!XLogRecPtrIsInvalid(stop_backup_lsn))
 	{
 		if (xlogpos > stop_backup_lsn)
+		{
+			stop_stream_lsn = xlogpos;
 			return true;
+		}
 
 		/* pg_stop_backup() was executed, wait for the completion of stream */
 		if (stream_stop_timeout == 0)
@@ -2568,45 +2537,13 @@ StreamLog(void *arg)
 {
 	XLogRecPtr	startpos;
 	TimeLineID	starttli;
-	char	   *basedir = (char *)arg;
-
-	/*
-	 * Connect in replication mode to the server
-	 */
-	if (conn == NULL)
-		conn = pgut_connect_replication(pgut_dbname);
-	if (!conn)
-	{
-		pthread_mutex_unlock(&start_stream_mut);
-		/* Error message already written in GetConnection() */
-		return;
-	}
-
-	if (!CheckServerVersionForStreaming(conn))
-	{
-		/*
-		 * Error message already written in CheckServerVersionForStreaming().
-		 * There's no hope of recovering from a version mismatch, so don't
-		 * retry.
-		 */
-		disconnect_and_exit(1);
-	}
-
-	/*
-	 * Identify server, obtaining start LSN position and current timeline ID
-	 * at the same time, necessary if not valid data can be found in the
-	 * existing output directory.
-	 */
-	if (!RunIdentifySystem(conn, NULL, &starttli, &startpos, NULL))
-		disconnect_and_exit(1);
-
-	/* Ok we have normal stream connect and main process can work again */
-	pthread_mutex_unlock(&start_stream_mut);
+	StreamThreadArg *stream_arg = (StreamThreadArg *) arg;
 
 	/*
 	 * We must use startpos as start_lsn from start_backup
 	 */
 	startpos = current.start_lsn;
+	starttli = current.tli;
 
 	/*
 	 * Always start streaming at the beginning of a segment
@@ -2620,7 +2557,7 @@ StreamLog(void *arg)
 	/*
 	 * Start the replication
 	 */
-	elog(LOG, _("starting log streaming at %X/%X (timeline %u)\n"),
+	elog(LOG, _("started streaming WAL at %X/%X (timeline %u)"),
 		 (uint32) (startpos >> 32), (uint32) startpos, starttli);
 
 #if PG_VERSION_NUM >= 90600
@@ -2634,11 +2571,11 @@ StreamLog(void *arg)
 		ctl.sysidentifier = NULL;
 
 #if PG_VERSION_NUM >= 100000
-		ctl.walmethod = CreateWalDirectoryMethod(basedir, 0, true);
+		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 #else
-		ctl.basedir = basedir;
+		ctl.basedir = (char *) stream_arg->basedir;
 #endif
 
 		ctl.stream_stop = stop_streaming;
@@ -2647,7 +2584,7 @@ StreamLog(void *arg)
 		ctl.synchronous = false;
 		ctl.mark_done = false;
 
-		if(ReceiveXlogStream(conn, &ctl) == false)
+		if(ReceiveXlogStream(stream_arg->conn, &ctl) == false)
 			elog(ERROR, "Problem in receivexlog");
 
 #if PG_VERSION_NUM >= 100000
@@ -2657,14 +2594,18 @@ StreamLog(void *arg)
 #endif
 	}
 #else
-	if(ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
-					  stop_streaming, standby_message_timeout, NULL,
-					  false, false) == false)
+	if(ReceiveXlogStream(stream_arg->conn, startpos, starttli, NULL,
+						 (char *) stream_arg->basedir, stop_streaming,
+						 standby_message_timeout, NULL, false, false) == false)
 		elog(ERROR, "Problem in receivexlog");
 #endif
 
-	PQfinish(conn);
-	conn = NULL;
+	elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
+		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, starttli);
+	stream_arg->ret = 0;
+
+	PQfinish(stream_arg->conn);
+	stream_arg->conn = NULL;
 }
 
 /*
@@ -2679,7 +2620,7 @@ get_last_ptrack_lsn(void)
 	uint32		xrecoff;
 	XLogRecPtr	lsn;
 
-	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()", 0, NULL, true);
+	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()", 0, NULL);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
