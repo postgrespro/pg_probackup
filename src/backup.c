@@ -1164,10 +1164,10 @@ pg_ptrack_support(void)
 		return false;
 	}
 
-	/* Now we support only ptrack version 1.5 */
-	if (strcmp(PQgetvalue(res_db, 0, 0), "1.5") != 0)
+	/* Now we support only ptrack versions upper than 1.5 */
+	if (strverscmp(PQgetvalue(res_db, 0, 0), "1.5") < 0)
 	{
-		elog(WARNING, "Update your ptrack to the version 1.5. Current version is %s", PQgetvalue(res_db, 0, 0));
+		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s", PQgetvalue(res_db, 0, 0));
 		PQclear(res_db);
 		return false;
 	}
