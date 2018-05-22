@@ -11,14 +11,19 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_exclude_temp_tables(self):
-        """make node without archiving, create temp table, take full backup, check that temp table not present in backup catalogue"""
+        """
+        make node without archiving, create temp table, take full backup,
+        check that temp table not present in backup catalogue
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2', 'shared_buffers': '1GB',
-            "fsync": "off", 'ptrack_enable': 'on'}
+            pg_options={
+                'wal_level': 'replica', 'max_wal_senders': '2',
+                'shared_buffers': '1GB', 'fsync': 'off', 'ptrack_enable': 'on'}
             )
 
         self.init_pb(backup_dir)
@@ -28,10 +33,14 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         conn = node.connect()
         with node.connect("postgres") as conn:
 
-            conn.execute("create temp table test as select generate_series(0,50050000)::text")
+            conn.execute(
+                "create temp table test as "
+                "select generate_series(0,50050000)::text")
             conn.commit()
 
-            temp_schema_name = conn.execute("SELECT nspname FROM pg_namespace WHERE oid = pg_my_temp_schema()")[0][0]
+            temp_schema_name = conn.execute(
+                "SELECT nspname FROM pg_namespace "
+                "WHERE oid = pg_my_temp_schema()")[0][0]
             conn.commit()
 
             temp_toast_schema_name = "pg_toast_" + temp_schema_name.replace("pg_", "")
@@ -60,18 +69,24 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         temp_toast_filename = os.path.basename(toast_path)
         temp_idx_toast_filename = os.path.basename(toast_idx_path)
 
-        self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--stream'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='full', options=['--stream'])
 
         for root, dirs, files in os.walk(backup_dir):
             for file in files:
-                if file in [temp_table_filename, temp_table_filename + ".1",
-                 temp_idx_filename,
-                 temp_idx_filename + ".1",
-                 temp_toast_filename,
-                 temp_toast_filename + ".1",
-                 temp_idx_toast_filename,
-                 temp_idx_toast_filename + ".1"]:
-                    self.assertEqual(1, 0, "Found temp table file in backup catalogue.\n Filepath: {0}".format(file))
+                if file in [
+                    temp_table_filename, temp_table_filename + ".1",
+                    temp_idx_filename,
+                    temp_idx_filename + ".1",
+                    temp_toast_filename,
+                    temp_toast_filename + ".1",
+                    temp_idx_toast_filename,
+                    temp_idx_toast_filename + ".1"
+                        ]:
+                    self.assertEqual(
+                        1, 0,
+                        "Found temp table file in backup catalogue.\n "
+                        "Filepath: {0}".format(file))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -92,7 +107,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
-                "shared_buffers": "1GB",
+                "shared_buffers": "10MB",
                 "fsync": "off",
                 'ptrack_enable': 'on'}
             )

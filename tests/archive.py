@@ -44,8 +44,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
 
         self.restore_node(
-            backup_dir, 'node', node,
-            options=["--recovery-target-action=promote"])
+            backup_dir, 'node', node)
         node.start()
         while node.safe_psql(
             "postgres",
@@ -659,8 +658,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Settings for Replica
         self.restore_node(
-            backup_dir, 'master', replica,
-            options=['--recovery-target-action=promote'])
+            backup_dir, 'master', replica)
         # CHECK PHYSICAL CORRECTNESS on REPLICA
         pgdata_replica = self.pgdata_content(replica.data_dir)
         self.compare_pgdata(pgdata_master, pgdata_replica)
