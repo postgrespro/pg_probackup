@@ -193,6 +193,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
+
 		if (file->is_datafile && file->pagemap.bitmap == NULL)
 			file->pagemap.bitmapsize = PageBitmapIsEmpty;
 	}

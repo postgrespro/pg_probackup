@@ -130,6 +130,11 @@ static void check_system_identifiers(void);
 static void confirm_block_size(const char *name, int blcksz);
 static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 
+/*
+ * A little optimization used in process_block_change().
+ */
+static pgFile *last_used_file = NULL;
+
 
 #define disconnect_and_exit(code)				\
 	{											\
@@ -500,6 +505,7 @@ do_backup_instance(void)
 	}
 	else
 		current.tli = get_current_timeline(false);
+
 	/*
 	 * In incremental backup mode ensure that already-validated
 	 * backup on current timeline exists and get its filelist.
@@ -509,6 +515,7 @@ do_backup_instance(void)
 		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		parray	   *backup_list;
+
 		/* get list of backups already taken */
 		backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 		if (backup_list == NULL)
@@ -628,6 +635,9 @@ do_backup_instance(void)
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
+		/* Just in case initialize it to NULL */
+		last_used_file = NULL;
+
 		/*
 		 * Build the page map. Obtain information about changed pages
 		 * reading WAL segments present in archives up to the point
@@ -2318,11 +2328,11 @@ datasegpath(RelFileNode rnode, ForkNumber forknum, BlockNumber segno)
 void
 process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 {
-	char		*path;
-	char		*rel_path;
+	char	   *path;
+	char	   *rel_path;
 	BlockNumber blkno_inseg;
 	int			segno;
-	pgFile		*file_item = NULL;
+	pgFile	   *file_item = NULL;
 	int			j;
 
 	segno = blkno / RELSEG_SIZE;
@@ -2332,14 +2342,24 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	path = pg_malloc(strlen(rel_path) + strlen(pgdata) + 2);
 	sprintf(path, "%s/%s", pgdata, rel_path);
 
-	for (j = 0; j < parray_num(backup_files_list); j++)
+	/*
+	 * Little optimization in case if we need the same file as in the previoius
+	 * call.
+	 */
+	if (last_used_file && strcmp(last_used_file->path, path) == 0)
+		file_item = last_used_file;
+	else
 	{
-		pgFile *p = (pgFile *) parray_get(backup_files_list, j);
-
-		if (strcmp(p->path, path) == 0)
+		for (j = 0; j < parray_num(backup_files_list); j++)
 		{
-			file_item = p;
-			break;
+			pgFile	   *p = (pgFile *) parray_get(backup_files_list, j);
+
+			if (strcmp(p->path, path) == 0)
+			{
+				file_item = p;
+				last_used_file = p;
+				break;
+			}
 		}
 	}
 
@@ -2443,7 +2463,7 @@ make_pagemap_from_ptrack(parray *files)
 				}
 				else
 				{
-					file->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
+					file->pagemap.bitmapsize = RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
 					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
 				}
 
