@@ -130,12 +130,6 @@ static void check_system_identifiers(void);
 static void confirm_block_size(const char *name, int blcksz);
 static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 
-/*
- * A little optimization used in process_block_change().
- */
-static pgFile *last_used_file = NULL;
-
-
 #define disconnect_and_exit(code)				\
 	{											\
 	if (conn != NULL) PQfinish(conn);			\
@@ -618,6 +612,19 @@ do_backup_instance(void)
 	else
 		dir_list_file(backup_files_list, pgdata, true, true, false);
 
+	/*
+	 * Sort pathname ascending. It is necessary to create intermediate
+	 * directories sequentially.
+	 *
+	 * For example:
+	 * 1 - create 'base'
+	 * 2 - create 'base/1'
+	 *
+	 * Sorted array is used at least in parse_backup_filelist_filenames(),
+	 * extractPageMap(), make_pagemap_from_ptrack().
+	 */
+	parray_qsort(backup_files_list, pgFileComparePath);
+
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
@@ -635,9 +642,6 @@ do_backup_instance(void)
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 	{
-		/* Just in case initialize it to NULL */
-		last_used_file = NULL;
-
 		/*
 		 * Build the page map. Obtain information about changed pages
 		 * reading WAL segments present in archives up to the point
@@ -651,26 +655,16 @@ do_backup_instance(void)
 						*/
 					   !current.from_replica, backup_files_list);
 	}
-
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		parray_qsort(backup_files_list, pgFileComparePath);
+		/*
+		 * Build the page map from ptrack information.
+		 */
 		make_pagemap_from_ptrack(backup_files_list);
 	}
 
 	/*
-	 * Sort pathname ascending. It is necessary to create intermediate
-	 * directories sequentially.
-	 *
-	 * For example:
-	 * 1 - create 'base'
-	 * 2 - create 'base/1'
-	 */
-	parray_qsort(backup_files_list, pgFileComparePath);
-
-	/*
-	 * Make directories before backup
-	 * and setup threads at the same time
+	 * Make directories before backup and setup threads at the same time
 	 */
 	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
@@ -771,12 +765,14 @@ do_backup_instance(void)
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
+
 			if (S_ISREG(file->mode))
 				calc_file_checksum(file);
 			/* Remove file path root prefix*/
 			if (strstr(file->path, database_path) == file->path)
 			{
 				char	   *ptr = file->path;
+
 				file->path = pstrdup(GetRelativePath(ptr, database_path));
 				free(ptr);
 			}
@@ -2301,27 +2297,6 @@ write_backup_file_list(parray *files, const char *root)
 }
 
 /*
- * A helper function to create the path of a relation file and segment.
- * The returned path is palloc'd
- */
-static char *
-datasegpath(RelFileNode rnode, ForkNumber forknum, BlockNumber segno)
-{
-	char	   *path;
-	char	   *segpath;
-
-	path = relpathperm(rnode, forknum);
-	if (segno > 0)
-	{
-		segpath = psprintf("%s.%u", path, segno);
-		pfree(path);
-		return segpath;
-	}
-	else
-		return path;
-}
-
-/*
  * Find pgfile by given rnode in the backup_files_list
  * and add given blkno to its pagemap.
  */
@@ -2332,36 +2307,24 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	char	   *rel_path;
 	BlockNumber blkno_inseg;
 	int			segno;
-	pgFile	   *file_item = NULL;
-	int			j;
+	pgFile	  **file_item;
+	pgFile		f;
 
 	segno = blkno / RELSEG_SIZE;
 	blkno_inseg = blkno % RELSEG_SIZE;
 
-	rel_path = datasegpath(rnode, forknum, segno);
-	path = pg_malloc(strlen(rel_path) + strlen(pgdata) + 2);
-	sprintf(path, "%s/%s", pgdata, rel_path);
-
-	/*
-	 * Little optimization in case if we need the same file as in the previoius
-	 * call.
-	 */
-	if (last_used_file && strcmp(last_used_file->path, path) == 0)
-		file_item = last_used_file;
+	rel_path = relpathperm(rnode, forknum);
+	if (segno > 0)
+		path = psprintf("%s/%s.%u", pgdata, rel_path, segno);
 	else
-	{
-		for (j = 0; j < parray_num(backup_files_list); j++)
-		{
-			pgFile	   *p = (pgFile *) parray_get(backup_files_list, j);
+		path = psprintf("%s/%s", pgdata, rel_path);
 
-			if (strcmp(p->path, path) == 0)
-			{
-				file_item = p;
-				last_used_file = p;
-				break;
-			}
-		}
-	}
+	pg_free(rel_path);
+
+	f.path = path;
+	/* backup_files_list should be sorted before */
+	file_item = (pgFile **) parray_bsearch(backup_files_list, &f,
+										   pgFileComparePath);
 
 	/*
 	 * If we don't have any record of this file in the file map, it means
@@ -2370,10 +2333,9 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	 * backup would simply copy it as-is.
 	 */
 	if (file_item)
-		datapagemap_add(&file_item->pagemap, blkno_inseg);
+		datapagemap_add(&(*file_item)->pagemap, blkno_inseg);
 
 	pg_free(path);
-	pg_free(rel_path);
 }
 
 /*

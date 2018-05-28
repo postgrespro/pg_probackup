@@ -385,7 +385,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_append(files, file);
 
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list);
-	parray_qsort(files, pgFileComparePath);
 }
 
 /*
