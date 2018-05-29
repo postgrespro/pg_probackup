@@ -46,6 +46,9 @@ const char *progname = "pg_probackup";
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
 
+/* We need critical section for datapagemap_add() in case of using threads */
+static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /*
  * We need to wait end of WAL streaming before execute pg_stop_backup().
  */
@@ -2333,7 +2336,16 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	 * backup would simply copy it as-is.
 	 */
 	if (file_item)
+	{
+		/* We need critical section only we use more than one threads */
+		if (num_threads > 1)
+			pthread_mutex_lock(&backup_pagemap_mutex);
+
 		datapagemap_add(&(*file_item)->pagemap, blkno_inseg);
+
+		if (num_threads > 1)
+			pthread_mutex_unlock(&backup_pagemap_mutex);
+	}
 
 	pg_free(path);
 }
