@@ -203,6 +203,7 @@ do_restore_or_validate(time_t target_backup_id,
 		}
 
 		/* If we already found dest_backup, look for full backup. */
+		/* TODO Now, as we have all backups linked, we can probably get rid of that?"*/
 		if (dest_backup)
 		{
 			if (current_backup->backup_mode == BACKUP_MODE_FULL)

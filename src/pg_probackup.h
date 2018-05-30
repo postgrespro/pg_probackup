@@ -184,6 +184,8 @@ typedef struct pgBackupConfig
 	int			compress_level;
 } pgBackupConfig;
 
+typedef struct pgBackup pgBackup;
+
 /* Information about single backup stored in backup.conf */
 typedef struct pgBackup
 {
@@ -226,6 +228,7 @@ typedef struct pgBackup
 	time_t			parent_backup; 	/* Identifier of the previous backup.
 									 * Which is basic backup for this
 									 * incremental backup. */
+	pgBackup		*parent_backup_link;
 	char			*primary_conninfo; /* Connection parameters of the backup
 										* in the format suitable for recovery.conf */
 } pgBackup;

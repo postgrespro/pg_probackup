@@ -256,6 +256,8 @@ catalog_get_backup_list(time_t requested_backup_id)
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
 
+	int		i;
+
 	/* open backup instance backups directory */
 	date_dir = opendir(backup_instance_path);
 	if (date_dir == NULL)
@@ -283,6 +285,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 		/* read backup information from BACKUP_CONTROL_FILE */
 		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONTROL_FILE);
 		backup = readBackupControlFile(backup_conf_path);
+		backup->backup_id = backup->start_time;
 
 		/* ignore corrupted backups */
 		if (backup)
@@ -315,6 +318,30 @@ catalog_get_backup_list(time_t requested_backup_id)
 	date_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
+
+	/* Link incremental backups with their ancestors.*/
+	for (i = 0; i < parray_num(backups); i++)
+	{
+		pgBackup *curr = parray_get(backups, i);
+
+		int j;
+
+		if (curr->backup_mode == BACKUP_MODE_FULL)
+			continue;
+
+		for (j = i+1; j < parray_num(backups); j++)
+		{
+			pgBackup *ancestor = parray_get(backups, j);
+
+			if (ancestor->start_time == curr->parent_backup)
+			{
+				curr->parent_backup_link = ancestor;
+				/* elog(INFO, "curr %s, ancestor %s j=%d", base36enc_dup(curr->start_time),
+						base36enc_dup(ancestor->start_time), j); */
+				break;
+			}
+		}
+	}
 
 	return backups;
 

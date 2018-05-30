@@ -283,6 +283,7 @@ do_validate_instance(void)
 		elog(ERROR, "Failed to get backup list.");
 
 	/* Valiate each backup along with its xlog files. */
+	/* TODO Maybe use parent_backup_link instead of looking for backups in the list */
 	for (i = 0; i < parray_num(backups); i++)
 	{
 		pgBackup   *base_full_backup = NULL;
