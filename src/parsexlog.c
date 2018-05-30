@@ -5,7 +5,7 @@
  *
  * Portions Copyright (c) 1996-2016, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -101,6 +101,19 @@ typedef struct XLogPageReadPrivate
 	TimeLineID	tli;
 } XLogPageReadPrivate;
 
+/* An argument for a thread function */
+typedef struct
+{
+	parray *files;
+	bool corrupted;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
+} xlog_thread_arg;
+
 static int SimpleXLogPageRead(XLogReaderState *xlogreader,
 				   XLogRecPtr targetPagePtr,
 				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf,
@@ -124,6 +137,9 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	XLogPageReadPrivate private;
 	XLogSegNo	endSegNo,
 				nextSegNo = 0;
+
+	pthread_t	threads[num_threads];
+	xlog_thread_arg thread_args[num_threads];
 
 	elog(LOG, "Compiling pagemap");
 	if (!XRecOffIsValid(startpoint))

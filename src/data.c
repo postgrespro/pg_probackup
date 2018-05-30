@@ -221,7 +221,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
  * to the backup file.
  */
 static void
-backup_data_page(backup_files_args *arguments, 
+backup_data_page(backup_files_arg *arguments,
 				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BlockNumber blknum, BlockNumber nblocks,
 				 FILE *in, FILE *out,
@@ -409,7 +409,7 @@ backup_data_page(backup_files_args *arguments,
  * backup with special header.
  */
 bool
-backup_data_file(backup_files_args* arguments,
+backup_data_file(backup_files_arg* arguments,
 				 const char *from_root, const char *to_root,
 				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BackupMode backup_mode)

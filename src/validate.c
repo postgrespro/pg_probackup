@@ -22,15 +22,15 @@ static bool corrupted_backup_found = false;
 
 typedef struct
 {
-	parray *files;
-	bool corrupted;
+	parray	   *files;
+	bool		corrupted;
 
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-} validate_files_args;
+} validate_files_arg;
 
 /*
  * Validate backup files.
@@ -44,8 +44,8 @@ pgBackupValidate(pgBackup *backup)
 	bool		corrupted = false;
 	bool		validation_isok = true;
 	/* arrays with meta info for multi threaded validate */
-	pthread_t  *validate_threads;
-	validate_files_args *validate_threads_args;
+	pthread_t  *threads;
+	validate_files_arg *threads_args;
 	int			i;
 
 	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
@@ -83,29 +83,29 @@ pgBackupValidate(pgBackup *backup)
 	}
 
 	/* init thread args with own file lists */
-	validate_threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	validate_threads_args = (validate_files_args *)
-		palloc(sizeof(validate_files_args) * num_threads);
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (validate_files_arg *)
+		palloc(sizeof(validate_files_arg) * num_threads);
 
 	/* Validate files */
 	for (i = 0; i < num_threads; i++)
 	{
-		validate_files_args *arg = &(validate_threads_args[i]);
+		validate_files_arg *arg = &(threads_args[i]);
 
 		arg->files = files;
 		arg->corrupted = false;
 		/* By default there are some error */
-		arg->ret = 1;
+		threads_args[i].ret = 1;
 
-		pthread_create(&validate_threads[i], NULL, pgBackupValidateFiles, arg);
+		pthread_create(&threads[i], NULL, pgBackupValidateFiles, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
-		validate_files_args *arg = &(validate_threads_args[i]);
+		validate_files_arg *arg = &(threads_args[i]);
 
-		pthread_join(validate_threads[i], NULL);
+		pthread_join(threads[i], NULL);
 		if (arg->corrupted)
 			corrupted = true;
 		if (arg->ret == 1)
@@ -114,8 +114,8 @@ pgBackupValidate(pgBackup *backup)
 	if (!validation_isok)
 		elog(ERROR, "Data files validation failed");
 
-	pfree(validate_threads);
-	pfree(validate_threads_args);
+	pfree(threads);
+	pfree(threads_args);
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
@@ -141,14 +141,14 @@ static void *
 pgBackupValidateFiles(void *arg)
 {
 	int			i;
-	validate_files_args *arguments = (validate_files_args *)arg;
+	validate_files_arg *arguments = (validate_files_arg *)arg;
 	pg_crc32	crc;
 
 	for (i = 0; i < parray_num(arguments->files); i++)
 	{
 		struct stat st;
+		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 
-		pgFile *file = (pgFile *) parray_get(arguments->files, i);
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
@@ -334,11 +334,13 @@ do_validate_instance(void)
 		if (current_backup->status == BACKUP_STATUS_CORRUPT)
 		{
 			int			j;
+
 			corrupted_backup_found = true;
 			current_backup_id = base36enc_dup(current_backup->start_time);
 			for (j = i - 1; j >= 0; j--)
 			{
 				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
+
 				if (backup->backup_mode == BACKUP_MODE_FULL)
 					break;
 				if (backup->status != BACKUP_STATUS_OK)
