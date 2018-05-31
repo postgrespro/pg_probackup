@@ -494,7 +494,7 @@ show_instance_json(parray *backup_list)
 	/* Begin of instance object */
 	json_add(buf, JT_BEGIN_OBJECT);
 
-	json_add_value(buf, "instance-name", instance_name, false);
+	json_add_value(buf, "instance", instance_name, false);
 
 	json_add_key(buf, "backups", true);
 
@@ -517,13 +517,13 @@ show_instance_json(parray *backup_list)
 
 		json_add(buf, JT_BEGIN_OBJECT);
 
-		json_add_value(buf, "id", base36enc(backup->start_time), true);
+		json_add_value(buf, "id", base36enc(backup->start_time), false);
 
 		if (backup->parent_backup != 0)
 			json_add_value(buf, "parent-backup-id",
 						   base36enc(backup->parent_backup), true);
 
-		json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), false);
+		json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), true);
 
 		json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE", true);
 
