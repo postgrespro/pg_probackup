@@ -228,6 +228,7 @@ typedef struct pgBackup
 	uint32			wal_block_size;
 	uint32			checksum_version;
 
+	char			program_version[100];
 	char			server_version[100];
 
 	bool			stream;			/* Was this backup taken in stream mode?

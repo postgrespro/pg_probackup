@@ -26,6 +26,21 @@ static int show_backup(time_t requested_backup_id);
 static void show_instance_plain(parray *backup_list, bool show_name);
 static void show_instance_json(parray *backup_list);
 
+/* Json output functions */
+
+typedef enum
+{
+	JT_BEGIN_ARRAY,
+	JT_END_ARRAY,
+	JT_BEGIN_OBJECT,
+	JT_END_OBJECT
+} JsonToken;
+
+static void json_add(PQExpBuffer buf, JsonToken type);
+static void json_add_key(PQExpBuffer buf, const char *name, bool add_comma);
+static void json_add_value(PQExpBuffer buf, const char *name, const char *value,
+						   bool add_comma);
+
 static PQExpBufferData show_buf;
 static bool first_instance = true;
 static uint8 json_level = 0;
@@ -219,8 +234,9 @@ show_instance_start(void)
 	first_instance = true;
 	json_level = 0;
 
-	appendPQExpBufferChar(&show_buf, '[');
-	json_level++;
+	json_add(&show_buf, JT_BEGIN_OBJECT);
+	json_add_key(&show_buf, "instances", false);
+	json_add(&show_buf, JT_BEGIN_ARRAY);
 }
 
 /*
@@ -230,7 +246,11 @@ static void
 show_instance_end(void)
 {
 	if (show_format == SHOW_JSON)
-		appendPQExpBufferStr(&show_buf, "\n]\n");
+	{
+		json_add(&show_buf, JT_END_ARRAY);
+		json_add(&show_buf, JT_END_OBJECT);
+		appendPQExpBufferChar(&show_buf, '\n');
+	}
 
 	fputs(show_buf.data, stdout);
 	termPQExpBuffer(&show_buf);
@@ -375,14 +395,6 @@ json_add_indent(PQExpBuffer buf)
 		appendPQExpBufferStr(buf, "    ");
 }
 
-typedef enum
-{
-	JT_BEGIN_ARRAY,
-	JT_END_ARRAY,
-	JT_BEGIN_OBJECT,
-	JT_END_OBJECT
-} JsonToken;
-
 static void
 json_add(PQExpBuffer buf, JsonToken type)
 {
@@ -493,10 +505,10 @@ show_instance_json(parray *backup_list)
 
 	/* Begin of instance object */
 	json_add(buf, JT_BEGIN_OBJECT);
+	json_add_key(buf, instance_name, false);
 
-	json_add_value(buf, "instance", instance_name, false);
-
-	json_add_key(buf, "backups", true);
+	json_add(buf, JT_BEGIN_OBJECT);
+	json_add_key(buf, "backups", false);
 
 	/*
 	 * List backups.
@@ -516,14 +528,19 @@ show_instance_json(parray *backup_list)
 			appendPQExpBufferChar(buf, ',');
 
 		json_add(buf, JT_BEGIN_OBJECT);
+		json_add_key(buf, base36enc(backup->start_time), false);
 
-		json_add_value(buf, "id", base36enc(backup->start_time), false);
+		/* Show backup attributes */
+		json_add(buf, JT_BEGIN_OBJECT);
 
 		if (backup->parent_backup != 0)
+		{
 			json_add_value(buf, "parent-backup-id",
-						   base36enc(backup->parent_backup), true);
-
-		json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), true);
+						   base36enc(backup->parent_backup), false);
+			json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), true);
+		}
+		else
+			json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), false);
 
 		json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE", true);
 
@@ -545,6 +562,7 @@ show_instance_json(parray *backup_list)
 		json_add_key(buf, "checksum-version", true);
 		appendPQExpBuffer(buf, "%u", backup->checksum_version);
 
+		json_add_value(buf, "program-version", backup->program_version, true);
 		json_add_value(buf, "server-version", backup->server_version, true);
 
 		json_add_key(buf, "current-tli", true);
@@ -595,10 +613,14 @@ show_instance_json(parray *backup_list)
 		json_add_value(buf, "status", status2str(backup->status), true);
 
 		json_add(buf, JT_END_OBJECT);
+		/* End of backup attributes */
+
+		json_add(buf, JT_END_OBJECT);
 	}
 
 	/* End of backups */
 	json_add(buf, JT_END_ARRAY);
+	json_add(buf, JT_END_OBJECT);
 
 	/* End of instance object */
 	json_add(buf, JT_END_OBJECT);

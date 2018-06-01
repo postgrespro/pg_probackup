@@ -325,5 +325,6 @@ pgBackup_init(pgBackup *backup)
 	backup->from_replica = false;
 	backup->parent_backup = 0;
 	backup->primary_conninfo = NULL;
+	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 }

@@ -395,6 +395,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
 	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	fprintf(out, "program-version = %s\n", PROGRAM_VERSION);
 	if (backup->server_version[0] != '\0')
 		fprintf(out, "server-version = %s\n", backup->server_version);
 
@@ -476,6 +477,7 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
+	char	   *program_version = NULL;
 	char	   *server_version = NULL;
 	char	   *compress_alg = NULL;
 
@@ -494,6 +496,7 @@ readBackupControlFile(const char *path)
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum-version",	&backup->checksum_version, SOURCE_FILE_STRICT},
+		{'s', 0, "program-version",		&program_version, SOURCE_FILE_STRICT},
 		{'s', 0, "server-version",		&server_version, SOURCE_FILE_STRICT},
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
@@ -568,6 +571,13 @@ readBackupControlFile(const char *path)
 	{
 		backup->parent_backup = base36dec(parent_backup);
 		free(parent_backup);
+	}
+
+	if (program_version)
+	{
+		StrNCpy(backup->program_version, program_version,
+				sizeof(backup->program_version));
+		pfree(program_version);
 	}
 
 	if (server_version)
