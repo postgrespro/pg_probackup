@@ -234,9 +234,8 @@ show_instance_start(void)
 	first_instance = true;
 	json_level = 0;
 
-	json_add(&show_buf, JT_BEGIN_OBJECT);
-	json_add_key(&show_buf, "instances", false);
-	json_add(&show_buf, JT_BEGIN_ARRAY);
+	appendPQExpBufferChar(&show_buf, '[');
+	json_level++;
 }
 
 /*
@@ -246,11 +245,7 @@ static void
 show_instance_end(void)
 {
 	if (show_format == SHOW_JSON)
-	{
-		json_add(&show_buf, JT_END_ARRAY);
-		json_add(&show_buf, JT_END_OBJECT);
-		appendPQExpBufferChar(&show_buf, '\n');
-	}
+		appendPQExpBufferStr(&show_buf, "\n]\n");
 
 	fputs(show_buf.data, stdout);
 	termPQExpBuffer(&show_buf);
@@ -505,10 +500,9 @@ show_instance_json(parray *backup_list)
 
 	/* Begin of instance object */
 	json_add(buf, JT_BEGIN_OBJECT);
-	json_add_key(buf, instance_name, false);
 
-	json_add(buf, JT_BEGIN_OBJECT);
-	json_add_key(buf, "backups", false);
+	json_add_value(buf, "instance", instance_name, false);
+	json_add_key(buf, "backups", true);
 
 	/*
 	 * List backups.
@@ -528,19 +522,14 @@ show_instance_json(parray *backup_list)
 			appendPQExpBufferChar(buf, ',');
 
 		json_add(buf, JT_BEGIN_OBJECT);
-		json_add_key(buf, base36enc(backup->start_time), false);
 
-		/* Show backup attributes */
-		json_add(buf, JT_BEGIN_OBJECT);
+		json_add_value(buf, "id", base36enc(backup->start_time), false);
 
 		if (backup->parent_backup != 0)
-		{
 			json_add_value(buf, "parent-backup-id",
-						   base36enc(backup->parent_backup), false);
-			json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), true);
-		}
-		else
-			json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), false);
+						   base36enc(backup->parent_backup), true);
+
+		json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), true);
 
 		json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE", true);
 
@@ -613,14 +602,10 @@ show_instance_json(parray *backup_list)
 		json_add_value(buf, "status", status2str(backup->status), true);
 
 		json_add(buf, JT_END_OBJECT);
-		/* End of backup attributes */
-
-		json_add(buf, JT_END_OBJECT);
 	}
 
 	/* End of backups */
 	json_add(buf, JT_END_ARRAY);
-	json_add(buf, JT_END_OBJECT);
 
 	/* End of instance object */
 	json_add(buf, JT_END_OBJECT);
