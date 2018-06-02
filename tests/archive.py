@@ -427,7 +427,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_replica_archive(self):
-        """make node without archiving, take stream backup and turn it into replica, set replica with archiving, make archive backup from replica"""
+        """
+        make node without archiving, take stream backup and
+        turn it into replica, set replica with archiving,
+        make archive backup from replica
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -468,7 +472,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
-        # Change data on master, take FULL backup from replica, restore taken backup and check that restored data equal to original data
+        # Change data on master, take FULL backup from replica,
+        # restore taken backup and check that restored data equal
+        # to original data
         master.psql(
             "postgres",
             "insert into t_heap as select i as id, md5(i::text) as text, "
@@ -502,7 +508,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
-        # Change data on master, make PAGE backup from replica, restore taken backup and check that restored data equal to original data
+        # Change data on master, make PAGE backup from replica,
+        # restore taken backup and check that restored data equal
+        # to original data
         master.psql(
             "postgres",
             "insert into t_heap as select i as id, md5(i::text) as text, "

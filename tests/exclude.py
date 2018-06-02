@@ -34,25 +34,33 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             temp_schema_name = conn.execute("SELECT nspname FROM pg_namespace WHERE oid = pg_my_temp_schema()")[0][0]
             conn.commit()
 
-            temp_toast_schema_name = "pg_toast_" + temp_schema_name.replace("pg_", "")
+            temp_toast_schema_name = "pg_toast_" + temp_schema_name.replace(
+                "pg_", "")
             conn.commit()
 
             conn.execute("create index test_idx on test (generate_series)")
             conn.commit()
 
-            heap_path = conn.execute("select pg_relation_filepath('test')")[0][0]
+            heap_path = conn.execute(
+                "select pg_relation_filepath('test')")[0][0]
             conn.commit()
 
-            index_path = conn.execute("select pg_relation_filepath('test_idx')")[0][0]
+            index_path = conn.execute(
+                "select pg_relation_filepath('test_idx')")[0][0]
             conn.commit()
 
             heap_oid = conn.execute("select 'test'::regclass::oid")[0][0]
             conn.commit()
 
-            toast_path = conn.execute("select pg_relation_filepath('{0}.{1}')".format(temp_toast_schema_name, "pg_toast_" + str(heap_oid)))[0][0]
+            toast_path = conn.execute(
+                "select pg_relation_filepath('{0}.{1}')".format(
+                    temp_toast_schema_name, "pg_toast_" + str(heap_oid)))[0][0]
             conn.commit()
 
-            toast_idx_path = conn.execute("select pg_relation_filepath('{0}.{1}')".format(temp_toast_schema_name, "pg_toast_" + str(heap_oid) + "_index"))[0][0]
+            toast_idx_path = conn.execute(
+                "select pg_relation_filepath('{0}.{1}')".format(
+                    temp_toast_schema_name,
+                    "pg_toast_" + str(heap_oid) + "_index"))[0][0]
             conn.commit()
 
         temp_table_filename = os.path.basename(heap_path)

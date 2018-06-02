@@ -1191,7 +1191,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             f.close
 
         self.assertTrue(
-            self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK',
+            self.show_pb(backup_dir, 'node')[1]['status'] == 'OK',
             "Backup Status should be OK")
 
         # Clean after yourself
@@ -1264,7 +1264,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         self.assertTrue(
-             self.show_pb(backup_dir, 'node')[1]['Status'] == 'ERROR',
+             self.show_pb(backup_dir, 'node')[1]['status'] == 'ERROR',
              "Backup Status should be ERROR")
 
         # Clean after yourself

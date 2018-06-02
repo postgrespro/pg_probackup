@@ -14,7 +14,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
     def test_retention_redundancy_1(self):
         """purge backups using redundancy-based retention policy"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -24,7 +25,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.start()
 
-        with open(os.path.join(backup_dir, 'backups', 'node', "pg_probackup.conf"), "a") as conf:
+        with open(os.path.join(
+                backup_dir, 'backups', 'node',
+                "pg_probackup.conf"), "a") as conf:
             conf.write("retention-redundancy = 1\n")
 
         # Make backups to be purged
@@ -57,7 +60,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         for wal_name in os.listdir(os.path.join(backup_dir, 'wal', 'node')):
             if not wal_name.endswith(".backup"):
-                #wal_name_b = wal_name.encode('ascii')
+                # wal_name_b = wal_name.encode('ascii')
                 self.assertEqual(wal_name[8:] > min_wal[8:], True)
                 self.assertEqual(wal_name[8:] > max_wal[8:], True)
 
@@ -68,7 +71,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
     def test_retention_window_2(self):
         """purge backups using window-based retention policy"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )

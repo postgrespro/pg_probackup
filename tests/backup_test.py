@@ -29,15 +29,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.start()
 
-        # full backup mode
-        # with open(path.join(node.logs_dir, "backup_full.log"), "wb") as backup_log:
-        #    backup_log.write(self.backup_node(node, options=["--verbose"]))
-
         backup_id = self.backup_node(backup_dir, 'node', node)
         show_backup = self.show_pb(backup_dir, 'node')[0]
 
-        self.assertEqual(show_backup['Status'], "OK")
-        self.assertEqual(show_backup['Mode'], "FULL")
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "FULL")
 
         # postmaster.pid and postmaster.opts shouldn't be copied
         excluded = True
@@ -61,29 +57,29 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # print self.show_pb(node)
         show_backup = self.show_pb(backup_dir, 'node')[1]
-        self.assertEqual(show_backup['Status'], "OK")
-        self.assertEqual(show_backup['Mode'], "PAGE")
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "PAGE")
 
         # Check parent backup
         self.assertEqual(
             backup_id,
             self.show_pb(
                 backup_dir, 'node',
-                backup_id=show_backup['ID'])["parent-backup-id"])
+                backup_id=show_backup['id'])["parent-backup-id"])
 
         # ptrack backup mode
         self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
 
         show_backup = self.show_pb(backup_dir, 'node')[2]
-        self.assertEqual(show_backup['Status'], "OK")
-        self.assertEqual(show_backup['Mode'], "PTRACK")
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "PTRACK")
 
         # Check parent backup
         self.assertEqual(
             page_backup_id,
             self.show_pb(
                 backup_dir, 'node',
-                backup_id=show_backup['ID'])["parent-backup-id"])
+                backup_id=show_backup['id'])["parent-backup-id"])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -106,7 +102,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             options=["-C"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
         node.stop()
 
         # Clean after yourself
@@ -162,7 +158,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         self.assertEqual(
-            self.show_pb(backup_dir, 'node')[0]['Status'],
+            self.show_pb(backup_dir, 'node')[0]['status'],
             "ERROR")
 
         # Clean after yourself
@@ -227,7 +223,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             self.show_pb(backup_dir, 'node', backup_id)['status'], "CORRUPT")
         self.assertEqual(
-            self.show_pb(backup_dir, 'node')[1]['Status'], "ERROR")
+            self.show_pb(backup_dir, 'node')[1]['status'], "ERROR")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -250,12 +246,12 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             backup_type="full", options=["-j", "4"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
 
         self.backup_node(
             backup_dir, 'node', node,
             backup_type="ptrack", options=["-j", "4"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -282,11 +278,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type="full",
             options=["-j", "4", "--stream"])
 
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
         self.backup_node(
             backup_dir, 'node', node,
             backup_type="ptrack", options=["-j", "4", "--stream"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['status'], "OK")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -342,7 +338,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             f.close
 
         self.assertTrue(
-            self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK',
+            self.show_pb(backup_dir, 'node')[1]['status'] == 'OK',
             "Backup Status should be OK")
 
         # Clean after yourself
@@ -415,7 +411,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         self.assertTrue(
-             self.show_pb(backup_dir, 'node')[1]['Status'] == 'ERROR',
+             self.show_pb(backup_dir, 'node')[1]['status'] == 'ERROR',
              "Backup Status should be ERROR")
 
         # Clean after yourself
