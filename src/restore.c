@@ -243,66 +243,69 @@ do_restore_or_validate(time_t target_backup_id,
 	if (is_restore)
 		check_tablespace_mapping(dest_backup);
 
-	if (dest_backup->backup_mode != BACKUP_MODE_FULL)
-		elog(INFO, "Validating parents for backup %s", base36enc(dest_backup->start_time));
-
-	/*
-	 * Validate backups from base_full_backup to dest_backup.
-	 */
-	for (i = base_full_backup_index; i >= dest_backup_index; i--)
+	if (!is_restore || !rt->restore_no_validate)
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
-		pgBackupValidate(backup);
-		/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
-		if (backup->status == BACKUP_STATUS_CORRUPT)
-		{
-			corrupted_backup = backup;
-			corrupted_backup_index = i;
-			break;
-		}
-		/* We do not validate WAL files of intermediate backups
-		 * It`s done to speed up restore
-		 */
-	}
-	/* There is no point in wal validation
-	 * if there is corrupted backup between base_backup and dest_backup
-	 */
-	if (!corrupted_backup)
+		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
+			elog(INFO, "Validating parents for backup %s", base36enc(dest_backup->start_time));
+
 		/*
-		 * Validate corresponding WAL files.
-		 * We pass base_full_backup timeline as last argument to this function,
-		 * because it's needed to form the name of xlog file.
+		 * Validate backups from base_full_backup to dest_backup.
 		 */
-		validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-					rt->recovery_target_xid, base_full_backup->tli);
-
-	/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
-	if (corrupted_backup)
-	{
-		for (i = corrupted_backup_index - 1; i >= 0; i--)
+		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
-			/* Mark incremental OK backup as orphan */
-			if (backup->backup_mode == BACKUP_MODE_FULL)
-				break;
-			if (backup->status != BACKUP_STATUS_OK)
-				continue;
-			else
+			pgBackupValidate(backup);
+			/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
+			if (backup->status == BACKUP_STATUS_CORRUPT)
 			{
-				char	   *backup_id,
-						   *corrupted_backup_id;
+				corrupted_backup = backup;
+				corrupted_backup_index = i;
+				break;
+			}
+			/* We do not validate WAL files of intermediate backups
+			 * It`s done to speed up restore
+			 */
+		}
+		/* There is no point in wal validation
+		 * if there is corrupted backup between base_backup and dest_backup
+		 */
+		if (!corrupted_backup)
+			/*
+			 * Validate corresponding WAL files.
+			 * We pass base_full_backup timeline as last argument to this function,
+			 * because it's needed to form the name of xlog file.
+			 */
+			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
+						rt->recovery_target_xid, base_full_backup->tli);
 
-				backup->status = BACKUP_STATUS_ORPHAN;
-				pgBackupWriteBackupControlFile(backup);
+		/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
+		if (corrupted_backup)
+		{
+			for (i = corrupted_backup_index - 1; i >= 0; i--)
+			{
+				pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+				/* Mark incremental OK backup as orphan */
+				if (backup->backup_mode == BACKUP_MODE_FULL)
+					break;
+				if (backup->status != BACKUP_STATUS_OK)
+					continue;
+				else
+				{
+					char	   *backup_id,
+							*corrupted_backup_id;
 
-				backup_id = base36enc_dup(backup->start_time);
-				corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
+					backup->status = BACKUP_STATUS_ORPHAN;
+					pgBackupWriteBackupControlFile(backup);
 
-				elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
-					 backup_id, corrupted_backup_id);
+					backup_id = base36enc_dup(backup->start_time);
+					corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
 
-				free(backup_id);
-				free(corrupted_backup_id);
+					elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
+						backup_id, corrupted_backup_id);
+
+					free(backup_id);
+					free(corrupted_backup_id);
+				}
 			}
 		}
 	}
@@ -1001,7 +1004,8 @@ parseRecoveryTargetOptions(const char *target_time,
 					TimeLineID	target_tli,
 					bool target_immediate,
 					const char *target_name,
-					const char *target_action)
+					const char *target_action,
+					bool		restore_no_validate)
 {
 	time_t			dummy_time;
 	TransactionId	dummy_xid;
@@ -1026,6 +1030,7 @@ parseRecoveryTargetOptions(const char *target_time,
 	rt->recovery_target_immediate = false;
 	rt->recovery_target_name = NULL;
 	rt->recovery_target_action = NULL;
+	rt->restore_no_validate = false;
 
 	/* parse given options */
 	if (target_time)
@@ -1070,6 +1075,12 @@ parseRecoveryTargetOptions(const char *target_time,
 	{
 		recovery_target_specified++;
 		rt->recovery_target_immediate = target_immediate;
+	}
+
+	if (restore_no_validate)
+	{
+		recovery_target_specified++;
+		rt->restore_no_validate = restore_no_validate;
 	}
 
 	if (target_name)

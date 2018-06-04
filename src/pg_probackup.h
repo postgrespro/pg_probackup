@@ -247,6 +247,7 @@ typedef struct pgRecoveryTarget
 	bool			recovery_target_immediate;
 	const char		*recovery_target_name;
 	const char		*recovery_target_action;
+	bool			restore_no_validate;
 } pgRecoveryTarget;
 
 /* Union to ease operations on relation pages */
@@ -378,7 +379,7 @@ extern parray * readTimeLineHistory_probackup(TimeLineID targetTLI);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, bool target_immediate,
-	const char *target_name, const char *target_action);
+	const char *target_name, const char *target_action, bool restore_no_validate);
 
 extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 
