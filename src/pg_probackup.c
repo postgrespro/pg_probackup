@@ -35,6 +35,8 @@ char		backup_instance_path[MAXPGPATH];
  */
 char		arclog_path[MAXPGPATH] = "";
 
+/* extra directory to backup */
+char	   *extradir = NULL;
 /* common options */
 char	   *backup_id_string_param = NULL;
 int			num_threads = 1;
@@ -174,6 +176,7 @@ static pgut_option options[] =
 	/* other options */
 	{ 'U', 150, "system-identifier",	&system_identifier,	SOURCE_FILE_STRICT },
 	{ 's', 151, "instance",				&instance_name,		SOURCE_CMDLINE },
+	{ 's', 152, "extra-directory",		&extradir,			SOURCE_CMDLINE },
 	/* archive-push options */
 	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
 	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },

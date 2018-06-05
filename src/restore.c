@@ -461,7 +461,7 @@ remove_deleted_files(pgBackup *backup)
 
 	/* Get list of files actually existing in target database */
 	files_restored = parray_new();
-	dir_list_file(files_restored, pgdata, true, true, false);
+	dir_list_file(files_restored, pgdata, true, true, false, false);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(files_restored, pgFileComparePathDesc);
 
@@ -768,6 +768,8 @@ restore_files(void *arg)
 		elog(VERBOSE, "Restoring file %s, is_datafile %i, is_cfs %i", file->path, file->is_datafile?1:0, file->is_cfs?1:0);
 		if (file->is_datafile && !file->is_cfs)
 			restore_data_file(from_root, pgdata, file, arguments->backup);
+		else if (file->is_extra)
+			copy_file(from_root, file->extradir, file);
 		else
 			copy_file(from_root, pgdata, file);
 

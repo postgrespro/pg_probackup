@@ -603,10 +603,12 @@ do_backup_instance(void)
 	if (is_remote_backup)
 		get_remote_pgdata_filelist(backup_files_list);
 	else
-		dir_list_file(backup_files_list, pgdata, true, true, false);
+		dir_list_file(backup_files_list, pgdata, true, true, false, false);
 
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
+
+	dir_list_file(backup_files_list, extradir, true, true, false, true);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -753,7 +755,7 @@ do_backup_instance(void)
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false);
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, false);
 
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
@@ -1819,7 +1821,7 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true);
+				file = pgFileNew(backup_label, true, false);
 				calc_file_checksum(file);
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
@@ -1863,7 +1865,7 @@ pg_stop_backup(pgBackup *backup)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true);
+				file = pgFileNew(tablespace_map, true, false);
 				if (S_ISREG(file->mode))
 					calc_file_checksum(file);
 				free(file->path);

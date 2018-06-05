@@ -100,6 +100,8 @@ typedef struct pgFile
 	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
+	bool	is_extra;
+	char	*extradir;		/* File from extra directory */
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
@@ -298,6 +300,9 @@ extern char		backup_instance_path[MAXPGPATH];
 extern char	   *pgdata;
 extern char		arclog_path[MAXPGPATH];
 
+/* extra directory to backup */
+extern char	   *extradir;
+
 /* common options */
 extern int		num_threads;
 extern bool		stream_wal;
@@ -442,7 +447,7 @@ extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool omit_symlink, bool add_root);
+						  bool omit_symlink, bool add_root, bool is_extra);
 extern void list_data_directories(parray *files, const char *path,
 								  bool is_root, bool exclude);
 
@@ -456,7 +461,7 @@ extern bool dir_is_empty(const char *path);
 
 extern bool fileExists(const char *path);
 
-extern pgFile *pgFileNew(const char *path, bool omit_symlink);
+extern pgFile *pgFileNew(const char *path, bool omit_symlink, bool is_extra);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
