@@ -265,7 +265,7 @@ help_restore(void)
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica]\n\n"));
+	printf(_("                 [--restore-as-replica] [--no-validate]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -282,6 +282,7 @@ help_restore(void)
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
 
 	printf(_("      --immediate                  end recovery as soon as a consistent state is reached\n"));
+	printf(_("      --no-validate                disable backup validation during recovery\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
