@@ -17,6 +17,8 @@
 
 #include "pqexpbuffer.h"
 
+#include "utils/json.h"
+
 
 static void show_instance_start(void);
 static void show_instance_end(void);
@@ -26,24 +28,9 @@ static int show_backup(time_t requested_backup_id);
 static void show_instance_plain(parray *backup_list, bool show_name);
 static void show_instance_json(parray *backup_list);
 
-/* Json output functions */
-
-typedef enum
-{
-	JT_BEGIN_ARRAY,
-	JT_END_ARRAY,
-	JT_BEGIN_OBJECT,
-	JT_END_OBJECT
-} JsonToken;
-
-static void json_add(PQExpBuffer buf, JsonToken type);
-static void json_add_key(PQExpBuffer buf, const char *name, bool add_comma);
-static void json_add_value(PQExpBuffer buf, const char *name, const char *value,
-						   bool add_comma);
-
 static PQExpBufferData show_buf;
 static bool first_instance = true;
-static uint8 json_level = 0;
+static int32 json_level = 0;
 
 int
 do_show(time_t requested_backup_id)
@@ -377,115 +364,6 @@ show_instance_plain(parray *backup_list, bool show_name)
  * Json output.
  */
 
-static void
-json_add_indent(PQExpBuffer buf)
-{
-	uint8		i;
-
-	if (json_level == 0)
-		return;
-
-	appendPQExpBufferChar(buf, '\n');
-	for (i = 0; i < json_level; i++)
-		appendPQExpBufferStr(buf, "    ");
-}
-
-static void
-json_add(PQExpBuffer buf, JsonToken type)
-{
-	switch (type)
-	{
-		case JT_BEGIN_ARRAY:
-			appendPQExpBufferChar(buf, '[');
-			json_level++;
-			break;
-		case JT_END_ARRAY:
-			json_level--;
-			if (json_level == 0)
-				appendPQExpBufferChar(buf, '\n');
-			else
-				json_add_indent(buf);
-			appendPQExpBufferChar(buf, ']');
-			break;
-		case JT_BEGIN_OBJECT:
-			json_add_indent(buf);
-			appendPQExpBufferChar(buf, '{');
-			json_level++;
-			break;
-		case JT_END_OBJECT:
-			json_level--;
-			if (json_level == 0)
-				appendPQExpBufferChar(buf, '\n');
-			else
-				json_add_indent(buf);
-			appendPQExpBufferChar(buf, '}');
-			break;
-		default:
-			break;
-	}
-}
-
-static void
-json_add_escaped(PQExpBuffer buf, const char *str)
-{
-	const char *p;
-
-	appendPQExpBufferChar(buf, '"');
-	for (p = str; *p; p++)
-	{
-		switch (*p)
-		{
-			case '\b':
-				appendPQExpBufferStr(buf, "\\b");
-				break;
-			case '\f':
-				appendPQExpBufferStr(buf, "\\f");
-				break;
-			case '\n':
-				appendPQExpBufferStr(buf, "\\n");
-				break;
-			case '\r':
-				appendPQExpBufferStr(buf, "\\r");
-				break;
-			case '\t':
-				appendPQExpBufferStr(buf, "\\t");
-				break;
-			case '"':
-				appendPQExpBufferStr(buf, "\\\"");
-				break;
-			case '\\':
-				appendPQExpBufferStr(buf, "\\\\");
-				break;
-			default:
-				if ((unsigned char) *p < ' ')
-					appendPQExpBuffer(buf, "\\u%04x", (int) *p);
-				else
-					appendPQExpBufferChar(buf, *p);
-				break;
-		}
-	}
-	appendPQExpBufferChar(buf, '"');
-}
-
-static void
-json_add_key(PQExpBuffer buf, const char *name, bool add_comma)
-{
-	if (add_comma)
-		appendPQExpBufferChar(buf, ',');
-	json_add_indent(buf);
-
-	json_add_escaped(buf, name);
-	appendPQExpBufferStr(buf, ": ");
-}
-
-static void
-json_add_value(PQExpBuffer buf, const char *name, const char *value,
-			   bool add_comma)
-{
-	json_add_key(buf, name, add_comma);
-	json_add_escaped(buf, value);
-}
-
 /*
  * Show instance backups in json format.
  */
@@ -499,116 +377,126 @@ show_instance_json(parray *backup_list)
 		appendPQExpBufferChar(buf, ',');
 
 	/* Begin of instance object */
-	json_add(buf, JT_BEGIN_OBJECT);
+	json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
-	json_add_value(buf, "instance", instance_name, false);
-	json_add_key(buf, "backups", true);
+	json_add_value(buf, "instance", instance_name, json_level, false);
+	json_add_key(buf, "backups", json_level, true);
 
 	/*
 	 * List backups.
 	 */
-	json_add(buf, JT_BEGIN_ARRAY);
+	json_add(buf, JT_BEGIN_ARRAY, &json_level);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = parray_get(backup_list, i);
 		TimeLineID	parent_tli;
 		char		timestamp[100] = "----";
-		char		duration[20] = "----";
-		char		data_bytes_str[10] = "----";
 		char		lsn[20];
 
 		if (i != 0)
 			appendPQExpBufferChar(buf, ',');
 
-		json_add(buf, JT_BEGIN_OBJECT);
+		json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
-		json_add_value(buf, "id", base36enc(backup->start_time), false);
+		json_add_value(buf, "id", base36enc(backup->start_time), json_level,
+					   false);
 
 		if (backup->parent_backup != 0)
 			json_add_value(buf, "parent-backup-id",
-						   base36enc(backup->parent_backup), true);
+						   base36enc(backup->parent_backup), json_level, true);
 
-		json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup), true);
+		json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup),
+					   json_level, true);
 
-		json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE", true);
+		json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE",
+					   json_level, true);
 
 		json_add_value(buf, "compress-alg",
-					   deparse_compress_alg(backup->compress_alg), true);
+					   deparse_compress_alg(backup->compress_alg), json_level,
+					   true);
 
-		json_add_key(buf, "compress-level", true);
+		json_add_key(buf, "compress-level", json_level, true);
 		appendPQExpBuffer(buf, "%d", backup->compress_level);
 
 		json_add_value(buf, "from-replica",
-					   backup->from_replica ? "true" : "false", true);
+					   backup->from_replica ? "true" : "false", json_level,
+					   true);
 
-		json_add_key(buf, "block-size", true);
+		json_add_key(buf, "block-size", json_level, true);
 		appendPQExpBuffer(buf, "%u", backup->block_size);
 
-		json_add_key(buf, "xlog-block-size", true);
+		json_add_key(buf, "xlog-block-size", json_level, true);
 		appendPQExpBuffer(buf, "%u", backup->wal_block_size);
 
-		json_add_key(buf, "checksum-version", true);
+		json_add_key(buf, "checksum-version", json_level, true);
 		appendPQExpBuffer(buf, "%u", backup->checksum_version);
 
-		json_add_value(buf, "program-version", backup->program_version, true);
-		json_add_value(buf, "server-version", backup->server_version, true);
+		json_add_value(buf, "program-version", backup->program_version,
+					   json_level, true);
+		json_add_value(buf, "server-version", backup->server_version,
+					   json_level, true);
 
-		json_add_key(buf, "current-tli", true);
+		json_add_key(buf, "current-tli", json_level, true);
 		appendPQExpBuffer(buf, "%d", backup->tli);
 
-		json_add_key(buf, "parent-tli", true);
+		json_add_key(buf, "parent-tli", json_level, true);
 		parent_tli = get_parent_tli(backup->tli);
 		appendPQExpBuffer(buf, "%u", parent_tli);
 
 		snprintf(lsn, lengthof(lsn), "%X/%X",
 				 (uint32) (backup->start_lsn >> 32), (uint32) backup->start_lsn);
-		json_add_value(buf, "start-lsn", lsn, true);
+		json_add_value(buf, "start-lsn", lsn, json_level, true);
 
 		snprintf(lsn, lengthof(lsn), "%X/%X",
 				 (uint32) (backup->stop_lsn >> 32), (uint32) backup->stop_lsn);
-		json_add_value(buf, "stop-lsn", lsn, true);
+		json_add_value(buf, "stop-lsn", lsn, json_level, true);
 
 		time2iso(timestamp, lengthof(timestamp), backup->start_time);
-		json_add_value(buf, "start-time", timestamp, true);
+		json_add_value(buf, "start-time", timestamp, json_level, true);
 
-		time2iso(timestamp, lengthof(timestamp), backup->end_time);
-		json_add_value(buf, "end-time", timestamp, true);
+		if (backup->end_time)
+		{
+			time2iso(timestamp, lengthof(timestamp), backup->end_time);
+			json_add_value(buf, "end-time", timestamp, json_level, true);
+		}
 
-		json_add_key(buf, "recovery-xid", true);
+		json_add_key(buf, "recovery-xid", json_level, true);
 		appendPQExpBuffer(buf, XID_FMT, backup->recovery_xid);
 
-		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
-		json_add_value(buf, "recovery-time", timestamp, true);
-
-		pretty_size(backup->data_bytes, data_bytes_str,
-					lengthof(data_bytes_str));
-		json_add_value(buf, "data-bytes", data_bytes_str, true);
-
-		pretty_size(backup->wal_bytes, data_bytes_str,
-					lengthof(data_bytes_str));
-		json_add_value(buf, "wal-bytes", data_bytes_str, true);
-
-		if (backup->end_time != (time_t) 0)
+		if (backup->recovery_time > 0)
 		{
-			snprintf(duration, lengthof(duration), "%.*lfs",  0,
-					 difftime(backup->end_time, backup->start_time));
-			json_add_value(buf, "time", duration, true);
+			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+			json_add_value(buf, "recovery-time", timestamp, json_level, true);
+		}
+
+		if (backup->data_bytes != BYTES_INVALID)
+		{
+			json_add_key(buf, "data-bytes", json_level, true);
+			appendPQExpBuffer(buf, INT64_FORMAT, backup->data_bytes);
+		}
+
+		if (backup->wal_bytes != BYTES_INVALID)
+		{
+			json_add_key(buf, "wal-bytes", json_level, true);
+			appendPQExpBuffer(buf, INT64_FORMAT, backup->wal_bytes);
 		}
 
 		if (backup->primary_conninfo)
-			json_add_value(buf, "primary_conninfo", backup->primary_conninfo, true);
+			json_add_value(buf, "primary_conninfo", backup->primary_conninfo,
+						   json_level, true);
 
-		json_add_value(buf, "status", status2str(backup->status), true);
+		json_add_value(buf, "status", status2str(backup->status), json_level,
+					   true);
 
-		json_add(buf, JT_END_OBJECT);
+		json_add(buf, JT_END_OBJECT, &json_level);
 	}
 
 	/* End of backups */
-	json_add(buf, JT_END_ARRAY);
+	json_add(buf, JT_END_ARRAY, &json_level);
 
 	/* End of instance object */
-	json_add(buf, JT_END_OBJECT);
+	json_add(buf, JT_END_OBJECT, &json_level);
 
 	first_instance = false;
 }

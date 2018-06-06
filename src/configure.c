@@ -2,18 +2,32 @@
  *
  * configure.c: - manage backup catalog.
  *
- * Copyright (c) 2017-2017, Postgres Professional
+ * Copyright (c) 2017-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
 
 #include "pg_probackup.h"
 
+#include "pqexpbuffer.h"
+
+#include "utils/json.h"
+
+
 static void opt_log_level_console(pgut_option *opt, const char *arg);
 static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
 
+static void show_configure_start(void);
+static void show_configure_end(void);
+static void show_configure(pgBackupConfig *config);
+
+static void show_configure_json(pgBackupConfig *config);
+
 static pgBackupConfig *cur_config = NULL;
+
+static PQExpBufferData show_buf;
+static int32 json_level = 0;
 
 /* Set configure options */
 int
@@ -68,7 +82,7 @@ do_configure(bool show_only)
 		config->compress_level = compress_level;
 
 	if (show_only)
-		writeBackupCatalogConfig(stderr, config);
+		show_configure(config);
 	else
 		writeBackupCatalogConfigFile(config);
 
@@ -251,7 +265,6 @@ readBackupCatalogConfigFile(void)
 	pgut_readopt(path, options, ERROR);
 
 	return config;
-
 }
 
 static void
@@ -270,4 +283,147 @@ static void
 opt_compress_alg(pgut_option *opt, const char *arg)
 {
 	cur_config->compress_alg = parse_compress_alg(arg);
+}
+
+/*
+ * Initialize configure visualization.
+ */
+static void
+show_configure_start(void)
+{
+	if (show_format == SHOW_PLAIN)
+		return;
+
+	/* For now we need buffer only for JSON format */
+	json_level = 0;
+	initPQExpBuffer(&show_buf);
+}
+
+/*
+ * Finalize configure visualization.
+ */
+static void
+show_configure_end(void)
+{
+	if (show_format == SHOW_PLAIN)
+		return;
+	else
+		appendPQExpBufferChar(&show_buf, '\n');
+
+	fputs(show_buf.data, stdout);
+	termPQExpBuffer(&show_buf);
+}
+
+/*
+ * Show configure information of pg_probackup.
+ */
+static void
+show_configure(pgBackupConfig *config)
+{
+	show_configure_start();
+
+	if (show_format == SHOW_PLAIN)
+		writeBackupCatalogConfig(stdout, config);
+	else
+		show_configure_json(config);
+
+	show_configure_end();
+}
+
+/*
+ * Json output.
+ */
+
+static void
+show_configure_json(pgBackupConfig *config)
+{
+	PQExpBuffer	buf = &show_buf;
+
+	json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+	json_add_value(buf, "pgdata", config->pgdata, json_level, false);
+
+	json_add_key(buf, "system-identifier", json_level, true);
+	appendPQExpBuffer(buf, UINT64_FORMAT, config->system_identifier);
+
+	/* Connection parameters */
+	if (config->pgdatabase)
+		json_add_value(buf, "pgdatabase", config->pgdatabase, json_level, true);
+	if (config->pghost)
+		json_add_value(buf, "pghost", config->pghost, json_level, true);
+	if (config->pgport)
+		json_add_value(buf, "pgport", config->pgport, json_level, true);
+	if (config->pguser)
+		json_add_value(buf, "pguser", config->pguser, json_level, true);
+
+	/* Replica parameters */
+	if (config->master_host)
+		json_add_value(buf, "master-host", config->master_host, json_level,
+					   true);
+	if (config->master_port)
+		json_add_value(buf, "master-port", config->master_port, json_level,
+					   true);
+	if (config->master_db)
+		json_add_value(buf, "master-db", config->master_db, json_level, true);
+	if (config->master_user)
+		json_add_value(buf, "master-user", config->master_user, json_level,
+					   true);
+
+	if (config->replica_timeout != INT_MIN)
+	{
+		json_add_key(buf, "replica-timeout", json_level, true);
+		appendPQExpBuffer(buf, "%d", config->replica_timeout);
+	}
+
+	/* Logging parameters */
+	if (config->log_level_console != INT_MIN)
+		json_add_value(buf, "log-level-console",
+					   deparse_log_level(config->log_level_console), json_level,
+					   true);
+	if (config->log_level_file != INT_MIN)
+		json_add_value(buf, "log-level-file",
+					   deparse_log_level(config->log_level_file), json_level,
+					   true);
+	if (config->log_filename)
+		json_add_value(buf, "log-filename", config->log_filename, json_level,
+					   true);
+	if (config->error_log_filename)
+		json_add_value(buf, "error-log-filename", config->error_log_filename,
+					   json_level, true);
+	if (config->log_directory)
+		json_add_value(buf, "log-directory", config->log_directory, json_level,
+					   true);
+
+	if (config->log_rotation_size)
+	{
+		json_add_key(buf, "log-rotation-size", json_level, true);
+		appendPQExpBuffer(buf, "%d", config->log_rotation_size);
+	}
+	if (config->log_rotation_age)
+	{
+		json_add_key(buf, "log-rotation-age", json_level, true);
+		appendPQExpBuffer(buf, "%d", config->log_rotation_age);
+	}
+
+	/* Retention parameters */
+	if (config->retention_redundancy)
+	{
+		json_add_key(buf, "retention-redundancy", json_level, true);
+		appendPQExpBuffer(buf, "%u", config->retention_redundancy);
+	}
+	if (config->retention_window)
+	{
+		json_add_key(buf, "retention-window", json_level, true);
+		appendPQExpBuffer(buf, "%u", config->retention_window);
+	}
+
+	/* Compression parameters */
+	json_add_value(buf, "compress-algorithm",
+				   deparse_compress_alg(config->compress_alg), json_level,
+				   true);
+
+	json_add_key(buf, "compress-level", json_level, true);
+	appendPQExpBuffer(buf, "%d", config->compress_level);
+
+	json_add(buf, JT_END_OBJECT, &json_level);
 }
