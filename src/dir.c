@@ -644,7 +644,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		if (is_extra)
 		{
 			file->extradir = pgut_strdup(root);
-//			dirname(file->extradir);
+			dirname(file->extradir);
 		}
 
 		/* We add the directory anyway */
@@ -1042,7 +1042,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 
 		if (root)
 			if (is_extra)
-				join_path_components(filepath, extra_path, basename(path));
+				join_path_components(filepath, extra_path, path);
 			else
 				join_path_components(filepath, root, path);
 		else

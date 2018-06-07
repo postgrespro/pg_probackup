@@ -359,6 +359,7 @@ restore_backup(pgBackup *backup)
 	char		timestamp[100];
 	char		this_backup_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
+	char		extra_path[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
 	int			i;
@@ -394,8 +395,9 @@ restore_backup(pgBackup *backup)
 	 * Get list of files which need to be restored.
 	 */
 	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
+	pgBackupGetPath(backup, extra_path, lengthof(extra_path), EXTRA_DIR);
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(database_path, list_path);
+	files = dir_read_file_list(database_path, extra_path, list_path);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -452,11 +454,13 @@ remove_deleted_files(pgBackup *backup)
 	parray	   *files;
 	parray	   *files_restored;
 	char		filelist_path[MAXPGPATH];
+	char		extra_path[MAXPGPATH];
 	int 		i;
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
+	pgBackupGetPath(backup, extra_path, lengthof(extra_path), EXTRA_DIR);
 	/* Read backup's filelist using target database path as base path */
-	files = dir_read_file_list(pgdata, filelist_path);
+	files = dir_read_file_list(pgdata, extra_path, filelist_path);
 	parray_qsort(files, pgFileComparePathDesc);
 
 	/* Get list of files actually existing in target database */

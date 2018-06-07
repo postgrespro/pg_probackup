@@ -263,6 +263,7 @@ typedef struct
 {
 	const char *from_root;
 	const char *to_root;
+	const char *extra;
 	parray	   *backup_files_list;
 	parray	   *prev_backup_filelist;
 	XLogRecPtr	prev_backup_start_lsn;

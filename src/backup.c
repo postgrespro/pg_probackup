@@ -452,6 +452,7 @@ do_backup_instance(void)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
+	char		extra_path[MAXPGPATH];
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -516,7 +517,7 @@ do_backup_instance(void)
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path, lengthof(prev_backup_filelist_path),
 						DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
-		prev_backup_filelist = dir_read_file_list(NULL, prev_backup_filelist_path);
+		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;
@@ -551,8 +552,8 @@ do_backup_instance(void)
 			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
+	pgBackupGetPath(&current, database_path, lengthof(database_path),DATABASE_DIR);
+	pgBackupGetPath(&current, extra_path, lengthof(extra_path), EXTRA_DIR);
 
 	/* start stream replication */
 	if (stream_wal)
@@ -667,7 +668,7 @@ do_backup_instance(void)
 		{
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
-			char		database_path[MAXPGPATH];
+//			char		database_path[MAXPGPATH];
 
 			if (!is_remote_backup)
 				if (file->is_extra)
@@ -678,10 +679,13 @@ do_backup_instance(void)
 				dir_name = file->path;
 
 			elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
-			pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
+//			pgBackupGetPath(&current, database_path, lengthof(database_path),
+//					DATABASE_DIR);
 
-			join_path_components(dirpath, database_path, dir_name);
+			if (file->is_extra)
+				join_path_components(dirpath, extra_path, dir_name);
+			else
+				join_path_components(dirpath, database_path, dir_name);
 			dir_create_dir(dirpath, DIR_PERMISSION);
 		}
 
@@ -699,6 +703,7 @@ do_backup_instance(void)
 
 		arg->from_root = pgdata;
 		arg->to_root = database_path;
+		arg->extra = extra_path;
 		arg->backup_files_list = backup_files_list;
 		arg->prev_backup_filelist = prev_backup_filelist;
 		arg->prev_backup_start_lsn = prev_backup_start_lsn;
@@ -2094,6 +2099,17 @@ backup_files(void *arg)
 				{
 					file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
+					continue;
+				}
+			}
+			else if (file->is_extra)
+			{
+				if (!copy_file(arguments->from_root,
+							   arguments->extra,
+							   file))
+				{
+					file->write_size = BYTES_INVALID;
+					elog(VERBOSE, "File \"%s\" was not copied extra files to backup", file->path);
 					continue;
 				}
 			}
