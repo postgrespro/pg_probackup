@@ -718,7 +718,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.commit()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
 
         # 1 - Try to restore to existing directory
         node.stop()
@@ -785,8 +785,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type="page")
 
         show_pb = self.show_pb(backup_dir, 'node')
-        self.assertEqual(show_pb[1]['Status'], "OK")
-        self.assertEqual(show_pb[2]['Status'], "OK")
+        self.assertEqual(show_pb[1]['status'], "OK")
+        self.assertEqual(show_pb[2]['status'], "OK")
 
         node.stop()
         node.cleanup()
@@ -829,7 +829,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Full backup
         self.backup_node(backup_dir, 'node', node)
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
 
         # Create tablespace
         tblspc_path = os.path.join(node.base_dir, "tblspc")
@@ -845,8 +845,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # First page backup
         self.backup_node(backup_dir, 'node', node, backup_type="page")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "OK")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Mode'], "PAGE")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['status'], "OK")
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[1]['backup-mode'], "PAGE")
 
         # Create tablespace table
         with node.connect("postgres") as con:
@@ -862,8 +863,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Second page backup
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="page")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Status'], "OK")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Mode'], "PAGE")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['status'], "OK")
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[2]['backup-mode'], "PAGE")
 
         node.stop()
         node.cleanup()

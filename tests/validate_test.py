@@ -908,7 +908,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
         target_xid = None
         with node.connect("postgres") as con:
-            res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
+            res = con.execute(
+                "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
             target_xid = res[0][0]
 
@@ -1041,7 +1042,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_validate_corrupt_wal_between_backups(self):
-        """make archive node, make full backup, corrupt all wal files, run validate to real xid, expect errors"""
+        """
+        make archive node, make full backup, corrupt all wal files,
+        run validate to real xid, expect errors
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),
@@ -1083,7 +1087,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         else:
             walfile = node.safe_psql(
                 'postgres',
-                'select pg_walfile_name(pg_current_wal_location())').rstrip()
+                'select pg_walfile_name(pg_current_wal_lsn())').rstrip()
 
         if self.archive_compress:
             walfile = walfile + '.gz'
@@ -1134,12 +1138,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'OK',
-            self.show_pb(backup_dir, 'node')[0]['Status'],
+            self.show_pb(backup_dir, 'node')[0]['status'],
             'Backup STATUS should be "OK"')
 
         self.assertEqual(
             'OK',
-            self.show_pb(backup_dir, 'node')[1]['Status'],
+            self.show_pb(backup_dir, 'node')[1]['status'],
             'Backup STATUS should be "OK"')
 
         # Clean after yourself
@@ -1208,7 +1212,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'ERROR',
-            self.show_pb(backup_dir, 'node')[1]['Status'],
+            self.show_pb(backup_dir, 'node')[1]['status'],
             'Backup {0} should have STATUS "ERROR"')
 
         # Clean after yourself
@@ -1405,7 +1409,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             pass
         self.assertTrue(
-            self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
+            self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
         self.set_archiving(backup_dir, 'node', node)
         node.reload()
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -1440,14 +1444,19 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'CORRUPT')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[3]['status'] == 'CORRUPT')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[7]['status'] == 'ORPHAN')
 
         os.rename(file_new, file)
         try:
@@ -1459,14 +1468,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'OK')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'OK')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1537,13 +1547,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'CORRUPT')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'CORRUPT')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
 
         os.rename(file_new, file)
         file = os.path.join(
@@ -1562,13 +1572,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'CORRUPT')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'CORRUPT')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

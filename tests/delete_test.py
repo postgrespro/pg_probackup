@@ -44,13 +44,13 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         show_backups = self.show_pb(backup_dir, 'node')
-        id_1 = show_backups[0]['ID']
-        id_2 = show_backups[1]['ID']
-        id_3 = show_backups[2]['ID']
+        id_1 = show_backups[0]['id']
+        id_2 = show_backups[1]['id']
+        id_3 = show_backups[2]['id']
         self.delete_pb(backup_dir, 'node', id_2)
         show_backups = self.show_pb(backup_dir, 'node')
-        self.assertEqual(show_backups[0]['ID'], id_1)
-        self.assertEqual(show_backups[1]['ID'], id_3)
+        self.assertEqual(show_backups[0]['id'], id_1)
+        self.assertEqual(show_backups[1]['id'], id_3)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -82,15 +82,15 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(show_backups), 4)
 
         # delete first page backup
-        self.delete_pb(backup_dir, 'node', show_backups[1]['ID'])
+        self.delete_pb(backup_dir, 'node', show_backups[1]['id'])
 
         show_backups = self.show_pb(backup_dir, 'node')
         self.assertEqual(len(show_backups), 2)
 
-        self.assertEqual(show_backups[0]['Mode'], "FULL")
-        self.assertEqual(show_backups[0]['Status'], "OK")
-        self.assertEqual(show_backups[1]['Mode'], "FULL")
-        self.assertEqual(show_backups[1]['Status'], "OK")
+        self.assertEqual(show_backups[0]['backup-mode'], "FULL")
+        self.assertEqual(show_backups[0]['status'], "OK")
+        self.assertEqual(show_backups[1]['backup-mode'], "FULL")
+        self.assertEqual(show_backups[1]['status'], "OK")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -122,15 +122,15 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(show_backups), 4)
 
         # delete first page backup
-        self.delete_pb(backup_dir, 'node', show_backups[1]['ID'])
+        self.delete_pb(backup_dir, 'node', show_backups[1]['id'])
 
         show_backups = self.show_pb(backup_dir, 'node')
         self.assertEqual(len(show_backups), 2)
 
-        self.assertEqual(show_backups[0]['Mode'], "FULL")
-        self.assertEqual(show_backups[0]['Status'], "OK")
-        self.assertEqual(show_backups[1]['Mode'], "FULL")
-        self.assertEqual(show_backups[1]['Status'], "OK")
+        self.assertEqual(show_backups[0]['backup-mode'], "FULL")
+        self.assertEqual(show_backups[0]['status'], "OK")
+        self.assertEqual(show_backups[1]['backup-mode'], "FULL")
+        self.assertEqual(show_backups[1]['status'], "OK")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

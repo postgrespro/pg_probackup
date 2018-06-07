@@ -89,6 +89,7 @@ help_pg_probackup(void)
 	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
@@ -128,6 +129,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s show -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
+	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
@@ -357,11 +359,13 @@ static void
 help_show(void)
 {
 	printf(_("%s show -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                 [--instance=instance_name [-i backup-id]]\n\n"));
+	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
+	printf(_("                 [--format=format]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     show info about specific intstance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
+	printf(_("      --format=format              show format=PLAIN|JSON\n"));
 }
 
 static void
@@ -472,10 +476,12 @@ help_set_config(void)
 static void
 help_show_config(void)
 {
-	printf(_("%s show-config -B backup-dir --instance=instance_name\n\n"), PROGRAM_NAME);
+	printf(_("%s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 [--format=format]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
+	printf(_("      --format=format              show format=PLAIN|JSON\n"));
 }
 
 static void

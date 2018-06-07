@@ -37,6 +37,35 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_show_json(self):
+        """Status DONE and OK"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.assertEqual(
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=["--log-level-console=panic"]),
+            None
+        )
+        self.backup_node(backup_dir, 'node', node)
+        self.assertIn("OK", self.show_pb(backup_dir, 'node', as_text=True))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_corrupt_2(self):
         """Status CORRUPT"""
         fname = self.id().split('.')[3]
