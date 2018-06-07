@@ -384,7 +384,11 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		return;
 	}
 	if (add_root)
+	{
+		file->extradir = dirname(pgut_strdup(file->path));
+		elog(WARNING,"ADD_ROOT Name: %s Path: %s %s",file->name, file->path, file->extradir);
 		parray_append(files, file);
+	}
 
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list, is_extra);
 	parray_qsort(files, pgFileComparePath);
@@ -636,6 +640,13 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 			continue;
 		}
 
+		/* If it is extra dir, remember it */
+		if (is_extra)
+		{
+			file->extradir = pgut_strdup(root);
+//			dirname(file->extradir);
+		}
+
 		/* We add the directory anyway */
 		if (S_ISDIR(file->mode))
 			parray_append(files, file);
@@ -650,14 +661,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		/* At least add the file */
 		if (S_ISREG(file->mode))
-		{
-			if (is_extra)
-			{
-				file->extradir = pgut_strdup(file->path);
-				dirname(file->extradir);
-			}
 			parray_append(files, file);
-		}
 
 		/*
 		 * If the entry is a directory call dir_list_file_internal()
@@ -825,6 +829,10 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
+		else if(file->is_extra)
+			path = GetRelativePath(path, file->extradir);
+		else
+			elog(WARNING,"NOT PGDATA and NOT ExtraDir %s", path);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
 					 "\"is_datafile\":\"%u\", \"is_cfs\":\"%u\", \"crc\":\"%u\","
@@ -832,6 +840,9 @@ print_file_list(FILE *out, const parray *files, const char *root)
 				path, (unsigned long) file->write_size, file->mode,
 				file->is_datafile?1:0, file->is_cfs?1:0, file->crc,
 				deparse_compress_alg(file->compress_alg), file->is_extra?1:0);
+
+		if (file->extradir)
+			fprintf(out, ",\"extradir\":\"%s\"", file->extradir);
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
@@ -985,7 +996,7 @@ bad_format:
  * If root is not NULL, path will be absolute path.
  */
 parray *
-dir_read_file_list(const char *root, const char *file_txt)
+dir_read_file_list(const char *root, const char *extra_path, const char *file_txt)
 {
 	FILE   *fp;
 	parray *files;
@@ -1004,6 +1015,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		char		filepath[MAXPGPATH];
 		char		linked[MAXPGPATH];
 		char		compress_alg_string[MAXPGPATH];
+		char		extradir_str[MAXPGPATH];
 		uint64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
@@ -1030,7 +1042,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 		if (root)
 			if (is_extra)
-				join_path_components(filepath, root, basename(path));
+				join_path_components(filepath, extra_path, basename(path));
 			else
 				join_path_components(filepath, root, path);
 		else
@@ -1039,7 +1051,11 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file = pgFileInit(filepath);
 
 		file->is_extra = is_extra ? true : false;
-		file->extradir = is_extra ? pgut_strdup(dirname(path)) : NULL;
+		if (is_extra)
+		{
+			get_control_value(buf, "extradir", extradir_str, NULL, true);
+			file->extradir = extradir_str;
+		}
 		file->write_size = (size_t) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;

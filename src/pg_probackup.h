@@ -43,7 +43,7 @@
 #define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
 
 /* Directory/File names */
-#define DATABASE_DIR			"database"
+#define DATABASE_DIR				"database"
 #define BACKUPS_DIR				"backups"
 #if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
@@ -59,6 +59,7 @@
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
+#define EXTRA_DIR				"extradir"
 
 /* Direcotry/File permission */
 #define DIR_PERMISSION		(0700)
@@ -454,7 +455,7 @@ extern void list_data_directories(parray *files, const char *path,
 extern void read_tablespace_map(parray *files, const char *backup_dir);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root);
-extern parray *dir_read_file_list(const char *root, const char *file_txt);
+extern parray *dir_read_file_list(const char *root, const char *extra_path, const char *file_txt);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);

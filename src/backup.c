@@ -608,7 +608,7 @@ do_backup_instance(void)
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
-	dir_list_file(backup_files_list, extradir, true, true, false, true);
+	dir_list_file(backup_files_list, extradir, true, true, true, true);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -670,11 +670,14 @@ do_backup_instance(void)
 			char		database_path[MAXPGPATH];
 
 			if (!is_remote_backup)
-				dir_name = GetRelativePath(file->path, pgdata);
+				if (file->is_extra)
+					dir_name = GetRelativePath(file->path, file->extradir);
+				else
+					dir_name = GetRelativePath(file->path, pgdata);
 			else
 				dir_name = file->path;
 
-			elog(VERBOSE, "Create directory \"%s\"", dir_name);
+			elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
 			pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
 
