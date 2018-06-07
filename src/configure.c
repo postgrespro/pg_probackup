@@ -29,6 +29,10 @@ static pgBackupConfig *cur_config = NULL;
 static PQExpBufferData show_buf;
 static int32 json_level = 0;
 
+/*
+ * All this code needs refactoring.
+ */
+
 /* Set configure options */
 int
 do_configure(bool show_only)
