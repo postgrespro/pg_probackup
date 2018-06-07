@@ -8,7 +8,6 @@
  */
 
 #include <errno.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -16,6 +15,7 @@
 
 #include "logger.h"
 #include "pgut.h"
+#include "thread.h"
 
 /* Logger parameters */
 
@@ -69,6 +69,9 @@ static bool exit_hook_registered = false;
 static bool loggin_in_progress = false;
 
 static pthread_mutex_t log_file_mutex = PTHREAD_MUTEX_INITIALIZER;
+#ifdef WIN32
+static long mutex_initlock = 0;
+#endif
 
 void
 init_logger(const char *root_path)
@@ -138,11 +141,10 @@ exit_if_necessary(int elevel)
 		}
 
 		/* If this is not the main thread then don't call exit() */
+		if (main_tid != pthread_self())
 #ifdef WIN32
-		if (main_tid != GetCurrentThreadId())
 			ExitThread(elevel);
 #else
-		if (!pthread_equal(main_tid, pthread_self()))
 			pthread_exit(NULL);
 #endif
 		else
@@ -174,6 +176,16 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	/*
 	 * There is no need to lock if this is elog() from upper elog().
 	 */
+#ifdef WIN32
+	if (log_file_mutex == NULL)
+	{
+		while (InterlockedExchange(&mutex_initlock, 1) == 1)
+			/* loop, another thread own the lock */ ;
+		if (log_file_mutex == NULL)
+			pthread_mutex_init(&log_file_mutex, NULL);
+		InterlockedExchange(&mutex_initlock, 0);
+	}
+#endif
 	pthread_mutex_lock(&log_file_mutex);
 	loggin_in_progress = true;
 
@@ -550,7 +562,7 @@ open_logfile(FILE **file, const char *filename_format)
 			{
 				char		buf[1024];
 
-				control_file = fopen(control, "r");
+				control_file = fopen(control, PG_BINARY_R);
 				if (control_file == NULL)
 					elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
 								control, strerror(errno));
@@ -596,7 +608,7 @@ logfile_open:
 	{
 		time_t		timestamp = time(NULL);
 
-		control_file = fopen(control, "w");
+		control_file = fopen(control, PG_BINARY_W);
 		if (control_file == NULL)
 			elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
 						control, strerror(errno));

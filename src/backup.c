@@ -18,16 +18,16 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <time.h>
-#include <pthread.h>
 
-#include "libpq/pqsignal.h"
-#include "storage/bufpage.h"
 #include "catalog/catalog.h"
 #include "catalog/pg_tablespace.h"
 #include "datapagemap.h"
-#include "receivelog.h"
-#include "streamutil.h"
+#include "libpq/pqsignal.h"
 #include "pgtar.h"
+#include "receivelog.h"
+#include "storage/bufpage.h"
+#include "streamutil.h"
+#include "utils/thread.h"
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
@@ -89,8 +89,8 @@ static bool pg_stop_backup_is_sent = false;
 static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
 
-static void backup_files(void *arg);
-static void remote_backup_files(void *arg);
+static void *backup_files(void *arg);
+static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
 
@@ -253,7 +253,11 @@ ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
 			else if (copybuf[156] == '2')
 			{
 				/* Symlink */
+#ifndef WIN32
 				pgfile->mode |= S_IFLNK;
+#else
+				pgfile->mode |= S_IFDIR;
+#endif
 			}
 			else
 				elog(ERROR, "Unrecognized link indicator \"%c\"\n",
@@ -289,7 +293,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 					DATABASE_DIR);
 	join_path_components(to_path, database_path, file->path);
 
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -363,7 +367,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
  * Take a remote backup of the PGDATA at a file level.
  * Copy all directories and files listed in backup_files_list.
  */
-static void
+static void *
 remote_backup_files(void *arg)
 {
 	int i;
@@ -385,7 +389,7 @@ remote_backup_files(void *arg)
 		if (S_ISDIR(file->mode))
 			continue;
 
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		file_backup_conn = pgut_connect_replication(pgut_dbname);
@@ -441,6 +445,8 @@ remote_backup_files(void *arg)
 
 	/* Data files transferring is successful */
 	arguments->ret = 0;
+
+	return NULL;
 }
 
 /*
@@ -456,8 +462,9 @@ do_backup_instance(void)
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
 
-	pthread_t	backup_threads[num_threads];
-	backup_files_args *backup_threads_args[num_threads];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t	*backup_threads;
+	backup_files_args *backup_threads_args;
 	bool		backup_isok = true;
 
 	pgBackup   *prev_backup = NULL;
@@ -681,16 +688,19 @@ do_backup_instance(void)
 		}
 
 		/* setup threads */
-		__sync_lock_release(&file->lock);
+		pg_atomic_clear_flag(&file->lock);
 	}
 
 	/* sort by size for load balancing */
 	parray_qsort(backup_files_list, pgFileCompareSize);
 
 	/* init thread args with own file lists */
+	backup_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
+	backup_threads_args = (backup_files_args *) palloc(sizeof(backup_files_args)*num_threads);
+
 	for (i = 0; i < num_threads; i++)
 	{
-		backup_files_args *arg = pg_malloc(sizeof(backup_files_args));
+		backup_files_args *arg = &(backup_threads_args[i]);
 
 		arg->from_root = pgdata;
 		arg->to_root = database_path;
@@ -701,33 +711,27 @@ do_backup_instance(void)
 		arg->thread_cancel_conn = NULL;
 		/* By default there are some error */
 		arg->ret = 1;
-		backup_threads_args[i] = arg;
 	}
 
 	/* Run threads */
 	elog(LOG, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
+		backup_files_args *arg = &(backup_threads_args[i]);
 		elog(VERBOSE, "Start thread num: %i", i);
 
 		if (!is_remote_backup)
-			pthread_create(&backup_threads[i], NULL,
-						   (void *(*)(void *)) backup_files,
-						   backup_threads_args[i]);
+			pthread_create(&backup_threads[i], NULL, backup_files, arg);
 		else
-			pthread_create(&backup_threads[i], NULL,
-						   (void *(*)(void *)) remote_backup_files,
-						   backup_threads_args[i]);
+			pthread_create(&backup_threads[i], NULL, remote_backup_files, arg);
 	}
-
+	
 	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(backup_threads[i], NULL);
-		if (backup_threads_args[i]->ret == 1)
+		if (backup_threads_args[i].ret == 1)
 			backup_isok = false;
-
-		pg_free(backup_threads_args[i]);
 	}
 	if (backup_isok)
 		elog(LOG, "Data files are transfered");
@@ -1017,7 +1021,7 @@ check_system_identifiers(void)
 
 	system_id_pgdata = get_system_identifier(pgdata);
 	system_id_conn = get_remote_system_identifier(backup_conn);
-
+	
 	if (system_id_conn != system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
 			 system_identifier, system_id_conn);
@@ -1040,14 +1044,15 @@ confirm_block_size(const char *name, int blcksz)
 	res = pgut_execute(backup_conn, "SELECT pg_catalog.current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
-
+	
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
-	PQclear(res);
-
 	if ((endp && *endp) || block_size != blcksz)
 		elog(ERROR,
 			 "%s(%d) is not compatible(%d expected)",
 			 name, block_size, blcksz);
+	
+	PQclear(res);//bad pointer to endp
+
 }
 
 /*
@@ -1802,7 +1807,7 @@ pg_stop_backup(pgBackup *backup)
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-			fp = fopen(backup_label, "w");
+			fp = fopen(backup_label, PG_BINARY_W);
 			if (fp == NULL)
 				elog(ERROR, "can't open backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
@@ -1850,7 +1855,7 @@ pg_stop_backup(pgBackup *backup)
 			char		tablespace_map[MAXPGPATH];
 
 			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fopen(tablespace_map, "w");
+			fp = fopen(tablespace_map, PG_BINARY_W);
 			if (fp == NULL)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
@@ -2006,7 +2011,7 @@ backup_disconnect(bool fatal, void *userdata)
  * In incremental backup mode, copy only files or datafiles' pages changed after
  * previous backup.
  */
-static void
+static void *
 backup_files(void *arg)
 {
 	int				i;
@@ -2021,7 +2026,7 @@ backup_files(void *arg)
 
 		pgFile *file = (pgFile *) parray_get(arguments->backup_files_list, i);
 		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (!pg_atomic_test_set_flag(&file->lock)) 
 			continue;
 
 		/* check for interrupt */
@@ -2126,6 +2131,8 @@ backup_files(void *arg)
 
 	/* Data files transferring is successful */
 	arguments->ret = 0;
+
+	return NULL;
 }
 
 /*

@@ -5,7 +5,7 @@ OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
 	src/util.o src/validate.o src/datapagemap.o src/parsexlog.o \
 	src/xlogreader.o src/streamutil.o src/receivelog.o \
 	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o \
-	src/utils/json.o
+	src/utils/json.o src/utils/thread.o
 
 EXTRA_CLEAN = src/datapagemap.c src/datapagemap.h src/xlogreader.c \
 	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h src/logging.h
@@ -62,6 +62,7 @@ src/streamutil.c: $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.c $@
 src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.h $@
+
 
 ifeq ($(MAJORVERSION),10)
 src/walmethods.c: $(top_srcdir)/src/bin/pg_basebackup/walmethods.c

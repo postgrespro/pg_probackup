@@ -446,7 +446,7 @@ backup_data_file(backup_files_args* arguments,
 	INIT_CRC32C(file->crc);
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(file->crc);
@@ -480,7 +480,7 @@ backup_data_file(backup_files_args* arguments,
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -569,18 +569,18 @@ restore_data_file(const char *from_root,
 				  pgFile *file,
 				  pgBackup *backup)
 {
-	char				to_path[MAXPGPATH];
-	FILE			   *in = NULL;
-	FILE			   *out = NULL;
-	BackupPageHeader	header;
-	BlockNumber			blknum;
-	size_t              file_size;
+	char		to_path[MAXPGPATH];
+	FILE	   *in = NULL;
+	FILE	   *out = NULL;
+	BackupPageHeader header;
+	BlockNumber	blknum;
+	size_t		file_size;
 
 	/* BYTES_INVALID allowed only in case of restoring file from DELTA backup */
 	if (file->write_size != BYTES_INVALID)
 	{
 		/* open backup mode file for read */
-		in = fopen(file->path, "r");
+		in = fopen(file->path, PG_BINARY_R);
 		if (in == NULL)
 		{
 			elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
@@ -594,9 +594,9 @@ restore_data_file(const char *from_root,
 	 * re-open it with "w" to create an empty file.
 	 */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "r+");
+	out = fopen(to_path, PG_BINARY_R "+");
 	if (out == NULL && errno == ENOENT)
-		out = fopen(to_path, "w");
+		out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -690,13 +690,13 @@ restore_data_file(const char *from_root,
 		}
 	}
 
-    /*
-     * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
-     * But during DELTA backup we read every file in PGDATA and thus DELTA backup
-     * knows exact size of every file at the time of backup.
-     * So when restoring file from DELTA backup we, knowning it`s size at
-     * a time of a backup, can truncate file to this size.
-     */
+	/*
+	 * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
+	 * But during DELTA backup we read every file in PGDATA and thus DELTA backup
+	 * knows exact size of every file at the time of backup.
+	 * So when restoring file from DELTA backup we, knowning it`s size at
+	 * a time of a backup, can truncate file to this size.
+	 */
 
 	if (backup->backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
@@ -759,7 +759,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(crc);
@@ -775,7 +775,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -918,7 +918,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			  bool overwrite)
 {
 	FILE	   *in = NULL;
-	FILE	   *out;
+	FILE	   *out=NULL;
 	char		buf[XLOG_BLCKSZ];
 	const char *to_path_p = to_path;
 	char		to_path_temp[MAXPGPATH];
@@ -930,7 +930,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "r");
+	in = fopen(from_path, PG_BINARY_R);
 	if (in == NULL)
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
@@ -946,7 +946,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
-		gz_out = gzopen(to_path_temp, "wb");
+		gz_out = gzopen(to_path_temp, PG_BINARY_W);
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 compress_level, to_path_temp, get_gz_error(gz_out, errno));
@@ -961,7 +961,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fopen(to_path_temp, "w");
+		out = fopen(to_path_temp, PG_BINARY_W);
 		if (out == NULL)
 			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
@@ -1083,7 +1083,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "r");
+	in = fopen(from_path, PG_BINARY_R);
 	if (in == NULL)
 	{
 #ifdef HAVE_LIBZ
@@ -1092,7 +1092,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		 * extension.
 		 */
 		snprintf(gz_from_path, sizeof(gz_from_path), "%s.gz", from_path);
-		gz_in = gzopen(gz_from_path, "rb");
+		gz_in = gzopen(gz_from_path, PG_BINARY_R);
 		if (gz_in == NULL)
 		{
 			if (errno == ENOENT)
@@ -1120,7 +1120,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-	out = fopen(to_path_temp, "w");
+	out = fopen(to_path_temp, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 			 to_path_temp, strerror(errno));
@@ -1254,7 +1254,7 @@ calc_file_checksum(pgFile *file)
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(crc);

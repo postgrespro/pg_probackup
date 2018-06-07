@@ -10,7 +10,6 @@
 
 #include "pg_probackup.h"
 
-#include <libgen.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -102,10 +101,12 @@ int
 dir_create_dir(const char *dir, mode_t mode)
 {
 	char		copy[MAXPGPATH];
-	char		parent[MAXPGPATH];
+	char		*parent;
 
 	strncpy(copy, dir, MAXPGPATH);
-	strncpy(parent, dirname(copy), MAXPGPATH);
+
+	parent = pstrdup(dir);
+	get_parent_directory(parent);
 
 	/* Create parent first */
 	if (access(parent, F_OK) == -1)
@@ -119,6 +120,7 @@ dir_create_dir(const char *dir, mode_t mode)
 		elog(ERROR, "cannot create directory \"%s\": %s", dir, strerror(errno));
 	}
 
+	pfree(parent);
 	return 0;
 }
 
@@ -152,6 +154,8 @@ pgFileInit(const char *path)
 	char	   *file_name;
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
+
+	file->name = 0;
 
 	file->size = 0;
 	file->mode = 0;
@@ -232,7 +236,7 @@ pgFileGetCRC(pgFile *file)
 	int			errno_tmp;
 
 	/* open file in binary read mode */
-	fp = fopen(file->path, "r");
+	fp = fopen(file->path, PG_BINARY_R);
 	if (fp == NULL)
 		elog(ERROR, "cannot open file \"%s\": %s",
 			file->path, strerror(errno));
@@ -350,7 +354,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fopen(path, "r");
+		black_list_file = fopen(path, PG_BINARY_R);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));
@@ -827,7 +831,11 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
+#ifndef WIN32
 		if (S_ISLNK(file->mode))
+#else
+		if (pgwin32_is_junction(file->path))
+#endif
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != -1)

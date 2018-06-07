@@ -10,6 +10,7 @@
 
 #include "pg_probackup.h"
 #include "streamutil.h"
+#include "utils/thread.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -207,11 +208,7 @@ main(int argc, char *argv[])
 	/*
 	 * Save main thread's tid. It is used call exit() in case of errors.
 	 */
-#ifdef WIN32
-	main_tid = GetCurrentThreadId();
-#else
 	main_tid = pthread_self();
-#endif
 
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
@@ -235,7 +232,7 @@ main(int argc, char *argv[])
 		else if (strcmp(argv[1], "show") == 0)
 			backup_subcmd = SHOW;
 		else if (strcmp(argv[1], "delete") == 0)
-			backup_subcmd = DELETE;
+			backup_subcmd = DELETE_SUBCMD;
 		else if (strcmp(argv[1], "set-config") == 0)
 			backup_subcmd = SET_CONFIG;
 		else if (strcmp(argv[1], "show-config") == 0)
@@ -281,7 +278,7 @@ main(int argc, char *argv[])
 	if (backup_subcmd == BACKUP ||
 		backup_subcmd == RESTORE ||
 		backup_subcmd == VALIDATE ||
-		backup_subcmd == DELETE)
+		backup_subcmd == DELETE_SUBCMD)
 	{
 		int			i,
 					len = 0,
@@ -325,6 +322,7 @@ main(int argc, char *argv[])
 		if (backup_path == NULL)
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
+	canonicalize_path(backup_path);
 
 	/* Ensure that backup_path is an absolute path */
 	if (!is_absolute_path(backup_path))
@@ -402,7 +400,7 @@ main(int argc, char *argv[])
 	{
 		if (backup_subcmd != RESTORE
 			&& backup_subcmd != VALIDATE
-			&& backup_subcmd != DELETE
+			&& backup_subcmd != DELETE_SUBCMD
 			&& backup_subcmd != SHOW)
 			elog(ERROR, "Cannot use -i (--backup-id) option together with the '%s' command",
 						argv[1]);
@@ -464,6 +462,7 @@ main(int argc, char *argv[])
 
 				start_time = time(NULL);
 				backup_mode = deparse_backup_mode(current.backup_mode);
+				current.stream = stream_wal;
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
@@ -484,7 +483,7 @@ main(int argc, char *argv[])
 						  false);
 		case SHOW:
 			return do_show(current.backup_id);
-		case DELETE:
+		case DELETE_SUBCMD:
 			if (delete_expired && backup_id_string_param)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
 			if (!delete_expired && !delete_wal && !backup_id_string_param)

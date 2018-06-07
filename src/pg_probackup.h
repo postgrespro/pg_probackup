@@ -15,10 +15,6 @@
 #include <limits.h>
 #include <libpq-fe.h>
 
-#ifndef WIN32
-#include <sys/mman.h>
-#endif
-
 #include "access/timeline.h"
 #include "access/xlogdefs.h"
 #include "access/xlog_internal.h"
@@ -28,6 +24,13 @@
 #include "storage/checksum.h"
 #include "utils/pg_crc.h"
 #include "common/relpath.h"
+#include "port.h"
+
+#ifdef FRONTEND
+#undef FRONTEND
+	#include "port/atomics.h"
+#define FRONTEND
+#endif
 
 #include "utils/parray.h"
 #include "utils/pgut.h"
@@ -102,7 +105,7 @@ typedef struct pgFile
 	bool	is_database;
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
-	volatile uint32 lock;	/* lock for synchronization of parallel threads  */
+	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 } pgFile;
 
@@ -144,7 +147,7 @@ typedef enum ProbackupSubcmd
 	RESTORE,
 	VALIDATE,
 	SHOW,
-	DELETE,
+	DELETE_SUBCMD,
 	SET_CONFIG,
 	SHOW_CONFIG
 } ProbackupSubcmd;
@@ -530,5 +533,17 @@ extern void pgBackup_init(pgBackup *backup);
 
 /* in status.c */
 extern bool is_pg_running(void);
+
+#ifdef WIN32
+#ifdef _DEBUG
+#define lseek _lseek
+#define open _open
+#define fstat _fstat
+#define read _read
+#define close _close
+#define write _write
+#define mkdir(dir,mode) _mkdir(dir)
+#endif
+#endif
 
 #endif /* PG_PROBACKUP_H */

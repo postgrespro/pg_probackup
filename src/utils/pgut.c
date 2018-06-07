@@ -42,12 +42,6 @@ static char	   *password = NULL;
 bool			prompt_password = true;
 bool			force_password = false;
 
-#ifdef WIN32
-DWORD main_tid = 0;
-#else
-pthread_t main_tid = 0;
-#endif
-
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
 
@@ -995,7 +989,7 @@ longopts_to_optstring(const struct option opts[], const size_t len)
 	s = result;
 	for (i = 0; i < len; i++)
 	{
-		if (!isprint(opts[i].val))
+		if (!isprint(opts[i].val)) //opts[i].val > 128 ||
 			continue;
 		*s++ = opts[i].val;
 		if (opts[i].has_arg != no_argument)
@@ -1052,6 +1046,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	struct option *longopts;
 	size_t		len;
 
+
 	len = option_length(options);
 	longopts = pgut_newarray(struct option, len + 1);
 	option_copy(longopts, options, len);
@@ -1059,6 +1054,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	optstring = longopts_to_optstring(longopts, len);
 
 	/* Assign named options */
+	optind = 2;
 	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)
 	{
 		opt = option_find(c, options);
@@ -1225,7 +1221,7 @@ get_next_token(const char *src, char *dst, const char *line)
 	}
 	else
 	{
-		i = j = strcspn(s, "# \n\r\t\v");
+		i = j = strcspn(s, "#\n\r\t\v");//removed space 
 		memcpy(dst, s, j);
 	}
 
