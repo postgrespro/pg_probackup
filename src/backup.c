@@ -453,6 +453,8 @@ do_backup_instance(void)
 	int			i;
 	char		database_path[MAXPGPATH];
 	char		extra_path[MAXPGPATH];
+	char	  **extradirs;
+	uint		extradirs_len;
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -466,6 +468,19 @@ do_backup_instance(void)
 	parray	   *prev_backup_filelist = NULL;
 
 	elog(LOG, "Database backup start");
+	extradirs_len = 0;
+	char *p;
+	p = strtok(extradir,":");
+	extradirs = palloc((extradirs_len+2)*sizeof(char*));
+	while(p!=NULL)
+	{
+		extradirs = repalloc(extradirs,(extradirs_len+1)*sizeof(char*));
+		extradirs[i] = (char *)palloc(strlen(p) + 1);
+		strcpy(extradirs[extradirs_len],p);
+		elog(WARNING,"%s",extradirs[extradirs_len]);
+		extradirs_len++;
+		p=strtok(NULL,":");
+	}
 
 	/* Initialize size summary */
 	current.data_bytes = 0;
@@ -610,6 +625,11 @@ do_backup_instance(void)
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
 	dir_list_file(backup_files_list, extradir, true, true, true, true);
+
+//	char   *extradirs[] = { DATABASE_DIR, EXTRA_DIR, NULL };
+//	/* Append to backup list all files dirictories from extra dirictory option */
+//	for (i = 0; extradirs[i]; i++)
+//		dir_list_file(backup_files_list, extradir, true, true, true, true);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
