@@ -12,6 +12,7 @@
 pthread_t main_tid = 0;
 
 #ifdef WIN32
+#include <errno.h>
 
 typedef struct win32_pthread
 {

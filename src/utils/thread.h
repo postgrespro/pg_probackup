@@ -11,6 +11,7 @@
 #define PROBACKUP_THREAD_H
 
 #ifdef WIN32
+#include "postgres_fe.h"
 #include "port/pthread-win32.h"
 
 /* Use native win32 threads on Windows */
