@@ -10,6 +10,7 @@
 
 #include "pg_probackup.h"
 #include "streamutil.h"
+#include "utils/thread.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +18,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char *PROGRAM_VERSION	= "2.0.15";
+const char *PROGRAM_VERSION	= "2.0.17";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -47,7 +48,6 @@ char	   *replication_slot = NULL;
 /* backup options */
 bool		backup_logs = false;
 bool		smooth_checkpoint;
-bool		from_replica = false;
 bool		is_remote_backup = false;
 /* Wait timeout for WAL segment archiving */
 uint32		archive_timeout = 300;		/* default is 300 seconds */
@@ -62,6 +62,13 @@ static char		   *target_time;
 static char		   *target_xid;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
+static bool			target_immediate;
+static char		   *target_name = NULL;
+static char		   *target_action = NULL;;
+
+static pgRecoveryTarget *recovery_target_options = NULL;
+
+bool restore_as_replica = false;
 
 /* delete options */
 bool		delete_wal = false;
@@ -76,7 +83,7 @@ uint32		retention_window = 0;
 /* compression options */
 CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
 int			compress_level = DEFAULT_COMPRESS_LEVEL;
-bool 		compress_shortcut = false;
+bool		compress_shortcut = false;
 
 /* other options */
 char	   *instance_name;
@@ -86,6 +93,9 @@ uint64		system_identifier = 0;
 static char *wal_file_path;
 static char *wal_file_name;
 static bool	file_overwrite = false;
+
+/* show options */
+ShowFormat show_format = SHOW_PLAIN;
 
 /* current settings */
 pgBackup	current;
@@ -97,6 +107,7 @@ static void opt_backup_mode(pgut_option *opt, const char *arg);
 static void opt_log_level_console(pgut_option *opt, const char *arg);
 static void opt_log_level_file(pgut_option *opt, const char *arg);
 static void opt_compress_alg(pgut_option *opt, const char *arg);
+static void opt_show_format(pgut_option *opt, const char *arg);
 
 static void compress_init(void);
 
@@ -132,6 +143,10 @@ static pgut_option options[] =
 	{ 's', 22, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
 	{ 'u', 23, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
+	{ 'b', 24, "immediate",				&target_immediate,	SOURCE_CMDLINE },
+	{ 's', 25, "recovery-target-name",	&target_name,		SOURCE_CMDLINE },
+	{ 's', 26, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
+	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
@@ -167,6 +182,8 @@ static pgut_option options[] =
 	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
 	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },
 	{ 'b', 162, "overwrite",			&file_overwrite,	SOURCE_CMDLINE },
+	/* show options */
+	{ 'f', 170, "format",				opt_show_format,	SOURCE_CMDLINE },
 	{ 0 }
 };
 
@@ -181,12 +198,17 @@ main(int argc, char *argv[])
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
 	int			rc;
+
 	/* initialize configuration */
 	pgBackup_init(&current);
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], "pgscripts");
 
+	/*
+	 * Save main thread's tid. It is used call exit() in case of errors.
+	 */
+	main_tid = pthread_self();
 
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
@@ -231,7 +253,7 @@ main(int argc, char *argv[])
 			if (argc == 2)
 			{
 #ifdef PGPRO_VERSION
-				fprintf(stderr, "%s %s (PostgresPro %s %s)\n",
+				fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
 						PROGRAM_NAME, PROGRAM_VERSION,
 						PGPRO_VERSION, PGPRO_EDITION);
 #else
@@ -300,6 +322,7 @@ main(int argc, char *argv[])
 		if (backup_path == NULL)
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
+	canonicalize_path(backup_path);
 
 	/* Ensure that backup_path is an absolute path */
 	if (!is_absolute_path(backup_path))
@@ -309,9 +332,6 @@ main(int argc, char *argv[])
 	rc = stat(backup_path, &stat_buf);
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
-
-	/* Initialize logger */
-	init_logger(backup_path);
 
 	/* command was initialized for a few commands */
 	if (command)
@@ -365,6 +385,9 @@ main(int argc, char *argv[])
 		pgut_readopt(path, options, ERROR);
 	}
 
+	/* Initialize logger */
+	init_logger(backup_path);
+
 	/*
 	 * We have read pgdata path from command line or from configuration file.
 	 * Ensure that pgdata is an absolute path.
@@ -406,8 +429,13 @@ main(int argc, char *argv[])
 		pgdata_exclude_dir[i] = "pg_log";
 	}
 
-	if (target_time != NULL && target_xid != NULL)
-		elog(ERROR, "You can't specify recovery-target-time and recovery-target-xid at the same time");
+	if (backup_subcmd == VALIDATE || backup_subcmd == RESTORE)
+	{
+		/* parse all recovery target options into recovery_target_options structure */
+		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
+								   target_inclusive, target_tli, target_immediate,
+								   target_name, target_action);
+	}
 
 	if (num_threads < 1)
 		num_threads = 1;
@@ -438,22 +466,20 @@ main(int argc, char *argv[])
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  current.stream ? "true" : "false", is_remote_backup ? "true" : "false");
+						  stream_wal ? "true" : "false", is_remote_backup ? "true" : "false");
 
 				return do_backup(start_time);
 			}
 		case RESTORE:
 			return do_restore_or_validate(current.backup_id,
-						  target_time, target_xid,
-						  target_inclusive, target_tli,
+						  recovery_target_options,
 						  true);
 		case VALIDATE:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
 				return do_validate_all();
 			else
 				return do_restore_or_validate(current.backup_id,
-						  target_time, target_xid,
-						  target_inclusive, target_tli,
+						  recovery_target_options,
 						  false);
 		case SHOW:
 			return do_show(current.backup_id);
@@ -495,49 +521,31 @@ opt_log_level_file(pgut_option *opt, const char *arg)
 	log_level_file = parse_log_level(arg);
 }
 
-CompressAlg
-parse_compress_alg(const char *arg)
+static void
+opt_show_format(pgut_option *opt, const char *arg)
 {
+	const char *v = arg;
 	size_t		len;
 
 	/* Skip all spaces detected */
-	while (isspace((unsigned char)*arg))
-		arg++;
-	len = strlen(arg);
+	while (IsSpace(*v))
+		v++;
+	len = strlen(v);
 
-	if (len == 0)
-		elog(ERROR, "compress algrorithm is empty");
-
-	if (pg_strncasecmp("zlib", arg, len) == 0)
-		return ZLIB_COMPRESS;
-	else if (pg_strncasecmp("pglz", arg, len) == 0)
-		return PGLZ_COMPRESS;
-	else if (pg_strncasecmp("none", arg, len) == 0)
-		return NONE_COMPRESS;
-	else
-		elog(ERROR, "invalid compress algorithm value \"%s\"", arg);
-
-	return NOT_DEFINED_COMPRESS;
-}
-
-const char*
-deparse_compress_alg(int alg)
-{
-	switch (alg)
+	if (len > 0)
 	{
-		case NONE_COMPRESS:
-		case NOT_DEFINED_COMPRESS:
-			return "none";
-		case ZLIB_COMPRESS:
-			return "zlib";
-		case PGLZ_COMPRESS:
-			return "pglz";
+		if (pg_strncasecmp("plain", v, len) == 0)
+			show_format = SHOW_PLAIN;
+		else if (pg_strncasecmp("json", v, len) == 0)
+			show_format = SHOW_JSON;
+		else
+			elog(ERROR, "Invalid show format \"%s\"", arg);
 	}
-
-	return NULL;
+	else
+		elog(ERROR, "Invalid show format \"%s\"", arg);
 }
 
-void
+static void
 opt_compress_alg(pgut_option *opt, const char *arg)
 {
 	compress_alg = parse_compress_alg(arg);
@@ -546,8 +554,8 @@ opt_compress_alg(pgut_option *opt, const char *arg)
 /*
  * Initialize compress and sanity checks for compress.
  */
-static
-void compress_init(void)
+static void
+compress_init(void)
 {
 	/* Default algorithm is zlib */
 	if (compress_shortcut)

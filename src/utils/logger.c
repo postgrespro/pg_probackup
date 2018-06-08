@@ -15,23 +15,7 @@
 
 #include "logger.h"
 #include "pgut.h"
-
-#ifndef WIN32
-#include <sys/mman.h>
-#include <pthread.h>
-#else
-#include "port/pthread-win32.h"
-#endif
-
-#ifdef WIN32
-typedef struct win32_pthread *pthread_t;
-typedef int pthread_attr_t;
-#define PTHREAD_MUTEX_INITIALIZER NULL //{ NULL, 0 }
-#define PTHREAD_ONCE_INIT false
-
-int pthread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *), void *arg);
-int pthread_join(pthread_t th, void **thread_return);
-#endif
+#include "thread.h"
 
 /* Logger parameters */
 
@@ -66,6 +50,8 @@ void pg_log(eLogType type, const char *fmt,...) pg_attribute_printf(2, 3);
 
 static void elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 						  pg_attribute_printf(3, 0);
+static void elog_stderr(int elevel, const char *fmt, ...)
+						pg_attribute_printf(2, 3);
 
 /* Functions to work with log files */
 static void open_logfile(FILE **file, const char *filename_format);
@@ -79,10 +65,13 @@ static FILE *log_file = NULL;
 static FILE *error_log_file = NULL;
 
 static bool exit_hook_registered = false;
-/* Logging to file is in progress */
-static bool logging_to_file = false;
+/* Logging of the current thread is in progress */
+static bool loggin_in_progress = false;
 
 static pthread_mutex_t log_file_mutex = PTHREAD_MUTEX_INITIALIZER;
+#ifdef WIN32
+static long mutex_initlock = 0;
+#endif
 
 void
 init_logger(const char *root_path)
@@ -127,8 +116,39 @@ write_elevel(FILE *stream, int elevel)
 			fputs("PANIC: ", stream);
 			break;
 		default:
-			elog(ERROR, "invalid logging level: %d", elevel);
+			elog_stderr(ERROR, "invalid logging level: %d", elevel);
 			break;
+	}
+}
+
+/*
+ * Exit with code if it is an error.
+ * Check for in_cleanup flag to avoid deadlock in case of ERROR in cleanup
+ * routines.
+ */
+static void
+exit_if_necessary(int elevel)
+{
+	if (elevel > WARNING && !in_cleanup)
+	{
+		/* Interrupt other possible routines */
+		interrupted = true;
+
+		if (loggin_in_progress)
+		{
+			loggin_in_progress = false;
+			pthread_mutex_unlock(&log_file_mutex);
+		}
+
+		/* If this is not the main thread then don't call exit() */
+		if (main_tid != pthread_self())
+#ifdef WIN32
+			ExitThread(elevel);
+#else
+			pthread_exit(NULL);
+#endif
+		else
+			exit(elevel);
 	}
 }
 
@@ -143,23 +163,31 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	bool		write_to_file,
 				write_to_error_log,
 				write_to_stderr;
-	va_list		error_args=NULL,
-				std_args=NULL;
+	va_list		error_args,
+				std_args;
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
-	write_to_file = !logging_to_file && elevel >= LOG_LEVEL_FILE &&
+	write_to_file = elevel >= LOG_LEVEL_FILE && log_path[0] != '\0';
+	write_to_error_log = elevel >= ERROR && error_log_filename &&
 		log_path[0] != '\0';
-	write_to_error_log = !logging_to_file && elevel >= ERROR &&
-		error_log_filename && log_path[0] != '\0';
 	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
 
 	/*
-	 * There is no need to lock if this is elog() from upper elog() and
-	 * logging is not initialized.
+	 * There is no need to lock if this is elog() from upper elog().
 	 */
-	if (write_to_file || write_to_error_log)
-		pthread_mutex_lock(&log_file_mutex);
+#ifdef WIN32
+	if (log_file_mutex == NULL)
+	{
+		while (InterlockedExchange(&mutex_initlock, 1) == 1)
+			/* loop, another thread own the lock */ ;
+		if (log_file_mutex == NULL)
+			pthread_mutex_init(&log_file_mutex, NULL);
+		InterlockedExchange(&mutex_initlock, 0);
+	}
+#endif
+	pthread_mutex_lock(&log_file_mutex);
+	loggin_in_progress = true;
 
 	/* We need copy args only if we need write to error log file */
 	if (write_to_error_log)
@@ -182,8 +210,6 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	 */
 	if (write_to_file)
 	{
-		logging_to_file = true;
-
 		if (log_file == NULL)
 		{
 			if (log_filename == NULL)
@@ -198,8 +224,6 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		vfprintf(log_file, fmt, args);
 		fputc('\n', log_file);
 		fflush(log_file);
-
-		logging_to_file = false;
 	}
 
 	/*
@@ -209,8 +233,6 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	 */
 	if (write_to_error_log)
 	{
-		logging_to_file = true;
-
 		if (error_log_file == NULL)
 			open_logfile(&error_log_file, error_log_filename);
 
@@ -221,7 +243,6 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		fputc('\n', error_log_file);
 		fflush(error_log_file);
 
-		logging_to_file = false;
 		va_end(error_args);
 	}
 
@@ -244,12 +265,38 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 			va_end(std_args);
 	}
 
-	if (write_to_file || write_to_error_log)
-		pthread_mutex_unlock(&log_file_mutex);
+	exit_if_necessary(elevel);
 
-	/* Exit with code if it is an error */
-	if (elevel > WARNING)
-		exit(elevel);
+	loggin_in_progress = false;
+	pthread_mutex_unlock(&log_file_mutex);
+}
+
+/*
+ * Log only to stderr. It is called only within elog_internal() when another
+ * logging already was started.
+ */
+static void
+elog_stderr(int elevel, const char *fmt, ...)
+{
+	va_list		args;
+
+	/*
+	 * Do not log message if severity level is less than log_level.
+	 * It is the little optimisation to put it here not in elog_internal().
+	 */
+	if (elevel < LOG_LEVEL_CONSOLE && elevel < ERROR)
+		return;
+
+	va_start(args, fmt);
+
+	write_elevel(stderr, elevel);
+	vfprintf(stderr, fmt, args);
+	fputc('\n', stderr);
+	fflush(stderr);
+
+	va_end(args);
+
+	exit_if_necessary(elevel);
 }
 
 /*
@@ -420,7 +467,7 @@ logfile_getname(const char *format, time_t timestamp)
 	struct tm  *tm = localtime(&timestamp);
 
 	if (log_path[0] == '\0')
-		elog(ERROR, "logging path is not set");
+		elog_stderr(ERROR, "logging path is not set");
 
 	filename = (char *) palloc(MAXPGPATH);
 
@@ -430,7 +477,7 @@ logfile_getname(const char *format, time_t timestamp)
 
 	/* Treat log_filename as a strftime pattern */
 	if (strftime(filename + len, MAXPGPATH - len, format, tm) <= 0)
-		elog(ERROR, "strftime(%s) failed: %s", format, strerror(errno));
+		elog_stderr(ERROR, "strftime(%s) failed: %s", format, strerror(errno));
 
 	return filename;
 }
@@ -456,8 +503,8 @@ logfile_open(const char *filename, const char *mode)
 	{
 		int			save_errno = errno;
 
-		elog(FATAL, "could not open log file \"%s\": %s",
-			 filename, strerror(errno));
+		elog_stderr(FATAL, "could not open log file \"%s\": %s",
+					filename, strerror(errno));
 		errno = save_errno;
 	}
 
@@ -491,8 +538,8 @@ open_logfile(FILE **file, const char *filename_format)
 			goto logfile_open;
 		}
 		else
-			elog(ERROR, "cannot stat log file \"%s\": %s",
-				 filename, strerror(errno));
+			elog_stderr(ERROR, "cannot stat log file \"%s\": %s",
+						filename, strerror(errno));
 	}
 	/* Found log file "filename" */
 	logfile_exists = true;
@@ -508,8 +555,8 @@ open_logfile(FILE **file, const char *filename_format)
 			if (stat(control, &control_st) == -1)
 			{
 				if (errno != ENOENT)
-					elog(ERROR, "cannot stat rotation file \"%s\": %s",
-						 control, strerror(errno));
+					elog_stderr(ERROR, "cannot stat rotation file \"%s\": %s",
+								control, strerror(errno));
 			}
 			else
 			{
@@ -517,17 +564,17 @@ open_logfile(FILE **file, const char *filename_format)
 
 				control_file = fopen(control, PG_BINARY_R);
 				if (control_file == NULL)
-					elog(ERROR, "cannot open rotation file \"%s\": %s",
-						 control, strerror(errno));
+					elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
+								control, strerror(errno));
 
 				if (fgets(buf, lengthof(buf), control_file))
 				{
 					time_t		creation_time;
 
 					if (!parse_int64(buf, (int64 *) &creation_time, 0))
-						elog(ERROR, "rotation file \"%s\" has wrong "
-							 "creation timestamp \"%s\"",
-							 control, buf);
+						elog_stderr(ERROR, "rotation file \"%s\" has wrong "
+									"creation timestamp \"%s\"",
+									control, buf);
 					/* Parsed creation time */
 
 					rotation_requested = (cur_time - creation_time) >
@@ -535,8 +582,8 @@ open_logfile(FILE **file, const char *filename_format)
 						log_rotation_age * 60;
 				}
 				else
-					elog(ERROR, "cannot read creation timestamp from "
-						 "rotation file \"%s\"", control);
+					elog_stderr(ERROR, "cannot read creation timestamp from "
+								"rotation file \"%s\"", control);
 
 				fclose(control_file);
 			}
@@ -563,8 +610,8 @@ logfile_open:
 
 		control_file = fopen(control, PG_BINARY_W);
 		if (control_file == NULL)
-			elog(ERROR, "cannot open rotation file \"%s\": %s",
-				 control, strerror(errno));
+			elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
+						control, strerror(errno));
 
 		fprintf(control_file, "%ld", timestamp);
 

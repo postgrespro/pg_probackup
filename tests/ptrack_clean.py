@@ -1,6 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, idx_ptrack
+import time
 
 
 module_name = 'ptrack_clean'
@@ -32,14 +33,25 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table and indexes
         node.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap tablespace somedata as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+            "create sequence t_seq; create table t_heap tablespace somedata "
+            "as select i as id, nextval('t_seq') as t_seq, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,256) i")
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                node.safe_psql("postgres", "create index {0} on {1} using {2}({3}) tablespace somedata".format(
-                    i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
+                node.safe_psql(
+                    "postgres",
+                    "create index {0} on {1} using {2}({3}) "
+                    "tablespace somedata".format(
+                        i, idx_ptrack[i]['relation'],
+                        idx_ptrack[i]['type'],
+                        idx_ptrack[i]['column']))
 
         # Take FULL backup to clean every ptrack
-        self.backup_node(backup_dir, 'node', node, options=['-j10', '--stream'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['-j10', '--stream'])
         node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -53,13 +65,17 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
         # Update everything and vacuum it
-        node.safe_psql('postgres', "update t_heap set t_seq = nextval('t_seq'), text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
+        node.safe_psql(
+            'postgres',
+            "update t_heap set t_seq = nextval('t_seq'), "
+            "text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
         node.safe_psql('postgres', 'vacuum t_heap')
 
         # Take PTRACK backup to clean every ptrack
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['-j100', '--log-level-file=verbose'])
+            options=['-j10', '--log-level-file=verbose'])
         node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -74,11 +90,17 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
         # Update everything and vacuum it
-        node.safe_psql('postgres', "update t_heap set t_seq = nextval('t_seq'), text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
+        node.safe_psql(
+            'postgres',
+            "update t_heap set t_seq = nextval('t_seq'), "
+            "text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
         node.safe_psql('postgres', 'vacuum t_heap')
 
         # Take PAGE backup to clean every ptrack
-        self.backup_node(backup_dir, 'node', node, backup_type='page', options=['-j100'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['-j10'])
         node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -100,10 +122,14 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_clean_replica(self):
         """Take backups of every available types from master and check that PTRACK on replica is clean"""
         fname = self.id().split('.')[3]
-        master = self.make_simple_node(base_dir="{0}/{1}/master".format(module_name, fname),
+        master = self.make_simple_node(
+            base_dir="{0}/{1}/master".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on', 'wal_level': 'replica', 'max_wal_senders': '2'})
+            pg_options={
+                'ptrack_enable': 'on',
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
@@ -111,28 +137,43 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
-        replica = self.make_simple_node(base_dir="{0}/{1}/replica".format(module_name, fname))
+        replica = self.make_simple_node(
+            base_dir="{0}/{1}/replica".format(module_name, fname))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
 
         self.add_instance(backup_dir, 'replica', replica)
-        self.set_replica(master, replica)
+        self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.start()
 
         # Create table and indexes
         master.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap as select i as id, nextval('t_seq') as t_seq, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+            "create sequence t_seq; create table t_heap as select i as id, "
+            "nextval('t_seq') as t_seq, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,256) i")
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                master.safe_psql("postgres", "create index {0} on {1} using {2}({3})".format(
-                    i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
+                master.safe_psql(
+                    "postgres",
+                    "create index {0} on {1} using {2}({3})".format(
+                        i, idx_ptrack[i]['relation'],
+                        idx_ptrack[i]['type'],
+                        idx_ptrack[i]['column']))
 
         # Take FULL backup to clean every ptrack
-        self.backup_node(backup_dir, 'replica', replica, options=['-j100', '--stream',
-            '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
+        self.backup_node(
+            backup_dir,
+            'replica',
+            replica,
+            options=[
+                '-j10', '--stream',
+                '--master-host=localhost',
+                '--master-db=postgres',
+                '--master-port={0}'.format(master.port)])
         master.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -146,12 +187,24 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
         # Update everything and vacuum it
-        master.safe_psql('postgres', "update t_heap set t_seq = nextval('t_seq'), text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
+        master.safe_psql(
+            'postgres',
+            "update t_heap set t_seq = nextval('t_seq'), "
+            "text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
         master.safe_psql('postgres', 'vacuum t_heap')
 
         # Take PTRACK backup to clean every ptrack
-        backup_id = self.backup_node(backup_dir, 'replica', replica, backup_type='ptrack', options=['-j100', '--stream',
-            '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
+        backup_id = self.backup_node(
+            backup_dir,
+            'replica',
+            replica,
+            backup_type='ptrack',
+            options=[
+                '-j10', '--stream',
+                '--master-host=localhost',
+                '--master-db=postgres',
+                '--master-port={0}'.format(master.port)])
         master.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -166,15 +219,24 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
         # Update everything and vacuum it
-        master.safe_psql('postgres', "update t_heap set t_seq = nextval('t_seq'), text = md5(text), tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
+        master.safe_psql(
+            'postgres',
+            "update t_heap set t_seq = nextval('t_seq'), text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 10))::tsvector;")
         master.safe_psql('postgres', 'vacuum t_heap')
         master.safe_psql('postgres', 'checkpoint')
 
         # Take PAGE backup to clean every ptrack
-        self.backup_node(backup_dir, 'replica', replica, backup_type='page', options=['-j100',
-            '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
+        self.backup_node(
+            backup_dir,
+            'replica',
+            replica,
+            backup_type='page',
+            options=[
+                '-j10', '--master-host=localhost',
+                '--master-db=postgres',
+                '--master-port={0}'.format(master.port)])
         master.safe_psql('postgres', 'checkpoint')
-
 
         for i in idx_ptrack:
             # get new size of heap and indexes and calculate it in pages

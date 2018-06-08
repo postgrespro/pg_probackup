@@ -1,1 +1,1 @@
-perl win32build.pl "C:\Program Files\PostgresProEnterprise\10" "C:\projects\pgwininstall2\pgwininstall\builddir\postgresql\postgresql-10.3\src"
+perl win32build.pl "C:\PgProject\pgwininstall-ee\builddir\distr_X64_10.4.1\postgresql" "C:\PgProject\pgwininstall-ee\builddir\postgresql\postgrespro-enterprise-10.4.1\src"

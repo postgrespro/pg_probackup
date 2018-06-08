@@ -148,8 +148,8 @@ get_remote_system_identifier(PGconn *conn)
 	char	   *val;
 
 	res = pgut_execute(conn,
-					   "SELECT system_identifier FROM pg_control_system()",
-					   0, NULL, true);
+					   "SELECT system_identifier FROM pg_catalog.pg_control_system()",
+					   0, NULL);
 	val = PQgetvalue(res, 0, 0);
 	if (!parse_uint64(val, &system_id_conn, 0))
 	{
@@ -176,8 +176,8 @@ uint32
 get_data_checksum_version(bool safe)
 {
 	ControlFileData ControlFile;
-	char       *buffer;
-	size_t      size;
+	char	   *buffer;
+	size_t		size;
 
 	/* First fetch file... */
 	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
@@ -310,10 +310,21 @@ pgBackup_init(pgBackup *backup)
 	backup->end_time = (time_t) 0;
 	backup->recovery_xid = 0;
 	backup->recovery_time = (time_t) 0;
+
 	backup->data_bytes = BYTES_INVALID;
+	backup->wal_bytes = BYTES_INVALID;
+
+	backup->compress_alg = NOT_DEFINED_COMPRESS;
+	backup->compress_level = 0;
+
 	backup->block_size = BLCKSZ;
 	backup->wal_block_size = XLOG_BLCKSZ;
+	backup->checksum_version = 0;
+
 	backup->stream = false;
+	backup->from_replica = false;
 	backup->parent_backup = 0;
+	backup->primary_conninfo = NULL;
+	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 }

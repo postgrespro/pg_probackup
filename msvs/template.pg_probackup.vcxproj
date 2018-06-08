@@ -191,6 +191,8 @@
     <ClCompile Include="..\src\utils\parray.c" />
     <ClCompile Include="..\src\utils\pgut.c" />
     <ClCompile Include="..\src\validate.c" />
+    <ClCompile Include="..\src\utils\json.c" />
+    <ClCompile Include="..\src\utils\thread.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="@PGSRC@\bin\pg_basebackup\receivelog.h" />
@@ -202,6 +204,8 @@
     <ClInclude Include="..\src\utils\logger.h" />
     <ClInclude Include="..\src\utils\parray.h" />
     <ClInclude Include="..\src\utils\pgut.h" />
+    <ClCompile Include="..\src\utils\json.h" />
+    <ClCompile Include="..\src\utils\thread.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

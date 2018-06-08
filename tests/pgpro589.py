@@ -63,7 +63,7 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        backup_id = self.show_pb(backup_dir, 'node')[0]['ID']
+        backup_id = self.show_pb(backup_dir, 'node')[0]['id']
         self.assertEqual(
             'ERROR', self.show_pb(backup_dir, 'node', backup_id)['status'],
             'Backup should have ERROR status')

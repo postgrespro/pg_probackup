@@ -12,6 +12,7 @@ import select
 import psycopg2
 from time import sleep
 import re
+import json
 
 idx_ptrack = {
     't_heap': {
@@ -96,7 +97,7 @@ def is_enterprise():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if 'postgrespro.ru' in p.communicate()[0]:
+    if b'postgrespro.ru' in p.communicate()[0]:
         return True
     else:
         return False
@@ -207,13 +208,13 @@ class ProbackupTest(object):
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
-        print(node.data_dir)
 
-        # Sane default parameters, not a shit with fsync = off from testgres
+        # Sane default parameters
         node.append_conf("postgresql.auto.conf", "max_connections = 100")
         node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
         node.append_conf("postgresql.auto.conf", "fsync = on")
-        node.append_conf("postgresql.auto.conf", "wal_level = minimal")
+        node.append_conf("postgresql.auto.conf", "wal_level = logical")
+        node.append_conf("postgresql.auto.conf", "hot_standby = 'off'")
 
         node.append_conf(
             "postgresql.auto.conf", "log_line_prefix = '%t [%p]: [%l-1] '")
@@ -259,7 +260,9 @@ class ProbackupTest(object):
             tblspc_name, tblspc_path)
         if cfs:
             cmd += " with (compression=true)"
-        os.makedirs(tblspc_path)
+
+        if not os.path.exists(tblspc_path):
+            os.makedirs(tblspc_path)
         res = node.safe_psql("postgres", cmd)
         # Check that tablespace was successfully created
         # self.assertEqual(
@@ -596,7 +599,7 @@ class ProbackupTest(object):
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
-            options=[], as_text=False
+            options=[], as_text=False, as_json=True
             ):
 
         backup_list = []
@@ -611,62 +614,83 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
+        if as_json:
+            cmd_list += ["--format=json"]
+
         if as_text:
             # You should print it when calling as_text=true
             return self.run_pb(cmd_list + options)
 
         # get show result as list of lines
-        show_splitted = self.run_pb(cmd_list + options).splitlines()
-        if instance is not None and backup_id is None:
-            # cut header(ID, Mode, etc) from show as single string
-            header = show_splitted[1:2][0]
-            # cut backup records from show as single list
-            # with string for every backup record
-            body = show_splitted[3:]
-            # inverse list so oldest record come first
-            body = body[::-1]
-            # split string in list with string for every header element
-            header_split = re.split("  +", header)
-            # Remove empty items
-            for i in header_split:
-                if i == '':
-                    header_split.remove(i)
+        if as_json:
+            data = json.loads(self.run_pb(cmd_list + options))
+        #    print(data)
+            for instance_data in data:
+                # find specific instance if requested
+                if instance and instance_data['instance'] != instance:
                     continue
-            header_split = [
-                header_element.rstrip() for header_element in header_split
-                ]
-            for backup_record in body:
-                # split list with str for every backup record element
-                backup_record_split = re.split("  +", backup_record)
-                # Remove empty items
-                for i in backup_record_split:
-                    if i == '':
-                        backup_record_split.remove(i)
-                if len(header_split) != len(backup_record_split):
-                    print(warning.format(
-                        header=header, body=body,
-                        header_split=header_split,
-                        body_split=backup_record_split)
-                    )
-                    exit(1)
-                new_dict = dict(zip(header_split, backup_record_split))
-                backup_list.append(new_dict)
+
+                for backup in reversed(instance_data['backups']):
+                    # find specific backup if requested
+                    if backup_id:
+                        if backup['id'] == backup_id:
+                            return backup
+                    else:
+                        backup_list.append(backup)
             return backup_list
         else:
-            # cut out empty lines and lines started with #
-            # and other garbage then reconstruct it as dictionary
-            # print show_splitted
-            sanitized_show = [item for item in show_splitted if item]
-            sanitized_show = [
-                item for item in sanitized_show if not item.startswith('#')
-            ]
-            # print sanitized_show
-            for line in sanitized_show:
-                name, var = line.partition(" = ")[::2]
-                var = var.strip('"')
-                var = var.strip("'")
-                specific_record[name.strip()] = var
-            return specific_record
+            show_splitted = self.run_pb(cmd_list + options).splitlines()
+            if instance is not None and backup_id is None:
+                # cut header(ID, Mode, etc) from show as single string
+                header = show_splitted[1:2][0]
+                # cut backup records from show as single list
+                # with string for every backup record
+                body = show_splitted[3:]
+                # inverse list so oldest record come first
+                body = body[::-1]
+                # split string in list with string for every header element
+                header_split = re.split("  +", header)
+                # Remove empty items
+                for i in header_split:
+                    if i == '':
+                        header_split.remove(i)
+                        continue
+                header_split = [
+                    header_element.rstrip() for header_element in header_split
+                    ]
+                for backup_record in body:
+                    backup_record = backup_record.rstrip()
+                    # split list with str for every backup record element
+                    backup_record_split = re.split("  +", backup_record)
+                    # Remove empty items
+                    for i in backup_record_split:
+                        if i == '':
+                            backup_record_split.remove(i)
+                    if len(header_split) != len(backup_record_split):
+                        print(warning.format(
+                            header=header, body=body,
+                            header_split=header_split,
+                            body_split=backup_record_split)
+                        )
+                        exit(1)
+                    new_dict = dict(zip(header_split, backup_record_split))
+                    backup_list.append(new_dict)
+                return backup_list
+            else:
+                # cut out empty lines and lines started with #
+                # and other garbage then reconstruct it as dictionary
+                # print show_splitted
+                sanitized_show = [item for item in show_splitted if item]
+                sanitized_show = [
+                    item for item in sanitized_show if not item.startswith('#')
+                ]
+                # print sanitized_show
+                for line in sanitized_show:
+                    name, var = line.partition(" = ")[::2]
+                    var = var.strip('"')
+                    var = var.strip("'")
+                    specific_record[name.strip()] = var
+                return specific_record
 
     def validate_pb(
             self, backup_dir, instance=None,
@@ -740,10 +764,10 @@ class ProbackupTest(object):
         else:
             archive_mode = 'on'
 
-        node.append_conf(
-            "postgresql.auto.conf",
-            "wal_level = archive"
-        )
+        # node.append_conf(
+        #     "postgresql.auto.conf",
+        #     "wal_level = archive"
+        # )
         node.append_conf(
                 "postgresql.auto.conf",
                 "archive_mode = {0}".format(archive_mode)
@@ -884,7 +908,7 @@ class ProbackupTest(object):
         except:
             pass
 
-    def pgdata_content(self, directory):
+    def pgdata_content(self, directory, ignore_ptrack=True):
         """ return dict with directory content. "
         " TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = [
@@ -897,9 +921,9 @@ class ProbackupTest(object):
             'backup_label', 'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control'
         ]
-        suffixes_to_ignore = (
-            '_ptrack'
-        )
+#        suffixes_to_ignore = (
+#            '_ptrack'
+#        )
         directory_dict = {}
         directory_dict['pgdata'] = directory
         directory_dict['files'] = {}
@@ -908,7 +932,7 @@ class ProbackupTest(object):
             for file in files:
                 if (
                     file in files_to_ignore or
-                    file.endswith(suffixes_to_ignore)
+                    (ignore_ptrack and file.endswith('_ptrack'))
                 ):
                         continue
 

@@ -13,24 +13,9 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-#ifndef WIN32
-#include <sys/mman.h>
-#include <pthread.h>
-#else
-#include "port/pthread-win32.h"
-#endif
+#include "utils/thread.h"
 
-#ifdef WIN32
-typedef struct win32_pthread *pthread_t;
-typedef int pthread_attr_t;
-#define PTHREAD_MUTEX_INITIALIZER NULL //{ NULL, 0 }
-#define PTHREAD_ONCE_INIT false
-
-int pthread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *), void *arg);
-int pthread_join(pthread_t th, void **thread_return);
-#endif
-
-static void pgBackupValidateFiles(void *arg);
+static void *pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);
 
 static bool corrupted_backup_found = false;
@@ -39,6 +24,12 @@ typedef struct
 {
 	parray *files;
 	bool corrupted;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
 } validate_files_args;
 
 /*
@@ -51,25 +42,34 @@ pgBackupValidate(pgBackup *backup)
 	char		path[MAXPGPATH];
 	parray	   *files;
 	bool		corrupted = false;
+	bool		validation_isok = true;
 	/* arrays with meta info for multi threaded validate */
-	pthread_t	*validate_threads;
+	pthread_t  *validate_threads;
 	validate_files_args *validate_threads_args;
 	int			i;
 
+	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
 	if (backup->status != BACKUP_STATUS_OK &&
-		backup->status != BACKUP_STATUS_DONE)
+		backup->status != BACKUP_STATUS_DONE &&
+		backup->status != BACKUP_STATUS_ORPHAN &&
+		backup->status != BACKUP_STATUS_CORRUPT)
 	{
-		elog(INFO, "Backup %s has status %s. Skip validation.",
+		elog(WARNING, "Backup %s has status %s. Skip validation.",
 					base36enc(backup->start_time), status2str(backup->status));
+		corrupted_backup_found = true;
 		return;
 	}
 
-	elog(INFO, "Validating backup %s", base36enc(backup->start_time));
+	if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE)
+		elog(INFO, "Validating backup %s", base36enc(backup->start_time));
+	else
+		elog(INFO, "Revalidating backup %s", base36enc(backup->start_time));
 
 	if (backup->backup_mode != BACKUP_MODE_FULL &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
-		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK)
-		elog(INFO, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
+		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK &&
+		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
+		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
@@ -83,26 +83,36 @@ pgBackupValidate(pgBackup *backup)
 	}
 
 	/* init thread args with own file lists */
-	validate_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
-	validate_threads_args = (validate_files_args *) palloc(sizeof(validate_files_args)*num_threads);
+	validate_threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	validate_threads_args = (validate_files_args *)
+		palloc(sizeof(validate_files_args) * num_threads);
 
 	/* Validate files */
 	for (i = 0; i < num_threads; i++)
 	{
 		validate_files_args *arg = &(validate_threads_args[i]);
+
 		arg->files = files;
 		arg->corrupted = false;
-		pthread_create(&validate_threads[i], NULL, (void *(*)(void *)) pgBackupValidateFiles, arg);
+		/* By default there are some error */
+		arg->ret = 1;
+
+		pthread_create(&validate_threads[i], NULL, pgBackupValidateFiles, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
 		validate_files_args *arg = &(validate_threads_args[i]);
+
 		pthread_join(validate_threads[i], NULL);
 		if (arg->corrupted)
 			corrupted = true;
+		if (arg->ret == 1)
+			validation_isok = false;
 	}
+	if (!validation_isok)
+		elog(ERROR, "Data files validation failed");
 
 	pfree(validate_threads);
 	pfree(validate_threads_args);
@@ -127,10 +137,10 @@ pgBackupValidate(pgBackup *backup)
  * rather throw a WARNING and set arguments->corrupted = true.
  * This is necessary to update backup status.
  */
-static void
+static void *
 pgBackupValidateFiles(void *arg)
 {
-	int		i;
+	int			i;
 	validate_files_args *arguments = (validate_files_args *)arg;
 	pg_crc32	crc;
 
@@ -174,7 +184,7 @@ pgBackupValidateFiles(void *arg)
 				elog(WARNING, "Cannot stat backup file \"%s\": %s",
 					file->path, strerror(errno));
 			arguments->corrupted = true;
-			return;
+			break;
 		}
 
 		if (file->write_size != st.st_size)
@@ -183,7 +193,7 @@ pgBackupValidateFiles(void *arg)
 				 file->path, (unsigned long) file->write_size,
 				 (unsigned long) st.st_size);
 			arguments->corrupted = true;
-			return;
+			break;
 		}
 
 		crc = pgFileGetCRC(file);
@@ -192,9 +202,14 @@ pgBackupValidateFiles(void *arg)
 			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
 					file->path, file->crc, crc);
 			arguments->corrupted = true;
-			return;
+			break;
 		}
 	}
+
+	/* Data files validation is successful */
+	arguments->ret = 0;
+
+	return NULL;
 }
 
 /*
@@ -249,7 +264,7 @@ do_validate_all(void)
 
 	if (corrupted_backup_found)
 	{
-		elog(INFO, "Some backups are not valid");
+		elog(WARNING, "Some backups are not valid");
 		return 1;
 	}
 	else
@@ -264,7 +279,7 @@ do_validate_all(void)
 static void
 do_validate_instance(void)
 {
-	char *current_backup_id;
+	char	   *current_backup_id;
 	int			i;
 	parray	   *backups;
 	pgBackup   *current_backup = NULL;
@@ -317,7 +332,7 @@ do_validate_instance(void)
 						0, base_full_backup->tli);
 		}
 		/* Mark every incremental backup between corrupted backup and nearest FULL backup as orphans */
-		if (current_backup->status != BACKUP_STATUS_OK)
+		if (current_backup->status == BACKUP_STATUS_CORRUPT)
 		{
 			int			j;
 			corrupted_backup_found = true;
@@ -331,7 +346,6 @@ do_validate_instance(void)
 					continue;
 				else
 				{
-
 					backup->status = BACKUP_STATUS_ORPHAN;
 					pgBackupWriteBackupControlFile(backup);
 

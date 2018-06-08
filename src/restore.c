@@ -16,16 +16,18 @@
 #include <unistd.h>
 
 #include "catalog/pg_control.h"
-
-#ifdef WIN32
-typedef struct win32_pthread *pthread_t;
-typedef int pthread_attr_t;
-#endif
+#include "utils/thread.h"
 
 typedef struct
 {
-	parray *files;
-	pgBackup *backup;
+	parray	   *files;
+	pgBackup   *backup;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
 } restore_files_args;
 
 /* Tablespace mapping structures */
@@ -61,11 +63,9 @@ static void restore_directories(const char *pg_data_dir,
 								const char *backup_dir);
 static void check_tablespace_mapping(pgBackup *backup);
 static void create_recovery_conf(time_t backup_id,
-								 const char *target_time,
-								 const char *target_xid,
-								 const char *target_inclusive,
-								 TimeLineID target_tli);
-static void restore_files(void *arg);
+								 pgRecoveryTarget *rt,
+								 pgBackup *backup);
+static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
 static const char *get_tablespace_mapping(const char *dir);
 static void set_tablespace_created(const char *link, const char *dir);
@@ -80,17 +80,11 @@ static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
  */
 int
-do_restore_or_validate(time_t target_backup_id,
-		   const char *target_time,
-		   const char *target_xid,
-		   const char *target_inclusive,
-		   TimeLineID target_tli,
-		   bool is_restore)
+do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
+					   bool is_restore)
 {
 	int			i;
 	parray	   *backups;
-	parray	   *timelines = NULL;
-	pgRecoveryTarget *rt = NULL;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
@@ -113,8 +107,6 @@ do_restore_or_validate(time_t target_backup_id,
 	if (instance_name == NULL)
 		elog(ERROR, "required parameter not specified: --instance");
 
-	rt = parseRecoveryTargetOptions(target_time, target_xid, target_inclusive);
-
 	elog(LOG, "%s begin.", action);
 
 	/* Get exclusive lock of backup catalog */
@@ -123,13 +115,6 @@ do_restore_or_validate(time_t target_backup_id,
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 	if (backups == NULL)
 		elog(ERROR, "Failed to get backup list.");
-
-	if (target_tli)
-	{
-		elog(LOG, "target timeline ID = %u", target_tli);
-		/* Read timeline history files from archives */
-		timelines = readTimeLineHistory_probackup(target_tli);
-	}
 
 	/* Find backup range we should restore or validate. */
 	for (i = 0; i < parray_num(backups); i++)
@@ -145,7 +130,10 @@ do_restore_or_validate(time_t target_backup_id,
 		 *  we must find the first valid(!) backup.
 		 */
 
-		if (is_restore && target_backup_id == 0 && current_backup->status != BACKUP_STATUS_OK)
+		if (is_restore &&
+			!dest_backup &&
+			target_backup_id == INVALID_BACKUP_ID &&
+			current_backup->status != BACKUP_STATUS_OK)
 		{
 			elog(WARNING, "Skipping backup %s, because it has non-valid status: %s",
 				base36enc(current_backup->start_time), status2str(current_backup->status));
@@ -160,12 +148,31 @@ do_restore_or_validate(time_t target_backup_id,
 			|| target_backup_id == INVALID_BACKUP_ID)
 			&& !dest_backup)
 		{
-			if (current_backup->status != BACKUP_STATUS_OK)
-				elog(ERROR, "Backup %s has status: %s",
-					 base36enc(current_backup->start_time), status2str(current_backup->status));
 
-			if (target_tli)
+			/* backup is not ok,
+			 * but in case of CORRUPT, ORPHAN or DONE revalidation can be done,
+			 * in other cases throw an error.
+			 */
+			if (current_backup->status != BACKUP_STATUS_OK)
 			{
+				if (current_backup->status == BACKUP_STATUS_DONE ||
+					current_backup->status == BACKUP_STATUS_ORPHAN ||
+					current_backup->status == BACKUP_STATUS_CORRUPT)
+					elog(WARNING, "Backup %s has status: %s",
+						 base36enc(current_backup->start_time), status2str(current_backup->status));
+				else
+					elog(ERROR, "Backup %s has status: %s",
+						 base36enc(current_backup->start_time), status2str(current_backup->status));
+			}
+
+			if (rt->recovery_target_tli)
+			{
+				parray	   *timelines;
+
+				elog(LOG, "target timeline ID = %u", rt->recovery_target_tli);
+				/* Read timeline history files from archives */
+				timelines = readTimeLineHistory_probackup(rt->recovery_target_tli);
+
 				if (!satisfy_timeline(timelines, current_backup))
 				{
 					if (target_backup_id != INVALID_BACKUP_ID)
@@ -201,17 +208,24 @@ do_restore_or_validate(time_t target_backup_id,
 			if (current_backup->backup_mode == BACKUP_MODE_FULL)
 			{
 				if (current_backup->status != BACKUP_STATUS_OK)
-					elog(ERROR, "base backup %s for given backup %s is in %s status",
-						 base36enc_dup(current_backup->start_time),
-						 base36enc_dup(dest_backup->start_time),
-						 status2str(current_backup->status));
-				else
 				{
-					/* We found both dest and base backups. */
-					base_full_backup = current_backup;
-					base_full_backup_index = i;
-					break;
+					/* Full backup revalidation can be done only for DONE and CORRUPT */
+					if (current_backup->status == BACKUP_STATUS_DONE ||
+							current_backup->status == BACKUP_STATUS_CORRUPT)
+						elog(WARNING, "base backup %s for given backup %s is in %s status, trying to revalidate",
+							base36enc_dup(current_backup->start_time),
+							base36enc_dup(dest_backup->start_time),
+							status2str(current_backup->status));
+					else
+						elog(ERROR, "base backup %s for given backup %s is in %s status",
+							base36enc_dup(current_backup->start_time),
+							base36enc_dup(dest_backup->start_time),
+							status2str(current_backup->status));
 				}
+				/* We found both dest and base backups. */
+				base_full_backup = current_backup;
+				base_full_backup_index = i;
+				break;
 			}
 			else
 				/* It`s ok to skip incremental backup */
@@ -239,12 +253,16 @@ do_restore_or_validate(time_t target_backup_id,
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 		pgBackupValidate(backup);
+		/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
 		if (backup->status == BACKUP_STATUS_CORRUPT)
 		{
 			corrupted_backup = backup;
 			corrupted_backup_index = i;
 			break;
 		}
+		/* We do not validate WAL files of intermediate backups
+		 * It`s done to speed up restore
+		 */
 	}
 	/* There is no point in wal validation
 	 * if there is corrupted backup between base_backup and dest_backup
@@ -320,12 +338,7 @@ do_restore_or_validate(time_t target_backup_id,
 			remove_deleted_files(dest_backup);
 
 		/* Create recovery.conf with given recovery target parameters */
-		if (!dest_backup->stream
-			|| (target_time != NULL || target_xid != NULL))
-		{
-			create_recovery_conf(target_backup_id, target_time, target_xid,
-								target_inclusive, target_tli);
-		}
+		create_recovery_conf(target_backup_id, rt, dest_backup);
 	}
 
 	/* cleanup */
@@ -350,9 +363,9 @@ restore_backup(pgBackup *backup)
 	parray	   *files;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
-	pthread_t			*restore_threads;
-	restore_files_args	*restore_threads_args;
-
+	pthread_t  *restore_threads;
+	restore_files_args *restore_threads_args;
+	bool		restore_isok = true;
 
 	if (backup->status != BACKUP_STATUS_OK)
 		elog(ERROR, "Backup %s cannot be restored because it is not valid",
@@ -384,17 +397,6 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(database_path, list_path);
-	for (i = parray_num(files) - 1; i >= 0; i--)
-	{
-		pgFile *file = (pgFile *) parray_get(files, i);
-
-		/*
-		 * Remove files which haven't changed since previous backup
-		 * and was not backed up
-		 */
-		if (file->write_size == BYTES_INVALID)
-			pgFileFree(parray_remove(files, i));
-	}
 
 	restore_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
 	restore_threads_args = (restore_files_args *) palloc(sizeof(restore_files_args)*num_threads);
@@ -413,17 +415,23 @@ restore_backup(pgBackup *backup)
 
 		arg->files = files;
 		arg->backup = backup;
+		/* By default there are some error */
+		arg->ret = 1;
 
 		elog(LOG, "Start thread for num:%li", parray_num(files));
 
-		pthread_create(&restore_threads[i], NULL, (void *(*)(void *)) restore_files, arg);
+		pthread_create(&restore_threads[i], NULL, restore_files, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(restore_threads[i], NULL);
+		if (restore_threads_args[i].ret == 1)
+			restore_isok = false;
 	}
+	if (!restore_isok)
+		elog(ERROR, "Data files restoring failed");
 
 	pfree(restore_threads);
 	pfree(restore_threads_args);
@@ -448,7 +456,7 @@ remove_deleted_files(pgBackup *backup)
 	parray	   *files;
 	parray	   *files_restored;
 	char		filelist_path[MAXPGPATH];
-	int 		i;
+	int			i;
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
 	/* Read backup's filelist using target database path as base path */
@@ -698,7 +706,7 @@ check_tablespace_mapping(pgBackup *backup)
 /*
  * Restore files into $PGDATA.
  */
-static void
+static void *
 restore_files(void *arg)
 {
 	int			i;
@@ -727,24 +735,31 @@ restore_files(void *arg)
 				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
 
 
-		/* Directories was created before */
-		if (S_ISDIR(file->mode))
+		/*
+		 * For PAGE and PTRACK backups skip files which haven't changed
+		 * since previous backup and thus were not backed up.
+		 * We cannot do the same when restoring DELTA backup because we need information
+		 * about every file to correctly truncate them.
+		 */
+		if (file->write_size == BYTES_INVALID &&
+			(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE
+			|| arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK))
 		{
-			elog(LOG, "directory, skip");
+			elog(VERBOSE, "The file didn`t changed. Skip restore: %s", file->path);
 			continue;
 		}
 
-		/* not backed up */
-		if (file->write_size == BYTES_INVALID)
+		/* Directories was created before */
+		if (S_ISDIR(file->mode))
 		{
-			elog(LOG, "not backed up, skip");
+			elog(VERBOSE, "directory, skip");
 			continue;
 		}
 
 		/* Do not restore tablespace_map file */
 		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, rel_path))
 		{
-			elog(LOG, "skip tablespace_map");
+			elog(VERBOSE, "skip tablespace_map");
 			continue;
 		}
 
@@ -761,20 +776,34 @@ restore_files(void *arg)
 			copy_file(from_root, pgdata, file);
 
 		/* print size of restored file */
-		elog(LOG, "Restored file %s : %lu bytes",
-			 file->path, (unsigned long) file->write_size);
+		if (file->write_size != BYTES_INVALID)
+			elog(LOG, "Restored file %s : %lu bytes",
+				file->path, (unsigned long) file->write_size);
 	}
+
+	/* Data files restoring is successful */
+	arguments->ret = 0;
+
+	return NULL;
 }
 
+/* Create recovery.conf with given recovery target parameters */
 static void
 create_recovery_conf(time_t backup_id,
-					 const char *target_time,
-					 const char *target_xid,
-					 const char *target_inclusive,
-					 TimeLineID target_tli)
+					 pgRecoveryTarget *rt,
+					 pgBackup *backup)
 {
-	char path[MAXPGPATH];
-	FILE *fp;
+	char		path[MAXPGPATH];
+	FILE	   *fp;
+	bool		need_restore_conf = false;
+
+	if (!backup->stream
+		|| (rt->time_specified || rt->xid_specified))
+			need_restore_conf = true;
+
+	/* No need to generate recovery.conf at all. */
+	if (!(need_restore_conf || restore_as_replica))
+		return;
 
 	elog(LOG, "----------------------------------------");
 	elog(LOG, "creating recovery.conf");
@@ -787,40 +816,48 @@ create_recovery_conf(time_t backup_id,
 
 	fprintf(fp, "# recovery.conf generated by pg_probackup %s\n",
 		PROGRAM_VERSION);
-#ifdef WIN32
-	char *p1 = backup_path;
-	while (*p1){
-		if ((*p1) == '\\')
-			*p1 = '/';
-		p1++;
-	}
-#endif
-	fprintf(fp, "restore_command = '%s archive-get -B %s --instance %s --wal-file-path %%p --wal-file-name %%f'\n",
-			PROGRAM_NAME, backup_path, instance_name);
-	fprintf(fp, "recovery_target_action = 'promote'\n");
 
-	if (target_time)
-		fprintf(fp, "recovery_target_time = '%s'\n", target_time);
-	else if (target_xid)
-		fprintf(fp, "recovery_target_xid = '%s'\n", target_xid);
-	else if (backup_id != 0)
+	if (need_restore_conf)
 	{
+
+		fprintf(fp, "restore_command = '%s archive-get -B %s --instance %s "
+					"--wal-file-path %%p --wal-file-name %%f'\n",
+					PROGRAM_NAME, backup_path, instance_name);
+
 		/*
-		 * We need to set this parameters only if 'backup_id' is provided
-		 * because the backup will be recovered as soon as possible as stop_lsn
-		 * is reached.
-		 * If 'backup_id' is not set we want to replay all available WAL records,
-		 * if 'recovery_target' is set all available WAL records will not be
-		 * replayed.
+		 * We've already checked that only one of the four following mutually
+		 * exclusive options is specified, so the order of calls is insignificant.
 		 */
-		fprintf(fp, "recovery_target = 'immediate'\n");
+		if (rt->recovery_target_name)
+			fprintf(fp, "recovery_target_name = '%s'\n", rt->recovery_target_name);
+
+		if (rt->time_specified)
+			fprintf(fp, "recovery_target_time = '%s'\n", rt->target_time_string);
+
+		if (rt->xid_specified)
+			fprintf(fp, "recovery_target_xid = '%s'\n", rt->target_xid_string);
+
+		if (rt->recovery_target_immediate)
+			fprintf(fp, "recovery_target = 'immediate'\n");
+
+		if (rt->inclusive_specified)
+			fprintf(fp, "recovery_target_inclusive = '%s'\n",
+					rt->recovery_target_inclusive?"true":"false");
+
+		if (rt->recovery_target_tli)
+			fprintf(fp, "recovery_target_timeline = '%u'\n", rt->recovery_target_tli);
+
+		if (rt->recovery_target_action)
+			fprintf(fp, "recovery_target_action = '%s'\n", rt->recovery_target_action);
 	}
 
-	if (target_inclusive)
-		fprintf(fp, "recovery_target_inclusive = '%s'\n", target_inclusive);
+	if (restore_as_replica)
+	{
+		fprintf(fp, "standby_mode = 'on'\n");
 
-	if (target_tli)
-		fprintf(fp, "recovery_target_timeline = '%u'\n", target_tli);
+		if (backup->primary_conninfo)
+			fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+	}
 
 	if (fflush(fp) != 0 ||
 		fsync(fileno(fp)) != 0 ||
@@ -950,50 +987,75 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 bool
 satisfy_timeline(const parray *timelines, const pgBackup *backup)
 {
-	int i;
+	int			i;
+
 	for (i = 0; i < parray_num(timelines); i++)
 	{
-		TimeLineHistoryEntry *timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
+		TimeLineHistoryEntry *timeline;
+
+		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
 			backup->stop_lsn < timeline->end)
 			return true;
 	}
 	return false;
 }
-
 /*
  * Get recovery options in the string format, parse them
  * and fill up the pgRecoveryTarget structure.
  */
 pgRecoveryTarget *
 parseRecoveryTargetOptions(const char *target_time,
-                   const char *target_xid,
-                   const char *target_inclusive)
+					const char *target_xid,
+					const char *target_inclusive,
+					TimeLineID	target_tli,
+					bool target_immediate,
+					const char *target_name,
+					const char *target_action)
 {
-	time_t			dummy_time;
-	TransactionId	dummy_xid;
-	bool			dummy_bool;
-	pgRecoveryTarget *rt;
+	time_t		dummy_time;
+	TransactionId dummy_xid;
+	bool		dummy_bool;
+	/*
+	 * count the number of the mutually exclusive options which may specify
+	 * recovery target. If final value > 1, throw an error.
+	 */
+	int			recovery_target_specified = 0;
+	pgRecoveryTarget *rt = pgut_new(pgRecoveryTarget);
 
-	/* Initialize pgRecoveryTarget */
-	rt = pgut_new(pgRecoveryTarget);
+	/* fill all options with default values */
 	rt->time_specified = false;
 	rt->xid_specified = false;
+	rt->inclusive_specified = false;
 	rt->recovery_target_time = 0;
 	rt->recovery_target_xid  = 0;
+	rt->target_time_string = NULL;
+	rt->target_xid_string = NULL;
 	rt->recovery_target_inclusive = false;
+	rt->recovery_target_tli  = 0;
+	rt->recovery_target_immediate = false;
+	rt->recovery_target_name = NULL;
+	rt->recovery_target_action = NULL;
 
+	/* parse given options */
 	if (target_time)
 	{
+		recovery_target_specified++;
 		rt->time_specified = true;
+		rt->target_time_string = target_time;
+
 		if (parse_time(target_time, &dummy_time))
 			rt->recovery_target_time = dummy_time;
 		else
 			elog(ERROR, "Invalid value of --time option %s", target_time);
 	}
+
 	if (target_xid)
 	{
+		recovery_target_specified++;
 		rt->xid_specified = true;
+		rt->target_xid_string = target_xid;
+
 #ifdef PGPRO_EE
 		if (parse_uint64(target_xid, &dummy_xid, 0))
 #else
@@ -1003,13 +1065,51 @@ parseRecoveryTargetOptions(const char *target_time,
 		else
 			elog(ERROR, "Invalid value of --xid option %s", target_xid);
 	}
+
 	if (target_inclusive)
 	{
+		rt->inclusive_specified = true;
 		if (parse_bool(target_inclusive, &dummy_bool))
 			rt->recovery_target_inclusive = dummy_bool;
 		else
 			elog(ERROR, "Invalid value of --inclusive option %s", target_inclusive);
 	}
+
+	rt->recovery_target_tli  = target_tli;
+	if (target_immediate)
+	{
+		recovery_target_specified++;
+		rt->recovery_target_immediate = target_immediate;
+	}
+
+	if (target_name)
+	{
+		recovery_target_specified++;
+		rt->recovery_target_name = target_name;
+	}
+
+	if (target_action)
+	{
+		rt->recovery_target_action = target_action;
+
+		if ((strcmp(target_action, "pause") != 0)
+			&& (strcmp(target_action, "promote") != 0)
+			&& (strcmp(target_action, "shutdown") != 0))
+				elog(ERROR, "Invalid value of --recovery-target-action option %s", target_action);
+	}
+	else
+	{
+		/* Default recovery target action is pause */
+		rt->recovery_target_action = "pause";
+	}
+
+	/* More than one mutually exclusive option was defined. */
+	if (recovery_target_specified > 1)
+		elog(ERROR, "At most one of --immediate, --target-name, --time, or --xid can be used");
+
+	/* If none of the options is defined, '--inclusive' option is meaningless */
+	if (!(rt->xid_specified || rt->time_specified) && rt->recovery_target_inclusive)
+		elog(ERROR, "--inclusive option applies when either --time or --xid is specified");
 
 	return rt;
 }

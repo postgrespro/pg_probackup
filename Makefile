@@ -4,7 +4,8 @@ OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
 	src/pg_probackup.o src/restore.o src/show.o src/status.o \
 	src/util.o src/validate.o src/datapagemap.o src/parsexlog.o \
 	src/xlogreader.o src/streamutil.o src/receivelog.o \
-	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o
+	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o \
+	src/utils/json.o src/utils/thread.o
 
 EXTRA_CLEAN = src/datapagemap.c src/datapagemap.h src/xlogreader.c \
 	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h src/logging.h

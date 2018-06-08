@@ -132,11 +132,10 @@ parse_page(Page page, XLogRecPtr *lsn)
  */
 static int
 read_page_from_file(pgFile *file, BlockNumber blknum,
-					FILE *in, Page page)
+					FILE *in, Page page, XLogRecPtr *page_lsn)
 {
 	off_t				offset = blknum*BLCKSZ;
 	size_t				read_len = 0;
-	XLogRecPtr			page_lsn;
 
 	/* read the block */
 	if (fseek(in, offset, SEEK_SET) != 0)
@@ -155,9 +154,9 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 			return 0;
 		}
 		else
-			elog(WARNING, "File: %s, block %u, expected block size %lu,"
-					  "but read %d, try again",
-					   file->path, blknum, read_len, BLCKSZ);
+			elog(WARNING, "File: %s, block %u, expected block size %d,"
+					  "but read %lu, try again",
+					   file->path, blknum, BLCKSZ, read_len);
 	}
 
 	/*
@@ -167,7 +166,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	 * If after several attempts page header is still invalid, throw an error.
 	 * The same idea is applied to checksum verification.
 	 */
-	if (!parse_page(page, &page_lsn))
+	if (!parse_page(page, page_lsn))
 	{
 		int i;
 		/* Check if the page is zeroed. */
@@ -232,6 +231,7 @@ backup_data_page(backup_files_args *arguments,
 	BackupPageHeader	header;
 	Page 				page = malloc(BLCKSZ);
 	Page 				compressed_page = NULL;
+	XLogRecPtr			page_lsn = 0;
 	size_t				write_buffer_size;
 	char				write_buffer[BLCKSZ+sizeof(header)];
 
@@ -252,7 +252,7 @@ backup_data_page(backup_files_args *arguments,
 		while(!page_is_valid && try_again)
 		{
 			int result = read_page_from_file(file, blknum,
-											 in, page);
+											 in, page, &page_lsn);
 
 			try_again--;
 			if (result == 0)
@@ -304,8 +304,8 @@ backup_data_page(backup_files_args *arguments,
 		}
 		else if (page_size != BLCKSZ)
 		{
-			elog(ERROR, "File: %s, block %u, expected block size %lu, but read %d",
-					   file->path, absolute_blknum, page_size, BLCKSZ);
+			elog(ERROR, "File: %s, block %u, expected block size %d, but read %lu",
+					   file->path, absolute_blknum, BLCKSZ, page_size);
 		}
 		else
 		{
@@ -316,6 +316,25 @@ backup_data_page(backup_files_args *arguments,
 			if (is_checksum_enabled)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
+		/* get lsn from page, provided by pg_ptrack_get_block() */
+		if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
+			file->exists_in_prev &&
+			header.compressed_size != PageIsTruncated &&
+			!parse_page(page, &page_lsn))
+				elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
+								"Possible risk of a memory corruption");
+
+	}
+
+	if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
+		file->exists_in_prev &&
+		header.compressed_size != PageIsTruncated &&
+		page_lsn < prev_backup_start_lsn)
+	{
+		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
+		(*n_skipped)++;
+		free(page);
+		return;
 	}
 
 	if (header.compressed_size != PageIsTruncated)
@@ -403,15 +422,21 @@ backup_data_file(backup_files_args* arguments,
 	int n_blocks_skipped = 0;
 	int n_blocks_read = 0;
 
+	/*
+	 * Skip unchanged file only if it exists in previous backup.
+	 * This way we can correctly handle null-sized files which are
+	 * not tracked by pagemap and thus always marked as unchanged.
+	 */
 	if ((backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
-		file->pagemap.bitmapsize == PageBitmapIsEmpty)
+		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
+		file->exists_in_prev)
 	{
 		/*
 		 * There are no changed blocks since last backup. We want make
 		 * incremental backup, so we should exit.
 		 */
-		elog(VERBOSE, "Skipping the file because it didn`t changed: %s", file->path);
+		elog(VERBOSE, "Skipping the unchanged file: %s", file->path);
 		return false;
 	}
 
@@ -466,10 +491,12 @@ backup_data_file(backup_files_args* arguments,
 
 	/*
 	 * Read each page, verify checksum and write it to backup.
-	 * If page map is empty backup all pages of the relation.
+	 * If page map is empty or file is not present in previous backup
+	 * backup all pages of the relation.
 	 */
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty
-		|| file->pagemap.bitmapsize == PageBitmapIsAbsent)
+		|| file->pagemap.bitmapsize == PageBitmapIsAbsent
+		|| !file->exists_in_prev)
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
 		{
@@ -478,6 +505,8 @@ backup_data_file(backup_files_args* arguments,
 							 &n_blocks_skipped, backup_mode);
 			n_blocks_read++;
 		}
+		if (backup_mode == BACKUP_MODE_DIFF_DELTA)
+			file->n_blocks = n_blocks_read;
 	}
 	/* If page map is not empty we scan only changed blocks, */
 	else
@@ -540,18 +569,23 @@ restore_data_file(const char *from_root,
 				  pgFile *file,
 				  pgBackup *backup)
 {
-	char				to_path[MAXPGPATH];
-	FILE			   *in;
-	FILE			   *out;
-	BackupPageHeader	header;
-	BlockNumber			blknum;
+	char		to_path[MAXPGPATH];
+	FILE	   *in = NULL;
+	FILE	   *out = NULL;
+	BackupPageHeader header;
+	BlockNumber	blknum;
+	size_t		file_size;
 
-	/* open backup mode file for read */
-	in = fopen(file->path, PG_BINARY_R);
-	if (in == NULL)
+	/* BYTES_INVALID allowed only in case of restoring file from DELTA backup */
+	if (file->write_size != BYTES_INVALID)
 	{
-		elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
-			 strerror(errno));
+		/* open backup mode file for read */
+		in = fopen(file->path, PG_BINARY_R);
+		if (in == NULL)
+		{
+			elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
+				 strerror(errno));
+		}
 	}
 
 	/*
@@ -560,7 +594,7 @@ restore_data_file(const char *from_root,
 	 * re-open it with "w" to create an empty file.
 	 */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "r+");
+	out = fopen(to_path, PG_BINARY_R "+");
 	if (out == NULL && errno == ENOENT)
 		out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
@@ -576,6 +610,10 @@ restore_data_file(const char *from_root,
 		size_t		read_len;
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
+
+		/* File didn`t changed. Nothig to copy */
+		if (file->write_size == BYTES_INVALID)
+			break;
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -652,12 +690,38 @@ restore_data_file(const char *from_root,
 		}
 	}
 
+	/*
+	 * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
+	 * But during DELTA backup we read every file in PGDATA and thus DELTA backup
+	 * knows exact size of every file at the time of backup.
+	 * So when restoring file from DELTA backup we, knowning it`s size at
+	 * a time of a backup, can truncate file to this size.
+	 */
+
+	if (backup->backup_mode == BACKUP_MODE_DIFF_DELTA)
+	{
+		/* get file current size */
+		fseek(out, 0, SEEK_END);
+		file_size = ftell(out);
+		if (file_size > file->n_blocks * BLCKSZ)
+		{
+			/*
+			 * Truncate file to this length.
+			 */
+			if (ftruncate(fileno(out), file->n_blocks * BLCKSZ) != 0)
+				elog(ERROR, "cannot truncate \"%s\": %s",
+					 file->path, strerror(errno));
+			elog(INFO, "Delta truncate file %s to block %u", file->path, file->n_blocks);
+		}
+	}
+
 	/* update file permission */
 	if (chmod(to_path, file->mode) == -1)
 	{
 		int errno_tmp = errno;
 
-		fclose(in);
+		if (in)
+			fclose(in);
 		fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
@@ -667,7 +731,8 @@ restore_data_file(const char *from_root,
 		fsync(fileno(out)) != 0 ||
 		fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
-	fclose(in);
+	if (in)
+		fclose(in);
 }
 
 /*
@@ -865,7 +930,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "rb");
+	in = fopen(from_path, PG_BINARY_R);
 	if (in == NULL)
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
@@ -881,7 +946,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
-		gz_out = gzopen(to_path_temp, "wb");
+		gz_out = gzopen(to_path_temp, PG_BINARY_W);
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 compress_level, to_path_temp, get_gz_error(gz_out, errno));
@@ -896,7 +961,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fopen(to_path_temp, "wb");
+		out = fopen(to_path_temp, PG_BINARY_W);
 		if (out == NULL)
 			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
@@ -1018,7 +1083,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "rb");
+	in = fopen(from_path, PG_BINARY_R);
 	if (in == NULL)
 	{
 #ifdef HAVE_LIBZ
@@ -1027,7 +1092,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		 * extension.
 		 */
 		snprintf(gz_from_path, sizeof(gz_from_path), "%s.gz", from_path);
-		gz_in = gzopen(gz_from_path, "rb");
+		gz_in = gzopen(gz_from_path, PG_BINARY_R);
 		if (gz_in == NULL)
 		{
 			if (errno == ENOENT)
@@ -1055,7 +1120,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-	out = fopen(to_path_temp, "wb");
+	out = fopen(to_path_temp, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 			 to_path_temp, strerror(errno));
