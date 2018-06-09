@@ -357,7 +357,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		elog(ERROR, "final receive failed: status %d ; %s",PQresultStatus(res), PQerrorMessage(conn));
 	}
 
-	file->write_size = (int) file->read_size;
+	file->write_size = (int64) file->read_size;
 	FIN_CRC32C(file->crc);
 
 	fclose(out);
@@ -438,7 +438,7 @@ remote_backup_files(void *arg)
 		/* receive the data from stream and write to backup file */
 		remote_copy_file(file_backup_conn, file);
 
-		elog(VERBOSE, "File \"%s\". Copied %d bytes",
+		elog(VERBOSE, "File \"%s\". Copied " INT64_FORMAT " bytes",
 			 file->path, file->write_size);
 		PQfinish(file_backup_conn);
 	}
@@ -2115,7 +2115,7 @@ backup_files(void *arg)
 				continue;
 			}
 
-			elog(VERBOSE, "File \"%s\". Copied %d bytes",
+			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
 				 file->path, file->write_size);
 		}
 		else

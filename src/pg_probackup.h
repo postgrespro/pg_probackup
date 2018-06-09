@@ -88,9 +88,10 @@ typedef struct pgFile
 	size_t	size;			/* size of the file */
 	size_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up, it's different from size) */
-	int		write_size;		/* size of the backed-up file. BYTES_INVALID means
+	int64	write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
+							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char	*linked;		/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */

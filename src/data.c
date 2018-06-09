@@ -843,7 +843,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		file->read_size += read_len;
 	}
 
-	file->write_size = (int) file->read_size;
+	file->write_size = (int64) file->read_size;
 	/* finish CRC calculation and store into pgFile */
 	FIN_CRC32C(crc);
 	file->crc = crc;
