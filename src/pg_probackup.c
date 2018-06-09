@@ -271,10 +271,8 @@ main(int argc, char *argv[])
 			backup_subcmd = SHOW_CONFIG_CMD;
 		else if (strcmp(argv[optind], "help") == 0)
 		{
-			if (argc - optind < 2)
-				help_pg_probackup();
-			else
-				help_command(argv[optind + 1]);
+			optind++;
+			help_opt = true;
 		}
 		else if (strcmp(argv[optind], "version") == 0)
 			version_opt = true;
@@ -284,7 +282,7 @@ main(int argc, char *argv[])
 
 	if (help_opt)
 	{
-		if (backup_subcmd == NO_CMD || argc - optind < 1)
+		if (argc - optind < 1)
 			help_pg_probackup();
 		else
 			help_command(argv[optind]);
