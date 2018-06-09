@@ -353,7 +353,7 @@ extern CompressAlg compress_alg;
 extern int		compress_level;
 extern bool		compress_shortcut;
 
-#define DEFAULT_COMPRESS_LEVEL 6
+#define DEFAULT_COMPRESS_LEVEL 1
 
 extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);

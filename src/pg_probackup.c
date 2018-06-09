@@ -564,7 +564,7 @@ compress_init(void)
 	if (backup_subcmd != SET_CONFIG)
 	{
 		if (compress_level != DEFAULT_COMPRESS_LEVEL
-			&& compress_alg == NONE_COMPRESS)
+			&& compress_alg == NOT_DEFINED_COMPRESS)
 			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
 	}
 
