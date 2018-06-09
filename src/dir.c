@@ -100,12 +100,9 @@ static void dir_list_file_internal(parray *files, const char *root,
 int
 dir_create_dir(const char *dir, mode_t mode)
 {
-	char		copy[MAXPGPATH];
-	char		*parent;
+	char		parent[MAXPGPATH];
 
-	strncpy(copy, dir, MAXPGPATH);
-
-	parent = pstrdup(dir);
+	strncpy(parent, dir, MAXPGPATH);
 	get_parent_directory(parent);
 
 	/* Create parent first */
@@ -120,7 +117,6 @@ dir_create_dir(const char *dir, mode_t mode)
 		elog(ERROR, "cannot create directory \"%s\": %s", dir, strerror(errno));
 	}
 
-	pfree(parent);
 	return 0;
 }
 
@@ -155,7 +151,7 @@ pgFileInit(const char *path)
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
-	file->name = 0;
+	file->name = NULL;
 
 	file->size = 0;
 	file->mode = 0;

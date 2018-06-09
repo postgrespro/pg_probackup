@@ -132,8 +132,7 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 
 	fprintf(out, "#Backup instance info\n");
 	fprintf(out, "PGDATA = %s\n", config->pgdata);
-	//fprintf(out, "system-identifier = %li\n", config->system_identifier);
-	fprintf(out, "system-identifier = %" INT64_MODIFIER "u\n", config->system_identifier);
+	fprintf(out, "system-identifier = " UINT64_FORMAT "\n", config->system_identifier);
 
 	fprintf(out, "#Connection parameters:\n");
 	if (config->pgdatabase)

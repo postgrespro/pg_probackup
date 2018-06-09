@@ -989,7 +989,7 @@ longopts_to_optstring(const struct option opts[], const size_t len)
 	s = result;
 	for (i = 0; i < len; i++)
 	{
-		if (!isprint(opts[i].val)) //opts[i].val > 128 ||
+		if (!isprint(opts[i].val))
 			continue;
 		*s++ = opts[i].val;
 		if (opts[i].has_arg != no_argument)
@@ -1045,7 +1045,6 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	pgut_option *opt;
 	struct option *longopts;
 	size_t		len;
-
 
 	len = option_length(options);
 	longopts = pgut_newarray(struct option, len + 1);
@@ -1221,7 +1220,7 @@ get_next_token(const char *src, char *dst, const char *line)
 	}
 	else
 	{
-		i = j = strcspn(s, "#\n\r\t\v");//removed space 
+		i = j = strcspn(s, "#\n\r\t\v");
 		memcpy(dst, s, j);
 	}
 

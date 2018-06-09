@@ -105,7 +105,7 @@ static void write_backup_file_list(parray *files, const char *root);
 static void wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment);
 static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
-static void StreamLog(void *arg);
+static void *StreamLog(void *arg);
 
 static void get_remote_pgdata_filelist(parray *files);
 static void ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum);
@@ -599,8 +599,7 @@ do_backup_instance(void)
 		/* By default there are some error */
 		stream_thread_arg.ret = 1;
 
-		pthread_create(&stream_thread, NULL, (void *(*)(void *)) StreamLog,
-					   &stream_thread_arg);
+		pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
 	}
 
 	/* initialize backup list */
@@ -1051,8 +1050,7 @@ confirm_block_size(const char *name, int blcksz)
 			 "%s(%d) is not compatible(%d expected)",
 			 name, block_size, blcksz);
 	
-	PQclear(res);//bad pointer to endp
-
+	PQclear(res);
 }
 
 /*
@@ -2539,7 +2537,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 /*
  * Start the log streaming
  */
-static void
+static void *
 StreamLog(void *arg)
 {
 	XLogRecPtr	startpos;
@@ -2613,6 +2611,8 @@ StreamLog(void *arg)
 
 	PQfinish(stream_arg->conn);
 	stream_arg->conn = NULL;
+
+	return NULL;
 }
 
 /*
