@@ -64,7 +64,7 @@ static char		   *target_inclusive;
 static TimeLineID	target_tli;
 static bool			target_immediate;
 static char		   *target_name = NULL;
-static char		   *target_action = NULL;;
+static char		   *target_action = NULL;
 
 static pgRecoveryTarget *recovery_target_options = NULL;
 
@@ -99,9 +99,10 @@ ShowFormat show_format = SHOW_PLAIN;
 
 /* current settings */
 pgBackup	current;
-ProbackupSubcmd backup_subcmd;
+ProbackupSubcmd backup_subcmd = NO_CMD;
 
-bool		help = false;
+static bool help_opt = false;
+static bool version_opt = false;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 static void opt_log_level_console(pgut_option *opt, const char *arg);
@@ -114,7 +115,8 @@ static void compress_init(void);
 static pgut_option options[] =
 {
 	/* directory options */
-	{ 'b',  1,  "help",					&help,				SOURCE_CMDLINE },
+	{ 'b',  1,  "help",					&help_opt,			SOURCE_CMDLINE },
+	{ 'b', 'V', "version",				&version_opt,		SOURCE_CMDLINE },
 	{ 's', 'D', "pgdata",				&pgdata,			SOURCE_CMDLINE },
 	{ 's', 'B', "backup-path",			&backup_path,		SOURCE_CMDLINE },
 	/* common options */
@@ -152,7 +154,7 @@ static pgut_option options[] =
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
 	{ 'b', 132, "all",					&apply_to_all,		SOURCE_CMDLINE },
 	/* TODO not implemented yet */
-	{ 'b', 133, "force",					&force_delete,		SOURCE_CMDLINE },
+	{ 'b', 133, "force",				&force_delete,		SOURCE_CMDLINE },
 	/* retention options */
 	{ 'u', 134, "retention-redundancy",	&retention_redundancy, SOURCE_CMDLINE },
 	{ 'u', 135, "retention-window",		&retention_window,	SOURCE_CMDLINE },
@@ -198,6 +200,9 @@ main(int argc, char *argv[])
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
 	int			rc;
+	int			i,
+				len = 0,
+				allocated = 0;
 
 	/* initialize configuration */
 	pgBackup_init(&current);
@@ -210,106 +215,94 @@ main(int argc, char *argv[])
 	 */
 	main_tid = pthread_self();
 
-	/* Parse subcommands and non-subcommand options */
-	if (argc > 1)
-	{
-		if (strcmp(argv[1], "archive-push") == 0)
-			backup_subcmd = ARCHIVE_PUSH;
-		else if (strcmp(argv[1], "archive-get") == 0)
-			backup_subcmd = ARCHIVE_GET;
-		else if (strcmp(argv[1], "add-instance") == 0)
-			backup_subcmd = ADD_INSTANCE;
-		else if (strcmp(argv[1], "del-instance") == 0)
-			backup_subcmd = DELETE_INSTANCE;
-		else if (strcmp(argv[1], "init") == 0)
-			backup_subcmd = INIT;
-		else if (strcmp(argv[1], "backup") == 0)
-			backup_subcmd = BACKUP;
-		else if (strcmp(argv[1], "restore") == 0)
-			backup_subcmd = RESTORE;
-		else if (strcmp(argv[1], "validate") == 0)
-			backup_subcmd = VALIDATE;
-		else if (strcmp(argv[1], "show") == 0)
-			backup_subcmd = SHOW;
-		else if (strcmp(argv[1], "delete") == 0)
-			backup_subcmd = DELETE_SUBCMD;
-		else if (strcmp(argv[1], "set-config") == 0)
-			backup_subcmd = SET_CONFIG;
-		else if (strcmp(argv[1], "show-config") == 0)
-			backup_subcmd = SHOW_CONFIG;
-		else if (strcmp(argv[1], "--help") == 0
-				|| strcmp(argv[1], "help") == 0
-				|| strcmp(argv[1], "-?") == 0)
-		{
-			if (argc > 2)
-				help_command(argv[2]);
-			else
-				help_pg_probackup();
-		}
-		else if (strcmp(argv[1], "--version") == 0
-				 || strcmp(argv[1], "version") == 0
-				 || strcmp(argv[1], "-V") == 0)
-		{
-			if (argc == 2)
-			{
-#ifdef PGPRO_VERSION
-				fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
-						PROGRAM_NAME, PROGRAM_VERSION,
-						PGPRO_VERSION, PGPRO_EDITION);
-#else
-				fprintf(stderr, "%s %s (PostgreSQL %s)\n",
-						PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
-#endif
-				exit(0);
-			}
-			else if (strcmp(argv[2], "--help") == 0)
-				help_command(argv[1]);
-			else
-				elog(ERROR, "Invalid arguments for \"%s\" subcommand", argv[1]);
-		}
-		else
-			elog(ERROR, "Unknown subcommand");
-	}
-
 	/*
 	 * Make command string before getopt_long() will call. It permutes the
 	 * content of argv.
 	 */
-	if (backup_subcmd == BACKUP ||
-		backup_subcmd == RESTORE ||
-		backup_subcmd == VALIDATE ||
-		backup_subcmd == DELETE_SUBCMD)
+	allocated = sizeof(char) * MAXPGPATH;
+	command = (char *) palloc(allocated);
+
+	for (i = 0; i < argc; i++)
 	{
-		int			i,
-					len = 0,
-					allocated = 0;
+		int			arglen = strlen(argv[i]);
 
-		allocated = sizeof(char) * MAXPGPATH;
-		command = (char *) palloc(allocated);
-
-		for (i = 0; i < argc; i++)
+		if (arglen + len > allocated)
 		{
-			int			arglen = strlen(argv[i]);
-
-			if (arglen + len > allocated)
-			{
-				allocated *= 2;
-				command = repalloc(command, allocated);
-			}
-
-			strncpy(command + len, argv[i], arglen);
-			len += arglen;
-			command[len++] = ' ';
+			allocated *= 2;
+			command = repalloc(command, allocated);
 		}
 
-		command[len] = '\0';
+		strncpy(command + len, argv[i], arglen);
+		len += arglen;
+		command[len++] = ' ';
 	}
+
+	command[len] = '\0';
 
 	/* Parse command line arguments */
 	pgut_getopt(argc, argv, options);
 
-	if (help)
-		help_command(argv[2]);
+	/* Process a command */
+	if (optind < argc)
+	{
+		if (strcmp(argv[optind], "archive-push") == 0)
+			backup_subcmd = ARCHIVE_PUSH_CMD;
+		else if (strcmp(argv[optind], "archive-get") == 0)
+			backup_subcmd = ARCHIVE_GET_CMD;
+		else if (strcmp(argv[optind], "add-instance") == 0)
+			backup_subcmd = ADD_INSTANCE_CMD;
+		else if (strcmp(argv[optind], "del-instance") == 0)
+			backup_subcmd = DELETE_INSTANCE_CMD;
+		else if (strcmp(argv[optind], "init") == 0)
+			backup_subcmd = INIT_CMD;
+		else if (strcmp(argv[optind], "backup") == 0)
+			backup_subcmd = BACKUP_CMD;
+		else if (strcmp(argv[optind], "restore") == 0)
+			backup_subcmd = RESTORE_CMD;
+		else if (strcmp(argv[optind], "validate") == 0)
+			backup_subcmd = VALIDATE_CMD;
+		else if (strcmp(argv[optind], "show") == 0)
+			backup_subcmd = SHOW_CMD;
+		else if (strcmp(argv[optind], "delete") == 0)
+			backup_subcmd = DELETE_CMD;
+		else if (strcmp(argv[optind], "set-config") == 0)
+			backup_subcmd = SET_CONFIG_CMD;
+		else if (strcmp(argv[optind], "show-config") == 0)
+			backup_subcmd = SHOW_CONFIG_CMD;
+		else if (strcmp(argv[optind], "help") == 0)
+		{
+			if (argc - optind < 2)
+				help_pg_probackup();
+			else
+				help_command(argv[optind + 1]);
+		}
+		else if (strcmp(argv[optind], "version") == 0)
+			version_opt = true;
+		else
+			elog(ERROR, "Unknown subcommand \"%s\"", argv[optind]);
+	}
+
+	if (help_opt)
+	{
+		if (backup_subcmd == NO_CMD || argc - optind < 1)
+			help_pg_probackup();
+		else
+			help_command(argv[optind]);
+	}
+	else if (version_opt)
+	{
+#ifdef PGPRO_VERSION
+		fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
+				PROGRAM_NAME, PROGRAM_VERSION,
+				PGPRO_VERSION, PGPRO_EDITION);
+#else
+		fprintf(stderr, "%s %s (PostgreSQL %s)\n",
+				PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
+#endif
+		return 0;
+	}
+	else if (backup_subcmd == NO_CMD)
+		elog(ERROR, "No subcommand specified");
 
 	/* backup_path is required for all pg_probackup commands except help */
 	if (backup_path == NULL)
@@ -343,7 +336,7 @@ main(int argc, char *argv[])
 	}
 
 	/* Option --instance is required for all commands except init and show */
-	if (backup_subcmd != INIT && backup_subcmd != SHOW && backup_subcmd != VALIDATE)
+	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD && backup_subcmd != VALIDATE_CMD)
 	{
 		if (instance_name == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
@@ -363,7 +356,7 @@ main(int argc, char *argv[])
 		 * for all commands except init, which doesn't take this parameter
 		 * and add-instance which creates new instance.
 		 */
-		if (backup_subcmd != INIT && backup_subcmd != ADD_INSTANCE)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
 		{
 			if (access(backup_instance_path, F_OK) != 0)
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -375,7 +368,7 @@ main(int argc, char *argv[])
 	 * Read options from env variables or from config file,
 	 * unless we're going to set them via set-config.
 	 */
-	if (instance_name && backup_subcmd != SET_CONFIG)
+	if (instance_name && backup_subcmd != SET_CONFIG_CMD)
 	{
 		/* Read environment variables */
 		pgut_getopt_env(options);
@@ -398,10 +391,10 @@ main(int argc, char *argv[])
 	/* Sanity check of --backup-id option */
 	if (backup_id_string_param != NULL)
 	{
-		if (backup_subcmd != RESTORE
-			&& backup_subcmd != VALIDATE
-			&& backup_subcmd != DELETE_SUBCMD
-			&& backup_subcmd != SHOW)
+		if (backup_subcmd != RESTORE_CMD
+			&& backup_subcmd != VALIDATE_CMD
+			&& backup_subcmd != DELETE_CMD
+			&& backup_subcmd != SHOW_CMD)
 			elog(ERROR, "Cannot use -i (--backup-id) option together with the '%s' command",
 						argv[1]);
 
@@ -429,7 +422,7 @@ main(int argc, char *argv[])
 		pgdata_exclude_dir[i] = "pg_log";
 	}
 
-	if (backup_subcmd == VALIDATE || backup_subcmd == RESTORE)
+	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)
 	{
 		/* parse all recovery target options into recovery_target_options structure */
 		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
@@ -445,17 +438,17 @@ main(int argc, char *argv[])
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
-		case ARCHIVE_PUSH:
+		case ARCHIVE_PUSH_CMD:
 			return do_archive_push(wal_file_path, wal_file_name, file_overwrite);
-		case ARCHIVE_GET:
+		case ARCHIVE_GET_CMD:
 			return do_archive_get(wal_file_path, wal_file_name);
-		case ADD_INSTANCE:
+		case ADD_INSTANCE_CMD:
 			return do_add_instance();
-		case DELETE_INSTANCE:
+		case DELETE_INSTANCE_CMD:
 			return do_delete_instance();
-		case INIT:
+		case INIT_CMD:
 			return do_init();
-		case BACKUP:
+		case BACKUP_CMD:
 			{
 				const char *backup_mode;
 				time_t		start_time;
@@ -470,20 +463,20 @@ main(int argc, char *argv[])
 
 				return do_backup(start_time);
 			}
-		case RESTORE:
+		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
 						  true);
-		case VALIDATE:
+		case VALIDATE_CMD:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
 				return do_validate_all();
 			else
 				return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
 						  false);
-		case SHOW:
+		case SHOW_CMD:
 			return do_show(current.backup_id);
-		case DELETE_SUBCMD:
+		case DELETE_CMD:
 			if (delete_expired && backup_id_string_param)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
 			if (!delete_expired && !delete_wal && !backup_id_string_param)
@@ -494,10 +487,13 @@ main(int argc, char *argv[])
 				return do_retention_purge();
 			else
 				return do_delete(current.backup_id);
-		case SHOW_CONFIG:
+		case SHOW_CONFIG_CMD:
 			return do_configure(true);
-		case SET_CONFIG:
+		case SET_CONFIG_CMD:
 			return do_configure(false);
+		case NO_CMD:
+			/* Should not happen */
+			elog(ERROR, "Unknown subcommand");
 	}
 
 	return 0;
@@ -561,7 +557,7 @@ compress_init(void)
 	if (compress_shortcut)
 		compress_alg = ZLIB_COMPRESS;
 
-	if (backup_subcmd != SET_CONFIG)
+	if (backup_subcmd != SET_CONFIG_CMD)
 	{
 		if (compress_level != DEFAULT_COMPRESS_LEVEL
 			&& compress_alg == NOT_DEFINED_COMPRESS)
@@ -574,7 +570,7 @@ compress_init(void)
 	if (compress_level == 0)
 		compress_alg = NOT_DEFINED_COMPRESS;
 
-	if (backup_subcmd == BACKUP || backup_subcmd == ARCHIVE_PUSH)
+	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
 	{
 #ifndef HAVE_LIBZ
 		if (compress_alg == ZLIB_COMPRESS)

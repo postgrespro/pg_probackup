@@ -135,8 +135,10 @@ static const unit_conversion time_unit_conversion_table[] =
 static size_t
 option_length(const pgut_option opts[])
 {
-	size_t	len;
+	size_t		len;
+
 	for (len = 0; opts && opts[len].type; len++) { }
+
 	return len;
 }
 
@@ -156,7 +158,7 @@ option_has_arg(char type)
 static void
 option_copy(struct option dst[], const pgut_option opts[], size_t len)
 {
-	size_t	i;
+	size_t		i;
 
 	for (i = 0; i < len; i++)
 	{
@@ -1047,13 +1049,12 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	size_t		len;
 
 	len = option_length(options);
-	longopts = pgut_newarray(struct option, len + 1);
+	longopts = pgut_newarray(struct option, len + 1 /* zero/end option */);
 	option_copy(longopts, options, len);
 
 	optstring = longopts_to_optstring(longopts, len);
 
 	/* Assign named options */
-	optind = 2;
 	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)
 	{
 		opt = option_find(c, options);

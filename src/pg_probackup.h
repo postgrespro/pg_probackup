@@ -139,18 +139,19 @@ typedef enum BackupMode
 
 typedef enum ProbackupSubcmd
 {
-	INIT = 0,
-	ARCHIVE_PUSH,
-	ARCHIVE_GET,
-	ADD_INSTANCE,
-	DELETE_INSTANCE,
-	BACKUP,
-	RESTORE,
-	VALIDATE,
-	SHOW,
-	DELETE_SUBCMD,
-	SET_CONFIG,
-	SHOW_CONFIG
+	NO_CMD = 0,
+	INIT_CMD,
+	ARCHIVE_PUSH_CMD,
+	ARCHIVE_GET_CMD,
+	ADD_INSTANCE_CMD,
+	DELETE_INSTANCE_CMD,
+	BACKUP_CMD,
+	RESTORE_CMD,
+	VALIDATE_CMD,
+	SHOW_CMD,
+	DELETE_CMD,
+	SET_CONFIG_CMD,
+	SHOW_CONFIG_CMD
 } ProbackupSubcmd;
 
 typedef enum ShowFormat
@@ -367,7 +368,7 @@ extern ShowFormat show_format;
 
 /* current settings */
 extern pgBackup current;
-extern ProbackupSubcmd	backup_subcmd;
+extern ProbackupSubcmd backup_subcmd;
 
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */
