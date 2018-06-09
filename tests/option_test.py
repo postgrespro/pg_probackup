@@ -199,7 +199,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
 
         # invalid option in pg_probackup.conf
-        with open(os.path.join(backup_dir, "backups", "node", "pg_probackup.conf"), "a") as conf:
+        pbconf_path = os.path.join(backup_dir, "backups", "node", "pg_probackup.conf")
+        with open(pbconf_path, "a") as conf:
             conf.write("TIMELINEID=1\n")
 
         try:
@@ -209,7 +210,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertEqual(e.message,
-                'ERROR: invalid option "TIMELINEID"\n',
+                'ERROR: invalid option "TIMELINEID" in file "{0}"\n'.format(pbconf_path),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
