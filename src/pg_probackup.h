@@ -88,7 +88,7 @@ typedef struct pgFile
 	size_t	size;			/* size of the file */
 	size_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up, it's different from size) */
-	size_t	write_size;		/* size of the backed-up file. BYTES_INVALID means
+	int		write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
@@ -160,7 +160,7 @@ typedef enum ShowFormat
 
 
 /* special values of pgBackup fields */
-#define INVALID_BACKUP_ID	 0    /* backup ID is not provided by user */
+#define INVALID_BACKUP_ID	0    /* backup ID is not provided by user */
 #define BYTES_INVALID		(-1)
 
 typedef struct pgBackupConfig

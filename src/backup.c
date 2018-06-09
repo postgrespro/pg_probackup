@@ -357,7 +357,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		elog(ERROR, "final receive failed: status %d ; %s",PQresultStatus(res), PQerrorMessage(conn));
 	}
 
-	file->write_size = file->read_size;
+	file->write_size = (int) file->read_size;
 	FIN_CRC32C(file->crc);
 
 	fclose(out);
@@ -438,8 +438,8 @@ remote_backup_files(void *arg)
 		/* receive the data from stream and write to backup file */
 		remote_copy_file(file_backup_conn, file);
 
-		elog(VERBOSE, "File \"%s\". Copied %lu bytes",
-				 file->path, (unsigned long) file->write_size);
+		elog(VERBOSE, "File \"%s\". Copied %d bytes",
+			 file->path, file->write_size);
 		PQfinish(file_backup_conn);
 	}
 
@@ -2099,27 +2099,24 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else
-				/* TODO:
-				 * Check if file exists in previous backup
-				 * If exists:
-				 *   if mtime > start_backup_time of parent backup,
-				 *    copy file to backup
-				 *   if mtime < start_backup_time
-				 *    calculate crc, compare crc to old file
-				 *      if crc is the same -> skip file
-				 */
-				if (!copy_file(arguments->from_root,
-							   arguments->to_root,
-							   file))
+			/* TODO:
+			 * Check if file exists in previous backup
+			 * If exists:
+			 *   if mtime > start_backup_time of parent backup,
+			 *    copy file to backup
+			 *   if mtime < start_backup_time
+			 *    calculate crc, compare crc to old file
+			 *      if crc is the same -> skip file
+			 */
+			else if (!copy_file(arguments->from_root, arguments->to_root, file))
 			{
 				file->write_size = BYTES_INVALID;
 				elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
 				continue;
 			}
 
-			elog(VERBOSE, "File \"%s\". Copied %lu bytes",
-				 file->path, (unsigned long) file->write_size);
+			elog(VERBOSE, "File \"%s\". Copied %d bytes",
+				 file->path, file->write_size);
 		}
 		else
 			elog(LOG, "unexpected file type %d", buf.st_mode);

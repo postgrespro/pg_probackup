@@ -777,8 +777,8 @@ restore_files(void *arg)
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Restored file %s : %lu bytes",
-				file->path, (unsigned long) file->write_size);
+			elog(LOG, "Restored file %s : %d bytes",
+				 file->path, file->write_size);
 	}
 
 	/* Data files restoring is successful */

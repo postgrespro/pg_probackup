@@ -189,9 +189,8 @@ pgBackupValidateFiles(void *arg)
 
 		if (file->write_size != st.st_size)
 		{
-			elog(WARNING, "Invalid size of backup file \"%s\" : %lu. Expected %lu",
-				 file->path, (unsigned long) file->write_size,
-				 (unsigned long) st.st_size);
+			elog(WARNING, "Invalid size of backup file \"%s\" : %d. Expected %lu",
+				 file->path, file->write_size, (unsigned long) st.st_size);
 			arguments->corrupted = true;
 			break;
 		}

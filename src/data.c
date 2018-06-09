@@ -229,8 +229,8 @@ backup_data_page(backup_files_args *arguments,
 				 BackupMode backup_mode)
 {
 	BackupPageHeader	header;
-	Page 				page = malloc(BLCKSZ);
-	Page 				compressed_page = NULL;
+	Page				page = malloc(BLCKSZ);
+	Page				compressed_page = NULL;
 	XLogRecPtr			page_lsn = 0;
 	size_t				write_buffer_size;
 	char				write_buffer[BLCKSZ+sizeof(header)];
@@ -385,7 +385,7 @@ backup_data_page(backup_files_args *arguments,
 	/* write data page */
 	if(fwrite(write_buffer, 1, write_buffer_size, out) != write_buffer_size)
 	{
-		int errno_tmp = errno;
+		int			errno_tmp = errno;
 		fclose(in);
 		fclose(out);
 		elog(ERROR, "File: %s, cannot write backup at block %u : %s",
@@ -843,7 +843,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		file->read_size += read_len;
 	}
 
-	file->write_size = file->read_size;
+	file->write_size = (int) file->read_size;
 	/* finish CRC calculation and store into pgFile */
 	FIN_CRC32C(crc);
 	file->crc = crc;
