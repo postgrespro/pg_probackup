@@ -56,7 +56,7 @@ help_command(char *command)
 			 || strcmp(command, "-V") == 0)
 		printf(_("No help page for \"%s\" command. Try pg_probackup help\n"), command);
 	else
-		printf(_("Unknown command. Try pg_probackup help\n"));
+		printf(_("Unknown command \"%s\". Try pg_probackup help\n"), command);
 	exit(0);
 }
 

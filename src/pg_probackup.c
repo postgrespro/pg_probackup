@@ -103,7 +103,6 @@ pgBackup	current;
 ProbackupSubcmd backup_subcmd = NO_CMD;
 
 static bool help_opt = false;
-static bool version_opt = false;
 
 static void opt_backup_mode(pgut_option *opt, const char *arg);
 static void opt_log_level_console(pgut_option *opt, const char *arg);
@@ -117,7 +116,6 @@ static pgut_option options[] =
 {
 	/* directory options */
 	{ 'b',  1,  "help",					&help_opt,			SOURCE_CMDLINE },
-	{ 'b', 'V', "version",				&version_opt,		SOURCE_CMDLINE },
 	{ 's', 'D', "pgdata",				&pgdata,			SOURCE_CMDLINE },
 	{ 's', 'B', "backup-path",			&backup_path,		SOURCE_CMDLINE },
 	/* common options */
@@ -196,14 +194,12 @@ static pgut_option options[] =
 int
 main(int argc, char *argv[])
 {
-	char	   *command = NULL;
+	char	   *command = NULL,
+			   *command_name;
 	char		path[MAXPGPATH];
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
 	int			rc;
-	int			i,
-				len = 0,
-				allocated = 0;
 
 	/* initialize configuration */
 	pgBackup_init(&current);
@@ -216,97 +212,104 @@ main(int argc, char *argv[])
 	 */
 	main_tid = pthread_self();
 
+	/* Parse subcommands and non-subcommand options */
+	if (argc > 1)
+	{
+		if (strcmp(argv[1], "archive-push") == 0)
+			backup_subcmd = ARCHIVE_PUSH_CMD;
+		else if (strcmp(argv[1], "archive-get") == 0)
+			backup_subcmd = ARCHIVE_GET_CMD;
+		else if (strcmp(argv[1], "add-instance") == 0)
+			backup_subcmd = ADD_INSTANCE_CMD;
+		else if (strcmp(argv[1], "del-instance") == 0)
+			backup_subcmd = DELETE_INSTANCE_CMD;
+		else if (strcmp(argv[1], "init") == 0)
+			backup_subcmd = INIT_CMD;
+		else if (strcmp(argv[1], "backup") == 0)
+			backup_subcmd = BACKUP_CMD;
+		else if (strcmp(argv[1], "restore") == 0)
+			backup_subcmd = RESTORE_CMD;
+		else if (strcmp(argv[1], "validate") == 0)
+			backup_subcmd = VALIDATE_CMD;
+		else if (strcmp(argv[1], "show") == 0)
+			backup_subcmd = SHOW_CMD;
+		else if (strcmp(argv[1], "delete") == 0)
+			backup_subcmd = DELETE_CMD;
+		else if (strcmp(argv[1], "set-config") == 0)
+			backup_subcmd = SET_CONFIG_CMD;
+		else if (strcmp(argv[1], "show-config") == 0)
+			backup_subcmd = SHOW_CONFIG_CMD;
+		else if (strcmp(argv[1], "--help") == 0 ||
+				 strcmp(argv[1], "-?") == 0 ||
+				 strcmp(argv[1], "help") == 0)
+		{
+			if (argc > 2)
+				help_command(argv[2]);
+			else
+				help_pg_probackup();
+		}
+		else if (strcmp(argv[1], "--version") == 0
+				 || strcmp(argv[1], "version") == 0
+				 || strcmp(argv[1], "-V") == 0)
+		{
+#ifdef PGPRO_VERSION
+			fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
+					PROGRAM_NAME, PROGRAM_VERSION,
+					PGPRO_VERSION, PGPRO_EDITION);
+#else
+			fprintf(stderr, "%s %s (PostgreSQL %s)\n",
+					PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
+#endif
+			exit(0);
+		}
+		else
+			elog(ERROR, "Unknown subcommand \"%s\"", argv[1]);
+	}
+
+	if (backup_subcmd == NO_CMD)
+		elog(ERROR, "No subcommand specified");
+
 	/*
 	 * Make command string before getopt_long() will call. It permutes the
 	 * content of argv.
 	 */
-	allocated = sizeof(char) * MAXPGPATH;
-	command = (char *) palloc(allocated);
-
-	for (i = 0; i < argc; i++)
+	command_name = pstrdup(argv[1]);
+	if (backup_subcmd == BACKUP_CMD ||
+		backup_subcmd == RESTORE_CMD ||
+		backup_subcmd == VALIDATE_CMD ||
+		backup_subcmd == DELETE_CMD)
 	{
-		int			arglen = strlen(argv[i]);
+		int			i,
+					len = 0,
+					allocated = 0;
 
-		if (arglen + len > allocated)
+		allocated = sizeof(char) * MAXPGPATH;
+		command = (char *) palloc(allocated);
+
+		for (i = 0; i < argc; i++)
 		{
-			allocated *= 2;
-			command = repalloc(command, allocated);
-		}
+			int			arglen = strlen(argv[i]);
 
-		strncpy(command + len, argv[i], arglen);
-		len += arglen;
-		command[len++] = ' ';
-	}
-
-	command[len] = '\0';
-
-	/* Parse command line arguments */
-	optind = 1;
-	/* process command-line options */
-	while (optind < argc)
-	{
-		pgut_getopt(argc, argv, options);
-		/* Process a command */
-		if (optind < argc)
-		{
-			if (strcmp(argv[optind], "archive-push") == 0)
-				backup_subcmd = ARCHIVE_PUSH_CMD;
-			else if (strcmp(argv[optind], "archive-get") == 0)
-				backup_subcmd = ARCHIVE_GET_CMD;
-			else if (strcmp(argv[optind], "add-instance") == 0)
-				backup_subcmd = ADD_INSTANCE_CMD;
-			else if (strcmp(argv[optind], "del-instance") == 0)
-				backup_subcmd = DELETE_INSTANCE_CMD;
-			else if (strcmp(argv[optind], "init") == 0)
-				backup_subcmd = INIT_CMD;
-			else if (strcmp(argv[optind], "backup") == 0)
-				backup_subcmd = BACKUP_CMD;
-			else if (strcmp(argv[optind], "restore") == 0)
-				backup_subcmd = RESTORE_CMD;
-			else if (strcmp(argv[optind], "validate") == 0)
-				backup_subcmd = VALIDATE_CMD;
-			else if (strcmp(argv[optind], "show") == 0)
-				backup_subcmd = SHOW_CMD;
-			else if (strcmp(argv[optind], "delete") == 0)
-				backup_subcmd = DELETE_CMD;
-			else if (strcmp(argv[optind], "set-config") == 0)
-				backup_subcmd = SET_CONFIG_CMD;
-			else if (strcmp(argv[optind], "show-config") == 0)
-				backup_subcmd = SHOW_CONFIG_CMD;
-			else if (strcmp(argv[optind], "help") == 0)
+			if (arglen + len > allocated)
 			{
-				optind++;
-				help_opt = true;
+				allocated *= 2;
+				command = repalloc(command, allocated);
 			}
-			else if (strcmp(argv[optind], "version") == 0)
-				version_opt = true;
-			else
-				elog(ERROR, "Unknown subcommand \"%s\"", argv[optind]);
-			optind++;
+
+			strncpy(command + len, argv[i], arglen);
+			len += arglen;
+			command[len++] = ' ';
 		}
+
+		command[len] = '\0';
 	}
+
+	optind += 1;
+	/* Parse command line arguments */
+	pgut_getopt(argc, argv, options);
 
 	if (help_opt)
-	{
-		if (argc - optind < 1)
-			help_pg_probackup();
-		else
-			help_command(argv[optind]);
-	}
-	else if (version_opt)
-	{
-#ifdef PGPRO_VERSION
-		fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
-				PROGRAM_NAME, PROGRAM_VERSION,
-				PGPRO_VERSION, PGPRO_EDITION);
-#else
-		fprintf(stderr, "%s %s (PostgreSQL %s)\n",
-				PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
-#endif
-		return 0;
-	}
-	else if (backup_subcmd == NO_CMD)
-		elog(ERROR, "No subcommand specified");
+		help_command(command_name);
 
 	/* backup_path is required for all pg_probackup commands except help */
 	if (backup_path == NULL)
