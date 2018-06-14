@@ -241,44 +241,49 @@ main(int argc, char *argv[])
 	command[len] = '\0';
 
 	/* Parse command line arguments */
-	pgut_getopt(argc, argv, options);
-
-	/* Process a command */
-	if (optind < argc)
+	optind = 1;
+	/* process command-line options */
+	while (optind < argc)
 	{
-		if (strcmp(argv[optind], "archive-push") == 0)
-			backup_subcmd = ARCHIVE_PUSH_CMD;
-		else if (strcmp(argv[optind], "archive-get") == 0)
-			backup_subcmd = ARCHIVE_GET_CMD;
-		else if (strcmp(argv[optind], "add-instance") == 0)
-			backup_subcmd = ADD_INSTANCE_CMD;
-		else if (strcmp(argv[optind], "del-instance") == 0)
-			backup_subcmd = DELETE_INSTANCE_CMD;
-		else if (strcmp(argv[optind], "init") == 0)
-			backup_subcmd = INIT_CMD;
-		else if (strcmp(argv[optind], "backup") == 0)
-			backup_subcmd = BACKUP_CMD;
-		else if (strcmp(argv[optind], "restore") == 0)
-			backup_subcmd = RESTORE_CMD;
-		else if (strcmp(argv[optind], "validate") == 0)
-			backup_subcmd = VALIDATE_CMD;
-		else if (strcmp(argv[optind], "show") == 0)
-			backup_subcmd = SHOW_CMD;
-		else if (strcmp(argv[optind], "delete") == 0)
-			backup_subcmd = DELETE_CMD;
-		else if (strcmp(argv[optind], "set-config") == 0)
-			backup_subcmd = SET_CONFIG_CMD;
-		else if (strcmp(argv[optind], "show-config") == 0)
-			backup_subcmd = SHOW_CONFIG_CMD;
-		else if (strcmp(argv[optind], "help") == 0)
+		pgut_getopt(argc, argv, options);
+		/* Process a command */
+		if (optind < argc)
 		{
+			if (strcmp(argv[optind], "archive-push") == 0)
+				backup_subcmd = ARCHIVE_PUSH_CMD;
+			else if (strcmp(argv[optind], "archive-get") == 0)
+				backup_subcmd = ARCHIVE_GET_CMD;
+			else if (strcmp(argv[optind], "add-instance") == 0)
+				backup_subcmd = ADD_INSTANCE_CMD;
+			else if (strcmp(argv[optind], "del-instance") == 0)
+				backup_subcmd = DELETE_INSTANCE_CMD;
+			else if (strcmp(argv[optind], "init") == 0)
+				backup_subcmd = INIT_CMD;
+			else if (strcmp(argv[optind], "backup") == 0)
+				backup_subcmd = BACKUP_CMD;
+			else if (strcmp(argv[optind], "restore") == 0)
+				backup_subcmd = RESTORE_CMD;
+			else if (strcmp(argv[optind], "validate") == 0)
+				backup_subcmd = VALIDATE_CMD;
+			else if (strcmp(argv[optind], "show") == 0)
+				backup_subcmd = SHOW_CMD;
+			else if (strcmp(argv[optind], "delete") == 0)
+				backup_subcmd = DELETE_CMD;
+			else if (strcmp(argv[optind], "set-config") == 0)
+				backup_subcmd = SET_CONFIG_CMD;
+			else if (strcmp(argv[optind], "show-config") == 0)
+				backup_subcmd = SHOW_CONFIG_CMD;
+			else if (strcmp(argv[optind], "help") == 0)
+			{
+				optind++;
+				help_opt = true;
+			}
+			else if (strcmp(argv[optind], "version") == 0)
+				version_opt = true;
+			else
+				elog(ERROR, "Unknown subcommand \"%s\"", argv[optind]);
 			optind++;
-			help_opt = true;
 		}
-		else if (strcmp(argv[optind], "version") == 0)
-			version_opt = true;
-		else
-			elog(ERROR, "Unknown subcommand \"%s\"", argv[optind]);
 	}
 
 	if (help_opt)
