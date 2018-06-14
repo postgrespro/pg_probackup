@@ -163,7 +163,6 @@
       <IgnoreSpecificDefaultLibraries>libc;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
-<!--  @PGROOT@\lib;@ADDLIBS@ @PGSRC@  @ADDINCLUDE@ -->
   <ItemGroup>
     <ClCompile Include="@PGSRC@\backend\access\transam\xlogreader.c" />
     <ClCompile Include="@PGSRC@\bin\pg_basebackup\receivelog.c" />
@@ -204,8 +203,8 @@
     <ClInclude Include="..\src\utils\logger.h" />
     <ClInclude Include="..\src\utils\parray.h" />
     <ClInclude Include="..\src\utils\pgut.h" />
-    <ClCompile Include="..\src\utils\json.h" />
-    <ClCompile Include="..\src\utils\thread.h" />
+    <ClInclude Include="..\src\utils\json.h" />
+    <ClInclude Include="..\src\utils\thread.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
