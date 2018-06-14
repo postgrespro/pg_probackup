@@ -386,7 +386,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	if (add_root)
 	{
 		file->extradir = dirname(pgut_strdup(file->path));
-		elog(WARNING,"ADD_ROOT Name: %s Path: %s %s",file->name, file->path, file->extradir);
+		elog(VERBOSE,"Dir_list_file add root Name: %s Path: %s %s",file->name, file->path, file->extradir);
 		parray_append(files, file);
 	}
 
@@ -831,8 +831,6 @@ print_file_list(FILE *out, const parray *files, const char *root)
 			path = GetRelativePath(path, root);
 		else if(file->is_extra)
 			path = GetRelativePath(path, file->extradir);
-		else
-			elog(WARNING,"NOT PGDATA and NOT ExtraDir %s", path);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
 					 "\"is_datafile\":\"%u\", \"is_cfs\":\"%u\", \"crc\":\"%u\","

@@ -774,10 +774,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	}
 
 	/* open backup file for write  */
-//	if (file->is_extra)
-//		join_path_components(to_path, to_root, file->path + strlen(file->extradir) + 1);
-//	else
-//		join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
 	out = fopen(to_path, "w");
 	if (out == NULL)

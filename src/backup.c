@@ -623,8 +623,6 @@ do_backup_instance(void)
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
-//	dir_list_file(backup_files_list, extradir, true, true, true, true);
-
 	/* Append to backup list all files dirictories from extra dirictory option */
 	for (i = 0; extradirs[i]; i++)
 	{
@@ -689,7 +687,6 @@ do_backup_instance(void)
 		{
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
-//			char		database_path[MAXPGPATH];
 
 			if (!is_remote_backup)
 				if (file->is_extra)
@@ -700,8 +697,6 @@ do_backup_instance(void)
 				dir_name = file->path;
 
 			elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
-//			pgBackupGetPath(&current, database_path, lengthof(database_path),
-//					DATABASE_DIR);
 
 			if (file->is_extra)
 				join_path_components(dirpath, extra_path, dir_name);
