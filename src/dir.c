@@ -1054,7 +1054,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 		if (is_extra)
 		{
 			get_control_value(buf, "extradir", extradir_str, NULL, true);
-			file->extradir = extradir_str;
+			file->extradir = pgut_strdup(extradir_str);
 		}
 		file->write_size = (size_t) write_size;
 		file->mode = (mode_t) mode;

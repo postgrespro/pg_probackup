@@ -453,8 +453,7 @@ do_backup_instance(void)
 	int			i;
 	char		database_path[MAXPGPATH];
 	char		extra_path[MAXPGPATH];
-	char	  **extradirs;
-	uint		extradirs_len;
+	char	   *extradirs[] = { NULL, NULL, NULL, NULL };
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -462,24 +461,24 @@ do_backup_instance(void)
 	pthread_t	backup_threads[num_threads];
 	backup_files_args *backup_threads_args[num_threads];
 	bool		backup_isok = true;
+	char	   *p;
 
 	pgBackup   *prev_backup = NULL;
 	char		prev_backup_filelist_path[MAXPGPATH];
 	parray	   *prev_backup_filelist = NULL;
 
 	elog(LOG, "Database backup start");
-	extradirs_len = 0;
-	char *p;
+	i = 0;
 	p = strtok(extradir,":");
-	extradirs = palloc((extradirs_len+2)*sizeof(char*));
 	while(p!=NULL)
 	{
-		extradirs = repalloc(extradirs,(extradirs_len+1)*sizeof(char*));
 		extradirs[i] = (char *)palloc(strlen(p) + 1);
-		strcpy(extradirs[extradirs_len],p);
-		elog(WARNING,"%s",extradirs[extradirs_len]);
-		extradirs_len++;
+		strcpy(extradirs[i],p);
+		elog(WARNING,"%s",extradirs[i]);
+		i++;
 		p=strtok(NULL,":");
+		if (i==3)
+			break;
 	}
 
 	/* Initialize size summary */
@@ -624,12 +623,14 @@ do_backup_instance(void)
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
-	dir_list_file(backup_files_list, extradir, true, true, true, true);
+//	dir_list_file(backup_files_list, extradir, true, true, true, true);
 
-//	char   *extradirs[] = { DATABASE_DIR, EXTRA_DIR, NULL };
-//	/* Append to backup list all files dirictories from extra dirictory option */
-//	for (i = 0; extradirs[i]; i++)
-//		dir_list_file(backup_files_list, extradir, true, true, true, true);
+	/* Append to backup list all files dirictories from extra dirictory option */
+	for (i = 0; extradirs[i]; i++)
+	{
+		elog(WARNING,"%s",extradirs[i]);
+		dir_list_file(backup_files_list, extradirs[i], true, true, true, true);
+	}
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -2124,7 +2125,7 @@ backup_files(void *arg)
 			}
 			else if (file->is_extra)
 			{
-				if (!copy_file(arguments->from_root,
+				if (!copy_file(file->extradir,
 							   arguments->extra,
 							   file))
 				{

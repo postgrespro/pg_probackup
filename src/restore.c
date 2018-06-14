@@ -389,7 +389,7 @@ restore_backup(pgBackup *backup)
 	 * this_backup_path = $BACKUP_PATH/backups/instance_name/backup_id
 	 */
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	restore_directories(pgdata, this_backup_path);
+//	restore_directories(pgdata, this_backup_path);
 
 	/*
 	 * Get list of files which need to be restored.
@@ -399,12 +399,49 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(database_path, extra_path, list_path);
 
-	/* setup threads */
+	/* Restore directories in do_backup_instance way */
+	parray_qsort(files, pgFileComparePath);
+	/*
+	 * Make directories before backup
+	 * and setup threads at the same time
+	 */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
+
+		/* if the entry was a directory, create it in the backup */
+		if (S_ISDIR(file->mode))
+		{
+			char		dirpath[MAXPGPATH];
+			char	   *dir_name;
+//			char		database_path[MAXPGPATH];
+
+			if (file->is_extra)
+				dir_name = GetRelativePath(file->path, extra_path);
+			else
+				dir_name = GetRelativePath(file->path, database_path);
+
+			elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
+//			pgBackupGetPath(&backup, database_path, lengthof(database_path),
+//					DATABASE_DIR);
+
+			if (file->is_extra)
+				join_path_components(dirpath, file->extradir, dir_name);
+			else
+				join_path_components(dirpath, pgdata, dir_name);
+			dir_create_dir(dirpath, DIR_PERMISSION);
+		}
+
+		/* setup threads */
 		__sync_lock_release(&file->lock);
 	}
+
+	/* setup threads */
+//	for (i = 0; i < parray_num(files); i++)
+//	{
+//		pgFile *file = (pgFile *) parray_get(files, i);
+//		__sync_lock_release(&file->lock);
+//	}
 
 	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
