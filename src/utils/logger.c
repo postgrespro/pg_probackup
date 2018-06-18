@@ -69,9 +69,6 @@ static bool exit_hook_registered = false;
 static bool loggin_in_progress = false;
 
 static pthread_mutex_t log_file_mutex = PTHREAD_MUTEX_INITIALIZER;
-#ifdef WIN32
-static long mutex_initlock = 0;
-#endif
 
 void
 init_logger(const char *root_path)
@@ -173,20 +170,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		log_path[0] != '\0';
 	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
 
-	/*
-	 * There is no need to lock if this is elog() from upper elog().
-	 */
-#ifdef WIN32
-	if (log_file_mutex == NULL)
-	{
-		while (InterlockedExchange(&mutex_initlock, 1) == 1)
-			/* loop, another thread own the lock */ ;
-		if (log_file_mutex == NULL)
-			pthread_mutex_init(&log_file_mutex, NULL);
-		InterlockedExchange(&mutex_initlock, 0);
-	}
-#endif
-	pthread_mutex_lock(&log_file_mutex);
+	pthread_lock(&log_file_mutex);
 	loggin_in_progress = true;
 
 	/* We need copy args only if we need write to error log file */

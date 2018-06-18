@@ -4,7 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
 import time
-
+import ipdb
 
 module_name = 'page'
 
@@ -525,4 +525,62 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         node_restored.start()
 
         # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_parallel_pagemap(self):
+        """
+        Test for parallel WAL segments reading, during which pagemap is built
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        # Initialize instance and backup directory
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={
+                "hot_standby": "on"
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        # Do full backup
+        self.backup_node(backup_dir, 'node', node)
+        show_backup = self.show_pb(backup_dir, 'node')[0]
+
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "FULL")
+
+        # Fill instance with data and make several WAL segments ...
+        node.safe_psql("postgres", "create table test (id int)")
+        for x in range(0, 8):
+            node.safe_psql("postgres",
+                "insert into test select i from generate_series(1,100) s(i)")
+            self.switch_wal_segment(node)
+        count1 = node.safe_psql("postgres", "select count(*) from test")
+
+        # ... and do page backup with parallel pagemap
+        self.backup_node(backup_dir, 'node', node, backup_type="page",
+            options=["-j", "4"])
+        show_backup = self.show_pb(backup_dir, 'node')[1]
+
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "PAGE")
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+        node.start()
+
+        # Check restored node
+        count2 = node.safe_psql("postgres", "select count(*) from test")
+
+        self.assertEqual(count1, count2)
+
+        # Clean after yourself
+        node.cleanup()
         self.del_test_dir(module_name, fname)

@@ -2344,7 +2344,7 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	{
 		/* We need critical section only we use more than one threads */
 		if (num_threads > 1)
-			pthread_mutex_lock(&backup_pagemap_mutex);
+			pthread_lock(&backup_pagemap_mutex);
 
 		datapagemap_add(&(*file_item)->pagemap, blkno_inseg);
 

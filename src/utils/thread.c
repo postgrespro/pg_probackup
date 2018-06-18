@@ -22,6 +22,8 @@ typedef struct win32_pthread
 	void	   *result;
 } win32_pthread;
 
+static long mutex_initlock = 0;
+
 static unsigned __stdcall
 win32_pthread_run(void *arg)
 {
@@ -79,3 +81,22 @@ pthread_join(pthread_t th, void **thread_return)
 }
 
 #endif   /* WIN32 */
+
+int
+pthread_lock(pthread_mutex_t *mp)
+{
+#ifdef WIN32
+	if (*mp == NULL)
+	{
+		while (InterlockedExchange(&mutex_initlock, 1) == 1)
+			/* loop, another thread own the lock */ ;
+		if (*mp == NULL)
+		{
+			if (pthread_mutex_init(mp, NULL))
+				return -1;
+		}
+		InterlockedExchange(&mutex_initlock, 0);
+	}
+#endif
+	return pthread_mutex_lock(mp);
+}
