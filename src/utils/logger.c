@@ -190,14 +190,14 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	loggin_in_progress = true;
 
 	/* We need copy args only if we need write to error log file */
-	if (write_to_error_log)
-		va_copy(error_args, args);
+	//if (write_to_error_log)
+	//	va_copy(error_args, args);
 	/*
 	 * We need copy args only if we need write to stderr. But do not copy args
 	 * if we need to log only to stderr.
 	 */
-	if (write_to_stderr && write_to_file)
-		va_copy(std_args, args);
+//	if (write_to_stderr && write_to_file)
+//		va_copy(std_args, args);
 
 	if (write_to_file || write_to_error_log)
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
@@ -238,7 +238,8 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 
 		fprintf(error_log_file, "%s: ", strfbuf);
 		write_elevel(error_log_file, elevel);
-
+		
+		va_copy(error_args, args);
 		vfprintf(error_log_file, fmt, error_args);
 		fputc('\n', error_log_file);
 		fflush(error_log_file);
@@ -253,7 +254,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	if (write_to_stderr)
 	{
 		write_elevel(stderr, elevel);
-
+		va_copy(std_args, args);
 		if (write_to_file)
 			vfprintf(stderr, fmt, std_args);
 		else
