@@ -299,6 +299,7 @@ validate_wal(pgBackup *backup,
 			 const char *archivedir,
 			 time_t target_time,
 			 TransactionId target_xid,
+			 XLogRecPtr target_lsn,
 			 TimeLineID tli)
 {
 	XLogRecPtr	startpoint = backup->start_lsn;
@@ -350,7 +351,7 @@ validate_wal(pgBackup *backup,
 	 * If recovery target is provided check that we can restore backup to a
 	 * recovery target time or xid.
 	 */
-	if (!TransactionIdIsValid(target_xid) && target_time == 0)
+	if (!TransactionIdIsValid(target_xid) && target_time == 0 && !XRecOffIsValid(target_lsn))
 	{
 		/* Recovery target is not given so exit */
 		elog(INFO, "Backup %s WAL segments are valid", backup_id);
@@ -384,7 +385,8 @@ validate_wal(pgBackup *backup,
 	last_xid = backup->recovery_xid;
 
 	if ((TransactionIdIsValid(target_xid) && target_xid == last_xid)
-		|| (target_time != 0 && backup->recovery_time >= target_time))
+		|| (target_time != 0 && backup->recovery_time >= target_time)
+		|| (XRecOffIsValid(target_lsn) && backup->stop_lsn >= target_lsn))
 		all_wal = true;
 
 	startpoint = backup->stop_lsn;
@@ -470,6 +472,9 @@ validate_wal(pgBackup *backup,
 		else if (target_time != 0)
 			elog(ERROR, "not enough WAL records to time %s",
 					target_timestamp);
+		else if (XRecOffIsValid(target_lsn))
+			elog(ERROR, "not enough WAL records to lsn %X/%X",
+					(uint32) (target_lsn >> 32), (uint32) (target_lsn));
 	}
 
 	/* clean */

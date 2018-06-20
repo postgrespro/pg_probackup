@@ -235,6 +235,35 @@ timestamptz_to_time_t(TimestampTz t)
 	return result;
 }
 
+/* Parse string representation of the server version */
+int
+parse_server_version(char *server_version_str)
+{
+	int			nfields;
+	int			result = 0;
+	int			major_version = 0;
+	int			minor_version = 0;
+
+	nfields = sscanf(server_version_str, "%d.%d", &major_version, &minor_version);
+	if (nfields == 2)
+	{
+		/* Server version lower than 10 */
+		if (major_version > 10)
+			elog(ERROR, "Server version format doesn't match major version %d", major_version);
+		result = major_version * 10000 + minor_version * 100;
+	}
+	else if (nfields == 1)
+	{
+		if (major_version < 10)
+			elog(ERROR, "Server version format doesn't match major version %d", major_version);
+		result = major_version * 10000;
+	}
+	else
+		elog(ERROR, "Unknown server version format");
+
+	return result;
+}
+
 const char *
 status2str(BackupStatus status)
 {

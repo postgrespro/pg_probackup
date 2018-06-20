@@ -31,6 +31,7 @@
 #define MAX_TZDISP_HOUR		15	/* maximum allowed hour part */
 #define SECS_PER_MINUTE		60
 #define MINS_PER_HOUR		60
+#define MAXPG_LSNCOMPONENT	8
 
 const char *PROGRAM_NAME = NULL;
 
@@ -980,6 +981,32 @@ parse_int(const char *value, int *result, int flags, const char **hintmsg)
 
 	if (result)
 		*result = (int) val;
+	return true;
+}
+
+bool
+parse_lsn(const char *value, XLogRecPtr *result)
+{
+	uint32	xlogid;
+	uint32	xrecoff;
+	int		len1;
+	int		len2;
+
+	len1 = strspn(value, "0123456789abcdefABCDEF");
+	if (len1 < 1 || len1 > MAXPG_LSNCOMPONENT || value[len1] != '/')
+		elog(ERROR, "invalid LSN \"%s\"", value);
+	len2 = strspn(value + len1 + 1, "0123456789abcdefABCDEF");
+	if (len2 < 1 || len2 > MAXPG_LSNCOMPONENT || value[len1 + 1 + len2] != '\0')
+		elog(ERROR, "invalid LSN \"%s\"", value);
+
+	if (sscanf(value, "%X/%X", &xlogid, &xrecoff) == 2)
+		*result = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+	else
+	{
+		elog(ERROR, "invalid LSN \"%s\"", value);
+		return false;
+	}
+
 	return true;
 }
 

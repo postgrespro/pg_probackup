@@ -116,7 +116,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
@@ -125,7 +125,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
 
@@ -265,7 +265,7 @@ help_restore(void)
 {
 	printf(_("%s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
@@ -280,6 +280,7 @@ help_restore(void)
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
+	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
@@ -323,7 +324,7 @@ help_validate(void)
 {
 	printf(_("%s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
@@ -333,6 +334,7 @@ help_validate(void)
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
+	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("      --recovery-target-name=target-name\n"));

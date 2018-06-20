@@ -258,6 +258,10 @@ typedef struct pgRecoveryTarget
 	TransactionId	recovery_target_xid;
 	/* add one more field in order to avoid deparsing recovery_target_xid back */
 	const char		*target_xid_string;
+	bool			lsn_specified;
+	XLogRecPtr		recovery_target_lsn;
+	/* add one more field in order to avoid deparsing recovery_target_lsn back */
+	const char		*target_lsn_string;
 	TimeLineID		recovery_target_tli;
 	bool			recovery_target_inclusive;
 	bool			inclusive_specified;
@@ -397,8 +401,9 @@ extern bool satisfy_recovery_target(const pgBackup *backup,
 extern parray * readTimeLineHistory_probackup(TimeLineID targetTLI);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
-	const char *target_inclusive, TimeLineID target_tli, bool target_immediate,
-	const char *target_name, const char *target_action, bool restore_no_validate);
+	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
+	bool target_immediate, const char *target_name,
+	const char *target_action, bool restore_no_validate);
 
 extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 
@@ -511,6 +516,7 @@ extern void validate_wal(pgBackup *backup,
 						 const char *archivedir,
 						 time_t target_time,
 						 TransactionId target_xid,
+						 XLogRecPtr target_lsn,
 						 TimeLineID tli);
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
@@ -533,6 +539,7 @@ extern long unsigned int base36dec(const char *text);
 extern uint64 get_system_identifier(char *pgdata);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern pg_time_t timestamptz_to_time_t(TimestampTz t);
+extern int parse_server_version(char *server_version_str);
 extern void pgBackup_init(pgBackup *backup);
 
 /* in status.c */
