@@ -179,6 +179,9 @@ doExtractPageMap(void *arg)
 				/* Adjust next record position */
 				XLogSegNoOffsetToRecPtr(extract_arg->private_data.xlogsegno, 0,
 										extract_arg->startpoint);
+				/* Skip over the page header */
+				extract_arg->startpoint += SizeOfXLogLongPHD;
+
 				continue;
 			}
 
@@ -283,6 +286,8 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		if (nextSegNoToRead > endSegNo)
 			break;
 		XLogSegNoOffsetToRecPtr(nextSegNoToRead, 0, startpoint);
+		/* Skip over the page header */
+		startpoint += SizeOfXLogLongPHD;
 
 		threads_need++;
 	}
