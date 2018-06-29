@@ -430,7 +430,7 @@ backup_data_file(backup_files_args* arguments,
 	if ((backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
-		file->exists_in_prev)
+		file->exists_in_prev && !file->pagemap_isabsent)
 	{
 		/*
 		 * There are no changed blocks since last backup. We want make
@@ -494,9 +494,8 @@ backup_data_file(backup_files_args* arguments,
 	 * If page map is empty or file is not present in previous backup
 	 * backup all pages of the relation.
 	 */
-	if (file->pagemap.bitmapsize == PageBitmapIsEmpty
-		|| file->pagemap.bitmapsize == PageBitmapIsAbsent
-		|| !file->exists_in_prev)
+	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+		file->pagemap_isabsent || !file->exists_in_prev)
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
 		{

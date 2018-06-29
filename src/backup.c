@@ -2403,12 +2403,12 @@ make_pagemap_from_ptrack(parray *files)
 
 		if (file->is_datafile)
 		{
-			if (file->tblspcOid == tblspcOid_with_ptrack_init
-					&& file->dbOid == dbOid_with_ptrack_init)
+			if (file->tblspcOid == tblspcOid_with_ptrack_init &&
+				file->dbOid == dbOid_with_ptrack_init)
 			{
 				/* ignore ptrack if ptrack_init exists */
 				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
-				file->pagemap.bitmapsize = PageBitmapIsAbsent;
+				file->pagemap_isabsent = true;
 				continue;
 			}
 
@@ -2461,7 +2461,7 @@ make_pagemap_from_ptrack(parray *files)
 				 * - target relation was deleted.
 				 */
 				elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
-				file->pagemap.bitmapsize = PageBitmapIsAbsent;
+				file->pagemap_isabsent = true;
 			}
 		}
 	}
