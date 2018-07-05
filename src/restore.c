@@ -1079,7 +1079,6 @@ parseRecoveryTargetOptions(const char *target_time,
 
 	if (restore_no_validate)
 	{
-		recovery_target_specified++;
 		rt->restore_no_validate = restore_no_validate;
 	}
 
