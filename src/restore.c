@@ -581,14 +581,6 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 							 linked_path, dir_created, link_name);
 				}
 
-				/*
-				 * This check was done in check_tablespace_mapping(). But do
-				 * it again.
-				 */
-				if (!dir_is_empty(linked_path))
-					elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-						 linked_path);
-
 				if (link_sep)
 					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
 						 linked_path,
