@@ -315,7 +315,12 @@ do_restore_or_validate(time_t target_backup_id,
 	 * produce corresponding error message
 	 */
 	if (dest_backup->status == BACKUP_STATUS_OK)
-		elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
+	{
+		if (rt->restore_no_validate)
+			elog(INFO, "Backup %s is used without validation.", base36enc(dest_backup->start_time));
+		else
+			elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
+	}
 	else if (dest_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Backup %s is corrupt.", base36enc(dest_backup->start_time));
 	else if (dest_backup->status == BACKUP_STATUS_ORPHAN)
