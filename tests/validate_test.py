@@ -1659,3 +1659,62 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_file_size_corruption_no_validate(self):
+
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            # initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+        )
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+        heap_size = node.safe_psql(
+            "postgres",
+            "select pg_relation_size('t_heap')")
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4"], async=False, gdb=False)
+
+        node.stop()
+        node.cleanup()
+
+        # Let`s do file corruption
+        with open(os.path.join(backup_dir, "backups", 'node', backup_id, "database", heap_path), "rb+", 0) as f:
+            f.truncate(int(heap_size) - 4096)
+            f.flush()
+            f.close
+
+        node.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["--no-validate"])
+        except ProbackupException as e:
+            self.assertTrue("ERROR: Data files restoring failed" in e.message, repr(e.message))
+            print "\nExpected error: \n" + e.message
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
