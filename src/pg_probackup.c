@@ -196,7 +196,6 @@ main(int argc, char *argv[])
 {
 	char	   *command = NULL,
 			   *command_name;
-	char		path[MAXPGPATH];
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
 	int			rc;
@@ -377,6 +376,8 @@ main(int argc, char *argv[])
 	 */
 	if (instance_name && backup_subcmd != SET_CONFIG_CMD)
 	{
+		char		path[MAXPGPATH];
+
 		/* Read environment variables */
 		pgut_getopt_env(options);
 
