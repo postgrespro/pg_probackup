@@ -242,6 +242,10 @@ backup_data_page(backup_files_args *arguments,
 	header.block = blknum;
 	header.compressed_size = 0;
 
+	/* check for interrupt */
+	if (interrupted)
+		elog(ERROR, "Interrupted during backup");
+
 	/*
 	 * Read the page and verify its header and checksum.
 	 * Under high write load it's possible that we've read partly
