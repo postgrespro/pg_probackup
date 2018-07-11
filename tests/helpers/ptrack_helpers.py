@@ -112,6 +112,25 @@ class ProbackupException(Exception):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
 
 
+def slow_start(self):
+
+    # wait for https://github.com/postgrespro/testgres/pull/50
+    # self.poll_query_until(
+    #    "postgres",
+    #    "SELECT not pg_is_in_recovery()",
+    #    raise_operational_error=False)
+
+    self.start()
+    while True:
+        try:
+            self.poll_query_until(
+                "postgres",
+                "SELECT not pg_is_in_recovery()")
+            break
+        except Exception as e:
+            continue
+
+
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
@@ -205,6 +224,8 @@ class ProbackupTest(object):
         os.makedirs(real_base_dir)
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
+        # bound method slow_start() to 'node' class instance
+        node.slow_start = slow_start.__get__(node)
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)

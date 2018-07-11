@@ -25,6 +25,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--replica-timeout=timeout]
 
   pg_probackup show-config -B backup-dir --instance=instance_name
+                 [--format=format]
 
   pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
                  [-C] [--stream [-S slot-name]] [--backup-pg-log]
@@ -61,10 +62,12 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup validate -B backup-dir [--instance=instance_name]
                  [-i backup-id] [--progress]
                  [--time=time|--xid=xid [--inclusive=boolean]]
+                 [--recovery-target-name=target-name]
                  [--timeline=timeline]
 
   pg_probackup show -B backup-dir
                  [--instance=instance_name [-i backup-id]]
+                 [--format=format]
 
   pg_probackup delete -B backup-dir --instance=instance_name
                  [--wal] [-i backup-id | --expired]

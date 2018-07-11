@@ -191,7 +191,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
                 node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.start()
+        node.slow_start()
         # Logical comparison
         self.assertEqual(
             result,
@@ -290,7 +290,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
                 node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.start()
+        node.slow_start()
         # Logical comparison
         self.assertEqual(
             result,

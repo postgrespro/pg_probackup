@@ -83,7 +83,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -98,7 +99,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
@@ -113,7 +115,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
         node.cleanup()
@@ -187,7 +190,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -202,7 +206,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
@@ -217,7 +222,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
         node.cleanup()
@@ -294,7 +300,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -309,7 +316,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
@@ -324,7 +332,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
         node.cleanup()
@@ -401,7 +410,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -416,7 +426,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
@@ -431,7 +442,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
         node.cleanup()

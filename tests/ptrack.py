@@ -586,10 +586,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
             )
-        node.start()
-        while node.psql(
-                "postgres", "select pg_is_in_recovery()")[0] != 0:
-            time.sleep(1)
+        node.slow_start()
         full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -611,10 +608,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.start()
-        while node.psql(
-                "postgres", "select pg_is_in_recovery()")[0] != 0:
-            time.sleep(1)
+        node.slow_start()
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
 
@@ -691,11 +685,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
         )
-        node.start()
-
-        while node.psql(
-                "postgres", "select pg_is_in_recovery()")[0] != 0:
-            time.sleep(1)
+        node.slow_start()
 
         full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
@@ -721,10 +711,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.start()
-        while node.psql(
-                "postgres", "select pg_is_in_recovery()")[0] != 0:
-            time.sleep(1)
+        node.slow_start()
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
 
@@ -1176,11 +1163,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
-        while node_restored.psql(
-                "postgres", "select pg_is_in_recovery()")[0] != 0:
-            time.sleep(1)
         result_new = node_restored.safe_psql(
             "postgres", "select * from t_heap")
 
@@ -1412,10 +1396,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         restored_node.append_conf(
             "postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
-        while restored_node.psql(
-                "postgres", "select pg_is_in_recovery()")[0] != 0:
-            time.sleep(1)
+        restored_node.slow_start()
 
         # COMPARE LOGICAL CONTENT
         result_new = restored_node.safe_psql(
@@ -1450,11 +1431,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         restored_node.append_conf(
             "postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
-        while restored_node.psql(
-                "postgres",
-                "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
             "postgres", "select * from t_heap")
@@ -1553,11 +1530,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         restored_node.append_conf(
             "postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
-        while restored_node.psql(
-                "postgres",
-                "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
             "postgres",
