@@ -29,7 +29,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -89,7 +89,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FIRST TIMELINE
         node.safe_psql(
@@ -247,7 +247,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.append_conf(
             'postgresql.auto.conf', "archive_command  = '{0} %p %f'".format(
                 archive_script_path))
-        node.start()
+        node.slow_start()
         try:
             self.backup_node(
                 backup_dir, 'node', node,
@@ -308,7 +308,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close()
 
-        node.start()
+        node.slow_start()
         node.safe_psql(
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
@@ -368,7 +368,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close()
 
-        node.start()
+        node.slow_start()
         node.safe_psql(
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
@@ -423,7 +423,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         replica = self.make_simple_node(
             base_dir="{0}/{1}/replica".format(module_name, fname))
@@ -444,7 +444,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # Check data correctness on replica
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -481,7 +481,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -513,7 +513,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -547,7 +547,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         master.psql(
             "postgres",
@@ -573,7 +573,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         # SET ARCHIVING FOR REPLICA
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # CHECK LOGICAL CORRECTNESS on REPLICA
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -628,7 +628,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         master.psql(
             "postgres",
@@ -655,7 +655,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # self.add_instance(backup_dir, 'replica', replica)
         # SET ARCHIVING FOR REPLICA
         # self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # CHECK LOGICAL CORRECTNESS on REPLICA
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")

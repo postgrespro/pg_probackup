@@ -112,7 +112,7 @@ class ProbackupException(Exception):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
 
 
-def slow_start(self):
+def slow_start(self, replica=False):
 
     # wait for https://github.com/postgrespro/testgres/pull/50
     # self.poll_query_until(
@@ -121,14 +121,24 @@ def slow_start(self):
     #    raise_operational_error=False)
 
     self.start()
-    while True:
-        try:
-            self.poll_query_until(
-                "postgres",
-                "SELECT not pg_is_in_recovery()")
-            break
-        except Exception as e:
-            continue
+    if not replica:
+        while True:
+            try:
+                self.poll_query_until(
+                    "postgres",
+                    "SELECT not pg_is_in_recovery()")
+                break
+            except Exception as e:
+                continue
+    else:
+        while True:
+            try:
+                self.poll_query_until(
+                    "postgres",
+                    "SELECT pg_is_in_recovery()")
+                break
+            except Exception as e:
+                continue
 
 
 class ProbackupTest(object):
