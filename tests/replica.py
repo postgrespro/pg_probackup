@@ -287,7 +287,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(replica.port))
-        replica.slow_start(replica=True)
+        replica.start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

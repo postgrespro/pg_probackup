@@ -131,14 +131,18 @@ def slow_start(self, replica=False):
             except Exception as e:
                 continue
     else:
-        while True:
-            try:
-                self.poll_query_until(
-                    "postgres",
-                    "SELECT pg_is_in_recovery()")
-                break
-            except Exception as e:
-                continue
+        self.poll_query_until(
+            "postgres",
+            "SELECT pg_is_in_recovery()")
+
+#        while True:
+#            try:
+#                self.poll_query_until(
+#                    "postgres",
+#                    "SELECT pg_is_in_recovery()")
+#                break
+#            except ProbackupException as e:
+#                continue
 
 
 class ProbackupTest(object):
