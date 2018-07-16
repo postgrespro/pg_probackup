@@ -122,8 +122,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		current_backup = (pgBackup *) parray_get(backups, i);
 
 		/* Skip all backups which started after target backup */
-		if (target_backup_id != INVALID_BACKUP_ID &&
-			current_backup->start_time > target_backup_id)
+		if (target_backup_id && current_backup->start_time > target_backup_id)
 			continue;
 
 		/*
@@ -382,7 +381,7 @@ restore_backup(pgBackup *backup)
 			"XLOG_BLCKSZ(%d) is not compatible(%d expected)",
 			backup->wal_block_size, XLOG_BLCKSZ);
 
-	time2iso(timestamp, lengthof(timestamp), backup->start_time, true);
+	time2iso(timestamp, lengthof(timestamp), backup->start_time);
 	elog(LOG, "restoring database from backup %s", timestamp);
 
 	/*

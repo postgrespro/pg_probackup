@@ -553,7 +553,7 @@ do_backup_instance(void)
 		pg_ptrack_clear();
 
 	/* notify start of backup to PostgreSQL server */
-	time2iso(label, lengthof(label), current.start_time, true);
+	time2iso(label, lengthof(label), current.start_time);
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);

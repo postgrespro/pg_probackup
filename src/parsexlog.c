@@ -380,8 +380,7 @@ validate_wal(pgBackup *backup,
 	xlogfpath[0] = '\0';
 
 	/* We can restore at least up to the backup end */
-	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time,
-			 true);
+	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time);
 	last_xid = backup->recovery_xid;
 
 	if ((TransactionIdIsValid(target_xid) && target_xid == last_xid)
@@ -431,7 +430,7 @@ validate_wal(pgBackup *backup,
 
 	if (last_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
-				 timestamptz_to_time_t(last_time), true);
+				 timestamptz_to_time_t(last_time));
 
 	/* There are all needed WAL records */
 	if (all_wal)
@@ -460,8 +459,8 @@ validate_wal(pgBackup *backup,
 				last_timestamp, last_xid);
 
 		if (target_time > 0)
-			time2iso(target_timestamp, lengthof(target_timestamp), target_time,
-					 true);
+			time2iso(target_timestamp, lengthof(target_timestamp),
+						target_time);
 		if (TransactionIdIsValid(target_xid) && target_time != 0)
 			elog(ERROR, "not enough WAL records to time %s and xid " XID_FMT,
 					target_timestamp, target_xid);

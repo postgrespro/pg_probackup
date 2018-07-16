@@ -324,8 +324,7 @@ show_instance_plain(parray *backup_list, bool show_name)
 		char		data_bytes_str[10] = "----";
 
 		if (backup->recovery_time != (time_t) 0)
-			time2iso(timestamp, lengthof(timestamp), backup->recovery_time,
-					 true);
+			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 		if (backup->end_time != (time_t) 0)
 			snprintf(duration, lengthof(duration), "%.*lfs",  0,
 					 difftime(backup->end_time, backup->start_time));
@@ -453,12 +452,12 @@ show_instance_json(parray *backup_list)
 				 (uint32) (backup->stop_lsn >> 32), (uint32) backup->stop_lsn);
 		json_add_value(buf, "stop-lsn", lsn, json_level, true);
 
-		time2iso(timestamp, lengthof(timestamp), backup->start_time, true);
+		time2iso(timestamp, lengthof(timestamp), backup->start_time);
 		json_add_value(buf, "start-time", timestamp, json_level, true);
 
 		if (backup->end_time)
 		{
-			time2iso(timestamp, lengthof(timestamp), backup->end_time, true);
+			time2iso(timestamp, lengthof(timestamp), backup->end_time);
 			json_add_value(buf, "end-time", timestamp, json_level, true);
 		}
 
@@ -467,8 +466,7 @@ show_instance_json(parray *backup_list)
 
 		if (backup->recovery_time > 0)
 		{
-			time2iso(timestamp, lengthof(timestamp), backup->recovery_time,
-					 true);
+			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 			json_add_value(buf, "recovery-time", timestamp, json_level, true);
 		}
 

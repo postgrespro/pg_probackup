@@ -521,7 +521,7 @@ extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
 extern void sanityChecks(void);
-extern void time2iso(char *buf, size_t len, time_t time, bool to_local);
+extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
