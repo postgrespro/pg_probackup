@@ -1836,7 +1836,7 @@ pg_stop_backup(pgBackup *backup)
 			elog(ERROR,
 				 "result of txid_snapshot_xmax() is invalid: %s",
 				 PQgetvalue(res, 0, 0));
-		if (!parse_time(PQgetvalue(res, 0, 1), &recovery_time))
+		if (!parse_time(PQgetvalue(res, 0, 1), &recovery_time, true))
 			elog(ERROR,
 				 "result of current_timestamp is invalid: %s",
 				 PQgetvalue(res, 0, 1));

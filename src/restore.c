@@ -1036,7 +1036,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		rt->time_specified = true;
 		rt->target_time_string = target_time;
 
-		if (parse_time(target_time, &dummy_time))
+		if (parse_time(target_time, &dummy_time, false))
 			rt->recovery_target_time = dummy_time;
 		else
 			elog(ERROR, "Invalid value of --time option %s", target_time);
