@@ -257,7 +257,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 	if (backup->status == BACKUP_STATUS_DELETED)
 		return 0;
 
-	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+	time2iso(timestamp, lengthof(timestamp), backup->recovery_time, true);
 
 	elog(INFO, "delete: %s %s", base36enc(backup->start_time), timestamp);
 

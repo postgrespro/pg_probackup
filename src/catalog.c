@@ -409,17 +409,17 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
+	time2iso(timestamp, lengthof(timestamp), backup->start_time, false);
 	fprintf(out, "start-time = '%s'\n", timestamp);
 	if (backup->end_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->end_time);
+		time2iso(timestamp, lengthof(timestamp), backup->end_time, false);
 		fprintf(out, "end-time = '%s'\n", timestamp);
 	}
 	fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
 		fprintf(out, "recovery-time = '%s'\n", timestamp);
 	}
 
