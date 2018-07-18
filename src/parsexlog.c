@@ -12,6 +12,7 @@
 
 #include "pg_probackup.h"
 
+#include <time.h>
 #include <unistd.h>
 #ifdef HAVE_LIBZ
 #include <zlib.h>
@@ -256,6 +257,8 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	bool		extract_isok = true;
 	pthread_t	threads[num_threads];
 	xlog_thread_arg thread_args[num_threads];
+	time_t		start_time,
+				end_time;
 
 	elog(LOG, "Compiling pagemap");
 	if (!XRecOffIsValid(startpoint))
@@ -271,6 +274,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		endSegNo--;
 
 	nextSegNoToRead = 0;
+	time(&start_time);
 
 	/*
 	 * Initialize thread args.
@@ -322,8 +326,11 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		if (thread_args[i].ret == 1)
 			extract_isok = false;
 	}
+
+	time(&end_time);
 	if (extract_isok)
-		elog(LOG, "Pagemap compiled");
+		elog(LOG, "Pagemap compiled, time elapsed %.0f sec",
+			 difftime(end_time, start_time));
 	else
 		elog(ERROR, "Pagemap compiling failed");
 }
