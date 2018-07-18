@@ -633,11 +633,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', node)
         node.start()
 
-        # Check restored node
-        count2 = node.safe_psql("postgres", "select count(*) from test")
-
-        self.assertEqual(count1, count2)
-
         # Clean after yourself
         node.cleanup()
         self.del_test_dir(module_name, fname)
