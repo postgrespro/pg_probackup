@@ -105,6 +105,7 @@ typedef struct XLogPageReadPrivate
 /* An argument for a thread function */
 typedef struct
 {
+	int			thread_num;
 	XLogPageReadPrivate private_data;
 
 	XLogRecPtr	startpoint;
@@ -148,6 +149,14 @@ doExtractPageMap(void *arg)
 	if (xlogreader == NULL)
 		elog(ERROR, "out of memory");
 
+	extract_arg->startpoint = XLogFindNextRecord(xlogreader,
+												 extract_arg->startpoint);
+
+	elog(VERBOSE, "Start LSN of thread %d: %X/%X",
+		 extract_arg->thread_num,
+		 (uint32) (extract_arg->startpoint >> 32),
+		 (uint32) (extract_arg->startpoint));
+
 	do
 	{
 		XLogRecord *record;
@@ -180,7 +189,13 @@ doExtractPageMap(void *arg)
 				XLogSegNoOffsetToRecPtr(extract_arg->private_data.xlogsegno, 0,
 										extract_arg->startpoint);
 				/* Skip over the page header */
-				extract_arg->startpoint += SizeOfXLogLongPHD;
+				extract_arg->startpoint = XLogFindNextRecord(xlogreader,
+															 extract_arg->startpoint);
+
+				elog(VERBOSE, "Thread %d switched to LSN %X/%X",
+					 extract_arg->thread_num,
+					 (uint32) (extract_arg->startpoint >> 32),
+					 (uint32) (extract_arg->startpoint));
 
 				continue;
 			}
@@ -266,6 +281,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	for (i = 0; i < num_threads; i++)
 	{
 		InitXLogPageRead(&thread_args[i].private_data, archivedir, tli, false);
+		thread_args[i].thread_num = i;
 		thread_args[i].private_data.manual_switch = true;
 
 		thread_args[i].startpoint = startpoint;
