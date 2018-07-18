@@ -403,7 +403,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 				  blknum, header.compressed_size, write_buffer_size); */
 
 	/* Update CRC */
-	COMP_CRC32C(*crc, &write_buffer, write_buffer_size);
+	COMP_CRC32C(*crc, write_buffer, write_buffer_size);
 
 	/* write data page */
 	if(fwrite(write_buffer, 1, write_buffer_size, out) != write_buffer_size)

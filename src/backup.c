@@ -327,7 +327,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		{
 			write_buffer_size = Min(row_length, sizeof(buf));
 			memcpy(buf, copybuf, write_buffer_size);
-			COMP_CRC32C(file->crc, &buf, write_buffer_size);
+			COMP_CRC32C(file->crc, buf, write_buffer_size);
 
 			/* TODO calc checksum*/
 			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
@@ -724,7 +724,7 @@ do_backup_instance(void)
 		else
 			pthread_create(&backup_threads[i], NULL, remote_backup_files, arg);
 	}
-	
+
 	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
@@ -844,7 +844,7 @@ do_backup(time_t start_time)
 		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
 						"pg_probackup have no way to detect data block corruption without them. "
 						"Reinitialize PGDATA with option '--data-checksums'.");
-	
+
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
 	current.stream = stream_wal;
@@ -1020,7 +1020,7 @@ check_system_identifiers(void)
 
 	system_id_pgdata = get_system_identifier(pgdata);
 	system_id_conn = get_remote_system_identifier(backup_conn);
-	
+
 	if (system_id_conn != system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
 			 system_identifier, system_id_conn);
@@ -1043,13 +1043,13 @@ confirm_block_size(const char *name, int blcksz)
 	res = pgut_execute(backup_conn, "SELECT pg_catalog.current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
-	
+
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
 	if ((endp && *endp) || block_size != blcksz)
 		elog(ERROR,
 			 "%s(%d) is not compatible(%d expected)",
 			 name, block_size, blcksz);
-	
+
 	PQclear(res);
 }
 
@@ -2024,7 +2024,7 @@ backup_files(void *arg)
 
 		pgFile *file = (pgFile *) parray_get(arguments->backup_files_list, i);
 		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
-		if (!pg_atomic_test_set_flag(&file->lock)) 
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		/* check for interrupt */
