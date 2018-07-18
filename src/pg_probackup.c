@@ -70,6 +70,7 @@ static char		   *target_action = NULL;
 static pgRecoveryTarget *recovery_target_options = NULL;
 
 bool restore_as_replica = false;
+bool restore_no_validate = false;
 
 /* delete options */
 bool		delete_wal = false;
@@ -148,6 +149,7 @@ static pgut_option options[] =
 	{ 's', 25, "recovery-target-name",	&target_name,		SOURCE_CMDLINE },
 	{ 's', 26, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
 	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
+	{ 'b', 27, "no-validate",			&restore_no_validate,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
@@ -435,7 +437,7 @@ main(int argc, char *argv[])
 		/* parse all recovery target options into recovery_target_options structure */
 		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
 								   target_inclusive, target_tli, target_immediate,
-								   target_name, target_action);
+								   target_name, target_action, restore_no_validate);
 	}
 
 	if (num_threads < 1)
