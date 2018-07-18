@@ -121,6 +121,7 @@ help_pg_probackup(void)
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
+	printf(_("                 [--no-validate]\n"));
 
 	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
@@ -285,7 +286,6 @@ help_restore(void)
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
 
 	printf(_("      --immediate                  end recovery as soon as a consistent state is reached\n"));
-	printf(_("      --no-validate                disable backup validation during recovery\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
@@ -294,6 +294,7 @@ help_restore(void)
 
 	printf(_("  -R, --restore-as-replica         write a minimal recovery.conf in the output directory\n"));
 	printf(_("                                   to ease setting up a standby server\n"));
+	printf(_("      --no-validate                disable backup validation during restore\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
