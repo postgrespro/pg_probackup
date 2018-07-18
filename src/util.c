@@ -176,8 +176,8 @@ uint32
 get_data_checksum_version(bool safe)
 {
 	ControlFileData ControlFile;
-	char       *buffer;
-	size_t      size;
+	char	   *buffer;
+	size_t		size;
 
 	/* First fetch file... */
 	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
@@ -191,7 +191,7 @@ get_data_checksum_version(bool safe)
 
 
 /*
- * Convert time_t value to ISO-8601 format string
+ * Convert time_t value to ISO-8601 format string. Always set timezone offset.
  */
 void
 time2iso(char *buf, size_t len, time_t time)
@@ -199,25 +199,23 @@ time2iso(char *buf, size_t len, time_t time)
 	struct tm  *ptm = gmtime(&time);
 	time_t		gmt = mktime(ptm);
 	time_t		offset;
+	char	   *ptr = buf;
 
 	ptm = localtime(&time);
 	offset = time - gmt + (ptm->tm_isdst ? 3600 : 0);
 
-	strftime(buf, len, "%Y-%m-%d %H:%M:%S", ptm);
+	strftime(ptr, len, "%Y-%m-%d %H:%M:%S", ptm);
 
-	if (offset != 0)
+	ptr += strlen(ptr);
+	snprintf(ptr, len - (ptr - buf), "%c%02d",
+			 (offset >= 0) ? '+' : '-',
+			 abs((int) offset) / SECS_PER_HOUR);
+
+	if (abs((int) offset) % SECS_PER_HOUR != 0)
 	{
-		buf += strlen(buf);
-		sprintf(buf, "%c%02d",
-				(offset >= 0) ? '+' : '-',
-				abs((int) offset) / SECS_PER_HOUR);
-
-		if (abs((int) offset) % SECS_PER_HOUR != 0)
-		{
-			buf += strlen(buf);
-			sprintf(buf, ":%02d",
-					abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
-		}
+		ptr += strlen(ptr);
+		snprintf(ptr, len - (ptr - buf), ":%02d",
+				 abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
 	}
 }
 
@@ -310,11 +308,21 @@ pgBackup_init(pgBackup *backup)
 	backup->end_time = (time_t) 0;
 	backup->recovery_xid = 0;
 	backup->recovery_time = (time_t) 0;
+
 	backup->data_bytes = BYTES_INVALID;
+	backup->wal_bytes = BYTES_INVALID;
+
+	backup->compress_alg = NOT_DEFINED_COMPRESS;
+	backup->compress_level = 0;
+
 	backup->block_size = BLCKSZ;
 	backup->wal_block_size = XLOG_BLCKSZ;
+	backup->checksum_version = 0;
+
 	backup->stream = false;
+	backup->from_replica = false;
 	backup->parent_backup = 0;
 	backup->primary_conninfo = NULL;
+	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 }

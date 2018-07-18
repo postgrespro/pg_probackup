@@ -12,7 +12,6 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <libgen.h>
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -251,14 +250,14 @@ IsDir(const char *dirpath, const char *entry)
 parray *
 catalog_get_backup_list(time_t requested_backup_id)
 {
-	DIR			   *date_dir = NULL;
-	struct dirent  *date_ent = NULL;
+	DIR			   *data_dir = NULL;
+	struct dirent  *data_ent = NULL;
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
 
 	/* open backup instance backups directory */
-	date_dir = opendir(backup_instance_path);
-	if (date_dir == NULL)
+	data_dir = opendir(backup_instance_path);
+	if (data_dir == NULL)
 	{
 		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
 			strerror(errno));
@@ -267,21 +266,21 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 	/* scan the directory and list backups */
 	backups = parray_new();
-	for (; (date_ent = readdir(date_dir)) != NULL; errno = 0)
+	for (; (data_ent = readdir(data_dir)) != NULL; errno = 0)
 	{
 		char backup_conf_path[MAXPGPATH];
-		char date_path[MAXPGPATH];
+		char data_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_instance_path, date_ent->d_name)
-			|| date_ent->d_name[0] == '.')
+		if (!IsDir(backup_instance_path, data_ent->d_name)
+			|| data_ent->d_name[0] == '.')
 			continue;
 
 		/* open subdirectory of specific backup */
-		join_path_components(date_path, backup_instance_path, date_ent->d_name);
+		join_path_components(data_path, backup_instance_path, data_ent->d_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
-		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONTROL_FILE);
+		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", data_path, BACKUP_CONTROL_FILE);
 		backup = readBackupControlFile(backup_conf_path);
 
 		/* ignore corrupted backups */
@@ -299,8 +298,8 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 		if (errno && errno != ENOENT)
 		{
-			elog(WARNING, "cannot read date directory \"%s\": %s",
-				 date_ent->d_name, strerror(errno));
+			elog(WARNING, "cannot read data directory \"%s\": %s",
+				 data_ent->d_name, strerror(errno));
 			goto err_proc;
 		}
 	}
@@ -311,16 +310,16 @@ catalog_get_backup_list(time_t requested_backup_id)
 		goto err_proc;
 	}
 
-	closedir(date_dir);
-	date_dir = NULL;
+	closedir(data_dir);
+	data_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
 
 	return backups;
 
 err_proc:
-	if (date_dir)
-		closedir(date_dir);
+	if (data_dir)
+		closedir(data_dir);
 	if (backup)
 		pgBackupFree(backup);
 	if (backups)
@@ -385,15 +384,17 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 	fprintf(out, "#Configuration\n");
 	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
-	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
-	fprintf(out, "compress-alg = %s\n", deparse_compress_alg(compress_alg));
-	fprintf(out, "compress-level = %d\n", compress_level);
-	fprintf(out, "from-replica = %s\n", from_replica?"true":"false");
+	fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
+	fprintf(out, "compress-alg = %s\n",
+			deparse_compress_alg(backup->compress_alg));
+	fprintf(out, "compress-level = %d\n", backup->compress_level);
+	fprintf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
 	
 	fprintf(out, "\n#Compatibility\n");
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
 	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	fprintf(out, "program-version = %s\n", PROGRAM_VERSION);
 	if (backup->server_version[0] != '\0')
 		fprintf(out, "server-version = %s\n", backup->server_version);
 
@@ -429,7 +430,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->data_bytes != BYTES_INVALID)
 		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
-	if (backup->data_bytes != BYTES_INVALID)
+	if (backup->wal_bytes != BYTES_INVALID)
 		fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
 	fprintf(out, "status = %s\n", status2str(backup->status));
@@ -475,10 +476,9 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
-	char	   *compress_alg = NULL;
+	char	   *program_version = NULL;
 	char	   *server_version = NULL;
-	int		   *compress_level;
-	bool	   *from_replica;
+	char	   *compress_alg = NULL;
 
 	pgut_option options[] =
 	{
@@ -495,13 +495,14 @@ readBackupControlFile(const char *path)
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum-version",	&backup->checksum_version, SOURCE_FILE_STRICT},
+		{'s', 0, "program-version",		&program_version, SOURCE_FILE_STRICT},
 		{'s', 0, "server-version",		&server_version, SOURCE_FILE_STRICT},
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
-		{'u', 0, "compress-level",		&compress_level, SOURCE_FILE_STRICT},
-		{'b', 0, "from-replica",		&from_replica, SOURCE_FILE_STRICT},
+		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
+		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{0}
 	};
@@ -571,12 +572,22 @@ readBackupControlFile(const char *path)
 		free(parent_backup);
 	}
 
+	if (program_version)
+	{
+		StrNCpy(backup->program_version, program_version,
+				sizeof(backup->program_version));
+		pfree(program_version);
+	}
+
 	if (server_version)
 	{
 		StrNCpy(backup->server_version, server_version,
 				sizeof(backup->server_version));
 		pfree(server_version);
 	}
+
+	if (compress_alg)
+		backup->compress_alg = parse_compress_alg(compress_alg);
 
 	return backup;
 }
@@ -621,6 +632,48 @@ deparse_backup_mode(BackupMode mode)
 			return "delta";
 		case BACKUP_MODE_INVALID:
 			return "invalid";
+	}
+
+	return NULL;
+}
+
+CompressAlg
+parse_compress_alg(const char *arg)
+{
+	size_t		len;
+
+	/* Skip all spaces detected */
+	while (isspace((unsigned char)*arg))
+		arg++;
+	len = strlen(arg);
+
+	if (len == 0)
+		elog(ERROR, "compress algrorithm is empty");
+
+	if (pg_strncasecmp("zlib", arg, len) == 0)
+		return ZLIB_COMPRESS;
+	else if (pg_strncasecmp("pglz", arg, len) == 0)
+		return PGLZ_COMPRESS;
+	else if (pg_strncasecmp("none", arg, len) == 0)
+		return NONE_COMPRESS;
+	else
+		elog(ERROR, "invalid compress algorithm value \"%s\"", arg);
+
+	return NOT_DEFINED_COMPRESS;
+}
+
+const char*
+deparse_compress_alg(int alg)
+{
+	switch (alg)
+	{
+		case NONE_COMPRESS:
+		case NOT_DEFINED_COMPRESS:
+			return "none";
+		case ZLIB_COMPRESS:
+			return "zlib";
+		case PGLZ_COMPRESS:
+			return "pglz";
 	}
 
 	return NULL;

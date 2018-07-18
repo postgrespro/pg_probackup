@@ -14,14 +14,14 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #include "catalog/pg_control.h"
+#include "utils/thread.h"
 
 typedef struct
 {
-	parray *files;
-	pgBackup *backup;
+	parray	   *files;
+	pgBackup   *backup;
 
 	/*
 	 * Return value from the thread.
@@ -65,7 +65,7 @@ static void check_tablespace_mapping(pgBackup *backup);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
-static void restore_files(void *arg);
+static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
 static const char *get_tablespace_mapping(const char *dir);
 static void set_tablespace_created(const char *link, const char *dir);
@@ -80,13 +80,11 @@ static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
  */
 int
-do_restore_or_validate(time_t target_backup_id,
-		   pgRecoveryTarget *rt,
-		   bool is_restore)
+do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
+					   bool is_restore)
 {
 	int			i;
 	parray	   *backups;
-	parray	   *timelines;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
@@ -94,7 +92,7 @@ do_restore_or_validate(time_t target_backup_id,
 	int			dest_backup_index = 0;
 	int			base_full_backup_index = 0;
 	int			corrupted_backup_index = 0;
-	char 	   *action = is_restore ? "Restore":"Validate";
+	char	   *action = is_restore ? "Restore":"Validate";
 
 	if (is_restore)
 	{
@@ -169,6 +167,8 @@ do_restore_or_validate(time_t target_backup_id,
 
 			if (rt->recovery_target_tli)
 			{
+				parray	   *timelines;
+
 				elog(LOG, "target timeline ID = %u", rt->recovery_target_tli);
 				/* Read timeline history files from archives */
 				timelines = readTimeLineHistory_probackup(rt->recovery_target_tli);
@@ -370,8 +370,9 @@ restore_backup(pgBackup *backup)
 	char		list_path[MAXPGPATH];
 	parray	   *files;
 	int			i;
-	pthread_t	restore_threads[num_threads];
-	restore_files_args *restore_threads_args[num_threads];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t  *restore_threads;
+	restore_files_args *restore_threads_args;
 	bool		restore_isok = true;
 
 	if (backup->status != BACKUP_STATUS_OK)
@@ -405,17 +406,21 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(database_path, list_path);
 
+	restore_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
+	restore_threads_args = (restore_files_args *) palloc(sizeof(restore_files_args)*num_threads);
+
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
-		__sync_lock_release(&file->lock);
+		pg_atomic_clear_flag(&file->lock);
 	}
 
 	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
 	{
-		restore_files_args *arg = pg_malloc(sizeof(restore_files_args));
+		restore_files_args *arg = &(restore_threads_args[i]);
+
 		arg->files = files;
 		arg->backup = backup;
 		/* By default there are some error */
@@ -423,22 +428,21 @@ restore_backup(pgBackup *backup)
 
 		elog(LOG, "Start thread for num:%li", parray_num(files));
 
-		restore_threads_args[i] = arg;
-		pthread_create(&restore_threads[i], NULL,
-					   (void *(*)(void *)) restore_files, arg);
+		pthread_create(&restore_threads[i], NULL, restore_files, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(restore_threads[i], NULL);
-		if (restore_threads_args[i]->ret == 1)
+		if (restore_threads_args[i].ret == 1)
 			restore_isok = false;
-
-		pg_free(restore_threads_args[i]);
 	}
 	if (!restore_isok)
 		elog(ERROR, "Data files restoring failed");
+
+	pfree(restore_threads);
+	pfree(restore_threads_args);
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
@@ -460,7 +464,7 @@ remove_deleted_files(pgBackup *backup)
 	parray	   *files;
 	parray	   *files_restored;
 	char		filelist_path[MAXPGPATH];
-	int 		i;
+	int			i;
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
 	/* Read backup's filelist using target database path as base path */
@@ -585,14 +589,6 @@ restore_directories(const char *pg_data_dir, const char *backup_dir)
 							 linked_path, dir_created, link_name);
 				}
 
-				/*
-				 * This check was done in check_tablespace_mapping(). But do
-				 * it again.
-				 */
-				if (!dir_is_empty(linked_path))
-					elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-						 linked_path);
-
 				if (link_sep)
 					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
 						 linked_path,
@@ -710,7 +706,7 @@ check_tablespace_mapping(pgBackup *backup)
 /*
  * Restore files into $PGDATA.
  */
-static void
+static void *
 restore_files(void *arg)
 {
 	int			i;
@@ -722,7 +718,7 @@ restore_files(void *arg)
 		char	   *rel_path;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		pgBackupGetPath(arguments->backup, from_root,
@@ -781,12 +777,14 @@ restore_files(void *arg)
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Restored file %s : %lu bytes",
-				file->path, (unsigned long) file->write_size);
+			elog(LOG, "Restored file %s : " INT64_FORMAT " bytes",
+				 file->path, file->write_size);
 	}
 
 	/* Data files restoring is successful */
 	arguments->ret = 0;
+
+	return NULL;
 }
 
 /* Create recovery.conf with given recovery target parameters */
@@ -795,9 +793,9 @@ create_recovery_conf(time_t backup_id,
 					 pgRecoveryTarget *rt,
 					 pgBackup *backup)
 {
-	char path[MAXPGPATH];
-	FILE *fp;
-	bool need_restore_conf = false;
+	char		path[MAXPGPATH];
+	FILE	   *fp;
+	bool		need_restore_conf = false;
 
 	if (!backup->stream
 		|| (rt->time_specified || rt->xid_specified))
@@ -967,7 +965,8 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 	entry = pgut_new(TimeLineHistoryEntry);
 	entry->tli = targetTLI;
 	/* LSN in target timeline is valid */
-	entry->end = (uint32) (-1UL << 32) | -1UL;
+	/* TODO ensure that -1UL --> -1L fix is correct */
+	entry->end = (uint32) (-1L << 32) | -1L;
 	parray_insert(result, 0, entry);
 
 	return result;
@@ -988,10 +987,13 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 bool
 satisfy_timeline(const parray *timelines, const pgBackup *backup)
 {
-	int i;
+	int			i;
+
 	for (i = 0; i < parray_num(timelines); i++)
 	{
-		TimeLineHistoryEntry *timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
+		TimeLineHistoryEntry *timeline;
+
+		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
 			backup->stop_lsn < timeline->end)
 			return true;
@@ -1012,14 +1014,14 @@ parseRecoveryTargetOptions(const char *target_time,
 					const char *target_action,
 					bool		restore_no_validate)
 {
-	time_t			dummy_time;
-	TransactionId	dummy_xid;
-	bool			dummy_bool;
+	time_t		dummy_time;
+	TransactionId dummy_xid;
+	bool		dummy_bool;
 	/*
 	 * count the number of the mutually exclusive options which may specify
 	 * recovery target. If final value > 1, throw an error.
 	 */
-	int				recovery_target_specified = 0;
+	int			recovery_target_specified = 0;
 	pgRecoveryTarget *rt = pgut_new(pgRecoveryTarget);
 
 	/* fill all options with default values */
@@ -1044,7 +1046,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		rt->time_specified = true;
 		rt->target_time_string = target_time;
 
-		if (parse_time(target_time, &dummy_time))
+		if (parse_time(target_time, &dummy_time, false))
 			rt->recovery_target_time = dummy_time;
 		else
 			elog(ERROR, "Invalid value of --time option %s", target_time);

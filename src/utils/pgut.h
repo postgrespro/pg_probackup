@@ -15,7 +15,6 @@
 #include "pqexpbuffer.h"
 
 #include <assert.h>
-#include <pthread.h>
 #include <sys/time.h>
 
 #include "logger.h"
@@ -59,7 +58,7 @@ typedef enum pgut_optsrc
 typedef struct pgut_option
 {
 	char		type;
-	char		sname;		/* short name */
+	uint8		sname;		/* short name */
 	const char *lname;		/* long name */
 	void	   *var;		/* pointer to variable */
 	pgut_optsrc	allowed;	/* allowed source */
@@ -93,13 +92,6 @@ extern const char  *PROGRAM_NAME;
 extern const char  *PROGRAM_VERSION;
 extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
-
-/* ID of the main thread */
-#ifdef WIN32
-extern DWORD main_tid;
-#else
-extern pthread_t main_tid;
-#endif
 
 extern void	pgut_help(bool details);
 
@@ -212,7 +204,7 @@ extern bool parse_int32(const char *value, int32 *result, int flags);
 extern bool parse_uint32(const char *value, uint32 *result, int flags);
 extern bool parse_int64(const char *value, int64 *result, int flags);
 extern bool parse_uint64(const char *value, uint64 *result, int flags);
-extern bool parse_time(const char *value, time_t *result);
+extern bool parse_time(const char *value, time_t *result, bool utc_default);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
 

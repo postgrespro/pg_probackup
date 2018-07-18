@@ -38,7 +38,7 @@ get_pgpid(void)
 
 	snprintf(pid_file, lengthof(pid_file), "%s/postmaster.pid", pgdata);
 
-	pidf = fopen(pid_file, "r");
+	pidf = fopen(pid_file, PG_BINARY_R);
 	if (pidf == NULL)
 	{
 		/* No pid file, not an error on startup */

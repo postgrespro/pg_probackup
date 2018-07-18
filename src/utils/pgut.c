@@ -42,12 +42,6 @@ static char	   *password = NULL;
 bool			prompt_password = true;
 bool			force_password = false;
 
-#ifdef WIN32
-DWORD main_tid = 0;
-#else
-pthread_t main_tid = 0;
-#endif
-
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
 
@@ -141,8 +135,10 @@ static const unit_conversion time_unit_conversion_table[] =
 static size_t
 option_length(const pgut_option opts[])
 {
-	size_t	len;
+	size_t		len;
+
 	for (len = 0; opts && opts[len].type; len++) { }
+
 	return len;
 }
 
@@ -162,7 +158,7 @@ option_has_arg(char type)
 static void
 option_copy(struct option dst[], const pgut_option opts[], size_t len)
 {
-	size_t	i;
+	size_t		i;
 
 	for (i = 0; i < len; i++)
 	{
@@ -260,7 +256,8 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				message = "a valid string. But provided: ";
 				break;
 			case 't':
-				if (parse_time(optarg, opt->var))
+				if (parse_time(optarg, opt->var,
+							   opt->source == SOURCE_FILE))
 					return;
 				message = "a time";
 				break;
@@ -750,9 +747,12 @@ parse_uint64(const char *value, uint64 *result, int flags)
 
 /*
  * Convert ISO-8601 format string to time_t value.
+ *
+ * If utc_default is true, then if timezone offset isn't specified tz will be
+ * +00:00.
  */
 bool
-parse_time(const char *value, time_t *result)
+parse_time(const char *value, time_t *result, bool utc_default)
 {
 	size_t		len;
 	int			fields_num,
@@ -874,7 +874,7 @@ parse_time(const char *value, time_t *result)
 	*result = mktime(&tm);
 
 	/* adjust time zone */
-	if (tz_set)
+	if (tz_set || utc_default)
 	{
 		time_t		ltime = time(NULL);
 		struct tm  *ptm = gmtime(&ltime);
@@ -1053,7 +1053,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	size_t		len;
 
 	len = option_length(options);
-	longopts = pgut_newarray(struct option, len + 1);
+	longopts = pgut_newarray(struct option, len + 1 /* zero/end option */);
 	option_copy(longopts, options, len);
 
 	optstring = longopts_to_optstring(longopts, len);
@@ -1225,7 +1225,7 @@ get_next_token(const char *src, char *dst, const char *line)
 	}
 	else
 	{
-		i = j = strcspn(s, "# \n\r\t\v");
+		i = j = strcspn(s, "#\n\r\t\v");
 		memcpy(dst, s, j);
 	}
 

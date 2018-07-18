@@ -10,7 +10,6 @@
 
 #include "pg_probackup.h"
 
-#include <libgen.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -101,11 +100,10 @@ static void dir_list_file_internal(parray *files, const char *root,
 int
 dir_create_dir(const char *dir, mode_t mode)
 {
-	char		copy[MAXPGPATH];
 	char		parent[MAXPGPATH];
 
-	strncpy(copy, dir, MAXPGPATH);
-	strncpy(parent, dirname(copy), MAXPGPATH);
+	strncpy(parent, dir, MAXPGPATH);
+	get_parent_directory(parent);
 
 	/* Create parent first */
 	if (access(parent, F_OK) == -1)
@@ -153,6 +151,8 @@ pgFileInit(const char *path)
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
+	file->name = NULL;
+
 	file->size = 0;
 	file->mode = 0;
 	file->read_size = 0;
@@ -161,7 +161,8 @@ pgFileInit(const char *path)
 	file->is_datafile = false;
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
-	file->pagemap.bitmapsize = PageBitmapIsAbsent;
+	file->pagemap.bitmapsize = PageBitmapIsEmpty;
+	file->pagemap_isabsent = false;
 	file->tblspcOid = 0;
 	file->dbOid = 0;
 	file->relOid = 0;
@@ -232,7 +233,7 @@ pgFileGetCRC(pgFile *file)
 	int			errno_tmp;
 
 	/* open file in binary read mode */
-	fp = fopen(file->path, "r");
+	fp = fopen(file->path, PG_BINARY_R);
 	if (fp == NULL)
 		elog(ERROR, "cannot open file \"%s\": %s",
 			file->path, strerror(errno));
@@ -350,7 +351,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fopen(path, "r");
+		black_list_file = fopen(path, PG_BINARY_R);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));
@@ -817,17 +818,22 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
 
-		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\", \"is_cfs\":\"%u\", \"crc\":\"%u\","
+		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
+					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\"",
-				path, (unsigned long) file->write_size, file->mode,
-				file->is_datafile?1:0, file->is_cfs?1:0, file->crc,
+				path, file->write_size, file->mode,
+				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
 				deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
+#ifndef WIN32
 		if (S_ISLNK(file->mode))
+#else
+		if (pgwin32_is_junction(file->path))
+#endif
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != -1)
@@ -1024,7 +1030,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 		file = pgFileInit(filepath);
 
-		file->write_size = (size_t) write_size;
+		file->write_size = (int64) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
 		file->is_cfs = is_cfs ? true : false;

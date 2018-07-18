@@ -56,7 +56,7 @@ help_command(char *command)
 			 || strcmp(command, "-V") == 0)
 		printf(_("No help page for \"%s\" command. Try pg_probackup help\n"), command);
 	else
-		printf(_("Unknown command. Try pg_probackup help\n"));
+		printf(_("Unknown command \"%s\". Try pg_probackup help\n"), command);
 	exit(0);
 }
 
@@ -89,6 +89,7 @@ help_pg_probackup(void)
 	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
@@ -124,10 +125,12 @@ help_pg_probackup(void)
 	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
 
 	printf(_("\n  %s show -B backup-dir\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
+	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
@@ -331,6 +334,8 @@ help_validate(void)
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
+	printf(_("      --recovery-target-name=target-name\n"));
+	printf(_("                                   the named restore point to which recovery will proceed\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -358,11 +363,13 @@ static void
 help_show(void)
 {
 	printf(_("%s show -B backup-dir\n"), PROGRAM_NAME);
-	printf(_("                 [--instance=instance_name [-i backup-id]]\n\n"));
+	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
+	printf(_("                 [--format=format]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     show info about specific intstance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
+	printf(_("      --format=format              show format=PLAIN|JSON\n"));
 }
 
 static void
@@ -473,10 +480,12 @@ help_set_config(void)
 static void
 help_show_config(void)
 {
-	printf(_("%s show-config -B backup-dir --instance=instance_name\n\n"), PROGRAM_NAME);
+	printf(_("%s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 [--format=format]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
+	printf(_("      --format=format              show format=PLAIN|JSON\n"));
 }
 
 static void
