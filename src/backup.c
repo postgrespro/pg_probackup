@@ -329,7 +329,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		{
 			write_buffer_size = Min(row_length, sizeof(buf));
 			memcpy(buf, copybuf, write_buffer_size);
-			COMP_CRC32C(file->crc, &buf, write_buffer_size);
+			COMP_CRC32C(file->crc, buf, write_buffer_size);
 
 			/* TODO calc checksum*/
 			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
@@ -732,7 +732,7 @@ do_backup_instance(void)
 		else
 			pthread_create(&threads[i], NULL, remote_backup_files, arg);
 	}
-	
+
 	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
@@ -854,7 +854,7 @@ do_backup(time_t start_time)
 		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
 						"pg_probackup have no way to detect data block corruption without them. "
 						"Reinitialize PGDATA with option '--data-checksums'.");
-	
+
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
 	current.stream = stream_wal;
@@ -1030,7 +1030,7 @@ check_system_identifiers(void)
 
 	system_id_pgdata = get_system_identifier(pgdata);
 	system_id_conn = get_remote_system_identifier(backup_conn);
-	
+
 	if (system_id_conn != system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
 			 system_identifier, system_id_conn);
@@ -1053,13 +1053,13 @@ confirm_block_size(const char *name, int blcksz)
 	res = pgut_execute(backup_conn, "SELECT pg_catalog.current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
 		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
-	
+
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
 	if ((endp && *endp) || block_size != blcksz)
 		elog(ERROR,
 			 "%s(%d) is not compatible(%d expected)",
 			 name, block_size, blcksz);
-	
+
 	PQclear(res);
 }
 
@@ -1846,7 +1846,7 @@ pg_stop_backup(pgBackup *backup)
 			elog(ERROR,
 				 "result of txid_snapshot_xmax() is invalid: %s",
 				 PQgetvalue(res, 0, 0));
-		if (!parse_time(PQgetvalue(res, 0, 1), &recovery_time))
+		if (!parse_time(PQgetvalue(res, 0, 1), &recovery_time, true))
 			elog(ERROR,
 				 "result of current_timestamp is invalid: %s",
 				 PQgetvalue(res, 0, 1));
@@ -2034,7 +2034,7 @@ backup_files(void *arg)
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
 
 		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
-		if (!pg_atomic_test_set_flag(&file->lock)) 
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		/* check for interrupt */
@@ -2402,12 +2402,12 @@ make_pagemap_from_ptrack(parray *files)
 
 		if (file->is_datafile)
 		{
-			if (file->tblspcOid == tblspcOid_with_ptrack_init
-					&& file->dbOid == dbOid_with_ptrack_init)
+			if (file->tblspcOid == tblspcOid_with_ptrack_init &&
+				file->dbOid == dbOid_with_ptrack_init)
 			{
 				/* ignore ptrack if ptrack_init exists */
 				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
-				file->pagemap.bitmapsize = PageBitmapIsAbsent;
+				file->pagemap_isabsent = true;
 				continue;
 			}
 
@@ -2460,7 +2460,7 @@ make_pagemap_from_ptrack(parray *files)
 				 * - target relation was deleted.
 				 */
 				elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
-				file->pagemap.bitmapsize = PageBitmapIsAbsent;
+				file->pagemap_isabsent = true;
 			}
 		}
 	}

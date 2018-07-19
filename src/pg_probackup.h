@@ -108,11 +108,12 @@ typedef struct pgFile
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
+	bool	pagemap_isabsent; /* Used to mark files with unknown state of pagemap,
+							   * i.e. datafiles without _ptrack */
 } pgFile;
 
 /* Special values of datapagemap_t bitmapsize */
 #define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
-#define PageBitmapIsAbsent -1	/* Used to mark files with unknown state of pagemap, i.e. datafiles without _ptrack */
 
 /* Current state of backup */
 typedef enum BackupStatus
@@ -263,6 +264,7 @@ typedef struct pgRecoveryTarget
 	bool			recovery_target_immediate;
 	const char		*recovery_target_name;
 	const char		*recovery_target_action;
+	bool			restore_no_validate;
 } pgRecoveryTarget;
 
 /* Union to ease operations on relation pages */
@@ -398,7 +400,7 @@ extern parray * readTimeLineHistory_probackup(TimeLineID targetTLI);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, bool target_immediate,
-	const char *target_name, const char *target_action);
+	const char *target_name, const char *target_action, bool restore_no_validate);
 
 extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 

@@ -171,6 +171,10 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
 
 	pthread_lock(&log_file_mutex);
+#ifdef WIN32
+	std_args = NULL;
+	error_args = NULL;
+#endif
 	loggin_in_progress = true;
 
 	/* We need copy args only if we need write to error log file */
@@ -237,7 +241,6 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	if (write_to_stderr)
 	{
 		write_elevel(stderr, elevel);
-
 		if (write_to_file)
 			vfprintf(stderr, fmt, std_args);
 		else

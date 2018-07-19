@@ -45,7 +45,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         # Make full backup to clean every ptrack
-        self.backup_node(backup_dir, 'node', node, options=['-j100', '--stream'])
+        self.backup_node(backup_dir, 'node', node, options=['-j10', '--stream'])
         for i in idx_ptrack:
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 node, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])

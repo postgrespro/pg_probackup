@@ -250,14 +250,14 @@ IsDir(const char *dirpath, const char *entry)
 parray *
 catalog_get_backup_list(time_t requested_backup_id)
 {
-	DIR			   *date_dir = NULL;
-	struct dirent  *date_ent = NULL;
+	DIR			   *data_dir = NULL;
+	struct dirent  *data_ent = NULL;
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
 
 	/* open backup instance backups directory */
-	date_dir = opendir(backup_instance_path);
-	if (date_dir == NULL)
+	data_dir = opendir(backup_instance_path);
+	if (data_dir == NULL)
 	{
 		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
 			strerror(errno));
@@ -266,21 +266,21 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 	/* scan the directory and list backups */
 	backups = parray_new();
-	for (; (date_ent = readdir(date_dir)) != NULL; errno = 0)
+	for (; (data_ent = readdir(data_dir)) != NULL; errno = 0)
 	{
 		char backup_conf_path[MAXPGPATH];
-		char date_path[MAXPGPATH];
+		char data_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_instance_path, date_ent->d_name)
-			|| date_ent->d_name[0] == '.')
+		if (!IsDir(backup_instance_path, data_ent->d_name)
+			|| data_ent->d_name[0] == '.')
 			continue;
 
 		/* open subdirectory of specific backup */
-		join_path_components(date_path, backup_instance_path, date_ent->d_name);
+		join_path_components(data_path, backup_instance_path, data_ent->d_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
-		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONTROL_FILE);
+		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", data_path, BACKUP_CONTROL_FILE);
 		backup = readBackupControlFile(backup_conf_path);
 
 		/* ignore corrupted backups */
@@ -298,8 +298,8 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 		if (errno && errno != ENOENT)
 		{
-			elog(WARNING, "cannot read date directory \"%s\": %s",
-				 date_ent->d_name, strerror(errno));
+			elog(WARNING, "cannot read data directory \"%s\": %s",
+				 data_ent->d_name, strerror(errno));
 			goto err_proc;
 		}
 	}
@@ -310,16 +310,16 @@ catalog_get_backup_list(time_t requested_backup_id)
 		goto err_proc;
 	}
 
-	closedir(date_dir);
-	date_dir = NULL;
+	closedir(data_dir);
+	data_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
 
 	return backups;
 
 err_proc:
-	if (date_dir)
-		closedir(date_dir);
+	if (data_dir)
+		closedir(data_dir);
 	if (backup)
 		pgBackupFree(backup);
 	if (backups)

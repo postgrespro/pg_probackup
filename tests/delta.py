@@ -508,10 +508,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         restored_node.append_conf(
             "postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
-        while restored_node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
             "postgres", "select * from pgbench_accounts")
@@ -946,11 +943,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
-        while node_restored.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
         result_new = node_restored.safe_psql(
             "postgres", "select * from t_heap")
 

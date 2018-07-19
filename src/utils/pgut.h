@@ -204,7 +204,7 @@ extern bool parse_int32(const char *value, int32 *result, int flags);
 extern bool parse_uint32(const char *value, uint32 *result, int flags);
 extern bool parse_int64(const char *value, int64 *result, int flags);
 extern bool parse_uint64(const char *value, uint64 *result, int flags);
-extern bool parse_time(const char *value, time_t *result);
+extern bool parse_time(const char *value, time_t *result, bool utc_default);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
 

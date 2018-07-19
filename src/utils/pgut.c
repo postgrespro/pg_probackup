@@ -256,7 +256,8 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				message = "a valid string. But provided: ";
 				break;
 			case 't':
-				if (parse_time(optarg, opt->var))
+				if (parse_time(optarg, opt->var,
+							   opt->source == SOURCE_FILE))
 					return;
 				message = "a time";
 				break;
@@ -746,9 +747,12 @@ parse_uint64(const char *value, uint64 *result, int flags)
 
 /*
  * Convert ISO-8601 format string to time_t value.
+ *
+ * If utc_default is true, then if timezone offset isn't specified tz will be
+ * +00:00.
  */
 bool
-parse_time(const char *value, time_t *result)
+parse_time(const char *value, time_t *result, bool utc_default)
 {
 	size_t		len;
 	int			fields_num,
@@ -870,7 +874,7 @@ parse_time(const char *value, time_t *result)
 	*result = mktime(&tm);
 
 	/* adjust time zone */
-	if (tz_set)
+	if (tz_set || utc_default)
 	{
 		time_t		ltime = time(NULL);
 		struct tm  *ptm = gmtime(&ltime);

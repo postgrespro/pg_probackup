@@ -121,10 +121,12 @@ help_pg_probackup(void)
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
+	printf(_("                 [--no-validate]\n"));
 
 	printf(_("\n  %s validate -B backup-dir [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid [--inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
 
 	printf(_("\n  %s show -B backup-dir\n"), PROGRAM_NAME);
@@ -267,7 +269,7 @@ help_restore(void)
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica]\n\n"));
+	printf(_("                 [--restore-as-replica] [--no-validate]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -292,6 +294,7 @@ help_restore(void)
 
 	printf(_("  -R, --restore-as-replica         write a minimal recovery.conf in the output directory\n"));
 	printf(_("                                   to ease setting up a standby server\n"));
+	printf(_("      --no-validate                disable backup validation during restore\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -332,6 +335,8 @@ help_validate(void)
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
+	printf(_("      --recovery-target-name=target-name\n"));
+	printf(_("                                   the named restore point to which recovery will proceed\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
