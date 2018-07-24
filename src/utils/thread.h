@@ -30,4 +30,6 @@ extern int pthread_join(pthread_t th, void **thread_return);
 
 extern pthread_t main_tid;
 
+extern int pthread_lock(pthread_mutex_t *mp);
+
 #endif   /* PROBACKUP_THREAD_H */

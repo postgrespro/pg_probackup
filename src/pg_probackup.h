@@ -279,18 +279,20 @@ typedef struct
 {
 	const char *from_root;
 	const char *to_root;
-	parray	   *backup_files_list;
-	parray	   *prev_backup_filelist;
-	XLogRecPtr	prev_backup_start_lsn;
-	PGconn	   *thread_backup_conn;
-	PGcancel   *thread_cancel_conn;
+
+	parray	   *files_list;
+	parray	   *prev_filelist;
+	XLogRecPtr	prev_start_lsn;
+
+	PGconn	   *backup_conn;
+	PGcancel   *cancel_conn;
 
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-} backup_files_args;
+} backup_files_arg;
 
 /*
  * return pointer that exceeds the length of prefix from character string.
@@ -384,7 +386,7 @@ extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
-extern char *pg_ptrack_get_block(backup_files_args *arguments,
+extern char *pg_ptrack_get_block(backup_files_arg *arguments,
 								 Oid dbOid, Oid tblsOid, Oid relOid, 
 								 BlockNumber blknum,
 								 size_t *result_size);
@@ -488,7 +490,7 @@ extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
-extern bool backup_data_file(backup_files_args* arguments,
+extern bool backup_data_file(backup_files_arg* arguments,
 							 const char *from_root, const char *to_root,
 							 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 							 BackupMode backup_mode);
@@ -506,7 +508,7 @@ extern bool calc_file_checksum(pgFile *file);
 extern void extractPageMap(const char *datadir,
 						   XLogRecPtr startpoint,
 						   TimeLineID tli,
-						   XLogRecPtr endpoint, bool prev_segno,
+						   XLogRecPtr endpoint, bool prev_seg,
 						   parray *backup_files_list);
 extern void validate_wal(pgBackup *backup,
 						 const char *archivedir,

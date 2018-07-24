@@ -46,6 +46,9 @@ const char *progname = "pg_probackup";
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
 
+/* We need critical section for datapagemap_add() in case of using threads */
+static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /*
  * We need to wait end of WAL streaming before execute pg_stop_backup().
  */
@@ -129,7 +132,6 @@ static void check_server_version(void);
 static void check_system_identifiers(void);
 static void confirm_block_size(const char *name, int blcksz);
 static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
-
 
 #define disconnect_and_exit(code)				\
 	{											\
@@ -370,10 +372,10 @@ remote_copy_file(PGconn *conn, pgFile* file)
 static void *
 remote_backup_files(void *arg)
 {
-	int i;
-	backup_files_args *arguments = (backup_files_args *) arg;
-	int n_backup_files_list = parray_num(arguments->backup_files_list);
-	PGconn		*file_backup_conn = NULL;
+	int			i;
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int			n_backup_files_list = parray_num(arguments->files_list);
+	PGconn	   *file_backup_conn = NULL;
 
 	for (i = 0; i < n_backup_files_list; i++)
 	{
@@ -383,7 +385,7 @@ remote_backup_files(void *arg)
 		pgFile		*file;
 		int			row_length;
 
-		file = (pgFile *) parray_get(arguments->backup_files_list, i);
+		file = (pgFile *) parray_get(arguments->files_list, i);
 
 		/* We have already copied all directories */
 		if (S_ISDIR(file->mode))
@@ -463,12 +465,11 @@ do_backup_instance(void)
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
 
 	/* arrays with meta info for multi threaded backup */
-	pthread_t	*backup_threads;
-	backup_files_args *backup_threads_args;
+	pthread_t	*threads;
+	backup_files_arg *threads_args;
 	bool		backup_isok = true;
 
 	pgBackup   *prev_backup = NULL;
-	char		prev_backup_filelist_path[MAXPGPATH];
 	parray	   *prev_backup_filelist = NULL;
 
 	elog(LOG, "Database backup start");
@@ -500,6 +501,7 @@ do_backup_instance(void)
 	}
 	else
 		current.tli = get_current_timeline(false);
+
 	/*
 	 * In incremental backup mode ensure that already-validated
 	 * backup on current timeline exists and get its filelist.
@@ -509,6 +511,8 @@ do_backup_instance(void)
 		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		parray	   *backup_list;
+		char		prev_backup_filelist_path[MAXPGPATH];
+
 		/* get list of backups already taken */
 		backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 		if (backup_list == NULL)
@@ -520,8 +524,8 @@ do_backup_instance(void)
 						"Create new FULL backup before an incremental one.");
 		parray_free(backup_list);
 
-		pgBackupGetPath(prev_backup, prev_backup_filelist_path, lengthof(prev_backup_filelist_path),
-						DATABASE_FILE_LIST);
+		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
+						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
 		prev_backup_filelist = dir_read_file_list(NULL, prev_backup_filelist_path);
 
@@ -611,6 +615,19 @@ do_backup_instance(void)
 	else
 		dir_list_file(backup_files_list, pgdata, true, true, false);
 
+	/*
+	 * Sort pathname ascending. It is necessary to create intermediate
+	 * directories sequentially.
+	 *
+	 * For example:
+	 * 1 - create 'base'
+	 * 2 - create 'base/1'
+	 *
+	 * Sorted array is used at least in parse_backup_filelist_filenames(),
+	 * extractPageMap(), make_pagemap_from_ptrack().
+	 */
+	parray_qsort(backup_files_list, pgFileComparePath);
+
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
@@ -641,26 +658,16 @@ do_backup_instance(void)
 						*/
 					   !current.from_replica, backup_files_list);
 	}
-
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		parray_qsort(backup_files_list, pgFileComparePath);
+		/*
+		 * Build the page map from ptrack information.
+		 */
 		make_pagemap_from_ptrack(backup_files_list);
 	}
 
 	/*
-	 * Sort pathname ascending. It is necessary to create intermediate
-	 * directories sequentially.
-	 *
-	 * For example:
-	 * 1 - create 'base'
-	 * 2 - create 'base/1'
-	 */
-	parray_qsort(backup_files_list, pgFileComparePath);
-
-	/*
-	 * Make directories before backup
-	 * and setup threads at the same time
+	 * Make directories before backup and setup threads at the same time
 	 */
 	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
@@ -694,20 +701,20 @@ do_backup_instance(void)
 	parray_qsort(backup_files_list, pgFileCompareSize);
 
 	/* init thread args with own file lists */
-	backup_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
-	backup_threads_args = (backup_files_args *) palloc(sizeof(backup_files_args)*num_threads);
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
 
 	for (i = 0; i < num_threads; i++)
 	{
-		backup_files_args *arg = &(backup_threads_args[i]);
+		backup_files_arg *arg = &(threads_args[i]);
 
 		arg->from_root = pgdata;
 		arg->to_root = database_path;
-		arg->backup_files_list = backup_files_list;
-		arg->prev_backup_filelist = prev_backup_filelist;
-		arg->prev_backup_start_lsn = prev_backup_start_lsn;
-		arg->thread_backup_conn = NULL;
-		arg->thread_cancel_conn = NULL;
+		arg->files_list = backup_files_list;
+		arg->prev_filelist = prev_backup_filelist;
+		arg->prev_start_lsn = prev_backup_start_lsn;
+		arg->backup_conn = NULL;
+		arg->cancel_conn = NULL;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -716,20 +723,21 @@ do_backup_instance(void)
 	elog(LOG, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
-		backup_files_args *arg = &(backup_threads_args[i]);
+		backup_files_arg *arg = &(threads_args[i]);
+
 		elog(VERBOSE, "Start thread num: %i", i);
 
 		if (!is_remote_backup)
-			pthread_create(&backup_threads[i], NULL, backup_files, arg);
+			pthread_create(&threads[i], NULL, backup_files, arg);
 		else
-			pthread_create(&backup_threads[i], NULL, remote_backup_files, arg);
+			pthread_create(&threads[i], NULL, remote_backup_files, arg);
 	}
 
 	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
-		pthread_join(backup_threads[i], NULL);
-		if (backup_threads_args[i].ret == 1)
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret == 1)
 			backup_isok = false;
 	}
 	if (backup_isok)
@@ -761,12 +769,14 @@ do_backup_instance(void)
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
+
 			if (S_ISREG(file->mode))
 				calc_file_checksum(file);
 			/* Remove file path root prefix*/
 			if (strstr(file->path, database_path) == file->path)
 			{
 				char	   *ptr = file->path;
+
 				file->path = pstrdup(GetRelativePath(ptr, database_path));
 				free(ptr);
 			}
@@ -2012,17 +2022,17 @@ backup_disconnect(bool fatal, void *userdata)
 static void *
 backup_files(void *arg)
 {
-	int				i;
-	backup_files_args *arguments = (backup_files_args *) arg;
-	int n_backup_files_list = parray_num(arguments->backup_files_list);
+	int			i;
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int			n_backup_files_list = parray_num(arguments->files_list);
 
 	/* backup a file */
 	for (i = 0; i < n_backup_files_list; i++)
 	{
 		int			ret;
 		struct stat	buf;
+		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
 
-		pgFile *file = (pgFile *) parray_get(arguments->backup_files_list, i);
 		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
@@ -2068,11 +2078,15 @@ backup_files(void *arg)
 			{
 				int			p;
 				char	   *relative;
-				int n_prev_backup_files_list = parray_num(arguments->prev_backup_filelist);
+				int			n_prev_files = parray_num(arguments->prev_filelist);
+
 				relative = GetRelativePath(file->path, arguments->from_root);
-				for (p = 0; p < n_prev_backup_files_list; p++)
+				for (p = 0; p < n_prev_files; p++)
 				{
-					pgFile *prev_file = (pgFile *) parray_get(arguments->prev_backup_filelist, p);
+					pgFile	   *prev_file;
+
+					prev_file = (pgFile *) parray_get(arguments->prev_filelist, p);
+
 					if (strcmp(relative, prev_file->path) == 0)
 					{
 						/* File exists in previous backup */
@@ -2089,7 +2103,7 @@ backup_files(void *arg)
 				if (!backup_data_file(arguments,
 									  arguments->from_root,
 									  arguments->to_root, file,
-									  arguments->prev_backup_start_lsn,
+									  arguments->prev_start_lsn,
 									  current.backup_mode))
 				{
 					file->write_size = BYTES_INVALID;
@@ -2121,8 +2135,8 @@ backup_files(void *arg)
 	}
 
 	/* Close connection */
-	if (arguments->thread_backup_conn)
-		pgut_disconnect(arguments->thread_backup_conn);
+	if (arguments->backup_conn)
+		pgut_disconnect(arguments->backup_conn);
 
 	/* Data files transferring is successful */
 	arguments->ret = 0;
@@ -2291,57 +2305,34 @@ write_backup_file_list(parray *files, const char *root)
 }
 
 /*
- * A helper function to create the path of a relation file and segment.
- * The returned path is palloc'd
- */
-static char *
-datasegpath(RelFileNode rnode, ForkNumber forknum, BlockNumber segno)
-{
-	char	   *path;
-	char	   *segpath;
-
-	path = relpathperm(rnode, forknum);
-	if (segno > 0)
-	{
-		segpath = psprintf("%s.%u", path, segno);
-		pfree(path);
-		return segpath;
-	}
-	else
-		return path;
-}
-
-/*
  * Find pgfile by given rnode in the backup_files_list
  * and add given blkno to its pagemap.
  */
 void
 process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 {
-	char		*path;
-	char		*rel_path;
+	char	   *path;
+	char	   *rel_path;
 	BlockNumber blkno_inseg;
 	int			segno;
-	pgFile		*file_item = NULL;
-	int			j;
+	pgFile	  **file_item;
+	pgFile		f;
 
 	segno = blkno / RELSEG_SIZE;
 	blkno_inseg = blkno % RELSEG_SIZE;
 
-	rel_path = datasegpath(rnode, forknum, segno);
-	path = pg_malloc(strlen(rel_path) + strlen(pgdata) + 2);
-	sprintf(path, "%s/%s", pgdata, rel_path);
+	rel_path = relpathperm(rnode, forknum);
+	if (segno > 0)
+		path = psprintf("%s/%s.%u", pgdata, rel_path, segno);
+	else
+		path = psprintf("%s/%s", pgdata, rel_path);
 
-	for (j = 0; j < parray_num(backup_files_list); j++)
-	{
-		pgFile *p = (pgFile *) parray_get(backup_files_list, j);
+	pg_free(rel_path);
 
-		if (strcmp(p->path, path) == 0)
-		{
-			file_item = p;
-			break;
-		}
-	}
+	f.path = path;
+	/* backup_files_list should be sorted before */
+	file_item = (pgFile **) parray_bsearch(backup_files_list, &f,
+										   pgFileComparePath);
 
 	/*
 	 * If we don't have any record of this file in the file map, it means
@@ -2350,10 +2341,18 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	 * backup would simply copy it as-is.
 	 */
 	if (file_item)
-		datapagemap_add(&file_item->pagemap, blkno_inseg);
+	{
+		/* We need critical section only we use more than one threads */
+		if (num_threads > 1)
+			pthread_lock(&backup_pagemap_mutex);
+
+		datapagemap_add(&(*file_item)->pagemap, blkno_inseg);
+
+		if (num_threads > 1)
+			pthread_mutex_unlock(&backup_pagemap_mutex);
+	}
 
 	pg_free(path);
-	pg_free(rel_path);
 }
 
 /*
@@ -2443,7 +2442,7 @@ make_pagemap_from_ptrack(parray *files)
 				}
 				else
 				{
-					file->pagemap.bitmapsize =	RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
+					file->pagemap.bitmapsize = RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
 					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
 				}
 
@@ -2639,7 +2638,7 @@ get_last_ptrack_lsn(void)
 }
 
 char *
-pg_ptrack_get_block(backup_files_args *arguments,
+pg_ptrack_get_block(backup_files_arg *arguments,
 					Oid dbOid,
 					Oid tblsOid,
 					Oid relOid,
@@ -2664,17 +2663,17 @@ pg_ptrack_get_block(backup_files_args *arguments,
 	sprintf(params[2], "%i", relOid);
 	sprintf(params[3], "%u", blknum);
 
-	if (arguments->thread_backup_conn == NULL)
+	if (arguments->backup_conn == NULL)
 	{
-		arguments->thread_backup_conn = pgut_connect(pgut_dbname);
+		arguments->backup_conn = pgut_connect(pgut_dbname);
 	}
 
-	if (arguments->thread_cancel_conn == NULL)
-		arguments->thread_cancel_conn = PQgetCancel(arguments->thread_backup_conn);
+	if (arguments->cancel_conn == NULL)
+		arguments->cancel_conn = PQgetCancel(arguments->backup_conn);
 
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
-	res = pgut_execute_parallel(arguments->thread_backup_conn,
-								arguments->thread_cancel_conn,
+	res = pgut_execute_parallel(arguments->backup_conn,
+								arguments->cancel_conn,
 					"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
 					4, (const char **)params, true);
 

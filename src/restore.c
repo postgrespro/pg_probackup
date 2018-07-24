@@ -28,7 +28,7 @@ typedef struct
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-} restore_files_args;
+} restore_files_arg;
 
 /* Tablespace mapping structures */
 
@@ -371,8 +371,8 @@ restore_backup(pgBackup *backup)
 	parray	   *files;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
-	pthread_t  *restore_threads;
-	restore_files_args *restore_threads_args;
+	pthread_t  *threads;
+	restore_files_arg *threads_args;
 	bool		restore_isok = true;
 
 	if (backup->status != BACKUP_STATUS_OK)
@@ -406,43 +406,44 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(database_path, list_path);
 
-	restore_threads = (pthread_t *) palloc(sizeof(pthread_t)*num_threads);
-	restore_threads_args = (restore_files_args *) palloc(sizeof(restore_files_args)*num_threads);
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (restore_files_arg *) palloc(sizeof(restore_files_arg)*num_threads);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile *file = (pgFile *) parray_get(files, i);
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+
 		pg_atomic_clear_flag(&file->lock);
 	}
 
 	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
 	{
-		restore_files_args *arg = &(restore_threads_args[i]);
+		restore_files_arg *arg = &(threads_args[i]);
 
 		arg->files = files;
 		arg->backup = backup;
 		/* By default there are some error */
-		arg->ret = 1;
+		threads_args[i].ret = 1;
 
 		elog(LOG, "Start thread for num:%li", parray_num(files));
 
-		pthread_create(&restore_threads[i], NULL, restore_files, arg);
+		pthread_create(&threads[i], NULL, restore_files, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
-		pthread_join(restore_threads[i], NULL);
-		if (restore_threads_args[i].ret == 1)
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret == 1)
 			restore_isok = false;
 	}
 	if (!restore_isok)
 		elog(ERROR, "Data files restoring failed");
 
-	pfree(restore_threads);
-	pfree(restore_threads_args);
+	pfree(threads);
+	pfree(threads_args);
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
@@ -710,7 +711,7 @@ static void *
 restore_files(void *arg)
 {
 	int			i;
-	restore_files_args *arguments = (restore_files_args *)arg;
+	restore_files_arg *arguments = (restore_files_arg *)arg;
 
 	for (i = 0; i < parray_num(arguments->files); i++)
 	{

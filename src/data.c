@@ -227,12 +227,12 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
  *         PageIsTruncated(-2) if the page was truncated
  */
 static int32
-prepare_page(backup_files_args *arguments,
-				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
-				 BlockNumber blknum, BlockNumber nblocks,
-				 FILE *in, int *n_skipped,
-				 BackupMode backup_mode,
-				 Page page)
+prepare_page(backup_files_arg *arguments,
+			 pgFile *file, XLogRecPtr prev_backup_start_lsn,
+			 BlockNumber blknum, BlockNumber nblocks,
+			 FILE *in, int *n_skipped,
+			 BackupMode backup_mode,
+			 Page page)
 {
 	XLogRecPtr	page_lsn = 0;
 	int			try_again = 100;
@@ -427,7 +427,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
  * backup with special header.
  */
 bool
-backup_data_file(backup_files_args* arguments,
+backup_data_file(backup_files_arg* arguments,
 				 const char *from_root, const char *to_root,
 				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 				 BackupMode backup_mode)
