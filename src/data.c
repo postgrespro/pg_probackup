@@ -513,6 +513,8 @@ backup_data_file(backup_files_args* arguments,
 	 * Read each page, verify checksum and write it to backup.
 	 * If page map is empty or file is not present in previous backup
 	 * backup all pages of the relation.
+	 *
+	 * We will enter here if backup_mode is FULL or DELTA.
 	 */
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
 		file->pagemap_isabsent || !file->exists_in_prev)
@@ -525,11 +527,17 @@ backup_data_file(backup_files_args* arguments,
 			compress_and_backup_page(file, blknum, in, out, &(file->crc),
 			                          page_state, curr_page);
 			n_blocks_read++;
+			if (page_state == PageIsTruncated)
+				break;
 		}
 		if (backup_mode == BACKUP_MODE_DIFF_DELTA)
 			file->n_blocks = n_blocks_read;
 	}
-	/* If page map is not empty we scan only changed blocks, */
+	/*
+	 * If page map is not empty we scan only changed blocks.
+	 *
+	 * We will enter here if backup_mode is PAGE or PTRACK.
+	 */
 	else
 	{
 		datapagemap_iterator_t *iter;
@@ -542,6 +550,8 @@ backup_data_file(backup_files_args* arguments,
 			compress_and_backup_page(file, blknum, in, out, &(file->crc),
 			                          page_state, curr_page);
 			n_blocks_read++;
+			if (page_state == PageIsTruncated)
+				break;
 		}
 
 		pg_free(file->pagemap.bitmap);
@@ -596,8 +606,9 @@ restore_data_file(const char *from_root,
 	FILE	   *in = NULL;
 	FILE	   *out = NULL;
 	BackupPageHeader header;
-	BlockNumber	blknum;
-	size_t		file_size;
+	BlockNumber	blknum = 0,
+				truncate_from = 0;
+	bool		need_truncate = false;
 
 	/* BYTES_INVALID allowed only in case of restoring file from DELTA backup */
 	if (file->write_size != BYTES_INVALID)
@@ -628,7 +639,7 @@ restore_data_file(const char *from_root,
 			 to_path, strerror(errno_tmp));
 	}
 
-	for (blknum = 0; ; blknum++)
+	while (true)
 	{
 		size_t		read_len;
 		DataPage	compressed_page; /* used as read buffer */
@@ -637,6 +648,21 @@ restore_data_file(const char *from_root,
 		/* File didn`t changed. Nothig to copy */
 		if (file->write_size == BYTES_INVALID)
 			break;
+
+		/*
+		 * We need to truncate result file if data file in a incremental backup
+		 * less than data file in a full backup. We know it thanks to n_blocks.
+		 *
+		 * It may be equal to -1, then we don't want to truncate the result
+		 * file.
+		 */
+		if (file->n_blocks != BLOCKNUM_INVALID &&
+			(blknum + 1) > file->n_blocks)
+		{
+			truncate_from = blknum;
+			need_truncate = true;
+			break;
+		}
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -658,17 +684,16 @@ restore_data_file(const char *from_root,
 			elog(ERROR, "backup is broken at file->path %s block %u",
 			     file->path, blknum);
 
+		blknum = header.block;
+
 		if (header.compressed_size == PageIsTruncated)
 		{
 			/*
 			 * Backup contains information that this block was truncated.
-			 * Truncate file to this length.
+			 * We need to truncate file to this length.
 			 */
-			if (ftruncate(fileno(out), header.block * BLCKSZ) != 0)
-				elog(ERROR, "cannot truncate \"%s\": %s",
-					 file->path, strerror(errno));
-			elog(VERBOSE, "truncate file %s to block %u",
-			     file->path, header.block);
+			truncate_from = blknum;
+			need_truncate = true;
 			break;
 		}
 
@@ -697,7 +722,6 @@ restore_data_file(const char *from_root,
 		/*
 		 * Seek and write the restored page.
 		 */
-		blknum = header.block;
 		if (fseek(out, blknum * BLCKSZ, SEEK_SET) < 0)
 			elog(ERROR, "cannot seek block %u of \"%s\": %s",
 				 blknum, to_path, strerror(errno));
@@ -724,23 +748,32 @@ restore_data_file(const char *from_root,
 	 * So when restoring file from DELTA backup we, knowning it`s size at
 	 * a time of a backup, can truncate file to this size.
 	 */
-
-	if (backup->backup_mode == BACKUP_MODE_DIFF_DELTA)
+	if (backup->backup_mode == BACKUP_MODE_DIFF_DELTA &&
+		file->n_blocks != BLOCKNUM_INVALID && !need_truncate)
 	{
+		size_t		file_size = 0;
+
 		/* get file current size */
 		fseek(out, 0, SEEK_END);
 		file_size = ftell(out);
+
 		if (file_size > file->n_blocks * BLCKSZ)
 		{
-			/*
-			 * Truncate file to this length.
-			 */
-			if (ftruncate(fileno(out), file->n_blocks * BLCKSZ) != 0)
-				elog(ERROR, "cannot truncate \"%s\": %s",
-					 file->path, strerror(errno));
-			elog(INFO, "Delta truncate file %s to block %u",
-			     file->path, file->n_blocks);
+			truncate_from = file->n_blocks;
+			need_truncate = true;
 		}
+	}
+
+	if (need_truncate)
+	{
+		/*
+		 * Truncate file to this length.
+		 */
+		if (ftruncate(fileno(out), truncate_from * BLCKSZ) != 0)
+			elog(ERROR, "cannot truncate \"%s\": %s",
+				 file->path, strerror(errno));
+		elog(INFO, "Delta truncate file %s to block %u",
+			 file->path, truncate_from);
 	}
 
 	/* update file permission */
