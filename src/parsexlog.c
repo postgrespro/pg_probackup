@@ -141,12 +141,13 @@ static void *
 doExtractPageMap(void *arg)
 {
 	xlog_thread_arg *extract_arg = (xlog_thread_arg *) arg;
+	XLogPageReadPrivate *private_data;
 	XLogReaderState *xlogreader;
 	XLogSegNo	nextSegNo = 0;
 	char	   *errormsg;
 
-	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead,
-									&extract_arg->private_data);
+	private_data = &extract_arg->private_data;
+	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, private_data);
 	if (xlogreader == NULL)
 		elog(ERROR, "out of memory");
 
@@ -157,6 +158,9 @@ doExtractPageMap(void *arg)
 		 extract_arg->thread_num,
 		 (uint32) (extract_arg->startpoint >> 32),
 		 (uint32) (extract_arg->startpoint));
+
+	/* Switch WAL segment manually below without using SimpleXLogPageRead() */
+	private_data->manual_switch = true;
 
 	do
 	{
@@ -171,23 +175,28 @@ doExtractPageMap(void *arg)
 		{
 			XLogRecPtr	errptr;
 
-			/* Try to switch to the next WAL segment */
-			if (extract_arg->private_data.need_switch)
+			/*
+			 * Try to switch to the next WAL segment. Usually
+			 * SimpleXLogPageRead() does it by itself. But here we need to do it
+			 * manually to support threads.
+			 */
+			if (private_data->need_switch)
 			{
-				extract_arg->private_data.need_switch = false;
+				private_data->need_switch = false;
 
+				/* Critical section */
 				pthread_lock(&wal_segment_mutex);
 				Assert(nextSegNoToRead);
-				extract_arg->private_data.xlogsegno = nextSegNoToRead;
+				private_data->xlogsegno = nextSegNoToRead;
 				nextSegNoToRead++;
 				pthread_mutex_unlock(&wal_segment_mutex);
 
 				/* We reach the end */
-				if (extract_arg->private_data.xlogsegno > extract_arg->endSegNo)
+				if (private_data->xlogsegno > extract_arg->endSegNo)
 					break;
 
 				/* Adjust next record position */
-				XLogSegNoOffsetToRecPtr(extract_arg->private_data.xlogsegno, 0,
+				XLogSegNoOffsetToRecPtr(private_data->xlogsegno, 0,
 										extract_arg->startpoint);
 				/* Skip over the page header */
 				extract_arg->startpoint = XLogFindNextRecord(xlogreader,
@@ -217,7 +226,7 @@ doExtractPageMap(void *arg)
 			 * start_lsn, we won't be able to build page map and PAGE backup will
 			 * be incorrect. Stop it and throw an error.
 			 */
-			PrintXLogCorruptionMsg(&extract_arg->private_data, ERROR);
+			PrintXLogCorruptionMsg(private_data, ERROR);
 		}
 
 		extractPageInfo(xlogreader);
@@ -255,8 +264,8 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	int			threads_need = 0;
 	XLogSegNo	endSegNo;
 	bool		extract_isok = true;
-	pthread_t	threads[num_threads];
-	xlog_thread_arg thread_args[num_threads];
+	pthread_t  *threads;
+	xlog_thread_arg *thread_args;
 	time_t		start_time,
 				end_time;
 
@@ -276,6 +285,9 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	nextSegNoToRead = 0;
 	time(&start_time);
 
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	thread_args = (xlog_thread_arg *) palloc(sizeof(xlog_thread_arg)*num_threads);
+
 	/*
 	 * Initialize thread args.
 	 *
@@ -286,7 +298,6 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 	{
 		InitXLogPageRead(&thread_args[i].private_data, archivedir, tli, false);
 		thread_args[i].thread_num = i;
-		thread_args[i].private_data.manual_switch = true;
 
 		thread_args[i].startpoint = startpoint;
 		thread_args[i].endpoint = endpoint;
@@ -326,6 +337,9 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		if (thread_args[i].ret == 1)
 			extract_isok = false;
 	}
+
+	pfree(threads);
+	pfree(thread_args);
 
 	time(&end_time);
 	if (extract_isok)
@@ -700,6 +714,10 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	if (!XLByteInSeg(targetPagePtr, private_data->xlogsegno))
 	{
 		CleanupXLogPageRead(xlogreader);
+		/*
+		 * Do not switch to next WAL segment in this function. Currently it is
+		 * manually switched only in doExtractPageMap().
+		 */
 		if (private_data->manual_switch)
 		{
 			private_data->need_switch = true;
@@ -709,6 +727,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 	XLByteToSeg(targetPagePtr, private_data->xlogsegno);
 
+	/* Try to switch to the next WAL segment */
 	if (!private_data->xlogexists)
 	{
 		char		xlogfname[MAXFNAMELEN];

@@ -528,9 +528,13 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 "hot_standby": "on"
             }
         )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        node_restored.cleanup()
         self.set_archiving(backup_dir, 'node', node)
         node.start()
 
@@ -542,13 +546,14 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup['backup-mode'], "FULL")
 
         # Fill instance with data and make several WAL segments ...
-        node.safe_psql("postgres", "create table test (id int)")
-        for x in range(0, 8):
-            node.safe_psql(
-                "postgres",
-                "insert into test select i from generate_series(1,100) s(i)")
-            self.switch_wal_segment(node)
-        count1 = node.safe_psql("postgres", "select count(*) from test")
+        with node.connect() as conn:
+            conn.execute("create table test (id int)")
+            for x in range(0, 8):
+                conn.execute(
+                    "insert into test select i from generate_series(1,100) s(i)")
+                conn.commit()
+                self.switch_wal_segment(conn)
+            count1 = conn.execute("select count(*) from test")
 
         # ... and do page backup with parallel pagemap
         self.backup_node(
@@ -558,18 +563,29 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup['status'], "OK")
         self.assertEqual(show_backup['backup-mode'], "PAGE")
 
-        # Drop node and restore it
-        node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
-        node.start()
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # Restore it
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        # Physical comparison
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
 
         # Check restored node
-        count2 = node.safe_psql("postgres", "select count(*) from test")
+        count2 = node_restored.execute("postgres", "select count(*) from test")
 
         self.assertEqual(count1, count2)
 
         # Clean after yourself
         node.cleanup()
+        node_restored.cleanup()
         self.del_test_dir(module_name, fname)
 
     def test_parallel_pagemap_1(self):

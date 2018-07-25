@@ -907,13 +907,26 @@ class ProbackupTest(object):
         return num
 
     def switch_wal_segment(self, node):
-        """ Execute pg_switch_wal/xlog() in given node"""
-        if self.version_to_num(
-            node.safe_psql("postgres", "show server_version")
-                ) >= self.version_to_num('10.0'):
-            node.safe_psql("postgres", "select pg_switch_wal()")
+        """
+        Execute pg_switch_wal/xlog() in given node
+
+        Args:
+            node: an instance of PostgresNode or NodeConnection class
+        """
+        if isinstance(node, testgres.PostgresNode):
+            if self.version_to_num(
+                node.safe_psql("postgres", "show server_version")
+                    ) >= self.version_to_num('10.0'):
+                node.safe_psql("postgres", "select pg_switch_wal()")
+            else:
+                node.safe_psql("postgres", "select pg_switch_xlog()")
         else:
-            node.safe_psql("postgres", "select pg_switch_xlog()")
+            if self.version_to_num(
+                node.execute("show server_version")[0][0]
+                    ) >= self.version_to_num('10.0'):
+                node.execute("select pg_switch_wal()")
+            else:
+                node.execute("select pg_switch_xlog()")
         sleep(1)
 
     def get_version(self, node):
