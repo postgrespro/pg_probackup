@@ -1095,20 +1095,22 @@ key_equals(const char *lhs, const char *rhs)
 
 /*
  * Get configuration from configuration file.
+ * Return number of parsed options
  */
-void
+int
 pgut_readopt(const char *path, pgut_option options[], int elevel)
 {
 	FILE   *fp;
 	char	buf[1024];
 	char	key[1024];
 	char	value[1024];
+	int		parsed_options = 0;
 
 	if (!options)
-		return;
+		return parsed_options;
 
 	if ((fp = pgut_fopen(path, "rt", true)) == NULL)
-		return;
+		return parsed_options;
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
@@ -1127,18 +1129,23 @@ pgut_readopt(const char *path, pgut_option options[], int elevel)
 				{
 					if (opt->allowed < SOURCE_FILE &&
 						opt->allowed != SOURCE_FILE_STRICT)
-						elog(elevel, "option %s cannot specified in file", opt->lname);
+						elog(elevel, "option %s cannot be specified in file", opt->lname);
 					else if (opt->source <= SOURCE_FILE)
+					{
 						assign_option(opt, value, SOURCE_FILE);
+						parsed_options++;
+					}
 					break;
 				}
 			}
 			if (!options[i].type)
-				elog(elevel, "invalid option \"%s\"", key);
+				elog(elevel, "invalid option \"%s\" in file \"%s\"", key, path);
 		}
 	}
 
 	fclose(fp);
+
+	return parsed_options;
 }
 
 static const char *

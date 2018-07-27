@@ -479,6 +479,7 @@ readBackupControlFile(const char *path)
 	char	   *program_version = NULL;
 	char	   *server_version = NULL;
 	char	   *compress_alg = NULL;
+	int			parsed_options;
 
 	pgut_option options[] =
 	{
@@ -508,10 +509,28 @@ readBackupControlFile(const char *path)
 	};
 
 	if (access(path, F_OK) != 0)
+	{
+		elog(WARNING, "control file \"%s\" doesn't exist", path);
+		pgBackupFree(backup);
 		return NULL;
+	}
 
 	pgBackup_init(backup);
-	pgut_readopt(path, options, ERROR);
+	parsed_options = pgut_readopt(path, options, WARNING);
+
+	if (parsed_options == 0)
+	{
+		elog(WARNING, "control file \"%s\" is empty", path);
+		pgBackupFree(backup);
+		return NULL;
+	}
+
+	if (backup->start_time == 0)
+	{
+		elog(WARNING, "invalid ID/start-time, control file \"%s\" is corrupted", path);
+		pgBackupFree(backup);
+		return NULL;
+	}
 
 	if (backup_mode)
 	{
