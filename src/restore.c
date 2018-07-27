@@ -276,7 +276,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * because it's needed to form the name of xlog file.
 			 */
 			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-						rt->recovery_target_xid, base_full_backup->tli);
+						rt->recovery_target_xid, rt->recovery_target_lsn,
+						base_full_backup->tli);
 
 		/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
 		if (corrupted_backup)
@@ -335,6 +336,11 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+
+			if (rt->lsn_specified && parse_server_version(backup->server_version) < 100000)
+				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
+						base36enc(dest_backup->start_time), dest_backup->server_version);
+
 			restore_backup(backup);
 		}
 
@@ -838,6 +844,9 @@ create_recovery_conf(time_t backup_id,
 		if (rt->xid_specified)
 			fprintf(fp, "recovery_target_xid = '%s'\n", rt->target_xid_string);
 
+		if (rt->recovery_target_lsn)
+			fprintf(fp, "recovery_target_lsn = '%s'\n", rt->target_lsn_string);
+
 		if (rt->recovery_target_immediate)
 			fprintf(fp, "recovery_target = 'immediate'\n");
 
@@ -982,6 +991,9 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 	if (rt->time_specified)
 		return backup->recovery_time <= rt->recovery_target_time;
 
+	if (rt->lsn_specified)
+		return backup->stop_lsn <= rt->recovery_target_lsn;
+
 	return true;
 }
 
@@ -1010,6 +1022,7 @@ parseRecoveryTargetOptions(const char *target_time,
 					const char *target_xid,
 					const char *target_inclusive,
 					TimeLineID	target_tli,
+					const char *target_lsn,
 					bool target_immediate,
 					const char *target_name,
 					const char *target_action,
@@ -1018,6 +1031,7 @@ parseRecoveryTargetOptions(const char *target_time,
 	time_t		dummy_time;
 	TransactionId dummy_xid;
 	bool		dummy_bool;
+	XLogRecPtr	dummy_lsn;
 	/*
 	 * count the number of the mutually exclusive options which may specify
 	 * recovery target. If final value > 1, throw an error.
@@ -1029,10 +1043,13 @@ parseRecoveryTargetOptions(const char *target_time,
 	rt->time_specified = false;
 	rt->xid_specified = false;
 	rt->inclusive_specified = false;
+	rt->lsn_specified = false;
 	rt->recovery_target_time = 0;
 	rt->recovery_target_xid  = 0;
+	rt->recovery_target_lsn = InvalidXLogRecPtr;
 	rt->target_time_string = NULL;
 	rt->target_xid_string = NULL;
+	rt->target_lsn_string = NULL;
 	rt->recovery_target_inclusive = false;
 	rt->recovery_target_tli  = 0;
 	rt->recovery_target_immediate = false;
@@ -1067,6 +1084,17 @@ parseRecoveryTargetOptions(const char *target_time,
 			rt->recovery_target_xid = dummy_xid;
 		else
 			elog(ERROR, "Invalid value of --xid option %s", target_xid);
+	}
+
+	if (target_lsn)
+	{
+		recovery_target_specified++;
+		rt->lsn_specified = true;
+		rt->target_lsn_string = target_lsn;
+		if (parse_lsn(target_lsn, &dummy_lsn))
+			rt->recovery_target_lsn = dummy_lsn;
+		else
+			elog(ERROR, "Invalid value of --lsn option %s", target_lsn);
 	}
 
 	if (target_inclusive)
@@ -1113,10 +1141,10 @@ parseRecoveryTargetOptions(const char *target_time,
 
 	/* More than one mutually exclusive option was defined. */
 	if (recovery_target_specified > 1)
-		elog(ERROR, "At most one of --immediate, --target-name, --time, or --xid can be used");
+		elog(ERROR, "At most one of --immediate, --target-name, --time, --xid, or --lsn can be used");
 
 	/* If none of the options is defined, '--inclusive' option is meaningless */
-	if (!(rt->xid_specified || rt->time_specified) && rt->recovery_target_inclusive)
+	if (!(rt->xid_specified || rt->time_specified || rt->lsn_specified) && rt->recovery_target_inclusive)
 		elog(ERROR, "--inclusive option applies when either --time or --xid is specified");
 
 	return rt;

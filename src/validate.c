@@ -328,7 +328,7 @@ do_validate_instance(void)
 					 base36enc(current_backup->start_time));
 			/* Validate corresponding WAL files */
 			validate_wal(current_backup, arclog_path, 0,
-						0, base_full_backup->tli);
+						0, 0, base_full_backup->tli);
 		}
 		/* Mark every incremental backup between corrupted backup and nearest FULL backup as orphans */
 		if (current_backup->status == BACKUP_STATUS_CORRUPT)

@@ -17,6 +17,7 @@
 #include <assert.h>
 #include <sys/time.h>
 
+#include "access/xlogdefs.h"
 #include "logger.h"
 
 #if !defined(C_H) && !defined(__cplusplus)
@@ -207,6 +208,7 @@ extern bool parse_uint64(const char *value, uint64 *result, int flags);
 extern bool parse_time(const char *value, time_t *result, bool utc_default);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
+extern bool parse_lsn(const char *value, XLogRecPtr *result);
 
 extern void convert_from_base_unit(int64 base_value, int base_unit,
 								   int64 *value, const char **unit);

@@ -61,6 +61,7 @@ uint32		replica_timeout = 300;		/* default is 300 seconds */
 /* restore options */
 static char		   *target_time;
 static char		   *target_xid;
+static char		   *target_lsn;
 static char		   *target_inclusive;
 static TimeLineID	target_tli;
 static bool			target_immediate;
@@ -150,6 +151,7 @@ static pgut_option options[] =
 	{ 's', 26, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
 	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
 	{ 'b', 27, "no-validate",			&restore_no_validate,	SOURCE_CMDLINE },
+	{ 's', 28, "lsn",					&target_lsn,		SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
@@ -436,7 +438,7 @@ main(int argc, char *argv[])
 	{
 		/* parse all recovery target options into recovery_target_options structure */
 		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
-								   target_inclusive, target_tli, target_immediate,
+								   target_inclusive, target_tli, target_lsn, target_immediate,
 								   target_name, target_action, restore_no_validate);
 	}
 
