@@ -2407,19 +2407,32 @@ make_pagemap_from_ptrack(parray *files)
 				 */
 				start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
 
-				if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
+				/*
+				 * If file segment was created after we have read ptrack,
+				 * we won't have a bitmap for this segment.
+				 */
+				if (start_addr > ptrack_nonparsed_size)
 				{
-					file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
-					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
+					elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
+					file->pagemap_isabsent = true;
 				}
 				else
 				{
-					file->pagemap.bitmapsize = RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
-					elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
-				}
 
-				file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
-				memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
+					if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
+					{
+						file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
+						elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
+					}
+					else
+					{
+						file->pagemap.bitmapsize = RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
+						elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
+					}
+
+					file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
+					memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
+				}
 			}
 			else
 			{
