@@ -443,6 +443,8 @@ extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 
+extern pgBackup* find_parent_backup(pgBackup *current_backup);
+
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool omit_symlink, bool add_root);

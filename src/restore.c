@@ -202,40 +202,39 @@ do_restore_or_validate(time_t target_backup_id,
 			dest_backup_index = i;
 		}
 
-		/* If we already found dest_backup, look for full backup. */
-		/* TODO Now, as we have all backups linked, we can probably get rid of that?"*/
-		if (dest_backup)
+	}
+
+	/* If we already found dest_backup, look for full backup. */
+	if (dest_backup)
+	{
+		base_full_backup = current_backup;
+
+		if (current_backup->backup_mode != BACKUP_MODE_FULL)
 		{
-			if (current_backup->backup_mode == BACKUP_MODE_FULL)
+			base_full_backup = find_parent_backup(current_backup);
+
+			if (base_full_backup == NULL)
+				elog(ERROR, "Valid full backup for backup %s is not found.",
+					base36enc(current_backup->start_time));
+		}
+
+		/*
+		 * We have found full backup by link,
+		 * now we need to walk the list to find its index.
+		 *
+		 * TODO I think we should rewrite it someday to use double linked list
+		 * and avoid relying on sort order anymore.
+		 */
+		for (i = dest_backup_index; i < parray_num(backups); i++)
+		{
+			pgBackup * temp_backup = (pgBackup *) parray_get(backups, i);
+			if (temp_backup->start_time == base_full_backup->start_time)
 			{
-				if (current_backup->status != BACKUP_STATUS_OK)
-				{
-					/* Full backup revalidation can be done only for DONE and CORRUPT */
-					if (current_backup->status == BACKUP_STATUS_DONE ||
-							current_backup->status == BACKUP_STATUS_CORRUPT)
-						elog(WARNING, "base backup %s for given backup %s is in %s status, trying to revalidate",
-							base36enc_dup(current_backup->start_time),
-							base36enc_dup(dest_backup->start_time),
-							status2str(current_backup->status));
-					else
-						elog(ERROR, "base backup %s for given backup %s is in %s status",
-							base36enc_dup(current_backup->start_time),
-							base36enc_dup(dest_backup->start_time),
-							status2str(current_backup->status));
-				}
-				/* We found both dest and base backups. */
-				base_full_backup = current_backup;
 				base_full_backup_index = i;
 				break;
 			}
-			else
-				/* It`s ok to skip incremental backup */
-				continue;
 		}
 	}
-
-	if (base_full_backup == NULL)
-		elog(ERROR, "Full backup satisfying target options is not found.");
 
 	/*
 	 * Ensure that directories provided in tablespace mapping are valid

@@ -714,3 +714,48 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 
 	make_native_path(path);
 }
+
+/* Find parent base FULL backup for current backup using parent_backup_link,
+ * return NULL if not found
+ */
+pgBackup*
+find_parent_backup(pgBackup *current_backup)
+{
+	pgBackup   *base_full_backup = NULL;
+	base_full_backup = current_backup;
+
+	while (base_full_backup->backup_mode != BACKUP_MODE_FULL)
+	{
+		/*
+		 * If we haven't found parent for incremental backup,
+		 * mark it and all depending backups as orphaned
+		 */
+		if (base_full_backup->parent_backup_link == NULL
+			|| (base_full_backup->status != BACKUP_STATUS_OK
+				&& base_full_backup->status != BACKUP_STATUS_DONE))
+		{
+			pgBackup   *orphaned_backup = current_backup;
+
+			while (orphaned_backup != NULL)
+			{
+				orphaned_backup->status = BACKUP_STATUS_ORPHAN;
+				pgBackupWriteBackupControlFile(orphaned_backup);
+				if (base_full_backup->parent_backup_link == NULL)
+					elog(WARNING, "Backup %s is orphaned because its parent backup is not found",
+							base36enc(orphaned_backup->start_time));
+				else
+					elog(WARNING, "Backup %s is orphaned because its parent backup is corrupted",
+							base36enc(orphaned_backup->start_time));
+
+				orphaned_backup = orphaned_backup->parent_backup_link;
+			}
+
+			base_full_backup = NULL;
+			break;
+		}
+
+		base_full_backup = base_full_backup->parent_backup_link;
+	}
+
+	return base_full_backup;
+}
