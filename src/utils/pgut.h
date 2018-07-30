@@ -15,9 +15,9 @@
 #include "pqexpbuffer.h"
 
 #include <assert.h>
-#include <pthread.h>
 #include <sys/time.h>
 
+#include "access/xlogdefs.h"
 #include "logger.h"
 
 #if !defined(C_H) && !defined(__cplusplus)
@@ -59,7 +59,7 @@ typedef enum pgut_optsrc
 typedef struct pgut_option
 {
 	char		type;
-	char		sname;		/* short name */
+	uint8		sname;		/* short name */
 	const char *lname;		/* long name */
 	void	   *var;		/* pointer to variable */
 	pgut_optsrc	allowed;	/* allowed source */
@@ -94,13 +94,6 @@ extern const char  *PROGRAM_VERSION;
 extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
 
-/* ID of the main thread */
-#ifdef WIN32
-extern DWORD main_tid;
-#else
-extern pthread_t main_tid;
-#endif
-
 extern void	pgut_help(bool details);
 
 /*
@@ -118,7 +111,7 @@ extern bool			in_cleanup;
 extern bool			in_password;	/* User prompts password */
 
 extern int pgut_getopt(int argc, char **argv, pgut_option options[]);
-extern void pgut_readopt(const char *path, pgut_option options[], int elevel);
+extern int pgut_readopt(const char *path, pgut_option options[], int elevel);
 extern void pgut_getopt_env(pgut_option options[]);
 extern void pgut_atexit_push(pgut_atexit_callback callback, void *userdata);
 extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
@@ -212,9 +205,10 @@ extern bool parse_int32(const char *value, int32 *result, int flags);
 extern bool parse_uint32(const char *value, uint32 *result, int flags);
 extern bool parse_int64(const char *value, int64 *result, int flags);
 extern bool parse_uint64(const char *value, uint64 *result, int flags);
-extern bool parse_time(const char *value, time_t *result);
+extern bool parse_time(const char *value, time_t *result, bool utc_default);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
+extern bool parse_lsn(const char *value, XLogRecPtr *result);
 
 extern void convert_from_base_unit(int64 base_value, int base_unit,
 								   int64 *value, const char **unit);

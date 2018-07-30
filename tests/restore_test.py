@@ -53,10 +53,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         recovery_conf = os.path.join(node.data_dir, "recovery.conf")
         self.assertEqual(os.path.isfile(recovery_conf), True)
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
 
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
@@ -104,10 +101,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
 
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
@@ -149,11 +143,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start(params=['-t', '10'])
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         pgbench = node.pgbench(
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             options=['-T', '10', '-c', '2', '--no-vacuum'])
@@ -181,11 +171,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             node)["recovery_target_timeline"]
         self.assertEqual(int(recovery_target_timeline), target_tli)
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
@@ -234,11 +220,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
@@ -297,11 +279,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         after = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
         self.assertEqual(
@@ -366,15 +344,158 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 0)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_to_lsn_inclusive(self):
+        """recovery to target lsn"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            self.del_test_dir(module_name, fname)
+            return
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.pgbench_init(scale=2)
+        with node.connect("postgres") as con:
+            con.execute("CREATE TABLE tbl0005 (a int)")
+            con.commit()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        before = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        with node.connect("postgres") as con:
+            con.execute("INSERT INTO tbl0005 VALUES (1)")
+            con.commit()
+            res = con.execute("SELECT pg_current_wal_lsn()")
+            con.commit()
+            con.execute("INSERT INTO tbl0005 VALUES (2)")
+            con.commit()
+            xlogid, xrecoff = res[0][0].split('/')
+            xrecoff = hex(int(xrecoff, 16) + 1)[2:]
+            target_lsn = "{0}/{1}".format(xlogid, xrecoff)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        node.stop()
+        node.cleanup()
+
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    "-j", "4", '--lsn={0}'.format(target_lsn),
+                    "--recovery-target-action=promote"]
+            ),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+
+        node.slow_start()
+
+        after = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        self.assertEqual(before, after)
+        self.assertEqual(
+            len(node.execute("postgres", "SELECT * FROM tbl0005")), 2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_to_lsn_not_inclusive(self):
+        """recovery to target lsn"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            self.del_test_dir(module_name, fname)
+            return
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.pgbench_init(scale=2)
+        with node.connect("postgres") as con:
+            con.execute("CREATE TABLE tbl0005 (a int)")
+            con.commit()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        before = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        with node.connect("postgres") as con:
+            con.execute("INSERT INTO tbl0005 VALUES (1)")
+            con.commit()
+            res = con.execute("SELECT pg_current_wal_lsn()")
+            con.commit()
+            con.execute("INSERT INTO tbl0005 VALUES (2)")
+            con.commit()
+            xlogid, xrecoff = res[0][0].split('/')
+            xrecoff = hex(int(xrecoff, 16) + 1)[2:]
+            target_lsn = "{0}/{1}".format(xlogid, xrecoff)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        node.stop()
+        node.cleanup()
+
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    "--inclusive=false",
+                    "-j", "4", '--lsn={0}'.format(target_lsn),
+                    "--recovery-target-action=promote"]
+            ),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+
+        node.slow_start()
+
+        after = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        self.assertEqual(before, after)
+        self.assertEqual(
+            len(node.execute("postgres", "SELECT * FROM tbl0005")), 1)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -420,11 +541,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
@@ -479,11 +596,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
@@ -535,11 +648,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
@@ -602,11 +711,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         bbalance = node.execute(
             "postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute(
@@ -674,11 +779,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 options=["-j", "4", "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         bbalance = node.execute(
             "postgres", "SELECT sum(bbalance) FROM pgbench_branches")
         delta = node.execute(
@@ -718,7 +819,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             con.commit()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
 
         # 1 - Try to restore to existing directory
         node.stop()
@@ -769,10 +870,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
+
         result = node.execute("postgres", "SELECT id FROM test")
         self.assertEqual(result[0][0], 1)
 
@@ -785,8 +884,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type="page")
 
         show_pb = self.show_pb(backup_dir, 'node')
-        self.assertEqual(show_pb[1]['Status'], "OK")
-        self.assertEqual(show_pb[2]['Status'], "OK")
+        self.assertEqual(show_pb[1]['status'], "OK")
+        self.assertEqual(show_pb[2]['status'], "OK")
 
         node.stop()
         node.cleanup()
@@ -802,10 +901,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
         result = node.execute("postgres", "SELECT id FROM test OFFSET 1")
         self.assertEqual(result[0][0], 2)
 
@@ -829,7 +925,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Full backup
         self.backup_node(backup_dir, 'node', node)
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['Status'], "OK")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
 
         # Create tablespace
         tblspc_path = os.path.join(node.base_dir, "tblspc")
@@ -845,8 +941,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # First page backup
         self.backup_node(backup_dir, 'node', node, backup_type="page")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Status'], "OK")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['Mode'], "PAGE")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['status'], "OK")
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[1]['backup-mode'], "PAGE")
 
         # Create tablespace table
         with node.connect("postgres") as con:
@@ -862,8 +959,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Second page backup
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="page")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Status'], "OK")
-        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['Mode'], "PAGE")
+        self.assertEqual(self.show_pb(backup_dir, 'node')[2]['status'], "OK")
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[2]['backup-mode'], "PAGE")
 
         node.stop()
         node.cleanup()
@@ -879,10 +977,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
 
         count = node.execute("postgres", "SELECT count(*) FROM tbl")
         self.assertEqual(count[0][0], 4)
@@ -933,10 +1028,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
 
         result = node.psql("postgres", 'select * from t_heap')
         self.assertTrue('does not exist' in result[2].decode("utf-8"))
@@ -985,11 +1077,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
-
+        node.slow_start()
         result = node.psql("postgres", 'select * from t_heap')
         self.assertTrue('does not exist' in result[2].decode("utf-8"))
 
@@ -1037,10 +1125,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
 
         result = node.psql("postgres", 'select * from t_heap')
         self.assertEqual(True, 'does not exist' in result[2].decode("utf-8"))
@@ -1095,10 +1180,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
 
         result = node.psql("postgres", 'select * from t_heap')
         self.assertTrue('does not exist' in result[2].decode("utf-8"))
@@ -1147,10 +1229,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "--recovery-target-name=savepoint",
                 "--recovery-target-action=promote"])
 
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node.slow_start()
 
         result_new = node.safe_psql("postgres", "select * from t_heap")
         res = node.psql("postgres", "select * from t_heap_1")

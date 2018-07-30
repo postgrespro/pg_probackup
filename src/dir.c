@@ -10,7 +10,6 @@
 
 #include "pg_probackup.h"
 
-#include <libgen.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -101,11 +100,10 @@ static void dir_list_file_internal(parray *files, const char *root,
 int
 dir_create_dir(const char *dir, mode_t mode)
 {
-	char		copy[MAXPGPATH];
 	char		parent[MAXPGPATH];
 
-	strncpy(copy, dir, MAXPGPATH);
-	strncpy(parent, dirname(copy), MAXPGPATH);
+	strncpy(parent, dir, MAXPGPATH);
+	get_parent_directory(parent);
 
 	/* Create parent first */
 	if (access(parent, F_OK) == -1)
@@ -153,6 +151,8 @@ pgFileInit(const char *path)
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
+	file->name = NULL;
+
 	file->size = 0;
 	file->mode = 0;
 	file->read_size = 0;
@@ -161,7 +161,8 @@ pgFileInit(const char *path)
 	file->is_datafile = false;
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
-	file->pagemap.bitmapsize = PageBitmapIsAbsent;
+	file->pagemap.bitmapsize = PageBitmapIsEmpty;
+	file->pagemap_isabsent = false;
 	file->tblspcOid = 0;
 	file->dbOid = 0;
 	file->relOid = 0;
@@ -185,7 +186,8 @@ pgFileInit(const char *path)
 
 	file->is_cfs = false;
 	file->exists_in_prev = false;	/* can change only in Incremental backup. */
-	file->n_blocks = -1;			/* can change only in DELTA backup. Number of blocks readed during backup */
+	/* Number of blocks readed during backup */
+	file->n_blocks = BLOCKNUM_INVALID;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }
@@ -232,7 +234,7 @@ pgFileGetCRC(pgFile *file)
 	int			errno_tmp;
 
 	/* open file in binary read mode */
-	fp = fopen(file->path, "r");
+	fp = fopen(file->path, PG_BINARY_R);
 	if (fp == NULL)
 		elog(ERROR, "cannot open file \"%s\": %s",
 			file->path, strerror(errno));
@@ -350,7 +352,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fopen(path, "r");
+		black_list_file = fopen(path, PG_BINARY_R);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));
@@ -385,7 +387,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_append(files, file);
 
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list);
-	parray_qsort(files, pgFileComparePath);
 }
 
 /*
@@ -817,20 +818,25 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
 
-		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\", \"is_cfs\":\"%u\", \"crc\":\"%u\","
+		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
+					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\"",
-				path, (unsigned long) file->write_size, file->mode,
-				file->is_datafile?1:0, file->is_cfs?1:0, file->crc,
+				path, file->write_size, file->mode,
+				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
 				deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
+#ifndef WIN32
 		if (S_ISLNK(file->mode))
+#else
+		if (pgwin32_is_junction(file->path))
+#endif
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
-		if (file->n_blocks != -1)
+		if (file->n_blocks != BLOCKNUM_INVALID)
 			fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
 		fprintf(out, "}\n");
@@ -852,23 +858,25 @@ print_file_list(FILE *out, const parray *files, const char *root)
  *   {"name1":"value1", "name2":"value2"}
  *
  * The value will be returned to "value_str" as string if it is not NULL. If it
- * is NULL the value will be returned to "value_ulong" as unsigned long.
+ * is NULL the value will be returned to "value_uint64" as int64.
+ *
+ * Returns true if the value was found in the line.
  */
-static void
+static bool
 get_control_value(const char *str, const char *name,
-				  char *value_str, uint64 *value_uint64, bool is_mandatory)
+				  char *value_str, int64 *value_int64, bool is_mandatory)
 {
 	int			state = CONTROL_WAIT_NAME;
 	char	   *name_ptr = (char *) name;
 	char	   *buf = (char *) str;
-	char		buf_uint64[32],	/* Buffer for "value_uint64" */
-			   *buf_uint64_ptr = buf_uint64;
+	char		buf_int64[32],	/* Buffer for "value_int64" */
+			   *buf_int64_ptr = buf_int64;
 
 	/* Set default values */
 	if (value_str)
 		*value_str = '\0';
-	else if (value_uint64)
-		*value_uint64 = 0;
+	else if (value_int64)
+		*value_int64 = 0;
 
 	while (*buf)
 	{
@@ -903,7 +911,7 @@ get_control_value(const char *str, const char *name,
 				if (*buf == '"')
 				{
 					state = CONTROL_INVALUE;
-					buf_uint64_ptr = buf_uint64;
+					buf_int64_ptr = buf_int64;
 				}
 				else if (IsAlpha(*buf))
 					goto bad_format;
@@ -916,19 +924,19 @@ get_control_value(const char *str, const char *name,
 					{
 						*value_str = '\0';
 					}
-					else if (value_uint64)
+					else if (value_int64)
 					{
 						/* Length of buf_uint64 should not be greater than 31 */
-						if (buf_uint64_ptr - buf_uint64 >= 32)
+						if (buf_int64_ptr - buf_int64 >= 32)
 							elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
 								 name, str, DATABASE_FILE_LIST);
 
-						*buf_uint64_ptr = '\0';
-						if (!parse_uint64(buf_uint64, value_uint64, 0))
+						*buf_int64_ptr = '\0';
+						if (!parse_int64(buf_int64, value_int64, 0))
 							goto bad_format;
 					}
 
-					return;
+					return true;
 				}
 				else
 				{
@@ -939,8 +947,8 @@ get_control_value(const char *str, const char *name,
 					}
 					else
 					{
-						*buf_uint64_ptr = *buf;
-						buf_uint64_ptr++;
+						*buf_int64_ptr = *buf;
+						buf_int64_ptr++;
 					}
 				}
 				break;
@@ -964,11 +972,12 @@ get_control_value(const char *str, const char *name,
 	if (is_mandatory)
 		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
 			 name, str, DATABASE_FILE_LIST);
-	return;
+	return false;
 
 bad_format:
 	elog(ERROR, "%s file has invalid format in line %s",
 		 DATABASE_FILE_LIST, str);
+	return false;	/* Make compiler happy */
 }
 
 /*
@@ -995,7 +1004,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		char		filepath[MAXPGPATH];
 		char		linked[MAXPGPATH];
 		char		compress_alg_string[MAXPGPATH];
-		uint64		write_size,
+		int64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
 					is_cfs,
@@ -1010,12 +1019,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
 		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
 		get_control_value(buf, "crc", NULL, &crc, true);
-
-		/* optional fields */
-		get_control_value(buf, "linked", linked, NULL, false);
-		get_control_value(buf, "segno", NULL, &segno, false);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
-		get_control_value(buf, "n_blocks", NULL, &n_blocks, false);
 
 		if (root)
 			join_path_components(filepath, root, path);
@@ -1024,16 +1028,25 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 		file = pgFileInit(filepath);
 
-		file->write_size = (size_t) write_size;
+		file->write_size = (int64) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
 		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
-		if (linked[0])
+
+		/*
+		 * Optional fields
+		 */
+
+		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
 			file->linked = pgut_strdup(linked);
-		file->segno = (int) segno;
-		file->n_blocks = (int) n_blocks;
+
+		if (get_control_value(buf, "segno", NULL, &segno, false))
+			file->segno = (int) segno;
+
+		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
+			file->n_blocks = (int) n_blocks;
 
 		parray_append(files, file);
 	}

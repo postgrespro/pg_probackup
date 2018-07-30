@@ -8,7 +8,6 @@
  */
 
 #include <errno.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -16,6 +15,7 @@
 
 #include "logger.h"
 #include "pgut.h"
+#include "thread.h"
 
 /* Logger parameters */
 
@@ -138,11 +138,10 @@ exit_if_necessary(int elevel)
 		}
 
 		/* If this is not the main thread then don't call exit() */
+		if (main_tid != pthread_self())
 #ifdef WIN32
-		if (main_tid != GetCurrentThreadId())
 			ExitThread(elevel);
 #else
-		if (!pthread_equal(main_tid, pthread_self()))
 			pthread_exit(NULL);
 #endif
 		else
@@ -171,10 +170,11 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		log_path[0] != '\0';
 	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
 
-	/*
-	 * There is no need to lock if this is elog() from upper elog().
-	 */
-	pthread_mutex_lock(&log_file_mutex);
+	pthread_lock(&log_file_mutex);
+#ifdef WIN32
+	std_args = NULL;
+	error_args = NULL;
+#endif
 	loggin_in_progress = true;
 
 	/* We need copy args only if we need write to error log file */
@@ -241,7 +241,6 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	if (write_to_stderr)
 	{
 		write_elevel(stderr, elevel);
-
 		if (write_to_file)
 			vfprintf(stderr, fmt, std_args);
 		else

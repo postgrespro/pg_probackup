@@ -281,7 +281,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 
 		/* print progress */
 		elog(VERBOSE, "delete file(%zd/%lu) \"%s\"", i + 1,
-				(unsigned long) parray_num(files), file->path);
+			 (unsigned long) parray_num(files), file->path);
 
 		if (remove(file->path))
 		{

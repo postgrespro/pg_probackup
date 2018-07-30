@@ -5,24 +5,23 @@
  *
  * Portions Copyright (c) 1996-2016, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
-
 #include "pg_probackup.h"
 
+#include <time.h>
 #include <unistd.h>
+#ifdef HAVE_LIBZ
+#include <zlib.h>
+#endif
 
 #include "commands/dbcommands_xlog.h"
 #include "catalog/storage_xlog.h"
 #include "access/transam.h"
-
-#ifdef HAVE_LIBZ
-#include <zlib.h>
-#endif
+#include "utils/thread.h"
 
 /*
  * RmgrNames is an array of resource manager names, to make error messages
@@ -85,74 +84,134 @@ typedef struct xl_xact_abort
 static void extractPageInfo(XLogReaderState *record);
 static bool getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime);
 
-static int		xlogreadfd = -1;
-static XLogSegNo xlogreadsegno = -1;
-static char		xlogfpath[MAXPGPATH];
-static bool		xlogexists = false;
-
-#ifdef HAVE_LIBZ
-static gzFile	gz_xlogread = NULL;
-static char		gz_xlogfpath[MAXPGPATH];
-#endif
-
 typedef struct XLogPageReadPrivate
 {
 	const char *archivedir;
 	TimeLineID	tli;
+
+	bool		manual_switch;
+	bool		need_switch;
+
+	int			xlogfile;
+	XLogSegNo	xlogsegno;
+	char		xlogpath[MAXPGPATH];
+	bool		xlogexists;
+
+#ifdef HAVE_LIBZ
+	gzFile		gz_xlogfile;
+	char		gz_xlogpath[MAXPGPATH];
+#endif
 } XLogPageReadPrivate;
+
+/* An argument for a thread function */
+typedef struct
+{
+	int			thread_num;
+	XLogPageReadPrivate private_data;
+
+	XLogRecPtr	startpoint;
+	XLogRecPtr	endpoint;
+	XLogSegNo	endSegNo;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
+} xlog_thread_arg;
 
 static int SimpleXLogPageRead(XLogReaderState *xlogreader,
 				   XLogRecPtr targetPagePtr,
 				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf,
 				   TimeLineID *pageTLI);
+static XLogReaderState *InitXLogPageRead(XLogPageReadPrivate *private_data,
+										 const char *archivedir,
+										 TimeLineID tli, bool allocate_reader);
+static void CleanupXLogPageRead(XLogReaderState *xlogreader);
+static void PrintXLogCorruptionMsg(XLogPageReadPrivate *private_data,
+								   int elevel);
+
+static XLogSegNo nextSegNoToRead = 0;
+static pthread_mutex_t wal_segment_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
- * Read WAL from the archive directory, from 'startpoint' to 'endpoint' on the
- * given timeline. Collect data blocks touched by the WAL records into a page map.
- *
- * If **prev_segno** is true then read all segments up to **endpoint** segment
- * minus one. Else read all segments up to **endpoint** segment.
+ * extractPageMap() worker.
  */
-void
-extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
-			   XLogRecPtr endpoint, bool prev_segno, parray *files)
+static void *
+doExtractPageMap(void *arg)
 {
-	size_t		i;
-	XLogRecord *record;
+	xlog_thread_arg *extract_arg = (xlog_thread_arg *) arg;
+	XLogPageReadPrivate *private_data;
 	XLogReaderState *xlogreader;
+	XLogSegNo	nextSegNo = 0;
 	char	   *errormsg;
-	XLogPageReadPrivate private;
-	XLogSegNo	endSegNo,
-				nextSegNo = 0;
 
-	elog(LOG, "Compiling pagemap");
-	if (!XRecOffIsValid(startpoint))
-		elog(ERROR, "Invalid startpoint value %X/%X",
-			 (uint32) (startpoint >> 32), (uint32) (startpoint));
-
-	if (!XRecOffIsValid(endpoint))
-		elog(ERROR, "Invalid endpoint value %X/%X",
-			 (uint32) (endpoint >> 32), (uint32) (endpoint));
-
-	private.archivedir = archivedir;
-	private.tli = tli;
-	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
+	private_data = &extract_arg->private_data;
+	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, private_data);
 	if (xlogreader == NULL)
 		elog(ERROR, "out of memory");
 
-	XLByteToSeg(endpoint, endSegNo);
-	if (prev_segno)
-		endSegNo--;
+	extract_arg->startpoint = XLogFindNextRecord(xlogreader,
+												 extract_arg->startpoint);
+
+	elog(VERBOSE, "Start LSN of thread %d: %X/%X",
+		 extract_arg->thread_num,
+		 (uint32) (extract_arg->startpoint >> 32),
+		 (uint32) (extract_arg->startpoint));
+
+	/* Switch WAL segment manually below without using SimpleXLogPageRead() */
+	private_data->manual_switch = true;
 
 	do
 	{
-		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+		XLogRecord *record;
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during WAL reading");
+
+		record = XLogReadRecord(xlogreader, extract_arg->startpoint, &errormsg);
 
 		if (record == NULL)
 		{
 			XLogRecPtr	errptr;
 
-			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
+			/*
+			 * Try to switch to the next WAL segment. Usually
+			 * SimpleXLogPageRead() does it by itself. But here we need to do it
+			 * manually to support threads.
+			 */
+			if (private_data->need_switch)
+			{
+				private_data->need_switch = false;
+
+				/* Critical section */
+				pthread_lock(&wal_segment_mutex);
+				Assert(nextSegNoToRead);
+				private_data->xlogsegno = nextSegNoToRead;
+				nextSegNoToRead++;
+				pthread_mutex_unlock(&wal_segment_mutex);
+
+				/* We reach the end */
+				if (private_data->xlogsegno > extract_arg->endSegNo)
+					break;
+
+				/* Adjust next record position */
+				XLogSegNoOffsetToRecPtr(private_data->xlogsegno, 0,
+										extract_arg->startpoint);
+				/* Skip over the page header */
+				extract_arg->startpoint = XLogFindNextRecord(xlogreader,
+															 extract_arg->startpoint);
+
+				elog(VERBOSE, "Thread %d switched to LSN %X/%X",
+					 extract_arg->thread_num,
+					 (uint32) (extract_arg->startpoint >> 32),
+					 (uint32) (extract_arg->startpoint));
+
+				continue;
+			}
+
+			errptr = extract_arg->startpoint ?
+				extract_arg->startpoint : xlogreader->EndRecPtr;
 
 			if (errormsg)
 				elog(WARNING, "could not read WAL record at %X/%X: %s",
@@ -167,37 +226,127 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 			 * start_lsn, we won't be able to build page map and PAGE backup will
 			 * be incorrect. Stop it and throw an error.
 			 */
-			if (!xlogexists)
-				elog(ERROR, "WAL segment \"%s\" is absent", xlogfpath);
-			else if (xlogreadfd != -1)
-				elog(ERROR, "Possible WAL CORRUPTION."
-							"Error has occured during reading WAL segment \"%s\"", xlogfpath);
+			PrintXLogCorruptionMsg(private_data, ERROR);
 		}
 
 		extractPageInfo(xlogreader);
 
-		startpoint = InvalidXLogRecPtr; /* continue reading at next record */
+		/* continue reading at next record */
+		extract_arg->startpoint = InvalidXLogRecPtr;
 
 		XLByteToSeg(xlogreader->EndRecPtr, nextSegNo);
-	} while (nextSegNo <= endSegNo && xlogreader->EndRecPtr != endpoint);
+	} while (nextSegNo <= extract_arg->endSegNo &&
+			 xlogreader->EndRecPtr < extract_arg->endpoint);
 
+	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
-	if (xlogreadfd != -1)
+
+	/* Extracting is successful */
+	extract_arg->ret = 0;
+	return NULL;
+}
+
+/*
+ * Read WAL from the archive directory, from 'startpoint' to 'endpoint' on the
+ * given timeline. Collect data blocks touched by the WAL records into a page map.
+ *
+ * If **prev_segno** is true then read all segments up to **endpoint** segment
+ * minus one. Else read all segments up to **endpoint** segment.
+ *
+ * Pagemap extracting is processed using threads. Eeach thread reads single WAL
+ * file.
+ */
+void
+extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
+			   XLogRecPtr endpoint, bool prev_seg, parray *files)
+{
+	int			i;
+	int			threads_need = 0;
+	XLogSegNo	endSegNo;
+	bool		extract_isok = true;
+	pthread_t  *threads;
+	xlog_thread_arg *thread_args;
+	time_t		start_time,
+				end_time;
+
+	elog(LOG, "Compiling pagemap");
+	if (!XRecOffIsValid(startpoint))
+		elog(ERROR, "Invalid startpoint value %X/%X",
+			 (uint32) (startpoint >> 32), (uint32) (startpoint));
+
+	if (!XRecOffIsValid(endpoint))
+		elog(ERROR, "Invalid endpoint value %X/%X",
+			 (uint32) (endpoint >> 32), (uint32) (endpoint));
+
+	XLByteToSeg(endpoint, endSegNo);
+	if (prev_seg)
+		endSegNo--;
+
+	nextSegNoToRead = 0;
+	time(&start_time);
+
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	thread_args = (xlog_thread_arg *) palloc(sizeof(xlog_thread_arg)*num_threads);
+
+	/*
+	 * Initialize thread args.
+	 *
+	 * Each thread works with its own WAL segment and we need to adjust
+	 * startpoint value for each thread.
+	 */
+	for (i = 0; i < num_threads; i++)
 	{
-		close(xlogreadfd);
-		xlogreadfd = -1;
-		xlogexists = false;
+		InitXLogPageRead(&thread_args[i].private_data, archivedir, tli, false);
+		thread_args[i].thread_num = i;
+
+		thread_args[i].startpoint = startpoint;
+		thread_args[i].endpoint = endpoint;
+		thread_args[i].endSegNo = endSegNo;
+		/* By default there is some error */
+		thread_args[i].ret = 1;
+
+		/* Adjust startpoint to the next thread */
+		if (nextSegNoToRead == 0)
+			XLByteToSeg(startpoint, nextSegNoToRead);
+
+		nextSegNoToRead++;
+		/*
+		 * If we need to read less WAL segments than num_threads, create less
+		 * threads.
+		 */
+		if (nextSegNoToRead > endSegNo)
+			break;
+		XLogSegNoOffsetToRecPtr(nextSegNoToRead, 0, startpoint);
+		/* Skip over the page header */
+		startpoint += SizeOfXLogLongPHD;
+
+		threads_need++;
 	}
 
-	/* Mark every datafile with empty pagemap as unchanged */
-	for (i = 0; i < parray_num(files); i++)
+	/* Run threads */
+	for (i = 0; i < threads_need; i++)
 	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-		if (file->is_datafile && file->pagemap.bitmap == NULL)
-			file->pagemap.bitmapsize = PageBitmapIsEmpty;
+		elog(VERBOSE, "Start WAL reader thread: %d", i);
+		pthread_create(&threads[i], NULL, doExtractPageMap, &thread_args[i]);
 	}
 
-	elog(LOG, "Pagemap compiled");
+	/* Wait for threads */
+	for (i = 0; i < threads_need; i++)
+	{
+		pthread_join(threads[i], NULL);
+		if (thread_args[i].ret == 1)
+			extract_isok = false;
+	}
+
+	pfree(threads);
+	pfree(thread_args);
+
+	time(&end_time);
+	if (extract_isok)
+		elog(LOG, "Pagemap compiled, time elapsed %.0f sec",
+			 difftime(end_time, start_time));
+	else
+		elog(ERROR, "Pagemap compiling failed");
 }
 
 /*
@@ -205,8 +354,7 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
  */
 static void
 validate_backup_wal_from_start_to_stop(pgBackup *backup,
-									   char *backup_xlog_path,
-									   TimeLineID tli)
+									   char *backup_xlog_path, TimeLineID tli)
 {
 	XLogRecPtr	startpoint = backup->start_lsn;
 	XLogRecord *record;
@@ -215,15 +363,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 	XLogPageReadPrivate private;
 	bool		got_endpoint = false;
 
-	private.archivedir = backup_xlog_path;
-	private.tli = tli;
-
-	/* We will check it in the end */
-	xlogfpath[0] = '\0';
-
-	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
-	if (xlogreader == NULL)
-		elog(ERROR, "out of memory");
+	xlogreader = InitXLogPageRead(&private, backup_xlog_path, tli, true);
 
 	while (true)
 	{
@@ -248,45 +388,27 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 
 	if (!got_endpoint)
 	{
-		if (xlogfpath[0] != 0)
-		{
-			/* XLOG reader couldn't read WAL segment.
-			 * We throw a WARNING here to be able to update backup status below.
-			 */
-			if (!xlogexists)
-			{
-				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
-			}
-			else if (xlogreadfd != -1)
-			{
-				elog(WARNING, "Possible WAL CORRUPTION."
-					"Error has occured during reading WAL segment \"%s\"", xlogfpath);
-			}
-		}
+		PrintXLogCorruptionMsg(&private, WARNING);
 
 		/*
 		 * If we don't have WAL between start_lsn and stop_lsn,
 		 * the backup is definitely corrupted. Update its status.
 		 */
-			backup->status = BACKUP_STATUS_CORRUPT;
-			pgBackupWriteBackupControlFile(backup);
-			elog(WARNING, "There are not enough WAL records to consistenly restore "
-				"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",
-				 base36enc(backup->start_time),
-				 (uint32) (backup->start_lsn >> 32),
-				 (uint32) (backup->start_lsn),
-				 (uint32) (backup->stop_lsn >> 32),
-				 (uint32) (backup->stop_lsn));
+		backup->status = BACKUP_STATUS_CORRUPT;
+		pgBackupWriteBackupControlFile(backup);
+
+		elog(WARNING, "There are not enough WAL records to consistenly restore "
+			"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",
+			 base36enc(backup->start_time),
+			 (uint32) (backup->start_lsn >> 32),
+			 (uint32) (backup->start_lsn),
+			 (uint32) (backup->stop_lsn >> 32),
+			 (uint32) (backup->stop_lsn));
 	}
 
 	/* clean */
+	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
-	if (xlogreadfd != -1)
-	{
-		close(xlogreadfd);
-		xlogreadfd = -1;
-		xlogexists = false;
-	}
 }
 
 /*
@@ -299,6 +421,7 @@ validate_wal(pgBackup *backup,
 			 const char *archivedir,
 			 time_t target_time,
 			 TransactionId target_xid,
+			 XLogRecPtr target_lsn,
 			 TimeLineID tli)
 {
 	XLogRecPtr	startpoint = backup->start_lsn;
@@ -350,7 +473,7 @@ validate_wal(pgBackup *backup,
 	 * If recovery target is provided check that we can restore backup to a
 	 * recovery target time or xid.
 	 */
-	if (!TransactionIdIsValid(target_xid) && target_time == 0)
+	if (!TransactionIdIsValid(target_xid) && target_time == 0 && !XRecOffIsValid(target_lsn))
 	{
 		/* Recovery target is not given so exit */
 		elog(INFO, "Backup %s WAL segments are valid", backup_id);
@@ -369,22 +492,15 @@ validate_wal(pgBackup *backup,
 	 * up to the given recovery target.
 	 * In any case we cannot restore to the point before stop_lsn.
 	 */
-	private.archivedir = archivedir;
-
-	private.tli = tli;
-	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
-	if (xlogreader == NULL)
-		elog(ERROR, "out of memory");
-
-	/* We will check it in the end */
-	xlogfpath[0] = '\0';
+	xlogreader = InitXLogPageRead(&private, archivedir, tli, true);
 
 	/* We can restore at least up to the backup end */
 	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time);
 	last_xid = backup->recovery_xid;
 
 	if ((TransactionIdIsValid(target_xid) && target_xid == last_xid)
-		|| (target_time != 0 && backup->recovery_time >= target_time))
+		|| (target_time != 0 && backup->recovery_time >= target_time)
+		|| (XRecOffIsValid(target_lsn) && backup->stop_lsn >= target_lsn))
 		all_wal = true;
 
 	startpoint = backup->stop_lsn;
@@ -439,21 +555,7 @@ validate_wal(pgBackup *backup,
 	/* Some needed WAL records are absent */
 	else
 	{
-		if (xlogfpath[0] != 0)
-		{
-			/* XLOG reader couldn't read WAL segment.
-			 * We throw a WARNING here to be able to update backup status below.
-			 */
-			if (!xlogexists)
-			{
-				elog(WARNING, "WAL segment \"%s\" is absent", xlogfpath);
-			}
-			else if (xlogreadfd != -1)
-			{
-				elog(WARNING, "Possible WAL CORRUPTION."
-					"Error has occured during reading WAL segment \"%s\"", xlogfpath);
-			}
-		}
+		PrintXLogCorruptionMsg(&private, WARNING);
 
 		elog(WARNING, "recovery can be done up to time %s and xid " XID_FMT,
 				last_timestamp, last_xid);
@@ -470,16 +572,14 @@ validate_wal(pgBackup *backup,
 		else if (target_time != 0)
 			elog(ERROR, "not enough WAL records to time %s",
 					target_timestamp);
+		else if (XRecOffIsValid(target_lsn))
+			elog(ERROR, "not enough WAL records to lsn %X/%X",
+					(uint32) (target_lsn >> 32), (uint32) (target_lsn));
 	}
 
 	/* clean */
+	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
-	if (xlogreadfd != -1)
-	{
-		close(xlogreadfd);
-		xlogreadfd = -1;
-		xlogexists = false;
-	}
 }
 
 /*
@@ -505,12 +605,7 @@ read_recovery_info(const char *archivedir, TimeLineID tli,
 		elog(ERROR, "Invalid stop_lsn value %X/%X",
 			 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
 
-	private.archivedir = archivedir;
-	private.tli = tli;
-
-	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
-	if (xlogreader == NULL)
-		elog(ERROR, "out of memory");
+	xlogreader = InitXLogPageRead(&private, archivedir, tli, true);
 
 	/* Read records from stop_lsn down to start_lsn */
 	do
@@ -553,13 +648,8 @@ read_recovery_info(const char *archivedir, TimeLineID tli,
 	res = false;
 
 cleanup:
+	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
-	if (xlogreadfd != -1)
-	{
-		close(xlogreadfd);
-		xlogreadfd = -1;
-		xlogexists = false;
-	}
 
 	return res;
 }
@@ -581,23 +671,13 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 		elog(ERROR, "Invalid target_lsn value %X/%X",
 			 (uint32) (target_lsn >> 32), (uint32) (target_lsn));
 
-	private.archivedir = archivedir;
-	private.tli = target_tli;
-
-	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, &private);
-	if (xlogreader == NULL)
-		elog(ERROR, "out of memory");
+	xlogreader = InitXLogPageRead(&private, archivedir, target_tli, true);
 
 	res = XLogReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
 	/* Didn't find 'target_lsn' and there is no error, return false */
 
+	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
-	if (xlogreadfd != -1)
-	{
-		close(xlogreadfd);
-		xlogreadfd = -1;
-		xlogexists = false;
-	}
 
 	return res;
 }
@@ -626,54 +706,53 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf,
 				   TimeLineID *pageTLI)
 {
-	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
+	XLogPageReadPrivate *private_data;
 	uint32		targetPageOff;
 
+	private_data = (XLogPageReadPrivate *) xlogreader->private_data;
 	targetPageOff = targetPagePtr % XLogSegSize;
 
 	/*
 	 * See if we need to switch to a new segment because the requested record
 	 * is not in the currently open one.
 	 */
-	if (!XLByteInSeg(targetPagePtr, xlogreadsegno))
+	if (!XLByteInSeg(targetPagePtr, private_data->xlogsegno))
 	{
-		if (xlogreadfd >= 0)
+		CleanupXLogPageRead(xlogreader);
+		/*
+		 * Do not switch to next WAL segment in this function. Currently it is
+		 * manually switched only in doExtractPageMap().
+		 */
+		if (private_data->manual_switch)
 		{
-			close(xlogreadfd);
-			xlogreadfd = -1;
-			xlogexists = false;
+			private_data->need_switch = true;
+			return -1;
 		}
-#ifdef HAVE_LIBZ
-		else if (gz_xlogread != NULL)
-		{
-			gzclose(gz_xlogread);
-			gz_xlogread = NULL;
-			xlogexists = false;
-		}
-#endif
 	}
 
-	XLByteToSeg(targetPagePtr, xlogreadsegno);
+	XLByteToSeg(targetPagePtr, private_data->xlogsegno);
 
-	if (!xlogexists)
+	/* Try to switch to the next WAL segment */
+	if (!private_data->xlogexists)
 	{
 		char		xlogfname[MAXFNAMELEN];
 
-		XLogFileName(xlogfname, private->tli, xlogreadsegno);
-		snprintf(xlogfpath, MAXPGPATH, "%s/%s", private->archivedir,
-				 xlogfname);
+		XLogFileName(xlogfname, private_data->tli, private_data->xlogsegno);
+		snprintf(private_data->xlogpath, MAXPGPATH, "%s/%s",
+				 private_data->archivedir, xlogfname);
 
-		if (fileExists(xlogfpath))
+		if (fileExists(private_data->xlogpath))
 		{
-			elog(LOG, "Opening WAL segment \"%s\"", xlogfpath);
+			elog(LOG, "Opening WAL segment \"%s\"", private_data->xlogpath);
 
-			xlogexists = true;
-			xlogreadfd = open(xlogfpath, O_RDONLY | PG_BINARY, 0);
+			private_data->xlogexists = true;
+			private_data->xlogfile = open(private_data->xlogpath,
+										  O_RDONLY | PG_BINARY, 0);
 
-			if (xlogreadfd < 0)
+			if (private_data->xlogfile < 0)
 			{
 				elog(WARNING, "Could not open WAL segment \"%s\": %s",
-					 xlogfpath, strerror(errno));
+					 private_data->xlogpath, strerror(errno));
 				return -1;
 			}
 		}
@@ -681,17 +760,21 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		/* Try to open compressed WAL segment */
 		else
 		{
-			snprintf(gz_xlogfpath, sizeof(gz_xlogfpath), "%s.gz", xlogfpath);
-			if (fileExists(gz_xlogfpath))
+			snprintf(private_data->gz_xlogpath,
+					 sizeof(private_data->gz_xlogpath), "%s.gz",
+					 private_data->xlogpath);
+			if (fileExists(private_data->gz_xlogpath))
 			{
-				elog(LOG, "Opening compressed WAL segment \"%s\"", gz_xlogfpath);
+				elog(LOG, "Opening compressed WAL segment \"%s\"",
+					 private_data->gz_xlogpath);
 
-				xlogexists = true;
-				gz_xlogread = gzopen(gz_xlogfpath, "rb");
-				if (gz_xlogread == NULL)
+				private_data->xlogexists = true;
+				private_data->gz_xlogfile = gzopen(private_data->gz_xlogpath,
+												   "rb");
+				if (private_data->gz_xlogfile == NULL)
 				{
 					elog(WARNING, "Could not open compressed WAL segment \"%s\": %s",
-						 gz_xlogfpath, strerror(errno));
+						 private_data->gz_xlogpath, strerror(errno));
 					return -1;
 				}
 			}
@@ -699,53 +782,127 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 #endif
 
 		/* Exit without error if WAL segment doesn't exist */
-		if (!xlogexists)
+		if (!private_data->xlogexists)
 			return -1;
 	}
 
 	/*
 	 * At this point, we have the right segment open.
 	 */
-	Assert(xlogexists);
+	Assert(private_data->xlogexists);
 
 	/* Read the requested page */
-	if (xlogreadfd != -1)
+	if (private_data->xlogfile != -1)
 	{
-		if (lseek(xlogreadfd, (off_t) targetPageOff, SEEK_SET) < 0)
+		if (lseek(private_data->xlogfile, (off_t) targetPageOff, SEEK_SET) < 0)
 		{
 			elog(WARNING, "Could not seek in WAL segment \"%s\": %s",
-				 xlogfpath, strerror(errno));
+				 private_data->xlogpath, strerror(errno));
 			return -1;
 		}
 
-		if (read(xlogreadfd, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (read(private_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 		{
 			elog(WARNING, "Could not read from WAL segment \"%s\": %s",
-				 xlogfpath, strerror(errno));
+				 private_data->xlogpath, strerror(errno));
 			return -1;
 		}
 	}
 #ifdef HAVE_LIBZ
 	else
 	{
-		if (gzseek(gz_xlogread, (z_off_t) targetPageOff, SEEK_SET) == -1)
+		if (gzseek(private_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
 		{
 			elog(WARNING, "Could not seek in compressed WAL segment \"%s\": %s",
-				 gz_xlogfpath, get_gz_error(gz_xlogread));
+				 private_data->gz_xlogpath,
+				 get_gz_error(private_data->gz_xlogfile));
 			return -1;
 		}
 
-		if (gzread(gz_xlogread, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (gzread(private_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 		{
 			elog(WARNING, "Could not read from compressed WAL segment \"%s\": %s",
-				 gz_xlogfpath, get_gz_error(gz_xlogread));
+				 private_data->gz_xlogpath,
+				 get_gz_error(private_data->gz_xlogfile));
 			return -1;
 		}
 	}
 #endif
 
-	*pageTLI = private->tli;
+	*pageTLI = private_data->tli;
 	return XLOG_BLCKSZ;
+}
+
+/*
+ * Initialize WAL segments reading.
+ */
+static XLogReaderState *
+InitXLogPageRead(XLogPageReadPrivate *private_data, const char *archivedir,
+				 TimeLineID tli, bool allocate_reader)
+{
+	XLogReaderState *xlogreader = NULL;
+
+	MemSet(private_data, 0, sizeof(XLogPageReadPrivate));
+	private_data->archivedir = archivedir;
+	private_data->tli = tli;
+	private_data->xlogfile = -1;
+
+	if (allocate_reader)
+	{
+		xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, private_data);
+		if (xlogreader == NULL)
+			elog(ERROR, "out of memory");
+	}
+
+	return xlogreader;
+}
+
+/*
+ * Cleanup after WAL segment reading.
+ */
+static void
+CleanupXLogPageRead(XLogReaderState *xlogreader)
+{
+	XLogPageReadPrivate *private_data;
+
+	private_data = (XLogPageReadPrivate *) xlogreader->private_data;
+	if (private_data->xlogfile >= 0)
+	{
+		close(private_data->xlogfile);
+		private_data->xlogfile = -1;
+	}
+#ifdef HAVE_LIBZ
+	else if (private_data->gz_xlogfile != NULL)
+	{
+		gzclose(private_data->gz_xlogfile);
+		private_data->gz_xlogfile = NULL;
+	}
+#endif
+	private_data->xlogexists = false;
+}
+
+static void
+PrintXLogCorruptionMsg(XLogPageReadPrivate *private_data, int elevel)
+{
+	if (private_data->xlogpath[0] != 0)
+	{
+		/*
+		 * XLOG reader couldn't read WAL segment.
+		 * We throw a WARNING here to be able to update backup status.
+		 */
+		if (!private_data->xlogexists)
+			elog(elevel, "WAL segment \"%s\" is absent", private_data->xlogpath);
+		else if (private_data->xlogfile != -1)
+			elog(elevel, "Possible WAL corruption. "
+						 "Error has occured during reading WAL segment \"%s\"",
+				 private_data->xlogpath);
+#ifdef HAVE_LIBZ
+		else if (private_data->gz_xlogpath != NULL)
+			elog(elevel, "Possible WAL corruption. "
+						 "Error has occured during reading WAL segment \"%s\"",
+				 private_data->gz_xlogpath);
+#endif
+	}
 }
 
 /*

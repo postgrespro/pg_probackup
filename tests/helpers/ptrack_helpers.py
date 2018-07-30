@@ -12,6 +12,7 @@ import select
 import psycopg2
 from time import sleep
 import re
+import json
 
 idx_ptrack = {
     't_heap': {
@@ -111,6 +112,39 @@ class ProbackupException(Exception):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
 
 
+def slow_start(self, replica=False):
+
+    # wait for https://github.com/postgrespro/testgres/pull/50
+    # self.poll_query_until(
+    #    "postgres",
+    #    "SELECT not pg_is_in_recovery()",
+    #    raise_operational_error=False)
+
+    self.start()
+    if not replica:
+        while True:
+            try:
+                self.poll_query_until(
+                    "postgres",
+                    "SELECT not pg_is_in_recovery()")
+                break
+            except Exception as e:
+                continue
+    else:
+        self.poll_query_until(
+            "postgres",
+            "SELECT pg_is_in_recovery()")
+
+#        while True:
+#            try:
+#                self.poll_query_until(
+#                    "postgres",
+#                    "SELECT pg_is_in_recovery()")
+#                break
+#            except ProbackupException as e:
+#                continue
+
+
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
@@ -204,6 +238,8 @@ class ProbackupTest(object):
         os.makedirs(real_base_dir)
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
+        # bound method slow_start() to 'node' class instance
+        node.slow_start = slow_start.__get__(node)
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
@@ -598,7 +634,7 @@ class ProbackupTest(object):
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
-            options=[], as_text=False
+            options=[], as_text=False, as_json=True
             ):
 
         backup_list = []
@@ -613,63 +649,83 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
+        if as_json:
+            cmd_list += ["--format=json"]
+
         if as_text:
             # You should print it when calling as_text=true
             return self.run_pb(cmd_list + options)
 
         # get show result as list of lines
-        show_splitted = self.run_pb(cmd_list + options).splitlines()
-        if instance is not None and backup_id is None:
-            # cut header(ID, Mode, etc) from show as single string
-            header = show_splitted[1:2][0]
-            # cut backup records from show as single list
-            # with string for every backup record
-            body = show_splitted[3:]
-            # inverse list so oldest record come first
-            body = body[::-1]
-            # split string in list with string for every header element
-            header_split = re.split("  +", header)
-            # Remove empty items
-            for i in header_split:
-                if i == '':
-                    header_split.remove(i)
+        if as_json:
+            data = json.loads(self.run_pb(cmd_list + options))
+        #    print(data)
+            for instance_data in data:
+                # find specific instance if requested
+                if instance and instance_data['instance'] != instance:
                     continue
-            header_split = [
-                header_element.rstrip() for header_element in header_split
-                ]
-            for backup_record in body:
-                backup_record = backup_record.rstrip()
-                # split list with str for every backup record element
-                backup_record_split = re.split("  +", backup_record)
-                # Remove empty items
-                for i in backup_record_split:
-                    if i == '':
-                        backup_record_split.remove(i)
-                if len(header_split) != len(backup_record_split):
-                    print(warning.format(
-                        header=header, body=body,
-                        header_split=header_split,
-                        body_split=backup_record_split)
-                    )
-                    exit(1)
-                new_dict = dict(zip(header_split, backup_record_split))
-                backup_list.append(new_dict)
+
+                for backup in reversed(instance_data['backups']):
+                    # find specific backup if requested
+                    if backup_id:
+                        if backup['id'] == backup_id:
+                            return backup
+                    else:
+                        backup_list.append(backup)
             return backup_list
         else:
-            # cut out empty lines and lines started with #
-            # and other garbage then reconstruct it as dictionary
-            # print show_splitted
-            sanitized_show = [item for item in show_splitted if item]
-            sanitized_show = [
-                item for item in sanitized_show if not item.startswith('#')
-            ]
-            # print sanitized_show
-            for line in sanitized_show:
-                name, var = line.partition(" = ")[::2]
-                var = var.strip('"')
-                var = var.strip("'")
-                specific_record[name.strip()] = var
-            return specific_record
+            show_splitted = self.run_pb(cmd_list + options).splitlines()
+            if instance is not None and backup_id is None:
+                # cut header(ID, Mode, etc) from show as single string
+                header = show_splitted[1:2][0]
+                # cut backup records from show as single list
+                # with string for every backup record
+                body = show_splitted[3:]
+                # inverse list so oldest record come first
+                body = body[::-1]
+                # split string in list with string for every header element
+                header_split = re.split("  +", header)
+                # Remove empty items
+                for i in header_split:
+                    if i == '':
+                        header_split.remove(i)
+                        continue
+                header_split = [
+                    header_element.rstrip() for header_element in header_split
+                    ]
+                for backup_record in body:
+                    backup_record = backup_record.rstrip()
+                    # split list with str for every backup record element
+                    backup_record_split = re.split("  +", backup_record)
+                    # Remove empty items
+                    for i in backup_record_split:
+                        if i == '':
+                            backup_record_split.remove(i)
+                    if len(header_split) != len(backup_record_split):
+                        print(warning.format(
+                            header=header, body=body,
+                            header_split=header_split,
+                            body_split=backup_record_split)
+                        )
+                        exit(1)
+                    new_dict = dict(zip(header_split, backup_record_split))
+                    backup_list.append(new_dict)
+                return backup_list
+            else:
+                # cut out empty lines and lines started with #
+                # and other garbage then reconstruct it as dictionary
+                # print show_splitted
+                sanitized_show = [item for item in show_splitted if item]
+                sanitized_show = [
+                    item for item in sanitized_show if not item.startswith('#')
+                ]
+                # print sanitized_show
+                for line in sanitized_show:
+                    name, var = line.partition(" = ")[::2]
+                    var = var.strip('"')
+                    var = var.strip("'")
+                    specific_record[name.strip()] = var
+                return specific_record
 
     def validate_pb(
             self, backup_dir, instance=None,
@@ -851,13 +907,26 @@ class ProbackupTest(object):
         return num
 
     def switch_wal_segment(self, node):
-        """ Execute pg_switch_wal/xlog() in given node"""
-        if self.version_to_num(
-            node.safe_psql("postgres", "show server_version")
-                ) >= self.version_to_num('10.0'):
-            node.safe_psql("postgres", "select pg_switch_wal()")
+        """
+        Execute pg_switch_wal/xlog() in given node
+
+        Args:
+            node: an instance of PostgresNode or NodeConnection class
+        """
+        if isinstance(node, testgres.PostgresNode):
+            if self.version_to_num(
+                node.safe_psql("postgres", "show server_version")
+                    ) >= self.version_to_num('10.0'):
+                node.safe_psql("postgres", "select pg_switch_wal()")
+            else:
+                node.safe_psql("postgres", "select pg_switch_xlog()")
         else:
-            node.safe_psql("postgres", "select pg_switch_xlog()")
+            if self.version_to_num(
+                node.execute("show server_version")[0][0]
+                    ) >= self.version_to_num('10.0'):
+                node.execute("select pg_switch_wal()")
+            else:
+                node.execute("select pg_switch_xlog()")
         sleep(1)
 
     def get_version(self, node):

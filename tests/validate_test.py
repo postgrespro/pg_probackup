@@ -749,6 +749,93 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_validate_instance_with_corrupted_full_and_try_restore(self):
+        """make archive node, take FULL, PAGE1, PAGE2, FULL2, PAGE3 backups,
+        corrupt file in FULL backup and run validate on instance,
+        expect FULL to gain status CORRUPT, PAGE1 and PAGE2 to gain status ORPHAN,
+        try to restore backup with --no-validation option"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+        file_path_t_heap = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+        # FULL1
+        backup_id_1 = self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+        # PAGE1
+        backup_id_2 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(20000,30000) i")
+        backup_id_3 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # FULL1
+        backup_id_4 = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE3
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(30000,40000) i")
+        backup_id_5 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # Corrupt some file in FULL backup
+        file_full = os.path.join(backup_dir, 'backups/node', backup_id_1, 'database', file_path_t_heap)
+        with open(file_full, "rb+", 0) as f:
+            f.seek(84)
+            f.write(b"blah")
+            f.flush()
+            f.close
+
+        # Validate Instance
+        try:
+            self.validate_pb(backup_dir, 'node', options=['--log-level-file=verbose'])
+            self.assertEqual(1, 0, "Expecting Error because of data files corruption.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'INFO: Validating backup {0}'.format(backup_id_1) in e.message
+                and "INFO: Validate backups of the instance 'node'" in e.message
+                and 'WARNING: Invalid CRC of backup file "{0}"'.format(file_full) in e.message
+                and 'WARNING: Backup {0} data files are corrupted'.format(backup_id_1) in e.message,
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        self.assertEqual('CORRUPT', self.show_pb(backup_dir, 'node', backup_id_1)['status'], 'Backup STATUS should be "CORRUPT"')
+        self.assertEqual('ORPHAN', self.show_pb(backup_dir, 'node', backup_id_2)['status'], 'Backup STATUS should be "ORPHAN"')
+        self.assertEqual('ORPHAN', self.show_pb(backup_dir, 'node', backup_id_3)['status'], 'Backup STATUS should be "ORPHAN"')
+        self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_4)['status'], 'Backup STATUS should be "OK"')
+        self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_5)['status'], 'Backup STATUS should be "OK"')
+
+        node.cleanup()
+        restore_out = self.restore_node(
+                backup_dir, 'node', node,
+                options=["--no-validate"])
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id_5),
+            restore_out,
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_full(self):
         """make archive node, take FULL, PAGE1, PAGE2, FULL2, PAGE3 backups,
         corrupt file in FULL backup and run validate on instance,
@@ -908,7 +995,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
         target_xid = None
         with node.connect("postgres") as con:
-            res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
+            res = con.execute(
+                "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
             target_xid = res[0][0]
 
@@ -1041,7 +1129,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_validate_corrupt_wal_between_backups(self):
-        """make archive node, make full backup, corrupt all wal files, run validate to real xid, expect errors"""
+        """
+        make archive node, make full backup, corrupt all wal files,
+        run validate to real xid, expect errors
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),
@@ -1083,7 +1174,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         else:
             walfile = node.safe_psql(
                 'postgres',
-                'select pg_walfile_name(pg_current_wal_location())').rstrip()
+                'select pg_walfile_name(pg_current_wal_lsn())').rstrip()
 
         if self.archive_compress:
             walfile = walfile + '.gz'
@@ -1134,12 +1225,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'OK',
-            self.show_pb(backup_dir, 'node')[0]['Status'],
+            self.show_pb(backup_dir, 'node')[0]['status'],
             'Backup STATUS should be "OK"')
 
         self.assertEqual(
             'OK',
-            self.show_pb(backup_dir, 'node')[1]['Status'],
+            self.show_pb(backup_dir, 'node')[1]['status'],
             'Backup STATUS should be "OK"')
 
         # Clean after yourself
@@ -1208,7 +1299,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'ERROR',
-            self.show_pb(backup_dir, 'node')[1]['Status'],
+            self.show_pb(backup_dir, 'node')[1]['status'],
             'Backup {0} should have STATUS "ERROR"')
 
         # Clean after yourself
@@ -1316,7 +1407,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node1', data_dir=node2.data_dir)
         node2.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node2.port))
-        node2.start()
+        node2.slow_start()
 
         timeline_node1 = node1.get_control_data()["Latest checkpoint's TimeLineID"]
         timeline_node2 = node2.get_control_data()["Latest checkpoint's TimeLineID"]
@@ -1405,7 +1496,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             pass
         self.assertTrue(
-            self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
+            self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
         self.set_archiving(backup_dir, 'node', node)
         node.reload()
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -1440,14 +1531,19 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'CORRUPT')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[3]['status'] == 'CORRUPT')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[7]['status'] == 'ORPHAN')
 
         os.rename(file_new, file)
         try:
@@ -1459,14 +1555,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ERROR')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['Status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'OK')
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'OK')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1537,13 +1634,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'CORRUPT')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'CORRUPT')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
 
         os.rename(file_new, file)
         file = os.path.join(
@@ -1562,13 +1659,72 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['Status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['Status'] == 'CORRUPT')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['Status'] == 'ORPHAN')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'OK')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'CORRUPT')
+        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_file_size_corruption_no_validate(self):
+
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            # initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+        )
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+        heap_size = node.safe_psql(
+            "postgres",
+            "select pg_relation_size('t_heap')")
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4"], async=False, gdb=False)
+
+        node.stop()
+        node.cleanup()
+
+        # Let`s do file corruption
+        with open(os.path.join(backup_dir, "backups", 'node', backup_id, "database", heap_path), "rb+", 0) as f:
+            f.truncate(int(heap_size) - 4096)
+            f.flush()
+            f.close
+
+        node.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["--no-validate"])
+        except ProbackupException as e:
+            self.assertTrue("ERROR: Data files restoring failed" in e.message, repr(e.message))
+            print "\nExpected error: \n" + e.message
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

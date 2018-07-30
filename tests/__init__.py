@@ -60,6 +60,10 @@ def load_tests(loader, tests, pattern):
 #      ptrack backup on replica should work correctly
 # archive:
 #      immediate recovery and full recovery
+# backward compatibility:
+#      previous version catalog must be readable by newer version
+#      incremental chain from previous version can be continued
+#      backups from previous version can be restored
 # 10vanilla_1.3ptrack +
 # 10vanilla+
 # 9.6vanilla_1.3ptrack +
