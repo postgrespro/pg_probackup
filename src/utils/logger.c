@@ -15,12 +15,13 @@
 
 #include "logger.h"
 #include "pgut.h"
+#include "pg_probackup.h"
 #include "thread.h"
 
 /* Logger parameters */
 
-int			log_level_console = LOG_NONE;
-int			log_level_file = LOG_NONE;
+int			log_level_console = LOG_LEVEL_CONSOLE_DEFAULT;
+int			log_level_file = LOG_LEVEL_FILE_DEFAULT;
 
 char	   *log_filename = NULL;
 char	   *error_log_filename = NULL;
@@ -74,12 +75,12 @@ void
 init_logger(const char *root_path)
 {
 	/* Set log path */
-	if (LOG_LEVEL_FILE != LOG_OFF || error_log_filename)
+	if (log_level_file != LOG_OFF || error_log_filename)
 	{
 		if (log_directory)
 			strcpy(log_path, log_directory);
 		else
-			join_path_components(log_path, root_path, "log");
+			join_path_components(log_path, root_path, LOG_DIRECTORY_DEFAULT);
 	}
 }
 
@@ -165,10 +166,10 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
-	write_to_file = elevel >= LOG_LEVEL_FILE && log_path[0] != '\0';
+	write_to_file = elevel >= log_level_file && log_path[0] != '\0';
 	write_to_error_log = elevel >= ERROR && error_log_filename &&
 		log_path[0] != '\0';
-	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
+	write_to_stderr = elevel >= log_level_console && !file_only;
 
 	pthread_lock(&log_file_mutex);
 #ifdef WIN32
@@ -201,7 +202,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		if (log_file == NULL)
 		{
 			if (log_filename == NULL)
-				open_logfile(&log_file, "pg_probackup.log");
+				open_logfile(&log_file, LOG_FILENAME_DEFAULT);
 			else
 				open_logfile(&log_file, log_filename);
 		}
@@ -271,7 +272,7 @@ elog_stderr(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_CONSOLE && elevel < ERROR)
+	if (elevel < log_level_console && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -298,7 +299,7 @@ elog(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_CONSOLE && elevel < LOG_LEVEL_FILE && elevel < ERROR)
+	if (elevel < log_level_console && elevel < log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -318,7 +319,7 @@ elog_file(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_FILE && elevel < ERROR)
+	if (elevel < log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -359,7 +360,7 @@ pg_log(eLogType type, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_CONSOLE && elevel < LOG_LEVEL_FILE && elevel < ERROR)
+	if (elevel < log_level_console && elevel < log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);

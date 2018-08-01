@@ -8,6 +8,7 @@
  */
 
 #include "pg_probackup.h"
+#include "utils/logger.h"
 
 #include "pqexpbuffer.h"
 
@@ -57,13 +58,17 @@ do_configure(bool show_only)
 		config->master_db = master_db;
 	if (master_user)
 		config->master_user = master_user;
-	if (replica_timeout != 300)		/* 300 is default value */
+
+	if (replica_timeout)
 		config->replica_timeout = replica_timeout;
 
-	if (log_level_console != LOG_NONE)
-		config->log_level_console = LOG_LEVEL_CONSOLE;
-	if (log_level_file != LOG_NONE)
-		config->log_level_file = LOG_LEVEL_FILE;
+	if (archive_timeout)
+		config->archive_timeout = archive_timeout;
+
+	if (log_level_console)
+		config->log_level_console = log_level_console;
+	if (log_level_file)
+		config->log_level_file = log_level_file;
 	if (log_filename)
 		config->log_filename = log_filename;
 	if (error_log_filename)
@@ -80,9 +85,9 @@ do_configure(bool show_only)
 	if (retention_window)
 		config->retention_window = retention_window;
 
-	if (compress_alg != NOT_DEFINED_COMPRESS)
+	if (compress_alg)
 		config->compress_alg = compress_alg;
-	if (compress_level != DEFAULT_COMPRESS_LEVEL)
+	if (compress_level)
 		config->compress_level = compress_level;
 
 	if (show_only)
@@ -107,21 +112,23 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->master_port = NULL;
 	config->master_db = NULL;
 	config->master_user = NULL;
-	config->replica_timeout = INT_MIN;	/* INT_MIN means "undefined" */
+	config->replica_timeout = REPLICA_TIMEOUT_DEFAULT;
 
-	config->log_level_console = INT_MIN;	/* INT_MIN means "undefined" */
-	config->log_level_file = INT_MIN;		/* INT_MIN means "undefined" */
-	config->log_filename = NULL;
+	config->archive_timeout = ARCHIVE_TIMEOUT_DEFAULT;
+
+	config->log_level_console = LOG_LEVEL_CONSOLE_DEFAULT;
+	config->log_level_file = LOG_LEVEL_FILE_DEFAULT;
+	config->log_filename = LOG_FILENAME_DEFAULT;
 	config->error_log_filename = NULL;
-	config->log_directory = NULL;
-	config->log_rotation_size = 0;
-	config->log_rotation_age = 0;
+	config->log_directory = LOG_DIRECTORY_DEFAULT;
+	config->log_rotation_size = LOG_ROTATION_SIZE_DEFAULT;
+	config->log_rotation_age = LOG_ROTATION_AGE_DEFAULT;
 
-	config->retention_redundancy = 0;
-	config->retention_window = 0;
+	config->retention_redundancy = RETENTION_REDUNDANCY_DEFAULT;
+	config->retention_window = RETENTION_WINDOW_DEFAULT;
 
-	config->compress_alg = NOT_DEFINED_COMPRESS;
-	config->compress_level = DEFAULT_COMPRESS_LEVEL;
+	config->compress_alg = COMPRESS_ALG_DEFAULT;
+	config->compress_level = COMPRESS_LEVEL_DEFAULT;
 }
 
 void
@@ -154,55 +161,43 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	if (config->master_user)
 		fprintf(out, "master-user = %s\n", config->master_user);
 
-	if (config->replica_timeout != INT_MIN)
-	{
-		convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_S,
-								 &res, &unit);
-		fprintf(out, "replica-timeout = " UINT64_FORMAT "%s\n", res, unit);
-	}
+	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_S,
+								&res, &unit);
+	fprintf(out, "replica-timeout = " UINT64_FORMAT "%s\n", res, unit);
+
+	fprintf(out, "#Archive parameters:\n");
+	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_S,
+								&res, &unit);
+	fprintf(out, "archive-timeout = " UINT64_FORMAT "%s\n", res, unit);
 
 	fprintf(out, "#Logging parameters:\n");
-	if (config->log_level_console != INT_MIN)
-		fprintf(out, "log-level-console = %s\n", deparse_log_level(config->log_level_console));
-	if (config->log_level_file != INT_MIN)
-		fprintf(out, "log-level-file = %s\n", deparse_log_level(config->log_level_file));
-	if (config->log_filename)
-		fprintf(out, "log-filename = %s\n", config->log_filename);
+	fprintf(out, "log-level-console = %s\n", deparse_log_level(config->log_level_console));
+	fprintf(out, "log-level-file = %s\n", deparse_log_level(config->log_level_file));
+	fprintf(out, "log-filename = %s\n", config->log_filename);
 	if (config->error_log_filename)
 		fprintf(out, "error-log-filename = %s\n", config->error_log_filename);
-	if (config->log_directory)
-		fprintf(out, "log-directory = %s\n", config->log_directory);
 
-	/*
-	 * Convert values from base unit
-	 */
-	if (config->log_rotation_size)
-	{
-		convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
-								 &res, &unit);
-		fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n", res, unit);
-	}
-	if (config->log_rotation_age)
-	{
-		convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
-								 &res, &unit);
-		fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n", res, unit);
-	}
+	if (strcmp(config->log_directory, LOG_DIRECTORY_DEFAULT) == 0)
+		fprintf(out, "log-directory = %s/%s\n", backup_path, config->log_directory);
+	else
+		fprintf(out, "log-directory = %s\n", config->log_directory);
+	/* Convert values from base unit */
+	convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
+								&res, &unit);
+	fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n", res, (res)?unit:"KB");
+
+	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
+								&res, &unit);
+	fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n", res, (res)?unit:"min");
 
 	fprintf(out, "#Retention parameters:\n");
-	if (config->retention_redundancy)
-		fprintf(out, "retention-redundancy = %u\n", config->retention_redundancy);
-	if (config->retention_window)
-		fprintf(out, "retention-window = %u\n", config->retention_window);
+	fprintf(out, "retention-redundancy = %u\n", config->retention_redundancy);
+	fprintf(out, "retention-window = %u\n", config->retention_window);
 
 	fprintf(out, "#Compression parameters:\n");
 
 	fprintf(out, "compress-algorithm = %s\n", deparse_compress_alg(config->compress_alg));
-
-	if (compress_level != config->compress_level)
-		fprintf(out, "compress-level = %d\n", compress_level);
-	else
-		fprintf(out, "compress-level = %d\n", config->compress_level);
+	fprintf(out, "compress-level = %d\n", config->compress_level);
 }
 
 void
@@ -258,6 +253,8 @@ readBackupCatalogConfigFile(void)
 		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		/* other options */
 		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
+		/* archive options */
+		{ 'u', 0, "archive-timeout",		&(config->archive_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		{0}
 	};
 
@@ -342,6 +339,8 @@ static void
 show_configure_json(pgBackupConfig *config)
 {
 	PQExpBuffer	buf = &show_buf;
+	uint64		res;
+	const char *unit;
 
 	json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
@@ -373,53 +372,60 @@ show_configure_json(pgBackupConfig *config)
 		json_add_value(buf, "master-user", config->master_user, json_level,
 					   true);
 
-	if (config->replica_timeout != INT_MIN)
-	{
-		json_add_key(buf, "replica-timeout", json_level, true);
-		appendPQExpBuffer(buf, "%d", config->replica_timeout);
-	}
+	json_add_key(buf, "replica-timeout", json_level, true);
+	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_S,
+							 &res, &unit);
+	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, unit);
+
+	/* Archive parameters */
+	json_add_key(buf, "archive-timeout", json_level, true);
+	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_S,
+							 &res, &unit);
+	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, unit);
 
 	/* Logging parameters */
-	if (config->log_level_console != INT_MIN)
-		json_add_value(buf, "log-level-console",
-					   deparse_log_level(config->log_level_console), json_level,
-					   true);
-	if (config->log_level_file != INT_MIN)
-		json_add_value(buf, "log-level-file",
-					   deparse_log_level(config->log_level_file), json_level,
-					   true);
-	if (config->log_filename)
-		json_add_value(buf, "log-filename", config->log_filename, json_level,
-					   true);
+	json_add_value(buf, "log-level-console",
+				   deparse_log_level(config->log_level_console), json_level,
+				   true);
+	json_add_value(buf, "log-level-file",
+				   deparse_log_level(config->log_level_file), json_level,
+				   true);
+	json_add_value(buf, "log-filename", config->log_filename, json_level,
+				   true);
 	if (config->error_log_filename)
 		json_add_value(buf, "error-log-filename", config->error_log_filename,
 					   json_level, true);
-	if (config->log_directory)
-		json_add_value(buf, "log-directory", config->log_directory, json_level,
-					   true);
 
-	if (config->log_rotation_size)
+	if (strcmp(config->log_directory, LOG_DIRECTORY_DEFAULT) == 0)
 	{
-		json_add_key(buf, "log-rotation-size", json_level, true);
-		appendPQExpBuffer(buf, "%d", config->log_rotation_size);
+		char		log_directory_fullpath[MAXPGPATH];
+
+		sprintf(log_directory_fullpath, "%s/%s",
+				backup_path, config->log_directory);
+
+		json_add_value(buf, "log-directory", log_directory_fullpath,
+					   json_level, true);
 	}
-	if (config->log_rotation_age)
-	{
-		json_add_key(buf, "log-rotation-age", json_level, true);
-		appendPQExpBuffer(buf, "%d", config->log_rotation_age);
-	}
+	else
+		json_add_value(buf, "log-directory", config->log_directory,
+					   json_level, true);
+
+	json_add_key(buf, "log-rotation-size", json_level, true);
+	convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
+							 &res, &unit);
+	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, (res)?unit:"KB");
+
+	json_add_key(buf, "log-rotation-age", json_level, true);
+	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
+							 &res, &unit);
+	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, (res)?unit:"min");
 
 	/* Retention parameters */
-	if (config->retention_redundancy)
-	{
-		json_add_key(buf, "retention-redundancy", json_level, true);
-		appendPQExpBuffer(buf, "%u", config->retention_redundancy);
-	}
-	if (config->retention_window)
-	{
-		json_add_key(buf, "retention-window", json_level, true);
-		appendPQExpBuffer(buf, "%u", config->retention_window);
-	}
+	json_add_key(buf, "retention-redundancy", json_level, true);
+	appendPQExpBuffer(buf, "%u", config->retention_redundancy);
+
+	json_add_key(buf, "retention-window", json_level, true);
+	appendPQExpBuffer(buf, "%u", config->retention_window);
 
 	/* Compression parameters */
 	json_add_value(buf, "compress-algorithm",

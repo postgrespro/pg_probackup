@@ -1680,7 +1680,7 @@ pgut_execute_parallel(PGconn* conn,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
+	if (log_level_console <= VERBOSE || log_level_file <= VERBOSE)
 	{
 		int		i;
 
@@ -1742,7 +1742,7 @@ pgut_execute_extended(PGconn* conn, const char *query, int nParams,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
+	if (log_level_console <= VERBOSE || log_level_file <= VERBOSE)
 	{
 		int		i;
 
@@ -1800,7 +1800,7 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
+	if (log_level_console <= VERBOSE || log_level_file <= VERBOSE)
 	{
 		int		i;
 
