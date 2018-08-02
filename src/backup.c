@@ -104,7 +104,6 @@ static int checkpoint_timeout(void);
 
 //static void backup_list_file(parray *files, const char *root, )
 static void parse_backup_filelist_filenames(parray *files, const char *root);
-static void write_backup_file_list(parray *files, const char *root);
 static void wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment);
 static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
@@ -515,8 +514,6 @@ do_backup_instance(void)
 
 		/* get list of backups already taken */
 		backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
-		if (backup_list == NULL)
-			elog(ERROR, "Failed to get backup list.");
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
 		if (prev_backup == NULL)
@@ -697,8 +694,11 @@ do_backup_instance(void)
 		pg_atomic_clear_flag(&file->lock);
 	}
 
-	/* sort by size for load balancing */
+	/* Sort by size for load balancing */
 	parray_qsort(backup_files_list, pgFileCompareSize);
+	/* Sort the array for binary search */
+	if (prev_backup_filelist)
+		parray_qsort(prev_backup_filelist, pgFileComparePath);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -788,7 +788,7 @@ do_backup_instance(void)
 	}
 
 	/* Print the list of files to backup catalog */
-	write_backup_file_list(backup_files_list, pgdata);
+	pgBackupWriteFileList(&current, backup_files_list, pgdata);
 
 	/* Compute summary of size of regular files in the backup */
 	for (i = 0; i < parray_num(backup_files_list); i++)
@@ -2076,35 +2076,32 @@ backup_files(void *arg)
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
 			{
-				int			p;
 				char	   *relative;
-				int			n_prev_files = parray_num(arguments->prev_filelist);
+				pgFile		key;
+				pgFile	  **prev_file;
 
 				relative = GetRelativePath(file->path, arguments->from_root);
-				for (p = 0; p < n_prev_files; p++)
-				{
-					pgFile	   *prev_file;
+				key.path = relative;
 
-					prev_file = (pgFile *) parray_get(arguments->prev_filelist, p);
-
-					if (strcmp(relative, prev_file->path) == 0)
-					{
-						/* File exists in previous backup */
-						file->exists_in_prev = true;
-						// elog(VERBOSE, "File exists at the time of previous backup %s", relative);
-						break;
-					}
-				}
+				prev_file = (pgFile **) parray_bsearch(arguments->prev_filelist,
+													   &key, pgFileComparePath);
+				if (prev_file)
+					/* File exists in previous backup */
+					file->exists_in_prev = true;
 			}
 			/* copy the file into backup */
 			if (file->is_datafile && !file->is_cfs)
 			{
+				char		to_path[MAXPGPATH];
+
+				join_path_components(to_path, arguments->to_root,
+									 file->path + strlen(arguments->from_root) + 1);
+
 				/* backup block by block if datafile AND not compressed by cfs*/
-				if (!backup_data_file(arguments,
-									  arguments->from_root,
-									  arguments->to_root, file,
+				if (!backup_data_file(arguments, to_path, file,
 									  arguments->prev_start_lsn,
-									  current.backup_mode))
+									  current.backup_mode,
+									  compress_alg, compress_level))
 				{
 					file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
@@ -2277,31 +2274,6 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 		}
 	}
 	free(cfs_tblspc_path);
-}
-
-
-/*
- * Output the list of files to backup catalog DATABASE_FILE_LIST
- */
-static void
-write_backup_file_list(parray *files, const char *root)
-{
-	FILE	   *fp;
-	char		path[MAXPGPATH];
-
-	pgBackupGetPath(&current, path, lengthof(path), DATABASE_FILE_LIST);
-
-	fp = fopen(path, "wt");
-	if (fp == NULL)
-		elog(ERROR, "cannot open file list \"%s\": %s", path,
-			strerror(errno));
-
-	print_file_list(fp, files, root);
-
-	if (fflush(fp) != 0 ||
-		fsync(fileno(fp)) != 0 ||
-		fclose(fp))
-		elog(ERROR, "cannot write file list \"%s\": %s", path, strerror(errno));
 }
 
 /*

@@ -38,7 +38,7 @@ char		backup_instance_path[MAXPGPATH];
 char		arclog_path[MAXPGPATH] = "";
 
 /* common options */
-char	   *backup_id_string_param = NULL;
+static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
 bool		progress = false;
@@ -125,7 +125,7 @@ static pgut_option options[] =
 	{ 'u', 'j', "threads",				&num_threads,		SOURCE_CMDLINE },
 	{ 'b', 2, "stream",					&stream_wal,		SOURCE_CMDLINE },
 	{ 'b', 3, "progress",				&progress,			SOURCE_CMDLINE },
-	{ 's', 'i', "backup-id",			&backup_id_string_param, SOURCE_CMDLINE },
+	{ 's', 'i', "backup-id",			&backup_id_string, SOURCE_CMDLINE },
 	/* backup options */
 	{ 'b', 10, "backup-pg-log",			&backup_logs,		SOURCE_CMDLINE },
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,	SOURCE_CMDLINE },
@@ -206,7 +206,7 @@ main(int argc, char *argv[])
 	int			rc;
 
 	/* initialize configuration */
-	pgBackup_init(&current);
+	pgBackupInit(&current);
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], "pgscripts");
@@ -235,10 +235,12 @@ main(int argc, char *argv[])
 			backup_subcmd = RESTORE_CMD;
 		else if (strcmp(argv[1], "validate") == 0)
 			backup_subcmd = VALIDATE_CMD;
-		else if (strcmp(argv[1], "show") == 0)
-			backup_subcmd = SHOW_CMD;
 		else if (strcmp(argv[1], "delete") == 0)
 			backup_subcmd = DELETE_CMD;
+		else if (strcmp(argv[1], "merge") == 0)
+			backup_subcmd = MERGE_CMD;
+		else if (strcmp(argv[1], "show") == 0)
+			backup_subcmd = SHOW_CMD;
 		else if (strcmp(argv[1], "set-config") == 0)
 			backup_subcmd = SET_CONFIG_CMD;
 		else if (strcmp(argv[1], "show-config") == 0)
@@ -281,7 +283,8 @@ main(int argc, char *argv[])
 	if (backup_subcmd == BACKUP_CMD ||
 		backup_subcmd == RESTORE_CMD ||
 		backup_subcmd == VALIDATE_CMD ||
-		backup_subcmd == DELETE_CMD)
+		backup_subcmd == DELETE_CMD ||
+		backup_subcmd == MERGE_CMD)
 	{
 		int			i,
 					len = 0,
@@ -347,7 +350,8 @@ main(int argc, char *argv[])
 	}
 
 	/* Option --instance is required for all commands except init and show */
-	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD && backup_subcmd != VALIDATE_CMD)
+	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
+		backup_subcmd != VALIDATE_CMD)
 	{
 		if (instance_name == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
@@ -359,7 +363,8 @@ main(int argc, char *argv[])
 	 */
 	if (instance_name)
 	{
-		sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
+		sprintf(backup_instance_path, "%s/%s/%s",
+				backup_path, BACKUPS_DIR, instance_name);
 		sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
 
 		/*
@@ -402,18 +407,19 @@ main(int argc, char *argv[])
 		elog(ERROR, "-D, --pgdata must be an absolute path");
 
 	/* Sanity check of --backup-id option */
-	if (backup_id_string_param != NULL)
+	if (backup_id_string != NULL)
 	{
-		if (backup_subcmd != RESTORE_CMD
-			&& backup_subcmd != VALIDATE_CMD
-			&& backup_subcmd != DELETE_CMD
-			&& backup_subcmd != SHOW_CMD)
-			elog(ERROR, "Cannot use -i (--backup-id) option together with the '%s' command",
-						argv[1]);
+		if (backup_subcmd != RESTORE_CMD &&
+			backup_subcmd != VALIDATE_CMD &&
+			backup_subcmd != DELETE_CMD &&
+			backup_subcmd != MERGE_CMD &&
+			backup_subcmd != SHOW_CMD)
+			elog(ERROR, "Cannot use -i (--backup-id) option together with the \"%s\" command",
+				 command_name);
 
-		current.backup_id = base36dec(backup_id_string_param);
+		current.backup_id = base36dec(backup_id_string);
 		if (current.backup_id == 0)
-			elog(ERROR, "Invalid backup-id");
+			elog(ERROR, "Invalid backup-id \"%s\"", backup_id_string);
 	}
 
 	/* Setup stream options. They are used in streamutil.c. */
@@ -490,16 +496,19 @@ main(int argc, char *argv[])
 		case SHOW_CMD:
 			return do_show(current.backup_id);
 		case DELETE_CMD:
-			if (delete_expired && backup_id_string_param)
+			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
-			if (!delete_expired && !delete_wal && !backup_id_string_param)
+			if (!delete_expired && !delete_wal && !backup_id_string)
 				elog(ERROR, "You must specify at least one of the delete options: --expired |--wal |--backup_id");
-			if (delete_wal && !delete_expired && !backup_id_string_param)
+			if (delete_wal && !delete_expired && !backup_id_string)
 				return do_retention_purge();
 			if (delete_expired)
 				return do_retention_purge();
 			else
 				return do_delete(current.backup_id);
+		case MERGE_CMD:
+			do_merge(current.backup_id);
+			break;
 		case SHOW_CONFIG_CMD:
 			return do_configure(true);
 		case SET_CONFIG_CMD:

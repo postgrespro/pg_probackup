@@ -32,50 +32,12 @@ typedef struct
 	int			ret;
 } restore_files_arg;
 
-/* Tablespace mapping structures */
-
-typedef struct TablespaceListCell
-{
-	struct TablespaceListCell *next;
-	char		old_dir[MAXPGPATH];
-	char		new_dir[MAXPGPATH];
-} TablespaceListCell;
-
-typedef struct TablespaceList
-{
-	TablespaceListCell *head;
-	TablespaceListCell *tail;
-} TablespaceList;
-
-typedef struct TablespaceCreatedListCell
-{
-	struct TablespaceCreatedListCell *next;
-	char		link_name[MAXPGPATH];
-	char		linked_dir[MAXPGPATH];
-} TablespaceCreatedListCell;
-
-typedef struct TablespaceCreatedList
-{
-	TablespaceCreatedListCell *head;
-	TablespaceCreatedListCell *tail;
-} TablespaceCreatedList;
-
 static void restore_backup(pgBackup *backup);
-static void restore_directories(const char *pg_data_dir,
-								const char *backup_dir);
-static void check_tablespace_mapping(pgBackup *backup);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
 static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
-static const char *get_tablespace_mapping(const char *dir);
-static void set_tablespace_created(const char *link, const char *dir);
-static const char *get_tablespace_created(const char *link);
-
-/* Tablespace mapping */
-static TablespaceList tablespace_dirs = {NULL, NULL};
-static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
 
 
 /*
@@ -115,8 +77,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	catalog_lock();
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backups == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
 	/* Find backup range we should restore or validate. */
 	for (i = 0; i < parray_num(backups); i++)
@@ -256,6 +216,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+
 			pgBackupValidate(backup);
 			/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
 			if (backup->status == BACKUP_STATUS_CORRUPT)
@@ -405,7 +366,7 @@ restore_backup(pgBackup *backup)
 	 * this_backup_path = $BACKUP_PATH/backups/instance_name/backup_id
 	 */
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	restore_directories(pgdata, this_backup_path);
+	create_data_directories(pgdata, this_backup_path, true);
 
 	/*
 	 * Get list of files which need to be restored.
@@ -507,212 +468,6 @@ remove_deleted_files(pgBackup *backup)
 }
 
 /*
- * Restore backup directories from **backup_database_dir** to **pg_data_dir**.
- *
- * TODO: Think about simplification and clarity of the function.
- */
-static void
-restore_directories(const char *pg_data_dir, const char *backup_dir)
-{
-	parray	   *dirs,
-			   *links;
-	size_t		i;
-	char		backup_database_dir[MAXPGPATH],
-				to_path[MAXPGPATH];
-
-	dirs = parray_new();
-	links = parray_new();
-
-	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
-
-	list_data_directories(dirs, backup_database_dir, true, false);
-	read_tablespace_map(links, backup_dir);
-
-	elog(LOG, "restore directories and symlinks...");
-
-	for (i = 0; i < parray_num(dirs); i++)
-	{
-		pgFile	   *dir = (pgFile *) parray_get(dirs, i);
-		char	   *relative_ptr = GetRelativePath(dir->path, backup_database_dir);
-
-		Assert(S_ISDIR(dir->mode));
-
-		/* First try to create symlink and linked directory */
-		if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative_ptr))
-		{
-			char	   *link_ptr = GetRelativePath(relative_ptr, PG_TBLSPC_DIR),
-					   *link_sep,
-					   *tmp_ptr;
-			char		link_name[MAXPGPATH];
-			pgFile	  **link;
-
-			/* Extract link name from relative path */
-			link_sep = first_dir_separator(link_ptr);
-			if (link_sep != NULL)
-			{
-				int			len = link_sep - link_ptr;
-				strncpy(link_name, link_ptr, len);
-				link_name[len] = '\0';
-			}
-			else
-				goto create_directory;
-
-			tmp_ptr = dir->path;
-			dir->path = link_name;
-			/* Search only by symlink name without path */
-			link = (pgFile **) parray_bsearch(links, dir, pgFileComparePath);
-			dir->path = tmp_ptr;
-
-			if (link)
-			{
-				const char *linked_path = get_tablespace_mapping((*link)->linked);
-				const char *dir_created;
-
-				if (!is_absolute_path(linked_path))
-					elog(ERROR, "tablespace directory is not an absolute path: %s\n",
-						 linked_path);
-
-				/* Check if linked directory was created earlier */
-				dir_created = get_tablespace_created(link_name);
-				if (dir_created)
-				{
-					/*
-					 * If symlink and linked directory were created do not
-					 * create it second time.
-					 */
-					if (strcmp(dir_created, linked_path) == 0)
-					{
-						/*
-						 * Create rest of directories.
-						 * First check is there any directory name after
-						 * separator.
-						 */
-						if (link_sep != NULL && *(link_sep + 1) != '\0')
-							goto create_directory;
-						else
-							continue;
-					}
-					else
-						elog(ERROR, "tablespace directory \"%s\" of page backup does not "
-							 "match with previous created tablespace directory \"%s\" of symlink \"%s\"",
-							 linked_path, dir_created, link_name);
-				}
-
-				if (link_sep)
-					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
-						 linked_path,
-						 (int) (link_sep -  relative_ptr), relative_ptr);
-				else
-					elog(LOG, "create directory \"%s\" and symbolic link \"%s\"",
-						 linked_path, relative_ptr);
-
-				/* Firstly, create linked directory */
-				dir_create_dir(linked_path, DIR_PERMISSION);
-
-				join_path_components(to_path, pg_data_dir, PG_TBLSPC_DIR);
-				/* Create pg_tblspc directory just in case */
-				dir_create_dir(to_path, DIR_PERMISSION);
-
-				/* Secondly, create link */
-				join_path_components(to_path, to_path, link_name);
-				if (symlink(linked_path, to_path) < 0)
-					elog(ERROR, "could not create symbolic link \"%s\": %s",
-						 to_path, strerror(errno));
-
-				/* Save linked directory */
-				set_tablespace_created(link_name, linked_path);
-
-				/*
-				 * Create rest of directories.
-				 * First check is there any directory name after separator.
-				 */
-				if (link_sep != NULL && *(link_sep + 1) != '\0')
-					goto create_directory;
-
-				continue;
-			}
-		}
-
-create_directory:
-		elog(LOG, "create directory \"%s\"", relative_ptr);
-
-		/* This is not symlink, create directory */
-		join_path_components(to_path, pg_data_dir, relative_ptr);
-		dir_create_dir(to_path, DIR_PERMISSION);
-	}
-
-	parray_walk(links, pgFileFree);
-	parray_free(links);
-
-	parray_walk(dirs, pgFileFree);
-	parray_free(dirs);
-}
-
-/*
- * Check that all tablespace mapping entries have correct linked directory
- * paths. Linked directories must be empty or do not exist.
- *
- * If tablespace-mapping option is supplied, all OLDDIR entries must have
- * entries in tablespace_map file.
- */
-static void
-check_tablespace_mapping(pgBackup *backup)
-{
-	char		this_backup_path[MAXPGPATH];
-	parray	   *links;
-	size_t		i;
-	TablespaceListCell *cell;
-	pgFile	   *tmp_file = pgut_new(pgFile);
-
-	links = parray_new();
-
-	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	read_tablespace_map(links, this_backup_path);
-
-	if (log_level_console <= LOG || log_level_file <= LOG)
-		elog(LOG, "check tablespace directories of backup %s",
-			 base36enc(backup->start_time));
-
-	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
-	for (cell = tablespace_dirs.head; cell; cell = cell->next)
-	{
-		tmp_file->linked = cell->old_dir;
-
-		if (parray_bsearch(links, tmp_file, pgFileCompareLinked) == NULL)
-			elog(ERROR, "--tablespace-mapping option's old directory "
-				 "doesn't have an entry in tablespace_map file: \"%s\"",
-				 cell->old_dir);
-	}
-
-	/* 2 - all linked directories must be empty */
-	for (i = 0; i < parray_num(links); i++)
-	{
-		pgFile	   *link = (pgFile *) parray_get(links, i);
-		const char *linked_path = link->linked;
-		TablespaceListCell *cell;
-
-		for (cell = tablespace_dirs.head; cell; cell = cell->next)
-			if (strcmp(link->linked, cell->old_dir) == 0)
-			{
-				linked_path = cell->new_dir;
-				break;
-			}
-
-		if (!is_absolute_path(linked_path))
-			elog(ERROR, "tablespace directory is not an absolute path: %s\n",
-				 linked_path);
-
-		if (!dir_is_empty(linked_path))
-			elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-				 linked_path);
-	}
-
-	free(tmp_file);
-	parray_walk(links, pgFileFree);
-	parray_free(links);
-}
-
-/*
  * Restore files into $PGDATA.
  */
 static void *
@@ -743,7 +498,6 @@ restore_files(void *arg)
 			elog(LOG, "Progress: (%d/%lu). Process file %s ",
 				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
 
-
 		/*
 		 * For PAGE and PTRACK backups skip files which haven't changed
 		 * since previous backup and thus were not backed up.
@@ -754,11 +508,11 @@ restore_files(void *arg)
 			(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE
 			|| arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK))
 		{
-			elog(VERBOSE, "The file didn`t changed. Skip restore: %s", file->path);
+			elog(VERBOSE, "The file didn`t change. Skip restore: %s", file->path);
 			continue;
 		}
 
-		/* Directories was created before */
+		/* Directories were created before */
 		if (S_ISDIR(file->mode))
 		{
 			elog(VERBOSE, "directory, skip");
@@ -778,9 +532,18 @@ restore_files(void *arg)
 		 * block and have BackupPageHeader meta information, so we cannot just
 		 * copy the file from backup.
 		 */
-		elog(VERBOSE, "Restoring file %s, is_datafile %i, is_cfs %i", file->path, file->is_datafile?1:0, file->is_cfs?1:0);
+		elog(VERBOSE, "Restoring file %s, is_datafile %i, is_cfs %i",
+			 file->path, file->is_datafile?1:0, file->is_cfs?1:0);
 		if (file->is_datafile && !file->is_cfs)
-			restore_data_file(from_root, pgdata, file, arguments->backup);
+		{
+			char		to_path[MAXPGPATH];
+
+			join_path_components(to_path, pgdata,
+								 file->path + strlen(from_root) + 1);
+			restore_data_file(to_path, file,
+							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
+							  false);
+		}
 		else
 			copy_file(from_root, pgdata, file);
 
@@ -1150,116 +913,4 @@ parseRecoveryTargetOptions(const char *target_time,
 		elog(ERROR, "--inclusive option applies when either --time or --xid is specified");
 
 	return rt;
-}
-
-/*
- * Split argument into old_dir and new_dir and append to tablespace mapping
- * list.
- *
- * Copy of function tablespace_list_append() from pg_basebackup.c.
- */
-void
-opt_tablespace_map(pgut_option *opt, const char *arg)
-{
-	TablespaceListCell *cell = pgut_new(TablespaceListCell);
-	char	   *dst;
-	char	   *dst_ptr;
-	const char *arg_ptr;
-
-	dst_ptr = dst = cell->old_dir;
-	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
-	{
-		if (dst_ptr - dst >= MAXPGPATH)
-			elog(ERROR, "directory name too long");
-
-		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
-			;					/* skip backslash escaping = */
-		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
-		{
-			if (*cell->new_dir)
-				elog(ERROR, "multiple \"=\" signs in tablespace mapping\n");
-			else
-				dst = dst_ptr = cell->new_dir;
-		}
-		else
-			*dst_ptr++ = *arg_ptr;
-	}
-
-	if (!*cell->old_dir || !*cell->new_dir)
-		elog(ERROR, "invalid tablespace mapping format \"%s\", "
-			 "must be \"OLDDIR=NEWDIR\"", arg);
-
-	/*
-	 * This check isn't absolutely necessary.  But all tablespaces are created
-	 * with absolute directories, so specifying a non-absolute path here would
-	 * just never match, possibly confusing users.  It's also good to be
-	 * consistent with the new_dir check.
-	 */
-	if (!is_absolute_path(cell->old_dir))
-		elog(ERROR, "old directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->old_dir);
-
-	if (!is_absolute_path(cell->new_dir))
-		elog(ERROR, "new directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->new_dir);
-
-	if (tablespace_dirs.tail)
-		tablespace_dirs.tail->next = cell;
-	else
-		tablespace_dirs.head = cell;
-	tablespace_dirs.tail = cell;
-}
-
-/*
- * Retrieve tablespace path, either relocated or original depending on whether
- * -T was passed or not.
- *
- * Copy of function get_tablespace_mapping() from pg_basebackup.c.
- */
-static const char *
-get_tablespace_mapping(const char *dir)
-{
-	TablespaceListCell *cell;
-
-	for (cell = tablespace_dirs.head; cell; cell = cell->next)
-		if (strcmp(dir, cell->old_dir) == 0)
-			return cell->new_dir;
-
-	return dir;
-}
-
-/*
- * Save create directory path into memory. We can use it in next page restore to
- * not raise the error "restore tablespace destination is not empty" in
- * restore_directories().
- */
-static void
-set_tablespace_created(const char *link, const char *dir)
-{
-	TablespaceCreatedListCell *cell = pgut_new(TablespaceCreatedListCell);
-
-	strcpy(cell->link_name, link);
-	strcpy(cell->linked_dir, dir);
-	cell->next = NULL;
-
-	if (tablespace_created_dirs.tail)
-		tablespace_created_dirs.tail->next = cell;
-	else
-		tablespace_created_dirs.head = cell;
-	tablespace_created_dirs.tail = cell;
-}
-
-/*
- * Is directory was created when symlink was created in restore_directories().
- */
-static const char *
-get_tablespace_created(const char *link)
-{
-	TablespaceCreatedListCell *cell;
-
-	for (cell = tablespace_created_dirs.head; cell; cell = cell->next)
-		if (strcmp(link, cell->link_name) == 0)
-			return cell->linked_dir;
-
-	return NULL;
 }

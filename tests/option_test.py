@@ -12,6 +12,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_help_1(self):
         """help options"""
+        self.maxDiff = None
         fname = self.id().split(".")[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         with open(os.path.join(self.dir_path, "expected/option_help.out"), "rb") as help_out:

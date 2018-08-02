@@ -247,8 +247,6 @@ show_instance(time_t requested_backup_id, bool show_name)
 	parray	   *backup_list;
 
 	backup_list = catalog_get_backup_list(requested_backup_id);
-	if (backup_list == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
 	if (show_format == SHOW_PLAIN)
 		show_instance_plain(backup_list, show_name);

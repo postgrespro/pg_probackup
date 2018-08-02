@@ -122,8 +122,9 @@ typedef enum BackupStatus
 {
 	BACKUP_STATUS_INVALID,		/* the pgBackup is invalid */
 	BACKUP_STATUS_OK,			/* completed backup */
-	BACKUP_STATUS_RUNNING,		/* running backup */
 	BACKUP_STATUS_ERROR,		/* aborted because of unexpected error */
+	BACKUP_STATUS_RUNNING,		/* running backup */
+	BACKUP_STATUS_MERGING,		/* merging backups */
 	BACKUP_STATUS_DELETING,		/* data files are being deleted */
 	BACKUP_STATUS_DELETED,		/* data files have been deleted */
 	BACKUP_STATUS_DONE,			/* completed but not validated yet */
@@ -144,15 +145,16 @@ typedef enum ProbackupSubcmd
 {
 	NO_CMD = 0,
 	INIT_CMD,
-	ARCHIVE_PUSH_CMD,
-	ARCHIVE_GET_CMD,
 	ADD_INSTANCE_CMD,
 	DELETE_INSTANCE_CMD,
+	ARCHIVE_PUSH_CMD,
+	ARCHIVE_GET_CMD,
 	BACKUP_CMD,
 	RESTORE_CMD,
 	VALIDATE_CMD,
-	SHOW_CMD,
 	DELETE_CMD,
+	MERGE_CMD,
+	SHOW_CMD,
 	SET_CONFIG_CMD,
 	SHOW_CONFIG_CMD
 } ProbackupSubcmd;
@@ -418,7 +420,8 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	bool target_immediate, const char *target_name,
 	const char *target_action, bool restore_no_validate);
 
-extern void opt_tablespace_map(pgut_option *opt, const char *arg);
+/* in merge.c */
+extern void do_merge(time_t backup_id);
 
 /* in init.c */
 extern int do_init(void);
@@ -470,10 +473,15 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void pgBackupWriteBackupControlFile(pgBackup *backup);
+extern void pgBackupWriteFileList(pgBackup *backup, parray *files,
+								  const char *root);
+
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir);
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
+extern void pgBackupInit(pgBackup *backup);
+extern void pgBackupCopy(pgBackup *dst, pgBackup *src);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
@@ -481,10 +489,13 @@ extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool omit_symlink, bool add_root);
-extern void list_data_directories(parray *files, const char *path,
-								  bool is_root, bool exclude);
+extern void create_data_directories(const char *data_dir,
+									const char *backup_dir,
+									bool extract_tablespaces);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
+extern void opt_tablespace_map(pgut_option *opt, const char *arg);
+extern void check_tablespace_mapping(pgBackup *backup);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root);
 extern parray *dir_read_file_list(const char *root, const char *file_txt);
@@ -493,12 +504,13 @@ extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
 
 extern bool fileExists(const char *path);
+extern size_t pgFileSize(const char *path);
 
 extern pgFile *pgFileNew(const char *path, bool omit_symlink);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
-extern pg_crc32 pgFileGetCRC(pgFile *file);
+extern pg_crc32 pgFileGetCRC(const char *file_path);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
@@ -506,13 +518,15 @@ extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
 extern bool backup_data_file(backup_files_arg* arguments,
-							 const char *from_root, const char *to_root,
-							 pgFile *file, XLogRecPtr prev_backup_start_lsn,
-							 BackupMode backup_mode);
-extern void restore_data_file(const char *from_root, const char *to_root,
-							  pgFile *file, pgBackup *backup);
-extern bool copy_file(const char *from_root, const char *to_root,
-					  pgFile *file);
+							 const char *to_path, pgFile *file,
+							 XLogRecPtr prev_backup_start_lsn,
+							 BackupMode backup_mode,
+							 CompressAlg calg, int clevel);
+extern void restore_data_file(const char *to_path,
+							  pgFile *file, bool allow_truncate,
+							  bool write_header);
+extern bool copy_file(const char *from_root, const char *to_root, pgFile *file);
+extern void move_file(const char *from_root, const char *to_root, pgFile *file);
 extern void push_wal_file(const char *from_path, const char *to_path,
 						  bool is_compress, bool overwrite);
 extern void get_wal_file(const char *from_path, const char *to_path);
@@ -553,7 +567,6 @@ extern uint64 get_system_identifier(char *pgdata);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 extern int parse_server_version(char *server_version_str);
-extern void pgBackup_init(pgBackup *backup);
 
 /* in status.c */
 extern bool is_pg_running(void);
