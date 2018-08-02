@@ -87,6 +87,7 @@ help_pg_probackup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--archive-timeout=timeout]\n"));
 
 	printf(_("\n  %s show-config -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--format=format]\n"));
@@ -257,7 +258,7 @@ help_backup(void)
 	printf(_("      --master-db=db_name          database to connect to master\n"));
 	printf(_("      --master-host=host_name      database server host of master\n"));
 	printf(_("      --master-port=port           database server port of master\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication in seconds\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
 }
 
 static void
@@ -429,6 +430,7 @@ help_set_config(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n\n"));
+	printf(_("                 [--archive-timeout=timeout]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -477,7 +479,9 @@ help_set_config(void)
 	printf(_("      --master-db=db_name          database to connect to master\n"));
 	printf(_("      --master-host=host_name      database server host of master\n"));
 	printf(_("      --master-port=port           database server port of master\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
+	printf(_("\n  Archive options:\n"));
+	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));
 }
 
 static void

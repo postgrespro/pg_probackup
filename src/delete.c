@@ -141,7 +141,8 @@ do_retention_purge(void)
 		if (retention_window > 0)
 			elog(LOG, "WINDOW=%u", retention_window);
 
-		if (retention_redundancy == 0 && retention_window == 0)
+		if (retention_redundancy == 0
+			&& retention_window == 0)
 		{
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
@@ -161,7 +162,8 @@ do_retention_purge(void)
 	}
 
 	/* Find target backups to be deleted */
-	if (delete_expired && (retention_redundancy > 0 || retention_window > 0))
+	if (delete_expired &&
+		(retention_redundancy > 0 || retention_window > 0))
 	{
 		backup_num = 0;
 		for (i = 0; i < parray_num(backup_list); i++)
@@ -173,13 +175,13 @@ do_retention_purge(void)
 			if (backup->status != BACKUP_STATUS_OK)
 				continue;
 			/*
-			 * When a validate full backup was found, we can delete the
+			 * When a valid full backup was found, we can delete the
 			 * backup that is older than it using the number of generations.
 			 */
 			if (backup->backup_mode == BACKUP_MODE_FULL)
 				backup_num++;
 
-			/* Evaluateretention_redundancy if this backup is eligible for removal */
+			/* Evaluate retention_redundancy if this backup is eligible for removal */
 			if (keep_next_backup ||
 				retention_redundancy >= backup_num_evaluate + 1 ||
 				(retention_window > 0 && backup->recovery_time >= days_threshold))
@@ -200,6 +202,7 @@ do_retention_purge(void)
 
 				continue;
 			}
+
 			/* Delete backup and update status to DELETED */
 			pgBackupDeleteFiles(backup);
 			backup_deleted = true;
@@ -259,7 +262,8 @@ pgBackupDeleteFiles(pgBackup *backup)
 
 	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 
-	elog(INFO, "delete: %s %s", base36enc(backup->start_time), timestamp);
+	elog(INFO, "delete: %s %s",
+		 base36enc(backup->start_time), timestamp);
 
 	/*
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which

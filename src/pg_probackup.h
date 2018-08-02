@@ -63,6 +63,8 @@
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 
+#define LOG_FILENAME_DEFAULT "pg_probackup.log"
+#define LOG_DIRECTORY_DEFAULT "log"
 /* Direcotry/File permission */
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
@@ -181,6 +183,8 @@ typedef struct pgBackupConfig
 	const char *master_db;
 	const char *master_user;
 	int			replica_timeout;
+
+	int			archive_timeout;
 
 	int			log_level_console;
 	int			log_level_file;
@@ -337,12 +341,14 @@ extern char	   *replication_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
+#define ARCHIVE_TIMEOUT_DEFAULT 300
 extern uint32	archive_timeout;
 extern bool		is_remote_backup;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;
 extern const char *master_user;
+#define REPLICA_TIMEOUT_DEFAULT 300
 extern uint32	replica_timeout;
 
 extern bool is_ptrack_support;
@@ -358,7 +364,10 @@ extern bool		delete_expired;
 extern bool		apply_to_all;
 extern bool		force_delete;
 
-/* retention options */
+/* retention options. 0 disables the option */
+#define RETENTION_REDUNDANCY_DEFAULT 0
+#define RETENTION_WINDOW_DEFAULT 0
+
 extern uint32	retention_redundancy;
 extern uint32	retention_window;
 
@@ -367,7 +376,8 @@ extern CompressAlg compress_alg;
 extern int		compress_level;
 extern bool		compress_shortcut;
 
-#define DEFAULT_COMPRESS_LEVEL 1
+#define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
+#define COMPRESS_LEVEL_DEFAULT 1
 
 extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);

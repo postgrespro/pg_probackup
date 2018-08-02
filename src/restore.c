@@ -14,8 +14,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "catalog/pg_control.h"
+#include "utils/logger.h"
 #include "utils/thread.h"
 
 typedef struct
@@ -455,7 +457,7 @@ restore_backup(pgBackup *backup)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	if (log_level_console <= LOG || log_level_file <= LOG)
 		elog(LOG, "restore %s backup completed", base36enc(backup->start_time));
 }
 
@@ -492,7 +494,7 @@ remove_deleted_files(pgBackup *backup)
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
 			pgFileDelete(file);
-			if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+			if (log_level_console <= LOG || log_level_file <= LOG)
 				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
 		}
 	}
@@ -667,7 +669,7 @@ check_tablespace_mapping(pgBackup *backup)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	read_tablespace_map(links, this_backup_path);
 
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	if (log_level_console <= LOG || log_level_file <= LOG)
 		elog(LOG, "check tablespace directories of backup %s",
 			 base36enc(backup->start_time));
 

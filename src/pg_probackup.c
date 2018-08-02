@@ -51,12 +51,12 @@ bool		backup_logs = false;
 bool		smooth_checkpoint;
 bool		is_remote_backup = false;
 /* Wait timeout for WAL segment archiving */
-uint32		archive_timeout = 300;		/* default is 300 seconds */
+uint32		archive_timeout = ARCHIVE_TIMEOUT_DEFAULT;
 const char *master_db = NULL;
 const char *master_host = NULL;
 const char *master_port= NULL;
 const char *master_user = NULL;
-uint32		replica_timeout = 300;		/* default is 300 seconds */
+uint32		replica_timeout = REPLICA_TIMEOUT_DEFAULT;
 
 /* restore options */
 static char		   *target_time;
@@ -84,9 +84,10 @@ uint32		retention_redundancy = 0;
 uint32		retention_window = 0;
 
 /* compression options */
-CompressAlg compress_alg = NOT_DEFINED_COMPRESS;
-int			compress_level = DEFAULT_COMPRESS_LEVEL;
-bool		compress_shortcut = false;
+CompressAlg compress_alg = COMPRESS_ALG_DEFAULT;
+int			compress_level = COMPRESS_LEVEL_DEFAULT;
+bool 		compress_shortcut = false;
+
 
 /* other options */
 char	   *instance_name;
@@ -571,7 +572,7 @@ compress_init(void)
 
 	if (backup_subcmd != SET_CONFIG_CMD)
 	{
-		if (compress_level != DEFAULT_COMPRESS_LEVEL
+		if (compress_level != COMPRESS_LEVEL_DEFAULT
 			&& compress_alg == NOT_DEFINED_COMPRESS)
 			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
 	}

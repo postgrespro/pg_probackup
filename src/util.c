@@ -341,8 +341,8 @@ pgBackup_init(pgBackup *backup)
 	backup->data_bytes = BYTES_INVALID;
 	backup->wal_bytes = BYTES_INVALID;
 
-	backup->compress_alg = NOT_DEFINED_COMPRESS;
-	backup->compress_level = 0;
+	backup->compress_alg = COMPRESS_ALG_DEFAULT;
+	backup->compress_level = COMPRESS_LEVEL_DEFAULT;
 
 	backup->block_size = BLCKSZ;
 	backup->wal_block_size = XLOG_BLCKSZ;
