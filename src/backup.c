@@ -989,23 +989,23 @@ check_server_version(void)
 	if (PQresultStatus(res) == PGRES_FATAL_ERROR)
 		/* It seems we connected to PostgreSQL (not Postgres Pro) */
 		elog(ERROR, "%s was built with Postgres Pro %s %s, "
-					"but connection made with PostgreSQL %s",
+					"but connection is made with PostgreSQL %s",
 			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, server_version_str);
 	else if (strcmp(server_version_str, PG_MAJORVERSION) != 0 &&
 			 strcmp(PQgetvalue(res, 0, 0), PGPRO_EDITION) != 0)
 		elog(ERROR, "%s was built with Postgres Pro %s %s, "
-					"but connection made with Postgres Pro %s %s",
+					"but connection is made with Postgres Pro %s %s",
 			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION,
 			 server_version_str, PQgetvalue(res, 0, 0));
 #else
 	if (PQresultStatus(res) != PGRES_FATAL_ERROR)
 		/* It seems we connected to Postgres Pro (not PostgreSQL) */
 		elog(ERROR, "%s was built with PostgreSQL %s, "
-					"but connection made with Postgres Pro %s %s",
+					"but connection is made with Postgres Pro %s %s",
 			 PROGRAM_NAME, PG_MAJORVERSION,
 			 server_version_str, PQgetvalue(res, 0, 0));
 	else if (strcmp(server_version_str, PG_MAJORVERSION) != 0)
-		elog(ERROR, "%s was built with PostgreSQL %s, but connection made with %s",
+		elog(ERROR, "%s was built with PostgreSQL %s, but connection is made with %s",
 			 PROGRAM_NAME, PG_MAJORVERSION, server_version_str);
 #endif
 
