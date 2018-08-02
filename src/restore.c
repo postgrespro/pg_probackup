@@ -203,8 +203,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			dest_backup = current_backup;
 			dest_backup_index = i;
 		}
-
 	}
+
+	if (dest_backup == NULL)
+		elog(ERROR, "Backup satisfying target options is not found.");
 
 	/* If we already found dest_backup, look for full backup. */
 	if (dest_backup)
@@ -237,6 +239,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			}
 		}
 	}
+
+	if (base_full_backup == NULL)
+		elog(ERROR, "Full backup satisfying target options is not found.");
 
 	/*
 	 * Ensure that directories provided in tablespace mapping are valid
