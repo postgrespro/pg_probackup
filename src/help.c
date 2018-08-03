@@ -420,11 +420,42 @@ static void
 help_merge(void)
 {
 	printf(_("%s merge -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 -i backup-id\n\n"));
+	printf(_("                 -i backup-id [-j num-threads] [--progress]\n"));
+	printf(_("                 [--log-level-console=log-level-console]\n"));
+	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-filename=log-filename]\n"));
+	printf(_("                 [--error-log-filename=error-log-filename]\n"));
+	printf(_("                 [--log-directory=log-directory]\n"));
+	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to merge\n"));
+
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --progress                   show progress\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'KB', 'MB', 'GB', 'TB' (default: KB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 }
 
 static void

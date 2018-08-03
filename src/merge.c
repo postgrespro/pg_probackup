@@ -353,14 +353,15 @@ merge_files(void *arg)
 	pgBackup   *to_backup = argument->to_backup;
 	pgBackup   *from_backup = argument->from_backup;
 	char		tmp_file_path[MAXPGPATH];
-	int			i;
+	int			i,
+				num_files = parray_num(argument->files);
 	int			to_root_len = strlen(argument->to_root);
 
 	if (to_backup->compress_alg == PGLZ_COMPRESS ||
 		to_backup->compress_alg == ZLIB_COMPRESS)
 		join_path_components(tmp_file_path, argument->to_root, "tmp");
 
-	for (i = 0; i < parray_num(argument->files); i++)
+	for (i = 0; i < num_files; i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(argument->files, i);
 
@@ -370,6 +371,10 @@ merge_files(void *arg)
 		/* check for interrupt */
 		if (interrupted)
 			elog(ERROR, "Interrupted during merging backups");
+
+		if (progress)
+			elog(LOG, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, num_files, file->path);
 
 		/*
 		 * Skip files which haven't changed since previous backup. But in case
