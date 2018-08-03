@@ -203,6 +203,8 @@ typedef struct pgBackupConfig
 	int			compress_level;
 } pgBackupConfig;
 
+typedef struct pgBackup pgBackup;
+
 /* Information about single backup stored in backup.conf */
 typedef struct pgBackup
 {
@@ -250,8 +252,9 @@ typedef struct pgBackup
 	time_t			parent_backup; 	/* Identifier of the previous backup.
 									 * Which is basic backup for this
 									 * incremental backup. */
-	char		   *primary_conninfo; /* Connection parameters of the backup
-									   * in the format suitable for recovery.conf */
+	pgBackup		*parent_backup_link;
+	char			*primary_conninfo; /* Connection parameters of the backup
+										* in the format suitable for recovery.conf */
 } pgBackup;
 
 /* Recovery target for restore and validate subcommands */
@@ -485,6 +488,8 @@ extern void pgBackupCopy(pgBackup *dst, pgBackup *src);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
+
+extern pgBackup* find_parent_backup(pgBackup *current_backup);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,

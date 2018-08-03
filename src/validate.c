@@ -291,43 +291,33 @@ do_validate_instance(void)
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
-	/* Valiate each backup along with its xlog files. */
+	/* Examine backups one by one and validate them */
 	for (i = 0; i < parray_num(backups); i++)
 	{
-		pgBackup   *base_full_backup = NULL;
-
 		current_backup = (pgBackup *) parray_get(backups, i);
 
-		if (current_backup->backup_mode != BACKUP_MODE_FULL)
-		{
-			int			j;
-
-			for (j = i + 1; j < parray_num(backups); j++)
-			{
-				pgBackup	   *backup = (pgBackup *) parray_get(backups, j);
-
-				if (backup->backup_mode == BACKUP_MODE_FULL)
-				{
-					base_full_backup = backup;
-					break;
-				}
-			}
-		}
-		else
-			base_full_backup = current_backup;
-
+		/* Valiate each backup along with its xlog files. */
 		pgBackupValidate(current_backup);
 
-		/* There is no point in wal validation for corrupted backup */
+		/* Ensure that the backup has valid list of parent backups */
 		if (current_backup->status == BACKUP_STATUS_OK)
 		{
-			if (base_full_backup == NULL)
-				elog(ERROR, "Valid full backup for backup %s is not found.",
-					 base36enc(current_backup->start_time));
+			pgBackup   *base_full_backup = current_backup;
+
+			if (current_backup->backup_mode != BACKUP_MODE_FULL)
+			{
+				base_full_backup = find_parent_backup(current_backup);
+
+				if (base_full_backup == NULL)
+					elog(ERROR, "Valid full backup for backup %s is not found.",
+						 base36enc(current_backup->start_time));
+			}
+
 			/* Validate corresponding WAL files */
 			validate_wal(current_backup, arclog_path, 0,
-						0, 0, base_full_backup->tli);
+						 0, 0, base_full_backup->tli);
 		}
+
 		/* Mark every incremental backup between corrupted backup and nearest FULL backup as orphans */
 		if (current_backup->status == BACKUP_STATUS_CORRUPT)
 		{

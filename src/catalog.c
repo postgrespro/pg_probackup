@@ -254,6 +254,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 	struct dirent  *data_ent = NULL;
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
+	int		i;
 
 	/* open backup instance backups directory */
 	data_dir = opendir(backup_instance_path);
@@ -282,6 +283,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 		/* read backup information from BACKUP_CONTROL_FILE */
 		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", data_path, BACKUP_CONTROL_FILE);
 		backup = readBackupControlFile(backup_conf_path);
+		backup->backup_id = backup->start_time;
 
 		/* ignore corrupted backups */
 		if (backup)
@@ -314,6 +316,30 @@ catalog_get_backup_list(time_t requested_backup_id)
 	data_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
+
+	/* Link incremental backups with their ancestors.*/
+	for (i = 0; i < parray_num(backups); i++)
+	{
+		pgBackup *curr = parray_get(backups, i);
+
+		int j;
+
+		if (curr->backup_mode == BACKUP_MODE_FULL)
+			continue;
+
+		for (j = i+1; j < parray_num(backups); j++)
+		{
+			pgBackup *ancestor = parray_get(backups, j);
+
+			if (ancestor->start_time == curr->parent_backup)
+			{
+				curr->parent_backup_link = ancestor;
+				/* elog(INFO, "curr %s, ancestor %s j=%d", base36enc_dup(curr->start_time),
+						base36enc_dup(ancestor->start_time), j); */
+				break;
+			}
+		}
+	}
 
 	return backups;
 
@@ -757,6 +783,7 @@ pgBackupInit(pgBackup *backup)
 	backup->stream = false;
 	backup->from_replica = false;
 	backup->parent_backup = INVALID_BACKUP_ID;
+	backup->parent_backup_link = NULL;
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
@@ -839,4 +866,49 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 				 base36enc(backup->start_time), subdir1, subdir2);
 
 	make_native_path(path);
+}
+
+/* Find parent base FULL backup for current backup using parent_backup_link,
+ * return NULL if not found
+ */
+pgBackup*
+find_parent_backup(pgBackup *current_backup)
+{
+	pgBackup   *base_full_backup = NULL;
+	base_full_backup = current_backup;
+
+	while (base_full_backup->backup_mode != BACKUP_MODE_FULL)
+	{
+		/*
+		 * If we haven't found parent for incremental backup,
+		 * mark it and all depending backups as orphaned
+		 */
+		if (base_full_backup->parent_backup_link == NULL
+			|| (base_full_backup->status != BACKUP_STATUS_OK
+				&& base_full_backup->status != BACKUP_STATUS_DONE))
+		{
+			pgBackup   *orphaned_backup = current_backup;
+
+			while (orphaned_backup != NULL)
+			{
+				orphaned_backup->status = BACKUP_STATUS_ORPHAN;
+				pgBackupWriteBackupControlFile(orphaned_backup);
+				if (base_full_backup->parent_backup_link == NULL)
+					elog(WARNING, "Backup %s is orphaned because its parent backup is not found",
+							base36enc(orphaned_backup->start_time));
+				else
+					elog(WARNING, "Backup %s is orphaned because its parent backup is corrupted",
+							base36enc(orphaned_backup->start_time));
+
+				orphaned_backup = orphaned_backup->parent_backup_link;
+			}
+
+			base_full_backup = NULL;
+			break;
+		}
+
+		base_full_backup = base_full_backup->parent_backup_link;
+	}
+
+	return base_full_backup;
 }

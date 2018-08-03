@@ -47,7 +47,7 @@ int
 do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					   bool is_restore)
 {
-	int			i;
+	int			i = 0;
 	parray	   *backups;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
@@ -79,9 +79,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
 	/* Find backup range we should restore or validate. */
-	for (i = 0; i < parray_num(backups); i++)
+	while ((i < parray_num(backups)) && !dest_backup)
 	{
 		current_backup = (pgBackup *) parray_get(backups, i);
+		i++;
 
 		/* Skip all backups which started after target backup */
 		if (target_backup_id && current_backup->start_time > target_backup_id)
@@ -93,7 +94,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 */
 
 		if (is_restore &&
-			!dest_backup &&
 			target_backup_id == INVALID_BACKUP_ID &&
 			current_backup->status != BACKUP_STATUS_OK)
 		{
@@ -107,8 +107,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * ensure that it satisfies recovery target.
 		 */
 		if ((target_backup_id == current_backup->start_time
-			|| target_backup_id == INVALID_BACKUP_ID)
-			&& !dest_backup)
+			|| target_backup_id == INVALID_BACKUP_ID))
 		{
 
 			/* backup is not ok,
@@ -161,37 +160,42 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * Save it as dest_backup
 			 */
 			dest_backup = current_backup;
-			dest_backup_index = i;
+			dest_backup_index = i-1;
+		}
+	}
+
+	if (dest_backup == NULL)
+		elog(ERROR, "Backup satisfying target options is not found.");
+
+	/* If we already found dest_backup, look for full backup. */
+	if (dest_backup)
+	{
+		base_full_backup = current_backup;
+
+		if (current_backup->backup_mode != BACKUP_MODE_FULL)
+		{
+			base_full_backup = find_parent_backup(current_backup);
+
+			if (base_full_backup == NULL)
+				elog(ERROR, "Valid full backup for backup %s is not found.",
+					base36enc(current_backup->start_time));
 		}
 
-		/* If we already found dest_backup, look for full backup. */
-		if (dest_backup)
+		/*
+		 * We have found full backup by link,
+		 * now we need to walk the list to find its index.
+		 *
+		 * TODO I think we should rewrite it someday to use double linked list
+		 * and avoid relying on sort order anymore.
+		 */
+		for (i = dest_backup_index; i < parray_num(backups); i++)
 		{
-			if (current_backup->backup_mode == BACKUP_MODE_FULL)
+			pgBackup * temp_backup = (pgBackup *) parray_get(backups, i);
+			if (temp_backup->start_time == base_full_backup->start_time)
 			{
-				if (current_backup->status != BACKUP_STATUS_OK)
-				{
-					/* Full backup revalidation can be done only for DONE and CORRUPT */
-					if (current_backup->status == BACKUP_STATUS_DONE ||
-							current_backup->status == BACKUP_STATUS_CORRUPT)
-						elog(WARNING, "base backup %s for given backup %s is in %s status, trying to revalidate",
-							base36enc_dup(current_backup->start_time),
-							base36enc_dup(dest_backup->start_time),
-							status2str(current_backup->status));
-					else
-						elog(ERROR, "base backup %s for given backup %s is in %s status",
-							base36enc_dup(current_backup->start_time),
-							base36enc_dup(dest_backup->start_time),
-							status2str(current_backup->status));
-				}
-				/* We found both dest and base backups. */
-				base_full_backup = current_backup;
 				base_full_backup_index = i;
 				break;
 			}
-			else
-				/* It`s ok to skip incremental backup */
-				continue;
 		}
 	}
 
