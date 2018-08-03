@@ -323,37 +323,3 @@ remove_not_digit(char *buf, size_t len, const char *str)
 	}
 	buf[j] = '\0';
 }
-
-/* Fill pgBackup struct with default values */
-void
-pgBackup_init(pgBackup *backup)
-{
-	backup->backup_id = INVALID_BACKUP_ID;
-	backup->backup_mode = BACKUP_MODE_INVALID;
-	backup->status = BACKUP_STATUS_INVALID;
-	backup->tli = 0;
-	backup->start_lsn = 0;
-	backup->stop_lsn = 0;
-	backup->start_time = (time_t) 0;
-	backup->end_time = (time_t) 0;
-	backup->recovery_xid = 0;
-	backup->recovery_time = (time_t) 0;
-
-	backup->data_bytes = BYTES_INVALID;
-	backup->wal_bytes = BYTES_INVALID;
-
-	backup->compress_alg = COMPRESS_ALG_DEFAULT;
-	backup->compress_level = COMPRESS_LEVEL_DEFAULT;
-
-	backup->block_size = BLCKSZ;
-	backup->wal_block_size = XLOG_BLCKSZ;
-	backup->checksum_version = 0;
-
-	backup->stream = false;
-	backup->from_replica = false;
-	backup->parent_backup = 0;
-	backup->parent_backup_link = NULL;
-	backup->primary_conninfo = NULL;
-	backup->program_version[0] = '\0';
-	backup->server_version[0] = '\0';
-}

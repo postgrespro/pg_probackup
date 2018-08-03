@@ -783,6 +783,7 @@ pgBackupInit(pgBackup *backup)
 	backup->stream = false;
 	backup->from_replica = false;
 	backup->parent_backup = INVALID_BACKUP_ID;
+	backup->parent_backup_link = NULL;
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
