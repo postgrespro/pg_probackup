@@ -351,6 +351,9 @@ err_proc:
 	if (backups)
 		parray_walk(backups, pgBackupFree);
 	parray_free(backups);
+
+	elog(ERROR, "Failed to get backup list");
+
 	return NULL;
 }
 
@@ -415,7 +418,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 			deparse_compress_alg(backup->compress_alg));
 	fprintf(out, "compress-level = %d\n", backup->compress_level);
 	fprintf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
-	
+
 	fprintf(out, "\n#Compatibility\n");
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
@@ -489,6 +492,30 @@ pgBackupWriteBackupControlFile(pgBackup *backup)
 }
 
 /*
+ * Output the list of files to backup catalog DATABASE_FILE_LIST
+ */
+void
+pgBackupWriteFileList(pgBackup *backup, parray *files, const char *root)
+{
+	FILE	   *fp;
+	char		path[MAXPGPATH];
+
+	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+
+	fp = fopen(path, "wt");
+	if (fp == NULL)
+		elog(ERROR, "cannot open file list \"%s\": %s", path,
+			strerror(errno));
+
+	print_file_list(fp, files, root);
+
+	if (fflush(fp) != 0 ||
+		fsync(fileno(fp)) != 0 ||
+		fclose(fp))
+		elog(ERROR, "cannot write file list \"%s\": %s", path, strerror(errno));
+}
+
+/*
  * Read BACKUP_CONTROL_FILE and create pgBackup.
  *  - Comment starts with ';'.
  *  - Do not care section.
@@ -541,7 +568,7 @@ readBackupControlFile(const char *path)
 		return NULL;
 	}
 
-	pgBackup_init(backup);
+	pgBackupInit(backup);
 	parsed_options = pgut_readopt(path, options, WARNING);
 
 	if (parsed_options == 0)
@@ -592,10 +619,12 @@ readBackupControlFile(const char *path)
 	{
 		if (strcmp(status, "OK") == 0)
 			backup->status = BACKUP_STATUS_OK;
-		else if (strcmp(status, "RUNNING") == 0)
-			backup->status = BACKUP_STATUS_RUNNING;
 		else if (strcmp(status, "ERROR") == 0)
 			backup->status = BACKUP_STATUS_ERROR;
+		else if (strcmp(status, "RUNNING") == 0)
+			backup->status = BACKUP_STATUS_RUNNING;
+		else if (strcmp(status, "MERGING") == 0)
+			backup->status = BACKUP_STATUS_MERGING;
 		else if (strcmp(status, "DELETING") == 0)
 			backup->status = BACKUP_STATUS_DELETING;
 		else if (strcmp(status, "DELETED") == 0)
@@ -724,11 +753,63 @@ deparse_compress_alg(int alg)
 	return NULL;
 }
 
+/*
+ * Fill pgBackup struct with default values.
+ */
+void
+pgBackupInit(pgBackup *backup)
+{
+	backup->backup_id = INVALID_BACKUP_ID;
+	backup->backup_mode = BACKUP_MODE_INVALID;
+	backup->status = BACKUP_STATUS_INVALID;
+	backup->tli = 0;
+	backup->start_lsn = 0;
+	backup->stop_lsn = 0;
+	backup->start_time = (time_t) 0;
+	backup->end_time = (time_t) 0;
+	backup->recovery_xid = 0;
+	backup->recovery_time = (time_t) 0;
+
+	backup->data_bytes = BYTES_INVALID;
+	backup->wal_bytes = BYTES_INVALID;
+
+	backup->compress_alg = COMPRESS_ALG_DEFAULT;
+	backup->compress_level = COMPRESS_LEVEL_DEFAULT;
+
+	backup->block_size = BLCKSZ;
+	backup->wal_block_size = XLOG_BLCKSZ;
+	backup->checksum_version = 0;
+
+	backup->stream = false;
+	backup->from_replica = false;
+	backup->parent_backup = INVALID_BACKUP_ID;
+	backup->primary_conninfo = NULL;
+	backup->program_version[0] = '\0';
+	backup->server_version[0] = '\0';
+}
+
+/*
+ * Copy backup metadata from **src** into **dst**.
+ */
+void
+pgBackupCopy(pgBackup *dst, pgBackup *src)
+{
+	pfree(dst->primary_conninfo);
+
+	memcpy(dst, src, sizeof(pgBackup));
+
+	if (src->primary_conninfo)
+		dst->primary_conninfo = pstrdup(src->primary_conninfo);
+}
+
 /* free pgBackup object */
 void
 pgBackupFree(void *backup)
 {
-	free(backup);
+	pgBackup *b = (pgBackup *) backup;
+
+	pfree(b->primary_conninfo);
+	pfree(backup);
 }
 
 /* Compare two pgBackup with their IDs (start time) in ascending order */

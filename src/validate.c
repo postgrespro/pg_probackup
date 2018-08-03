@@ -195,7 +195,7 @@ pgBackupValidateFiles(void *arg)
 			break;
 		}
 
-		crc = pgFileGetCRC(file);
+		crc = pgFileGetCRC(file->path);
 		if (crc != file->crc)
 		{
 			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
@@ -290,8 +290,6 @@ do_validate_instance(void)
 
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backups == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
 	/* Examine backups one by one and validate them */
 	for (i = 0; i < parray_num(backups); i++)

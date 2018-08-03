@@ -271,8 +271,9 @@ status2str(BackupStatus status)
 	{
 		"UNKNOWN",
 		"OK",
-		"RUNNING",
 		"ERROR",
+		"RUNNING",
+		"MERGING",
 		"DELETING",
 		"DELETED",
 		"DONE",

@@ -33,8 +33,6 @@ do_delete(time_t backup_id)
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backup_list == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
 	if (backup_id != 0)
 	{

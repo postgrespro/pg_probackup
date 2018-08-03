@@ -14,6 +14,7 @@ static void help_restore(void);
 static void help_validate(void);
 static void help_show(void);
 static void help_delete(void);
+static void help_merge(void);
 static void help_set_config(void);
 static void help_show_config(void);
 static void help_add_instance(void);
@@ -36,6 +37,8 @@ help_command(char *command)
 		help_show();
 	else if (strcmp(command, "delete") == 0)
 		help_delete();
+	else if (strcmp(command, "merge") == 0)
+		help_merge();
 	else if (strcmp(command, "set-config") == 0)
 		help_set_config();
 	else if (strcmp(command, "show-config") == 0)
@@ -113,7 +116,7 @@ help_pg_probackup(void)
 	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
-	printf(_("                 [--replica-timeout=timeout]\n\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
 
 	printf(_("\n  %s restore -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-dir] [-i backup-id] [--progress]\n"));
@@ -136,6 +139,8 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s delete -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
+	printf(_("\n  %s merge -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 -i backup-id\n"));
 
 	printf(_("\n  %s add-instance -B backup-dir -D pgdata-dir\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
@@ -409,6 +414,17 @@ help_delete(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceed this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+}
+
+static void
+help_merge(void)
+{
+	printf(_("%s merge -B backup-dir --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 -i backup-id\n\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
+	printf(_("  -i, --backup-id=backup-id        backup to merge\n"));
 }
 
 static void
