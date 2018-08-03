@@ -85,7 +85,7 @@ int
 do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					   bool is_restore)
 {
-	int			i;
+	int			i = 0;
 	parray	   *backups;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
@@ -119,9 +119,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		elog(ERROR, "Failed to get backup list.");
 
 	/* Find backup range we should restore or validate. */
-	for (i = 0; i < parray_num(backups); i++)
+	while ((i < parray_num(backups)) && !dest_backup)
 	{
 		current_backup = (pgBackup *) parray_get(backups, i);
+		i++;
 
 		/* Skip all backups which started after target backup */
 		if (target_backup_id && current_backup->start_time > target_backup_id)
@@ -133,7 +134,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 */
 
 		if (is_restore &&
-			!dest_backup &&
 			target_backup_id == INVALID_BACKUP_ID &&
 			current_backup->status != BACKUP_STATUS_OK)
 		{
@@ -147,8 +147,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * ensure that it satisfies recovery target.
 		 */
 		if ((target_backup_id == current_backup->start_time
-			|| target_backup_id == INVALID_BACKUP_ID)
-			&& !dest_backup)
+			|| target_backup_id == INVALID_BACKUP_ID))
 		{
 
 			/* backup is not ok,
@@ -201,7 +200,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * Save it as dest_backup
 			 */
 			dest_backup = current_backup;
-			dest_backup_index = i;
+			dest_backup_index = i-1;
 		}
 	}
 

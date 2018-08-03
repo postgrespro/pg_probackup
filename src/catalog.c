@@ -254,7 +254,6 @@ catalog_get_backup_list(time_t requested_backup_id)
 	struct dirent  *data_ent = NULL;
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
-
 	int		i;
 
 	/* open backup instance backups directory */
