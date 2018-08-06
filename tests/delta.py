@@ -508,10 +508,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         restored_node.append_conf(
             "postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
-        while restored_node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
             "postgres", "select * from pgbench_accounts")
@@ -946,11 +943,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
-        while node_restored.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
         result_new = node_restored.safe_psql(
             "postgres", "select * from t_heap")
 
@@ -1191,7 +1185,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             f.close
 
         self.assertTrue(
-            self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK',
+            self.show_pb(backup_dir, 'node')[1]['status'] == 'OK',
             "Backup Status should be OK")
 
         # Clean after yourself
@@ -1264,7 +1258,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         self.assertTrue(
-             self.show_pb(backup_dir, 'node')[1]['Status'] == 'ERROR',
+             self.show_pb(backup_dir, 'node')[1]['status'] == 'ERROR',
              "Backup Status should be ERROR")
 
         # Clean after yourself

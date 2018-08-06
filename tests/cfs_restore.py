@@ -4,7 +4,7 @@ restore
 
     pg_probackup restore -B backupdir --instance instance_name
         [-D datadir]
-        [ -i backup_id | [{--time=time | --xid=xid } [--inclusive=boolean]]][--timeline=timeline] [-T OLDDIR=NEWDIR]
+        [ -i backup_id | [{--time=time | --xid=xid | --lsn=lsn } [--inclusive=boolean]]][--timeline=timeline] [-T OLDDIR=NEWDIR]
         [-j num_threads] [--progress] [-q] [-v]
 
 """

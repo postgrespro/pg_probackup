@@ -11,25 +11,26 @@
 #include "pg_probackup.h"
 
 #include <sys/stat.h>
-#include <pthread.h>
 #include <dirent.h>
 
-static void pgBackupValidateFiles(void *arg);
+#include "utils/thread.h"
+
+static void *pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);
 
 static bool corrupted_backup_found = false;
 
 typedef struct
 {
-	parray *files;
-	bool corrupted;
+	parray	   *files;
+	bool		corrupted;
 
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-} validate_files_args;
+} validate_files_arg;
 
 /*
  * Validate backup files.
@@ -42,8 +43,9 @@ pgBackupValidate(pgBackup *backup)
 	parray	   *files;
 	bool		corrupted = false;
 	bool		validation_isok = true;
-	pthread_t	validate_threads[num_threads];
-	validate_files_args *validate_threads_args[num_threads];
+	/* arrays with meta info for multi threaded validate */
+	pthread_t  *threads;
+	validate_files_arg *threads_args;
 	int			i;
 
 	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
@@ -77,35 +79,43 @@ pgBackupValidate(pgBackup *backup)
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-		__sync_lock_release(&file->lock);
+		pg_atomic_clear_flag(&file->lock);
 	}
+
+	/* init thread args with own file lists */
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (validate_files_arg *)
+		palloc(sizeof(validate_files_arg) * num_threads);
 
 	/* Validate files */
 	for (i = 0; i < num_threads; i++)
 	{
-		validate_files_args *arg = pg_malloc(sizeof(validate_files_args));
+		validate_files_arg *arg = &(threads_args[i]);
+
 		arg->files = files;
 		arg->corrupted = false;
 		/* By default there are some error */
-		arg->ret = 1;
+		threads_args[i].ret = 1;
 
-		validate_threads_args[i] = arg;
-		pthread_create(&validate_threads[i], NULL,
-					   (void *(*)(void *)) pgBackupValidateFiles, arg);
+		pthread_create(&threads[i], NULL, pgBackupValidateFiles, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
-		pthread_join(validate_threads[i], NULL);
-		if (validate_threads_args[i]->corrupted)
+		validate_files_arg *arg = &(threads_args[i]);
+
+		pthread_join(threads[i], NULL);
+		if (arg->corrupted)
 			corrupted = true;
-		if (validate_threads_args[i]->ret == 1)
+		if (arg->ret == 1)
 			validation_isok = false;
-		pg_free(validate_threads_args[i]);
 	}
 	if (!validation_isok)
 		elog(ERROR, "Data files validation failed");
+
+	pfree(threads);
+	pfree(threads_args);
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
@@ -127,19 +137,19 @@ pgBackupValidate(pgBackup *backup)
  * rather throw a WARNING and set arguments->corrupted = true.
  * This is necessary to update backup status.
  */
-static void
+static void *
 pgBackupValidateFiles(void *arg)
 {
-	int		i;
-	validate_files_args *arguments = (validate_files_args *)arg;
+	int			i;
+	validate_files_arg *arguments = (validate_files_arg *)arg;
 	pg_crc32	crc;
 
 	for (i = 0; i < parray_num(arguments->files); i++)
 	{
 		struct stat st;
+		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 
-		pgFile *file = (pgFile *) parray_get(arguments->files, i);
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		if (interrupted)
@@ -179,14 +189,13 @@ pgBackupValidateFiles(void *arg)
 
 		if (file->write_size != st.st_size)
 		{
-			elog(WARNING, "Invalid size of backup file \"%s\" : %lu. Expected %lu",
-				 file->path, (unsigned long) file->write_size,
-				 (unsigned long) st.st_size);
+			elog(WARNING, "Invalid size of backup file \"%s\" : " INT64_FORMAT ". Expected %lu",
+				 file->path, file->write_size, (unsigned long) st.st_size);
 			arguments->corrupted = true;
 			break;
 		}
 
-		crc = pgFileGetCRC(file);
+		crc = pgFileGetCRC(file->path);
 		if (crc != file->crc)
 		{
 			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
@@ -198,6 +207,8 @@ pgBackupValidateFiles(void *arg)
 
 	/* Data files validation is successful */
 	arguments->ret = 0;
+
+	return NULL;
 }
 
 /*
@@ -267,7 +278,7 @@ do_validate_all(void)
 static void
 do_validate_instance(void)
 {
-	char *current_backup_id;
+	char	   *current_backup_id;
 	int			i;
 	parray	   *backups;
 	pgBackup   *current_backup = NULL;
@@ -279,55 +290,45 @@ do_validate_instance(void)
 
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backups == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
-	/* Valiate each backup along with its xlog files. */
+	/* Examine backups one by one and validate them */
 	for (i = 0; i < parray_num(backups); i++)
 	{
-		pgBackup   *base_full_backup = NULL;
-
 		current_backup = (pgBackup *) parray_get(backups, i);
 
-		if (current_backup->backup_mode != BACKUP_MODE_FULL)
-		{
-			int			j;
-
-			for (j = i + 1; j < parray_num(backups); j++)
-			{
-				pgBackup	   *backup = (pgBackup *) parray_get(backups, j);
-
-				if (backup->backup_mode == BACKUP_MODE_FULL)
-				{
-					base_full_backup = backup;
-					break;
-				}
-			}
-		}
-		else
-			base_full_backup = current_backup;
-
+		/* Valiate each backup along with its xlog files. */
 		pgBackupValidate(current_backup);
 
-		/* There is no point in wal validation for corrupted backup */
+		/* Ensure that the backup has valid list of parent backups */
 		if (current_backup->status == BACKUP_STATUS_OK)
 		{
-			if (base_full_backup == NULL)
-				elog(ERROR, "Valid full backup for backup %s is not found.",
-					 base36enc(current_backup->start_time));
+			pgBackup   *base_full_backup = current_backup;
+
+			if (current_backup->backup_mode != BACKUP_MODE_FULL)
+			{
+				base_full_backup = find_parent_backup(current_backup);
+
+				if (base_full_backup == NULL)
+					elog(ERROR, "Valid full backup for backup %s is not found.",
+						 base36enc(current_backup->start_time));
+			}
+
 			/* Validate corresponding WAL files */
 			validate_wal(current_backup, arclog_path, 0,
-						0, base_full_backup->tli);
+						 0, 0, base_full_backup->tli);
 		}
+
 		/* Mark every incremental backup between corrupted backup and nearest FULL backup as orphans */
 		if (current_backup->status == BACKUP_STATUS_CORRUPT)
 		{
 			int			j;
+
 			corrupted_backup_found = true;
 			current_backup_id = base36enc_dup(current_backup->start_time);
 			for (j = i - 1; j >= 0; j--)
 			{
 				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
+
 				if (backup->backup_mode == BACKUP_MODE_FULL)
 					break;
 				if (backup->status != BACKUP_STATUS_OK)

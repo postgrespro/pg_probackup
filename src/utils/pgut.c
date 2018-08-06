@@ -31,6 +31,7 @@
 #define MAX_TZDISP_HOUR		15	/* maximum allowed hour part */
 #define SECS_PER_MINUTE		60
 #define MINS_PER_HOUR		60
+#define MAXPG_LSNCOMPONENT	8
 
 const char *PROGRAM_NAME = NULL;
 
@@ -41,12 +42,6 @@ const char	   *username = NULL;
 static char	   *password = NULL;
 bool			prompt_password = true;
 bool			force_password = false;
-
-#ifdef WIN32
-DWORD main_tid = 0;
-#else
-pthread_t main_tid = 0;
-#endif
 
 /* Database connections */
 static PGcancel *volatile cancel_conn = NULL;
@@ -141,8 +136,10 @@ static const unit_conversion time_unit_conversion_table[] =
 static size_t
 option_length(const pgut_option opts[])
 {
-	size_t	len;
+	size_t		len;
+
 	for (len = 0; opts && opts[len].type; len++) { }
+
 	return len;
 }
 
@@ -162,7 +159,7 @@ option_has_arg(char type)
 static void
 option_copy(struct option dst[], const pgut_option opts[], size_t len)
 {
-	size_t	i;
+	size_t		i;
 
 	for (i = 0; i < len; i++)
 	{
@@ -260,7 +257,8 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				message = "a valid string. But provided: ";
 				break;
 			case 't':
-				if (parse_time(optarg, opt->var))
+				if (parse_time(optarg, opt->var,
+							   opt->source == SOURCE_FILE))
 					return;
 				message = "a time";
 				break;
@@ -750,9 +748,12 @@ parse_uint64(const char *value, uint64 *result, int flags)
 
 /*
  * Convert ISO-8601 format string to time_t value.
+ *
+ * If utc_default is true, then if timezone offset isn't specified tz will be
+ * +00:00.
  */
 bool
-parse_time(const char *value, time_t *result)
+parse_time(const char *value, time_t *result, bool utc_default)
 {
 	size_t		len;
 	int			fields_num,
@@ -874,7 +875,7 @@ parse_time(const char *value, time_t *result)
 	*result = mktime(&tm);
 
 	/* adjust time zone */
-	if (tz_set)
+	if (tz_set || utc_default)
 	{
 		time_t		ltime = time(NULL);
 		struct tm  *ptm = gmtime(&ltime);
@@ -983,6 +984,32 @@ parse_int(const char *value, int *result, int flags, const char **hintmsg)
 	return true;
 }
 
+bool
+parse_lsn(const char *value, XLogRecPtr *result)
+{
+	uint32	xlogid;
+	uint32	xrecoff;
+	int		len1;
+	int		len2;
+
+	len1 = strspn(value, "0123456789abcdefABCDEF");
+	if (len1 < 1 || len1 > MAXPG_LSNCOMPONENT || value[len1] != '/')
+		elog(ERROR, "invalid LSN \"%s\"", value);
+	len2 = strspn(value + len1 + 1, "0123456789abcdefABCDEF");
+	if (len2 < 1 || len2 > MAXPG_LSNCOMPONENT || value[len1 + 1 + len2] != '\0')
+		elog(ERROR, "invalid LSN \"%s\"", value);
+
+	if (sscanf(value, "%X/%X", &xlogid, &xrecoff) == 2)
+		*result = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+	else
+	{
+		elog(ERROR, "invalid LSN \"%s\"", value);
+		return false;
+	}
+
+	return true;
+}
+
 static char *
 longopts_to_optstring(const struct option opts[], const size_t len)
 {
@@ -1053,7 +1080,7 @@ pgut_getopt(int argc, char **argv, pgut_option options[])
 	size_t		len;
 
 	len = option_length(options);
-	longopts = pgut_newarray(struct option, len + 1);
+	longopts = pgut_newarray(struct option, len + 1 /* zero/end option */);
 	option_copy(longopts, options, len);
 
 	optstring = longopts_to_optstring(longopts, len);
@@ -1095,20 +1122,22 @@ key_equals(const char *lhs, const char *rhs)
 
 /*
  * Get configuration from configuration file.
+ * Return number of parsed options
  */
-void
+int
 pgut_readopt(const char *path, pgut_option options[], int elevel)
 {
 	FILE   *fp;
 	char	buf[1024];
 	char	key[1024];
 	char	value[1024];
+	int		parsed_options = 0;
 
 	if (!options)
-		return;
+		return parsed_options;
 
 	if ((fp = pgut_fopen(path, "rt", true)) == NULL)
-		return;
+		return parsed_options;
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
@@ -1127,18 +1156,23 @@ pgut_readopt(const char *path, pgut_option options[], int elevel)
 				{
 					if (opt->allowed < SOURCE_FILE &&
 						opt->allowed != SOURCE_FILE_STRICT)
-						elog(elevel, "option %s cannot specified in file", opt->lname);
+						elog(elevel, "option %s cannot be specified in file", opt->lname);
 					else if (opt->source <= SOURCE_FILE)
+					{
 						assign_option(opt, value, SOURCE_FILE);
+						parsed_options++;
+					}
 					break;
 				}
 			}
 			if (!options[i].type)
-				elog(elevel, "invalid option \"%s\"", key);
+				elog(elevel, "invalid option \"%s\" in file \"%s\"", key, path);
 		}
 	}
 
 	fclose(fp);
+
+	return parsed_options;
 }
 
 static const char *
@@ -1225,7 +1259,7 @@ get_next_token(const char *src, char *dst, const char *line)
 	}
 	else
 	{
-		i = j = strcspn(s, "# \n\r\t\v");
+		i = j = strcspn(s, "#\n\r\t\v");
 		memcpy(dst, s, j);
 	}
 
@@ -1646,7 +1680,7 @@ pgut_execute_parallel(PGconn* conn,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
+	if (log_level_console <= VERBOSE || log_level_file <= VERBOSE)
 	{
 		int		i;
 
@@ -1708,7 +1742,7 @@ pgut_execute_extended(PGconn* conn, const char *query, int nParams,
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
+	if (log_level_console <= VERBOSE || log_level_file <= VERBOSE)
 	{
 		int		i;
 
@@ -1766,7 +1800,7 @@ pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int
 		elog(ERROR, "interrupted");
 
 	/* write query to elog if verbose */
-	if (LOG_LEVEL_CONSOLE <= VERBOSE || LOG_LEVEL_FILE <= VERBOSE)
+	if (log_level_console <= VERBOSE || log_level_file <= VERBOSE)
 	{
 		int		i;
 

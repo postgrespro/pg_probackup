@@ -27,18 +27,24 @@
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
-static size_t zlib_compress(void* dst, size_t dst_size, void const* src, size_t src_size)
+static int32
+zlib_compress(void *dst, size_t dst_size, void const *src, size_t src_size,
+			  int level)
 {
-	uLongf compressed_size = dst_size;
-	int rc = compress2(dst, &compressed_size, src, src_size, compress_level);
+	uLongf		compressed_size = dst_size;
+	int			rc = compress2(dst, &compressed_size, src, src_size,
+							   level);
+
 	return rc == Z_OK ? compressed_size : rc;
 }
 
 /* Implementation of zlib compression method */
-static size_t zlib_decompress(void* dst, size_t dst_size, void const* src, size_t src_size)
+static int32
+zlib_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
 {
-	uLongf dest_len = dst_size;
-	int rc = uncompress(dst, &dest_len, src, src_size);
+	uLongf		dest_len = dst_size;
+	int			rc = uncompress(dst, &dest_len, src, src_size);
+
 	return rc == Z_OK ? dest_len : rc;
 }
 #endif
@@ -47,8 +53,9 @@ static size_t zlib_decompress(void* dst, size_t dst_size, void const* src, size_
  * Compresses source into dest using algorithm. Returns the number of bytes
  * written in the destination buffer, or -1 if compression fails.
  */
-static size_t
-do_compress(void* dst, size_t dst_size, void const* src, size_t src_size, CompressAlg alg)
+static int32
+do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
+			CompressAlg alg, int level)
 {
 	switch (alg)
 	{
@@ -57,7 +64,7 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size, Compre
 			return -1;
 #ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
-			return zlib_compress(dst, dst_size, src, src_size);
+			return zlib_compress(dst, dst_size, src, src_size, level);
 #endif
 		case PGLZ_COMPRESS:
 			return pglz_compress(src, src_size, dst, PGLZ_strategy_always);
@@ -70,8 +77,9 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size, Compre
  * Decompresses source into dest using algorithm. Returns the number of bytes
  * decompressed in the destination buffer, or -1 if decompression fails.
  */
-static size_t
-do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size, CompressAlg alg)
+static int32
+do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
+			  CompressAlg alg)
 {
 	switch (alg)
 	{
@@ -101,6 +109,7 @@ typedef struct BackupPageHeader
 
 /* Special value for compressed_size field */
 #define PageIsTruncated -2
+#define SkipCurrentPage -3
 
 /* Verify page's header */
 static bool
@@ -134,8 +143,8 @@ static int
 read_page_from_file(pgFile *file, BlockNumber blknum,
 					FILE *in, Page page, XLogRecPtr *page_lsn)
 {
-	off_t				offset = blknum*BLCKSZ;
-	size_t				read_len = 0;
+	off_t		offset = blknum * BLCKSZ;
+	size_t		read_len = 0;
 
 	/* read the block */
 	if (fseek(in, offset, SEEK_SET) != 0)
@@ -216,31 +225,32 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 }
 
 /*
- * Backup the specified block from a file of a relation.
- * Verify page header and checksum of the page and write it
- * to the backup file.
+ * Retrieves a page taking the backup mode into account
+ * and writes it into argument "page". Argument "page"
+ * should be a pointer to allocated BLCKSZ of bytes.
+ *
+ * Prints appropriate warnings/errors/etc into log.
+ * Returns 0 if page was successfully retrieved
+ *         SkipCurrentPage(-3) if we need to skip this page
+ *         PageIsTruncated(-2) if the page was truncated
  */
-static void
-backup_data_page(backup_files_args *arguments, 
-				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
-				 BlockNumber blknum, BlockNumber nblocks,
-				 FILE *in, FILE *out,
-				 pg_crc32 *crc, int *n_skipped,
-				 BackupMode backup_mode)
+static int32
+prepare_page(backup_files_arg *arguments,
+			 pgFile *file, XLogRecPtr prev_backup_start_lsn,
+			 BlockNumber blknum, BlockNumber nblocks,
+			 FILE *in, int *n_skipped,
+			 BackupMode backup_mode,
+			 Page page)
 {
-	BackupPageHeader	header;
-	Page 				page = malloc(BLCKSZ);
-	Page 				compressed_page = NULL;
-	XLogRecPtr			page_lsn = 0;
-	size_t				write_buffer_size;
-	char				write_buffer[BLCKSZ+sizeof(header)];
-
-	int					try_again = 100;
-	bool				page_is_valid = false;
+	XLogRecPtr	page_lsn = 0;
+	int			try_again = 100;
+	bool		page_is_valid = false;
+	bool		page_is_truncated = false;
 	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
 
-	header.block = blknum;
-	header.compressed_size = 0;
+	/* check for interrupt */
+	if (interrupted)
+		elog(ERROR, "Interrupted during backup");
 
 	/*
 	 * Read the page and verify its header and checksum.
@@ -258,7 +268,7 @@ backup_data_page(backup_files_args *arguments,
 			if (result == 0)
 			{
 				/* This block was truncated.*/
-				header.compressed_size = PageIsTruncated;
+				page_is_truncated = true;
 				/* Page is not actually valid, but it is absent
 				 * and we're not going to reread it or validate */
 				page_is_valid = true;
@@ -291,35 +301,38 @@ backup_data_page(backup_files_args *arguments,
 	if (backup_mode == BACKUP_MODE_DIFF_PTRACK || (!page_is_valid && is_ptrack_support))
 	{
 		size_t page_size = 0;
-
-		free(page);
-		page = NULL;
-		page = (Page) pg_ptrack_get_block(arguments, file->dbOid, file->tblspcOid,
+		Page ptrack_page = NULL;
+		ptrack_page = (Page) pg_ptrack_get_block(arguments, file->dbOid, file->tblspcOid,
 										  file->relOid, absolute_blknum, &page_size);
 
-		if (page == NULL)
+		if (ptrack_page == NULL)
 		{
 			/* This block was truncated.*/
-			header.compressed_size = PageIsTruncated;
+			page_is_truncated = true;
 		}
 		else if (page_size != BLCKSZ)
 		{
+			free(ptrack_page);
 			elog(ERROR, "File: %s, block %u, expected block size %d, but read %lu",
 					   file->path, absolute_blknum, BLCKSZ, page_size);
 		}
 		else
 		{
 			/*
+			 * We need to copy the page that was successfully
+			 * retreieved from ptrack into our output "page" parameter.
 			 * We must set checksum here, because it is outdated
 			 * in the block recieved from shared buffers.
 			 */
+			memcpy(page, ptrack_page, BLCKSZ);
+			free(ptrack_page);
 			if (is_checksum_enabled)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
 		/* get lsn from page, provided by pg_ptrack_get_block() */
 		if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
 			file->exists_in_prev &&
-			header.compressed_size != PageIsTruncated &&
+			!page_is_truncated &&
 			!parse_page(page, &page_lsn))
 				elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
 								"Possible risk of a memory corruption");
@@ -328,76 +341,91 @@ backup_data_page(backup_files_args *arguments,
 
 	if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
 		file->exists_in_prev &&
-		header.compressed_size != PageIsTruncated &&
+		!page_is_truncated &&
 		page_lsn < prev_backup_start_lsn)
 	{
 		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
 		(*n_skipped)++;
-		free(page);
+		return SkipCurrentPage;
+	}
+
+	if (page_is_truncated)
+		return PageIsTruncated;
+
+	return 0;
+}
+
+static void
+compress_and_backup_page(pgFile *file, BlockNumber blknum,
+						FILE *in, FILE *out, pg_crc32 *crc,
+						int page_state, Page page,
+						CompressAlg calg, int clevel)
+{
+	BackupPageHeader header;
+	size_t		write_buffer_size = sizeof(header);
+	char		write_buffer[BLCKSZ+sizeof(header)];
+	char		compressed_page[BLCKSZ];
+
+	if(page_state == SkipCurrentPage)
 		return;
-	}
 
-	if (header.compressed_size != PageIsTruncated)
+	header.block = blknum;
+	header.compressed_size = page_state;
+
+	if(page_state == PageIsTruncated)
 	{
-		file->read_size += BLCKSZ;
-
-		compressed_page = malloc(BLCKSZ);
+		/*
+		* The page was truncated. Write only header
+		* to know that we must truncate restored file
+		*/
+		memcpy(write_buffer, &header, sizeof(header));
+	}
+	else
+	{
+		/* The page was not truncated, so we need to compress it */
 		header.compressed_size = do_compress(compressed_page, BLCKSZ,
-											page, BLCKSZ, compress_alg);
+											 page, BLCKSZ, calg, clevel);
 
-		file->compress_alg = compress_alg;
-
+		file->compress_alg = calg;
+		file->read_size += BLCKSZ;
 		Assert (header.compressed_size <= BLCKSZ);
-	}
 
-	write_buffer_size = sizeof(header);
-
-	/*
-	 * The page was truncated. Write only header
-	 * to know that we must truncate restored file
-	 */
-	if (header.compressed_size == PageIsTruncated)
-	{
-		memcpy(write_buffer, &header, sizeof(header));
-	}
-	/* The page compression failed. Write it as is. */
-	else if (header.compressed_size == -1)
-	{
-		header.compressed_size = BLCKSZ;
-		memcpy(write_buffer, &header, sizeof(header));
-		memcpy(write_buffer + sizeof(header), page, BLCKSZ);
-		write_buffer_size += header.compressed_size;
-	}
-	/* The page was successfully compressed */
-	else if (header.compressed_size > 0)
-	{
-		memcpy(write_buffer, &header, sizeof(header));
-		memcpy(write_buffer + sizeof(header), compressed_page, header.compressed_size);
-		write_buffer_size += MAXALIGN(header.compressed_size);
+		/* The page was successfully compressed. */
+		if (header.compressed_size > 0)
+		{
+			memcpy(write_buffer, &header, sizeof(header));
+			memcpy(write_buffer + sizeof(header),
+				   compressed_page, header.compressed_size);
+			write_buffer_size += MAXALIGN(header.compressed_size);
+		}
+		/* Nonpositive value means that compression failed. Write it as is. */
+		else
+		{
+			header.compressed_size = BLCKSZ;
+			memcpy(write_buffer, &header, sizeof(header));
+			memcpy(write_buffer + sizeof(header), page, BLCKSZ);
+			write_buffer_size += header.compressed_size;
+		}
 	}
 
 	/* elog(VERBOSE, "backup blkno %u, compressed_size %d write_buffer_size %ld",
 				  blknum, header.compressed_size, write_buffer_size); */
 
 	/* Update CRC */
-	COMP_CRC32C(*crc, &write_buffer, write_buffer_size);
+	COMP_CRC32C(*crc, write_buffer, write_buffer_size);
 
 	/* write data page */
 	if(fwrite(write_buffer, 1, write_buffer_size, out) != write_buffer_size)
 	{
-		int errno_tmp = errno;
+		int			errno_tmp = errno;
+
 		fclose(in);
 		fclose(out);
 		elog(ERROR, "File: %s, cannot write backup at block %u : %s",
-				file->path, blknum, strerror(errno_tmp));
+			 file->path, blknum, strerror(errno_tmp));
 	}
 
 	file->write_size += write_buffer_size;
-
-	if (page != NULL)
-		free(page);
-	if (compressed_page != NULL)
-		free(compressed_page);
 }
 
 /*
@@ -409,18 +437,19 @@ backup_data_page(backup_files_args *arguments,
  * backup with special header.
  */
 bool
-backup_data_file(backup_files_args* arguments,
-				 const char *from_root, const char *to_root,
-				 pgFile *file, XLogRecPtr prev_backup_start_lsn,
-				 BackupMode backup_mode)
+backup_data_file(backup_files_arg* arguments,
+				 const char *to_path, pgFile *file,
+				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
+				 CompressAlg calg, int clevel)
 {
-	char			to_path[MAXPGPATH];
-	FILE			*in;
-	FILE			*out;
-	BlockNumber		blknum = 0;
-	BlockNumber		nblocks = 0;
-	int n_blocks_skipped = 0;
-	int n_blocks_read = 0;
+	FILE		*in;
+	FILE		*out;
+	BlockNumber	blknum = 0;
+	BlockNumber	nblocks = 0;
+	int			n_blocks_skipped = 0;
+	int			n_blocks_read = 0;
+	int			page_state;
+	char		curr_page[BLCKSZ];
 
 	/*
 	 * Skip unchanged file only if it exists in previous backup.
@@ -430,7 +459,7 @@ backup_data_file(backup_files_args* arguments,
 	if ((backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
-		file->exists_in_prev)
+		file->exists_in_prev && !file->pagemap_isabsent)
 	{
 		/*
 		 * There are no changed blocks since last backup. We want make
@@ -446,7 +475,7 @@ backup_data_file(backup_files_args* arguments,
 	INIT_CRC32C(file->crc);
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(file->crc);
@@ -479,8 +508,7 @@ backup_data_file(backup_files_args* arguments,
 	nblocks = file->size/BLCKSZ;
 
 	/* open backup file for write  */
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -493,32 +521,45 @@ backup_data_file(backup_files_args* arguments,
 	 * Read each page, verify checksum and write it to backup.
 	 * If page map is empty or file is not present in previous backup
 	 * backup all pages of the relation.
+	 *
+	 * We will enter here if backup_mode is FULL or DELTA.
 	 */
-	if (file->pagemap.bitmapsize == PageBitmapIsEmpty
-		|| file->pagemap.bitmapsize == PageBitmapIsAbsent
-		|| !file->exists_in_prev)
+	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+		file->pagemap_isabsent || !file->exists_in_prev)
 	{
 		for (blknum = 0; blknum < nblocks; blknum++)
 		{
-			backup_data_page(arguments, file, prev_backup_start_lsn, blknum,
-							 nblocks, in, out, &(file->crc),
-							 &n_blocks_skipped, backup_mode);
+			page_state = prepare_page(arguments, file, prev_backup_start_lsn,
+									  blknum, nblocks, in, &n_blocks_skipped,
+									  backup_mode, curr_page);
+			compress_and_backup_page(file, blknum, in, out, &(file->crc),
+									  page_state, curr_page, calg, clevel);
 			n_blocks_read++;
+			if (page_state == PageIsTruncated)
+				break;
 		}
 		if (backup_mode == BACKUP_MODE_DIFF_DELTA)
 			file->n_blocks = n_blocks_read;
 	}
-	/* If page map is not empty we scan only changed blocks, */
+	/*
+	 * If page map is not empty we scan only changed blocks.
+	 *
+	 * We will enter here if backup_mode is PAGE or PTRACK.
+	 */
 	else
 	{
 		datapagemap_iterator_t *iter;
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
 		{
-			backup_data_page(arguments, file, prev_backup_start_lsn, blknum,
-							 nblocks, in, out, &(file->crc),
-							 &n_blocks_skipped, backup_mode);
+			page_state = prepare_page(arguments, file, prev_backup_start_lsn,
+									  blknum, nblocks, in, &n_blocks_skipped,
+									  backup_mode, curr_page);
+			compress_and_backup_page(file, blknum, in, out, &(file->crc),
+									  page_state, curr_page, calg, clevel);
 			n_blocks_read++;
+			if (page_state == PageIsTruncated)
+				break;
 		}
 
 		pg_free(file->pagemap.bitmap);
@@ -562,25 +603,26 @@ backup_data_file(backup_files_args* arguments,
 /*
  * Restore files in the from_root directory to the to_root directory with
  * same relative path.
+ *
+ * If write_header is true then we add header to each restored block, currently
+ * it is used for MERGE command.
  */
 void
-restore_data_file(const char *from_root,
-				  const char *to_root,
-				  pgFile *file,
-				  pgBackup *backup)
+restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
+				  bool write_header)
 {
-	char				to_path[MAXPGPATH];
-	FILE			   *in = NULL;
-	FILE			   *out = NULL;
-	BackupPageHeader	header;
-	BlockNumber			blknum;
-	size_t              file_size;
+	FILE	   *in = NULL;
+	FILE	   *out = NULL;
+	BackupPageHeader header;
+	BlockNumber	blknum = 0,
+				truncate_from = 0;
+	bool		need_truncate = false;
 
 	/* BYTES_INVALID allowed only in case of restoring file from DELTA backup */
 	if (file->write_size != BYTES_INVALID)
 	{
 		/* open backup mode file for read */
-		in = fopen(file->path, "r");
+		in = fopen(file->path, PG_BINARY_R);
 		if (in == NULL)
 		{
 			elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
@@ -593,10 +635,9 @@ restore_data_file(const char *from_root,
 	 * modified pages for differential restore. If the file does not exist,
 	 * re-open it with "w" to create an empty file.
 	 */
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "r+");
+	out = fopen(to_path, PG_BINARY_R "+");
 	if (out == NULL && errno == ENOENT)
-		out = fopen(to_path, "w");
+		out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -605,8 +646,9 @@ restore_data_file(const char *from_root,
 			 to_path, strerror(errno_tmp));
 	}
 
-	for (blknum = 0; ; blknum++)
+	while (true)
 	{
+		off_t		write_pos;
 		size_t		read_len;
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
@@ -614,6 +656,21 @@ restore_data_file(const char *from_root,
 		/* File didn`t changed. Nothig to copy */
 		if (file->write_size == BYTES_INVALID)
 			break;
+
+		/*
+		 * We need to truncate result file if data file in a incremental backup
+		 * less than data file in a full backup. We know it thanks to n_blocks.
+		 *
+		 * It may be equal to -1, then we don't want to truncate the result
+		 * file.
+		 */
+		if (file->n_blocks != BLOCKNUM_INVALID &&
+			(blknum + 1) > file->n_blocks)
+		{
+			truncate_from = blknum;
+			need_truncate = true;
+			break;
+		}
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -632,18 +689,19 @@ restore_data_file(const char *from_root,
 		}
 
 		if (header.block < blknum)
-			elog(ERROR, "backup is broken at file->path %s block %u",file->path, blknum);
+			elog(ERROR, "backup is broken at file->path %s block %u",
+				 file->path, blknum);
+
+		blknum = header.block;
 
 		if (header.compressed_size == PageIsTruncated)
 		{
 			/*
 			 * Backup contains information that this block was truncated.
-			 * Truncate file to this length.
+			 * We need to truncate file to this length.
 			 */
-			if (ftruncate(fileno(out), header.block * BLCKSZ) != 0)
-				elog(ERROR, "cannot truncate \"%s\": %s",
-					 file->path, strerror(errno));
-			elog(VERBOSE, "truncate file %s to block %u", file->path, header.block);
+			truncate_from = blknum;
+			need_truncate = true;
 			break;
 		}
 
@@ -657,62 +715,87 @@ restore_data_file(const char *from_root,
 
 		if (header.compressed_size != BLCKSZ)
 		{
-			size_t uncompressed_size = 0;
+			int32		uncompressed_size = 0;
 
 			uncompressed_size = do_decompress(page.data, BLCKSZ,
-											compressed_page.data,
-											header.compressed_size, file->compress_alg);
+											  compressed_page.data,
+											  MAXALIGN(header.compressed_size),
+											  file->compress_alg);
 
 			if (uncompressed_size != BLCKSZ)
-				elog(ERROR, "page uncompressed to %ld bytes. != BLCKSZ", uncompressed_size);
+				elog(ERROR, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
+					 file->path, uncompressed_size);
 		}
+
+		write_pos = (write_header) ? blknum * (BLCKSZ + sizeof(header)) :
+									 blknum * BLCKSZ;
 
 		/*
 		 * Seek and write the restored page.
 		 */
-		blknum = header.block;
-		if (fseek(out, blknum * BLCKSZ, SEEK_SET) < 0)
+		if (fseek(out, write_pos, SEEK_SET) < 0)
 			elog(ERROR, "cannot seek block %u of \"%s\": %s",
 				 blknum, to_path, strerror(errno));
+
+		if (write_header)
+		{
+			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header))
+				elog(ERROR, "cannot write header of block %u of \"%s\": %s",
+					 blknum, file->path, strerror(errno));
+		}
 
 		if (header.compressed_size < BLCKSZ)
 		{
 			if (fwrite(page.data, 1, BLCKSZ, out) != BLCKSZ)
 				elog(ERROR, "cannot write block %u of \"%s\": %s",
-					blknum, file->path, strerror(errno));
+					 blknum, file->path, strerror(errno));
 		}
 		else
 		{
 			/* if page wasn't compressed, we've read full block */
 			if (fwrite(compressed_page.data, 1, BLCKSZ, out) != BLCKSZ)
 				elog(ERROR, "cannot write block %u of \"%s\": %s",
-					blknum, file->path, strerror(errno));
+					 blknum, file->path, strerror(errno));
 		}
 	}
 
-    /*
-     * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
-     * But during DELTA backup we read every file in PGDATA and thus DELTA backup
-     * knows exact size of every file at the time of backup.
-     * So when restoring file from DELTA backup we, knowning it`s size at
-     * a time of a backup, can truncate file to this size.
-     */
-
-	if (backup->backup_mode == BACKUP_MODE_DIFF_DELTA)
+	/*
+	 * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
+	 * But during DELTA backup we read every file in PGDATA and thus DELTA backup
+	 * knows exact size of every file at the time of backup.
+	 * So when restoring file from DELTA backup we, knowning it`s size at
+	 * a time of a backup, can truncate file to this size.
+	 */
+	if (allow_truncate && file->n_blocks != BLOCKNUM_INVALID && !need_truncate)
 	{
+		size_t		file_size = 0;
+
 		/* get file current size */
 		fseek(out, 0, SEEK_END);
 		file_size = ftell(out);
+
 		if (file_size > file->n_blocks * BLCKSZ)
 		{
-			/*
-			 * Truncate file to this length.
-			 */
-			if (ftruncate(fileno(out), file->n_blocks * BLCKSZ) != 0)
-				elog(ERROR, "cannot truncate \"%s\": %s",
-					 file->path, strerror(errno));
-			elog(INFO, "Delta truncate file %s to block %u", file->path, file->n_blocks);
+			truncate_from = file->n_blocks;
+			need_truncate = true;
 		}
+	}
+
+	if (need_truncate)
+	{
+		off_t		write_pos;
+
+		write_pos = (write_header) ? truncate_from * (BLCKSZ + sizeof(header)) :
+									 truncate_from * BLCKSZ;
+
+		/*
+		 * Truncate file to this length.
+		 */
+		if (ftruncate(fileno(out), write_pos) != 0)
+			elog(ERROR, "cannot truncate \"%s\": %s",
+				 file->path, strerror(errno));
+		elog(INFO, "Delta truncate file %s to block %u",
+			 file->path, truncate_from);
 	}
 
 	/* update file permission */
@@ -759,7 +842,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(crc);
@@ -775,7 +858,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fopen(to_path, "w");
+	out = fopen(to_path, PG_BINARY_W);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -843,7 +926,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		file->read_size += read_len;
 	}
 
-	file->write_size = file->read_size;
+	file->write_size = (int64) file->read_size;
 	/* finish CRC calculation and store into pgFile */
 	FIN_CRC32C(crc);
 	file->crc = crc;
@@ -865,6 +948,22 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	fclose(in);
 
 	return true;
+}
+
+/*
+ * Move file from one backup to another.
+ * We do not apply compression to these files, because
+ * it is either small control file or already compressed cfs file.
+ */
+void
+move_file(const char *from_root, const char *to_root, pgFile *file)
+{
+	char		to_path[MAXPGPATH];
+
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	if (rename(file->path, to_path) == -1)
+		elog(ERROR, "Cannot move file \"%s\" to path \"%s\": %s",
+			 file->path, to_path, strerror(errno));
 }
 
 #ifdef HAVE_LIBZ
@@ -918,7 +1017,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			  bool overwrite)
 {
 	FILE	   *in = NULL;
-	FILE	   *out;
+	FILE	   *out=NULL;
 	char		buf[XLOG_BLCKSZ];
 	const char *to_path_p = to_path;
 	char		to_path_temp[MAXPGPATH];
@@ -930,7 +1029,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "r");
+	in = fopen(from_path, PG_BINARY_R);
 	if (in == NULL)
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
@@ -946,7 +1045,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
-		gz_out = gzopen(to_path_temp, "wb");
+		gz_out = gzopen(to_path_temp, PG_BINARY_W);
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 compress_level, to_path_temp, get_gz_error(gz_out, errno));
@@ -961,7 +1060,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fopen(to_path_temp, "w");
+		out = fopen(to_path_temp, PG_BINARY_W);
 		if (out == NULL)
 			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
@@ -1083,7 +1182,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 
 	/* open file for read */
-	in = fopen(from_path, "r");
+	in = fopen(from_path, PG_BINARY_R);
 	if (in == NULL)
 	{
 #ifdef HAVE_LIBZ
@@ -1092,7 +1191,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		 * extension.
 		 */
 		snprintf(gz_from_path, sizeof(gz_from_path), "%s.gz", from_path);
-		gz_in = gzopen(gz_from_path, "rb");
+		gz_in = gzopen(gz_from_path, PG_BINARY_R);
 		if (gz_in == NULL)
 		{
 			if (errno == ENOENT)
@@ -1120,7 +1219,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-	out = fopen(to_path_temp, "w");
+	out = fopen(to_path_temp, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 			 to_path_temp, strerror(errno));
@@ -1254,7 +1353,7 @@ calc_file_checksum(pgFile *file)
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, "r");
+	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
 		FIN_CRC32C(crc);

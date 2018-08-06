@@ -3,8 +3,6 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
-import time
-
 
 module_name = 'page'
 
@@ -33,8 +31,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname),
-        )
+            base_dir="{0}/{1}/node_restored".format(module_name, fname))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -49,32 +46,27 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             "create table t_heap tablespace somedata as select i as id, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,1024) i;"
-        )
+            "from generate_series(0,1024) i;")
+
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         self.backup_node(backup_dir, 'node', node)
 
         node.safe_psql(
             "postgres",
-            "delete from t_heap where ctid >= '(11,0)'"
-        )
+            "delete from t_heap where ctid >= '(11,0)'")
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='page',
-            options=['--log-level-file=verbose']
-        )
+            options=['--log-level-file=verbose'])
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='page'
-        )
+            backup_dir, 'node', node, backup_type='page')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -87,8 +79,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             options=[
                 "-j", "4",
                 "-T", "{0}={1}".format(old_tablespace, new_tablespace),
-                "--recovery-target-action=promote"]
-        )
+                "--recovery-target-action=promote"])
 
         # Physical comparison
         if self.paranoia:
@@ -97,21 +88,17 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
-
-        while node_restored.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        node_restored.slow_start()
 
         # Logical comparison
         result1 = node.safe_psql(
             "postgres",
-            "select * from t_heap"
-            )
+            "select * from t_heap")
+
         result2 = node_restored.safe_psql(
             "postgres",
-            "select * from t_heap"
-            )
+            "select * from t_heap")
+
         self.assertEqual(result1, result2)
 
         # Clean after yourself
@@ -175,7 +162,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 backup_id=full_backup_id, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -188,7 +175,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 backup_id=page_backup_id, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
@@ -254,7 +241,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -271,7 +259,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
+
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
@@ -349,10 +338,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         restored_node.append_conf(
             "postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
-        while restored_node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
             "postgres", "select * from pgbench_accounts")
@@ -525,4 +511,131 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         node_restored.start()
 
         # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_parallel_pagemap(self):
+        """
+        Test for parallel WAL segments reading, during which pagemap is built
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        # Initialize instance and backup directory
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={
+                "hot_standby": "on"
+            }
+        )
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node_restored.cleanup()
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        # Do full backup
+        self.backup_node(backup_dir, 'node', node)
+        show_backup = self.show_pb(backup_dir, 'node')[0]
+
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "FULL")
+
+        # Fill instance with data and make several WAL segments ...
+        with node.connect() as conn:
+            conn.execute("create table test (id int)")
+            for x in range(0, 8):
+                conn.execute(
+                    "insert into test select i from generate_series(1,100) s(i)")
+                conn.commit()
+                self.switch_wal_segment(conn)
+            count1 = conn.execute("select count(*) from test")
+
+        # ... and do page backup with parallel pagemap
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="page", options=["-j", "4"])
+        show_backup = self.show_pb(backup_dir, 'node')[1]
+
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "PAGE")
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # Restore it
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        # Physical comparison
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.start()
+
+        # Check restored node
+        count2 = node_restored.execute("postgres", "select count(*) from test")
+
+        self.assertEqual(count1, count2)
+
+        # Clean after yourself
+        node.cleanup()
+        node_restored.cleanup()
+        self.del_test_dir(module_name, fname)
+
+    def test_parallel_pagemap_1(self):
+        """
+        Test for parallel WAL segments reading, during which pagemap is built
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        # Initialize instance and backup directory
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={}
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        # Do full backup
+        self.backup_node(backup_dir, 'node', node)
+        show_backup = self.show_pb(backup_dir, 'node')[0]
+
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "FULL")
+
+        # Fill instance with data and make several WAL segments ...
+        node.pgbench_init(scale=10)
+
+        # do page backup in single thread
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="page")
+
+        self.delete_pb(backup_dir, 'node', page_id)
+
+        # ... and do page backup with parallel pagemap
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="page", options=["-j", "4"])
+        show_backup = self.show_pb(backup_dir, 'node')[1]
+
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "PAGE")
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+        node.start()
+
+        # Clean after yourself
+        node.cleanup()
         self.del_test_dir(module_name, fname)

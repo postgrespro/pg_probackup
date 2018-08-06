@@ -36,11 +36,13 @@ extern char		   *error_log_filename;
 extern char		   *log_directory;
 extern char			log_path[MAXPGPATH];
 
+#define LOG_ROTATION_SIZE_DEFAULT 0
+#define LOG_ROTATION_AGE_DEFAULT 0
 extern int			log_rotation_size;
 extern int			log_rotation_age;
 
-#define LOG_LEVEL_CONSOLE ((log_level_console == LOG_NONE) ? INFO : log_level_console)
-#define LOG_LEVEL_FILE ((log_level_file == LOG_NONE) ? LOG_OFF : log_level_file)
+#define LOG_LEVEL_CONSOLE_DEFAULT INFO
+#define LOG_LEVEL_FILE_DEFAULT LOG_OFF
 
 #undef elog
 extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);

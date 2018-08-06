@@ -44,7 +44,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
-        self.backup_node(backup_dir, 'node', node, options=['-j100', '--stream'])
+        self.backup_node(backup_dir, 'node', node, options=['-j10', '--stream'])
 
         node.safe_psql('postgres', 'delete from t_heap where id > 128;')
         node.safe_psql('postgres', 'vacuum t_heap')
@@ -116,7 +116,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         # Take PTRACK backup to clean every ptrack
-        self.backup_node(backup_dir, 'replica', replica, options=['-j100',
+        self.backup_node(backup_dir, 'replica', replica, options=['-j10',
             '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
 
         master.safe_psql('postgres', 'delete from t_heap where id > 128;')
