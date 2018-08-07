@@ -107,12 +107,6 @@ write_elevel(FILE *stream, int elevel)
 		case ERROR:
 			fputs("ERROR: ", stream);
 			break;
-		case FATAL:
-			fputs("FATAL: ", stream);
-			break;
-		case PANIC:
-			fputs("PANIC: ", stream);
-			break;
 		default:
 			elog_stderr(ERROR, "invalid logging level: %d", elevel);
 			break;
@@ -151,7 +145,7 @@ exit_if_necessary(int elevel)
 }
 
 /*
- * Logs to stderr or to log file and exit if ERROR or FATAL.
+ * Logs to stderr or to log file and exit if ERROR.
  *
  * Actual implementation for elog() and pg_log().
  */
@@ -288,7 +282,7 @@ elog_stderr(int elevel, const char *fmt, ...)
 }
 
 /*
- * Logs to stderr or to log file and exit if ERROR or FATAL.
+ * Logs to stderr or to log file and exit if ERROR.
  */
 void
 elog(int elevel, const char *fmt, ...)
@@ -308,7 +302,7 @@ elog(int elevel, const char *fmt, ...)
 }
 
 /*
- * Logs only to log file and exit if ERROR or FATAL.
+ * Logs only to log file and exit if ERROR.
  */
 void
 elog_file(int elevel, const char *fmt, ...)
@@ -399,10 +393,6 @@ parse_log_level(const char *level)
 		return WARNING;
 	else if (pg_strncasecmp("error", v, len) == 0)
 		return ERROR;
-	else if (pg_strncasecmp("fatal", v, len) == 0)
-		return FATAL;
-	else if (pg_strncasecmp("panic", v, len) == 0)
-		return PANIC;
 
 	/* Log level is invalid */
 	elog(ERROR, "invalid log-level \"%s\"", level);
@@ -431,10 +421,6 @@ deparse_log_level(int level)
 			return "WARNING";
 		case ERROR:
 			return "ERROR";
-		case FATAL:
-			return "FATAL";
-		case PANIC:
-			return "PANIC";
 		default:
 			elog(ERROR, "invalid log-level %d", level);
 	}
@@ -491,7 +477,7 @@ logfile_open(const char *filename, const char *mode)
 	{
 		int			save_errno = errno;
 
-		elog_stderr(FATAL, "could not open log file \"%s\": %s",
+		elog_stderr(ERROR, "could not open log file \"%s\": %s",
 					filename, strerror(errno));
 		errno = save_errno;
 	}

@@ -1663,7 +1663,7 @@ pg_stop_backup(pgBackup *backup)
 	TransactionId recovery_xid;
 
 	if (!backup_in_progress)
-		elog(FATAL, "backup is not in progress");
+		elog(ERROR, "backup is not in progress");
 
 	/* For replica we call pg_stop_backup() on master */
 	conn = (current.from_replica) ? master_conn : backup_conn;
