@@ -21,8 +21,6 @@
 #define NOTICE		(-2)
 #define WARNING		(-1)
 #define ERROR		1
-#define FATAL		2
-#define PANIC		3
 #define LOG_OFF		10
 
 /* Logger parameters */
