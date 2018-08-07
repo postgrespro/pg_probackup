@@ -250,7 +250,7 @@ help_backup(void)
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
 	printf(_("                                   available options: 'zlib', 'pglz', 'none' (default: zlib)\n"));
 	printf(_("      --compress-level=compress-level\n"));
-	printf(_("                                   level of compression [0-9] (default: 6)\n"));
+	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
@@ -515,7 +515,7 @@ help_set_config(void)
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
 	printf(_("                                   available options: 'zlib','pglz','none'\n"));
 	printf(_("      --compress-level=compress-level\n"));
-	printf(_("                                   level of compression [0-9] (default: 6)\n"));
+	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
@@ -585,7 +585,7 @@ help_archive_push(void)
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
 	printf(_("                                   available options: 'zlib','none'\n"));
 	printf(_("      --compress-level=compress-level\n"));
-	printf(_("                                   level of compression [0-9]\n"));
+	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 	printf(_("      --overwrite                  overwrite archived WAL file\n"));
 }
 
