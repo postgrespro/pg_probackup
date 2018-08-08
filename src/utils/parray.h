@@ -10,6 +10,10 @@
 #ifndef PARRAY_H
 #define PARRAY_H
 
+#include "postgres_fe.h"
+
+#include <stdlib.h>
+
 /*
  * "parray" hold pointers to objects in a linear memory area.
  * Client use "parray *" to access parray object.

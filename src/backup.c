@@ -543,9 +543,11 @@ do_backup_instance(void)
 
 		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
-			elog(ERROR, "LSN from ptrack_control %lx differs from STOP LSN of previous backup %lx.\n"
+			elog(ERROR, "LSN from ptrack_control %X/%X differs from STOP LSN of previous backup %X/%X.\n"
 						"Create new full backup before an incremental one.",
-						ptrack_lsn, prev_backup->stop_lsn);
+						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+						(uint32) (prev_backup->stop_lsn >> 32),
+						(uint32) (prev_backup->stop_lsn));
 		}
 	}
 
@@ -1032,11 +1034,13 @@ check_system_identifiers(void)
 	system_id_conn = get_remote_system_identifier(backup_conn);
 
 	if (system_id_conn != system_identifier)
-		elog(ERROR, "Backup data directory was initialized for system id %ld, but connected instance system id is %ld",
-			 system_identifier, system_id_conn);
+		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
+					"but connected instance system id is " UINT64_FORMAT,
+					system_identifier, system_id_conn);
 	if (system_id_pgdata != system_identifier)
-		elog(ERROR, "Backup data directory was initialized for system id %ld, but target backup directory system id is %ld",
-			 system_identifier, system_id_pgdata);
+		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
+					"but target backup directory system id is " UINT64_FORMAT,
+					system_identifier, system_id_pgdata);
 }
 
 /*

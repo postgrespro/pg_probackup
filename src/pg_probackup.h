@@ -63,8 +63,6 @@
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 
-#define LOG_FILENAME_DEFAULT "pg_probackup.log"
-#define LOG_DIRECTORY_DEFAULT "log"
 /* Direcotry/File permission */
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
@@ -206,7 +204,7 @@ typedef struct pgBackupConfig
 typedef struct pgBackup pgBackup;
 
 /* Information about single backup stored in backup.conf */
-typedef struct pgBackup
+struct pgBackup
 {
 	BackupMode		backup_mode; /* Mode - one of BACKUP_MODE_xxx above*/
 	time_t			backup_id;	 /* Identifier of the backup.
@@ -255,7 +253,7 @@ typedef struct pgBackup
 	pgBackup		*parent_backup_link;
 	char			*primary_conninfo; /* Connection parameters of the backup
 										* in the format suitable for recovery.conf */
-} pgBackup;
+};
 
 /* Recovery target for restore and validate subcommands */
 typedef struct pgRecoveryTarget
@@ -406,7 +404,7 @@ extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
 extern char *pg_ptrack_get_block(backup_files_arg *arguments,
-								 Oid dbOid, Oid tblsOid, Oid relOid, 
+								 Oid dbOid, Oid tblsOid, Oid relOid,
 								 BlockNumber blknum,
 								 size_t *result_size);
 /* in restore.c */

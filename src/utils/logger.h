@@ -42,6 +42,9 @@ extern int			log_rotation_age;
 #define LOG_LEVEL_CONSOLE_DEFAULT INFO
 #define LOG_LEVEL_FILE_DEFAULT LOG_OFF
 
+#define LOG_FILENAME_DEFAULT "pg_probackup.log"
+#define LOG_DIRECTORY_DEFAULT "log"
+
 #undef elog
 extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
 extern void elog_file(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);

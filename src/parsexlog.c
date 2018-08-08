@@ -897,7 +897,7 @@ PrintXLogCorruptionMsg(XLogPageReadPrivate *private_data, int elevel)
 						 "Error has occured during reading WAL segment \"%s\"",
 				 private_data->xlogpath);
 #ifdef HAVE_LIBZ
-		else if (private_data->gz_xlogpath != NULL)
+		else if (private_data->gz_xlogfile != NULL)
 			elog(elevel, "Possible WAL corruption. "
 						 "Error has occured during reading WAL segment \"%s\"",
 				 private_data->gz_xlogpath);

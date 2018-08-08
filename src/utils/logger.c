@@ -15,7 +15,6 @@
 
 #include "logger.h"
 #include "pgut.h"
-#include "pg_probackup.h"
 #include "thread.h"
 
 /* Logger parameters */
