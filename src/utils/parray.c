@@ -7,7 +7,8 @@
  *-------------------------------------------------------------------------
  */
 
-#include "src/pg_probackup.h"
+#include "parray.h"
+#include "pgut.h"
 
 /* members of struct parray are hidden from client. */
 struct parray
