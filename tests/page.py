@@ -220,7 +220,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
-            "md5(i::text)::tsvector as tsvector from generate_series(0,1) i")
+            "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
         full_result = node.execute("postgres", "SELECT * FROM t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='full')
@@ -230,10 +230,14 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap select i as id, "
             "md5(i::text) as text, md5(i::text)::tsvector as tsvector "
-            "from generate_series(0,2) i")
+            "from generate_series(100, 200) i")
         page_result = node.execute("postgres", "SELECT * FROM t_heap")
         page_backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+            backup_dir, 'node', node,
+            backup_type='page', options=["-j", "4"])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
 
         # Drop Node
         node.cleanup()
@@ -250,6 +254,12 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
+
+        # GET RESTORED PGDATA AND COMPARE
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
         node.slow_start()
 
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
