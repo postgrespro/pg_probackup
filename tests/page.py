@@ -255,11 +255,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        # GET RESTORED PGDATA AND COMPARE
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
-            self.compare_pgdata(pgdata, pgdata_restored)
-
         node.slow_start()
 
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
@@ -278,6 +273,12 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
+
+         # GET RESTORED PGDATA AND COMPARE
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
         node.slow_start()
 
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")

@@ -305,6 +305,8 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		/* By default there is some error */
 		thread_args[i].ret = 1;
 
+		threads_need++;
+
 		/* Adjust startpoint to the next thread */
 		if (nextSegNoToRead == 0)
 			XLByteToSeg(startpoint, nextSegNoToRead);
@@ -317,10 +319,6 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 		if (nextSegNoToRead > endSegNo)
 			break;
 		XLogSegNoOffsetToRecPtr(nextSegNoToRead, 0, startpoint);
-		/* Skip over the page header */
-		startpoint += SizeOfXLogLongPHD;
-
-		threads_need++;
 	}
 
 	/* Run threads */
