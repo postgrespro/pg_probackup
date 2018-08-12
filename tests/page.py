@@ -744,7 +744,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'ERROR',
-            self.show_pb(backup_dir, 'node')[1]['status'],
+            self.show_pb(backup_dir, 'node')[2]['status'],
             'Backup {0} should have STATUS "ERROR"')
 
         # Clean after yourself
