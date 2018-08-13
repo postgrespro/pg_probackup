@@ -14,7 +14,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #include "catalog/pg_control.h"
 #include "utils/logger.h"
