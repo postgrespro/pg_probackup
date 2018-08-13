@@ -166,11 +166,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
 
-        # GET RESTORED PGDATA AND COMPARE
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
-            self.compare_pgdata(pgdata, pgdata_restored)
-
         node.slow_start()
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
@@ -184,6 +179,12 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 backup_id=page_backup_id, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
+
+        # GET RESTORED PGDATA AND COMPARE
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
         node.slow_start()
         page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(page_result, page_result_new)
@@ -658,4 +659,93 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.cleanup()
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_backup_with_lost_wal_segment(self):
+        """
+        make node with archiving
+        make archive backup, then generate some wals with pgbench,
+        delete latest archived wal segment
+        run page backup, expecting error because of missing wal segment
+        make sure that backup status is 'ERROR'
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        # make some wals
+        node.pgbench_init(scale=3)
+
+        # delete last wal segment
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
+            wals_dir, f)) and not f.endswith('.backup')]
+        wals = map(str, wals)
+        file = os.path.join(wals_dir, max(wals))
+        os.remove(file)
+        if self.archive_compress:
+            file = file[:-3]
+
+        # Single-thread PAGE backup
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page')
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of wal segment disappearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'INFO: Wait for LSN' in e.message and
+                'in archived WAL segment' in e.message and
+                'WARNING: could not read WAL record at' in e.message and
+                'ERROR: WAL segment "{0}" is absent\n'.format(
+                    file) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'Backup {0} should have STATUS "ERROR"')
+
+        # Multi-thread PAGE backup
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page', options=["-j", "4"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of wal segment disappearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'INFO: Wait for LSN' in e.message and
+                'in archived WAL segment' in e.message and
+                'WARNING: could not read WAL record at' in e.message and
+                'ERROR: WAL segment "{0}" is absent\n'.format(
+                    file) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[2]['status'],
+            'Backup {0} should have STATUS "ERROR"')
+
+        # Clean after yourself
         self.del_test_dir(module_name, fname)

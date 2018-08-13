@@ -1237,77 +1237,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_validate_wal_lost_segment_2(self):
-        """
-        make node with archiving
-        make archive backup
-        delete from archive wal segment which DO NOT belong to this backup
-        run validate, expecting error because of missing wal segment
-        make sure that backup status is 'ERROR'
-        """
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.start()
-
-        self.backup_node(backup_dir, 'node', node)
-
-        # make some wals
-        node.pgbench_init(scale=2)
-        pgbench = node.pgbench(
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            options=["-c", "4", "-T", "10"]
-        )
-        pgbench.wait()
-        pgbench.stdout.close()
-
-        # delete last wal segment
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
-        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-            wals_dir, f)) and not f.endswith('.backup')]
-        wals = map(str, wals)
-        file = os.path.join(wals_dir, max(wals))
-        os.remove(file)
-        if self.archive_compress:
-            file = file[:-3]
-
-        # Try to restore
-        try:
-            backup_id = self.backup_node(
-                backup_dir, 'node', node, backup_type='page')
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of wal segment disappearance.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    self.output, self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'INFO: Wait for LSN' in e.message and
-                'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
-                'ERROR: WAL segment "{0}" is absent\n'.format(
-                    file) in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
-        self.assertEqual(
-            'ERROR',
-            self.show_pb(backup_dir, 'node')[1]['status'],
-            'Backup {0} should have STATUS "ERROR"')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
     def test_pgpro702_688(self):
-        """make node without archiving, make stream backup, get Recovery Time, validate to Recovery Time"""
+        """
+        make node without archiving, make stream backup,
+        get Recovery Time, validate to Recovery Time
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),
@@ -1346,7 +1280,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_pgpro688(self):
-        """make node with archiving, make backup, get Recovery Time, validate to Recovery Time. Waiting PGPRO-688. RESOLVED"""
+        """
+        make node with archiving, make backup, get Recovery Time,
+        validate to Recovery Time. Waiting PGPRO-688. RESOLVED
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),
@@ -1361,9 +1298,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         node.start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
-        recovery_time = self.show_pb(backup_dir, 'node', backup_id)['recovery-time']
+        recovery_time = self.show_pb(
+            backup_dir, 'node', backup_id)['recovery-time']
 
-        self.validate_pb(backup_dir, 'node', options=["--time={0}".format(recovery_time)])
+        self.validate_pb(
+            backup_dir, 'node', options=["--time={0}".format(recovery_time)])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

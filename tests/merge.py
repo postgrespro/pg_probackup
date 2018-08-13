@@ -458,7 +458,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
     def test_merge_delta_delete(self):
         """
         Make node, create tablespace with table, take full backup,
-        alter tablespace location, take delta backup, restore database.
+        alter tablespace location, take delta backup, merge full and delta,
+        restore database.
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -542,3 +543,74 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_continue_failed_merge(self):
+        """
+        Check that failed MERGE can be continued
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,1000) i"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        backup_id = self.show_pb(backup_dir, "node")[2]["id"]
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+
+        gdb.set_breakpoint('move_file')
+        gdb.run_until_break()
+
+        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
+            print('Failed to hit breakpoint')
+            exit(1)
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        # Try to continue failed MERGE
+        self.merge_backup(backup_dir, "node", backup_id)
