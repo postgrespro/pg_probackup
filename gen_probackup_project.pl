@@ -139,6 +139,7 @@ sub build_pgprobackup
 		'fetch.c',
 		'help.c',
 		'init.c',
+		'merge.c',
 		'parsexlog.c',
 		'pg_probackup.c',
 		'restore.c',
