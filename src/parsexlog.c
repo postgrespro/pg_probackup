@@ -260,7 +260,7 @@ doExtractPageMap(void *arg)
 
 		XLByteToSeg(xlogreader->EndRecPtr, nextSegNo);
 	} while (nextSegNo <= extract_arg->endSegNo &&
-			 xlogreader->EndRecPtr < extract_arg->endpoint);
+			 xlogreader->ReadRecPtr < extract_arg->endpoint);
 
 	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
@@ -274,15 +274,12 @@ doExtractPageMap(void *arg)
  * Read WAL from the archive directory, from 'startpoint' to 'endpoint' on the
  * given timeline. Collect data blocks touched by the WAL records into a page map.
  *
- * If **prev_segno** is true then read all segments up to **endpoint** segment
- * minus one. Else read all segments up to **endpoint** segment.
- *
  * Pagemap extracting is processed using threads. Eeach thread reads single WAL
  * file.
  */
 void
 extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
-			   XLogRecPtr endpoint, bool prev_seg, parray *files)
+			   XLogRecPtr endpoint, parray *files)
 {
 	int			i;
 	int			threads_need = 0;
@@ -303,8 +300,6 @@ extractPageMap(const char *archivedir, XLogRecPtr startpoint, TimeLineID tli,
 			 (uint32) (endpoint >> 32), (uint32) (endpoint));
 
 	XLByteToSeg(endpoint, endSegNo);
-	if (prev_seg)
-		endSegNo--;
 
 	nextSegNoToRead = 0;
 	time(&start_time);
