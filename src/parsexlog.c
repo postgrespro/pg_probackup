@@ -149,9 +149,9 @@ doExtractPageMap(void *arg)
 
 	private_data = &extract_arg->private_data;
 	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, private_data);
-	xlogreader->system_identifier = system_identifier;
 	if (xlogreader == NULL)
 		elog(ERROR, "out of memory");
+	xlogreader->system_identifier = system_identifier;
 
 	found = XLogFindNextRecord(xlogreader, extract_arg->startpoint);
 
@@ -870,6 +870,7 @@ InitXLogPageRead(XLogPageReadPrivate *private_data, const char *archivedir,
 		xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, private_data);
 		if (xlogreader == NULL)
 			elog(ERROR, "out of memory");
+		xlogreader->system_identifier = system_identifier;
 	}
 
 	return xlogreader;
