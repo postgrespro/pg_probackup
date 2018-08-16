@@ -782,8 +782,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
             wals_dir, f)) and not f.endswith('.backup')]
         wals = map(str, wals)
-        file = os.path.join(wals_dir, max(wals))
-#        file = os.path.join(wals_dir, '000000010000000000000004')
+ #       file = os.path.join(wals_dir, max(wals))
+        file = os.path.join(wals_dir, '000000010000000000000004')
         print(file)
         with open(file, "rb+", 0) as f:
             f.seek(42)
@@ -809,7 +809,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'WARNING: could not read WAL record at' in e.message and
-                'ERROR: WAL segment "{0}" is absent\n'.format(
+                'incorrect resource manager data checksum in record at' in e.message and
+                'ERROR: Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -834,7 +835,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'WARNING: could not read WAL record at' in e.message and
-                'ERROR: WAL segment "{0}" is absent\n'.format(
+                'incorrect resource manager data checksum in record at' in e.message and
+                'ERROR: Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
