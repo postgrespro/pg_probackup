@@ -846,3 +846,114 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_backup_with_alien_wal_segment(self):
+        """
+        make two nodes with archiving
+        take archive full backup from both nodes,
+        generate some wals with pgbench on both nodes,
+        move latest archived wal segment from second node to first node`s archive
+        run page backup on first node
+        expecting error because of alien wal segment
+        make sure that backup status is 'ERROR'
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        alien_node = self.make_simple_node(
+            base_dir="{0}/{1}/alien_node".format(module_name, fname)
+            )
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.add_instance(backup_dir, 'alien_node', alien_node)
+        self.set_archiving(backup_dir, 'alien_node', alien_node)
+        alien_node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'alien_node', alien_node)
+
+        # make some wals
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; "
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i;")
+
+        alien_node.safe_psql(
+            "postgres",
+            "create database alien")
+
+        alien_node.safe_psql(
+            "alien",
+            "create sequence t_seq; "
+            "create table t_heap_alien as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i;")
+
+        # copy lastest wal segment
+        wals_dir = os.path.join(backup_dir, 'wal', 'alien_node')
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
+            wals_dir, f)) and not f.endswith('.backup')]
+        wals = map(str, wals)
+        filename = max(wals)
+        file = os.path.join(wals_dir, filename)
+        file_destination = os.path.join(
+            os.path.join(backup_dir, 'wal', 'node'), filename)
+#        file = os.path.join(wals_dir, '000000010000000000000004')
+        print(file)
+        print(file_destination)
+        os.rename(file, file_destination)
+
+        if self.archive_compress:
+            file = file[:-3]
+
+        # Single-thread PAGE backup
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page')
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of alien wal segment.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            print("SUCCESS")
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'Backup {0} should have STATUS "ERROR"')
+
+        # Multi-thread PAGE backup
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page', options=["-j", "4"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of alien wal segment.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            print("SUCCESS")
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[2]['status'],
+            'Backup {0} should have STATUS "ERROR"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
