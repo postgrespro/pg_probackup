@@ -176,8 +176,8 @@ switchToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 	}
 	arg->startpoint = found;
 
-	elog(VERBOSE, "Thread %d switched to LSN %X/%X",
-			arg->thread_num,
+	elog(VERBOSE, "Thread [%d]: switched to LSN %X/%X",
+			private_data->thread_num,
 			(uint32) (arg->startpoint >> 32), (uint32) (arg->startpoint));
 
 	return true;
