@@ -283,20 +283,28 @@ catalog_get_backup_list(time_t requested_backup_id)
 		/* read backup information from BACKUP_CONTROL_FILE */
 		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", data_path, BACKUP_CONTROL_FILE);
 		backup = readBackupControlFile(backup_conf_path);
-		backup->backup_id = backup->start_time;
 
-		/* ignore corrupted backups */
-		if (backup)
+		if (!backup)
 		{
-			if (requested_backup_id != INVALID_BACKUP_ID
-				&& requested_backup_id != backup->start_time)
-			{
-				pgBackupFree(backup);
-				continue;
-			}
-			parray_append(backups, backup);
-			backup = NULL;
+			backup = pgut_new(pgBackup);
+			pgBackupInit(backup);
+			backup->start_time = base36dec(data_ent->d_name);
 		}
+		else if (strcmp(base36enc(backup->start_time), data_ent->d_name) != 0)
+		{
+			elog(WARNING, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
+				 base36enc(backup->start_time), backup_conf_path);
+		}
+
+		backup->backup_id = backup->start_time;
+		if (requested_backup_id != INVALID_BACKUP_ID
+			&& requested_backup_id != backup->start_time)
+		{
+			pgBackupFree(backup);
+			continue;
+		}
+		parray_append(backups, backup);
+		backup = NULL;
 
 		if (errno && errno != ENOENT)
 		{
