@@ -650,12 +650,7 @@ do_backup_instance(void)
 		 * where this backup has started.
 		 */
 		extractPageMap(arclog_path, prev_backup->start_lsn, current.tli,
-					   current.start_lsn,
-					   /*
-						* For backup from master wait for previous segment.
-						* For backup from replica wait for current segment.
-						*/
-					   !current.from_replica, backup_files_list);
+					   current.start_lsn, backup_files_list);
 	}
 	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{

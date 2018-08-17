@@ -540,7 +540,7 @@ extern bool calc_file_checksum(pgFile *file);
 extern void extractPageMap(const char *datadir,
 						   XLogRecPtr startpoint,
 						   TimeLineID tli,
-						   XLogRecPtr endpoint, bool prev_seg,
+						   XLogRecPtr endpoint,
 						   parray *backup_files_list);
 extern void validate_wal(pgBackup *backup,
 						 const char *archivedir,
