@@ -561,6 +561,7 @@ readBackupControlFile(const char *path)
 		{0}
 	};
 
+	pgBackupInit(backup);
 	if (access(path, F_OK) != 0)
 	{
 		elog(WARNING, "control file \"%s\" doesn't exist", path);
@@ -568,7 +569,6 @@ readBackupControlFile(const char *path)
 		return NULL;
 	}
 
-	pgBackupInit(backup);
 	parsed_options = pgut_readopt(path, options, WARNING);
 
 	if (parsed_options == 0)
