@@ -711,8 +711,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
-                'ERROR: WAL segment "{0}" is absent\n'.format(
+                'could not read WAL record at' in e.message and
+                'WAL segment "{0}" is absent\n'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -737,8 +737,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
-                'ERROR: WAL segment "{0}" is absent\n'.format(
+                'could not read WAL record at' in e.message and
+                'WAL segment "{0}" is absent\n'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -808,9 +808,9 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
+                'could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
-                'ERROR: Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -834,9 +834,9 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
+                'could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
-                'ERROR: Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -932,7 +932,15 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     self.output, self.cmd))
         except ProbackupException as e:
-            print("SUCCESS")
+            self.assertTrue(
+                'INFO: Wait for LSN' in e.message and
+                'in archived WAL segment' in e.message and
+                'could not read WAL record at' in e.message and
+                'incorrect resource manager data checksum in record at' in e.message and
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                    file) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         self.assertEqual(
             'ERROR',
@@ -950,7 +958,15 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     self.output, self.cmd))
         except ProbackupException as e:
-            print("SUCCESS")
+            self.assertTrue(
+                'INFO: Wait for LSN' in e.message and
+                'in archived WAL segment' in e.message and
+                'could not read WAL record at' in e.message and
+                'incorrect resource manager data checksum in record at' in e.message and
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                    file) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         self.assertEqual(
             'ERROR',
