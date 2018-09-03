@@ -896,10 +896,10 @@ find_parent_full_backup(pgBackup *current_backup)
  * Interate over parent chain and look for any problems.
  * Return 0 if chain is broken.
  *  result_backup must contain oldest existing backup after missing backup.
- *  we have no way to know if there is multiple missing backups.
- * Return 1 if chain is intact, but some backup is !OK.
+ *  we have no way to know if there are multiple missing backups.
+ * Return 1 if chain is intact, but at least one backup is !OK.
  *  result_backup must contain oldest !OK backup.
- * Return 2 if chain is intact and all backup are OK.
+ * Return 2 if chain is intact and all backups are OK.
  *	result_backup must contain FULL backup on which chain is based.
  */
 int
@@ -953,9 +953,10 @@ scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 
 /*
  * Determine if child_backup descend from parent_backup
- * This check DO NOT(!!!) guarantee that parent chain is intact, because parent_backup
- * can be missing.
- * If inclusive is true, then full backup counts as a child of himself.
+ * This check DO NOT(!!!) guarantee that parent chain is intact,
+ * because parent_backup can be missing.
+ * If inclusive is true, then child_backup counts as a child of himself
+ * if parent_backup_time is start_time of child_backup.
  */
 bool
 is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
@@ -979,7 +980,7 @@ is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
 }
 
 /*
- * return backup index number.
+ * Return backup index number.
  * Note: this index number holds true until new sorting of backup list
  */
 int
