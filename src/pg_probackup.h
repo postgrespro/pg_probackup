@@ -487,7 +487,10 @@ extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 
-extern pgBackup* find_parent_backup(pgBackup *current_backup);
+extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
+extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
+extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
+extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,

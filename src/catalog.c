@@ -868,47 +868,132 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 	make_native_path(path);
 }
 
-/* Find parent base FULL backup for current backup using parent_backup_link,
- * return NULL if not found
+/*
+ * Find parent base FULL backup for current backup using parent_backup_link
  */
 pgBackup*
-find_parent_backup(pgBackup *current_backup)
+find_parent_full_backup(pgBackup *current_backup)
 {
 	pgBackup   *base_full_backup = NULL;
 	base_full_backup = current_backup;
 
-	while (base_full_backup->backup_mode != BACKUP_MODE_FULL)
+	if (!current_backup)
+		elog(ERROR, "Target backup cannot be NULL");
+
+	while (base_full_backup->parent_backup_link != NULL)
 	{
-		/*
-		 * If we haven't found parent for incremental backup,
-		 * mark it and all depending backups as orphaned
-		 */
-		if (base_full_backup->parent_backup_link == NULL
-			|| (base_full_backup->status != BACKUP_STATUS_OK
-				&& base_full_backup->status != BACKUP_STATUS_DONE))
-		{
-			pgBackup   *orphaned_backup = current_backup;
-
-			while (orphaned_backup != NULL)
-			{
-				orphaned_backup->status = BACKUP_STATUS_ORPHAN;
-				pgBackupWriteBackupControlFile(orphaned_backup);
-				if (base_full_backup->parent_backup_link == NULL)
-					elog(WARNING, "Backup %s is orphaned because its parent backup is not found",
-							base36enc(orphaned_backup->start_time));
-				else
-					elog(WARNING, "Backup %s is orphaned because its parent backup is corrupted",
-							base36enc(orphaned_backup->start_time));
-
-				orphaned_backup = orphaned_backup->parent_backup_link;
-			}
-
-			base_full_backup = NULL;
-			break;
-		}
-
 		base_full_backup = base_full_backup->parent_backup_link;
 	}
 
+	if (base_full_backup->backup_mode != BACKUP_MODE_FULL)
+		elog(ERROR, "Failed to find FULL backup parent for %s",
+				base36enc(current_backup->start_time));
+
 	return base_full_backup;
+}
+
+/*
+ * Interate over parent chain and look for any problems.
+ * Return 0 if chain is broken.
+ *  result_backup must contain oldest existing backup after missing backup.
+ *  we have no way to know if there is multiple missing backups.
+ * Return 1 if chain is intact, but some backup is !OK.
+ *  result_backup must contain oldest !OK backup.
+ * Return 2 if chain is intact and all backup are OK.
+ *	result_backup must contain FULL backup on which chain is based.
+ */
+int
+scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
+{
+	pgBackup   *target_backup = NULL;
+	pgBackup   *invalid_backup = NULL;
+
+	if (!current_backup)
+		elog(ERROR, "Target backup cannot be NULL");
+
+	target_backup = current_backup;
+
+	while (target_backup->parent_backup_link)
+	{
+		if (target_backup->status != BACKUP_STATUS_OK &&
+			  target_backup->status != BACKUP_STATUS_DONE)
+			/* oldest invalid backup in parent chain */
+			invalid_backup = target_backup;
+
+
+		target_backup = target_backup->parent_backup_link;
+	}
+
+	/* Prevous loop will skip FULL backup because his parent_backup_link is NULL */
+	if (target_backup->backup_mode == BACKUP_MODE_FULL &&
+		(target_backup->status != BACKUP_STATUS_OK &&
+		target_backup->status != BACKUP_STATUS_DONE))
+	{
+		invalid_backup = target_backup;
+	}
+
+	/* found chain end and oldest backup is not FULL */
+	if (target_backup->backup_mode != BACKUP_MODE_FULL)
+	{
+		/* Set oldest child backup in chain */
+		*result_backup = target_backup;
+		return 0;
+	}
+
+	/* chain is ok, but some backups are invalid */
+	if (invalid_backup)
+	{
+		*result_backup = invalid_backup;
+		return 1;
+	}
+
+	*result_backup = target_backup;
+	return 2;
+}
+
+/*
+ * Determine if child_backup descend from parent_backup
+ * This check DO NOT(!!!) guarantee that parent chain is intact, because parent_backup
+ * can be missing.
+ * If inclusive is true, then full backup counts as a child of himself.
+ */
+bool
+is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
+{
+	if (!child_backup)
+		elog(ERROR, "Target backup cannot be NULL");
+
+	while (child_backup->parent_backup_link &&
+			child_backup->parent_backup != parent_backup_time)
+	{
+		child_backup = child_backup->parent_backup_link;
+	}
+
+	if (child_backup->parent_backup == parent_backup_time)
+		return true;
+
+	if (inclusive && child_backup->start_time == parent_backup_time)
+		return true;
+
+	return false;
+}
+
+/*
+ * return backup index number.
+ * Note: this index number holds true until new sorting of backup list
+ */
+int
+get_backup_index_number(parray *backup_list, pgBackup *backup)
+{
+	int i;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
+
+		if (tmp_backup->start_time == backup->start_time)
+			return i;
+	}
+	elog(ERROR, "Failed to find backup %s", base36enc(backup->start_time));
+	return 0;
 }
