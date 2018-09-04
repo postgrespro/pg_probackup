@@ -170,15 +170,16 @@ switchToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 	 */
 	if (XLogRecPtrIsInvalid(found))
 	{
-		elog(WARNING, "could not read WAL record at %X/%X",
-			(uint32) (arg->startpoint >> 32), (uint32) (arg->startpoint));
+		elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X",
+			 private_data->thread_num,
+			 (uint32) (arg->startpoint >> 32), (uint32) (arg->startpoint));
 		PrintXLogCorruptionMsg(private_data, ERROR);
 	}
 	arg->startpoint = found;
 
 	elog(VERBOSE, "Thread [%d]: switched to LSN %X/%X",
-			private_data->thread_num,
-			(uint32) (arg->startpoint >> 32), (uint32) (arg->startpoint));
+		 private_data->thread_num,
+		 (uint32) (arg->startpoint >> 32), (uint32) (arg->startpoint));
 
 	return true;
 }
@@ -261,32 +262,6 @@ doExtractPageMap(void *arg)
 					continue;
 				else
 					break;
-
-				/* Adjust next record position */
-				XLogSegNoOffsetToRecPtr(private_data->xlogsegno, 0,
-										extract_arg->startpoint);
-				/* Skip over the page header */
-				found = XLogFindNextRecord(xlogreader, extract_arg->startpoint);
-				/*
-				 * We get invalid WAL record pointer usually when WAL segment is
-				 * absent or is corrupted.
-				 */
-				if (XLogRecPtrIsInvalid(found))
-				{
-					elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X",
-						private_data->thread_num,
-						(uint32) (extract_arg->startpoint >> 32),
-						(uint32) (extract_arg->startpoint));
-					PrintXLogCorruptionMsg(private_data, ERROR);
-				}
-				extract_arg->startpoint = found;
-
-				elog(VERBOSE, "Thread [%d]: switched to LSN %X/%X",
-					 private_data->thread_num,
-					 (uint32) (extract_arg->startpoint >> 32),
-					 (uint32) (extract_arg->startpoint));
-
-				continue;
 			}
 
 			errptr = extract_arg->startpoint ?
