@@ -168,12 +168,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * Save it as dest_backup
 			 */
 			dest_backup = current_backup;
-			dest_backup_index = i-1;
 		}
 	}
 
 	if (dest_backup == NULL)
 		elog(ERROR, "Backup satisfying target options is not found.");
+
+	dest_backup_index = get_backup_index_number(backups, dest_backup);
 
 	/* If we already found dest_backup, look for full backup. */
 	if (dest_backup->backup_mode == BACKUP_MODE_FULL)
@@ -264,11 +265,12 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * and avoid relying on sort order anymore.
 		 */
 		base_full_backup = tmp_backup;
-		base_full_backup_index = get_backup_index_number(backups, base_full_backup);
 	}
 
 	if (base_full_backup == NULL)
 		elog(ERROR, "Full backup satisfying target options is not found.");
+
+	base_full_backup_index = get_backup_index_number(backups, base_full_backup);
 
 	/*
 	 * Ensure that directories provided in tablespace mapping are valid
@@ -284,7 +286,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		/*
 		 * Validate backups from base_full_backup to dest_backup.
-		 * At this moment we are sure that parent chain is intact.
+		 * At this point we are sure that parent chain is intact.
 		 */
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
