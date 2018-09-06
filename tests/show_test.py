@@ -28,7 +28,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             self.backup_node(
                 backup_dir, 'node', node,
-                options=["--log-level-console=panic"]),
+                options=["--log-level-console=off"]),
             None
         )
         self.assertIn("OK", self.show_pb(backup_dir, 'node', as_text=True))
@@ -56,7 +56,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             self.backup_node(
                 backup_dir, 'node', node,
-                options=["--log-level-console=panic"]),
+                options=["--log-level-console=off"]),
             None
         )
         self.backup_node(backup_dir, 'node', node)

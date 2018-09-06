@@ -919,7 +919,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_destination)
 
         if self.archive_compress:
-            file = file[:-3]
+            file_destination = file_destination[:-3]
 
         # Single-thread PAGE backup
         try:
@@ -936,9 +936,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'could not read WAL record at' in e.message and
-                'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
-                    file) in e.message,
+                    file_destination) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -962,9 +961,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'could not read WAL record at' in e.message and
-                'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
-                    file) in e.message,
+                    file_destination) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

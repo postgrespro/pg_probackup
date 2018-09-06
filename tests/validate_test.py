@@ -1494,7 +1494,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # result = node2.safe_psql("postgres", "select last_failed_wal from pg_stat_get_archiver() where last_failed_wal is not NULL")
         ## self.assertEqual(res, six.b(""), 'Restored Node1 failed to archive segment {0} due to having the same archive command as Master'.format(res.rstrip()))
         # if result == "":
-        #    self.assertEqual(1, 0, 'Error is expected due to Master and Node1 having the common archive and archive_command')
+        # self.assertEqual(1, 0, 'Error is expected due to Master and Node1 having the common archive and archive_command')
 
         self.switch_wal_segment(node1)
         self.switch_wal_segment(node2)
