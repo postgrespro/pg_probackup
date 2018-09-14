@@ -767,7 +767,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	 */
 	if (!XLByteInSeg(targetPagePtr, private_data->xlogsegno))
 	{
-		elog(VERBOSE, "Need to switch to segno next to %X/%X, current LSN %X/%X",
+		elog(VERBOSE, "Thread [%d]: Need to switch to segno next to %X/%X, current LSN %X/%X",
+			 private_data->thread_num,
 			 (uint32) (targetPagePtr >> 32), (uint32) (targetPagePtr),
 			 (uint32) (xlogreader->currRecPtr >> 32),
 			 (uint32) (xlogreader->currRecPtr ));
