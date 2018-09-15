@@ -973,3 +973,38 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_multithread_page_backup_with_toast(self):
+        """
+        make node, create toast, do multithread PAGE backup
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        # make some wals
+        node.safe_psql(
+            "postgres",
+            "create table t3 as select i, "
+            "repeat(md5(i::text),5006056) as fat_attr "
+            "from generate_series(0,70) i")
+
+        # Multi-thread PAGE backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=["-j", "4"])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
