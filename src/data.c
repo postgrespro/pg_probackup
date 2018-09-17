@@ -719,7 +719,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 
 			uncompressed_size = do_decompress(page.data, BLCKSZ,
 											  compressed_page.data,
-											  MAXALIGN(header.compressed_size),
+											  header.compressed_size,
 											  file->compress_alg);
 
 			if (uncompressed_size != BLCKSZ)
