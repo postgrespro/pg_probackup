@@ -718,7 +718,7 @@ do_backup_instance(void)
 	}
 
 	/* Run threads */
-	elog(LOG, "Start transfering data files");
+	elog(INFO, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
@@ -739,7 +739,7 @@ do_backup_instance(void)
 			backup_isok = false;
 	}
 	if (backup_isok)
-		elog(LOG, "Data files are transfered");
+		elog(INFO, "Data files are transfered");
 	else
 		elog(ERROR, "Data files transferring failed");
 
