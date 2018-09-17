@@ -302,7 +302,7 @@ show_instance_plain(parray *backup_list, bool show_name)
 	int			i;
 
 	if (show_name)
-		printfPQExpBuffer(&show_buf, "\nBACKUP INSTANCE '%s'\n", instance_name);
+		appendPQExpBuffer(&show_buf, "\nBACKUP INSTANCE '%s'\n", instance_name);
 
 	/* if you add new fields here, fix the header */
 	/* show header */
