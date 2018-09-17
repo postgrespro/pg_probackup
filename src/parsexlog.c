@@ -161,6 +161,8 @@ switchToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 
 	/* Adjust next record position */
 	XLogSegNoOffsetToRecPtr(private_data->xlogsegno, 0, arg->startpoint);
+	/* We need to close previously opened file if it wasn't closed earlier */
+	CleanupXLogPageRead(xlogreader);
 	/* Skip over the page header and contrecord if any */
 	found = XLogFindNextRecord(xlogreader, arg->startpoint);
 
