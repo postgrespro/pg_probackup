@@ -1306,7 +1306,7 @@ get_control_value(const char *str, const char *name,
 						{
 							/* We assume that too big value is -1 */
 							if (errno == ERANGE)
-								*value_int64 = -1;
+								*value_int64 = BYTES_INVALID;
 							else
 								goto bad_format;
 						}
