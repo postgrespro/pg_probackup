@@ -1303,7 +1303,13 @@ get_control_value(const char *str, const char *name,
 
 						*buf_int64_ptr = '\0';
 						if (!parse_int64(buf_int64, value_int64, 0))
-							goto bad_format;
+						{
+							/* We assume that too big value is -1 */
+							if (errno == ERANGE)
+								*value_int64 = -1;
+							else
+								goto bad_format;
+						}
 					}
 
 					return true;
