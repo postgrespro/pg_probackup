@@ -475,10 +475,7 @@ class ProbackupTest(object):
                         )
 
             self.assertTrue(
-                success, 'Ptrack does not correspond to state'
-                ' of its own pages.\n Gory Details: \n{0}'.format(
-                    idx_dict['type'], idx_dict
-                )
+                success, 'Ptrack has failed to register changes in data files'
             )
 
     def check_ptrack_recovery(self, idx_dict):
