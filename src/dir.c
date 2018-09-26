@@ -918,6 +918,8 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 	{
 		links = parray_new();
 		read_tablespace_map(links, backup_dir);
+		/* Sort links by a link name*/
+		parray_qsort(links, pgFileComparePath);
 	}
 
 	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
@@ -1102,7 +1104,6 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		parray_append(files, file);
 	}
 
-	parray_qsort(files, pgFileCompareLinked);
 	fclose(fp);
 }
 
@@ -1126,6 +1127,8 @@ check_tablespace_mapping(pgBackup *backup)
 
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	read_tablespace_map(links, this_backup_path);
+	/* Sort links by the path of a linked file*/
+	parray_qsort(links, pgFileCompareLinked);
 
 	if (log_level_console <= LOG || log_level_file <= LOG)
 		elog(LOG, "check tablespace directories of backup %s",
@@ -1303,7 +1306,13 @@ get_control_value(const char *str, const char *name,
 
 						*buf_int64_ptr = '\0';
 						if (!parse_int64(buf_int64, value_int64, 0))
-							goto bad_format;
+						{
+							/* We assume that too big value is -1 */
+							if (errno == ERANGE)
+								*value_int64 = BYTES_INVALID;
+							else
+								goto bad_format;
+						}
 					}
 
 					return true;

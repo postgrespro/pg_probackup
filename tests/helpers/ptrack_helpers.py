@@ -405,8 +405,9 @@ class ProbackupTest(object):
                 if idx_dict['ptrack'][PageNum] != 1:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was added,'
-                            ' but ptrack value is {2}. THIS IS BAD'.format(
+                            'File: {0}\n Page Number {1} of type {2} was added,'
+                            ' but ptrack value is {3}. THIS IS BAD'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum])
                         )
@@ -420,8 +421,9 @@ class ProbackupTest(object):
                 if idx_dict['ptrack'][PageNum] != 0:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was deleted,'
-                            ' but ptrack value is {2}'.format(
+                            'File: {0}\n Page Number {1} of type {2} was deleted,'
+                            ' but ptrack value is {3}'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum])
                         )
@@ -437,14 +439,15 @@ class ProbackupTest(object):
                 if idx_dict['ptrack'][PageNum] != 1:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was changed,'
-                            ' but ptrack value is {2}. THIS IS BAD'.format(
+                            'File: {0}\n Page Number {1} of type {2} was changed,'
+                            ' but ptrack value is {3}. THIS IS BAD'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum])
                         )
                         print(
-                            "\n Old checksumm: {0}\n"
-                            " New checksumm: {1}".format(
+                            "  Old checksumm: {0}\n"
+                            "  New checksumm: {1}".format(
                                 idx_dict['old_pages'][PageNum],
                                 idx_dict['new_pages'][PageNum])
                         )
@@ -463,18 +466,16 @@ class ProbackupTest(object):
                 if idx_dict['ptrack'][PageNum] != 0:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was not changed,'
-                            ' but ptrack value is {2}'.format(
+                            'File: {0}\n Page Number {1} of type {2} was not changed,'
+                            ' but ptrack value is {3}'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum]
                             )
                         )
 
             self.assertTrue(
-                success, 'Ptrack does not correspond to state'
-                ' of its own pages.\n Gory Details: \n{0}'.format(
-                    idx_dict['type'], idx_dict
-                )
+                success, 'Ptrack has failed to register changes in data files'
             )
 
     def check_ptrack_recovery(self, idx_dict):

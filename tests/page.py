@@ -711,8 +711,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
-                'ERROR: WAL segment "{0}" is absent\n'.format(
+                'could not read WAL record at' in e.message and
+                'WAL segment "{0}" is absent\n'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -737,8 +737,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
-                'ERROR: WAL segment "{0}" is absent\n'.format(
+                'could not read WAL record at' in e.message and
+                'WAL segment "{0}" is absent\n'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -808,9 +808,9 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
+                'could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
-                'ERROR: Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -834,9 +834,9 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'WARNING: could not read WAL record at' in e.message and
+                'could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
-                'ERROR: Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -919,7 +919,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_destination)
 
         if self.archive_compress:
-            file = file[:-3]
+            file_destination = file_destination[:-3]
 
         # Single-thread PAGE backup
         try:
@@ -932,7 +932,14 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     self.output, self.cmd))
         except ProbackupException as e:
-            print("SUCCESS")
+            self.assertTrue(
+                'INFO: Wait for LSN' in e.message and
+                'in archived WAL segment' in e.message and
+                'could not read WAL record at' in e.message and
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                    file_destination) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         self.assertEqual(
             'ERROR',
@@ -950,12 +957,54 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     self.output, self.cmd))
         except ProbackupException as e:
-            print("SUCCESS")
+            self.assertTrue(
+                'INFO: Wait for LSN' in e.message and
+                'in archived WAL segment' in e.message and
+                'could not read WAL record at' in e.message and
+                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
+                    file_destination) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         self.assertEqual(
             'ERROR',
             self.show_pb(backup_dir, 'node')[2]['status'],
             'Backup {0} should have STATUS "ERROR"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_multithread_page_backup_with_toast(self):
+        """
+        make node, create toast, do multithread PAGE backup
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        # make some wals
+        node.safe_psql(
+            "postgres",
+            "create table t3 as select i, "
+            "repeat(md5(i::text),5006056) as fat_attr "
+            "from generate_series(0,70) i")
+
+        # Multi-thread PAGE backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=["-j", "4"])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
