@@ -1241,3 +1241,70 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_zags_block_corrupt(self):
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        conn = node.connect()
+        with node.connect("postgres") as conn:
+
+            conn.execute(
+                "create table tbl(i int)")
+            conn.execute(
+                "create index idx ON tbl (i)")
+            conn.execute(
+                "insert into tbl select i from generate_series(0,400) as i")
+            conn.execute(
+                "select pg_relation_size('idx')")
+            conn.execute(
+                "delete from tbl where i < 100")
+            conn.execute(
+                "explain analyze select i from tbl order by i")
+            conn.execute(
+                "select i from tbl order by i")
+            conn.execute(
+                "create extension pageinspect")
+            print(conn.execute(
+                "select * from bt_page_stats('idx',1)"))
+            conn.execute(
+                "insert into tbl select i from generate_series(0,100) as i")
+            conn.execute(
+                "insert into tbl select i from generate_series(0,100) as i")
+            conn.execute(
+                "insert into tbl select i from generate_series(0,100) as i")
+            conn.execute(
+                "insert into tbl select i from generate_series(0,100) as i")
+
+            conn.commit()
+
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored)
+
+        node_restored.append_conf("postgresql.auto.conf", "archive_mode = 'off'")
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.slow_start()
+        exit(1)
