@@ -1264,32 +1264,43 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
             conn.execute(
                 "create table tbl(i int)")
+            conn.commit()
             conn.execute(
                 "create index idx ON tbl (i)")
+            conn.commit()
             conn.execute(
                 "insert into tbl select i from generate_series(0,400) as i")
+            conn.commit()
             conn.execute(
                 "select pg_relation_size('idx')")
+            conn.commit()
             conn.execute(
                 "delete from tbl where i < 100")
+            conn.commit()
             conn.execute(
                 "explain analyze select i from tbl order by i")
+            conn.commit()
             conn.execute(
                 "select i from tbl order by i")
+            conn.commit()
             conn.execute(
                 "create extension pageinspect")
+            conn.commit()
             print(conn.execute(
                 "select * from bt_page_stats('idx',1)"))
+            conn.commit()
             conn.execute(
                 "insert into tbl select i from generate_series(0,100) as i")
+            conn.commit()
             conn.execute(
                 "insert into tbl select i from generate_series(0,100) as i")
+            conn.commit()
             conn.execute(
                 "insert into tbl select i from generate_series(0,100) as i")
+            conn.commit()
             conn.execute(
                 "insert into tbl select i from generate_series(0,100) as i")
 
-            conn.commit()
 
         node_restored = self.make_simple_node(
             base_dir="{0}/{1}/node_restored".format(module_name, fname),
