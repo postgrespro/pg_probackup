@@ -19,15 +19,6 @@
 #include "logger.h"
 #include "pgut.h"
 
-/* old gcc doesn't have LLONG_MAX. */
-#ifndef LLONG_MAX
-#if defined(HAVE_LONG_INT_64) || !defined(HAVE_LONG_LONG_INT_64)
-#define LLONG_MAX		LONG_MAX
-#else
-#define LLONG_MAX		INT64CONST(0x7FFFFFFFFFFFFFFF)
-#endif
-#endif
-
 #define MAX_TZDISP_HOUR		15	/* maximum allowed hour part */
 #define SECS_PER_MINUTE		60
 #define MINS_PER_HOUR		60
@@ -303,7 +294,13 @@ convert_to_base_unit(int64 value, const char *unit,
 			if (table[i].multiplier < 0)
 				*base_value = value / (-table[i].multiplier);
 			else
+			{
+				/* Check for integer overflow first */
+				if (value > PG_INT64_MAX / table[i].multiplier)
+					return false;
+
 				*base_value = value * table[i].multiplier;
+			}
 			return true;
 		}
 	}
@@ -333,7 +330,13 @@ convert_to_base_unit_u(uint64 value, const char *unit,
 			if (table[i].multiplier < 0)
 				*base_value = value / (-table[i].multiplier);
 			else
+			{
+				/* Check for integer overflow first */
+				if (value > PG_UINT64_MAX / table[i].multiplier)
+					return false;
+
 				*base_value = value * table[i].multiplier;
+			}
 			return true;
 		}
 	}
@@ -371,6 +374,10 @@ convert_from_base_unit(int64 base_value, int base_unit,
 			 */
 			if (table[i].multiplier < 0)
 			{
+				/* Check for integer overflow first */
+				if (base_value > PG_INT64_MAX / (-table[i].multiplier))
+					continue;
+
 				*value = base_value * (-table[i].multiplier);
 				*unit = table[i].unit;
 				break;
@@ -415,6 +422,10 @@ convert_from_base_unit_u(uint64 base_value, int base_unit,
 			 */
 			if (table[i].multiplier < 0)
 			{
+				/* Check for integer overflow first */
+				if (base_value > PG_UINT64_MAX / (-table[i].multiplier))
+					continue;
+
 				*value = base_value * (-table[i].multiplier);
 				*unit = table[i].unit;
 				break;
@@ -612,7 +623,7 @@ parse_int32(const char *value, int32 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-		*result = INT_MAX;
+		*result = PG_INT32_MAX;
 		return true;
 	}
 
@@ -621,10 +632,15 @@ parse_int32(const char *value, int32 *result, int flags)
 	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
+	/* Check for integer overflow */
 	if (errno == ERANGE || val != (int64) ((int32) val))
 		return false;
 
 	if (!parse_unit(endptr, flags, val, &val))
+		return false;
+
+	/* Check for integer overflow again */
+	if (val != (int64) ((int32) val))
 		return false;
 
 	*result = val;
@@ -644,7 +660,7 @@ parse_uint32(const char *value, uint32 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-		*result = UINT_MAX;
+		*result = PG_UINT32_MAX;
 		return true;
 	}
 
@@ -653,10 +669,15 @@ parse_uint32(const char *value, uint32 *result, int flags)
 	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
+	/* Check for integer overflow */
 	if (errno == ERANGE || val != (uint64) ((uint32) val))
 		return false;
 
 	if (!parse_unit_u(endptr, flags, val, &val))
+		return false;
+
+	/* Check for integer overflow again */
+	if (val != (uint64) ((uint32) val))
 		return false;
 
 	*result = val;
@@ -676,7 +697,7 @@ parse_int64(const char *value, int64 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-		*result = LLONG_MAX;
+		*result = PG_INT64_MAX;
 		return true;
 	}
 
@@ -714,13 +735,7 @@ parse_uint64(const char *value, uint64 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-#if defined(HAVE_LONG_INT_64)
-		*result = ULONG_MAX;
-#elif defined(HAVE_LONG_LONG_INT_64)
-		*result = ULLONG_MAX;
-#else
-		*result = ULONG_MAX;
-#endif
+		*result = PG_UINT64_MAX;
 		return true;
 	}
 

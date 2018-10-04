@@ -161,12 +161,12 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	if (config->master_user)
 		fprintf(out, "master-user = %s\n", config->master_user);
 
-	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_S,
+	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_MS,
 								&res, &unit);
 	fprintf(out, "replica-timeout = " UINT64_FORMAT "%s\n", res, unit);
 
 	fprintf(out, "#Archive parameters:\n");
-	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_S,
+	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_MS,
 								&res, &unit);
 	fprintf(out, "archive-timeout = " UINT64_FORMAT "%s\n", res, unit);
 
@@ -183,11 +183,11 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 		fprintf(out, "log-directory = %s\n", config->log_directory);
 	/* Convert values from base unit */
 	convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
-								&res, &unit);
+							 &res, &unit);
 	fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n", res, (res)?unit:"KB");
 
-	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
-								&res, &unit);
+	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_MS,
+							 &res, &unit);
 	fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n", res, (res)?unit:"min");
 
 	fprintf(out, "#Retention parameters:\n");
@@ -237,8 +237,8 @@ readBackupCatalogConfigFile(void)
 		{ 's', 0, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
 		{ 's', 0, "error-log-filename",		&(config->error_log_filename),	SOURCE_CMDLINE },
 		{ 's', 0, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
-		{ 'u', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
-		{ 'u', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
+		{ 'U', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
+		{ 'U', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 		/* connection options */
 		{ 's', 0, "pgdata",					&(config->pgdata),				SOURCE_FILE_STRICT },
 		{ 's', 0, "pgdatabase",				&(config->pgdatabase),			SOURCE_FILE_STRICT },
@@ -250,11 +250,11 @@ readBackupCatalogConfigFile(void)
 		{ 's', 0, "master-port",			&(config->master_port),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-db",				&(config->master_db),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-user",			&(config->master_user),			SOURCE_FILE_STRICT },
-		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
+		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 		/* other options */
 		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
 		/* archive options */
-		{ 'u', 0, "archive-timeout",		&(config->archive_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
+		{ 'u', 0, "archive-timeout",		&(config->archive_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 		{0}
 	};
 
@@ -373,13 +373,13 @@ show_configure_json(pgBackupConfig *config)
 					   true);
 
 	json_add_key(buf, "replica-timeout", json_level, true);
-	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_S,
+	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_MS,
 							 &res, &unit);
 	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, unit);
 
 	/* Archive parameters */
 	json_add_key(buf, "archive-timeout", json_level, true);
-	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_S,
+	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_MS,
 							 &res, &unit);
 	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, unit);
 
@@ -416,7 +416,7 @@ show_configure_json(pgBackupConfig *config)
 	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, (res)?unit:"KB");
 
 	json_add_key(buf, "log-rotation-age", json_level, true);
-	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_S,
+	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_MS,
 							 &res, &unit);
 	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, (res)?unit:"min");
 

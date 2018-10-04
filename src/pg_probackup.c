@@ -131,14 +131,14 @@ static pgut_option options[] =
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,	SOURCE_CMDLINE },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,	SOURCE_CMDLINE },
 	{ 's', 'S', "slot",					&replication_slot,	SOURCE_CMDLINE },
-	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE, SOURCE_DEFAULT,	OPTION_UNIT_S },
+	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE, SOURCE_DEFAULT,	OPTION_UNIT_MS },
 	{ 'b', 12, "delete-wal",			&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 13, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
 	{ 's', 14, "master-db",				&master_db,			SOURCE_CMDLINE, },
 	{ 's', 15, "master-host",			&master_host,		SOURCE_CMDLINE, },
 	{ 's', 16, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 17, "master-user",			&master_user,		SOURCE_CMDLINE, },
-	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
+	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
@@ -172,8 +172,8 @@ static pgut_option options[] =
 	{ 's', 142, "log-filename",			&log_filename,		SOURCE_CMDLINE },
 	{ 's', 143, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
 	{ 's', 144, "log-directory",		&log_directory,		SOURCE_CMDLINE },
-	{ 'u', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
-	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MIN },
+	{ 'U', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
+	{ 'U', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },
