@@ -627,7 +627,7 @@ restore_files(void *arg)
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Restored file %s : " INT64_FORMAT " bytes",
+			elog(VERBOSE, "Restored file %s : " INT64_FORMAT " bytes",
 				 file->path, file->write_size);
 	}
 
