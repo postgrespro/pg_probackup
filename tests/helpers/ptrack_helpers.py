@@ -616,7 +616,8 @@ class ProbackupTest(object):
         return self.run_pb(cmd_list + options, async, gdb)
 
     def merge_backup(
-            self, backup_dir, instance, backup_id, async=False, gdb=False):
+            self, backup_dir, instance, backup_id, async=False,
+            gdb=False, options=[]):
         cmd_list = [
             "merge",
             "-B", backup_dir,
@@ -624,7 +625,7 @@ class ProbackupTest(object):
             "-i", backup_id
         ]
 
-        return self.run_pb(cmd_list, async, gdb)
+        return self.run_pb(cmd_list + options, async, gdb)
 
     def restore_node(
             self, backup_dir, instance, node=False,

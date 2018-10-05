@@ -352,14 +352,9 @@ merge_files(void *arg)
 	merge_files_arg *argument = (merge_files_arg *) arg;
 	pgBackup   *to_backup = argument->to_backup;
 	pgBackup   *from_backup = argument->from_backup;
-	char		tmp_file_path[MAXPGPATH];
 	int			i,
 				num_files = parray_num(argument->files);
 	int			to_root_len = strlen(argument->to_root);
-
-	if (to_backup->compress_alg == PGLZ_COMPRESS ||
-		to_backup->compress_alg == ZLIB_COMPRESS)
-		join_path_components(tmp_file_path, argument->to_root, "tmp");
 
 	for (i = 0; i < num_files; i++)
 	{
@@ -433,7 +428,10 @@ merge_files(void *arg)
 			if (to_backup->compress_alg == PGLZ_COMPRESS ||
 				to_backup->compress_alg == ZLIB_COMPRESS)
 			{
+				char		tmp_file_path[MAXPGPATH];
 				char	   *prev_path;
+
+				join_path_components(tmp_file_path, to_path_tmp, "_tmp");
 
 				/* Start the magic */
 
