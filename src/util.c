@@ -122,6 +122,40 @@ get_current_timeline(bool safe)
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
 
+/*
+ * Get last check point record ptr from pg_tonrol.
+ */
+XLogRecPtr
+get_checkpoint_location(PGconn *conn)
+{
+#if PG_VERSION_NUM >= 90600
+	PGresult   *res;
+	uint32		lsn_hi;
+	uint32		lsn_lo;
+	XLogRecPtr	lsn;
+
+	res = pgut_execute(conn,
+					   "SELECT checkpoint_location FROM pg_catalog.pg_control_checkpoint()",
+					   0, NULL);
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
+	PQclear(res);
+	/* Calculate LSN */
+	lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
+
+	return lsn;
+#else
+	char	   *buffer;
+	size_t		size;
+	ControlFileData ControlFile;
+
+	buffer = fetchFile(conn, "global/pg_control", &size);
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.checkPoint;
+#endif
+}
+
 uint64
 get_system_identifier(char *pgdata_path)
 {

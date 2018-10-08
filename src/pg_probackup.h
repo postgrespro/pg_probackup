@@ -560,17 +560,19 @@ extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
+extern XLogRecPtr get_checkpoint_location(PGconn *conn);
+extern uint64 get_system_identifier(char *pgdata);
+extern uint64 get_remote_system_identifier(PGconn *conn);
+extern uint32 get_data_checksum_version(bool safe);
+
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
 extern void remove_trailing_space(char *buf, int comment_mark);
 extern void remove_not_digit(char *buf, size_t len, const char *str);
-extern uint32 get_data_checksum_version(bool safe);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
-extern uint64 get_system_identifier(char *pgdata);
-extern uint64 get_remote_system_identifier(PGconn *conn);
 extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 extern int parse_server_version(char *server_version_str);
 

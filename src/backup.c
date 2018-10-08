@@ -1142,10 +1142,11 @@ pg_switch_wal(PGconn *conn)
 	res = pgut_execute(conn, "SET client_min_messages = warning;", 0, NULL);
 	PQclear(res);
 
-	if (server_version >= 100000)
-		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL);
-	else
-		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL);
+#if PG_VERSION_NUM >= 100000
+	res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL);
+#else
+	res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL);
+#endif
 
 	PQclear(res);
 }
@@ -1584,9 +1585,6 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 
 	while (true)
 	{
-		PGresult   *res;
-		uint32		lsn_hi;
-		uint32		lsn_lo;
 		XLogRecPtr	replica_lsn;
 
 		/*
@@ -1595,12 +1593,7 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		 */
 		if (is_start_backup)
 		{
-			if (server_version >= 100000)
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_replay_lsn()",
-								   0, NULL);
-			else
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_replay_location()",
-								   0, NULL);
+			replica_lsn = get_checkpoint_location(backup_conn);
 		}
 		/*
 		 * For lsn from pg_stop_backup() we need it only to be received by
@@ -1608,19 +1601,24 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		 */
 		else
 		{
-			if (server_version >= 100000)
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_receive_lsn()",
-								   0, NULL);
-			else
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_receive_location()",
-								   0, NULL);
-		}
+			PGresult   *res;
+			uint32		lsn_hi;
+			uint32		lsn_lo;
 
-		/* Extract timeline and LSN from result */
-		XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
-		/* Calculate LSN */
-		replica_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
-		PQclear(res);
+#if PG_VERSION_NUM >= 100000
+			res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_receive_lsn()",
+							   0, NULL);
+#else
+			res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_receive_location()",
+							   0, NULL);
+#endif
+
+			/* Extract LSN from result */
+			XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
+			/* Calculate LSN */
+			replica_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
+			PQclear(res);
+		}
 
 		/* target lsn was replicated */
 		if (replica_lsn >= lsn)
