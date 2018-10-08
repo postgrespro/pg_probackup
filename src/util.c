@@ -134,9 +134,15 @@ get_checkpoint_location(PGconn *conn)
 	uint32		lsn_lo;
 	XLogRecPtr	lsn;
 
+#if PG_VERSION_NUM >= 100000
+	res = pgut_execute(conn,
+					   "SELECT checkpoint_lsn FROM pg_catalog.pg_control_checkpoint()",
+					   0, NULL);
+#else
 	res = pgut_execute(conn,
 					   "SELECT checkpoint_location FROM pg_catalog.pg_control_checkpoint()",
 					   0, NULL);
+#endif
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
 	PQclear(res);
 	/* Calculate LSN */
