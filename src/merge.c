@@ -80,7 +80,7 @@ do_merge(time_t backup_id)
 					 base36enc(backup->start_time), status2str(backup->status));
 
 			if (backup->backup_mode == BACKUP_MODE_FULL)
-				elog(ERROR, "Backup %s if full backup",
+				elog(ERROR, "Backup %s is full backup",
 					 base36enc(backup->start_time));
 
 			dest_backup = backup;
@@ -431,7 +431,7 @@ merge_files(void *arg)
 				char		tmp_file_path[MAXPGPATH];
 				char	   *prev_path;
 
-				join_path_components(tmp_file_path, to_path_tmp, "_tmp");
+				snprintf(tmp_file_path, MAXPGPATH, "%s_tmp", to_path_tmp);
 
 				/* Start the magic */
 
