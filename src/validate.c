@@ -24,6 +24,8 @@ typedef struct
 {
 	parray	   *files;
 	bool		corrupted;
+	XLogRecPtr	stop_lsn;
+	uint32		checksum_version;
 
 	/*
 	 * Return value from the thread.
@@ -100,6 +102,8 @@ pgBackupValidate(pgBackup *backup)
 
 		arg->files = files;
 		arg->corrupted = false;
+		arg->stop_lsn = backup->stop_lsn;
+		arg->checksum_version = backup->checksum_version;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -207,7 +211,13 @@ pgBackupValidateFiles(void *arg)
 			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
 					file->path, file->crc, crc);
 			arguments->corrupted = true;
-			break;
+
+			/* validate relation blocks */
+			if (file->is_datafile)
+			{
+				if (!check_file_pages(file, arguments->stop_lsn, arguments->checksum_version))
+					arguments->corrupted = true;
+			}
 		}
 	}
 
