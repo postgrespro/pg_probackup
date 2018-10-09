@@ -93,7 +93,7 @@ class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
         )
 
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -151,7 +151,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in tablespace dir"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -189,7 +189,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -230,7 +230,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
-            self.node_new.start()
+            self.node_new.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -272,7 +272,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
-            self.node_new.start()
+            self.node_new.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -319,7 +319,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in new tablespace location"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -365,7 +365,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in new tablespace location"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(

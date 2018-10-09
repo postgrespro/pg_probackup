@@ -2206,7 +2206,8 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 
 				/* Yes, it is */
 				if (sscanf_result == 2 &&
-					strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
+					strncmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY,
+							strlen(TABLESPACE_VERSION_DIRECTORY)) == 0)
 					set_cfs_datafiles(files, root, relative, i);
 			}
 		}
