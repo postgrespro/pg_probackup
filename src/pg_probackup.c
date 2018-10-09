@@ -19,7 +19,7 @@
 #include <unistd.h>
 #include "pg_getopt.h"
 
-const char *PROGRAM_VERSION	= "2.0.20";
+const char *PROGRAM_VERSION	= "2.0.21";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
