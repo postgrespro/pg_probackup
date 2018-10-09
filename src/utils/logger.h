@@ -36,8 +36,8 @@ extern char			log_path[MAXPGPATH];
 
 #define LOG_ROTATION_SIZE_DEFAULT 0
 #define LOG_ROTATION_AGE_DEFAULT 0
-extern int			log_rotation_size;
-extern int			log_rotation_age;
+extern uint64		log_rotation_size;
+extern uint64		log_rotation_age;
 
 #define LOG_LEVEL_CONSOLE_DEFAULT INFO
 #define LOG_LEVEL_FILE_DEFAULT LOG_OFF

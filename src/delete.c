@@ -15,7 +15,8 @@
 #include <unistd.h>
 
 static int pgBackupDeleteFiles(pgBackup *backup);
-static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli);
+static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
+							uint32 xlog_seg_size);
 
 int
 do_delete(time_t backup_id)
@@ -23,8 +24,8 @@ do_delete(time_t backup_id)
 	int			i;
 	parray	   *backup_list,
 			   *delete_list;
+	pgBackup   *target_backup = NULL;
 	time_t		parent_id = 0;
-	bool		backup_found = false;
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
 
@@ -56,9 +57,9 @@ do_delete(time_t backup_id)
 
 				/* Save backup id to retreive increment backups */
 				parent_id = backup->start_time;
-				backup_found = true;
+				target_backup = backup;
 			}
-			else if (backup_found)
+			else if (target_backup)
 			{
 				if (backup->backup_mode != BACKUP_MODE_FULL &&
 					backup->parent_backup == parent_id)
@@ -93,6 +94,8 @@ do_delete(time_t backup_id)
 	/* Clean WAL segments */
 	if (delete_wal)
 	{
+		Assert(target_backup);
+
 		/* Find oldest LSN, used by backups */
 		for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 		{
@@ -106,7 +109,7 @@ do_delete(time_t backup_id)
 			}
 		}
 
-		delete_walfiles(oldest_lsn, oldest_tli);
+		delete_walfiles(oldest_lsn, oldest_tli, xlog_seg_size);
 	}
 
 	/* cleanup */
@@ -225,7 +228,7 @@ do_retention_purge(void)
 	/* Purge WAL files */
 	if (delete_wal)
 	{
-		delete_walfiles(oldest_lsn, oldest_tli);
+		delete_walfiles(oldest_lsn, oldest_tli, xlog_seg_size);
 	}
 
 	/* Cleanup */
@@ -313,7 +316,8 @@ pgBackupDeleteFiles(pgBackup *backup)
  *    oldest_lsn.
  */
 static void
-delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
+delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
+				uint32 xlog_seg_size)
 {
 	XLogSegNo   targetSegNo;
 	char		oldestSegmentNeeded[MAXFNAMELEN];
@@ -329,8 +333,9 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 
 	if (!XLogRecPtrIsInvalid(oldest_lsn))
 	{
-		XLByteToSeg(oldest_lsn, targetSegNo);
-		XLogFileName(oldestSegmentNeeded, oldest_tli, targetSegNo);
+		GetXLogSegNo(oldest_lsn, targetSegNo, xlog_seg_size);
+		GetXLogFileName(oldestSegmentNeeded, oldest_tli, targetSegNo,
+						xlog_seg_size);
 
 		elog(LOG, "removing WAL segments older than %s", oldestSegmentNeeded);
 	}
@@ -436,7 +441,7 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	delete_walfiles(InvalidXLogRecPtr, 0);
+	delete_walfiles(InvalidXLogRecPtr, 0, xlog_seg_size);
 
 	/* Delete backup instance config file */
 	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);

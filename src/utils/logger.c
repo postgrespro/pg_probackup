@@ -32,9 +32,9 @@ char	   *log_directory = NULL;
 char		log_path[MAXPGPATH] = "";
 
 /* Maximum size of an individual log file in kilobytes */
-int			log_rotation_size = 0;
+uint64		log_rotation_size = 0;
 /* Maximum lifetime of an individual log file in minutes */
-int			log_rotation_age = 0;
+uint64		log_rotation_age = 0;
 
 /* Implementation for logging.h */
 

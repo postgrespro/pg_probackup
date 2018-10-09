@@ -69,7 +69,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "PAGE")
 
         # Merge all backups
-        self.merge_backup(backup_dir, "node", page_id)
+        self.merge_backup(backup_dir, "node", page_id,
+                          options=["-j", "4"])
         show_backups = self.show_pb(backup_dir, "node")
 
         # sanity check
