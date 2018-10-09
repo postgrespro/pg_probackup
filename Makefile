@@ -32,7 +32,7 @@ else
 srchome=$(top_srcdir)
 endif
 
-ifeq ($(MAJORVERSION),10)
+ifneq (,$(filter 10 11 12,$(MAJORVERSION)))
 OBJS += src/walmethods.o
 EXTRA_CLEAN += src/walmethods.c src/walmethods.h
 INCLUDES += src/walmethods.h
@@ -64,7 +64,7 @@ src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.h $@
 
 
-ifeq ($(MAJORVERSION),10)
+ifneq (,$(filter 10 11 12,$(MAJORVERSION)))
 src/walmethods.c: $(top_srcdir)/src/bin/pg_basebackup/walmethods.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/walmethods.c $@
 src/walmethods.h: $(top_srcdir)/src/bin/pg_basebackup/walmethods.h

@@ -91,11 +91,6 @@ static const unit_conversion memory_unit_conversion_table[] =
 	{"MB", OPTION_UNIT_XBLOCKS, 1024 / (XLOG_BLCKSZ / 1024)},
 	{"kB", OPTION_UNIT_XBLOCKS, -(XLOG_BLCKSZ / 1024)},
 
-	{"TB", OPTION_UNIT_XSEGS, (1024 * 1024 * 1024) / (XLOG_SEG_SIZE / 1024)},
-	{"GB", OPTION_UNIT_XSEGS, (1024 * 1024) / (XLOG_SEG_SIZE / 1024)},
-	{"MB", OPTION_UNIT_XSEGS, -(XLOG_SEG_SIZE / (1024 * 1024))},
-	{"kB", OPTION_UNIT_XSEGS, -(XLOG_SEG_SIZE / 1024)},
-
 	{""}						/* end of table marker */
 };
 
@@ -1140,7 +1135,7 @@ key_equals(const char *lhs, const char *rhs)
  * Return number of parsed options
  */
 int
-pgut_readopt(const char *path, pgut_option options[], int elevel)
+pgut_readopt(const char *path, pgut_option options[], int elevel, bool strict)
 {
 	FILE   *fp;
 	char	buf[1024];
@@ -1180,7 +1175,7 @@ pgut_readopt(const char *path, pgut_option options[], int elevel)
 					break;
 				}
 			}
-			if (!options[i].type)
+			if (strict && !options[i].type)
 				elog(elevel, "invalid option \"%s\" in file \"%s\"", key, path);
 		}
 	}

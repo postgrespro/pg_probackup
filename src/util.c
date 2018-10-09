@@ -13,6 +13,9 @@
 #include <time.h>
 
 #include "storage/bufpage.h"
+#if PG_VERSION_NUM >= 110000
+#include "streamutil.h"
+#endif
 
 const char *
 base36enc(long unsigned int value)
@@ -209,6 +212,27 @@ get_remote_system_identifier(PGconn *conn)
 	pg_free(buffer);
 
 	return ControlFile.system_identifier;
+#endif
+}
+
+uint32
+get_xlog_seg_size(char *pgdata_path)
+{
+#if PG_VERSION_NUM >= 110000
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	if (buffer == NULL)
+		return 0;
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.xlog_seg_size;
+#else
+	return (uint32) XLOG_SEG_SIZE;
 #endif
 }
 

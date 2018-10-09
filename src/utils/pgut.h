@@ -111,7 +111,8 @@ extern bool			in_cleanup;
 extern bool			in_password;	/* User prompts password */
 
 extern int pgut_getopt(int argc, char **argv, pgut_option options[]);
-extern int pgut_readopt(const char *path, pgut_option options[], int elevel);
+extern int pgut_readopt(const char *path, pgut_option options[], int elevel,
+						bool strict);
 extern void pgut_getopt_env(pgut_option options[]);
 extern void pgut_atexit_push(pgut_atexit_callback callback, void *userdata);
 extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);

@@ -172,11 +172,13 @@ typedef enum ShowFormat
 typedef struct pgBackupConfig
 {
 	uint64		system_identifier;
-	char		*pgdata;
-	const char	*pgdatabase;
-	const char	*pghost;
-	const char	*pgport;
-	const char	*pguser;
+	uint32		xlog_seg_size;
+
+	char	   *pgdata;
+	const char *pgdatabase;
+	const char *pghost;
+	const char *pgport;
+	const char *pguser;
 
 	const char *master_host;
 	const char *master_port;
@@ -324,6 +326,26 @@ typedef struct
 	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
 	 strcmp((fname) + XLOG_FNAME_LEN, ".gz") == 0)
 
+#if PG_VERSION_NUM >= 110000
+#define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
+	XLByteToSeg(xlrp, logSegNo, wal_segsz_bytes)
+#define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
+	XLogSegNoOffsetToRecPtr(segno, offset, wal_segsz_bytes, dest)
+#define GetXLogFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+	XLogFileName(fname, tli, logSegNo, wal_segsz_bytes)
+#define IsInXLogSeg(xlrp, logSegNo, wal_segsz_bytes) \
+	XLByteInSeg(xlrp, logSegNo, wal_segsz_bytes)
+#else
+#define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
+	XLByteToSeg(xlrp, logSegNo)
+#define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
+	XLogSegNoOffsetToRecPtr(segno, offset, dest)
+#define GetXLogFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+	XLogFileName(fname, tli, logSegNo)
+#define IsInXLogSeg(xlrp, logSegNo, wal_segsz_bytes) \
+	XLByteInSeg(xlrp, logSegNo)
+#endif
+
 /* directory options */
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
@@ -384,6 +406,7 @@ extern const char* deparse_compress_alg(int alg);
 /* other options */
 extern char *instance_name;
 extern uint64 system_identifier;
+extern uint32 xlog_seg_size;
 
 /* show options */
 extern ShowFormat show_format;
@@ -440,6 +463,8 @@ extern void pgBackupConfigInit(pgBackupConfig *config);
 extern void writeBackupCatalogConfig(FILE *out, pgBackupConfig *config);
 extern void writeBackupCatalogConfigFile(pgBackupConfig *config);
 extern pgBackupConfig* readBackupCatalogConfigFile(void);
+
+extern uint32 get_config_xlog_seg_size(void);
 
 /* in show.c */
 extern int do_show(time_t requested_backup_id);
@@ -540,23 +565,23 @@ extern void get_wal_file(const char *from_path, const char *to_path);
 extern bool calc_file_checksum(pgFile *file);
 
 /* parsexlog.c */
-extern void extractPageMap(const char *datadir,
-						   XLogRecPtr startpoint,
-						   TimeLineID tli,
-						   XLogRecPtr endpoint,
-						   parray *backup_files_list);
+extern void extractPageMap(const char *archivedir,
+						   TimeLineID tli, uint32 seg_size,
+						   XLogRecPtr startpoint, XLogRecPtr endpoint,
+						   parray *files);
 extern void validate_wal(pgBackup *backup,
 						 const char *archivedir,
 						 time_t target_time,
 						 TransactionId target_xid,
 						 XLogRecPtr target_lsn,
-						 TimeLineID tli);
+						 TimeLineID tli, uint32 seg_size);
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
+							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
 							   time_t *recovery_time,
 							   TransactionId *recovery_xid);
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
-							 TimeLineID target_tli);
+							 TimeLineID target_tli, uint32 seg_size);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
@@ -564,6 +589,7 @@ extern XLogRecPtr get_checkpoint_location(PGconn *conn);
 extern uint64 get_system_identifier(char *pgdata);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
+extern uint32 get_xlog_seg_size(char *pgdata_path);
 
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);

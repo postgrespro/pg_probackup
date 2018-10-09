@@ -572,23 +572,23 @@ readBackupControlFile(const char *path)
 	pgBackupInit(backup);
 	if (access(path, F_OK) != 0)
 	{
-		elog(WARNING, "control file \"%s\" doesn't exist", path);
+		elog(WARNING, "Control file \"%s\" doesn't exist", path);
 		pgBackupFree(backup);
 		return NULL;
 	}
 
-	parsed_options = pgut_readopt(path, options, WARNING);
+	parsed_options = pgut_readopt(path, options, WARNING, true);
 
 	if (parsed_options == 0)
 	{
-		elog(WARNING, "control file \"%s\" is empty", path);
+		elog(WARNING, "Control file \"%s\" is empty", path);
 		pgBackupFree(backup);
 		return NULL;
 	}
 
 	if (backup->start_time == 0)
 	{
-		elog(WARNING, "invalid ID/start-time, control file \"%s\" is corrupted", path);
+		elog(WARNING, "Invalid ID/start-time, control file \"%s\" is corrupted", path);
 		pgBackupFree(backup);
 		return NULL;
 	}
@@ -607,7 +607,7 @@ readBackupControlFile(const char *path)
 		if (sscanf(start_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
 			backup->start_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
-			elog(WARNING, "invalid START_LSN \"%s\"", start_lsn);
+			elog(WARNING, "Invalid START_LSN \"%s\"", start_lsn);
 		free(start_lsn);
 	}
 
@@ -619,7 +619,7 @@ readBackupControlFile(const char *path)
 		if (sscanf(stop_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
 			backup->stop_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
-			elog(WARNING, "invalid STOP_LSN \"%s\"", stop_lsn);
+			elog(WARNING, "Invalid STOP_LSN \"%s\"", stop_lsn);
 		free(stop_lsn);
 	}
 
@@ -644,7 +644,7 @@ readBackupControlFile(const char *path)
 		else if (strcmp(status, "CORRUPT") == 0)
 			backup->status = BACKUP_STATUS_CORRUPT;
 		else
-			elog(WARNING, "invalid STATUS \"%s\"", status);
+			elog(WARNING, "Invalid STATUS \"%s\"", status);
 		free(status);
 	}
 

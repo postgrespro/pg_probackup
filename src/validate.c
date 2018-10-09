@@ -259,6 +259,8 @@ do_validate_all(void)
 			instance_name = dent->d_name;
 			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
 			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
+			xlog_seg_size = get_config_xlog_seg_size();
+
 			do_validate_instance();
 		}
 	}
@@ -381,7 +383,7 @@ do_validate_instance(void)
 		/* Validate corresponding WAL files */
 		if (current_backup->status == BACKUP_STATUS_OK)
 			validate_wal(current_backup, arclog_path, 0,
-						 0, 0, base_full_backup->tli);
+						 0, 0, base_full_backup->tli, xlog_seg_size);
 
 		/*
 		 * Mark every descendant of corrupted backup as orphan
@@ -468,7 +470,8 @@ do_validate_instance(void)
 								//tmp_backup = find_parent_full_backup(dest_backup);
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
-									 0, 0, current_backup->tli);
+											 0, 0, current_backup->tli,
+											 xlog_seg_size);
 							}
 						}
 

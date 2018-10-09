@@ -320,9 +320,10 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 			to_backup->data_bytes += file->write_size;
 	}
 	/* compute size of wal files of this backup stored in the archive */
-	if (!current.stream)
-		to_backup->wal_bytes = XLOG_SEG_SIZE *
-			(to_backup->stop_lsn / XLogSegSize - to_backup->start_lsn / XLogSegSize + 1);
+	if (!to_backup->stream)
+		to_backup->wal_bytes = xlog_seg_size *
+			(to_backup->stop_lsn / xlog_seg_size -
+			 to_backup->start_lsn / xlog_seg_size + 1);
 	else
 		to_backup->wal_bytes = BYTES_INVALID;
 

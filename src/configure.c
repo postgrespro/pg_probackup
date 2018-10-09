@@ -102,6 +102,13 @@ void
 pgBackupConfigInit(pgBackupConfig *config)
 {
 	config->system_identifier = 0;
+
+#if PG_VERSION_NUM >= 110000
+	config->xlog_seg_size = 0;
+#else
+	config->xlog_seg_size = XLOG_SEG_SIZE;
+#endif
+
 	config->pgdata = NULL;
 	config->pgdatabase = NULL;
 	config->pghost = NULL;
@@ -140,6 +147,9 @@ writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
 	fprintf(out, "#Backup instance info\n");
 	fprintf(out, "PGDATA = %s\n", config->pgdata);
 	fprintf(out, "system-identifier = " UINT64_FORMAT "\n", config->system_identifier);
+#if PG_VERSION_NUM >= 110000
+	fprintf(out, "xlog-seg-size = %u\n", config->xlog_seg_size);
+#endif
 
 	fprintf(out, "#Connection parameters:\n");
 	if (config->pgdatabase)
@@ -253,6 +263,9 @@ readBackupCatalogConfigFile(void)
 		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 		/* other options */
 		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
+#if PG_VERSION_NUM >= 110000
+		{'u', 0, "xlog-seg-size",			&config->xlog_seg_size,			SOURCE_FILE_STRICT},
+#endif
 		/* archive options */
 		{ 'u', 0, "archive-timeout",		&(config->archive_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 		{0}
@@ -263,9 +276,42 @@ readBackupCatalogConfigFile(void)
 	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
 
 	pgBackupConfigInit(config);
-	pgut_readopt(path, options, ERROR);
+	pgut_readopt(path, options, ERROR, true);
+
+#if PG_VERSION_NUM >= 110000
+	if (!IsValidWalSegSize(config->xlog_seg_size))
+		elog(ERROR, "Invalid WAL segment size %u", config->xlog_seg_size);
+#endif
 
 	return config;
+}
+
+/*
+ * Read xlog-seg-size from BACKUP_CATALOG_CONF_FILE.
+ */
+uint32
+get_config_xlog_seg_size(void)
+{
+#if PG_VERSION_NUM >= 110000
+	char		path[MAXPGPATH];
+	uint32		seg_size;
+	pgut_option options[] =
+	{
+		{'u', 0, "xlog-seg-size", &seg_size, SOURCE_FILE_STRICT},
+		{0}
+	};
+
+	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+	pgut_readopt(path, options, ERROR, false);
+
+	if (!IsValidWalSegSize(seg_size))
+		elog(ERROR, "Invalid WAL segment size %u", seg_size);
+
+	return seg_size;
+
+#else
+	return (uint32) XLOG_SEG_SIZE;
+#endif
 }
 
 static void
@@ -348,6 +394,11 @@ show_configure_json(pgBackupConfig *config)
 
 	json_add_key(buf, "system-identifier", json_level, true);
 	appendPQExpBuffer(buf, UINT64_FORMAT, config->system_identifier);
+
+#if PG_VERSION_NUM >= 110000
+	json_add_key(buf, "xlog-seg-size", json_level, true);
+	appendPQExpBuffer(buf, "%u", config->xlog_seg_size);
+#endif
 
 	/* Connection parameters */
 	if (config->pgdatabase)

@@ -318,8 +318,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * because it's needed to form the name of xlog file.
 			 */
 			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-						rt->recovery_target_xid, rt->recovery_target_lsn,
-						base_full_backup->tli);
+						 rt->recovery_target_xid, rt->recovery_target_lsn,
+						 base_full_backup->tli, xlog_seg_size);
 		}
 		/* Orphinize every OK descendant of corrupted backup */
 		else

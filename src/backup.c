@@ -650,8 +650,9 @@ do_backup_instance(void)
 		 * reading WAL segments present in archives up to the point
 		 * where this backup has started.
 		 */
-		extractPageMap(arclog_path, prev_backup->start_lsn, current.tli,
-					   current.start_lsn, backup_files_list);
+		extractPageMap(arclog_path, current.tli, xlog_seg_size,
+					   prev_backup->start_lsn, current.start_lsn,
+					   backup_files_list);
 	}
 	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -827,6 +828,11 @@ do_backup(time_t start_time)
 
 	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
 
+#if PG_VERSION_NUM >= 110000
+	if (!RetrieveWalSegSize(backup_conn))
+		elog(ERROR, "Failed to retreive wal_segment_size");
+#endif
+
 	current.compress_alg = compress_alg;
 	current.compress_level = compress_level;
 
@@ -918,8 +924,9 @@ do_backup(time_t start_time)
 	/* compute size of wal files of this backup stored in the archive */
 	if (!current.stream)
 	{
-		current.wal_bytes = XLOG_SEG_SIZE *
-							(current.stop_lsn/XLogSegSize - current.start_lsn/XLogSegSize + 1);
+		current.wal_bytes = xlog_seg_size *
+			(current.stop_lsn / xlog_seg_size -
+			 current.start_lsn / xlog_seg_size + 1);
 	}
 
 	/* Backup is done. Update backup status */
@@ -1467,10 +1474,10 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	tli = get_current_timeline(false);
 
 	/* Compute the name of the WAL file containig requested LSN */
-	XLByteToSeg(lsn, targetSegNo);
+	GetXLogSegNo(lsn, targetSegNo, xlog_seg_size);
 	if (wait_prev_segment)
 		targetSegNo--;
-	XLogFileName(wal_segment, tli, targetSegNo);
+	GetXLogFileName(wal_segment, tli, targetSegNo, xlog_seg_size);
 
 	/*
 	 * In pg_start_backup we wait for 'lsn' in 'pg_wal' directory iff it is
@@ -1536,7 +1543,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 			/*
 			 * A WAL segment found. Check LSN on it.
 			 */
-			if (wal_contains_lsn(wal_segment_dir, lsn, tli))
+			if (wal_contains_lsn(wal_segment_dir, lsn, tli, xlog_seg_size))
 				/* Target LSN was found */
 			{
 				elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
@@ -1946,7 +1953,7 @@ pg_stop_backup(pgBackup *backup)
 
 		elog(LOG, "Getting the Recovery Time from WAL");
 
-		if (!read_recovery_info(xlog_path, backup->tli,
+		if (!read_recovery_info(xlog_path, backup->tli, xlog_seg_size,
 								backup->start_lsn, backup->stop_lsn,
 								&backup->recovery_time, &backup->recovery_xid))
 		{
@@ -2553,7 +2560,7 @@ StreamLog(void *arg)
 	/*
 	 * Always start streaming at the beginning of a segment
 	 */
-	startpos -= startpos % XLOG_SEG_SIZE;
+	startpos -= startpos % xlog_seg_size;
 
 	/* Initialize timeout */
 	stream_stop_timeout = 0;

@@ -93,6 +93,16 @@ bool 		compress_shortcut = false;
 char	   *instance_name;
 uint64		system_identifier = 0;
 
+/*
+ * Starting from PostgreSQL 11 WAL segment size may vary. Prior to
+ * PostgreSQL 10 xlog_seg_size is equal to XLOG_SEG_SIZE.
+ */
+#if PG_VERSION_NUM >= 110000
+uint32		xlog_seg_size = 0;
+#else
+uint32		xlog_seg_size = XLOG_SEG_SIZE;
+#endif
+
 /* archive push options */
 static char *wal_file_path;
 static char *wal_file_name;
@@ -184,6 +194,9 @@ static pgut_option options[] =
 	/* other options */
 	{ 'U', 150, "system-identifier",	&system_identifier,	SOURCE_FILE_STRICT },
 	{ 's', 151, "instance",				&instance_name,		SOURCE_CMDLINE },
+#if PG_VERSION_NUM >= 110000
+	{ 'u', 152, "xlog-seg-size",		&xlog_seg_size,		SOURCE_FILE_STRICT},
+#endif
 	/* archive-push options */
 	{ 's', 160, "wal-file-path",		&wal_file_path,		SOURCE_CMDLINE },
 	{ 's', 161, "wal-file-name",		&wal_file_name,		SOURCE_CMDLINE },
@@ -210,6 +223,14 @@ main(int argc, char *argv[])
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], "pgscripts");
+
+#if PG_VERSION_NUM >= 110000
+	/*
+	 * Reset WAL segment size, we will retreive it using RetrieveWalSegSize()
+	 * later.
+	 */
+	WalSegSz = 0;
+#endif
 
 	/*
 	 * Save main thread's tid. It is used call exit() in case of errors.
@@ -393,7 +414,7 @@ main(int argc, char *argv[])
 
 		/* Read options from configuration file */
 		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-		pgut_readopt(path, options, ERROR);
+		pgut_readopt(path, options, ERROR, true);
 	}
 
 	/* Initialize logger */
@@ -405,6 +426,14 @@ main(int argc, char *argv[])
 	 */
 	if (pgdata != NULL && !is_absolute_path(pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
+
+#if PG_VERSION_NUM >= 110000
+	/* Check xlog-seg-size option */
+	if (instance_name &&
+		backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
+		backup_subcmd != ADD_INSTANCE_CMD && !IsValidWalSegSize(xlog_seg_size))
+		elog(ERROR, "Invalid WAL segment size %u", xlog_seg_size);
+#endif
 
 	/* Sanity check of --backup-id option */
 	if (backup_id_string != NULL)
