@@ -1,9 +1,9 @@
 import unittest
 
-from . import init_test, option_test, show_test, \
-    backup_test, delete_test, restore_test, validate_test, \
+from . import init_test, merge, option_test, show_test, \
+    backup_test, delete_test, delta, restore_test, validate_test, \
     retention_test, ptrack_clean, ptrack_cluster, \
-    ptrack_move_to_tablespace, ptrack_recovery, ptrack_vacuum, \
+    ptrack_move_to_tablespace, ptrack_recovery, ptrack_truncate, ptrack_vacuum, \
     ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
     false_positive, replica, compression, page, ptrack, archive, \
@@ -16,14 +16,16 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup_test))
     suite.addTests(loader.loadTestsFromModule(cfs_backup))
-#    suite.addTests(loader.loadTestsFromModule(cfs_restore))
+    suite.addTests(loader.loadTestsFromModule(cfs_restore))
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
 #    suite.addTests(loader.loadTestsFromModule(logging))
     suite.addTests(loader.loadTestsFromModule(compression))
     suite.addTests(loader.loadTestsFromModule(delete_test))
+    suite.addTests(loader.loadTestsFromModule(delta))
     suite.addTests(loader.loadTestsFromModule(exclude))
     suite.addTests(loader.loadTestsFromModule(false_positive))
     suite.addTests(loader.loadTestsFromModule(init_test))
+    suite.addTests(loader.loadTestsFromModule(merge))
     suite.addTests(loader.loadTestsFromModule(option_test))
     suite.addTests(loader.loadTestsFromModule(page))
     suite.addTests(loader.loadTestsFromModule(ptrack))
@@ -31,6 +33,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(ptrack_cluster))
     suite.addTests(loader.loadTestsFromModule(ptrack_move_to_tablespace))
     suite.addTests(loader.loadTestsFromModule(ptrack_recovery))
+    suite.addTests(loader.loadTestsFromModule(ptrack_truncate))
     suite.addTests(loader.loadTestsFromModule(ptrack_vacuum))
     suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_bits_frozen))
     suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_bits_visibility))
