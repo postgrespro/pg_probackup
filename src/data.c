@@ -339,9 +339,11 @@ prepare_page(backup_files_arg *arguments,
 
 	}
 
+	/* Nullified pages must be copied by DELTA backup, just to be safe */
 	if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
 		file->exists_in_prev &&
 		!page_is_truncated &&
+		page_lsn &&
 		page_lsn < prev_backup_start_lsn)
 	{
 		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
