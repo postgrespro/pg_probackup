@@ -368,7 +368,7 @@ BlackListCompare(const void *str1, const void *str2)
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
  *
  * When omit_symlink is true, symbolic link is ignored and only file or
- * directory llnked to will be listed.
+ * directory linked to will be listed.
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,

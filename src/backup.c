@@ -2096,12 +2096,13 @@ backup_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
+			pgFile	  **prev_file;
+
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
 			{
 				char	   *relative;
 				pgFile		key;
-				pgFile	  **prev_file;
 
 				relative = GetRelativePath(file->path, arguments->from_root);
 				key.path = relative;
@@ -2131,20 +2132,27 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			/* TODO:
-			 * Check if file exists in previous backup
-			 * If exists:
-			 *   if mtime > start_backup_time of parent backup,
-			 *    copy file to backup
-			 *   if mtime < start_backup_time
-			 *    calculate crc, compare crc to old file
-			 *      if crc is the same -> skip file
-			 */
-			else if (!copy_file(arguments->from_root, arguments->to_root, file))
+			else 
 			{
-				file->write_size = BYTES_INVALID;
-				elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
-				continue;
+				bool skip = false;
+
+				/* If non-data file has not changed since last backup... */
+				if (file->exists_in_prev &&
+					buf.st_mtime < current.parent_backup)
+				{
+					calc_file_checksum(file);
+					/* ...and checksum is the same... */
+					if (EQ_CRC32C(file->crc, (*prev_file)->crc))
+						skip = true; /* ...skip copying file. */
+				}
+				if (skip ||
+					!copy_file(arguments->from_root, arguments->to_root, file))
+				{
+					file->write_size = BYTES_INVALID;
+					elog(VERBOSE, "File \"%s\" was not copied to backup",
+						 file->path);
+					continue;
+				}
 			}
 
 			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
