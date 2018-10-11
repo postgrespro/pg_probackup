@@ -1550,16 +1550,16 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 	/* read and validate pages one by one */
 	while (true)
 	{
-		Page	compressed_page = NULL; /* used as read buffer */
-		Page	page = NULL;
+		DataPage	compressed_page; /* used as read buffer */
+		DataPage	page;
 		BackupPageHeader header;
-		BlockNumber blknum;
+		BlockNumber blknum = 0;
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
 		if (read_len != sizeof(header))
 		{
-			int errno_tmp = errno;
+			int			errno_tmp = errno;
 			if (read_len == 0 && feof(in))
 				break;		/* EOF found */
 			else if (read_len != 0 && feof(in))
@@ -1586,7 +1586,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 
 		Assert(header.compressed_size <= BLCKSZ);
 
-		read_len = fread(compressed_page, 1,
+		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
 			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
@@ -1596,22 +1596,22 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 		{
 			int32		uncompressed_size = 0;
 
-			uncompressed_size = do_decompress(page, BLCKSZ,
-											  compressed_page,
-											  MAXALIGN(header.compressed_size),
+			uncompressed_size = do_decompress(page.data, BLCKSZ,
+											  compressed_page.data,
+											  header.compressed_size,
 											  file->compress_alg);
 
 			if (uncompressed_size != BLCKSZ)
 				elog(ERROR, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
 					 file->path, uncompressed_size);
 
-			if (validate_one_page(page, file, blknum,
+			if (validate_one_page(page.data, file, blknum,
 				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND__NOT_VALID)
 				is_valid = false;
 		}
 		else
 		{
-			if (validate_one_page(compressed_page, file, blknum,
+			if (validate_one_page(compressed_page.data, file, blknum,
 				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND__NOT_VALID)
 				is_valid = false;
 		}
