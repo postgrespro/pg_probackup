@@ -221,10 +221,36 @@ class ProbackupTest(object):
                 self.probackup_path = self.test_env["PGPROBACKUPBIN"]
             else:
                 if self.verbose:
-                    print('PGPROBINDIR is not an executable file')
+                    print('PGPROBACKUPBIN is not an executable file')
+
         if not self.probackup_path:
-            self.probackup_path = os.path.abspath(os.path.join(
+            probackup_path_tmp = os.path.join(
+                testgres.get_pg_config()["BINDIR"], 'pg_probackup')
+
+            if os.path.isfile(probackup_path_tmp):
+                if not os.access(probackup_path_tmp, os.X_OK):
+                    print('{0} is not an executable file'.format(
+                        probackup_path_tmp))
+                else:
+                    self.probackup_path = probackup_path_tmp
+
+        if not self.probackup_path:
+            probackup_path_tmp = os.path.abspath(os.path.join(
                 self.dir_path, "../pg_probackup"))
+
+            if os.path.isfile(probackup_path_tmp):
+                if not os.access(probackup_path_tmp, os.X_OK):
+                    print('{0} is not an executable file'.format(
+                        probackup_path_tmp))
+                else:
+                    self.probackup_path = probackup_path_tmp
+
+        if not self.probackup_path:
+            print('pg_probackup binary is not found')
+            exit(1)
+
+        os.environ['PATH'] = os.path.dirname(
+            self.probackup_path) + ":" + os.environ['PATH']
 
     def make_simple_node(
             self,
