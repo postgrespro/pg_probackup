@@ -840,6 +840,7 @@ class ProbackupTest(object):
             "-B", backup_dir,
             "--instance={0}".format(instance)
         ]
+
         res = self.run_pb(cmd_list, old_binary=old_binary).splitlines()
         for line in res:
             if not line.startswith('#'):

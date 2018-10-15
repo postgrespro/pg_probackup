@@ -1,7 +1,7 @@
 import unittest
 import subprocess
 import os
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, archive_script
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from sys import exit
 
 module_name = 'compatibility'
@@ -34,7 +34,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         node.pgbench_init(scale=10)
 
-        # FULL backup
+        # FULL backup with old binary
         self.backup_node(
             backup_dir, 'node', node, old_binary=True)
 
@@ -44,7 +44,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         self.show_pb(backup_dir)
         self.validate_pb(backup_dir)
 
-        # RESTORE
+        # RESTORE old FULL with new binary
         node_restored = self.make_simple_node(
             base_dir="{0}/{1}/node_restored".format(module_name, fname))
 
@@ -58,7 +58,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Incremental BACKUP
+        # Incremental BACKUP with old binary
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
