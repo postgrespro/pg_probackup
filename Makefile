@@ -1,7 +1,7 @@
 PROGRAM = pg_probackup
 OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
 	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o \
-	src/pg_probackup.o src/restore.o src/show.o src/status.o \
+	src/pg_probackup.o src/restore.o src/show.o \
 	src/util.o src/validate.o src/datapagemap.o src/parsexlog.o \
 	src/xlogreader.o src/streamutil.o src/receivelog.o \
 	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o \

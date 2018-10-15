@@ -7,10 +7,10 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
-
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "pg_probackup.h"
 
 #include "utils/thread.h"
 
@@ -75,7 +75,9 @@ do_merge(time_t backup_id)
 			continue;
 		else if (backup->start_time == backup_id && !dest_backup)
 		{
-			if (backup->status != BACKUP_STATUS_OK)
+			if (backup->status != BACKUP_STATUS_OK &&
+				/* It is possible that previous merging was interrupted */
+				backup->status != BACKUP_STATUS_MERGING)
 				elog(ERROR, "Backup %s has status: %s",
 					 base36enc(backup->start_time), status2str(backup->status));
 
@@ -93,19 +95,15 @@ do_merge(time_t backup_id)
 			if (backup->start_time != prev_parent)
 				continue;
 
-			if (backup->status != BACKUP_STATUS_OK)
-				elog(ERROR, "Skipping backup %s, because it has non-valid status: %s",
+			if (backup->status != BACKUP_STATUS_OK &&
+				/* It is possible that previous merging was interrupted */
+				backup->status != BACKUP_STATUS_MERGING)
+				elog(ERROR, "Backup %s has status: %s",
 					 base36enc(backup->start_time), status2str(backup->status));
 
 			/* If we already found dest_backup, look for full backup */
 			if (dest_backup && backup->backup_mode == BACKUP_MODE_FULL)
 			{
-				if (backup->status != BACKUP_STATUS_OK)
-					elog(ERROR, "Parent full backup %s for the given backup %s has status: %s",
-						 base36enc_dup(backup->start_time),
-						 base36enc_dup(dest_backup->start_time),
-						 status2str(backup->status));
-
 				full_backup = backup;
 				full_backup_idx = i;
 

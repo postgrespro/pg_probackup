@@ -8,22 +8,26 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
+#include "postgres_fe.h"
 
-#include <unistd.h>
-#include <time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "libpq/pqsignal.h"
-#include "storage/block.h"
-#include "storage/bufpage.h"
+#include "storage/checksum.h"
 #include "storage/checksum_impl.h"
 #include <common/pg_lzcompress.h>
+
+#include <sys/stat.h>
+
+#include "pg_probackup.h"
 
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 #endif
+
+/* Union to ease operations on relation pages */
+typedef union DataPage
+{
+	PageHeaderData page_data;
+	char		data[BLCKSZ];
+} DataPage;
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */

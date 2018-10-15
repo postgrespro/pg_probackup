@@ -8,20 +8,38 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
-#include "streamutil.h"
-#include "utils/thread.h"
+#include "postgres_fe.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include "pg_getopt.h"
+#include "streamutil.h"
+
+#include <sys/stat.h>
+
+#include "pg_probackup.h"
+
+#include "utils/thread.h"
 
 const char *PROGRAM_VERSION	= "2.0.21";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
+
+typedef enum ProbackupSubcmd
+{
+	NO_CMD = 0,
+	INIT_CMD,
+	ADD_INSTANCE_CMD,
+	DELETE_INSTANCE_CMD,
+	ARCHIVE_PUSH_CMD,
+	ARCHIVE_GET_CMD,
+	BACKUP_CMD,
+	RESTORE_CMD,
+	VALIDATE_CMD,
+	DELETE_CMD,
+	MERGE_CMD,
+	SHOW_CMD,
+	SET_CONFIG_CMD,
+	SHOW_CONFIG_CMD
+} ProbackupSubcmd;
 
 /* directory options */
 char	   *backup_path = NULL;
@@ -113,7 +131,7 @@ ShowFormat show_format = SHOW_PLAIN;
 
 /* current settings */
 pgBackup	current;
-ProbackupSubcmd backup_subcmd = NO_CMD;
+static ProbackupSubcmd backup_subcmd = NO_CMD;
 
 static bool help_opt = false;
 
@@ -534,7 +552,8 @@ main(int argc, char *argv[])
 			if (delete_expired)
 				return do_retention_purge();
 			else
-				return do_delete(current.backup_id);
+				do_delete(current.backup_id);
+			break;
 		case MERGE_CMD:
 			do_merge(current.backup_id);
 			break;

@@ -8,17 +8,17 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
-
 #include <dirent.h>
 #include <time.h>
 #include <unistd.h>
 
-static int pgBackupDeleteFiles(pgBackup *backup);
+#include "pg_probackup.h"
+
+static int delete_backup_files(pgBackup *backup);
 static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
 							uint32 xlog_seg_size);
 
-int
+void
 do_delete(time_t backup_id)
 {
 	int			i;
@@ -85,7 +85,7 @@ do_delete(time_t backup_id)
 			if (interrupted)
 				elog(ERROR, "interrupted during delete backup");
 
-			pgBackupDeleteFiles(backup);
+			delete_backup_files(backup);
 		}
 
 		parray_free(delete_list);
@@ -115,8 +115,6 @@ do_delete(time_t backup_id)
 	/* cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
-
-	return 0;
 }
 
 /*
@@ -205,7 +203,7 @@ do_retention_purge(void)
 			}
 
 			/* Delete backup and update status to DELETED */
-			pgBackupDeleteFiles(backup);
+			delete_backup_files(backup);
 			backup_deleted = true;
 		}
 	}
@@ -248,7 +246,7 @@ do_retention_purge(void)
  * BACKUP_STATUS_DELETED.
  */
 static int
-pgBackupDeleteFiles(pgBackup *backup)
+delete_backup_files(pgBackup *backup)
 {
 	size_t		i;
 	char		path[MAXPGPATH];
@@ -433,7 +431,7 @@ do_delete_instance(void)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
-		pgBackupDeleteFiles(backup);
+		delete_backup_files(backup);
 	}
 
 	/* Cleanup */

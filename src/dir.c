@@ -8,17 +8,15 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
+#include "postgres_fe.h"
+
+#include "catalog/pg_tablespace.h"
 
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <dirent.h>
-#include <time.h>
 
-#include "catalog/catalog.h"
-#include "catalog/pg_tablespace.h"
-#include "datapagemap.h"
+#include "pg_probackup.h"
 
 /*
  * The contents of these directories are removed or recreated during server
@@ -1364,8 +1362,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 	fp = fopen(file_txt, "rt");
 	if (fp == NULL)
-		elog(errno == ENOENT ? ERROR : ERROR,
-			"cannot open \"%s\": %s", file_txt, strerror(errno));
+		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
 
 	files = parray_new();
 

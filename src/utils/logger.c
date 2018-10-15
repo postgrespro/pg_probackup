@@ -7,11 +7,9 @@
  *-------------------------------------------------------------------------
  */
 
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
+#include "postgres_fe.h"
+
 #include <sys/stat.h>
-#include <time.h>
 
 #include "logger.h"
 #include "pgut.h"

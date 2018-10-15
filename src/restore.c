@@ -8,15 +8,15 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
+#include "postgres_fe.h"
 
-#include <fcntl.h>
+#include "access/timeline.h"
+
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
-#include "catalog/pg_control.h"
-#include "utils/logger.h"
+#include "pg_probackup.h"
+
 #include "utils/thread.h"
 
 typedef struct

@@ -8,9 +8,6 @@
  */
 
 #include "pg_probackup.h"
-#include "utils/logger.h"
-
-#include "pqexpbuffer.h"
 
 #include "utils/json.h"
 

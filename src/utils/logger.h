@@ -10,8 +10,6 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-#include "postgres_fe.h"
-
 #define LOG_NONE	(-10)
 
 /* Log level */

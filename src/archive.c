@@ -7,10 +7,10 @@
  *
  *-------------------------------------------------------------------------
  */
-#include "pg_probackup.h"
 
 #include <unistd.h>
-#include <sys/stat.h>
+
+#include "pg_probackup.h"
 
 /*
  * pg_probackup specific archive command for archive backups

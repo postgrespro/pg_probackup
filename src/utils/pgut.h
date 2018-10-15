@@ -11,26 +11,9 @@
 #ifndef PGUT_H
 #define PGUT_H
 
-#include "libpq-fe.h"
-#include "pqexpbuffer.h"
-
-#include <assert.h>
-#include <sys/time.h>
-
+#include "postgres_fe.h"
 #include "access/xlogdefs.h"
-#include "logger.h"
-
-#if !defined(C_H) && !defined(__cplusplus)
-#ifndef bool
-typedef char bool;
-#endif
-#ifndef true
-#define true	((bool) 1)
-#endif
-#ifndef false
-#define false	((bool) 0)
-#endif
-#endif
+#include "libpq-fe.h"
 
 #define INFINITE_STR		"INFINITE"
 
@@ -139,19 +122,12 @@ extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char *
 extern void pgut_cancel(PGconn* conn);
 extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);
 
-extern const char *pgut_get_host(void);
-extern const char *pgut_get_port(void);
-extern void pgut_set_host(const char *new_host);
-extern void pgut_set_port(const char *new_port);
-
 /*
  * memory allocators
  */
 extern void *pgut_malloc(size_t size);
 extern void *pgut_realloc(void *p, size_t size);
 extern char *pgut_strdup(const char *str);
-extern char *strdup_with_len(const char *str, size_t len);
-extern char *strdup_trim(const char *str);
 
 #define pgut_new(type)			((type *) pgut_malloc(sizeof(type)))
 #define pgut_newarray(type, n)	((type *) pgut_malloc(sizeof(type) * (n)))
@@ -178,28 +154,6 @@ extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
 #define AssertMacro(x)	((void) 0)
 #endif
 
-/*
- * StringInfo and string operations
- */
-#define STRINGINFO_H
-
-#define StringInfoData			PQExpBufferData
-#define StringInfo				PQExpBuffer
-#define makeStringInfo			createPQExpBuffer
-#define initStringInfo			initPQExpBuffer
-#define freeStringInfo			destroyPQExpBuffer
-#define termStringInfo			termPQExpBuffer
-#define resetStringInfo			resetPQExpBuffer
-#define enlargeStringInfo		enlargePQExpBuffer
-#define printfStringInfo		printfPQExpBuffer	/* reset + append */
-#define appendStringInfo		appendPQExpBuffer
-#define appendStringInfoString	appendPQExpBufferStr
-#define appendStringInfoChar	appendPQExpBufferChar
-#define appendBinaryStringInfo	appendBinaryPQExpBuffer
-
-extern int appendStringInfoFile(StringInfo str, FILE *fp);
-extern int appendStringInfoFd(StringInfo str, int fd);
-
 extern bool parse_bool(const char *value, bool *result);
 extern bool parse_bool_with_len(const char *value, size_t len, bool *result);
 extern bool parse_int32(const char *value, int32 *result, int flags);
@@ -219,8 +173,6 @@ extern void convert_from_base_unit_u(uint64 base_value, int base_unit,
 #define IsSpace(c)		(isspace((unsigned char)(c)))
 #define IsAlpha(c)		(isalpha((unsigned char)(c)))
 #define IsAlnum(c)		(isalnum((unsigned char)(c)))
-#define IsIdentHead(c)	(IsAlpha(c) || (c) == '_')
-#define IsIdentBody(c)	(IsAlnum(c) || (c) == '_')
 #define ToLower(c)		(tolower((unsigned char)(c)))
 #define ToUpper(c)		(toupper((unsigned char)(c)))
 

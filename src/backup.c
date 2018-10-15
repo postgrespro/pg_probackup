@@ -8,26 +8,28 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
+#include "postgres_fe.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <time.h>
-
-#include "catalog/catalog.h"
 #include "catalog/pg_tablespace.h"
-#include "datapagemap.h"
-#include "libpq/pqsignal.h"
 #include "pgtar.h"
 #include "receivelog.h"
-#include "storage/bufpage.h"
 #include "streamutil.h"
+
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "pg_probackup.h"
+
 #include "utils/thread.h"
+
+#define PG_STOP_BACKUP_TIMEOUT 300
+
+/*
+ * Macro needed to parse ptrack.
+ * NOTE Keep those values syncronised with definitions in ptrack.h
+ */
+#define PTRACK_BITS_PER_HEAPBLOCK 1
+#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;

@@ -8,10 +8,12 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
+#include "postgres_fe.h"
 
 #include <sys/stat.h>
 #include <dirent.h>
+
+#include "pg_probackup.h"
 
 #include "utils/thread.h"
 

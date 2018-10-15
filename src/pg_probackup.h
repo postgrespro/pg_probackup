@@ -11,39 +11,24 @@
 #define PG_PROBACKUP_H
 
 #include "postgres_fe.h"
+#include "libpq-fe.h"
 
-#include <limits.h>
-#include <libpq-fe.h>
-
-#include "access/timeline.h"
-#include "access/xlogdefs.h"
 #include "access/xlog_internal.h"
-#include "catalog/pg_control.h"
-#include "storage/block.h"
-#include "storage/bufpage.h"
-#include "storage/checksum.h"
 #include "utils/pg_crc.h"
-#include "common/relpath.h"
-#include "port.h"
 
 #ifdef FRONTEND
 #undef FRONTEND
-	#include "port/atomics.h"
+#include "port/atomics.h"
 #define FRONTEND
+#else
+#include "port/atomics.h"
 #endif
 
+#include "utils/logger.h"
 #include "utils/parray.h"
 #include "utils/pgut.h"
 
 #include "datapagemap.h"
-
-# define PG_STOP_BACKUP_TIMEOUT 300
-/*
- * Macro needed to parse ptrack.
- * NOTE Keep those values syncronised with definitions in ptrack.h
- */
-#define PTRACK_BITS_PER_HEAPBLOCK 1
-#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
 
 /* Directory/File names */
 #define DATABASE_DIR			"database"
@@ -138,24 +123,6 @@ typedef enum BackupMode
 	BACKUP_MODE_DIFF_DELTA,		/* incremental page backup with lsn comparison */
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
-
-typedef enum ProbackupSubcmd
-{
-	NO_CMD = 0,
-	INIT_CMD,
-	ADD_INSTANCE_CMD,
-	DELETE_INSTANCE_CMD,
-	ARCHIVE_PUSH_CMD,
-	ARCHIVE_GET_CMD,
-	BACKUP_CMD,
-	RESTORE_CMD,
-	VALIDATE_CMD,
-	DELETE_CMD,
-	MERGE_CMD,
-	SHOW_CMD,
-	SET_CONFIG_CMD,
-	SHOW_CONFIG_CMD
-} ProbackupSubcmd;
 
 typedef enum ShowFormat
 {
@@ -281,13 +248,6 @@ typedef struct pgRecoveryTarget
 	bool			restore_no_validate;
 } pgRecoveryTarget;
 
-/* Union to ease operations on relation pages */
-typedef union DataPage
-{
-	PageHeaderData page_data;
-	char		data[BLCKSZ];
-} DataPage;
-
 typedef struct
 {
 	const char *from_root;
@@ -398,11 +358,6 @@ extern CompressAlg compress_alg;
 extern int		compress_level;
 extern bool		compress_shortcut;
 
-#define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
-#define COMPRESS_LEVEL_DEFAULT 1
-
-extern CompressAlg parse_compress_alg(const char *arg);
-extern const char* deparse_compress_alg(int alg);
 /* other options */
 extern char *instance_name;
 extern uint64 system_identifier;
@@ -413,7 +368,6 @@ extern ShowFormat show_format;
 
 /* current settings */
 extern pgBackup current;
-extern ProbackupSubcmd backup_subcmd;
 
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */
@@ -470,7 +424,7 @@ extern uint32 get_config_xlog_seg_size(void);
 extern int do_show(time_t requested_backup_id);
 
 /* in delete.c */
-extern int do_delete(time_t backup_id);
+extern void do_delete(time_t backup_id);
 extern int do_retention_purge(void);
 extern int do_delete_instance(void);
 
@@ -516,6 +470,12 @@ extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
+
+#define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
+#define COMPRESS_LEVEL_DEFAULT 1
+
+extern CompressAlg parse_compress_alg(const char *arg);
+extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
@@ -602,11 +562,7 @@ extern void remove_not_digit(char *buf, size_t len, const char *str);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
-extern pg_time_t timestamptz_to_time_t(TimestampTz t);
 extern int parse_server_version(char *server_version_str);
-
-/* in status.c */
-extern bool is_pg_running(void);
 
 #ifdef WIN32
 #ifdef _DEBUG
