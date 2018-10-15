@@ -11,6 +11,7 @@
 #include "postgres_fe.h"
 
 #include "catalog/pg_tablespace.h"
+#include "common/relpath.h"
 #include "pgtar.h"
 #include "receivelog.h"
 #include "streamutil.h"
