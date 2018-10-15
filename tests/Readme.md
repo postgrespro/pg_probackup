@@ -13,6 +13,9 @@ Check physical correctness of restored instances:
 Check archive compression:
  export ARCHIVE_COMPRESSION=ON
 
+Enable compatibility tests:
+ export PGPROBACKUPBIN_OLD=/path/to/previous_version_pg_probackup_binary
+
 Specify path to pg_probackup binary file. By default tests use <Path to Git repository>/pg_probackup/
  export PGPROBACKUPBIN=<path to pg_probackup>
 
