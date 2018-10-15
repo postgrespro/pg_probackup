@@ -10,8 +10,10 @@
 
 #include "postgres_fe.h"
 
+#if PG_VERSION_NUM < 110000
+#include "catalog/catalog.h"
+#endif
 #include "catalog/pg_tablespace.h"
-#include "common/relpath.h"
 
 #include <unistd.h>
 #include <sys/stat.h>
