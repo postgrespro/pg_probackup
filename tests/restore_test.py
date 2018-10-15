@@ -1330,7 +1330,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'autovacuum': 'off',
-                'full_page_write': 'on'}
+                'full_page_writes': 'on'}
             )
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

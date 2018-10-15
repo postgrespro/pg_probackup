@@ -252,6 +252,16 @@ class ProbackupTest(object):
         os.environ['PATH'] = os.path.dirname(
             self.probackup_path) + ":" + os.environ['PATH']
 
+        if "PGPROBACKUPBIN_OLD" in self.test_env:
+            if (
+                os.path.isfile(self.test_env["PGPROBACKUPBIN_OLD"]) and
+                os.access(self.test_env["PGPROBACKUPBIN_OLD"], os.X_OK)
+            ):
+                self.probackup_old_path = self.test_env["PGPROBACKUPBIN_OLD"]
+            else:
+                if self.verbose:
+                    print('PGPROBACKUPBIN_OLD is not an executable file')
+
     def make_simple_node(
             self,
             base_dir=None,
@@ -534,13 +544,22 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, async=False, gdb=False):
+    def run_pb(self, command, async=False, gdb=False, old_binary=False):
+        if not self.probackup_old_path and old_binary:
+            print("PGPROBACKUPBIN_OLD is not set")
+            exit(1)
+
+        if old_binary:
+            binary_path = self.probackup_old_path
+        else:
+            binary_path = self.probackup_path
+
         try:
-            self.cmd = [' '.join(map(str, [self.probackup_path] + command))]
+            self.cmd = [' '.join(map(str, [binary_path] + command))]
             if self.verbose:
                 print(self.cmd)
             if gdb:
-                return GDBobj([self.probackup_path] + command, self.verbose)
+                return GDBobj([binary_path] + command, self.verbose)
             if async:
                 return subprocess.Popen(
                     self.cmd,
@@ -550,7 +569,7 @@ class ProbackupTest(object):
                 )
             else:
                 self.output = subprocess.check_output(
-                    [self.probackup_path] + command,
+                    [binary_path] + command,
                     stderr=subprocess.STDOUT,
                     env=self.test_env
                     ).decode("utf-8")
@@ -586,37 +605,45 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode("utf-8"), command)
 
-    def init_pb(self, backup_dir):
+    def init_pb(self, backup_dir, old_binary=False):
 
         shutil.rmtree(backup_dir, ignore_errors=True)
+
         return self.run_pb([
             "init",
             "-B", backup_dir
-        ])
+            ],
+            old_binary=old_binary
+        )
 
-    def add_instance(self, backup_dir, instance, node):
+    def add_instance(self, backup_dir, instance, node, old_binary=False):
 
         return self.run_pb([
             "add-instance",
             "--instance={0}".format(instance),
             "-B", backup_dir,
             "-D", node.data_dir
-        ])
+            ],
+            old_binary=old_binary
+        )
 
-    def del_instance(self, backup_dir, instance):
+    def del_instance(self, backup_dir, instance, old_binary=False):
 
         return self.run_pb([
             "del-instance",
             "--instance={0}".format(instance),
             "-B", backup_dir
-        ])
+            ],
+            old_binary=old_binary
+        )
 
     def clean_pb(self, backup_dir):
         shutil.rmtree(backup_dir, ignore_errors=True)
 
     def backup_node(
             self, backup_dir, instance, node, data_dir=False,
-            backup_type="full", options=[], async=False, gdb=False
+            backup_type="full", options=[], async=False, gdb=False,
+            old_binary=False
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -639,11 +666,11 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ["-b", backup_type]
 
-        return self.run_pb(cmd_list + options, async, gdb)
+        return self.run_pb(cmd_list + options, async, gdb, old_binary)
 
     def merge_backup(
             self, backup_dir, instance, backup_id, async=False,
-            gdb=False, options=[]):
+            gdb=False, old_binary=False, options=[]):
         cmd_list = [
             "merge",
             "-B", backup_dir,
@@ -651,11 +678,11 @@ class ProbackupTest(object):
             "-i", backup_id
         ]
 
-        return self.run_pb(cmd_list + options, async, gdb)
+        return self.run_pb(cmd_list + options, async, gdb, old_binary)
 
     def restore_node(
             self, backup_dir, instance, node=False,
-            data_dir=None, backup_id=None, options=[]
+            data_dir=None, backup_id=None, old_binary=False, options=[]
             ):
         if data_dir is None:
             data_dir = node.data_dir
@@ -669,11 +696,11 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
-            options=[], as_text=False, as_json=True
+            options=[], as_text=False, as_json=True, old_binary=False
             ):
 
         backup_list = []
@@ -693,11 +720,11 @@ class ProbackupTest(object):
 
         if as_text:
             # You should print it when calling as_text=true
-            return self.run_pb(cmd_list + options)
+            return self.run_pb(cmd_list + options, old_binary=old_binary)
 
         # get show result as list of lines
         if as_json:
-            data = json.loads(self.run_pb(cmd_list + options))
+            data = json.loads(self.run_pb(cmd_list + options, old_binary=old_binary))
         #    print(data)
             for instance_data in data:
                 # find specific instance if requested
@@ -713,7 +740,8 @@ class ProbackupTest(object):
                         backup_list.append(backup)
             return backup_list
         else:
-            show_splitted = self.run_pb(cmd_list + options).splitlines()
+            show_splitted = self.run_pb(
+                cmd_list + options, old_binary=old_binary).splitlines()
             if instance is not None and backup_id is None:
                 # cut header(ID, Mode, etc) from show as single string
                 header = show_splitted[1:2][0]
@@ -768,7 +796,7 @@ class ProbackupTest(object):
 
     def validate_pb(
             self, backup_dir, instance=None,
-            backup_id=None, options=[]
+            backup_id=None, options=[], old_binary=False
             ):
 
         cmd_list = [
@@ -780,9 +808,11 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
-    def delete_pb(self, backup_dir, instance, backup_id=None, options=[]):
+    def delete_pb(
+            self, backup_dir, instance,
+            backup_id=None, options=[], old_binary=False):
         cmd_list = [
             "delete",
             "-B", backup_dir
@@ -792,24 +822,25 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
-    def delete_expired(self, backup_dir, instance, options=[]):
+    def delete_expired(
+            self, backup_dir, instance, options=[], old_binary=False):
         cmd_list = [
             "delete", "--expired", "--wal",
             "-B", backup_dir,
             "--instance={0}".format(instance)
         ]
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
-    def show_config(self, backup_dir, instance):
+    def show_config(self, backup_dir, instance, old_binary=False):
         out_dict = {}
         cmd_list = [
             "show-config",
             "-B", backup_dir,
             "--instance={0}".format(instance)
         ]
-        res = self.run_pb(cmd_list).splitlines()
+        res = self.run_pb(cmd_list, old_binary=old_binary).splitlines()
         for line in res:
             if not line.startswith('#'):
                 name, var = line.partition(" = ")[::2]
@@ -830,7 +861,8 @@ class ProbackupTest(object):
         return out_dict
 
     def set_archiving(
-            self, backup_dir, instance, node, replica=False, overwrite=False):
+            self, backup_dir, instance, node, replica=False, overwrite=False,
+            old_binary=False):
 
         if replica:
             archive_mode = 'always'
@@ -966,7 +998,6 @@ class ProbackupTest(object):
                 node.execute("select pg_switch_wal()")
             else:
                 node.execute("select pg_switch_xlog()")
-        sleep(1)
 
     def get_version(self, node):
         return self.version_to_num(
