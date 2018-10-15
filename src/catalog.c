@@ -219,8 +219,7 @@ read_backup(time_t timestamp)
 /*
  * Save the backup status into BACKUP_CONTROL_FILE.
  *
- * We need to reread the backup using its ID and save it changing only its
- * status.
+ * We need to reread the backup using its ID and save it changing only its status.
  */
 void
 write_backup_status(pgBackup *backup)
@@ -230,7 +229,7 @@ write_backup_status(pgBackup *backup)
 	tmp = read_backup(backup->start_time);
 	tmp->status = backup->status;
 
-
+	write_backup(tmp);
 	pgBackupFree(tmp);
 }
 
