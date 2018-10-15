@@ -252,6 +252,8 @@ class ProbackupTest(object):
         os.environ['PATH'] = os.path.dirname(
             self.probackup_path) + ":" + os.environ['PATH']
 
+        self.probackup_old_path = None
+
         if "PGPROBACKUPBIN_OLD" in self.test_env:
             if (
                 os.path.isfile(self.test_env["PGPROBACKUPBIN_OLD"]) and
