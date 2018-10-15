@@ -167,10 +167,10 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	elog(LOG, "Merging backup %s with backup %s", from_backup_id, to_backup_id);
 
 	to_backup->status = BACKUP_STATUS_MERGING;
-	pgBackupWriteBackupControlFile(to_backup);
+	write_backup_status(to_backup);
 
 	from_backup->status = BACKUP_STATUS_MERGING;
-	pgBackupWriteBackupControlFile(from_backup);
+	write_backup_status(from_backup);
 
 	/*
 	 * Make backup paths.
@@ -326,7 +326,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		to_backup->wal_bytes = BYTES_INVALID;
 
 	pgBackupWriteFileList(to_backup, files, from_database_path);
-	pgBackupWriteBackupControlFile(to_backup);
+	write_backup_status(to_backup);
 
 	/* Cleanup */
 	pfree(threads_args);

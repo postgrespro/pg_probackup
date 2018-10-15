@@ -269,7 +269,7 @@ delete_backup_files(pgBackup *backup)
 	 * the error occurs before deleting all backup files.
 	 */
 	backup->status = BACKUP_STATUS_DELETING;
-	pgBackupWriteBackupControlFile(backup);
+	write_backup_status(backup);
 
 	/* list files to be deleted */
 	files = parray_new();

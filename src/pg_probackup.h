@@ -445,6 +445,9 @@ extern int do_validate_all(void);
 
 /* in catalog.c */
 extern pgBackup *read_backup(time_t timestamp);
+extern void write_backup(pgBackup *backup);
+extern void write_backup_status(pgBackup *backup);
+
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
 extern parray *catalog_get_backup_list(time_t requested_backup_id);
@@ -452,7 +455,6 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
-extern void pgBackupWriteBackupControlFile(pgBackup *backup);
 extern void pgBackupWriteFileList(pgBackup *backup, parray *files,
 								  const char *root);
 

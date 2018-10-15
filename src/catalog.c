@@ -217,6 +217,24 @@ read_backup(time_t timestamp)
 }
 
 /*
+ * Save the backup status into BACKUP_CONTROL_FILE.
+ *
+ * We need to reread the backup using its ID and save it changing only its
+ * status.
+ */
+void
+write_backup_status(pgBackup *backup)
+{
+	pgBackup   *tmp;
+
+	tmp = read_backup(backup->start_time);
+	tmp->status = backup->status;
+
+
+	pgBackupFree(tmp);
+}
+
+/*
  * Get backup_mode in string representation.
  */
 const char *
@@ -478,7 +496,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 /* create BACKUP_CONTROL_FILE */
 void
-pgBackupWriteBackupControlFile(pgBackup *backup)
+write_backup(pgBackup *backup)
 {
 	FILE   *fp = NULL;
 	char	ini_path[MAXPGPATH];
