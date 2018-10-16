@@ -42,6 +42,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(node.data_dir)
 
         self.show_pb(backup_dir)
+
         self.validate_pb(backup_dir)
 
         # RESTORE old FULL with new binary
@@ -64,6 +65,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             stderr=subprocess.STDOUT,
             options=["-c", "4", "-T", "10"]
         )
+        pgbench.wait()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='page',
@@ -87,15 +89,17 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             stderr=subprocess.STDOUT,
             options=["-c", "4", "-T", "10"]
         )
+        pgbench.wait()
 
         self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='page')
+            backup_dir, 'node', node, backup_type='page',
+            options=['--log-level-file=verbose'])
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
+
         self.restore_node(
             backup_dir, 'node', node_restored,
             options=["-j", "4", "--recovery-target-action=promote"])
