@@ -911,6 +911,8 @@ do_backup(time_t start_time)
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
+	StrNCpy(current.program_version, PROGRAM_VERSION,
+			sizeof(current.program_version));
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))

@@ -241,7 +241,7 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				*(char **) opt->var = pgut_strdup(optarg);
 				if (strcmp(optarg,"") != 0)
 					return;
-				message = "a valid string. But provided: ";
+				message = "a valid string";
 				break;
 			case 't':
 				if (parse_time(optarg, opt->var,

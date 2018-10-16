@@ -219,7 +219,8 @@ read_backup(time_t timestamp)
 /*
  * Save the backup status into BACKUP_CONTROL_FILE.
  *
- * We need to reread the backup using its ID and save it changing only its status.
+ * We need to reread the backup using its ID and save it changing only its
+ * status.
  */
 void
 write_backup_status(pgBackup *backup)
@@ -227,9 +228,10 @@ write_backup_status(pgBackup *backup)
 	pgBackup   *tmp;
 
 	tmp = read_backup(backup->start_time);
-	tmp->status = backup->status;
 
+	tmp->status = backup->status;
 	write_backup(tmp);
+
 	pgBackupFree(tmp);
 }
 
@@ -443,7 +445,8 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
 	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
-	fprintf(out, "program-version = %s\n", PROGRAM_VERSION);
+	if (backup->program_version[0] != '\0')
+		fprintf(out, "program-version = %s\n", backup->program_version);
 	if (backup->server_version[0] != '\0')
 		fprintf(out, "server-version = %s\n", backup->server_version);
 
@@ -493,17 +496,19 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 }
 
-/* create BACKUP_CONTROL_FILE */
+/*
+ * Save the backup content into BACKUP_CONTROL_FILE.
+ */
 void
 write_backup(pgBackup *backup)
 {
 	FILE   *fp = NULL;
-	char	ini_path[MAXPGPATH];
+	char	conf_path[MAXPGPATH];
 
-	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_CONTROL_FILE);
-	fp = fopen(ini_path, "wt");
+	pgBackupGetPath(backup, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
+	fp = fopen(conf_path, "wt");
 	if (fp == NULL)
-		elog(ERROR, "cannot open configuration file \"%s\": %s", ini_path,
+		elog(ERROR, "Cannot open configuration file \"%s\": %s", conf_path,
 			strerror(errno));
 
 	pgBackupWriteControl(fp, backup);
