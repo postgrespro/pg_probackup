@@ -454,9 +454,9 @@ class ProbackupTest(object):
                 continue
             if PageNum not in idx_dict['new_pages']:
                 # Page is not present now, meaning that relation got smaller
-                # Ptrack should be equal to 0,
+                # Ptrack should be equal to 1,
                 # We are not freaking out about false positive stuff
-                if idx_dict['ptrack'][PageNum] != 0:
+                if idx_dict['ptrack'][PageNum] != 1:
                     if self.verbose:
                         print(
                             'File: {0}\n Page Number {1} of type {2} was deleted,'
