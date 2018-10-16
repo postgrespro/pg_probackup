@@ -1037,22 +1037,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	return true;
 }
 
-/*
- * Move file from one backup to another.
- * We do not apply compression to these files, because
- * it is either small control file or already compressed cfs file.
- */
-void
-move_file(const char *from_root, const char *to_root, pgFile *file)
-{
-	char		to_path[MAXPGPATH];
-
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	if (rename(file->path, to_path) == -1)
-		elog(ERROR, "Cannot move file \"%s\" to path \"%s\": %s",
-			 file->path, to_path, strerror(errno));
-}
-
 #ifdef HAVE_LIBZ
 /*
  * Show error during work with compressed file

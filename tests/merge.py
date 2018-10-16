@@ -602,7 +602,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
 
-        gdb.set_breakpoint('move_file')
+        gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
         if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
@@ -615,3 +615,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Try to continue failed MERGE
         self.merge_backup(backup_dir, "node", backup_id)
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
