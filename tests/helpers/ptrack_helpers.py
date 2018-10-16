@@ -460,7 +460,7 @@ class ProbackupTest(object):
                     if self.verbose:
                         print(
                             'File: {0}\n Page Number {1} of type {2} was deleted,'
-                            ' but ptrack value is {3}'.format(
+                            ' but ptrack value is {3}. THIS IS BAD'.format(
                                 idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum])

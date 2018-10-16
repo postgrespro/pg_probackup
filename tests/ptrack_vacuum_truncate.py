@@ -116,8 +116,15 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         # Take PTRACK backup to clean every ptrack
-        self.backup_node(backup_dir, 'replica', replica, options=['-j10',
-            '--master-host=localhost', '--master-db=postgres', '--master-port={0}'.format(master.port)])
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '-j10',
+                '--master-host=localhost',
+                '--master-db=postgres',
+                '--master-port={0}'.format(master.port)
+                ]
+            )
 
         master.safe_psql('postgres', 'delete from t_heap where id > 128;')
         master.safe_psql('postgres', 'vacuum t_heap')
