@@ -35,7 +35,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             "create sequence t_seq; create table t_heap tablespace somedata "
             "as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,127) i")
+            "from generate_series(0,2560) i")
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
                 node.safe_psql(
@@ -63,6 +63,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'vacuum full t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
+        # CHECK PTRACK SANITY
+        success = True
         for i in idx_ptrack:
             # get new size of heap and indexes. size calculated in pages
             idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
@@ -77,7 +79,12 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
 
             # compare pages and check ptrack sanity, the most important part
-            self.check_ptrack_sanity(idx_ptrack[i])
+            if not self.check_ptrack_sanity(idx_ptrack[i]):
+                success = False
+
+        self.assertTrue(
+            success, 'Ptrack has failed to register changes in data files'
+        )
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -117,7 +124,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create sequence t_seq; create table t_heap as select i as id, "
             "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as "
-            "tsvector from generate_series(0,127) i")
+            "tsvector from generate_series(0,2560) i")
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
                 master.safe_psql(
@@ -133,8 +140,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Sync master and replica
         lsn = master.safe_psql(
             'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-#        print(lsn)
-
         replica.poll_query_until(
             "postgres",
             "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
@@ -168,18 +173,14 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Sync master and replica
         lsn = master.safe_psql(
             'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-#        print(lsn)
-
         replica.poll_query_until(
             "postgres",
             "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
                 lsn))
-
         replica.safe_psql('postgres', 'checkpoint')
 
-#        print(replica.safe_psql(
-#            'postgres', 'SELECT pg_catalog.pg_last_wal_replay_lsn()'))
-
+        # CHECK PTRACK SANITY
+        success = True
         for i in idx_ptrack:
             # get new size of heap and indexes. size calculated in pages
             idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
@@ -194,7 +195,12 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
 
             # compare pages and check ptrack sanity, the most important part
-            self.check_ptrack_sanity(idx_ptrack[i])
+            if not self.check_ptrack_sanity(idx_ptrack[i]):
+                success = False
+
+        self.assertTrue(
+                success, 'Ptrack has failed to register changes in data files'
+            )
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

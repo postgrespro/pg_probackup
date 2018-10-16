@@ -511,10 +511,10 @@ class ProbackupTest(object):
                                 idx_dict['ptrack'][PageNum]
                             )
                         )
-
-            self.assertTrue(
-                success, 'Ptrack has failed to register changes in data files'
-            )
+            return success
+            # self.assertTrue(
+            #    success, 'Ptrack has failed to register changes in data files'
+            # )
 
     def check_ptrack_recovery(self, idx_dict):
         size = idx_dict['size']

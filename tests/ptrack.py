@@ -1495,7 +1495,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             node,
             idx_ptrack['path']
         )
-        self.check_ptrack_sanity(idx_ptrack)
+
+        if not self.check_ptrack_sanity(idx_ptrack):
+            self.assertTrue(
+                False, 'Ptrack has failed to register changes in data files'
+            )
 
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
