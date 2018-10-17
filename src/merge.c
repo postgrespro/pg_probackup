@@ -80,7 +80,7 @@ do_merge(time_t backup_id)
 					 base36enc(backup->start_time), status2str(backup->status));
 
 			if (backup->backup_mode == BACKUP_MODE_FULL)
-				elog(ERROR, "Backup %s if full backup",
+				elog(ERROR, "Backup %s is full backup",
 					 base36enc(backup->start_time));
 
 			dest_backup = backup;
@@ -320,9 +320,10 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 			to_backup->data_bytes += file->write_size;
 	}
 	/* compute size of wal files of this backup stored in the archive */
-	if (!current.stream)
-		to_backup->wal_bytes = XLOG_SEG_SIZE *
-			(to_backup->stop_lsn / XLogSegSize - to_backup->start_lsn / XLogSegSize + 1);
+	if (!to_backup->stream)
+		to_backup->wal_bytes = xlog_seg_size *
+			(to_backup->stop_lsn / xlog_seg_size -
+			 to_backup->start_lsn / xlog_seg_size + 1);
 	else
 		to_backup->wal_bytes = BYTES_INVALID;
 
@@ -352,14 +353,9 @@ merge_files(void *arg)
 	merge_files_arg *argument = (merge_files_arg *) arg;
 	pgBackup   *to_backup = argument->to_backup;
 	pgBackup   *from_backup = argument->from_backup;
-	char		tmp_file_path[MAXPGPATH];
 	int			i,
 				num_files = parray_num(argument->files);
 	int			to_root_len = strlen(argument->to_root);
-
-	if (to_backup->compress_alg == PGLZ_COMPRESS ||
-		to_backup->compress_alg == ZLIB_COMPRESS)
-		join_path_components(tmp_file_path, argument->to_root, "tmp");
 
 	for (i = 0; i < num_files; i++)
 	{
@@ -433,7 +429,10 @@ merge_files(void *arg)
 			if (to_backup->compress_alg == PGLZ_COMPRESS ||
 				to_backup->compress_alg == ZLIB_COMPRESS)
 			{
+				char		tmp_file_path[MAXPGPATH];
 				char	   *prev_path;
+
+				snprintf(tmp_file_path, MAXPGPATH, "%s_tmp", to_path_tmp);
 
 				/* Start the magic */
 

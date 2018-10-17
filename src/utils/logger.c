@@ -32,9 +32,9 @@ char	   *log_directory = NULL;
 char		log_path[MAXPGPATH] = "";
 
 /* Maximum size of an individual log file in kilobytes */
-int			log_rotation_size = 0;
+uint64		log_rotation_size = 0;
 /* Maximum lifetime of an individual log file in minutes */
-int			log_rotation_age = 0;
+uint64		log_rotation_age = 0;
 
 /* Implementation for logging.h */
 
@@ -551,8 +551,8 @@ open_logfile(FILE **file, const char *filename_format)
 					/* Parsed creation time */
 
 					rotation_requested = (cur_time - creation_time) >
-						/* convert to seconds */
-						log_rotation_age * 60;
+						/* convert to seconds from milliseconds */
+						log_rotation_age / 1000;
 				}
 				else
 					elog_stderr(ERROR, "cannot read creation timestamp from "
