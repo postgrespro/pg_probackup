@@ -1633,8 +1633,8 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 static bool
 fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 {
-	pg_crc32	crc_from;
-	pg_crc32	crc_to;
+	pg_crc32	crc1;
+	pg_crc32	crc2;
 
 	/* Get checksum of backup file */
 #ifdef HAVE_LIBZ
@@ -1643,7 +1643,7 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 		char 		buf [1024];
 		gzFile		gz_in = NULL;
 
-		INIT_CRC32C(crc_to);
+		INIT_CRC32C(crc2);
 		gz_in = gzopen(path2, PG_BINARY_R);
 		if (gz_in == NULL)
 		{
@@ -1666,11 +1666,11 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 					 path1, path2);
 				return false;
 			}
-			COMP_CRC32C(crc_to, buf, read_len);
+			COMP_CRC32C(crc2, buf, read_len);
 			if (gzeof(gz_in) || read_len == 0)
 				break;
 		}
-		FIN_CRC32C(crc_to);
+		FIN_CRC32C(crc2);
 		
 		if (gzclose(gz_in) != 0)
 			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
@@ -1679,11 +1679,11 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 	else
 #endif
 	{
-		crc_to = pgFileGetCRC(path2);
+		crc2 = pgFileGetCRC(path2);
 	}
 
 	/* Get checksum of original file */
-	crc_from = pgFileGetCRC(path1);
+	crc1 = pgFileGetCRC(path1);
 
-	return EQ_CRC32C(crc_from, crc_to);
+	return EQ_CRC32C(crc1, crc2);
 }
