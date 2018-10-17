@@ -218,6 +218,12 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'vacuum t_heap')
         master.safe_psql('postgres', 'checkpoint')
 
+        self.backup_node(
+            backup_dir, 'replica', replica, options=[
+                '-j10', '--stream', '--master-host=localhost',
+                '--master-db=postgres', '--master-port={0}'.format(
+                    master.port)])
+
         for i in idx_ptrack:
             # get size of heap and indexes. size calculated in pages
             idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
@@ -227,15 +233,18 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
-        self.backup_node(
-            backup_dir, 'replica', replica, options=[
-                '-j10', '--stream', '--master-host=localhost',
-                '--master-db=postgres', '--master-port={0}'.format(
-                    master.port)])
-
         master.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
         master.safe_psql('postgres', 'cluster t_heap using t_btree')
         master.safe_psql('postgres', 'checkpoint')
+
+        # Sync master and replica
+        lsn = master.safe_psql(
+            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
+        replica.poll_query_until(
+            "postgres",
+            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
+                lsn))
+        replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
         success = True
@@ -322,6 +331,12 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 lsn))
         replica.safe_psql('postgres', 'checkpoint')
 
+        self.backup_node(
+            backup_dir, 'replica', replica, options=[
+                '-j10', '--stream', '--master-host=localhost',
+                '--master-db=postgres', '--master-port={0}'.format(
+                    master.port)])
+
         for i in idx_ptrack:
             # get size of heap and indexes. size calculated in pages
             idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
@@ -330,12 +345,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # calculate md5sums of pages
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
-
-        self.backup_node(
-            backup_dir, 'replica', replica, options=[
-                '-j10', '--stream', '--master-host=localhost',
-                '--master-db=postgres', '--master-port={0}'.format(
-                    master.port)])
 
         master.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
         master.safe_psql('postgres', 'cluster t_heap using t_gist')
