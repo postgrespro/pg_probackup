@@ -47,6 +47,12 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql('postgres', 'checkpoint')
 
+        self.backup_node(
+            backup_dir, 'node', node, options=['-j10', '--stream'])
+
+        node.safe_psql('postgres', 'vacuum freeze t_heap')
+        node.safe_psql('postgres', 'checkpoint')
+
         for i in idx_ptrack:
             # get size of heap and indexes. size calculated in pages
             idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -55,12 +61,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # calculate md5sums of pages
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
-
-        self.backup_node(
-            backup_dir, 'node', node, options=['-j10', '--stream'])
-
-        node.safe_psql('postgres', 'vacuum freeze t_heap')
-        node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
         success = True
@@ -144,15 +144,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 lsn))
         replica.safe_psql('postgres', 'checkpoint')
 
-        for i in idx_ptrack:
-            # get size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
-            # get path to heap and index files
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate md5sums of pages
-            idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
-
         # Take PTRACK backup to clean every ptrack
         self.backup_node(
             backup_dir, 'replica', replica,
@@ -161,6 +152,15 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 '--master-host=localhost',
                 '--master-db=postgres',
                 '--master-port={0}'.format(master.port)])
+
+        for i in idx_ptrack:
+            # get size of heap and indexes. size calculated in pages
+            idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
+            # get path to heap and index files
+            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
+            # calculate md5sums of pages
+            idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         master.safe_psql('postgres', 'vacuum freeze t_heap')
         master.safe_psql('postgres', 'checkpoint')

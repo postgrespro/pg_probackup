@@ -8,7 +8,7 @@ module_name = 'ptrack_truncate'
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_truncate(self):
         fname = self.id().split('.')[3]
@@ -69,7 +69,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_ptrack_truncate_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
@@ -136,7 +136,13 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         # Make full backup to clean every ptrack
         self.backup_node(
-            backup_dir, 'replica', replica, options=['-j10', '--stream'])
+            backup_dir, 'replica', replica,
+            options=[
+                '-j10',
+                '--master-host=localhost',
+                '--master-db=postgres',
+                '--master-port={0}'.format(master.port)])
+
         for i in idx_ptrack:
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 replica, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
