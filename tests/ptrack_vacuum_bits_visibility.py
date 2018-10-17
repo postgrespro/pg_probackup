@@ -47,15 +47,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql('postgres', 'checkpoint')
 
-        # Sync master and replica
-        lsn = master.safe_psql(
-            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-        replica.poll_query_until(
-            "postgres",
-            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
-                lsn))
-        replica.safe_psql('postgres', 'checkpoint')
-
         for i in idx_ptrack:
             # get size of heap and indexes. size calculated in pages
             idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -70,15 +61,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql('postgres', 'vacuum t_heap')
         node.safe_psql('postgres', 'checkpoint')
-
-        # Sync master and replica
-        lsn = master.safe_psql(
-            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-        replica.poll_query_until(
-            "postgres",
-            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
-                lsn))
-        replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
         success = True

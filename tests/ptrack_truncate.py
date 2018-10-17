@@ -60,6 +60,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Make full backup to clean every ptrack
         self.backup_node(
             backup_dir, 'node', node, options=['-j10', '--stream'])
+
         for i in idx_ptrack:
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 node, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
@@ -100,6 +101,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         replica.start()
 
         # Create table and indexes
+        self.create_tblspace_in_node(master, 'somedata')
         master.safe_psql(
             "postgres",
             "create sequence t_seq; create table t_heap tablespace somedata "
@@ -113,9 +115,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                     "tablespace somedata".format(
                         i, idx_ptrack[i]['relation'],
                         idx_ptrack[i]['type'], idx_ptrack[i]['column']))
-
-        replica.safe_psql('postgres', 'truncate t_heap')
-        replica.safe_psql('postgres', 'checkpoint')
 
         # Sync master and replica
         lsn = master.safe_psql(
@@ -143,9 +142,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 replica, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
 
-        # Delete some rows, vacuum it and make checkpoint
-        master.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
-        master.safe_psql('postgres', 'vacuum t_heap')
+        master.safe_psql('postgres', 'truncate t_heap')
         master.safe_psql('postgres', 'checkpoint')
 
         # Sync master and replica
