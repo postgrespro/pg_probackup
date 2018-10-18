@@ -798,7 +798,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		if (ftruncate(fileno(out), write_pos) != 0)
 			elog(ERROR, "cannot truncate \"%s\": %s",
 				 file->path, strerror(errno));
-		elog(INFO, "Delta truncate file %s to block %u",
+		elog(VERBOSE, "Delta truncate file %s to block %u",
 			 file->path, truncate_from);
 	}
 
