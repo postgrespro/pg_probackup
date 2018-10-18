@@ -1412,48 +1412,52 @@ calc_file_checksum(pgFile *file)
 	return true;
 }
 
-/* Validate given page
- * return value:
+/*
+ * Validate given page.
+ *
+ * Returns value:
  * 0  - if the page is not found
  * 1  - if the page is found and valid
  * -1 - if the page is found but invalid
  */
 #define PAGE_IS_NOT_FOUND 0
 #define PAGE_IS_FOUND_AND_VALID 1
-#define PAGE_IS_FOUND_AND__NOT_VALID -1
+#define PAGE_IS_FOUND_AND_NOT_VALID -1
 static int
 validate_one_page(Page page, pgFile *file,
 				  BlockNumber blknum, XLogRecPtr stop_lsn,
 				  uint32 checksum_version)
 {
 	PageHeader	phdr;
-	XLogRecPtr lsn;
-	bool page_header_is_sane = false;
-	bool checksum_is_ok = false;
+	XLogRecPtr	lsn;
+	bool		page_header_is_sane = false;
+	bool		checksum_is_ok = false;
 
 	/* new level of paranoia */
 	if (page == NULL)
 	{
-		elog(LOG, "File %s, block %u, page is NULL",
-					file->path, blknum);
-			return PAGE_IS_NOT_FOUND;
+		elog(LOG, "File \"%s\", block %u, page is NULL", file->path, blknum);
+		return PAGE_IS_NOT_FOUND;
 	}
+
+	phdr = (PageHeader) page;
 
 	if (PageIsNew(page))
 	{
-		int i;
+		int			i;
+
 		/* Check if the page is zeroed. */
 		for(i = 0; i < BLCKSZ && page[i] == 0; i++);
 
 		if (i == BLCKSZ)
 		{
-			elog(LOG, "File: %s blknum %u, page is New. empty zeroed page",
+			elog(LOG, "File: %s blknum %u, page is New, empty zeroed page",
 				 file->path, blknum);
 			return PAGE_IS_FOUND_AND_VALID;
 		}
 		else
 		{
-			elog(WARNING, "File: %s, block %u, page is New, but not zeroed",
+			elog(WARNING, "File: %s blknum %u, page is New, but not zeroed",
 				 file->path, blknum);
 		}
 
@@ -1462,8 +1466,6 @@ validate_one_page(Page page, pgFile *file,
 	}
 	else
 	{
-		phdr = (PageHeader) page;
-
 		if (PageGetPageSize(phdr) == BLCKSZ &&
 			PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 			(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
@@ -1478,7 +1480,7 @@ validate_one_page(Page page, pgFile *file,
 	if (page_header_is_sane)
 	{
 		/* Verify checksum */
-		if(checksum_version)
+		if (checksum_version)
 		{
 			/*
 			* If checksum is wrong, sleep a bit and then try again
@@ -1495,8 +1497,7 @@ validate_one_page(Page page, pgFile *file,
 					 file->path, blknum);
 			}
 		}
-
-		if (!checksum_version)
+		else
 		{
 			/* Get lsn from page header. Ensure that page is from our time */
 			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
@@ -1525,7 +1526,7 @@ validate_one_page(Page page, pgFile *file,
 		}
 	}
 
-	return PAGE_IS_FOUND_AND__NOT_VALID;
+	return PAGE_IS_FOUND_AND_NOT_VALID;
 }
 
 /* Valiate pages of datafile in backup one by one */
@@ -1610,13 +1611,13 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 					 file->path, uncompressed_size);
 
 			if (validate_one_page(page.data, file, blknum,
-				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND__NOT_VALID)
+				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
 				is_valid = false;
 		}
 		else
 		{
 			if (validate_one_page(compressed_page.data, file, blknum,
-				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND__NOT_VALID)
+				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
 				is_valid = false;
 		}
 	}
