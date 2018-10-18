@@ -24,7 +24,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -85,7 +85,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
@@ -98,7 +98,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, 'replica', synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # Create table and indexes
         self.create_tblspace_in_node(master, 'somedata')
@@ -117,12 +117,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                         idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
         # Sync master and replica
-        lsn = master.safe_psql(
-            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-        replica.poll_query_until(
-            "postgres",
-            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
-                lsn))
+        self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -152,12 +147,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'checkpoint')
 
         # Sync master and replica
-        lsn = master.safe_psql(
-            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-        replica.poll_query_until(
-            "postgres",
-            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
-                lsn))
+        self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY

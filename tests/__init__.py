@@ -2,7 +2,7 @@ import unittest
 
 from . import init_test, merge, option_test, show_test, compatibility, \
     backup_test, delete_test, delta, restore_test, validate_test, \
-    retention_test, ptrack_clean, ptrack_cluster, \
+    retention_test, ptrack_clean, ptrack_empty, ptrack_cluster, \
     ptrack_move_to_tablespace, ptrack_recovery, ptrack_truncate, \
     ptrack_vacuum, ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
@@ -31,6 +31,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(page))
     suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(ptrack_clean))
+    suite.addTests(loader.loadTestsFromModule(ptrack_empty))
     suite.addTests(loader.loadTestsFromModule(ptrack_cluster))
     suite.addTests(loader.loadTestsFromModule(ptrack_move_to_tablespace))
     suite.addTests(loader.loadTestsFromModule(ptrack_recovery))

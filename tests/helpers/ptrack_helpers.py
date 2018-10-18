@@ -48,6 +48,11 @@ idx_ptrack = {
         'column': 'tsvector',
         'relation': 't_heap'
     },
+    't_hash': {
+        'type': 'hash',
+        'column': 'id',
+        'relation': 't_heap'
+    }
 }
 
 archive_script = """
@@ -1001,6 +1006,27 @@ class ProbackupTest(object):
                 node.execute("select pg_switch_wal()")
             else:
                 node.execute("select pg_switch_xlog()")
+
+    def wait_until_replica_catch_with_master(self, master, replica):
+
+        if self.version_to_num(
+                master.safe_psql(
+                    "postgres",
+                    "show server_version")) >= self.version_to_num('10.0'):
+            master_function = 'pg_catalog.pg_current_wal_lsn()'
+            replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
+        else:
+            master_function = 'pg_catalog.pg_current_xlog_location()'
+            replica_function = 'pg_catalog.pg_last_xlog_replay_location()'
+
+        lsn = master.safe_psql(
+            'postgres',
+            'SELECT {0}'.format(master_function)).rstrip()
+
+        # Wait until replica catch up with master
+        replica.poll_query_until(
+            'postgres',
+            "SELECT '{0}'::pg_lsn <= {1}".format(lsn, replica_function))
 
     def get_version(self, node):
         return self.version_to_num(

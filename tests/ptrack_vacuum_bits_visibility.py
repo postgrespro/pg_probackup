@@ -24,7 +24,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 

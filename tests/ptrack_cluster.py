@@ -238,12 +238,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'checkpoint')
 
         # Sync master and replica
-        lsn = master.safe_psql(
-            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-        replica.poll_query_until(
-            "postgres",
-            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
-                lsn))
+        self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
@@ -323,12 +318,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'checkpoint')
 
         # Sync master and replica
-        lsn = master.safe_psql(
-            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-        replica.poll_query_until(
-            "postgres",
-            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
-                lsn))
+        self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
         self.backup_node(
@@ -351,12 +341,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'checkpoint')
 
         # Sync master and replica
-        lsn = master.safe_psql(
-            'postgres', 'SELECT pg_catalog.pg_current_wal_lsn()').rstrip()
-        replica.poll_query_until(
-            "postgres",
-            "SELECT '{0}'::pg_lsn <= pg_last_wal_replay_lsn()".format(
-                lsn))
+        self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
