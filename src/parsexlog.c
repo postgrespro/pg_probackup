@@ -476,7 +476,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 		 * the backup is definitely corrupted. Update its status.
 		 */
 		backup->status = BACKUP_STATUS_CORRUPT;
-		pgBackupWriteBackupControlFile(backup);
+		write_backup_status(backup);
 
 		elog(WARNING, "There are not enough WAL records to consistenly restore "
 			"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",

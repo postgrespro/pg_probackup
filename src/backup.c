@@ -536,7 +536,7 @@ do_backup_instance(void)
 		prev_backup_start_lsn = prev_backup->start_lsn;
 		current.parent_backup = prev_backup->start_time;
 
-		pgBackupWriteBackupControlFile(&current);
+		write_backup(&current);
 	}
 
 	/*
@@ -911,11 +911,13 @@ do_backup(time_t start_time)
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
+	StrNCpy(current.program_version, PROGRAM_VERSION,
+			sizeof(current.program_version));
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "cannot create backup directory");
-	pgBackupWriteBackupControlFile(&current);
+	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");
 
@@ -937,7 +939,7 @@ do_backup(time_t start_time)
 	/* Backup is done. Update backup status */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
-	pgBackupWriteBackupControlFile(&current);
+	write_backup(&current);
 
 	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 	//		current.data_bytes);
@@ -2015,7 +2017,7 @@ backup_cleanup(bool fatal, void *userdata)
 			 base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
-		pgBackupWriteBackupControlFile(&current);
+		write_backup(&current);
 	}
 
 	/*
