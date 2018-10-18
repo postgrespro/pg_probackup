@@ -21,6 +21,7 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
 #    suite.addTests(loader.loadTestsFromModule(logging))
     suite.addTests(loader.loadTestsFromModule(compression))
+    suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(delete_test))
     suite.addTests(loader.loadTestsFromModule(delta))
     suite.addTests(loader.loadTestsFromModule(exclude))
