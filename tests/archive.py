@@ -1,6 +1,6 @@
 import os
 import shutil
-import zlib
+import gzip
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, archive_script
 from datetime import datetime, timedelta
@@ -329,13 +329,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         wal_src = os.path.join(node.data_dir, 'pg_wal', '000000010000000000000001')
         if self.archive_compress:
-            with open(wal_src, 'rb') as f_in, open(file, 'wb') as f_out:
-                original_wal = f_in.read()
-                compressed_wal = zlib.compress(original_wal, 1)
-                f_out.write(compressed_wal)
+            with open(wal_src, 'rb') as f_in, gzip.open(file, 'wb', compresslevel=1) as f_out:
+                shutil.copyfileobj(f_in, f_out)
         else:
             shutil.copyfile(wal_src, file)
-        
+
         self.switch_wal_segment(node)
         sleep(5)
 

@@ -1124,7 +1124,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			return;
 			/* Do not copy and do not rise error. Just quit as normal. */
 		else if (!overwrite)
-			elog(ERROR, "WAL segment \"%s\" already exists.", to_path);
+			elog(ERROR, "WAL segment \"%s\" already exists.", to_path_p);
 	}
 
 	/* open backup file for write  */
