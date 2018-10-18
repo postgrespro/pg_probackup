@@ -8,9 +8,9 @@
  *-------------------------------------------------------------------------
  */
 
-#include <unistd.h>
-
 #include "pg_probackup.h"
+
+#include <unistd.h>
 
 /*
  * pg_probackup specific archive command for archive backups

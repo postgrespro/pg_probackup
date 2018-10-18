@@ -8,11 +8,11 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
+
 #include <time.h>
 #include <dirent.h>
 #include <sys/stat.h>
-
-#include "pg_probackup.h"
 
 #include "utils/json.h"
 

@@ -8,10 +8,10 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
+
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include "pg_probackup.h"
 
 /*
  * Read a file into memory. The file to be read is <datadir>/<path>.

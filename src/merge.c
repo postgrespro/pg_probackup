@@ -7,10 +7,10 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
+
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include "pg_probackup.h"
 
 #include "utils/thread.h"
 

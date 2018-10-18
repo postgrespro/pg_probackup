@@ -8,7 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
+#include "pg_probackup.h"
 
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
@@ -18,8 +18,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
-
-#include "pg_probackup.h"
 
 /*
  * The contents of these directories are removed or recreated during server

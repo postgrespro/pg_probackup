@@ -8,12 +8,12 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
+
 #include <dirent.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include "pg_probackup.h"
 
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);

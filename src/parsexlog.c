@@ -10,7 +10,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
+#include "pg_probackup.h"
 
 #include "access/transam.h"
 #include "catalog/pg_control.h"
@@ -20,8 +20,6 @@
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 #endif
-
-#include "pg_probackup.h"
 
 #include "utils/thread.h"
 

@@ -8,13 +8,11 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
+#include "pg_probackup.h"
 
 #include "catalog/pg_control.h"
 
 #include <time.h>
-
-#include "pg_probackup.h"
 
 const char *
 base36enc(long unsigned int value)

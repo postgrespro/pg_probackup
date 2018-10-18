@@ -8,14 +8,12 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
+#include "pg_probackup.h"
 
 #include "pg_getopt.h"
 #include "streamutil.h"
 
 #include <sys/stat.h>
-
-#include "pg_probackup.h"
 
 #include "utils/thread.h"
 

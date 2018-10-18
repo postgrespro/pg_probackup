@@ -8,7 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
+#include "pg_probackup.h"
 
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
@@ -20,8 +20,6 @@
 
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include "pg_probackup.h"
 
 #include "utils/thread.h"
 

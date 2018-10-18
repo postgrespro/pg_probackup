@@ -8,15 +8,13 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
+#include "pg_probackup.h"
 
 #include "storage/checksum.h"
 #include "storage/checksum_impl.h"
 #include <common/pg_lzcompress.h>
 
 #include <sys/stat.h>
-
-#include "pg_probackup.h"
 
 #ifdef HAVE_LIBZ
 #include <zlib.h>

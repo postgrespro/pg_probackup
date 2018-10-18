@@ -8,11 +8,11 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
+
 #include <dirent.h>
 #include <time.h>
 #include <unistd.h>
-
-#include "pg_probackup.h"
 
 static int delete_backup_files(pgBackup *backup);
 static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,

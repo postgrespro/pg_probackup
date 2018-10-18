@@ -8,10 +8,10 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
+
 #include <unistd.h>
 #include <sys/stat.h>
-
-#include "pg_probackup.h"
 
 /*
  * Initialize backup catalog.
