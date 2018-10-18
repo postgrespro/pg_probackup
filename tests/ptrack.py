@@ -1341,6 +1341,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
+        node_restored.port = node.port
         node_restored.slow_start()
 
         # Clean after yourself

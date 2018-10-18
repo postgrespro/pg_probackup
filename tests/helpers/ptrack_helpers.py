@@ -52,6 +52,11 @@ idx_ptrack = {
         'type': 'hash',
         'column': 'id',
         'relation': 't_heap'
+    },
+    't_bloom': {
+        'type': 'bloom',
+        'column': 'id',
+        'relation': 't_heap'
     }
 }
 
