@@ -1751,32 +1751,27 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 		INIT_CRC32C(crc2);
 		gz_in = gzopen(path2, PG_BINARY_R);
 		if (gz_in == NULL)
-		{
-			/* There is no such file or it cannot be read */
-			elog(LOG, 
+			/* File cannot be read */
+			elog(ERROR,
 					 "Cannot compare WAL file \"%s\" with compressed \"%s\"",
 					 path1, path2);
-			return false;
-		}
 
 		for (;;)
 		{
 			size_t read_len = 0;
 			read_len = gzread(gz_in, buf, sizeof(buf));
 			if (read_len != sizeof(buf) && !gzeof(gz_in))
-			{
 				/* An error occurred while reading the file */
-				elog(LOG, 
+				elog(ERROR,
 					 "Cannot compare WAL file \"%s\" with compressed \"%s\"",
 					 path1, path2);
-				return false;
-			}
+
 			COMP_CRC32C(crc2, buf, read_len);
 			if (gzeof(gz_in) || read_len == 0)
 				break;
 		}
 		FIN_CRC32C(crc2);
-		
+
 		if (gzclose(gz_in) != 0)
 			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
 				 path2, get_gz_error(gz_in, errno));
