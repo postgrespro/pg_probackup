@@ -34,7 +34,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table
         node.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap "
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
             "(id int DEFAULT nextval('t_seq'), text text, tsvector tsvector) "
             "tablespace somedata")
 
@@ -120,7 +121,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table
         master.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap "
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
             "(id int DEFAULT nextval('t_seq'), text text, tsvector tsvector)")
         self.wait_until_replica_catch_with_master(master, replica)
 
