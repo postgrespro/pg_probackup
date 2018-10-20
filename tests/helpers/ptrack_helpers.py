@@ -874,7 +874,7 @@ class ProbackupTest(object):
         return out_dict
 
     def set_archiving(
-            self, backup_dir, instance, node, replica=False, overwrite=False,
+            self, backup_dir, instance, node, replica=False, overwrite=False, compress=False,
             old_binary=False):
 
         if replica:
@@ -895,7 +895,7 @@ class ProbackupTest(object):
             self.probackup_path, backup_dir, instance)
 
         if os.name == 'posix':
-            if self.archive_compress:
+            if self.archive_compress or compress:
                 archive_command = archive_command + "--compress "
 
             if overwrite:
