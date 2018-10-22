@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import subprocess
 from sys import exit
 import time
+import hashlib
 
 
 module_name = 'validate'
@@ -3060,6 +3061,76 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_corrupt_pg_control_via_resetxlog(self):
+        """ PGPRO-2096 """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        if self.get_version(node) < 100000:
+            pg_resetxlog_path = self.get_bin_path('pg_resetxlog')
+            wal_dir = 'pg_xlog'
+        else:
+            pg_resetxlog_path = self.get_bin_path('pg_resetwal')
+            wal_dir = 'pg_wal'
+
+        os.mkdir(
+            os.path.join(
+                backup_dir, 'backups', 'node', backup_id, 'database', wal_dir, 'archive_status'))
+
+        pg_control_path = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'global', 'pg_control')
+
+        md5_before = hashlib.md5(
+            open(pg_control_path, 'rb').read()).hexdigest()
+
+        self.run_binary(
+            [
+                pg_resetxlog_path,
+                os.path.join(backup_dir, 'backups', 'node', backup_id, 'database'),
+                '-o 42',
+                '-f'
+            ],
+            async=False)
+
+        md5_after = hashlib.md5(
+            open(pg_control_path, 'rb').read()).hexdigest()
+
+        if self.verbose:
+            print('\n MD5 BEFORE resetxlog: {0}\n MD5 AFTER resetxlog: {1}'.format(
+                md5_before, md5_after))
+
+        # Validate backup
+        try:
+            self.validate_pb(backup_dir, 'node')
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of pg_control change.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'data files are corrupted',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
