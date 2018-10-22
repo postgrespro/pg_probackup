@@ -508,10 +508,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         restored_node.append_conf(
             "postgresql.auto.conf", "port = {0}".format(restored_node.port))
-        restored_node.start()
-        while restored_node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
+        restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
             "postgres", "select * from pgbench_accounts")
@@ -946,11 +943,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
-        while node_restored.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            time.sleep(1)
         result_new = node_restored.safe_psql(
             "postgres", "select * from t_heap")
 
@@ -1191,7 +1185,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             f.close
 
         self.assertTrue(
-            self.show_pb(backup_dir, 'node')[1]['Status'] == 'OK',
+            self.show_pb(backup_dir, 'node')[1]['status'] == 'OK',
             "Backup Status should be OK")
 
         # Clean after yourself
@@ -1264,8 +1258,78 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         self.assertTrue(
-             self.show_pb(backup_dir, 'node')[1]['Status'] == 'ERROR',
+             self.show_pb(backup_dir, 'node')[1]['status'] == 'ERROR',
              "Backup Status should be ERROR")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_delta_nullified_heap_page_backup(self):
+        """
+        make node, take full backup, nullify some heap block,
+        take delta backup, restore, physically compare pgdata`s
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=1)
+
+        file_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        # Nullify some block in PostgreSQL
+        file = os.path.join(node.data_dir, file_path)
+
+        with open(file, 'r+b', 0) as f:
+            f.seek(8192)
+            f.write(b"\x00"*8192)
+            f.flush()
+            f.close
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=["--log-level-file=verbose"])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
+        with open(log_file_path) as f:
+            self.assertTrue("LOG: File: {0} blknum 1, empty page".format(
+                file) in f.read())
+            self.assertFalse("Skipping blknum: 1 in file: {0}".format(
+                file) in f.read())
+
+        # Restore DELTA backup
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored
+        )
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

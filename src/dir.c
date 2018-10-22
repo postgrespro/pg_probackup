@@ -10,16 +10,15 @@
 
 #include "pg_probackup.h"
 
+#if PG_VERSION_NUM < 110000
+#include "catalog/catalog.h"
+#endif
+#include "catalog/pg_tablespace.h"
+
 #include <libgen.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <dirent.h>
-#include <time.h>
-
-#include "catalog/catalog.h"
-#include "catalog/pg_tablespace.h"
-#include "datapagemap.h"
 
 /*
  * The contents of these directories are removed or recreated during server
@@ -88,6 +87,34 @@ static char *pgdata_exclude_files_non_exclusive[] =
 	NULL
 };
 
+/* Tablespace mapping structures */
+
+typedef struct TablespaceListCell
+{
+	struct TablespaceListCell *next;
+	char		old_dir[MAXPGPATH];
+	char		new_dir[MAXPGPATH];
+} TablespaceListCell;
+
+typedef struct TablespaceList
+{
+	TablespaceListCell *head;
+	TablespaceListCell *tail;
+} TablespaceList;
+
+typedef struct TablespaceCreatedListCell
+{
+	struct TablespaceCreatedListCell *next;
+	char		link_name[MAXPGPATH];
+	char		linked_dir[MAXPGPATH];
+} TablespaceCreatedListCell;
+
+typedef struct TablespaceCreatedList
+{
+	TablespaceCreatedListCell *head;
+	TablespaceCreatedListCell *tail;
+} TablespaceCreatedList;
+
 static int BlackListCompare(const void *str1, const void *str2);
 
 static bool dir_check_file(const char *root, pgFile *file);
@@ -95,17 +122,23 @@ static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
 								   bool omit_symlink, parray *black_list, bool is_extra);
 
+static void list_data_directories(parray *files, const char *path, bool is_root,
+								  bool exclude);
+
+/* Tablespace mapping */
+static TablespaceList tablespace_dirs = {NULL, NULL};
+static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
+
 /*
  * Create directory, also create parent directories if necessary.
  */
 int
 dir_create_dir(const char *dir, mode_t mode)
 {
-	char		copy[MAXPGPATH];
 	char		parent[MAXPGPATH];
 
-	strncpy(copy, dir, MAXPGPATH);
-	strncpy(parent, dirname(copy), MAXPGPATH);
+	strncpy(parent, dir, MAXPGPATH);
+	get_parent_directory(parent);
 
 	/* Create parent first */
 	if (access(parent, F_OK) == -1)
@@ -155,6 +188,8 @@ pgFileInit(const char *path)
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 
+	file->name = NULL;
+
 	file->size = 0;
 	file->mode = 0;
 	file->read_size = 0;
@@ -163,7 +198,8 @@ pgFileInit(const char *path)
 	file->is_datafile = false;
 	file->linked = NULL;
 	file->pagemap.bitmap = NULL;
-	file->pagemap.bitmapsize = PageBitmapIsAbsent;
+	file->pagemap.bitmapsize = PageBitmapIsEmpty;
+	file->pagemap_isabsent = false;
 	file->tblspcOid = 0;
 	file->dbOid = 0;
 	file->relOid = 0;
@@ -187,7 +223,8 @@ pgFileInit(const char *path)
 
 	file->is_cfs = false;
 	file->exists_in_prev = false;	/* can change only in Incremental backup. */
-	file->n_blocks = -1;			/* can change only in DELTA backup. Number of blocks readed during backup */
+	/* Number of blocks readed during backup */
+	file->n_blocks = BLOCKNUM_INVALID;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	return file;
 }
@@ -225,7 +262,7 @@ delete_file:
 }
 
 pg_crc32
-pgFileGetCRC(pgFile *file)
+pgFileGetCRC(const char *file_path)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
@@ -234,10 +271,10 @@ pgFileGetCRC(pgFile *file)
 	int			errno_tmp;
 
 	/* open file in binary read mode */
-	fp = fopen(file->path, "r");
+	fp = fopen(file_path, PG_BINARY_R);
 	if (fp == NULL)
 		elog(ERROR, "cannot open file \"%s\": %s",
-			file->path, strerror(errno));
+			file_path, strerror(errno));
 
 	/* calc CRC of backup file */
 	INIT_CRC32C(crc);
@@ -249,7 +286,7 @@ pgFileGetCRC(pgFile *file)
 	}
 	errno_tmp = errno;
 	if (!feof(fp))
-		elog(WARNING, "cannot read \"%s\": %s", file->path,
+		elog(WARNING, "cannot read \"%s\": %s", file_path,
 			strerror(errno_tmp));
 	if (len > 0)
 		COMP_CRC32C(crc, buf, len);
@@ -333,7 +370,7 @@ BlackListCompare(const void *str1, const void *str2)
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
  *
  * When omit_symlink is true, symbolic link is ignored and only file or
- * directory llnked to will be listed.
+ * directory linked to will be listed.
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
@@ -352,7 +389,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fopen(path, "r");
+		black_list_file = fopen(path, PG_BINARY_R);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));
@@ -391,7 +428,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	}
 
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list, is_extra);
-	parray_qsort(files, pgFileComparePath);
 }
 
 /*
@@ -689,7 +725,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
  * **is_root** is a little bit hack. We exclude only first level of directories
  * and on the first level we check all files and directories.
  */
-void
+static void
 list_data_directories(parray *files, const char *path, bool is_root,
 					  bool exclude)
 {
@@ -762,6 +798,271 @@ list_data_directories(parray *files, const char *path, bool is_root,
 }
 
 /*
+ * Save create directory path into memory. We can use it in next page restore to
+ * not raise the error "restore tablespace destination is not empty" in
+ * create_data_directories().
+ */
+static void
+set_tablespace_created(const char *link, const char *dir)
+{
+	TablespaceCreatedListCell *cell = pgut_new(TablespaceCreatedListCell);
+
+	strcpy(cell->link_name, link);
+	strcpy(cell->linked_dir, dir);
+	cell->next = NULL;
+
+	if (tablespace_created_dirs.tail)
+		tablespace_created_dirs.tail->next = cell;
+	else
+		tablespace_created_dirs.head = cell;
+	tablespace_created_dirs.tail = cell;
+}
+
+/*
+ * Retrieve tablespace path, either relocated or original depending on whether
+ * -T was passed or not.
+ *
+ * Copy of function get_tablespace_mapping() from pg_basebackup.c.
+ */
+static const char *
+get_tablespace_mapping(const char *dir)
+{
+	TablespaceListCell *cell;
+
+	for (cell = tablespace_dirs.head; cell; cell = cell->next)
+		if (strcmp(dir, cell->old_dir) == 0)
+			return cell->new_dir;
+
+	return dir;
+}
+
+/*
+ * Is directory was created when symlink was created in restore_directories().
+ */
+static const char *
+get_tablespace_created(const char *link)
+{
+	TablespaceCreatedListCell *cell;
+
+	for (cell = tablespace_created_dirs.head; cell; cell = cell->next)
+		if (strcmp(link, cell->link_name) == 0)
+			return cell->linked_dir;
+
+	return NULL;
+}
+
+/*
+ * Split argument into old_dir and new_dir and append to tablespace mapping
+ * list.
+ *
+ * Copy of function tablespace_list_append() from pg_basebackup.c.
+ */
+void
+opt_tablespace_map(pgut_option *opt, const char *arg)
+{
+	TablespaceListCell *cell = pgut_new(TablespaceListCell);
+	char	   *dst;
+	char	   *dst_ptr;
+	const char *arg_ptr;
+
+	dst_ptr = dst = cell->old_dir;
+	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
+	{
+		if (dst_ptr - dst >= MAXPGPATH)
+			elog(ERROR, "directory name too long");
+
+		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
+			;					/* skip backslash escaping = */
+		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
+		{
+			if (*cell->new_dir)
+				elog(ERROR, "multiple \"=\" signs in tablespace mapping\n");
+			else
+				dst = dst_ptr = cell->new_dir;
+		}
+		else
+			*dst_ptr++ = *arg_ptr;
+	}
+
+	if (!*cell->old_dir || !*cell->new_dir)
+		elog(ERROR, "invalid tablespace mapping format \"%s\", "
+			 "must be \"OLDDIR=NEWDIR\"", arg);
+
+	/*
+	 * This check isn't absolutely necessary.  But all tablespaces are created
+	 * with absolute directories, so specifying a non-absolute path here would
+	 * just never match, possibly confusing users.  It's also good to be
+	 * consistent with the new_dir check.
+	 */
+	if (!is_absolute_path(cell->old_dir))
+		elog(ERROR, "old directory is not an absolute path in tablespace mapping: %s\n",
+			 cell->old_dir);
+
+	if (!is_absolute_path(cell->new_dir))
+		elog(ERROR, "new directory is not an absolute path in tablespace mapping: %s\n",
+			 cell->new_dir);
+
+	if (tablespace_dirs.tail)
+		tablespace_dirs.tail->next = cell;
+	else
+		tablespace_dirs.head = cell;
+	tablespace_dirs.tail = cell;
+}
+
+/*
+ * Create backup directories from **backup_dir** to **data_dir**. Doesn't raise
+ * an error if target directories exist.
+ *
+ * If **extract_tablespaces** is true then try to extract tablespace data
+ * directories into their initial path using tablespace_map file.
+ */
+void
+create_data_directories(const char *data_dir, const char *backup_dir,
+						bool extract_tablespaces)
+{
+	parray	   *dirs,
+			   *links = NULL;
+	size_t		i;
+	char		backup_database_dir[MAXPGPATH],
+				to_path[MAXPGPATH];
+
+	dirs = parray_new();
+	if (extract_tablespaces)
+	{
+		links = parray_new();
+		read_tablespace_map(links, backup_dir);
+		/* Sort links by a link name*/
+		parray_qsort(links, pgFileComparePath);
+	}
+
+	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
+	list_data_directories(dirs, backup_database_dir, true, false);
+
+	elog(LOG, "restore directories and symlinks...");
+
+	for (i = 0; i < parray_num(dirs); i++)
+	{
+		pgFile	   *dir = (pgFile *) parray_get(dirs, i);
+		char	   *relative_ptr = GetRelativePath(dir->path, backup_database_dir);
+
+		Assert(S_ISDIR(dir->mode));
+
+		/* Try to create symlink and linked directory if necessary */
+		if (extract_tablespaces &&
+			path_is_prefix_of_path(PG_TBLSPC_DIR, relative_ptr))
+		{
+			char	   *link_ptr = GetRelativePath(relative_ptr, PG_TBLSPC_DIR),
+					   *link_sep,
+					   *tmp_ptr;
+			char		link_name[MAXPGPATH];
+			pgFile	  **link;
+
+			/* Extract link name from relative path */
+			link_sep = first_dir_separator(link_ptr);
+			if (link_sep != NULL)
+			{
+				int			len = link_sep - link_ptr;
+				strncpy(link_name, link_ptr, len);
+				link_name[len] = '\0';
+			}
+			else
+				goto create_directory;
+
+			tmp_ptr = dir->path;
+			dir->path = link_name;
+			/* Search only by symlink name without path */
+			link = (pgFile **) parray_bsearch(links, dir, pgFileComparePath);
+			dir->path = tmp_ptr;
+
+			if (link)
+			{
+				const char *linked_path = get_tablespace_mapping((*link)->linked);
+				const char *dir_created;
+
+				if (!is_absolute_path(linked_path))
+					elog(ERROR, "tablespace directory is not an absolute path: %s\n",
+						 linked_path);
+
+				/* Check if linked directory was created earlier */
+				dir_created = get_tablespace_created(link_name);
+				if (dir_created)
+				{
+					/*
+					 * If symlink and linked directory were created do not
+					 * create it second time.
+					 */
+					if (strcmp(dir_created, linked_path) == 0)
+					{
+						/*
+						 * Create rest of directories.
+						 * First check is there any directory name after
+						 * separator.
+						 */
+						if (link_sep != NULL && *(link_sep + 1) != '\0')
+							goto create_directory;
+						else
+							continue;
+					}
+					else
+						elog(ERROR, "tablespace directory \"%s\" of page backup does not "
+							 "match with previous created tablespace directory \"%s\" of symlink \"%s\"",
+							 linked_path, dir_created, link_name);
+				}
+
+				if (link_sep)
+					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
+						 linked_path,
+						 (int) (link_sep -  relative_ptr), relative_ptr);
+				else
+					elog(LOG, "create directory \"%s\" and symbolic link \"%s\"",
+						 linked_path, relative_ptr);
+
+				/* Firstly, create linked directory */
+				dir_create_dir(linked_path, DIR_PERMISSION);
+
+				join_path_components(to_path, data_dir, PG_TBLSPC_DIR);
+				/* Create pg_tblspc directory just in case */
+				dir_create_dir(to_path, DIR_PERMISSION);
+
+				/* Secondly, create link */
+				join_path_components(to_path, to_path, link_name);
+				if (symlink(linked_path, to_path) < 0)
+					elog(ERROR, "could not create symbolic link \"%s\": %s",
+						 to_path, strerror(errno));
+
+				/* Save linked directory */
+				set_tablespace_created(link_name, linked_path);
+
+				/*
+				 * Create rest of directories.
+				 * First check is there any directory name after separator.
+				 */
+				if (link_sep != NULL && *(link_sep + 1) != '\0')
+					goto create_directory;
+
+				continue;
+			}
+		}
+
+create_directory:
+		elog(LOG, "create directory \"%s\"", relative_ptr);
+
+		/* This is not symlink, create directory */
+		join_path_components(to_path, data_dir, relative_ptr);
+		dir_create_dir(to_path, DIR_PERMISSION);
+	}
+
+	if (extract_tablespaces)
+	{
+		parray_walk(links, pgFileFree);
+		parray_free(links);
+	}
+
+	parray_walk(dirs, pgFileFree);
+	parray_free(dirs);
+}
+
+/*
  * Read names of symbolik names of tablespaces with links to directories from
  * tablespace_map or tablespace_map.txt.
  */
@@ -808,8 +1109,73 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		parray_append(files, file);
 	}
 
-	parray_qsort(files, pgFileCompareLinked);
 	fclose(fp);
+}
+
+/*
+ * Check that all tablespace mapping entries have correct linked directory
+ * paths. Linked directories must be empty or do not exist.
+ *
+ * If tablespace-mapping option is supplied, all OLDDIR entries must have
+ * entries in tablespace_map file.
+ */
+void
+check_tablespace_mapping(pgBackup *backup)
+{
+	char		this_backup_path[MAXPGPATH];
+	parray	   *links;
+	size_t		i;
+	TablespaceListCell *cell;
+	pgFile	   *tmp_file = pgut_new(pgFile);
+
+	links = parray_new();
+
+	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
+	read_tablespace_map(links, this_backup_path);
+	/* Sort links by the path of a linked file*/
+	parray_qsort(links, pgFileCompareLinked);
+
+	if (log_level_console <= LOG || log_level_file <= LOG)
+		elog(LOG, "check tablespace directories of backup %s",
+			 base36enc(backup->start_time));
+
+	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
+	for (cell = tablespace_dirs.head; cell; cell = cell->next)
+	{
+		tmp_file->linked = cell->old_dir;
+
+		if (parray_bsearch(links, tmp_file, pgFileCompareLinked) == NULL)
+			elog(ERROR, "--tablespace-mapping option's old directory "
+				 "doesn't have an entry in tablespace_map file: \"%s\"",
+				 cell->old_dir);
+	}
+
+	/* 2 - all linked directories must be empty */
+	for (i = 0; i < parray_num(links); i++)
+	{
+		pgFile	   *link = (pgFile *) parray_get(links, i);
+		const char *linked_path = link->linked;
+		TablespaceListCell *cell;
+
+		for (cell = tablespace_dirs.head; cell; cell = cell->next)
+			if (strcmp(link->linked, cell->old_dir) == 0)
+			{
+				linked_path = cell->new_dir;
+				break;
+			}
+
+		if (!is_absolute_path(linked_path))
+			elog(ERROR, "tablespace directory is not an absolute path: %s\n",
+				 linked_path);
+
+		if (!dir_is_empty(linked_path))
+			elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
+				 linked_path);
+	}
+
+	free(tmp_file);
+	parray_walk(links, pgFileFree);
+	parray_free(links);
 }
 
 /*
@@ -832,12 +1198,14 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		else if(file->is_extra)
 			path = GetRelativePath(path, file->extradir);
 
-		fprintf(out, "{\"path\":\"%s\", \"size\":\"%lu\",\"mode\":\"%u\","
-					 "\"is_datafile\":\"%u\", \"is_cfs\":\"%u\", \"crc\":\"%u\","
+		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
+					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\", \"is_extra\":\"%u\"",
-				path, (unsigned long) file->write_size, file->mode,
-				file->is_datafile?1:0, file->is_cfs?1:0, file->crc,
-				deparse_compress_alg(file->compress_alg), file->is_extra?1:0);
+				path, file->write_size, file->mode,
+				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
+				deparse_compress_alg(file->compress_alg),
+				file->is_extra ? 1 : 0);
 
 		if (file->extradir)
 			fprintf(out, ",\"extradir\":\"%s\"", file->extradir);
@@ -845,10 +1213,14 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
+#ifndef WIN32
 		if (S_ISLNK(file->mode))
+#else
+		if (pgwin32_is_junction(file->path))
+#endif
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
-		if (file->n_blocks != -1)
+		if (file->n_blocks != BLOCKNUM_INVALID)
 			fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
 		fprintf(out, "}\n");
@@ -870,23 +1242,25 @@ print_file_list(FILE *out, const parray *files, const char *root)
  *   {"name1":"value1", "name2":"value2"}
  *
  * The value will be returned to "value_str" as string if it is not NULL. If it
- * is NULL the value will be returned to "value_ulong" as unsigned long.
+ * is NULL the value will be returned to "value_int64" as int64.
+ *
+ * Returns true if the value was found in the line.
  */
-static void
+static bool
 get_control_value(const char *str, const char *name,
-				  char *value_str, uint64 *value_uint64, bool is_mandatory)
+				  char *value_str, int64 *value_int64, bool is_mandatory)
 {
 	int			state = CONTROL_WAIT_NAME;
 	char	   *name_ptr = (char *) name;
 	char	   *buf = (char *) str;
-	char		buf_uint64[32],	/* Buffer for "value_uint64" */
-			   *buf_uint64_ptr = buf_uint64;
+	char		buf_int64[32],	/* Buffer for "value_int64" */
+			   *buf_int64_ptr = buf_int64;
 
 	/* Set default values */
 	if (value_str)
 		*value_str = '\0';
-	else if (value_uint64)
-		*value_uint64 = 0;
+	else if (value_int64)
+		*value_int64 = 0;
 
 	while (*buf)
 	{
@@ -921,7 +1295,7 @@ get_control_value(const char *str, const char *name,
 				if (*buf == '"')
 				{
 					state = CONTROL_INVALUE;
-					buf_uint64_ptr = buf_uint64;
+					buf_int64_ptr = buf_int64;
 				}
 				else if (IsAlpha(*buf))
 					goto bad_format;
@@ -934,19 +1308,25 @@ get_control_value(const char *str, const char *name,
 					{
 						*value_str = '\0';
 					}
-					else if (value_uint64)
+					else if (value_int64)
 					{
 						/* Length of buf_uint64 should not be greater than 31 */
-						if (buf_uint64_ptr - buf_uint64 >= 32)
+						if (buf_int64_ptr - buf_int64 >= 32)
 							elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
 								 name, str, DATABASE_FILE_LIST);
 
-						*buf_uint64_ptr = '\0';
-						if (!parse_uint64(buf_uint64, value_uint64, 0))
-							goto bad_format;
+						*buf_int64_ptr = '\0';
+						if (!parse_int64(buf_int64, value_int64, 0))
+						{
+							/* We assume that too big value is -1 */
+							if (errno == ERANGE)
+								*value_int64 = BYTES_INVALID;
+							else
+								goto bad_format;
+						}
 					}
 
-					return;
+					return true;
 				}
 				else
 				{
@@ -957,8 +1337,8 @@ get_control_value(const char *str, const char *name,
 					}
 					else
 					{
-						*buf_uint64_ptr = *buf;
-						buf_uint64_ptr++;
+						*buf_int64_ptr = *buf;
+						buf_int64_ptr++;
 					}
 				}
 				break;
@@ -982,11 +1362,12 @@ get_control_value(const char *str, const char *name,
 	if (is_mandatory)
 		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
 			 name, str, DATABASE_FILE_LIST);
-	return;
+	return false;
 
 bad_format:
 	elog(ERROR, "%s file has invalid format in line %s",
 		 DATABASE_FILE_LIST, str);
+	return false;	/* Make compiler happy */
 }
 
 /*
@@ -1002,8 +1383,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 
 	fp = fopen(file_txt, "rt");
 	if (fp == NULL)
-		elog(errno == ENOENT ? ERROR : ERROR,
-			"cannot open \"%s\": %s", file_txt, strerror(errno));
+		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
 
 	files = parray_new();
 
@@ -1014,7 +1394,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 		char		linked[MAXPGPATH];
 		char		compress_alg_string[MAXPGPATH];
 		char		extradir_str[MAXPGPATH];
-		uint64		write_size,
+		int64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
 					is_cfs,
@@ -1030,12 +1410,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
 		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
 		get_control_value(buf, "crc", NULL, &crc, true);
-
-		/* optional fields */
-		get_control_value(buf, "linked", linked, NULL, false);
-		get_control_value(buf, "segno", NULL, &segno, false);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
-		get_control_value(buf, "n_blocks", NULL, &n_blocks, false);
 		get_control_value(buf, "is_extra", NULL, &is_extra, false);
 
 		if (root)
@@ -1054,16 +1429,26 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 			get_control_value(buf, "extradir", extradir_str, NULL, true);
 			file->extradir = pgut_strdup(extradir_str);
 		}
-		file->write_size = (size_t) write_size;
+		file->write_size = (int64) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
 		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
-		if (linked[0])
+
+		/*
+		 * Optional fields
+		 */
+
+		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
 			file->linked = pgut_strdup(linked);
-		file->segno = (int) segno;
-		file->n_blocks = (int) n_blocks;
+
+		if (get_control_value(buf, "segno", NULL, &segno, false))
+			file->segno = (int) segno;
+
+		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
+			file->n_blocks = (int) n_blocks;
+
 		parray_append(files, file);
 	}
 
@@ -1123,4 +1508,15 @@ fileExists(const char *path)
 		return false;
 	else
 		return true;
+}
+
+size_t
+pgFileSize(const char *path)
+{
+	struct stat buf;
+
+	if (stat(path, &buf) == -1)
+		elog(ERROR, "Cannot stat file \"%s\": %s", path, strerror(errno));
+
+	return buf.st_size;
 }

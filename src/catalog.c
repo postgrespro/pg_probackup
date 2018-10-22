@@ -11,14 +11,8 @@
 #include "pg_probackup.h"
 
 #include <dirent.h>
-#include <fcntl.h>
-#include <libgen.h>
 #include <signal.h>
-#include <sys/file.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-#include <stdlib.h>
-#include <time.h>
 #include <unistd.h>
 
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
@@ -223,6 +217,25 @@ read_backup(time_t timestamp)
 }
 
 /*
+ * Save the backup status into BACKUP_CONTROL_FILE.
+ *
+ * We need to reread the backup using its ID and save it changing only its
+ * status.
+ */
+void
+write_backup_status(pgBackup *backup)
+{
+	pgBackup   *tmp;
+
+	tmp = read_backup(backup->start_time);
+
+	tmp->status = backup->status;
+	write_backup(tmp);
+
+	pgBackupFree(tmp);
+}
+
+/*
  * Get backup_mode in string representation.
  */
 const char *
@@ -251,14 +264,15 @@ IsDir(const char *dirpath, const char *entry)
 parray *
 catalog_get_backup_list(time_t requested_backup_id)
 {
-	DIR			   *date_dir = NULL;
-	struct dirent  *date_ent = NULL;
+	DIR			   *data_dir = NULL;
+	struct dirent  *data_ent = NULL;
 	parray		   *backups = NULL;
 	pgBackup	   *backup = NULL;
+	int		i;
 
 	/* open backup instance backups directory */
-	date_dir = opendir(backup_instance_path);
-	if (date_dir == NULL)
+	data_dir = opendir(backup_instance_path);
+	if (data_dir == NULL)
 	{
 		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
 			strerror(errno));
@@ -267,40 +281,49 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 	/* scan the directory and list backups */
 	backups = parray_new();
-	for (; (date_ent = readdir(date_dir)) != NULL; errno = 0)
+	for (; (data_ent = readdir(data_dir)) != NULL; errno = 0)
 	{
 		char backup_conf_path[MAXPGPATH];
-		char date_path[MAXPGPATH];
+		char data_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_instance_path, date_ent->d_name)
-			|| date_ent->d_name[0] == '.')
+		if (!IsDir(backup_instance_path, data_ent->d_name)
+			|| data_ent->d_name[0] == '.')
 			continue;
 
 		/* open subdirectory of specific backup */
-		join_path_components(date_path, backup_instance_path, date_ent->d_name);
+		join_path_components(data_path, backup_instance_path, data_ent->d_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
-		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", date_path, BACKUP_CONTROL_FILE);
+		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", data_path, BACKUP_CONTROL_FILE);
 		backup = readBackupControlFile(backup_conf_path);
 
-		/* ignore corrupted backups */
-		if (backup)
+		if (!backup)
 		{
-			if (requested_backup_id != INVALID_BACKUP_ID
-				&& requested_backup_id != backup->start_time)
-			{
-				pgBackupFree(backup);
-				continue;
-			}
-			parray_append(backups, backup);
-			backup = NULL;
+			backup = pgut_new(pgBackup);
+			pgBackupInit(backup);
+			backup->start_time = base36dec(data_ent->d_name);
 		}
+		else if (strcmp(base36enc(backup->start_time), data_ent->d_name) != 0)
+		{
+			elog(WARNING, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
+				 base36enc(backup->start_time), backup_conf_path);
+		}
+
+		backup->backup_id = backup->start_time;
+		if (requested_backup_id != INVALID_BACKUP_ID
+			&& requested_backup_id != backup->start_time)
+		{
+			pgBackupFree(backup);
+			continue;
+		}
+		parray_append(backups, backup);
+		backup = NULL;
 
 		if (errno && errno != ENOENT)
 		{
-			elog(WARNING, "cannot read date directory \"%s\": %s",
-				 date_ent->d_name, strerror(errno));
+			elog(WARNING, "cannot read data directory \"%s\": %s",
+				 data_ent->d_name, strerror(errno));
 			goto err_proc;
 		}
 	}
@@ -311,21 +334,48 @@ catalog_get_backup_list(time_t requested_backup_id)
 		goto err_proc;
 	}
 
-	closedir(date_dir);
-	date_dir = NULL;
+	closedir(data_dir);
+	data_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
+
+	/* Link incremental backups with their ancestors.*/
+	for (i = 0; i < parray_num(backups); i++)
+	{
+		pgBackup *curr = parray_get(backups, i);
+
+		int j;
+
+		if (curr->backup_mode == BACKUP_MODE_FULL)
+			continue;
+
+		for (j = i+1; j < parray_num(backups); j++)
+		{
+			pgBackup *ancestor = parray_get(backups, j);
+
+			if (ancestor->start_time == curr->parent_backup)
+			{
+				curr->parent_backup_link = ancestor;
+				/* elog(INFO, "curr %s, ancestor %s j=%d", base36enc_dup(curr->start_time),
+						base36enc_dup(ancestor->start_time), j); */
+				break;
+			}
+		}
+	}
 
 	return backups;
 
 err_proc:
-	if (date_dir)
-		closedir(date_dir);
+	if (data_dir)
+		closedir(data_dir);
 	if (backup)
 		pgBackupFree(backup);
 	if (backups)
 		parray_walk(backups, pgBackupFree);
 	parray_free(backups);
+
+	elog(ERROR, "Failed to get backup list");
+
 	return NULL;
 }
 
@@ -385,15 +435,18 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 	fprintf(out, "#Configuration\n");
 	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
-	fprintf(out, "stream = %s\n", backup->stream?"true":"false");
-	fprintf(out, "compress-alg = %s\n", deparse_compress_alg(compress_alg));
-	fprintf(out, "compress-level = %d\n", compress_level);
-	fprintf(out, "from-replica = %s\n", from_replica?"true":"false");
-	
+	fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
+	fprintf(out, "compress-alg = %s\n",
+			deparse_compress_alg(backup->compress_alg));
+	fprintf(out, "compress-level = %d\n", backup->compress_level);
+	fprintf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
+
 	fprintf(out, "\n#Compatibility\n");
 	fprintf(out, "block-size = %u\n", backup->block_size);
 	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
 	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	if (backup->program_version[0] != '\0')
+		fprintf(out, "program-version = %s\n", backup->program_version);
 	if (backup->server_version[0] != '\0')
 		fprintf(out, "server-version = %s\n", backup->server_version);
 
@@ -429,7 +482,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->data_bytes != BYTES_INVALID)
 		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
-	if (backup->data_bytes != BYTES_INVALID)
+	if (backup->wal_bytes != BYTES_INVALID)
 		fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
 	fprintf(out, "status = %s\n", status2str(backup->status));
@@ -443,22 +496,48 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 }
 
-/* create BACKUP_CONTROL_FILE */
+/*
+ * Save the backup content into BACKUP_CONTROL_FILE.
+ */
 void
-pgBackupWriteBackupControlFile(pgBackup *backup)
+write_backup(pgBackup *backup)
 {
 	FILE   *fp = NULL;
-	char	ini_path[MAXPGPATH];
+	char	conf_path[MAXPGPATH];
 
-	pgBackupGetPath(backup, ini_path, lengthof(ini_path), BACKUP_CONTROL_FILE);
-	fp = fopen(ini_path, "wt");
+	pgBackupGetPath(backup, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
+	fp = fopen(conf_path, "wt");
 	if (fp == NULL)
-		elog(ERROR, "cannot open configuration file \"%s\": %s", ini_path,
+		elog(ERROR, "Cannot open configuration file \"%s\": %s", conf_path,
 			strerror(errno));
 
 	pgBackupWriteControl(fp, backup);
 
 	fclose(fp);
+}
+
+/*
+ * Output the list of files to backup catalog DATABASE_FILE_LIST
+ */
+void
+pgBackupWriteFileList(pgBackup *backup, parray *files, const char *root)
+{
+	FILE	   *fp;
+	char		path[MAXPGPATH];
+
+	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+
+	fp = fopen(path, "wt");
+	if (fp == NULL)
+		elog(ERROR, "cannot open file list \"%s\": %s", path,
+			strerror(errno));
+
+	print_file_list(fp, files, root);
+
+	if (fflush(fp) != 0 ||
+		fsync(fileno(fp)) != 0 ||
+		fclose(fp))
+		elog(ERROR, "cannot write file list \"%s\": %s", path, strerror(errno));
 }
 
 /*
@@ -475,10 +554,10 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
-	char	   *compress_alg = NULL;
+	char	   *program_version = NULL;
 	char	   *server_version = NULL;
-	int		   *compress_level;
-	bool	   *from_replica;
+	char	   *compress_alg = NULL;
+	int			parsed_options;
 
 	pgut_option options[] =
 	{
@@ -495,22 +574,41 @@ readBackupControlFile(const char *path)
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum-version",	&backup->checksum_version, SOURCE_FILE_STRICT},
+		{'s', 0, "program-version",		&program_version, SOURCE_FILE_STRICT},
 		{'s', 0, "server-version",		&server_version, SOURCE_FILE_STRICT},
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
-		{'u', 0, "compress-level",		&compress_level, SOURCE_FILE_STRICT},
-		{'b', 0, "from-replica",		&from_replica, SOURCE_FILE_STRICT},
+		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
+		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{0}
 	};
 
+	pgBackupInit(backup);
 	if (access(path, F_OK) != 0)
+	{
+		elog(WARNING, "Control file \"%s\" doesn't exist", path);
+		pgBackupFree(backup);
 		return NULL;
+	}
 
-	pgBackup_init(backup);
-	pgut_readopt(path, options, ERROR);
+	parsed_options = pgut_readopt(path, options, WARNING, true);
+
+	if (parsed_options == 0)
+	{
+		elog(WARNING, "Control file \"%s\" is empty", path);
+		pgBackupFree(backup);
+		return NULL;
+	}
+
+	if (backup->start_time == 0)
+	{
+		elog(WARNING, "Invalid ID/start-time, control file \"%s\" is corrupted", path);
+		pgBackupFree(backup);
+		return NULL;
+	}
 
 	if (backup_mode)
 	{
@@ -526,7 +624,7 @@ readBackupControlFile(const char *path)
 		if (sscanf(start_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
 			backup->start_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
-			elog(WARNING, "invalid START_LSN \"%s\"", start_lsn);
+			elog(WARNING, "Invalid START_LSN \"%s\"", start_lsn);
 		free(start_lsn);
 	}
 
@@ -538,7 +636,7 @@ readBackupControlFile(const char *path)
 		if (sscanf(stop_lsn, "%X/%X", &xlogid, &xrecoff) == 2)
 			backup->stop_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 		else
-			elog(WARNING, "invalid STOP_LSN \"%s\"", stop_lsn);
+			elog(WARNING, "Invalid STOP_LSN \"%s\"", stop_lsn);
 		free(stop_lsn);
 	}
 
@@ -546,10 +644,12 @@ readBackupControlFile(const char *path)
 	{
 		if (strcmp(status, "OK") == 0)
 			backup->status = BACKUP_STATUS_OK;
-		else if (strcmp(status, "RUNNING") == 0)
-			backup->status = BACKUP_STATUS_RUNNING;
 		else if (strcmp(status, "ERROR") == 0)
 			backup->status = BACKUP_STATUS_ERROR;
+		else if (strcmp(status, "RUNNING") == 0)
+			backup->status = BACKUP_STATUS_RUNNING;
+		else if (strcmp(status, "MERGING") == 0)
+			backup->status = BACKUP_STATUS_MERGING;
 		else if (strcmp(status, "DELETING") == 0)
 			backup->status = BACKUP_STATUS_DELETING;
 		else if (strcmp(status, "DELETED") == 0)
@@ -561,7 +661,7 @@ readBackupControlFile(const char *path)
 		else if (strcmp(status, "CORRUPT") == 0)
 			backup->status = BACKUP_STATUS_CORRUPT;
 		else
-			elog(WARNING, "invalid STATUS \"%s\"", status);
+			elog(WARNING, "Invalid STATUS \"%s\"", status);
 		free(status);
 	}
 
@@ -571,12 +671,22 @@ readBackupControlFile(const char *path)
 		free(parent_backup);
 	}
 
+	if (program_version)
+	{
+		StrNCpy(backup->program_version, program_version,
+				sizeof(backup->program_version));
+		pfree(program_version);
+	}
+
 	if (server_version)
 	{
 		StrNCpy(backup->server_version, server_version,
 				sizeof(backup->server_version));
 		pfree(server_version);
 	}
+
+	if (compress_alg)
+		backup->compress_alg = parse_compress_alg(compress_alg);
 
 	return backup;
 }
@@ -626,11 +736,106 @@ deparse_backup_mode(BackupMode mode)
 	return NULL;
 }
 
+CompressAlg
+parse_compress_alg(const char *arg)
+{
+	size_t		len;
+
+	/* Skip all spaces detected */
+	while (isspace((unsigned char)*arg))
+		arg++;
+	len = strlen(arg);
+
+	if (len == 0)
+		elog(ERROR, "compress algrorithm is empty");
+
+	if (pg_strncasecmp("zlib", arg, len) == 0)
+		return ZLIB_COMPRESS;
+	else if (pg_strncasecmp("pglz", arg, len) == 0)
+		return PGLZ_COMPRESS;
+	else if (pg_strncasecmp("none", arg, len) == 0)
+		return NONE_COMPRESS;
+	else
+		elog(ERROR, "invalid compress algorithm value \"%s\"", arg);
+
+	return NOT_DEFINED_COMPRESS;
+}
+
+const char*
+deparse_compress_alg(int alg)
+{
+	switch (alg)
+	{
+		case NONE_COMPRESS:
+		case NOT_DEFINED_COMPRESS:
+			return "none";
+		case ZLIB_COMPRESS:
+			return "zlib";
+		case PGLZ_COMPRESS:
+			return "pglz";
+	}
+
+	return NULL;
+}
+
+/*
+ * Fill pgBackup struct with default values.
+ */
+void
+pgBackupInit(pgBackup *backup)
+{
+	backup->backup_id = INVALID_BACKUP_ID;
+	backup->backup_mode = BACKUP_MODE_INVALID;
+	backup->status = BACKUP_STATUS_INVALID;
+	backup->tli = 0;
+	backup->start_lsn = 0;
+	backup->stop_lsn = 0;
+	backup->start_time = (time_t) 0;
+	backup->end_time = (time_t) 0;
+	backup->recovery_xid = 0;
+	backup->recovery_time = (time_t) 0;
+
+	backup->data_bytes = BYTES_INVALID;
+	backup->wal_bytes = BYTES_INVALID;
+
+	backup->compress_alg = COMPRESS_ALG_DEFAULT;
+	backup->compress_level = COMPRESS_LEVEL_DEFAULT;
+
+	backup->block_size = BLCKSZ;
+	backup->wal_block_size = XLOG_BLCKSZ;
+	backup->checksum_version = 0;
+
+	backup->stream = false;
+	backup->from_replica = false;
+	backup->parent_backup = INVALID_BACKUP_ID;
+	backup->parent_backup_link = NULL;
+	backup->primary_conninfo = NULL;
+	backup->program_version[0] = '\0';
+	backup->server_version[0] = '\0';
+}
+
+/*
+ * Copy backup metadata from **src** into **dst**.
+ */
+void
+pgBackupCopy(pgBackup *dst, pgBackup *src)
+{
+	pfree(dst->primary_conninfo);
+
+	memcpy(dst, src, sizeof(pgBackup));
+
+	if (src->primary_conninfo)
+		dst->primary_conninfo = pstrdup(src->primary_conninfo);
+}
+
 /* free pgBackup object */
 void
 pgBackupFree(void *backup)
 {
-	free(backup);
+	pgBackup *b = (pgBackup *) backup;
+
+	pfree(b->primary_conninfo);
+	pfree(backup);
 }
 
 /* Compare two pgBackup with their IDs (start time) in ascending order */
@@ -686,4 +891,135 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 				 base36enc(backup->start_time), subdir1, subdir2);
 
 	make_native_path(path);
+}
+
+/*
+ * Find parent base FULL backup for current backup using parent_backup_link
+ */
+pgBackup*
+find_parent_full_backup(pgBackup *current_backup)
+{
+	pgBackup   *base_full_backup = NULL;
+	base_full_backup = current_backup;
+
+	if (!current_backup)
+		elog(ERROR, "Target backup cannot be NULL");
+
+	while (base_full_backup->parent_backup_link != NULL)
+	{
+		base_full_backup = base_full_backup->parent_backup_link;
+	}
+
+	if (base_full_backup->backup_mode != BACKUP_MODE_FULL)
+		elog(ERROR, "Failed to find FULL backup parent for %s",
+				base36enc(current_backup->start_time));
+
+	return base_full_backup;
+}
+
+/*
+ * Interate over parent chain and look for any problems.
+ * Return 0 if chain is broken.
+ *  result_backup must contain oldest existing backup after missing backup.
+ *  we have no way to know if there are multiple missing backups.
+ * Return 1 if chain is intact, but at least one backup is !OK.
+ *  result_backup must contain oldest !OK backup.
+ * Return 2 if chain is intact and all backups are OK.
+ *	result_backup must contain FULL backup on which chain is based.
+ */
+int
+scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
+{
+	pgBackup   *target_backup = NULL;
+	pgBackup   *invalid_backup = NULL;
+
+	if (!current_backup)
+		elog(ERROR, "Target backup cannot be NULL");
+
+	target_backup = current_backup;
+
+	while (target_backup->parent_backup_link)
+	{
+		if (target_backup->status != BACKUP_STATUS_OK &&
+			  target_backup->status != BACKUP_STATUS_DONE)
+			/* oldest invalid backup in parent chain */
+			invalid_backup = target_backup;
+
+
+		target_backup = target_backup->parent_backup_link;
+	}
+
+	/* Prevous loop will skip FULL backup because his parent_backup_link is NULL */
+	if (target_backup->backup_mode == BACKUP_MODE_FULL &&
+		(target_backup->status != BACKUP_STATUS_OK &&
+		target_backup->status != BACKUP_STATUS_DONE))
+	{
+		invalid_backup = target_backup;
+	}
+
+	/* found chain end and oldest backup is not FULL */
+	if (target_backup->backup_mode != BACKUP_MODE_FULL)
+	{
+		/* Set oldest child backup in chain */
+		*result_backup = target_backup;
+		return 0;
+	}
+
+	/* chain is ok, but some backups are invalid */
+	if (invalid_backup)
+	{
+		*result_backup = invalid_backup;
+		return 1;
+	}
+
+	*result_backup = target_backup;
+	return 2;
+}
+
+/*
+ * Determine if child_backup descend from parent_backup
+ * This check DO NOT(!!!) guarantee that parent chain is intact,
+ * because parent_backup can be missing.
+ * If inclusive is true, then child_backup counts as a child of himself
+ * if parent_backup_time is start_time of child_backup.
+ */
+bool
+is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
+{
+	if (!child_backup)
+		elog(ERROR, "Target backup cannot be NULL");
+
+	while (child_backup->parent_backup_link &&
+			child_backup->parent_backup != parent_backup_time)
+	{
+		child_backup = child_backup->parent_backup_link;
+	}
+
+	if (child_backup->parent_backup == parent_backup_time)
+		return true;
+
+	if (inclusive && child_backup->start_time == parent_backup_time)
+		return true;
+
+	return false;
+}
+
+/*
+ * Return backup index number.
+ * Note: this index number holds true until new sorting of backup list
+ */
+int
+get_backup_index_number(parray *backup_list, pgBackup *backup)
+{
+	int i;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
+
+		if (tmp_backup->start_time == backup->start_time)
+			return i;
+	}
+	elog(ERROR, "Failed to find backup %s", base36enc(backup->start_time));
+	return 0;
 }

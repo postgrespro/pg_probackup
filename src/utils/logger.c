@@ -7,20 +7,18 @@
  *-------------------------------------------------------------------------
  */
 
-#include <errno.h>
-#include <pthread.h>
-#include <stdio.h>
-#include <string.h>
+#include "postgres_fe.h"
+
 #include <sys/stat.h>
-#include <time.h>
 
 #include "logger.h"
 #include "pgut.h"
+#include "thread.h"
 
 /* Logger parameters */
 
-int			log_level_console = LOG_NONE;
-int			log_level_file = LOG_NONE;
+int			log_level_console = LOG_LEVEL_CONSOLE_DEFAULT;
+int			log_level_file = LOG_LEVEL_FILE_DEFAULT;
 
 char	   *log_filename = NULL;
 char	   *error_log_filename = NULL;
@@ -32,9 +30,9 @@ char	   *log_directory = NULL;
 char		log_path[MAXPGPATH] = "";
 
 /* Maximum size of an individual log file in kilobytes */
-int			log_rotation_size = 0;
+uint64		log_rotation_size = 0;
 /* Maximum lifetime of an individual log file in minutes */
-int			log_rotation_age = 0;
+uint64		log_rotation_age = 0;
 
 /* Implementation for logging.h */
 
@@ -74,12 +72,12 @@ void
 init_logger(const char *root_path)
 {
 	/* Set log path */
-	if (LOG_LEVEL_FILE != LOG_OFF || error_log_filename)
+	if (log_level_file != LOG_OFF || error_log_filename)
 	{
 		if (log_directory)
 			strcpy(log_path, log_directory);
 		else
-			join_path_components(log_path, root_path, "log");
+			join_path_components(log_path, root_path, LOG_DIRECTORY_DEFAULT);
 	}
 }
 
@@ -105,12 +103,6 @@ write_elevel(FILE *stream, int elevel)
 			break;
 		case ERROR:
 			fputs("ERROR: ", stream);
-			break;
-		case FATAL:
-			fputs("FATAL: ", stream);
-			break;
-		case PANIC:
-			fputs("PANIC: ", stream);
 			break;
 		default:
 			elog_stderr(ERROR, "invalid logging level: %d", elevel);
@@ -138,11 +130,10 @@ exit_if_necessary(int elevel)
 		}
 
 		/* If this is not the main thread then don't call exit() */
+		if (main_tid != pthread_self())
 #ifdef WIN32
-		if (main_tid != GetCurrentThreadId())
 			ExitThread(elevel);
 #else
-		if (!pthread_equal(main_tid, pthread_self()))
 			pthread_exit(NULL);
 #endif
 		else
@@ -151,7 +142,7 @@ exit_if_necessary(int elevel)
 }
 
 /*
- * Logs to stderr or to log file and exit if ERROR or FATAL.
+ * Logs to stderr or to log file and exit if ERROR.
  *
  * Actual implementation for elog() and pg_log().
  */
@@ -166,15 +157,16 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
-	write_to_file = elevel >= LOG_LEVEL_FILE && log_path[0] != '\0';
+	write_to_file = elevel >= log_level_file && log_path[0] != '\0';
 	write_to_error_log = elevel >= ERROR && error_log_filename &&
 		log_path[0] != '\0';
-	write_to_stderr = elevel >= LOG_LEVEL_CONSOLE && !file_only;
+	write_to_stderr = elevel >= log_level_console && !file_only;
 
-	/*
-	 * There is no need to lock if this is elog() from upper elog().
-	 */
-	pthread_mutex_lock(&log_file_mutex);
+	pthread_lock(&log_file_mutex);
+#ifdef WIN32
+	std_args = NULL;
+	error_args = NULL;
+#endif
 	loggin_in_progress = true;
 
 	/* We need copy args only if we need write to error log file */
@@ -201,7 +193,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		if (log_file == NULL)
 		{
 			if (log_filename == NULL)
-				open_logfile(&log_file, "pg_probackup.log");
+				open_logfile(&log_file, LOG_FILENAME_DEFAULT);
 			else
 				open_logfile(&log_file, log_filename);
 		}
@@ -241,7 +233,6 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	if (write_to_stderr)
 	{
 		write_elevel(stderr, elevel);
-
 		if (write_to_file)
 			vfprintf(stderr, fmt, std_args);
 		else
@@ -272,7 +263,7 @@ elog_stderr(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_CONSOLE && elevel < ERROR)
+	if (elevel < log_level_console && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -288,7 +279,7 @@ elog_stderr(int elevel, const char *fmt, ...)
 }
 
 /*
- * Logs to stderr or to log file and exit if ERROR or FATAL.
+ * Logs to stderr or to log file and exit if ERROR.
  */
 void
 elog(int elevel, const char *fmt, ...)
@@ -299,7 +290,7 @@ elog(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_CONSOLE && elevel < LOG_LEVEL_FILE && elevel < ERROR)
+	if (elevel < log_level_console && elevel < log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -308,7 +299,7 @@ elog(int elevel, const char *fmt, ...)
 }
 
 /*
- * Logs only to log file and exit if ERROR or FATAL.
+ * Logs only to log file and exit if ERROR.
  */
 void
 elog_file(int elevel, const char *fmt, ...)
@@ -319,7 +310,7 @@ elog_file(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_FILE && elevel < ERROR)
+	if (elevel < log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -360,7 +351,7 @@ pg_log(eLogType type, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < LOG_LEVEL_CONSOLE && elevel < LOG_LEVEL_FILE && elevel < ERROR)
+	if (elevel < log_level_console && elevel < log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -399,10 +390,6 @@ parse_log_level(const char *level)
 		return WARNING;
 	else if (pg_strncasecmp("error", v, len) == 0)
 		return ERROR;
-	else if (pg_strncasecmp("fatal", v, len) == 0)
-		return FATAL;
-	else if (pg_strncasecmp("panic", v, len) == 0)
-		return PANIC;
 
 	/* Log level is invalid */
 	elog(ERROR, "invalid log-level \"%s\"", level);
@@ -431,10 +418,6 @@ deparse_log_level(int level)
 			return "WARNING";
 		case ERROR:
 			return "ERROR";
-		case FATAL:
-			return "FATAL";
-		case PANIC:
-			return "PANIC";
 		default:
 			elog(ERROR, "invalid log-level %d", level);
 	}
@@ -491,7 +474,7 @@ logfile_open(const char *filename, const char *mode)
 	{
 		int			save_errno = errno;
 
-		elog_stderr(FATAL, "could not open log file \"%s\": %s",
+		elog_stderr(ERROR, "could not open log file \"%s\": %s",
 					filename, strerror(errno));
 		errno = save_errno;
 	}
@@ -566,8 +549,8 @@ open_logfile(FILE **file, const char *filename_format)
 					/* Parsed creation time */
 
 					rotation_requested = (cur_time - creation_time) >
-						/* convert to seconds */
-						log_rotation_age * 60;
+						/* convert to seconds from milliseconds */
+						log_rotation_age / 1000;
 				}
 				else
 					elog_stderr(ERROR, "cannot read creation timestamp from "

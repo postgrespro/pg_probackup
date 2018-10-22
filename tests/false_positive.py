@@ -13,7 +13,9 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     @unittest.expectedFailure
     def test_validate_wal_lost_segment(self):
-        """Loose segment located between backups. ExpectedFailure. This is BUG """
+        """
+        Loose segment located between backups. ExpectedFailure. This is BUG
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),
@@ -31,14 +33,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         # make some wals
-        node.pgbench_init(scale=2)
-        pgbench = node.pgbench(
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            options=["-c", "4", "-T", "10"]
-        )
-        pgbench.wait()
-        pgbench.stdout.close()
+        node.pgbench_init(scale=5)
 
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, "wal", 'node')
@@ -191,7 +186,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
                 node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.start()
+        node.slow_start()
         # Logical comparison
         self.assertEqual(
             result,
@@ -290,7 +285,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
                 node.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.start()
+        node.slow_start()
         # Logical comparison
         self.assertEqual(
             result,

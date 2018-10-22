@@ -50,7 +50,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master, replica)
 
         # Check data correctness on replica
-        replica.start(["-t", "600"])
+        replica.slow_start(replica=True)
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
@@ -82,7 +82,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -113,7 +113,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -143,7 +143,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'master', master)
         # force more frequent wal switch
         master.append_conf('postgresql.auto.conf', 'archive_timeout  = 10')
-        master.start()
+        master.slow_start()
 
         replica = self.make_simple_node(
             base_dir="{0}/{1}/replica".format(module_name, fname))
@@ -166,7 +166,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Settings for Replica
         self.set_replica(master, replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start(["-t", "600"])
+        replica.slow_start(replica=True)
 
         # Check data correctness on replica
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -200,7 +200,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -231,7 +231,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -260,7 +260,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'master', master)
         # force more frequent wal switch
         master.append_conf('postgresql.auto.conf', 'archive_timeout  = 10')
-        master.start()
+        master.slow_start()
 
         replica = self.make_simple_node(
             base_dir="{0}/{1}/replica".format(module_name, fname))
@@ -287,15 +287,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(replica.port))
-        replica.start(["-t", "600"])
-
-        time.sleep(1)
-        self.assertEqual(
-            master.safe_psql(
-                "postgres",
-                "select exists(select * from pg_stat_replication)"
-                ).rstrip(),
-            't')
+        replica.start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

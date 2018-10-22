@@ -12,10 +12,15 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_ptrack_recovery(self):
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on', 'wal_level': 'replica', 'max_wal_senders': '2'})
+            pg_options={
+                'ptrack_enable': 'on',
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -24,19 +29,30 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.create_tblspace_in_node(node, 'somedata')
 
         # Create table and indexes
-        node.safe_psql("postgres",
-            "create sequence t_seq; create table t_heap as select i as id, md5(i::text) as text,md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,256) i")
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; create table t_heap as select i as id, "
+            "md5(i::text) as text,md5(repeat(i::text,10))::tsvector as "
+            "tsvector from generate_series(0,2560) i")
+
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                node.safe_psql("postgres", "create index {0} on {1} using {2}({3})".format(
-                    i, idx_ptrack[i]['relation'], idx_ptrack[i]['type'], idx_ptrack[i]['column']))
+                node.safe_psql(
+                    "postgres",
+                    "create index {0} on {1} using {2}({3})".format(
+                        i, idx_ptrack[i]['relation'],
+                        idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
         # Move table and indexes and make checkpoint
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] == 'heap':
-                node.safe_psql('postgres', 'alter table {0} set tablespace somedata;'.format(i))
+                node.safe_psql(
+                    'postgres',
+                    'alter table {0} set tablespace somedata;'.format(i))
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                node.safe_psql('postgres', 'alter index {0} set tablespace somedata'.format(i))
+                node.safe_psql(
+                    'postgres',
+                    'alter index {0} set tablespace somedata'.format(i))
         node.safe_psql('postgres', 'checkpoint')
 
         # Check ptrack files

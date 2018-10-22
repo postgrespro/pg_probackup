@@ -12,6 +12,7 @@ import select
 import psycopg2
 from time import sleep
 import re
+import json
 
 idx_ptrack = {
     't_heap': {
@@ -47,6 +48,16 @@ idx_ptrack = {
         'column': 'tsvector',
         'relation': 't_heap'
     },
+    't_hash': {
+        'type': 'hash',
+        'column': 'id',
+        'relation': 't_heap'
+    },
+    't_bloom': {
+        'type': 'bloom',
+        'column': 'id',
+        'relation': 't_heap'
+    }
 }
 
 archive_script = """
@@ -109,6 +120,39 @@ class ProbackupException(Exception):
 
     def __str__(self):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
+
+
+def slow_start(self, replica=False):
+
+    # wait for https://github.com/postgrespro/testgres/pull/50
+    # self.poll_query_until(
+    #    "postgres",
+    #    "SELECT not pg_is_in_recovery()",
+    #    raise_operational_error=False)
+
+    self.start()
+    if not replica:
+        while True:
+            try:
+                self.poll_query_until(
+                    "postgres",
+                    "SELECT not pg_is_in_recovery()")
+                break
+            except Exception as e:
+                continue
+    else:
+        self.poll_query_until(
+            "postgres",
+            "SELECT pg_is_in_recovery()")
+
+#        while True:
+#            try:
+#                self.poll_query_until(
+#                    "postgres",
+#                    "SELECT pg_is_in_recovery()")
+#                break
+#            except ProbackupException as e:
+#                continue
 
 
 class ProbackupTest(object):
@@ -187,10 +231,48 @@ class ProbackupTest(object):
                 self.probackup_path = self.test_env["PGPROBACKUPBIN"]
             else:
                 if self.verbose:
-                    print('PGPROBINDIR is not an executable file')
+                    print('PGPROBACKUPBIN is not an executable file')
+
         if not self.probackup_path:
-            self.probackup_path = os.path.abspath(os.path.join(
+            probackup_path_tmp = os.path.join(
+                testgres.get_pg_config()["BINDIR"], 'pg_probackup')
+
+            if os.path.isfile(probackup_path_tmp):
+                if not os.access(probackup_path_tmp, os.X_OK):
+                    print('{0} is not an executable file'.format(
+                        probackup_path_tmp))
+                else:
+                    self.probackup_path = probackup_path_tmp
+
+        if not self.probackup_path:
+            probackup_path_tmp = os.path.abspath(os.path.join(
                 self.dir_path, "../pg_probackup"))
+
+            if os.path.isfile(probackup_path_tmp):
+                if not os.access(probackup_path_tmp, os.X_OK):
+                    print('{0} is not an executable file'.format(
+                        probackup_path_tmp))
+                else:
+                    self.probackup_path = probackup_path_tmp
+
+        if not self.probackup_path:
+            print('pg_probackup binary is not found')
+            exit(1)
+
+        os.environ['PATH'] = os.path.dirname(
+            self.probackup_path) + ":" + os.environ['PATH']
+
+        self.probackup_old_path = None
+
+        if "PGPROBACKUPBIN_OLD" in self.test_env:
+            if (
+                os.path.isfile(self.test_env["PGPROBACKUPBIN_OLD"]) and
+                os.access(self.test_env["PGPROBACKUPBIN_OLD"], os.X_OK)
+            ):
+                self.probackup_old_path = self.test_env["PGPROBACKUPBIN_OLD"]
+            else:
+                if self.verbose:
+                    print('PGPROBACKUPBIN_OLD is not an executable file')
 
     def make_simple_node(
             self,
@@ -204,6 +286,8 @@ class ProbackupTest(object):
         os.makedirs(real_base_dir)
 
         node = testgres.get_new_node('test', base_dir=real_base_dir)
+        # bound method slow_start() to 'node' class instance
+        node.slow_start = slow_start.__get__(node)
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
@@ -369,8 +453,9 @@ class ProbackupTest(object):
                 if idx_dict['ptrack'][PageNum] != 1:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was added,'
-                            ' but ptrack value is {2}. THIS IS BAD'.format(
+                            'File: {0}\n Page Number {1} of type {2} was added,'
+                            ' but ptrack value is {3}. THIS IS BAD'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum])
                         )
@@ -379,13 +464,14 @@ class ProbackupTest(object):
                 continue
             if PageNum not in idx_dict['new_pages']:
                 # Page is not present now, meaning that relation got smaller
-                # Ptrack should be equal to 0,
+                # Ptrack should be equal to 1,
                 # We are not freaking out about false positive stuff
-                if idx_dict['ptrack'][PageNum] != 0:
+                if idx_dict['ptrack'][PageNum] != 1:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was deleted,'
-                            ' but ptrack value is {2}'.format(
+                            'File: {0}\n Page Number {1} of type {2} was deleted,'
+                            ' but ptrack value is {3}. THIS IS BAD'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum])
                         )
@@ -401,14 +487,15 @@ class ProbackupTest(object):
                 if idx_dict['ptrack'][PageNum] != 1:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was changed,'
-                            ' but ptrack value is {2}. THIS IS BAD'.format(
+                            'File: {0}\n Page Number {1} of type {2} was changed,'
+                            ' but ptrack value is {3}. THIS IS BAD'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum])
                         )
                         print(
-                            "\n Old checksumm: {0}\n"
-                            " New checksumm: {1}".format(
+                            "  Old checksumm: {0}\n"
+                            "  New checksumm: {1}".format(
                                 idx_dict['old_pages'][PageNum],
                                 idx_dict['new_pages'][PageNum])
                         )
@@ -427,19 +514,17 @@ class ProbackupTest(object):
                 if idx_dict['ptrack'][PageNum] != 0:
                     if self.verbose:
                         print(
-                            'Page Number {0} of type {1} was not changed,'
-                            ' but ptrack value is {2}'.format(
+                            'File: {0}\n Page Number {1} of type {2} was not changed,'
+                            ' but ptrack value is {3}'.format(
+                                idx_dict['path'],
                                 PageNum, idx_dict['type'],
                                 idx_dict['ptrack'][PageNum]
                             )
                         )
-
-            self.assertTrue(
-                success, 'Ptrack does not correspond to state'
-                ' of its own pages.\n Gory Details: \n{0}'.format(
-                    idx_dict['type'], idx_dict
-                )
-            )
+            return success
+            # self.assertTrue(
+            #    success, 'Ptrack has failed to register changes in data files'
+            # )
 
     def check_ptrack_recovery(self, idx_dict):
         size = idx_dict['size']
@@ -471,13 +556,22 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, async=False, gdb=False):
+    def run_pb(self, command, async=False, gdb=False, old_binary=False):
+        if not self.probackup_old_path and old_binary:
+            print("PGPROBACKUPBIN_OLD is not set")
+            exit(1)
+
+        if old_binary:
+            binary_path = self.probackup_old_path
+        else:
+            binary_path = self.probackup_path
+
         try:
-            self.cmd = [' '.join(map(str, [self.probackup_path] + command))]
+            self.cmd = [' '.join(map(str, [binary_path] + command))]
             if self.verbose:
                 print(self.cmd)
             if gdb:
-                return GDBobj([self.probackup_path] + command, self.verbose)
+                return GDBobj([binary_path] + command, self.verbose)
             if async:
                 return subprocess.Popen(
                     self.cmd,
@@ -487,7 +581,7 @@ class ProbackupTest(object):
                 )
             else:
                 self.output = subprocess.check_output(
-                    [self.probackup_path] + command,
+                    [binary_path] + command,
                     stderr=subprocess.STDOUT,
                     env=self.test_env
                     ).decode("utf-8")
@@ -523,37 +617,45 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode("utf-8"), command)
 
-    def init_pb(self, backup_dir):
+    def init_pb(self, backup_dir, old_binary=False):
 
         shutil.rmtree(backup_dir, ignore_errors=True)
+
         return self.run_pb([
             "init",
             "-B", backup_dir
-        ])
+            ],
+            old_binary=old_binary
+        )
 
-    def add_instance(self, backup_dir, instance, node):
+    def add_instance(self, backup_dir, instance, node, old_binary=False):
 
         return self.run_pb([
             "add-instance",
             "--instance={0}".format(instance),
             "-B", backup_dir,
             "-D", node.data_dir
-        ])
+            ],
+            old_binary=old_binary
+        )
 
-    def del_instance(self, backup_dir, instance):
+    def del_instance(self, backup_dir, instance, old_binary=False):
 
         return self.run_pb([
             "del-instance",
             "--instance={0}".format(instance),
             "-B", backup_dir
-        ])
+            ],
+            old_binary=old_binary
+        )
 
     def clean_pb(self, backup_dir):
         shutil.rmtree(backup_dir, ignore_errors=True)
 
     def backup_node(
             self, backup_dir, instance, node, data_dir=False,
-            backup_type="full", options=[], async=False, gdb=False
+            backup_type="full", options=[], async=False, gdb=False,
+            old_binary=False
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -576,11 +678,23 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ["-b", backup_type]
 
-        return self.run_pb(cmd_list + options, async, gdb)
+        return self.run_pb(cmd_list + options, async, gdb, old_binary)
+
+    def merge_backup(
+            self, backup_dir, instance, backup_id, async=False,
+            gdb=False, old_binary=False, options=[]):
+        cmd_list = [
+            "merge",
+            "-B", backup_dir,
+            "--instance={0}".format(instance),
+            "-i", backup_id
+        ]
+
+        return self.run_pb(cmd_list + options, async, gdb, old_binary)
 
     def restore_node(
             self, backup_dir, instance, node=False,
-            data_dir=None, backup_id=None, options=[]
+            data_dir=None, backup_id=None, old_binary=False, options=[]
             ):
         if data_dir is None:
             data_dir = node.data_dir
@@ -594,11 +708,11 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
-            options=[], as_text=False
+            options=[], as_text=False, as_json=True, old_binary=False
             ):
 
         backup_list = []
@@ -613,67 +727,88 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
+        if as_json:
+            cmd_list += ["--format=json"]
+
         if as_text:
             # You should print it when calling as_text=true
-            return self.run_pb(cmd_list + options)
+            return self.run_pb(cmd_list + options, old_binary=old_binary)
 
         # get show result as list of lines
-        show_splitted = self.run_pb(cmd_list + options).splitlines()
-        if instance is not None and backup_id is None:
-            # cut header(ID, Mode, etc) from show as single string
-            header = show_splitted[1:2][0]
-            # cut backup records from show as single list
-            # with string for every backup record
-            body = show_splitted[3:]
-            # inverse list so oldest record come first
-            body = body[::-1]
-            # split string in list with string for every header element
-            header_split = re.split("  +", header)
-            # Remove empty items
-            for i in header_split:
-                if i == '':
-                    header_split.remove(i)
+        if as_json:
+            data = json.loads(self.run_pb(cmd_list + options, old_binary=old_binary))
+        #    print(data)
+            for instance_data in data:
+                # find specific instance if requested
+                if instance and instance_data['instance'] != instance:
                     continue
-            header_split = [
-                header_element.rstrip() for header_element in header_split
-                ]
-            for backup_record in body:
-                backup_record = backup_record.rstrip()
-                # split list with str for every backup record element
-                backup_record_split = re.split("  +", backup_record)
-                # Remove empty items
-                for i in backup_record_split:
-                    if i == '':
-                        backup_record_split.remove(i)
-                if len(header_split) != len(backup_record_split):
-                    print(warning.format(
-                        header=header, body=body,
-                        header_split=header_split,
-                        body_split=backup_record_split)
-                    )
-                    exit(1)
-                new_dict = dict(zip(header_split, backup_record_split))
-                backup_list.append(new_dict)
+
+                for backup in reversed(instance_data['backups']):
+                    # find specific backup if requested
+                    if backup_id:
+                        if backup['id'] == backup_id:
+                            return backup
+                    else:
+                        backup_list.append(backup)
             return backup_list
         else:
-            # cut out empty lines and lines started with #
-            # and other garbage then reconstruct it as dictionary
-            # print show_splitted
-            sanitized_show = [item for item in show_splitted if item]
-            sanitized_show = [
-                item for item in sanitized_show if not item.startswith('#')
-            ]
-            # print sanitized_show
-            for line in sanitized_show:
-                name, var = line.partition(" = ")[::2]
-                var = var.strip('"')
-                var = var.strip("'")
-                specific_record[name.strip()] = var
-            return specific_record
+            show_splitted = self.run_pb(
+                cmd_list + options, old_binary=old_binary).splitlines()
+            if instance is not None and backup_id is None:
+                # cut header(ID, Mode, etc) from show as single string
+                header = show_splitted[1:2][0]
+                # cut backup records from show as single list
+                # with string for every backup record
+                body = show_splitted[3:]
+                # inverse list so oldest record come first
+                body = body[::-1]
+                # split string in list with string for every header element
+                header_split = re.split("  +", header)
+                # Remove empty items
+                for i in header_split:
+                    if i == '':
+                        header_split.remove(i)
+                        continue
+                header_split = [
+                    header_element.rstrip() for header_element in header_split
+                    ]
+                for backup_record in body:
+                    backup_record = backup_record.rstrip()
+                    # split list with str for every backup record element
+                    backup_record_split = re.split("  +", backup_record)
+                    # Remove empty items
+                    for i in backup_record_split:
+                        if i == '':
+                            backup_record_split.remove(i)
+                    if len(header_split) != len(backup_record_split):
+                        print(warning.format(
+                            header=header, body=body,
+                            header_split=header_split,
+                            body_split=backup_record_split)
+                        )
+                        exit(1)
+                    new_dict = dict(zip(header_split, backup_record_split))
+                    backup_list.append(new_dict)
+                return backup_list
+            else:
+                # cut out empty lines and lines started with #
+                # and other garbage then reconstruct it as dictionary
+                # print show_splitted
+                sanitized_show = [item for item in show_splitted if item]
+                sanitized_show = [
+                    item for item in sanitized_show if not item.startswith('#')
+                ]
+                # print sanitized_show
+                for line in sanitized_show:
+                    name, var = line.partition(" = ")[::2]
+                    var = var.strip('"')
+                    var = var.strip("'")
+                    specific_record[name.strip()] = var
+                return specific_record
 
     def validate_pb(
             self, backup_dir, instance=None,
-            backup_id=None, options=[]
+            backup_id=None, options=[], old_binary=False
             ):
 
         cmd_list = [
@@ -685,9 +820,11 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
-    def delete_pb(self, backup_dir, instance, backup_id=None, options=[]):
+    def delete_pb(
+            self, backup_dir, instance,
+            backup_id=None, options=[], old_binary=False):
         cmd_list = [
             "delete",
             "-B", backup_dir
@@ -697,24 +834,26 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ["-i", backup_id]
 
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
-    def delete_expired(self, backup_dir, instance, options=[]):
+    def delete_expired(
+            self, backup_dir, instance, options=[], old_binary=False):
         cmd_list = [
             "delete", "--expired", "--wal",
             "-B", backup_dir,
             "--instance={0}".format(instance)
         ]
-        return self.run_pb(cmd_list + options)
+        return self.run_pb(cmd_list + options, old_binary=old_binary)
 
-    def show_config(self, backup_dir, instance):
+    def show_config(self, backup_dir, instance, old_binary=False):
         out_dict = {}
         cmd_list = [
             "show-config",
             "-B", backup_dir,
             "--instance={0}".format(instance)
         ]
-        res = self.run_pb(cmd_list).splitlines()
+
+        res = self.run_pb(cmd_list, old_binary=old_binary).splitlines()
         for line in res:
             if not line.startswith('#'):
                 name, var = line.partition(" = ")[::2]
@@ -735,7 +874,8 @@ class ProbackupTest(object):
         return out_dict
 
     def set_archiving(
-            self, backup_dir, instance, node, replica=False, overwrite=False):
+            self, backup_dir, instance, node, replica=False, overwrite=False,
+            old_binary=False):
 
         if replica:
             archive_mode = 'always'
@@ -851,14 +991,47 @@ class ProbackupTest(object):
         return num
 
     def switch_wal_segment(self, node):
-        """ Execute pg_switch_wal/xlog() in given node"""
-        if self.version_to_num(
-            node.safe_psql("postgres", "show server_version")
-                ) >= self.version_to_num('10.0'):
-            node.safe_psql("postgres", "select pg_switch_wal()")
+        """
+        Execute pg_switch_wal/xlog() in given node
+
+        Args:
+            node: an instance of PostgresNode or NodeConnection class
+        """
+        if isinstance(node, testgres.PostgresNode):
+            if self.version_to_num(
+                node.safe_psql("postgres", "show server_version")
+                    ) >= self.version_to_num('10.0'):
+                node.safe_psql("postgres", "select pg_switch_wal()")
+            else:
+                node.safe_psql("postgres", "select pg_switch_xlog()")
         else:
-            node.safe_psql("postgres", "select pg_switch_xlog()")
-        sleep(1)
+            if self.version_to_num(
+                node.execute("show server_version")[0][0]
+                    ) >= self.version_to_num('10.0'):
+                node.execute("select pg_switch_wal()")
+            else:
+                node.execute("select pg_switch_xlog()")
+
+    def wait_until_replica_catch_with_master(self, master, replica):
+
+        if self.version_to_num(
+                master.safe_psql(
+                    "postgres",
+                    "show server_version")) >= self.version_to_num('10.0'):
+            master_function = 'pg_catalog.pg_current_wal_lsn()'
+            replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
+        else:
+            master_function = 'pg_catalog.pg_current_xlog_location()'
+            replica_function = 'pg_catalog.pg_last_xlog_replay_location()'
+
+        lsn = master.safe_psql(
+            'postgres',
+            'SELECT {0}'.format(master_function)).rstrip()
+
+        # Wait until replica catch up with master
+        replica.poll_query_until(
+            'postgres',
+            "SELECT '{0}'::pg_lsn <= {1}".format(lsn, replica_function))
 
     def get_version(self, node):
         return self.version_to_num(

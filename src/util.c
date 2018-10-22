@@ -10,9 +10,9 @@
 
 #include "pg_probackup.h"
 
-#include <time.h>
+#include "catalog/pg_control.h"
 
-#include "storage/bufpage.h"
+#include <time.h>
 
 const char *
 base36enc(long unsigned int value)
@@ -122,6 +122,46 @@ get_current_timeline(bool safe)
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
 
+/*
+ * Get last check point record ptr from pg_tonrol.
+ */
+XLogRecPtr
+get_checkpoint_location(PGconn *conn)
+{
+#if PG_VERSION_NUM >= 90600
+	PGresult   *res;
+	uint32		lsn_hi;
+	uint32		lsn_lo;
+	XLogRecPtr	lsn;
+
+#if PG_VERSION_NUM >= 100000
+	res = pgut_execute(conn,
+					   "SELECT checkpoint_lsn FROM pg_catalog.pg_control_checkpoint()",
+					   0, NULL);
+#else
+	res = pgut_execute(conn,
+					   "SELECT checkpoint_location FROM pg_catalog.pg_control_checkpoint()",
+					   0, NULL);
+#endif
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
+	PQclear(res);
+	/* Calculate LSN */
+	lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
+
+	return lsn;
+#else
+	char	   *buffer;
+	size_t		size;
+	ControlFileData ControlFile;
+
+	buffer = fetchFile(conn, "global/pg_control", &size);
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.checkPoint;
+#endif
+}
+
 uint64
 get_system_identifier(char *pgdata_path)
 {
@@ -173,11 +213,32 @@ get_remote_system_identifier(PGconn *conn)
 }
 
 uint32
+get_xlog_seg_size(char *pgdata_path)
+{
+#if PG_VERSION_NUM >= 110000
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	if (buffer == NULL)
+		return 0;
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.xlog_seg_size;
+#else
+	return (uint32) XLOG_SEG_SIZE;
+#endif
+}
+
+uint32
 get_data_checksum_version(bool safe)
 {
 	ControlFileData ControlFile;
-	char       *buffer;
-	size_t      size;
+	char	   *buffer;
+	size_t		size;
 
 	/* First fetch file... */
 	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
@@ -191,7 +252,7 @@ get_data_checksum_version(bool safe)
 
 
 /*
- * Convert time_t value to ISO-8601 format string
+ * Convert time_t value to ISO-8601 format string. Always set timezone offset.
  */
 void
 time2iso(char *buf, size_t len, time_t time)
@@ -199,41 +260,52 @@ time2iso(char *buf, size_t len, time_t time)
 	struct tm  *ptm = gmtime(&time);
 	time_t		gmt = mktime(ptm);
 	time_t		offset;
+	char	   *ptr = buf;
 
 	ptm = localtime(&time);
 	offset = time - gmt + (ptm->tm_isdst ? 3600 : 0);
 
-	strftime(buf, len, "%Y-%m-%d %H:%M:%S", ptm);
+	strftime(ptr, len, "%Y-%m-%d %H:%M:%S", ptm);
 
-	if (offset != 0)
+	ptr += strlen(ptr);
+	snprintf(ptr, len - (ptr - buf), "%c%02d",
+			 (offset >= 0) ? '+' : '-',
+			 abs((int) offset) / SECS_PER_HOUR);
+
+	if (abs((int) offset) % SECS_PER_HOUR != 0)
 	{
-		buf += strlen(buf);
-		sprintf(buf, "%c%02d",
-				(offset >= 0) ? '+' : '-',
-				abs((int) offset) / SECS_PER_HOUR);
-
-		if (abs((int) offset) % SECS_PER_HOUR != 0)
-		{
-			buf += strlen(buf);
-			sprintf(buf, ":%02d",
-					abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
-		}
+		ptr += strlen(ptr);
+		snprintf(ptr, len - (ptr - buf), ":%02d",
+				 abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
 	}
 }
 
-/* copied from timestamp.c */
-pg_time_t
-timestamptz_to_time_t(TimestampTz t)
+/* Parse string representation of the server version */
+int
+parse_server_version(char *server_version_str)
 {
-	pg_time_t	result;
+	int			nfields;
+	int			result = 0;
+	int			major_version = 0;
+	int			minor_version = 0;
 
-#ifdef HAVE_INT64_TIMESTAMP
-	result = (pg_time_t) (t / USECS_PER_SEC +
-				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
-#else
-	result = (pg_time_t) (t +
-				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
-#endif
+	nfields = sscanf(server_version_str, "%d.%d", &major_version, &minor_version);
+	if (nfields == 2)
+	{
+		/* Server version lower than 10 */
+		if (major_version > 10)
+			elog(ERROR, "Server version format doesn't match major version %d", major_version);
+		result = major_version * 10000 + minor_version * 100;
+	}
+	else if (nfields == 1)
+	{
+		if (major_version < 10)
+			elog(ERROR, "Server version format doesn't match major version %d", major_version);
+		result = major_version * 10000;
+	}
+	else
+		elog(ERROR, "Unknown server version format");
+
 	return result;
 }
 
@@ -244,8 +316,9 @@ status2str(BackupStatus status)
 	{
 		"UNKNOWN",
 		"OK",
-		"RUNNING",
 		"ERROR",
+		"RUNNING",
+		"MERGING",
 		"DELETING",
 		"DELETED",
 		"DONE",
@@ -294,27 +367,4 @@ remove_not_digit(char *buf, size_t len, const char *str)
 		buf[j++] = str[i];
 	}
 	buf[j] = '\0';
-}
-
-/* Fill pgBackup struct with default values */
-void
-pgBackup_init(pgBackup *backup)
-{
-	backup->backup_id = INVALID_BACKUP_ID;
-	backup->backup_mode = BACKUP_MODE_INVALID;
-	backup->status = BACKUP_STATUS_INVALID;
-	backup->tli = 0;
-	backup->start_lsn = 0;
-	backup->stop_lsn = 0;
-	backup->start_time = (time_t) 0;
-	backup->end_time = (time_t) 0;
-	backup->recovery_xid = 0;
-	backup->recovery_time = (time_t) 0;
-	backup->data_bytes = BYTES_INVALID;
-	backup->block_size = BLCKSZ;
-	backup->wal_block_size = XLOG_BLCKSZ;
-	backup->stream = false;
-	backup->parent_backup = 0;
-	backup->primary_conninfo = NULL;
-	backup->server_version[0] = '\0';
 }

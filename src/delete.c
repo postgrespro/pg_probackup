@@ -14,17 +14,18 @@
 #include <time.h>
 #include <unistd.h>
 
-static int pgBackupDeleteFiles(pgBackup *backup);
-static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli);
+static int delete_backup_files(pgBackup *backup);
+static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
+							uint32 xlog_seg_size);
 
-int
+void
 do_delete(time_t backup_id)
 {
 	int			i;
 	parray	   *backup_list,
 			   *delete_list;
+	pgBackup   *target_backup = NULL;
 	time_t		parent_id = 0;
-	bool		backup_found = false;
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
 
@@ -33,8 +34,6 @@ do_delete(time_t backup_id)
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backup_list == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
 	if (backup_id != 0)
 	{
@@ -58,9 +57,9 @@ do_delete(time_t backup_id)
 
 				/* Save backup id to retreive increment backups */
 				parent_id = backup->start_time;
-				backup_found = true;
+				target_backup = backup;
 			}
-			else if (backup_found)
+			else if (target_backup)
 			{
 				if (backup->backup_mode != BACKUP_MODE_FULL &&
 					backup->parent_backup == parent_id)
@@ -86,7 +85,7 @@ do_delete(time_t backup_id)
 			if (interrupted)
 				elog(ERROR, "interrupted during delete backup");
 
-			pgBackupDeleteFiles(backup);
+			delete_backup_files(backup);
 		}
 
 		parray_free(delete_list);
@@ -95,6 +94,8 @@ do_delete(time_t backup_id)
 	/* Clean WAL segments */
 	if (delete_wal)
 	{
+		Assert(target_backup);
+
 		/* Find oldest LSN, used by backups */
 		for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 		{
@@ -108,14 +109,12 @@ do_delete(time_t backup_id)
 			}
 		}
 
-		delete_walfiles(oldest_lsn, oldest_tli);
+		delete_walfiles(oldest_lsn, oldest_tli, xlog_seg_size);
 	}
 
 	/* cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
-
-	return 0;
 }
 
 /*
@@ -141,7 +140,8 @@ do_retention_purge(void)
 		if (retention_window > 0)
 			elog(LOG, "WINDOW=%u", retention_window);
 
-		if (retention_redundancy == 0 && retention_window == 0)
+		if (retention_redundancy == 0
+			&& retention_window == 0)
 		{
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
@@ -161,7 +161,8 @@ do_retention_purge(void)
 	}
 
 	/* Find target backups to be deleted */
-	if (delete_expired && (retention_redundancy > 0 || retention_window > 0))
+	if (delete_expired &&
+		(retention_redundancy > 0 || retention_window > 0))
 	{
 		backup_num = 0;
 		for (i = 0; i < parray_num(backup_list); i++)
@@ -173,13 +174,13 @@ do_retention_purge(void)
 			if (backup->status != BACKUP_STATUS_OK)
 				continue;
 			/*
-			 * When a validate full backup was found, we can delete the
+			 * When a valid full backup was found, we can delete the
 			 * backup that is older than it using the number of generations.
 			 */
 			if (backup->backup_mode == BACKUP_MODE_FULL)
 				backup_num++;
 
-			/* Evaluateretention_redundancy if this backup is eligible for removal */
+			/* Evaluate retention_redundancy if this backup is eligible for removal */
 			if (keep_next_backup ||
 				retention_redundancy >= backup_num_evaluate + 1 ||
 				(retention_window > 0 && backup->recovery_time >= days_threshold))
@@ -200,8 +201,9 @@ do_retention_purge(void)
 
 				continue;
 			}
+
 			/* Delete backup and update status to DELETED */
-			pgBackupDeleteFiles(backup);
+			delete_backup_files(backup);
 			backup_deleted = true;
 		}
 	}
@@ -224,7 +226,7 @@ do_retention_purge(void)
 	/* Purge WAL files */
 	if (delete_wal)
 	{
-		delete_walfiles(oldest_lsn, oldest_tli);
+		delete_walfiles(oldest_lsn, oldest_tli, xlog_seg_size);
 	}
 
 	/* Cleanup */
@@ -244,7 +246,7 @@ do_retention_purge(void)
  * BACKUP_STATUS_DELETED.
  */
 static int
-pgBackupDeleteFiles(pgBackup *backup)
+delete_backup_files(pgBackup *backup)
 {
 	size_t		i;
 	char		path[MAXPGPATH];
@@ -259,14 +261,15 @@ pgBackupDeleteFiles(pgBackup *backup)
 
 	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 
-	elog(INFO, "delete: %s %s", base36enc(backup->start_time), timestamp);
+	elog(INFO, "delete: %s %s",
+		 base36enc(backup->start_time), timestamp);
 
 	/*
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
 	backup->status = BACKUP_STATUS_DELETING;
-	pgBackupWriteBackupControlFile(backup);
+	write_backup_status(backup);
 
 	/* list files to be deleted */
 	files = parray_new();
@@ -281,7 +284,7 @@ pgBackupDeleteFiles(pgBackup *backup)
 
 		/* print progress */
 		elog(VERBOSE, "delete file(%zd/%lu) \"%s\"", i + 1,
-				(unsigned long) parray_num(files), file->path);
+			 (unsigned long) parray_num(files), file->path);
 
 		if (remove(file->path))
 		{
@@ -311,7 +314,8 @@ pgBackupDeleteFiles(pgBackup *backup)
  *    oldest_lsn.
  */
 static void
-delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
+delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
+				uint32 xlog_seg_size)
 {
 	XLogSegNo   targetSegNo;
 	char		oldestSegmentNeeded[MAXFNAMELEN];
@@ -327,8 +331,9 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli)
 
 	if (!XLogRecPtrIsInvalid(oldest_lsn))
 	{
-		XLByteToSeg(oldest_lsn, targetSegNo);
-		XLogFileName(oldestSegmentNeeded, oldest_tli, targetSegNo);
+		GetXLogSegNo(oldest_lsn, targetSegNo, xlog_seg_size);
+		GetXLogFileName(oldestSegmentNeeded, oldest_tli, targetSegNo,
+						xlog_seg_size);
 
 		elog(LOG, "removing WAL segments older than %s", oldestSegmentNeeded);
 	}
@@ -426,7 +431,7 @@ do_delete_instance(void)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
-		pgBackupDeleteFiles(backup);
+		delete_backup_files(backup);
 	}
 
 	/* Cleanup */
@@ -434,7 +439,7 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	delete_walfiles(InvalidXLogRecPtr, 0);
+	delete_walfiles(InvalidXLogRecPtr, 0, xlog_seg_size);
 
 	/* Delete backup instance config file */
 	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);

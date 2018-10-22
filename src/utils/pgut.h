@@ -11,26 +11,9 @@
 #ifndef PGUT_H
 #define PGUT_H
 
+#include "postgres_fe.h"
+#include "access/xlogdefs.h"
 #include "libpq-fe.h"
-#include "pqexpbuffer.h"
-
-#include <assert.h>
-#include <pthread.h>
-#include <sys/time.h>
-
-#include "logger.h"
-
-#if !defined(C_H) && !defined(__cplusplus)
-#ifndef bool
-typedef char bool;
-#endif
-#ifndef true
-#define true	((bool) 1)
-#endif
-#ifndef false
-#define false	((bool) 0)
-#endif
-#endif
 
 #define INFINITE_STR		"INFINITE"
 
@@ -59,7 +42,7 @@ typedef enum pgut_optsrc
 typedef struct pgut_option
 {
 	char		type;
-	char		sname;		/* short name */
+	uint8		sname;		/* short name */
 	const char *lname;		/* long name */
 	void	   *var;		/* pointer to variable */
 	pgut_optsrc	allowed;	/* allowed source */
@@ -94,13 +77,6 @@ extern const char  *PROGRAM_VERSION;
 extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
 
-/* ID of the main thread */
-#ifdef WIN32
-extern DWORD main_tid;
-#else
-extern pthread_t main_tid;
-#endif
-
 extern void	pgut_help(bool details);
 
 /*
@@ -118,7 +94,8 @@ extern bool			in_cleanup;
 extern bool			in_password;	/* User prompts password */
 
 extern int pgut_getopt(int argc, char **argv, pgut_option options[]);
-extern void pgut_readopt(const char *path, pgut_option options[], int elevel);
+extern int pgut_readopt(const char *path, pgut_option options[], int elevel,
+						bool strict);
 extern void pgut_getopt_env(pgut_option options[]);
 extern void pgut_atexit_push(pgut_atexit_callback callback, void *userdata);
 extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
@@ -145,19 +122,12 @@ extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char *
 extern void pgut_cancel(PGconn* conn);
 extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);
 
-extern const char *pgut_get_host(void);
-extern const char *pgut_get_port(void);
-extern void pgut_set_host(const char *new_host);
-extern void pgut_set_port(const char *new_port);
-
 /*
  * memory allocators
  */
 extern void *pgut_malloc(size_t size);
 extern void *pgut_realloc(void *p, size_t size);
 extern char *pgut_strdup(const char *str);
-extern char *strdup_with_len(const char *str, size_t len);
-extern char *strdup_trim(const char *str);
 
 #define pgut_new(type)			((type *) pgut_malloc(sizeof(type)))
 #define pgut_newarray(type, n)	((type *) pgut_malloc(sizeof(type) * (n)))
@@ -184,37 +154,16 @@ extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
 #define AssertMacro(x)	((void) 0)
 #endif
 
-/*
- * StringInfo and string operations
- */
-#define STRINGINFO_H
-
-#define StringInfoData			PQExpBufferData
-#define StringInfo				PQExpBuffer
-#define makeStringInfo			createPQExpBuffer
-#define initStringInfo			initPQExpBuffer
-#define freeStringInfo			destroyPQExpBuffer
-#define termStringInfo			termPQExpBuffer
-#define resetStringInfo			resetPQExpBuffer
-#define enlargeStringInfo		enlargePQExpBuffer
-#define printfStringInfo		printfPQExpBuffer	/* reset + append */
-#define appendStringInfo		appendPQExpBuffer
-#define appendStringInfoString	appendPQExpBufferStr
-#define appendStringInfoChar	appendPQExpBufferChar
-#define appendBinaryStringInfo	appendBinaryPQExpBuffer
-
-extern int appendStringInfoFile(StringInfo str, FILE *fp);
-extern int appendStringInfoFd(StringInfo str, int fd);
-
 extern bool parse_bool(const char *value, bool *result);
 extern bool parse_bool_with_len(const char *value, size_t len, bool *result);
 extern bool parse_int32(const char *value, int32 *result, int flags);
 extern bool parse_uint32(const char *value, uint32 *result, int flags);
 extern bool parse_int64(const char *value, int64 *result, int flags);
 extern bool parse_uint64(const char *value, uint64 *result, int flags);
-extern bool parse_time(const char *value, time_t *result);
+extern bool parse_time(const char *value, time_t *result, bool utc_default);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
+extern bool parse_lsn(const char *value, XLogRecPtr *result);
 
 extern void convert_from_base_unit(int64 base_value, int base_unit,
 								   int64 *value, const char **unit);
@@ -224,8 +173,6 @@ extern void convert_from_base_unit_u(uint64 base_value, int base_unit,
 #define IsSpace(c)		(isspace((unsigned char)(c)))
 #define IsAlpha(c)		(isalpha((unsigned char)(c)))
 #define IsAlnum(c)		(isalnum((unsigned char)(c)))
-#define IsIdentHead(c)	(IsAlpha(c) || (c) == '_')
-#define IsIdentBody(c)	(IsAlnum(c) || (c) == '_')
 #define ToLower(c)		(tolower((unsigned char)(c)))
 #define ToUpper(c)		(toupper((unsigned char)(c)))
 

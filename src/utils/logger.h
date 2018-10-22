@@ -10,8 +10,6 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-#include "postgres_fe.h"
-
 #define LOG_NONE	(-10)
 
 /* Log level */
@@ -21,8 +19,6 @@
 #define NOTICE		(-2)
 #define WARNING		(-1)
 #define ERROR		1
-#define FATAL		2
-#define PANIC		3
 #define LOG_OFF		10
 
 /* Logger parameters */
@@ -36,11 +32,16 @@ extern char		   *error_log_filename;
 extern char		   *log_directory;
 extern char			log_path[MAXPGPATH];
 
-extern int			log_rotation_size;
-extern int			log_rotation_age;
+#define LOG_ROTATION_SIZE_DEFAULT 0
+#define LOG_ROTATION_AGE_DEFAULT 0
+extern uint64		log_rotation_size;
+extern uint64		log_rotation_age;
 
-#define LOG_LEVEL_CONSOLE ((log_level_console == LOG_NONE) ? INFO : log_level_console)
-#define LOG_LEVEL_FILE ((log_level_file == LOG_NONE) ? LOG_OFF : log_level_file)
+#define LOG_LEVEL_CONSOLE_DEFAULT INFO
+#define LOG_LEVEL_FILE_DEFAULT LOG_OFF
+
+#define LOG_FILENAME_DEFAULT "pg_probackup.log"
+#define LOG_DIRECTORY_DEFAULT "log"
 
 #undef elog
 extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);

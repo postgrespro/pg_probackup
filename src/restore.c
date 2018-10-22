@@ -10,83 +10,44 @@
 
 #include "pg_probackup.h"
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <pthread.h>
+#include "access/timeline.h"
 
-#include "catalog/pg_control.h"
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "utils/thread.h"
 
 typedef struct
 {
-	parray *files;
-	pgBackup *backup;
+	parray	   *files;
+	pgBackup   *backup;
 
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-} restore_files_args;
-
-/* Tablespace mapping structures */
-
-typedef struct TablespaceListCell
-{
-	struct TablespaceListCell *next;
-	char		old_dir[MAXPGPATH];
-	char		new_dir[MAXPGPATH];
-} TablespaceListCell;
-
-typedef struct TablespaceList
-{
-	TablespaceListCell *head;
-	TablespaceListCell *tail;
-} TablespaceList;
-
-typedef struct TablespaceCreatedListCell
-{
-	struct TablespaceCreatedListCell *next;
-	char		link_name[MAXPGPATH];
-	char		linked_dir[MAXPGPATH];
-} TablespaceCreatedListCell;
-
-typedef struct TablespaceCreatedList
-{
-	TablespaceCreatedListCell *head;
-	TablespaceCreatedListCell *tail;
-} TablespaceCreatedList;
+} restore_files_arg;
 
 static void restore_backup(pgBackup *backup);
-static void restore_directories(const char *pg_data_dir,
-								const char *backup_dir);
-static void check_tablespace_mapping(pgBackup *backup);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
-static void restore_files(void *arg);
+static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
-static const char *get_tablespace_mapping(const char *dir);
-static void set_tablespace_created(const char *link, const char *dir);
-static const char *get_tablespace_created(const char *link);
-
-/* Tablespace mapping */
-static TablespaceList tablespace_dirs = {NULL, NULL};
-static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
 
 
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
  */
 int
-do_restore_or_validate(time_t target_backup_id,
-		   pgRecoveryTarget *rt,
-		   bool is_restore)
+do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
+					   bool is_restore)
 {
-	int			i;
+	int			i = 0;
+	int			j = 0;
 	parray	   *backups;
-	parray	   *timelines;
+	pgBackup   *tmp_backup = NULL;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
@@ -94,7 +55,7 @@ do_restore_or_validate(time_t target_backup_id,
 	int			dest_backup_index = 0;
 	int			base_full_backup_index = 0;
 	int			corrupted_backup_index = 0;
-	char 	   *action = is_restore ? "Restore":"Validate";
+	char	   *action = is_restore ? "Restore":"Validate";
 
 	if (is_restore)
 	{
@@ -115,13 +76,12 @@ do_restore_or_validate(time_t target_backup_id,
 	catalog_lock();
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
-	if (backups == NULL)
-		elog(ERROR, "Failed to get backup list.");
 
 	/* Find backup range we should restore or validate. */
-	for (i = 0; i < parray_num(backups); i++)
+	while ((i < parray_num(backups)) && !dest_backup)
 	{
 		current_backup = (pgBackup *) parray_get(backups, i);
+		i++;
 
 		/* Skip all backups which started after target backup */
 		if (target_backup_id && current_backup->start_time > target_backup_id)
@@ -133,7 +93,6 @@ do_restore_or_validate(time_t target_backup_id,
 		 */
 
 		if (is_restore &&
-			!dest_backup &&
 			target_backup_id == INVALID_BACKUP_ID &&
 			current_backup->status != BACKUP_STATUS_OK)
 		{
@@ -147,19 +106,25 @@ do_restore_or_validate(time_t target_backup_id,
 		 * ensure that it satisfies recovery target.
 		 */
 		if ((target_backup_id == current_backup->start_time
-			|| target_backup_id == INVALID_BACKUP_ID)
-			&& !dest_backup)
+			|| target_backup_id == INVALID_BACKUP_ID))
 		{
 
 			/* backup is not ok,
-			 * but in case of CORRUPT, ORPHAN or DONE revalidation can be done,
+			 * but in case of CORRUPT, ORPHAN or DONE revalidation is possible
+			 * unless --no-validate is used,
 			 * in other cases throw an error.
 			 */
+			 // 1. validate
+			 // 2. validate -i INVALID_ID <- allowed revalidate
+			 // 3. restore -i INVALID_ID <- allowed revalidate and restore
+			 // 4. restore <- impossible
+			 // 5. restore --no-validate <- forbidden
 			if (current_backup->status != BACKUP_STATUS_OK)
 			{
-				if (current_backup->status == BACKUP_STATUS_DONE ||
+				if ((current_backup->status == BACKUP_STATUS_DONE ||
 					current_backup->status == BACKUP_STATUS_ORPHAN ||
 					current_backup->status == BACKUP_STATUS_CORRUPT)
+					&& !rt->restore_no_validate)
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
 				else
@@ -169,6 +134,8 @@ do_restore_or_validate(time_t target_backup_id,
 
 			if (rt->recovery_target_tli)
 			{
+				parray	   *timelines;
+
 				elog(LOG, "target timeline ID = %u", rt->recovery_target_tli);
 				/* Read timeline history files from archives */
 				timelines = readTimeLineHistory_probackup(rt->recovery_target_tli);
@@ -199,42 +166,112 @@ do_restore_or_validate(time_t target_backup_id,
 			 * Save it as dest_backup
 			 */
 			dest_backup = current_backup;
-			dest_backup_index = i;
+		}
+	}
+
+	if (dest_backup == NULL)
+		elog(ERROR, "Backup satisfying target options is not found.");
+
+	dest_backup_index = get_backup_index_number(backups, dest_backup);
+
+	/* If we already found dest_backup, look for full backup. */
+	if (dest_backup->backup_mode == BACKUP_MODE_FULL)
+			base_full_backup = dest_backup;
+	else
+	{
+		int result;
+
+		result = scan_parent_chain(dest_backup, &tmp_backup);
+
+		if (result == 0)
+		{
+			/* chain is broken, determine missing backup ID
+			 * and orphinize all his descendants
+			 */
+			char	   *missing_backup_id;
+			time_t 		missing_backup_start_time;
+
+			missing_backup_start_time = tmp_backup->parent_backup;
+			missing_backup_id = base36enc_dup(tmp_backup->parent_backup);
+
+			for (j = get_backup_index_number(backups, tmp_backup); j >= 0; j--)
+			{
+				pgBackup *backup = (pgBackup *) parray_get(backups, j);
+
+				/* use parent backup start_time because he is missing
+				 * and we must orphinize his descendants
+				 */
+				if (is_parent(missing_backup_start_time, backup, false))
+				{
+					if (backup->status == BACKUP_STATUS_OK)
+					{
+						backup->status = BACKUP_STATUS_ORPHAN;
+						write_backup_status(backup);
+
+						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
+								base36enc(backup->start_time), missing_backup_id);
+					}
+					else
+					{
+						elog(WARNING, "Backup %s has missing parent %s",
+								base36enc(backup->start_time), missing_backup_id);
+					}
+				}
+			}
+			/* No point in doing futher */
+			elog(ERROR, "%s of backup %s failed.", action, base36enc(dest_backup->start_time));
+		}
+		else if (result == 1)
+		{
+			/* chain is intact, but at least one parent is invalid */
+			char	   *parent_backup_id;
+
+			/* parent_backup_id contain human-readable backup ID of oldest invalid backup */
+			parent_backup_id = base36enc_dup(tmp_backup->start_time);
+
+			for (j = get_backup_index_number(backups, tmp_backup) - 1; j >= 0; j--)
+			{
+
+				pgBackup *backup = (pgBackup *) parray_get(backups, j);
+
+				if (is_parent(tmp_backup->start_time, backup, false))
+				{
+					if (backup->status == BACKUP_STATUS_OK)
+					{
+						backup->status = BACKUP_STATUS_ORPHAN;
+						write_backup_status(backup);
+
+						elog(WARNING,
+							 "Backup %s is orphaned because his parent %s has status: %s",
+							 base36enc(backup->start_time),
+							 parent_backup_id,
+							 status2str(tmp_backup->status));
+					}
+					else
+					{
+						elog(WARNING, "Backup %s has parent %s with status: %s",
+								base36enc(backup->start_time), parent_backup_id,
+								status2str(tmp_backup->status));
+					}
+				}
+			}
+			tmp_backup = find_parent_full_backup(dest_backup);
 		}
 
-		/* If we already found dest_backup, look for full backup. */
-		if (dest_backup)
-		{
-			if (current_backup->backup_mode == BACKUP_MODE_FULL)
-			{
-				if (current_backup->status != BACKUP_STATUS_OK)
-				{
-					/* Full backup revalidation can be done only for DONE and CORRUPT */
-					if (current_backup->status == BACKUP_STATUS_DONE ||
-							current_backup->status == BACKUP_STATUS_CORRUPT)
-						elog(WARNING, "base backup %s for given backup %s is in %s status, trying to revalidate",
-							base36enc_dup(current_backup->start_time),
-							base36enc_dup(dest_backup->start_time),
-							status2str(current_backup->status));
-					else
-						elog(ERROR, "base backup %s for given backup %s is in %s status",
-							base36enc_dup(current_backup->start_time),
-							base36enc_dup(dest_backup->start_time),
-							status2str(current_backup->status));
-				}
-				/* We found both dest and base backups. */
-				base_full_backup = current_backup;
-				base_full_backup_index = i;
-				break;
-			}
-			else
-				/* It`s ok to skip incremental backup */
-				continue;
-		}
+		/*
+		 * We have found full backup by link,
+		 * now we need to walk the list to find its index.
+		 *
+		 * TODO I think we should rewrite it someday to use double linked list
+		 * and avoid relying on sort order anymore.
+		 */
+		base_full_backup = tmp_backup;
 	}
 
 	if (base_full_backup == NULL)
 		elog(ERROR, "Full backup satisfying target options is not found.");
+
+	base_full_backup_index = get_backup_index_number(backups, base_full_backup);
 
 	/*
 	 * Ensure that directories provided in tablespace mapping are valid
@@ -243,76 +280,88 @@ do_restore_or_validate(time_t target_backup_id,
 	if (is_restore)
 		check_tablespace_mapping(dest_backup);
 
-	if (dest_backup->backup_mode != BACKUP_MODE_FULL)
-		elog(INFO, "Validating parents for backup %s", base36enc(dest_backup->start_time));
-
-	/*
-	 * Validate backups from base_full_backup to dest_backup.
-	 */
-	for (i = base_full_backup_index; i >= dest_backup_index; i--)
+	if (!is_restore || !rt->restore_no_validate)
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
-		pgBackupValidate(backup);
-		/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
-		if (backup->status == BACKUP_STATUS_CORRUPT)
-		{
-			corrupted_backup = backup;
-			corrupted_backup_index = i;
-			break;
-		}
-		/* We do not validate WAL files of intermediate backups
-		 * It`s done to speed up restore
-		 */
-	}
-	/* There is no point in wal validation
-	 * if there is corrupted backup between base_backup and dest_backup
-	 */
-	if (!corrupted_backup)
+		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
+			elog(INFO, "Validating parents for backup %s", base36enc(dest_backup->start_time));
+
 		/*
-		 * Validate corresponding WAL files.
-		 * We pass base_full_backup timeline as last argument to this function,
-		 * because it's needed to form the name of xlog file.
+		 * Validate backups from base_full_backup to dest_backup.
+		 * At this point we are sure that parent chain is intact.
 		 */
-		validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-					rt->recovery_target_xid, base_full_backup->tli);
-
-	/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
-	if (corrupted_backup)
-	{
-		for (i = corrupted_backup_index - 1; i >= 0; i--)
+		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
-			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
-			/* Mark incremental OK backup as orphan */
-			if (backup->backup_mode == BACKUP_MODE_FULL)
-				break;
-			if (backup->status != BACKUP_STATUS_OK)
-				continue;
-			else
+			tmp_backup = (pgBackup *) parray_get(backups, i);
+
+			if (is_parent(base_full_backup->start_time, tmp_backup, true))
 			{
-				char	   *backup_id,
-						   *corrupted_backup_id;
 
-				backup->status = BACKUP_STATUS_ORPHAN;
-				pgBackupWriteBackupControlFile(backup);
-
-				backup_id = base36enc_dup(backup->start_time);
-				corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
-
-				elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
-					 backup_id, corrupted_backup_id);
-
-				free(backup_id);
-				free(corrupted_backup_id);
+				pgBackupValidate(tmp_backup);
+				/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
+				if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
+				{
+					corrupted_backup = tmp_backup;
+					corrupted_backup_index = i;
+					break;
+				}
+				/* We do not validate WAL files of intermediate backups
+				 * It`s done to speed up restore
+				 */
 			}
 		}
+
+		/* There is no point in wal validation of corrupted backups */
+		if (!corrupted_backup)
+		{
+			/*
+			 * Validate corresponding WAL files.
+			 * We pass base_full_backup timeline as last argument to this function,
+			 * because it's needed to form the name of xlog file.
+			 */
+			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
+						 rt->recovery_target_xid, rt->recovery_target_lsn,
+						 base_full_backup->tli, xlog_seg_size);
+		}
+		/* Orphinize every OK descendant of corrupted backup */
+		else
+		{
+			char	   *corrupted_backup_id;
+			corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
+
+			for (j = corrupted_backup_index - 1; j >= 0; j--)
+			{
+				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
+
+				if (is_parent(corrupted_backup->start_time, backup, false))
+				{
+					if (backup->status == BACKUP_STATUS_OK)
+					{
+						backup->status = BACKUP_STATUS_ORPHAN;
+						write_backup_status(backup);
+
+						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
+							 base36enc(backup->start_time),
+							 corrupted_backup_id,
+							 status2str(corrupted_backup->status));
+					}
+				}
+			}
+			free(corrupted_backup_id);
+		}
 	}
 
+	// TODO: rewrite restore to use parent_chain
 	/*
 	 * If dest backup is corrupted or was orphaned in previous check
 	 * produce corresponding error message
 	 */
 	if (dest_backup->status == BACKUP_STATUS_OK)
-		elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
+	{
+		if (rt->restore_no_validate)
+			elog(INFO, "Backup %s is used without validation.", base36enc(dest_backup->start_time));
+		else
+			elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
+	}
 	else if (dest_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Backup %s is corrupt.", base36enc(dest_backup->start_time));
 	else if (dest_backup->status == BACKUP_STATUS_ORPHAN)
@@ -321,12 +370,19 @@ do_restore_or_validate(time_t target_backup_id,
 		elog(ERROR, "Backup %s has status: %s",
 				base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
-	/* We ensured that all backups are valid, now restore if required */
+	/* We ensured that all backups are valid, now restore if required
+	 * TODO: use parent_link
+	 */
 	if (is_restore)
 	{
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+
+			if (rt->lsn_specified && parse_server_version(backup->server_version) < 100000)
+				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
+						base36enc(dest_backup->start_time), dest_backup->server_version);
+
 			restore_backup(backup);
 		}
 
@@ -357,14 +413,17 @@ void
 restore_backup(pgBackup *backup)
 {
 	char		timestamp[100];
+	char		this_backup_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
 	char		extra_path[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
 	int			i;
-	pthread_t	restore_threads[num_threads];
-	restore_files_args *restore_threads_args[num_threads];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t  *threads;
+	restore_files_arg *threads_args;
 	bool		restore_isok = true;
+
 
 	if (backup->status != BACKUP_STATUS_OK)
 		elog(ERROR, "Backup %s cannot be restored because it is not valid",
@@ -382,6 +441,13 @@ restore_backup(pgBackup *backup)
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
 	elog(LOG, "restoring database from backup %s", timestamp);
+
+	/*
+	 * Restore backup directories.
+	 * this_backup_path = $BACKUP_PATH/backups/instance_name/backup_id
+	 */
+	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
+	create_data_directories(pgdata, this_backup_path, true);
 
 	/*
 	 * Get list of files which need to be restored.
@@ -423,42 +489,44 @@ restore_backup(pgBackup *backup)
 		}
 
 		/* setup threads */
-		__sync_lock_release(&file->lock);
+		pg_atomic_clear_flag(&file->lock);
 	}
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (restore_files_arg *) palloc(sizeof(restore_files_arg)*num_threads);
 
 	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
 	{
-		restore_files_args *arg = pg_malloc(sizeof(restore_files_args));
+		restore_files_arg *arg = &(threads_args[i]);
+
 		arg->files = files;
 		arg->backup = backup;
 		/* By default there are some error */
-		arg->ret = 1;
+		threads_args[i].ret = 1;
 
 		elog(LOG, "Start thread for num:%li", parray_num(files));
 
-		restore_threads_args[i] = arg;
-		pthread_create(&restore_threads[i], NULL,
-					   (void *(*)(void *)) restore_files, arg);
+		pthread_create(&threads[i], NULL, restore_files, arg);
 	}
 
 	/* Wait theads */
 	for (i = 0; i < num_threads; i++)
 	{
-		pthread_join(restore_threads[i], NULL);
-		if (restore_threads_args[i]->ret == 1)
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret == 1)
 			restore_isok = false;
-
-		pg_free(restore_threads_args[i]);
 	}
 	if (!restore_isok)
 		elog(ERROR, "Data files restoring failed");
+
+	pfree(threads);
+	pfree(threads_args);
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+	if (log_level_console <= LOG || log_level_file <= LOG)
 		elog(LOG, "restore %s backup completed", base36enc(backup->start_time));
 }
 
@@ -475,7 +543,7 @@ remove_deleted_files(pgBackup *backup)
 	parray	   *files_restored;
 	char		filelist_path[MAXPGPATH];
 	char		extra_path[MAXPGPATH];
-	int 		i;
+	int			i;
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
 	pgBackupGetPath(backup, extra_path, lengthof(extra_path), EXTRA_DIR);
@@ -497,7 +565,7 @@ remove_deleted_files(pgBackup *backup)
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
 			pgFileDelete(file);
-			if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
+			if (log_level_console <= LOG || log_level_file <= LOG)
 				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
 		}
 	}
@@ -510,227 +578,13 @@ remove_deleted_files(pgBackup *backup)
 }
 
 /*
- * Restore backup directories from **backup_database_dir** to **pg_data_dir**.
- *
- * TODO: Think about simplification and clarity of the function.
- */
-static void
-restore_directories(const char *pg_data_dir, const char *backup_dir)
-{
-	parray	   *dirs,
-			   *links;
-	size_t		i;
-	char		backup_database_dir[MAXPGPATH],
-				to_path[MAXPGPATH];
-
-	dirs = parray_new();
-	links = parray_new();
-
-	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
-
-	list_data_directories(dirs, backup_database_dir, true, false);
-	read_tablespace_map(links, backup_dir);
-
-	elog(LOG, "restore directories and symlinks...");
-
-	for (i = 0; i < parray_num(dirs); i++)
-	{
-		pgFile	   *dir = (pgFile *) parray_get(dirs, i);
-		char	   *relative_ptr = GetRelativePath(dir->path, backup_database_dir);
-
-		Assert(S_ISDIR(dir->mode));
-
-		/* First try to create symlink and linked directory */
-		if (path_is_prefix_of_path(PG_TBLSPC_DIR, relative_ptr))
-		{
-			char	   *link_ptr = GetRelativePath(relative_ptr, PG_TBLSPC_DIR),
-					   *link_sep,
-					   *tmp_ptr;
-			char		link_name[MAXPGPATH];
-			pgFile	  **link;
-
-			/* Extract link name from relative path */
-			link_sep = first_dir_separator(link_ptr);
-			if (link_sep != NULL)
-			{
-				int			len = link_sep - link_ptr;
-				strncpy(link_name, link_ptr, len);
-				link_name[len] = '\0';
-			}
-			else
-				goto create_directory;
-
-			tmp_ptr = dir->path;
-			dir->path = link_name;
-			/* Search only by symlink name without path */
-			link = (pgFile **) parray_bsearch(links, dir, pgFileComparePath);
-			dir->path = tmp_ptr;
-
-			if (link)
-			{
-				const char *linked_path = get_tablespace_mapping((*link)->linked);
-				const char *dir_created;
-
-				if (!is_absolute_path(linked_path))
-					elog(ERROR, "tablespace directory is not an absolute path: %s\n",
-						 linked_path);
-
-				/* Check if linked directory was created earlier */
-				dir_created = get_tablespace_created(link_name);
-				if (dir_created)
-				{
-					/*
-					 * If symlink and linked directory were created do not
-					 * create it second time.
-					 */
-					if (strcmp(dir_created, linked_path) == 0)
-					{
-						/*
-						 * Create rest of directories.
-						 * First check is there any directory name after
-						 * separator.
-						 */
-						if (link_sep != NULL && *(link_sep + 1) != '\0')
-							goto create_directory;
-						else
-							continue;
-					}
-					else
-						elog(ERROR, "tablespace directory \"%s\" of page backup does not "
-							 "match with previous created tablespace directory \"%s\" of symlink \"%s\"",
-							 linked_path, dir_created, link_name);
-				}
-
-				/*
-				 * This check was done in check_tablespace_mapping(). But do
-				 * it again.
-				 */
-				if (!dir_is_empty(linked_path))
-					elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-						 linked_path);
-
-				if (link_sep)
-					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
-						 linked_path,
-						 (int) (link_sep -  relative_ptr), relative_ptr);
-				else
-					elog(LOG, "create directory \"%s\" and symbolic link \"%s\"",
-						 linked_path, relative_ptr);
-
-				/* Firstly, create linked directory */
-				dir_create_dir(linked_path, DIR_PERMISSION);
-
-				join_path_components(to_path, pg_data_dir, PG_TBLSPC_DIR);
-				/* Create pg_tblspc directory just in case */
-				dir_create_dir(to_path, DIR_PERMISSION);
-
-				/* Secondly, create link */
-				join_path_components(to_path, to_path, link_name);
-				if (symlink(linked_path, to_path) < 0)
-					elog(ERROR, "could not create symbolic link \"%s\": %s",
-						 to_path, strerror(errno));
-
-				/* Save linked directory */
-				set_tablespace_created(link_name, linked_path);
-
-				/*
-				 * Create rest of directories.
-				 * First check is there any directory name after separator.
-				 */
-				if (link_sep != NULL && *(link_sep + 1) != '\0')
-					goto create_directory;
-
-				continue;
-			}
-		}
-
-create_directory:
-		elog(LOG, "create directory \"%s\"", relative_ptr);
-
-		/* This is not symlink, create directory */
-		join_path_components(to_path, pg_data_dir, relative_ptr);
-		dir_create_dir(to_path, DIR_PERMISSION);
-	}
-
-	parray_walk(links, pgFileFree);
-	parray_free(links);
-
-	parray_walk(dirs, pgFileFree);
-	parray_free(dirs);
-}
-
-/*
- * Check that all tablespace mapping entries have correct linked directory
- * paths. Linked directories must be empty or do not exist.
- *
- * If tablespace-mapping option is supplied, all OLDDIR entries must have
- * entries in tablespace_map file.
- */
-static void
-check_tablespace_mapping(pgBackup *backup)
-{
-	char		this_backup_path[MAXPGPATH];
-	parray	   *links;
-	size_t		i;
-	TablespaceListCell *cell;
-	pgFile	   *tmp_file = pgut_new(pgFile);
-
-	links = parray_new();
-
-	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	read_tablespace_map(links, this_backup_path);
-
-	if (LOG_LEVEL_CONSOLE <= LOG || LOG_LEVEL_FILE <= LOG)
-		elog(LOG, "check tablespace directories of backup %s",
-			 base36enc(backup->start_time));
-
-	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
-	for (cell = tablespace_dirs.head; cell; cell = cell->next)
-	{
-		tmp_file->linked = cell->old_dir;
-
-		if (parray_bsearch(links, tmp_file, pgFileCompareLinked) == NULL)
-			elog(ERROR, "--tablespace-mapping option's old directory "
-				 "doesn't have an entry in tablespace_map file: \"%s\"",
-				 cell->old_dir);
-	}
-
-	/* 2 - all linked directories must be empty */
-	for (i = 0; i < parray_num(links); i++)
-	{
-		pgFile	   *link = (pgFile *) parray_get(links, i);
-		const char *linked_path = link->linked;
-		TablespaceListCell *cell;
-
-		for (cell = tablespace_dirs.head; cell; cell = cell->next)
-			if (strcmp(link->linked, cell->old_dir) == 0)
-			{
-				linked_path = cell->new_dir;
-				break;
-			}
-
-		if (!is_absolute_path(linked_path))
-			elog(ERROR, "tablespace directory is not an absolute path: %s\n",
-				 linked_path);
-
-		if (!dir_is_empty(linked_path))
-			elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-				 linked_path);
-	}
-
-	free(tmp_file);
-	parray_walk(links, pgFileFree);
-	parray_free(links);
-}
-
-/*
  * Restore files into $PGDATA.
  */
-static void
+static void *
 restore_files(void *arg)
 {
 	int			i;
-	restore_files_args *arguments = (restore_files_args *)arg;
+	restore_files_arg *arguments = (restore_files_arg *)arg;
 
 	for (i = 0; i < parray_num(arguments->files); i++)
 	{
@@ -738,7 +592,7 @@ restore_files(void *arg)
 		char	   *rel_path;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 
-		if (__sync_lock_test_and_set(&file->lock, 1) != 0)
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		pgBackupGetPath(arguments->backup, from_root,
@@ -754,7 +608,6 @@ restore_files(void *arg)
 			elog(LOG, "Progress: (%d/%lu). Process file %s ",
 				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
 
-
 		/*
 		 * For PAGE and PTRACK backups skip files which haven't changed
 		 * since previous backup and thus were not backed up.
@@ -765,11 +618,11 @@ restore_files(void *arg)
 			(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE
 			|| arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK))
 		{
-			elog(VERBOSE, "The file didn`t changed. Skip restore: %s", file->path);
+			elog(VERBOSE, "The file didn`t change. Skip restore: %s", file->path);
 			continue;
 		}
 
-		/* Directories was created before */
+		/* Directories were created before */
 		if (S_ISDIR(file->mode))
 		{
 			elog(VERBOSE, "directory, skip");
@@ -789,9 +642,18 @@ restore_files(void *arg)
 		 * block and have BackupPageHeader meta information, so we cannot just
 		 * copy the file from backup.
 		 */
-		elog(VERBOSE, "Restoring file %s, is_datafile %i, is_cfs %i", file->path, file->is_datafile?1:0, file->is_cfs?1:0);
+		elog(VERBOSE, "Restoring file %s, is_datafile %i, is_cfs %i",
+			 file->path, file->is_datafile?1:0, file->is_cfs?1:0);
 		if (file->is_datafile && !file->is_cfs)
-			restore_data_file(from_root, pgdata, file, arguments->backup);
+		{
+			char		to_path[MAXPGPATH];
+
+			join_path_components(to_path, pgdata,
+								 file->path + strlen(from_root) + 1);
+			restore_data_file(to_path, file,
+							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
+							  false);
+		}
 		else if (file->is_extra)
 			copy_file(from_root, file->extradir, file);
 		else
@@ -799,12 +661,14 @@ restore_files(void *arg)
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Restored file %s : %lu bytes",
-				file->path, (unsigned long) file->write_size);
+			elog(VERBOSE, "Restored file %s : " INT64_FORMAT " bytes",
+				 file->path, file->write_size);
 	}
 
 	/* Data files restoring is successful */
 	arguments->ret = 0;
+
+	return NULL;
 }
 
 /* Create recovery.conf with given recovery target parameters */
@@ -813,9 +677,9 @@ create_recovery_conf(time_t backup_id,
 					 pgRecoveryTarget *rt,
 					 pgBackup *backup)
 {
-	char path[MAXPGPATH];
-	FILE *fp;
-	bool need_restore_conf = false;
+	char		path[MAXPGPATH];
+	FILE	   *fp;
+	bool		need_restore_conf = false;
 
 	if (!backup->stream
 		|| (rt->time_specified || rt->xid_specified))
@@ -856,6 +720,9 @@ create_recovery_conf(time_t backup_id,
 
 		if (rt->xid_specified)
 			fprintf(fp, "recovery_target_xid = '%s'\n", rt->target_xid_string);
+
+		if (rt->recovery_target_lsn)
+			fprintf(fp, "recovery_target_lsn = '%s'\n", rt->target_lsn_string);
 
 		if (rt->recovery_target_immediate)
 			fprintf(fp, "recovery_target = 'immediate'\n");
@@ -985,7 +852,8 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 	entry = pgut_new(TimeLineHistoryEntry);
 	entry->tli = targetTLI;
 	/* LSN in target timeline is valid */
-	entry->end = (uint32) (-1UL << 32) | -1UL;
+	/* TODO ensure that -1UL --> -1L fix is correct */
+	entry->end = (uint32) (-1L << 32) | -1L;
 	parray_insert(result, 0, entry);
 
 	return result;
@@ -1000,16 +868,22 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 	if (rt->time_specified)
 		return backup->recovery_time <= rt->recovery_target_time;
 
+	if (rt->lsn_specified)
+		return backup->stop_lsn <= rt->recovery_target_lsn;
+
 	return true;
 }
 
 bool
 satisfy_timeline(const parray *timelines, const pgBackup *backup)
 {
-	int i;
+	int			i;
+
 	for (i = 0; i < parray_num(timelines); i++)
 	{
-		TimeLineHistoryEntry *timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
+		TimeLineHistoryEntry *timeline;
+
+		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
 			backup->stop_lsn < timeline->end)
 			return true;
@@ -1025,33 +899,40 @@ parseRecoveryTargetOptions(const char *target_time,
 					const char *target_xid,
 					const char *target_inclusive,
 					TimeLineID	target_tli,
+					const char *target_lsn,
 					bool target_immediate,
 					const char *target_name,
-					const char *target_action)
+					const char *target_action,
+					bool		restore_no_validate)
 {
-	time_t			dummy_time;
-	TransactionId	dummy_xid;
-	bool			dummy_bool;
+	time_t		dummy_time;
+	TransactionId dummy_xid;
+	bool		dummy_bool;
+	XLogRecPtr	dummy_lsn;
 	/*
 	 * count the number of the mutually exclusive options which may specify
 	 * recovery target. If final value > 1, throw an error.
 	 */
-	int				recovery_target_specified = 0;
+	int			recovery_target_specified = 0;
 	pgRecoveryTarget *rt = pgut_new(pgRecoveryTarget);
 
 	/* fill all options with default values */
 	rt->time_specified = false;
 	rt->xid_specified = false;
 	rt->inclusive_specified = false;
+	rt->lsn_specified = false;
 	rt->recovery_target_time = 0;
 	rt->recovery_target_xid  = 0;
+	rt->recovery_target_lsn = InvalidXLogRecPtr;
 	rt->target_time_string = NULL;
 	rt->target_xid_string = NULL;
+	rt->target_lsn_string = NULL;
 	rt->recovery_target_inclusive = false;
 	rt->recovery_target_tli  = 0;
 	rt->recovery_target_immediate = false;
 	rt->recovery_target_name = NULL;
 	rt->recovery_target_action = NULL;
+	rt->restore_no_validate = false;
 
 	/* parse given options */
 	if (target_time)
@@ -1060,7 +941,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		rt->time_specified = true;
 		rt->target_time_string = target_time;
 
-		if (parse_time(target_time, &dummy_time))
+		if (parse_time(target_time, &dummy_time, false))
 			rt->recovery_target_time = dummy_time;
 		else
 			elog(ERROR, "Invalid value of --time option %s", target_time);
@@ -1082,6 +963,17 @@ parseRecoveryTargetOptions(const char *target_time,
 			elog(ERROR, "Invalid value of --xid option %s", target_xid);
 	}
 
+	if (target_lsn)
+	{
+		recovery_target_specified++;
+		rt->lsn_specified = true;
+		rt->target_lsn_string = target_lsn;
+		if (parse_lsn(target_lsn, &dummy_lsn))
+			rt->recovery_target_lsn = dummy_lsn;
+		else
+			elog(ERROR, "Invalid value of --lsn option %s", target_lsn);
+	}
+
 	if (target_inclusive)
 	{
 		rt->inclusive_specified = true;
@@ -1096,6 +988,11 @@ parseRecoveryTargetOptions(const char *target_time,
 	{
 		recovery_target_specified++;
 		rt->recovery_target_immediate = target_immediate;
+	}
+
+	if (restore_no_validate)
+	{
+		rt->restore_no_validate = restore_no_validate;
 	}
 
 	if (target_name)
@@ -1121,123 +1018,11 @@ parseRecoveryTargetOptions(const char *target_time,
 
 	/* More than one mutually exclusive option was defined. */
 	if (recovery_target_specified > 1)
-		elog(ERROR, "At most one of --immediate, --target-name, --time, or --xid can be used");
+		elog(ERROR, "At most one of --immediate, --target-name, --time, --xid, or --lsn can be used");
 
 	/* If none of the options is defined, '--inclusive' option is meaningless */
-	if (!(rt->xid_specified || rt->time_specified) && rt->recovery_target_inclusive)
+	if (!(rt->xid_specified || rt->time_specified || rt->lsn_specified) && rt->recovery_target_inclusive)
 		elog(ERROR, "--inclusive option applies when either --time or --xid is specified");
 
 	return rt;
-}
-
-/*
- * Split argument into old_dir and new_dir and append to tablespace mapping
- * list.
- *
- * Copy of function tablespace_list_append() from pg_basebackup.c.
- */
-void
-opt_tablespace_map(pgut_option *opt, const char *arg)
-{
-	TablespaceListCell *cell = pgut_new(TablespaceListCell);
-	char	   *dst;
-	char	   *dst_ptr;
-	const char *arg_ptr;
-
-	dst_ptr = dst = cell->old_dir;
-	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
-	{
-		if (dst_ptr - dst >= MAXPGPATH)
-			elog(ERROR, "directory name too long");
-
-		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
-			;					/* skip backslash escaping = */
-		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
-		{
-			if (*cell->new_dir)
-				elog(ERROR, "multiple \"=\" signs in tablespace mapping\n");
-			else
-				dst = dst_ptr = cell->new_dir;
-		}
-		else
-			*dst_ptr++ = *arg_ptr;
-	}
-
-	if (!*cell->old_dir || !*cell->new_dir)
-		elog(ERROR, "invalid tablespace mapping format \"%s\", "
-			 "must be \"OLDDIR=NEWDIR\"", arg);
-
-	/*
-	 * This check isn't absolutely necessary.  But all tablespaces are created
-	 * with absolute directories, so specifying a non-absolute path here would
-	 * just never match, possibly confusing users.  It's also good to be
-	 * consistent with the new_dir check.
-	 */
-	if (!is_absolute_path(cell->old_dir))
-		elog(ERROR, "old directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->old_dir);
-
-	if (!is_absolute_path(cell->new_dir))
-		elog(ERROR, "new directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->new_dir);
-
-	if (tablespace_dirs.tail)
-		tablespace_dirs.tail->next = cell;
-	else
-		tablespace_dirs.head = cell;
-	tablespace_dirs.tail = cell;
-}
-
-/*
- * Retrieve tablespace path, either relocated or original depending on whether
- * -T was passed or not.
- *
- * Copy of function get_tablespace_mapping() from pg_basebackup.c.
- */
-static const char *
-get_tablespace_mapping(const char *dir)
-{
-	TablespaceListCell *cell;
-
-	for (cell = tablespace_dirs.head; cell; cell = cell->next)
-		if (strcmp(dir, cell->old_dir) == 0)
-			return cell->new_dir;
-
-	return dir;
-}
-
-/*
- * Save create directory path into memory. We can use it in next page restore to
- * not raise the error "restore tablespace destination is not empty" in
- * restore_directories().
- */
-static void
-set_tablespace_created(const char *link, const char *dir)
-{
-	TablespaceCreatedListCell *cell = pgut_new(TablespaceCreatedListCell);
-
-	strcpy(cell->link_name, link);
-	strcpy(cell->linked_dir, dir);
-	cell->next = NULL;
-
-	if (tablespace_created_dirs.tail)
-		tablespace_created_dirs.tail->next = cell;
-	else
-		tablespace_created_dirs.head = cell;
-	tablespace_created_dirs.tail = cell;
-}
-
-/*
- * Is directory was created when symlink was created in restore_directories().
- */
-static const char *
-get_tablespace_created(const char *link)
-{
-	TablespaceCreatedListCell *cell;
-
-	for (cell = tablespace_created_dirs.head; cell; cell = cell->next)
-		if (strcmp(link, cell->link_name) == 0)
-			return cell->linked_dir;
-
-	return NULL;
 }

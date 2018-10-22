@@ -11,7 +11,6 @@
 #include "pg_probackup.h"
 
 #include <unistd.h>
-#include <dirent.h>
 #include <sys/stat.h>
 
 /*
@@ -54,7 +53,7 @@ do_add_instance(void)
 {
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
-    struct stat st;
+	struct stat st;
 	pgBackupConfig *config = pgut_new(pgBackupConfig);
 
 	/* PGDATA is always required */
@@ -64,6 +63,8 @@ do_add_instance(void)
 
 	/* Read system_identifier from PGDATA */
 	system_identifier = get_system_identifier(pgdata);
+	/* Starting from PostgreSQL 11 read WAL segment size from PGDATA */
+	xlog_seg_size = get_xlog_seg_size(pgdata);
 
 	/* Ensure that all root directories already exist */
 	if (access(backup_path, F_OK) != 0)
@@ -97,6 +98,7 @@ do_add_instance(void)
 	 */
 	pgBackupConfigInit(config);
 	config->system_identifier = system_identifier;
+	config->xlog_seg_size = xlog_seg_size;
 	config->pgdata = pgdata;
 	writeBackupCatalogConfigFile(config);
 

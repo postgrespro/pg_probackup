@@ -29,7 +29,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -45,11 +45,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.restore_node(
             backup_dir, 'node', node)
-        node.start()
-        while node.safe_psql(
-            "postgres",
-                "select pg_is_in_recovery()") == 't\n':
-            sleep(1)
+        node.slow_start()
 
         # Recreate backup calagoue
         self.init_pb(backup_dir)
@@ -65,11 +61,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=["--recovery-target-action=promote"])
-        node.start()
-        while node.safe_psql(
-            "postgres",
-                "select pg_is_in_recovery()") == 't\n':
-            sleep(1)
+        node.slow_start()
 
         self.assertEqual(
             result, node.safe_psql("postgres", "SELECT * FROM t_heap"),
@@ -97,7 +89,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FIRST TIMELINE
         node.safe_psql(
@@ -117,11 +109,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=['--immediate', '--recovery-target-action=promote'])
-        node.start()
-        while node.safe_psql(
-            "postgres",
-                "select pg_is_in_recovery()") == 't\n':
-            sleep(1)
+        node.slow_start()
+
         if self.verbose:
             print(node.safe_psql(
                 "postgres",
@@ -152,11 +141,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=['--immediate', '--recovery-target-action=promote'])
-        node.start()
-        while node.safe_psql(
-            "postgres",
-                "select pg_is_in_recovery()") == 't\n':
-            sleep(1)
+        node.slow_start()
 
         if self.verbose:
             print(
@@ -184,11 +169,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=['--immediate', '--recovery-target-action=promote'])
-        node.start()
-        while node.safe_psql(
-                "postgres",
-                "select pg_is_in_recovery()") == 't\n':
-            sleep(1)
+        node.slow_start()
+
         if self.verbose:
             print('Fourth timeline')
             print(node.safe_psql(
@@ -200,10 +182,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=['--immediate', '--recovery-target-action=promote'])
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            sleep(1)
+        node.slow_start()
+
         if self.verbose:
             print('Fifth timeline')
             print(node.safe_psql(
@@ -215,10 +195,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=['--immediate', '--recovery-target-action=promote'])
-        node.start()
-        while node.safe_psql(
-                "postgres", "select pg_is_in_recovery()") == 't\n':
-            sleep(1)
+        node.slow_start()
+
         if self.verbose:
             print('Sixth timeline')
             print(node.safe_psql(
@@ -269,7 +247,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.append_conf(
             'postgresql.auto.conf', "archive_command  = '{0} %p %f'".format(
                 archive_script_path))
-        node.start()
+        node.slow_start()
         try:
             self.backup_node(
                 backup_dir, 'node', node,
@@ -330,7 +308,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close()
 
-        node.start()
+        node.slow_start()
         node.safe_psql(
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
@@ -390,7 +368,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close()
 
-        node.start()
+        node.slow_start()
         node.safe_psql(
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
@@ -426,7 +404,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_replica_archive(self):
-        """make node without archiving, take stream backup and turn it into replica, set replica with archiving, make archive backup from replica"""
+        """
+        make node without archiving, take stream backup and
+        turn it into replica, set replica with archiving,
+        make archive backup from replica
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -441,7 +423,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         replica = self.make_simple_node(
             base_dir="{0}/{1}/replica".format(module_name, fname))
@@ -459,15 +441,18 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Settings for Replica
         self.restore_node(backup_dir, 'master', replica)
         self.set_replica(master, replica, synchronous=True)
+
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # Check data correctness on replica
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
-        # Change data on master, take FULL backup from replica, restore taken backup and check that restored data equal to original data
+        # Change data on master, take FULL backup from replica,
+        # restore taken backup and check that restored data equal
+        # to original data
         master.psql(
             "postgres",
             "insert into t_heap as select i as id, md5(i::text) as text, "
@@ -496,12 +481,14 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
-        # Change data on master, make PAGE backup from replica, restore taken backup and check that restored data equal to original data
+        # Change data on master, make PAGE backup from replica,
+        # restore taken backup and check that restored data equal
+        # to original data
         master.psql(
             "postgres",
             "insert into t_heap as select i as id, md5(i::text) as text, "
@@ -526,7 +513,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
-        node.start()
+        node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
@@ -560,7 +547,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         master.psql(
             "postgres",
@@ -586,7 +573,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         # SET ARCHIVING FOR REPLICA
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # CHECK LOGICAL CORRECTNESS on REPLICA
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -641,7 +628,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         master.psql(
             "postgres",
@@ -668,7 +655,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # self.add_instance(backup_dir, 'replica', replica)
         # SET ARCHIVING FOR REPLICA
         # self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # CHECK LOGICAL CORRECTNESS on REPLICA
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -763,7 +750,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Check data correctness
         node.cleanup()
         self.restore_node(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
+
         self.assertEqual(
             result,
             node.safe_psql(
@@ -795,7 +783,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         if self.get_version(node) < self.version_to_num('10.0'):
             return unittest.skip('You need PostgreSQL 10 for this test')
         else:
-            pg_receivexlog_path = node.get_bin_path('pg_receivewal')
+            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         pg_receivexlog = self.run_binary(
             [
@@ -834,7 +822,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Check data correctness
         node.cleanup()
         self.restore_node(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
+
         self.assertEqual(
             result, node.safe_psql("postgres", "SELECT * FROM t_heap"),
             'data after restore not equal to original data')
