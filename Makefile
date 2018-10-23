@@ -38,7 +38,7 @@ EXTRA_CLEAN += src/walmethods.c src/walmethods.h
 INCLUDES += src/walmethods.h
 endif
 
-PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc
+PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc -I$(top_srcdir)/$(subdir)/src
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
