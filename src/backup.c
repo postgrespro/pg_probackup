@@ -10,24 +10,27 @@
 
 #include "pg_probackup.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <time.h>
-
+#if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
+#endif
 #include "catalog/pg_tablespace.h"
-#include "datapagemap.h"
-#include "libpq/pqsignal.h"
 #include "pgtar.h"
 #include "receivelog.h"
-#include "storage/bufpage.h"
 #include "streamutil.h"
+
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "utils/thread.h"
+
+#define PG_STOP_BACKUP_TIMEOUT 300
+
+/*
+ * Macro needed to parse ptrack.
+ * NOTE Keep those values syncronised with definitions in ptrack.h
+ */
+#define PTRACK_BITS_PER_HEAPBLOCK 1
+#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
@@ -531,7 +534,7 @@ do_backup_instance(void)
 		prev_backup_start_lsn = prev_backup->start_lsn;
 		current.parent_backup = prev_backup->start_time;
 
-		pgBackupWriteBackupControlFile(&current);
+		write_backup(&current);
 	}
 
 	/*
@@ -906,11 +909,13 @@ do_backup(time_t start_time)
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
+	StrNCpy(current.program_version, PROGRAM_VERSION,
+			sizeof(current.program_version));
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "cannot create backup directory");
-	pgBackupWriteBackupControlFile(&current);
+	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");
 
@@ -932,7 +937,7 @@ do_backup(time_t start_time)
 	/* Backup is done. Update backup status */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
-	pgBackupWriteBackupControlFile(&current);
+	write_backup(&current);
 
 	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 	//		current.data_bytes);
@@ -2010,7 +2015,7 @@ backup_cleanup(bool fatal, void *userdata)
 			 base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
-		pgBackupWriteBackupControlFile(&current);
+		write_backup(&current);
 	}
 
 	/*
@@ -2096,12 +2101,13 @@ backup_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
+			pgFile	  **prev_file;
+
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
 			{
 				char	   *relative;
 				pgFile		key;
-				pgFile	  **prev_file;
 
 				relative = GetRelativePath(file->path, arguments->from_root);
 				key.path = relative;
@@ -2131,20 +2137,27 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			/* TODO:
-			 * Check if file exists in previous backup
-			 * If exists:
-			 *   if mtime > start_backup_time of parent backup,
-			 *    copy file to backup
-			 *   if mtime < start_backup_time
-			 *    calculate crc, compare crc to old file
-			 *      if crc is the same -> skip file
-			 */
-			else if (!copy_file(arguments->from_root, arguments->to_root, file))
+			else 
 			{
-				file->write_size = BYTES_INVALID;
-				elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
-				continue;
+				bool skip = false;
+
+				/* If non-data file has not changed since last backup... */
+				if (file->exists_in_prev &&
+					buf.st_mtime < current.parent_backup)
+				{
+					calc_file_checksum(file);
+					/* ...and checksum is the same... */
+					if (EQ_CRC32C(file->crc, (*prev_file)->crc))
+						skip = true; /* ...skip copying file. */
+				}
+				if (skip ||
+					!copy_file(arguments->from_root, arguments->to_root, file))
+				{
+					file->write_size = BYTES_INVALID;
+					elog(VERBOSE, "File \"%s\" was not copied to backup",
+						 file->path);
+					continue;
+				}
 			}
 
 			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",

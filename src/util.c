@@ -10,12 +10,9 @@
 
 #include "pg_probackup.h"
 
-#include <time.h>
+#include "catalog/pg_control.h"
 
-#include "storage/bufpage.h"
-#if PG_VERSION_NUM >= 110000
-#include "streamutil.h"
-#endif
+#include <time.h>
 
 const char *
 base36enc(long unsigned int value)
@@ -281,22 +278,6 @@ time2iso(char *buf, size_t len, time_t time)
 		snprintf(ptr, len - (ptr - buf), ":%02d",
 				 abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
 	}
-}
-
-/* copied from timestamp.c */
-pg_time_t
-timestamptz_to_time_t(TimestampTz t)
-{
-	pg_time_t	result;
-
-#ifdef HAVE_INT64_TIMESTAMP
-	result = (pg_time_t) (t / USECS_PER_SEC +
-				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
-#else
-	result = (pg_time_t) (t +
-				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
-#endif
-	return result;
 }
 
 /* Parse string representation of the server version */

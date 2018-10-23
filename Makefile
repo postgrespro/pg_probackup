@@ -1,7 +1,7 @@
 PROGRAM = pg_probackup
 OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
 	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o \
-	src/pg_probackup.o src/restore.o src/show.o src/status.o \
+	src/pg_probackup.o src/restore.o src/show.o \
 	src/util.o src/validate.o src/datapagemap.o src/parsexlog.o \
 	src/xlogreader.o src/streamutil.o src/receivelog.o \
 	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o \
@@ -38,7 +38,7 @@ EXTRA_CLEAN += src/walmethods.c src/walmethods.h
 INCLUDES += src/walmethods.h
 endif
 
-PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc
+PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc -I$(top_srcdir)/$(subdir)/src
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
 

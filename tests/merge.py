@@ -513,7 +513,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(node.data_dir)
 
         backup_id = self.show_pb(backup_dir, "node")[1]["id"]
-        self.merge_backup(backup_dir, "node", backup_id)
+        self.merge_backup(backup_dir, "node", backup_id, options=["-j", "4"])
 
         # RESTORE
         node_restored = self.make_simple_node(

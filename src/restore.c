@@ -10,13 +10,11 @@
 
 #include "pg_probackup.h"
 
-#include <fcntl.h>
+#include "access/timeline.h"
+
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
-#include "catalog/pg_control.h"
-#include "utils/logger.h"
 #include "utils/thread.h"
 
 typedef struct
@@ -208,7 +206,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK)
 					{
 						backup->status = BACKUP_STATUS_ORPHAN;
-						pgBackupWriteBackupControlFile(backup);
+						write_backup_status(backup);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -241,10 +239,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK)
 					{
 						backup->status = BACKUP_STATUS_ORPHAN;
-						pgBackupWriteBackupControlFile(backup);
-								elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
-								base36enc(backup->start_time), parent_backup_id,
-								status2str(tmp_backup->status));
+						write_backup_status(backup);
+
+						elog(WARNING,
+							 "Backup %s is orphaned because his parent %s has status: %s",
+							 base36enc(backup->start_time),
+							 parent_backup_id,
+							 status2str(tmp_backup->status));
 					}
 					else
 					{
@@ -336,7 +337,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK)
 					{
 						backup->status = BACKUP_STATUS_ORPHAN;
-						pgBackupWriteBackupControlFile(backup);
+						write_backup_status(backup);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),

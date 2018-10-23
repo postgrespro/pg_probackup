@@ -5,12 +5,64 @@ from datetime import datetime, timedelta
 import subprocess
 from sys import exit
 import time
+import hashlib
 
 
 module_name = 'validate'
 
 
 class ValidateTest(ProbackupTest, unittest.TestCase):
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_validate_nullified_heap_page_backup(self):
+        """
+        make node with nullified heap block
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=3)
+
+        file_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        # Nullify some block in PostgreSQL
+        file = os.path.join(node.data_dir, file_path)
+        with open(file, 'r+b') as f:
+            f.seek(8192)
+            f.write(b"\x00"*8192)
+            f.flush()
+            f.close
+
+        self.backup_node(
+            backup_dir, 'node', node, options=["--log-level-file=verbose"])
+
+        log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
+
+        with open(log_file_path) as f:
+            self.assertTrue(
+                'LOG: File: {0} blknum 1, empty page'.format(file) in f.read(),
+                'Failed to detect nullified block')
+
+        self.validate_pb(backup_dir)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -29,7 +81,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=3)
         with node.connect("postgres") as con:
@@ -198,7 +250,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Corrupt some file
         file = os.path.join(
             backup_dir, 'backups/node', backup_id_2, 'database', file_path)
-        with open(file, "rb+", 0) as f:
+        with open(file, "r+b", 0) as f:
             f.seek(42)
             f.write(b"blah")
             f.flush()
@@ -219,6 +271,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 'INFO: Validating parents for backup {0}'.format(
                     backup_id_2) in e.message and
                 'ERROR: Backup {0} is corrupt'.format(
+                    backup_id_2) in e.message and
+                'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_2) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -1530,7 +1584,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30'}
             )
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -1561,6 +1618,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             pass
+
         self.assertTrue(
             self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
         self.set_archiving(backup_dir, 'node', node)
@@ -1709,11 +1767,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
         os.rename(file_new, file)
+
         file = os.path.join(
             backup_dir, 'backups', 'node',
-            backup_id_page, 'database', 'postgresql.auto.conf')
+            backup_id_page, 'database', 'backup_label')
 
-        file_new = os.path.join(backup_dir, 'postgresql.auto.conf')
+        file_new = os.path.join(backup_dir, 'backup_label')
         os.rename(file, file_new)
 
         try:
@@ -1785,9 +1844,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         file = os.path.join(
             backup_dir, 'backups', 'node',
-            corrupt_id, 'database', 'postgresql.auto.conf')
+            corrupt_id, 'database', 'backup_label')
 
-        file_new = os.path.join(backup_dir, 'postgresql.auto.conf')
+        file_new = os.path.join(backup_dir, 'backup_label')
         os.rename(file, file_new)
 
         try:
@@ -3002,6 +3061,76 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_corrupt_pg_control_via_resetxlog(self):
+        """ PGPRO-2096 """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        if self.get_version(node) < 100000:
+            pg_resetxlog_path = self.get_bin_path('pg_resetxlog')
+            wal_dir = 'pg_xlog'
+        else:
+            pg_resetxlog_path = self.get_bin_path('pg_resetwal')
+            wal_dir = 'pg_wal'
+
+        os.mkdir(
+            os.path.join(
+                backup_dir, 'backups', 'node', backup_id, 'database', wal_dir, 'archive_status'))
+
+        pg_control_path = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'global', 'pg_control')
+
+        md5_before = hashlib.md5(
+            open(pg_control_path, 'rb').read()).hexdigest()
+
+        self.run_binary(
+            [
+                pg_resetxlog_path,
+                os.path.join(backup_dir, 'backups', 'node', backup_id, 'database'),
+                '-o 42',
+                '-f'
+            ],
+            async=False)
+
+        md5_after = hashlib.md5(
+            open(pg_control_path, 'rb').read()).hexdigest()
+
+        if self.verbose:
+            print('\n MD5 BEFORE resetxlog: {0}\n MD5 AFTER resetxlog: {1}'.format(
+                md5_before, md5_after))
+
+        # Validate backup
+        try:
+            self.validate_pb(backup_dir, 'node')
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of pg_control change.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'data files are corrupted',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

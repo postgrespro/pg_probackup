@@ -12,15 +12,15 @@
 
 #include "pg_probackup.h"
 
-#include <time.h>
-#include <unistd.h>
+#include "access/transam.h"
+#include "catalog/pg_control.h"
+#include "commands/dbcommands_xlog.h"
+#include "catalog/storage_xlog.h"
+
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 #endif
 
-#include "commands/dbcommands_xlog.h"
-#include "catalog/storage_xlog.h"
-#include "access/transam.h"
 #include "utils/thread.h"
 
 /*
@@ -135,6 +135,22 @@ static void PrintXLogCorruptionMsg(XLogPageReadPrivate *private_data,
 
 static XLogSegNo nextSegNoToRead = 0;
 static pthread_mutex_t wal_segment_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/* copied from timestamp.c */
+static pg_time_t
+timestamptz_to_time_t(TimestampTz t)
+{
+	pg_time_t	result;
+
+#ifdef HAVE_INT64_TIMESTAMP
+	result = (pg_time_t) (t / USECS_PER_SEC +
+				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
+#else
+	result = (pg_time_t) (t +
+				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
+#endif
+	return result;
+}
 
 /*
  * Do manual switch to the next WAL segment.
@@ -458,7 +474,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 		 * the backup is definitely corrupted. Update its status.
 		 */
 		backup->status = BACKUP_STATUS_CORRUPT;
-		pgBackupWriteBackupControlFile(backup);
+		write_backup_status(backup);
 
 		elog(WARNING, "There are not enough WAL records to consistenly restore "
 			"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",

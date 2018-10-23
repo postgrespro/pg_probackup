@@ -9,19 +9,35 @@
  */
 
 #include "pg_probackup.h"
-#include "streamutil.h"
-#include "utils/thread.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include "pg_getopt.h"
+#include "streamutil.h"
+
+#include <sys/stat.h>
+
+#include "utils/thread.h"
 
 const char *PROGRAM_VERSION	= "2.0.21";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
+
+typedef enum ProbackupSubcmd
+{
+	NO_CMD = 0,
+	INIT_CMD,
+	ADD_INSTANCE_CMD,
+	DELETE_INSTANCE_CMD,
+	ARCHIVE_PUSH_CMD,
+	ARCHIVE_GET_CMD,
+	BACKUP_CMD,
+	RESTORE_CMD,
+	VALIDATE_CMD,
+	DELETE_CMD,
+	MERGE_CMD,
+	SHOW_CMD,
+	SET_CONFIG_CMD,
+	SHOW_CONFIG_CMD
+} ProbackupSubcmd;
 
 /* directory options */
 char	   *backup_path = NULL;
@@ -113,7 +129,7 @@ ShowFormat show_format = SHOW_PLAIN;
 
 /* current settings */
 pgBackup	current;
-ProbackupSubcmd backup_subcmd = NO_CMD;
+static ProbackupSubcmd backup_subcmd = NO_CMD;
 
 static bool help_opt = false;
 
@@ -141,14 +157,14 @@ static pgut_option options[] =
 	{ 'f', 'b', "backup-mode",			opt_backup_mode,	SOURCE_CMDLINE },
 	{ 'b', 'C', "smooth-checkpoint",	&smooth_checkpoint,	SOURCE_CMDLINE },
 	{ 's', 'S', "slot",					&replication_slot,	SOURCE_CMDLINE },
-	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE, SOURCE_DEFAULT,	OPTION_UNIT_MS },
+	{ 'u', 11, "archive-timeout",		&archive_timeout,	SOURCE_CMDLINE, SOURCE_DEFAULT,	OPTION_UNIT_S },
 	{ 'b', 12, "delete-wal",			&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 13, "delete-expired",		&delete_expired,	SOURCE_CMDLINE },
 	{ 's', 14, "master-db",				&master_db,			SOURCE_CMDLINE, },
 	{ 's', 15, "master-host",			&master_host,		SOURCE_CMDLINE, },
 	{ 's', 16, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 17, "master-user",			&master_user,		SOURCE_CMDLINE, },
-	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
+	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
 	/* restore options */
@@ -534,7 +550,8 @@ main(int argc, char *argv[])
 			if (delete_expired)
 				return do_retention_purge();
 			else
-				return do_delete(current.backup_id);
+				do_delete(current.backup_id);
+			break;
 		case MERGE_CMD:
 			do_merge(current.backup_id);
 			break;

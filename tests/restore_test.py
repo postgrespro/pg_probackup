@@ -1242,7 +1242,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_zags_block_corrupt(self):
         fname = self.id().split('.')[3]
@@ -1314,8 +1314,129 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored)
 
         node_restored.append_conf("postgresql.auto.conf", "archive_mode = 'off'")
+        node_restored.append_conf("postgresql.auto.conf", "hot_standby = 'on'")
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
 
         node_restored.slow_start()
-        exit(1)
+
+    @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_zags_block_corrupt_1(self):
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'autovacuum': 'off',
+                'full_page_writes': 'on'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql('postgres', 'create table tbl(i int)')
+
+        node.safe_psql('postgres', 'create index idx ON tbl (i)')
+
+        node.safe_psql(
+            'postgres',
+            'insert into tbl select i from generate_series(0,100000) as i')
+
+        print(node.safe_psql(
+            'postgres',
+            "select pg_relation_size('idx')"))
+
+        node.safe_psql(
+            'postgres',
+            'delete from tbl where i%2 = 0')
+
+        node.safe_psql(
+            'postgres',
+            'explain analyze select i from tbl order by i')
+
+        node.safe_psql(
+            'postgres',
+            'select i from tbl order by i')
+
+        node.safe_psql(
+            'postgres',
+            'create extension pageinspect')
+
+        print(node.safe_psql(
+            'postgres',
+            "select * from bt_page_stats('idx',1)"))
+
+        node.safe_psql(
+            'postgres',
+            'checkpoint')
+
+        node.safe_psql(
+            'postgres',
+            'insert into tbl select i from generate_series(0,100) as i')
+
+        node.safe_psql(
+            'postgres',
+            'insert into tbl select i from generate_series(0,100) as i')
+
+        node.safe_psql(
+            'postgres',
+            'insert into tbl select i from generate_series(0,100) as i')
+
+        node.safe_psql(
+            'postgres',
+            'insert into tbl select i from generate_series(0,100) as i')
+
+        self.switch_wal_segment(node)
+
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored)
+
+        node_restored.append_conf("postgresql.auto.conf", "archive_mode = 'off'")
+        node_restored.append_conf("postgresql.auto.conf", "hot_standby = 'on'")
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.slow_start()
+
+        while True:
+            with open(node_restored.pg_log_file, 'r') as f:
+                if 'selected new timeline ID' in f.read():
+                    break
+
+        with open(node_restored.pg_log_file, 'r') as f:
+                print(f.read())
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+#        pg_xlogdump_path = self.get_bin_path('pg_xlogdump')
+
+#        pg_xlogdump = self.run_binary(
+#            [
+#                pg_xlogdump_path, '-b',
+#                os.path.join(backup_dir, 'wal', 'node', '000000010000000000000003'),
+#                ' | ', 'grep', 'Btree', ''
+#            ], async=False)
+
+        if pg_xlogdump.returncode:
+            self.assertFalse(
+                True,
+                'Failed to start pg_wal_dump: {0}'.format(
+                    pg_receivexlog.communicate()[1]))

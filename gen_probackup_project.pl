@@ -145,7 +145,6 @@ sub build_pgprobackup
 		'pg_probackup.c',
 		'restore.c',
 		'show.c',
-		'status.c',
 		'util.c',
 		'validate.c'
 		);

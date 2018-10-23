@@ -10,15 +10,14 @@
 
 #include "pg_probackup.h"
 
+#if PG_VERSION_NUM < 110000
+#include "catalog/catalog.h"
+#endif
+#include "catalog/pg_tablespace.h"
+
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <dirent.h>
-#include <time.h>
-
-#include "catalog/catalog.h"
-#include "catalog/pg_tablespace.h"
-#include "datapagemap.h"
 
 /*
  * The contents of these directories are removed or recreated during server
@@ -368,7 +367,7 @@ BlackListCompare(const void *str1, const void *str2)
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
  *
  * When omit_symlink is true, symbolic link is ignored and only file or
- * directory llnked to will be listed.
+ * directory linked to will be listed.
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
@@ -996,14 +995,6 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 							 linked_path, dir_created, link_name);
 				}
 
-				/*
-				 * This check was done in check_tablespace_mapping(). But do
-				 * it again.
-				 */
-				if (!dir_is_empty(linked_path))
-					elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-						 linked_path);
-
 				if (link_sep)
 					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
 						 linked_path,
@@ -1372,8 +1363,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 	fp = fopen(file_txt, "rt");
 	if (fp == NULL)
-		elog(errno == ENOENT ? ERROR : ERROR,
-			"cannot open \"%s\": %s", file_txt, strerror(errno));
+		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
 
 	files = parray_new();
 

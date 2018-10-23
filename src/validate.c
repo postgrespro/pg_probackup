@@ -133,7 +133,7 @@ pgBackupValidate(pgBackup *backup)
 
 	/* Update backup status */
 	backup->status = corrupted ? BACKUP_STATUS_CORRUPT : BACKUP_STATUS_OK;
-	pgBackupWriteBackupControlFile(backup);
+	write_backup_status(backup);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -338,7 +338,7 @@ do_validate_instance(void)
 				if (current_backup->status == BACKUP_STATUS_OK)
 				{
 					current_backup->status = BACKUP_STATUS_ORPHAN;
-					pgBackupWriteBackupControlFile(current_backup);
+					write_backup_status(current_backup);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 							base36enc(current_backup->start_time),
 							parent_backup_id);
@@ -363,7 +363,7 @@ do_validate_instance(void)
 					if (current_backup->status == BACKUP_STATUS_OK)
 					{
 						current_backup->status = BACKUP_STATUS_ORPHAN;
-						pgBackupWriteBackupControlFile(current_backup);
+						write_backup_status(current_backup);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 								base36enc(current_backup->start_time), parent_backup_id,
 								status2str(tmp_backup->status));
@@ -420,7 +420,7 @@ do_validate_instance(void)
 					if (backup->status == BACKUP_STATUS_OK)
 					{
 						backup->status = BACKUP_STATUS_ORPHAN;
-						pgBackupWriteBackupControlFile(backup);
+						write_backup_status(backup);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),

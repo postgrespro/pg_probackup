@@ -10,20 +10,22 @@
 
 #include "pg_probackup.h"
 
-#include <unistd.h>
-#include <time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "libpq/pqsignal.h"
-#include "storage/block.h"
-#include "storage/bufpage.h"
+#include "storage/checksum.h"
 #include "storage/checksum_impl.h"
 #include <common/pg_lzcompress.h>
+
+#include <sys/stat.h>
 
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 #endif
+
+/* Union to ease operations on relation pages */
+typedef union DataPage
+{
+	PageHeaderData page_data;
+	char		data[BLCKSZ];
+} DataPage;
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
@@ -796,7 +798,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		if (ftruncate(fileno(out), write_pos) != 0)
 			elog(ERROR, "cannot truncate \"%s\": %s",
 				 file->path, strerror(errno));
-		elog(INFO, "Delta truncate file %s to block %u",
+		elog(VERBOSE, "Delta truncate file %s to block %u",
 			 file->path, truncate_from);
 	}
 
@@ -1408,48 +1410,52 @@ calc_file_checksum(pgFile *file)
 	return true;
 }
 
-/* Validate given page
- * return value:
+/*
+ * Validate given page.
+ *
+ * Returns value:
  * 0  - if the page is not found
  * 1  - if the page is found and valid
  * -1 - if the page is found but invalid
  */
 #define PAGE_IS_NOT_FOUND 0
 #define PAGE_IS_FOUND_AND_VALID 1
-#define PAGE_IS_FOUND_AND__NOT_VALID -1
+#define PAGE_IS_FOUND_AND_NOT_VALID -1
 static int
 validate_one_page(Page page, pgFile *file,
 				  BlockNumber blknum, XLogRecPtr stop_lsn,
 				  uint32 checksum_version)
 {
 	PageHeader	phdr;
-	XLogRecPtr lsn;
-	bool page_header_is_sane = false;
-	bool checksum_is_ok = false;
+	XLogRecPtr	lsn;
+	bool		page_header_is_sane = false;
+	bool		checksum_is_ok = false;
 
 	/* new level of paranoia */
 	if (page == NULL)
 	{
-		elog(LOG, "File %s, block %u, page is NULL",
-					file->path, blknum);
-			return PAGE_IS_NOT_FOUND;
+		elog(LOG, "File \"%s\", block %u, page is NULL", file->path, blknum);
+		return PAGE_IS_NOT_FOUND;
 	}
+
+	phdr = (PageHeader) page;
 
 	if (PageIsNew(page))
 	{
-		int i;
+		int			i;
+
 		/* Check if the page is zeroed. */
 		for(i = 0; i < BLCKSZ && page[i] == 0; i++);
 
 		if (i == BLCKSZ)
 		{
-			elog(LOG, "File: %s blknum %u, page is New. empty zeroed page",
+			elog(LOG, "File: %s blknum %u, page is New, empty zeroed page",
 				 file->path, blknum);
 			return PAGE_IS_FOUND_AND_VALID;
 		}
 		else
 		{
-			elog(WARNING, "File: %s, block %u, page is New, but not zeroed",
+			elog(WARNING, "File: %s blknum %u, page is New, but not zeroed",
 				 file->path, blknum);
 		}
 
@@ -1458,8 +1464,6 @@ validate_one_page(Page page, pgFile *file,
 	}
 	else
 	{
-		phdr = (PageHeader) page;
-
 		if (PageGetPageSize(phdr) == BLCKSZ &&
 			PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 			(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
@@ -1474,7 +1478,7 @@ validate_one_page(Page page, pgFile *file,
 	if (page_header_is_sane)
 	{
 		/* Verify checksum */
-		if(checksum_version)
+		if (checksum_version)
 		{
 			/*
 			* If checksum is wrong, sleep a bit and then try again
@@ -1491,8 +1495,7 @@ validate_one_page(Page page, pgFile *file,
 					 file->path, blknum);
 			}
 		}
-
-		if (!checksum_version)
+		else
 		{
 			/* Get lsn from page header. Ensure that page is from our time */
 			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
@@ -1521,7 +1524,7 @@ validate_one_page(Page page, pgFile *file,
 		}
 	}
 
-	return PAGE_IS_FOUND_AND__NOT_VALID;
+	return PAGE_IS_FOUND_AND_NOT_VALID;
 }
 
 /* Valiate pages of datafile in backup one by one */
@@ -1550,16 +1553,16 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 	/* read and validate pages one by one */
 	while (true)
 	{
-		Page	compressed_page = NULL; /* used as read buffer */
-		Page	page = NULL;
+		DataPage	compressed_page; /* used as read buffer */
+		DataPage	page;
 		BackupPageHeader header;
-		BlockNumber blknum;
+		BlockNumber blknum = 0;
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
 		if (read_len != sizeof(header))
 		{
-			int errno_tmp = errno;
+			int			errno_tmp = errno;
 			if (read_len == 0 && feof(in))
 				break;		/* EOF found */
 			else if (read_len != 0 && feof(in))
@@ -1586,7 +1589,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 
 		Assert(header.compressed_size <= BLCKSZ);
 
-		read_len = fread(compressed_page, 1,
+		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
 			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
@@ -1596,23 +1599,23 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 		{
 			int32		uncompressed_size = 0;
 
-			uncompressed_size = do_decompress(page, BLCKSZ,
-											  compressed_page,
-											  MAXALIGN(header.compressed_size),
+			uncompressed_size = do_decompress(page.data, BLCKSZ,
+											  compressed_page.data,
+											  header.compressed_size,
 											  file->compress_alg);
 
 			if (uncompressed_size != BLCKSZ)
 				elog(ERROR, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
 					 file->path, uncompressed_size);
 
-			if (validate_one_page(page, file, blknum,
-				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND__NOT_VALID)
+			if (validate_one_page(page.data, file, blknum,
+				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
 				is_valid = false;
 		}
 		else
 		{
-			if (validate_one_page(compressed_page, file, blknum,
-				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND__NOT_VALID)
+			if (validate_one_page(compressed_page.data, file, blknum,
+				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
 				is_valid = false;
 		}
 	}

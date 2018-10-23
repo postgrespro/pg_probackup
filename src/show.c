@@ -11,11 +11,8 @@
 #include "pg_probackup.h"
 
 #include <time.h>
-#include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
-
-#include "pqexpbuffer.h"
 
 #include "utils/json.h"
 
