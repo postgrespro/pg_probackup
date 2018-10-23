@@ -7,7 +7,7 @@ my $pgsrc="";
 if (@ARGV==1) 
 {
 	$pgsrc = shift @ARGV;
-	if($pgsrc == "--help"){
+	if($pgsrc eq "--help"){
 		print STDERR "Usage $0 pg-source-dir \n";
 		print STDERR "Like this: \n";
 		print STDERR "$0 C:/PgProject/postgresql.10dev/postgrespro \n";
