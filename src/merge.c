@@ -310,7 +310,6 @@ delete_source_backup:
 	 * Merging finished, now we can safely update ID of the destination backup.
 	 */
 	pgBackupCopy(to_backup, from_backup);
-	elog(INFO, "to_backup: %s", base36enc(to_backup->start_time));
 	/* Correct metadata */
 	to_backup->backup_mode = BACKUP_MODE_FULL;
 	to_backup->status = BACKUP_STATUS_OK;
