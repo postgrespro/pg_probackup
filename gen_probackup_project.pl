@@ -127,6 +127,7 @@ sub build_pgprobackup
 	#vvs test
 	my $probackup =
 	  $solution->AddProject('pg_probackup', 'exe', 'pg_probackup'); #, 'contrib/pg_probackup'
+	$probackup->AddDefine('FRONTEND');
 	$probackup->AddFiles(
 		'contrib/pg_probackup/src', 
 		'archive.c',
@@ -139,11 +140,11 @@ sub build_pgprobackup
 		'fetch.c',
 		'help.c',
 		'init.c',
+		'merge.c',
 		'parsexlog.c',
 		'pg_probackup.c',
 		'restore.c',
 		'show.c',
-		'status.c',
 		'util.c',
 		'validate.c'
 		);

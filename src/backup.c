@@ -10,24 +10,27 @@
 
 #include "pg_probackup.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <time.h>
-
+#if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
+#endif
 #include "catalog/pg_tablespace.h"
-#include "datapagemap.h"
-#include "libpq/pqsignal.h"
 #include "pgtar.h"
 #include "receivelog.h"
-#include "storage/bufpage.h"
 #include "streamutil.h"
+
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "utils/thread.h"
+
+#define PG_STOP_BACKUP_TIMEOUT 300
+
+/*
+ * Macro needed to parse ptrack.
+ * NOTE Keep those values syncronised with definitions in ptrack.h
+ */
+#define PTRACK_BITS_PER_HEAPBLOCK 1
+#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
 
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
@@ -104,7 +107,8 @@ static int checkpoint_timeout(void);
 
 //static void backup_list_file(parray *files, const char *root, )
 static void parse_backup_filelist_filenames(parray *files, const char *root);
-static void wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment);
+static void wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
+						 bool wait_prev_segment);
 static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
 static void *StreamLog(void *arg);
@@ -530,7 +534,7 @@ do_backup_instance(void)
 		prev_backup_start_lsn = prev_backup->start_lsn;
 		current.parent_backup = prev_backup->start_time;
 
-		pgBackupWriteBackupControlFile(&current);
+		write_backup(&current);
 	}
 
 	/*
@@ -543,10 +547,11 @@ do_backup_instance(void)
 
 		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
-			elog(ERROR, "LSN from ptrack_control " UINT64_FORMAT " differs from STOP LSN of previous backup "
-                                                UINT64_FORMAT ".\n"
+			elog(ERROR, "LSN from ptrack_control %X/%X differs from STOP LSN of previous backup %X/%X.\n"
 						"Create new full backup before an incremental one.",
-						ptrack_lsn, prev_backup->stop_lsn);
+						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+						(uint32) (prev_backup->stop_lsn >> 32),
+						(uint32) (prev_backup->stop_lsn));
 		}
 	}
 
@@ -650,11 +655,7 @@ do_backup_instance(void)
 		 */
 		extractPageMap(arclog_path, current.tli, xlog_seg_size,
 					   prev_backup->start_lsn, current.start_lsn,
-					   /*
-						* For backup from master wait for previous segment.
-						* For backup from replica wait for current segment.
-						*/
-					   !current.from_replica, backup_files_list);
+					   backup_files_list);
 	}
 	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -721,7 +722,7 @@ do_backup_instance(void)
 	}
 
 	/* Run threads */
-	elog(LOG, "Start transfering data files");
+	elog(INFO, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
@@ -742,7 +743,7 @@ do_backup_instance(void)
 			backup_isok = false;
 	}
 	if (backup_isok)
-		elog(LOG, "Data files are transfered");
+		elog(INFO, "Data files are transfered");
 	else
 		elog(ERROR, "Data files transferring failed");
 
@@ -908,11 +909,13 @@ do_backup(time_t start_time)
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
+	StrNCpy(current.program_version, PROGRAM_VERSION,
+			sizeof(current.program_version));
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "cannot create backup directory");
-	pgBackupWriteBackupControlFile(&current);
+	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");
 
@@ -934,7 +937,7 @@ do_backup(time_t start_time)
 	/* Backup is done. Update backup status */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
-	pgBackupWriteBackupControlFile(&current);
+	write_backup(&current);
 
 	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 	//		current.data_bytes);
@@ -1039,13 +1042,13 @@ check_system_identifiers(void)
 	system_id_conn = get_remote_system_identifier(backup_conn);
 
 	if (system_id_conn != system_identifier)
-		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT 
-                            ", but connected instance system id is " UINT64_FORMAT,
-			 system_identifier, system_id_conn);
+		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
+					"but connected instance system id is " UINT64_FORMAT,
+					system_identifier, system_id_conn);
 	if (system_id_pgdata != system_identifier)
-		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT 
-                            ", but target backup directory system id is " UINT64_FORMAT,
-			 system_identifier, system_id_pgdata);
+		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
+					"but target backup directory system id is " UINT64_FORMAT,
+					system_identifier, system_id_pgdata);
 }
 
 /*
@@ -1080,8 +1083,8 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 {
 	PGresult   *res;
 	const char *params[2];
-	uint32		xlogid;
-	uint32		xrecoff;
+	uint32		lsn_hi;
+	uint32		lsn_lo;
 	PGconn	   *conn;
 
 	params[0] = label;
@@ -1109,9 +1112,9 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	backup_in_progress = true;
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
-	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
 	/* Calculate LSN */
-	backup->start_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+	backup->start_lsn = ((uint64) lsn_hi )<< 32 | lsn_lo;
 
 	PQclear(res);
 
@@ -1122,20 +1125,17 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 		 */
 		pg_switch_wal(conn);
 
-	if (!stream_wal)
-	{
-		/*
-		 * Do not wait start_lsn for stream backup.
-		 * Because WAL streaming will start after pg_start_backup() in stream
-		 * mode.
-		 */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 		/* In PAGE mode wait for current segment... */
-		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
-			wait_wal_lsn(backup->start_lsn, false);
+		wait_wal_lsn(backup->start_lsn, true, false);
+	/*
+	 * Do not wait start_lsn for stream backup.
+	 * Because WAL streaming will start after pg_start_backup() in stream
+	 * mode.
+	 */
+	else if (!stream_wal)
 		/* ...for others wait for previous segment */
-		else
-			wait_wal_lsn(backup->start_lsn, true);
-	}
+		wait_wal_lsn(backup->start_lsn, true, true);
 
 	/* Wait for start_lsn to be replayed by replica */
 	if (backup->from_replica)
@@ -1154,10 +1154,11 @@ pg_switch_wal(PGconn *conn)
 	res = pgut_execute(conn, "SET client_min_messages = warning;", 0, NULL);
 	PQclear(res);
 
-	if (server_version >= 100000)
-		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL);
-	else
-		res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL);
+#if PG_VERSION_NUM >= 100000
+	res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL);
+#else
+	res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL);
+#endif
 
 	PQclear(res);
 }
@@ -1453,16 +1454,20 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
  * If current backup started in stream mode wait for 'lsn' to be streamed in
  * 'pg_wal' directory.
  *
+ * If 'is_start_lsn' is true and backup mode is PAGE then we wait for 'lsn' to
+ * be archived in archive 'wal' directory regardless stream mode.
+ *
  * If 'wait_prev_segment' wait for previous segment.
  */
 static void
-wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
+wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 {
 	TimeLineID	tli;
 	XLogSegNo	targetSegNo;
-	char		wal_dir[MAXPGPATH],
-				wal_segment_path[MAXPGPATH];
-	char		wal_segment[MAXFNAMELEN];
+	char		pg_wal_dir[MAXPGPATH];
+	char		wal_segment_path[MAXPGPATH],
+			   *wal_segment_dir,
+				wal_segment[MAXFNAMELEN];
 	bool		file_exists = false;
 	uint32		try_count = 0,
 				timeout;
@@ -1479,11 +1484,20 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 		targetSegNo--;
 	GetXLogFileName(wal_segment, tli, targetSegNo, xlog_seg_size);
 
-	if (stream_wal)
+	/*
+	 * In pg_start_backup we wait for 'lsn' in 'pg_wal' directory iff it is
+	 * stream and non-page backup. Page backup needs archived WAL files, so we
+	 * wait for 'lsn' in archive 'wal' directory for page backups.
+	 *
+	 * In pg_stop_backup it depends only on stream_wal.
+	 */
+	if (stream_wal &&
+		(current.backup_mode != BACKUP_MODE_DIFF_PAGE || !is_start_lsn))
 	{
-		pgBackupGetPath2(&current, wal_dir, lengthof(wal_dir),
+		pgBackupGetPath2(&current, pg_wal_dir, lengthof(pg_wal_dir),
 						 DATABASE_DIR, PG_XLOG_DIR);
-		join_path_components(wal_segment_path, wal_dir, wal_segment);
+		join_path_components(wal_segment_path, pg_wal_dir, wal_segment);
+		wal_segment_dir = pg_wal_dir;
 
 		timeout = (uint32) checkpoint_timeout();
 		timeout = timeout + timeout * 0.1;
@@ -1491,6 +1505,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 	else
 	{
 		join_path_components(wal_segment_path, arclog_path, wal_segment);
+		wal_segment_dir = arclog_path;
 		timeout = archive_timeout;
 	}
 
@@ -1533,10 +1548,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool wait_prev_segment)
 			/*
 			 * A WAL segment found. Check LSN on it.
 			 */
-			if ((stream_wal && wal_contains_lsn(wal_dir, lsn, tli,
-												xlog_seg_size)) ||
-				(!stream_wal && wal_contains_lsn(arclog_path, lsn, tli,
-												 xlog_seg_size)))
+			if (wal_contains_lsn(wal_segment_dir, lsn, tli, xlog_seg_size))
 				/* Target LSN was found */
 			{
 				elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
@@ -1585,9 +1597,6 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 
 	while (true)
 	{
-		PGresult   *res;
-		uint32		xlogid;
-		uint32		xrecoff;
 		XLogRecPtr	replica_lsn;
 
 		/*
@@ -1596,12 +1605,7 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		 */
 		if (is_start_backup)
 		{
-			if (server_version >= 100000)
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_replay_lsn()",
-								   0, NULL);
-			else
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_replay_location()",
-								   0, NULL);
+			replica_lsn = get_checkpoint_location(backup_conn);
 		}
 		/*
 		 * For lsn from pg_stop_backup() we need it only to be received by
@@ -1609,19 +1613,24 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 		 */
 		else
 		{
-			if (server_version >= 100000)
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_receive_lsn()",
-								   0, NULL);
-			else
-				res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_receive_location()",
-								   0, NULL);
-		}
+			PGresult   *res;
+			uint32		lsn_hi;
+			uint32		lsn_lo;
 
-		/* Extract timeline and LSN from result */
-		XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
-		/* Calculate LSN */
-		replica_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
-		PQclear(res);
+#if PG_VERSION_NUM >= 100000
+			res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_receive_lsn()",
+							   0, NULL);
+#else
+			res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_receive_location()",
+							   0, NULL);
+#endif
+
+			/* Extract LSN from result */
+			XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
+			/* Calculate LSN */
+			replica_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
+			PQclear(res);
+		}
 
 		/* target lsn was replicated */
 		if (replica_lsn >= lsn)
@@ -1654,10 +1663,10 @@ pg_stop_backup(pgBackup *backup)
 	PGconn		*conn;
 	PGresult	*res;
 	PGresult	*tablespace_map_content = NULL;
-	uint32		xlogid;
-	uint32		xrecoff;
+	uint32		lsn_hi;
+	uint32		lsn_lo;
 	XLogRecPtr	restore_lsn = InvalidXLogRecPtr;
-	int 		pg_stop_backup_timeout = 0;
+	int			pg_stop_backup_timeout = 0;
 	char		path[MAXPGPATH];
 	char		backup_label[MAXPGPATH];
 	FILE		*fp;
@@ -1700,6 +1709,10 @@ pg_stop_backup(pgBackup *backup)
 
 		res = pgut_execute(conn, "SELECT pg_catalog.pg_create_restore_point($1)",
 						   1, params);
+		/* Extract timeline and LSN from the result */
+		XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
+		/* Calculate LSN */
+		restore_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
 		PQclear(res);
 	}
 
@@ -1732,7 +1745,6 @@ pg_stop_backup(pgBackup *backup)
 		}
 		else
 		{
-
 			stop_backup_query =	"SELECT"
 								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 								" current_timestamp(0)::timestamptz,"
@@ -1751,6 +1763,8 @@ pg_stop_backup(pgBackup *backup)
 	 */
 	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
+		res = NULL;
+
 		while (1)
 		{
 			if (!PQconsumeInput(conn) || PQisBusy(conn))
@@ -1792,8 +1806,11 @@ pg_stop_backup(pgBackup *backup)
 		{
 			switch (PQresultStatus(res))
 			{
+				/*
+				 * We should expect only PGRES_TUPLES_OK since pg_stop_backup
+				 * returns tuples.
+				 */
 				case PGRES_TUPLES_OK:
-				case PGRES_COMMAND_OK:
 					break;
 				default:
 					elog(ERROR, "query failed: %s query was: %s",
@@ -1805,9 +1822,9 @@ pg_stop_backup(pgBackup *backup)
 		backup_in_progress = false;
 
 		/* Extract timeline and LSN from results of pg_stop_backup() */
-		XLogDataFromLSN(PQgetvalue(res, 0, 2), &xlogid, &xrecoff);
+		XLogDataFromLSN(PQgetvalue(res, 0, 2), &lsn_hi, &lsn_lo);
 		/* Calculate LSN */
-		stop_backup_lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+		stop_backup_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
 
 		if (!XRecOffIsValid(stop_backup_lsn))
 		{
@@ -1924,7 +1941,7 @@ pg_stop_backup(pgBackup *backup)
 		 * Wait for stop_lsn to be archived or streamed.
 		 * We wait for stop_lsn in stream mode just in case.
 		 */
-		wait_wal_lsn(stop_backup_lsn, false);
+		wait_wal_lsn(stop_backup_lsn, false, false);
 
 		if (stream_wal)
 		{
@@ -1998,7 +2015,7 @@ backup_cleanup(bool fatal, void *userdata)
 			 base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
-		pgBackupWriteBackupControlFile(&current);
+		write_backup(&current);
 	}
 
 	/*
@@ -2084,12 +2101,13 @@ backup_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
+			pgFile	  **prev_file;
+
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
 			{
 				char	   *relative;
 				pgFile		key;
-				pgFile	  **prev_file;
 
 				relative = GetRelativePath(file->path, arguments->from_root);
 				key.path = relative;
@@ -2119,20 +2137,27 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			/* TODO:
-			 * Check if file exists in previous backup
-			 * If exists:
-			 *   if mtime > start_backup_time of parent backup,
-			 *    copy file to backup
-			 *   if mtime < start_backup_time
-			 *    calculate crc, compare crc to old file
-			 *      if crc is the same -> skip file
-			 */
-			else if (!copy_file(arguments->from_root, arguments->to_root, file))
+			else 
 			{
-				file->write_size = BYTES_INVALID;
-				elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
-				continue;
+				bool skip = false;
+
+				/* If non-data file has not changed since last backup... */
+				if (file->exists_in_prev &&
+					buf.st_mtime < current.parent_backup)
+				{
+					calc_file_checksum(file);
+					/* ...and checksum is the same... */
+					if (EQ_CRC32C(file->crc, (*prev_file)->crc))
+						skip = true; /* ...skip copying file. */
+				}
+				if (skip ||
+					!copy_file(arguments->from_root, arguments->to_root, file))
+				{
+					file->write_size = BYTES_INVALID;
+					elog(VERBOSE, "File \"%s\" was not copied to backup",
+						 file->path);
+					continue;
+				}
 			}
 
 			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
@@ -2194,7 +2219,8 @@ parse_backup_filelist_filenames(parray *files, const char *root)
 
 				/* Yes, it is */
 				if (sscanf_result == 2 &&
-					strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
+					strncmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY,
+							strlen(TABLESPACE_VERSION_DIRECTORY)) == 0)
 					set_cfs_datafiles(files, root, relative, i);
 			}
 		}
@@ -2618,16 +2644,16 @@ get_last_ptrack_lsn(void)
 
 {
 	PGresult   *res;
-	uint32		xlogid;
-	uint32		xrecoff;
+	uint32		lsn_hi;
+	uint32		lsn_lo;
 	XLogRecPtr	lsn;
 
 	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()", 0, NULL);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
-	XLogDataFromLSN(PQgetvalue(res, 0, 0), &xlogid, &xrecoff);
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
 	/* Calculate LSN */
-	lsn = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
+	lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
 
 	PQclear(res);
 	return lsn;

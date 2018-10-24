@@ -7,10 +7,10 @@
  *
  *-------------------------------------------------------------------------
  */
+
 #include "pg_probackup.h"
 
 #include <unistd.h>
-#include <sys/stat.h>
 
 /*
  * pg_probackup specific archive command for archive backups
@@ -52,7 +52,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 
 	if(system_id != config->system_identifier)
 		elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
-					"Instance '%s' should have SYSTEM_ID = " INT64_FORMAT " instead of " INT64_FORMAT,
+					"Instance '%s' should have SYSTEM_ID = %ld instead of %ld",
 					wal_file_name, instance_name, config->system_identifier, system_id);
 
 	/* Create 'archlog_path' directory. Do nothing if it already exists. */

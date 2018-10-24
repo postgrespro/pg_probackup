@@ -1263,3 +1263,73 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_delta_nullified_heap_page_backup(self):
+        """
+        make node, take full backup, nullify some heap block,
+        take delta backup, restore, physically compare pgdata`s
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'}
+            )
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=1)
+
+        file_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        # Nullify some block in PostgreSQL
+        file = os.path.join(node.data_dir, file_path)
+
+        with open(file, 'r+b', 0) as f:
+            f.seek(8192)
+            f.write(b"\x00"*8192)
+            f.flush()
+            f.close
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=["--log-level-file=verbose"])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
+        with open(log_file_path) as f:
+            self.assertTrue("LOG: File: {0} blknum 1, empty page".format(
+                file) in f.read())
+            self.assertFalse("Skipping blknum: 1 in file: {0}".format(
+                file) in f.read())
+
+        # Restore DELTA backup
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+        )
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored
+        )
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
