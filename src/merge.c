@@ -326,7 +326,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		to_backup->wal_bytes = BYTES_INVALID;
 
 	pgBackupWriteFileList(to_backup, files, from_database_path);
-	write_backup_status(to_backup);
+	write_backup(to_backup);
 
 	/* Cleanup */
 	pfree(threads_args);
