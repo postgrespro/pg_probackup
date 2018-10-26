@@ -416,7 +416,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 				  blknum, header.compressed_size, write_buffer_size); */
 
 	/* Update CRC */
-	COMP_CRC32C(*crc, write_buffer, write_buffer_size);
+	COMP_TRADITIONAL_CRC32(*crc, write_buffer, write_buffer_size);
 
 	/* write data page */
 	if(fwrite(write_buffer, 1, write_buffer_size, out) != write_buffer_size)
@@ -476,13 +476,13 @@ backup_data_file(backup_files_arg* arguments,
 	/* reset size summary */
 	file->read_size = 0;
 	file->write_size = 0;
-	INIT_CRC32C(file->crc);
+	INIT_TRADITIONAL_CRC32(file->crc);
 
 	/* open backup mode file for read */
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
-		FIN_CRC32C(file->crc);
+		FIN_TRADITIONAL_CRC32(file->crc);
 
 		/*
 		 * If file is not found, this is not en error.
@@ -587,7 +587,7 @@ backup_data_file(backup_files_arg* arguments,
 			 to_path, strerror(errno));
 	fclose(in);
 
-	FIN_CRC32C(file->crc);
+	FIN_TRADITIONAL_CRC32(file->crc);
 
 	/*
 	 * If we have pagemap then file in the backup can't be a zero size.
@@ -839,7 +839,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	struct stat	st;
 	pg_crc32	crc;
 
-	INIT_CRC32C(crc);
+	INIT_TRADITIONAL_CRC32(crc);
 
 	/* reset size summary */
 	file->read_size = 0;
@@ -849,7 +849,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
-		FIN_CRC32C(crc);
+		FIN_TRADITIONAL_CRC32(crc);
 		file->crc = crc;
 
 		/* maybe deleted, it's not error */
@@ -898,7 +898,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 				 strerror(errno_tmp));
 		}
 		/* update CRC */
-		COMP_CRC32C(crc, buf, read_len);
+		COMP_TRADITIONAL_CRC32(crc, buf, read_len);
 
 		file->read_size += read_len;
 	}
@@ -925,14 +925,14 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 				 strerror(errno_tmp));
 		}
 		/* update CRC */
-		COMP_CRC32C(crc, buf, read_len);
+		COMP_TRADITIONAL_CRC32(crc, buf, read_len);
 
 		file->read_size += read_len;
 	}
 
 	file->write_size = (int64) file->read_size;
 	/* finish CRC calculation and store into pgFile */
-	FIN_CRC32C(crc);
+	FIN_TRADITIONAL_CRC32(crc);
 	file->crc = crc;
 
 	/* update file permission */
@@ -1350,7 +1350,7 @@ calc_file_checksum(pgFile *file)
 	pg_crc32	crc;
 
 	Assert(S_ISREG(file->mode));
-	INIT_CRC32C(crc);
+	INIT_TRADITIONAL_CRC32(crc);
 
 	/* reset size summary */
 	file->read_size = 0;
@@ -1360,7 +1360,7 @@ calc_file_checksum(pgFile *file)
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
-		FIN_CRC32C(crc);
+		FIN_TRADITIONAL_CRC32(crc);
 		file->crc = crc;
 
 		/* maybe deleted, it's not error */
@@ -1387,7 +1387,7 @@ calc_file_checksum(pgFile *file)
 			break;
 
 		/* update CRC */
-		COMP_CRC32C(crc, buf, read_len);
+		COMP_TRADITIONAL_CRC32(crc, buf, read_len);
 
 		file->write_size += read_len;
 		file->read_size += read_len;
@@ -1402,7 +1402,7 @@ calc_file_checksum(pgFile *file)
 	}
 
 	/* finish CRC calculation and store into pgFile */
-	FIN_CRC32C(crc);
+	FIN_TRADITIONAL_CRC32(crc);
 	file->crc = crc;
 
 	fclose(in);
