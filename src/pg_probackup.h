@@ -503,7 +503,7 @@ extern pgFile *pgFileNew(const char *path, bool omit_symlink);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
-extern pg_crc32 pgFileGetCRC(const char *file_path);
+extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
@@ -564,7 +564,8 @@ extern void remove_not_digit(char *buf, size_t len, const char *str);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
-extern int parse_server_version(char *server_version_str);
+extern uint32 parse_server_version(const char *server_version_str);
+extern uint32 parse_program_version(const char *program_version);
 
 #ifdef WIN32
 #ifdef _DEBUG

@@ -19,6 +19,8 @@ static void *pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);
 
 static bool corrupted_backup_found = false;
+/* Program version of a current backup */
+static uint32 validate_backup_version = 0;
 
 typedef struct
 {
@@ -89,6 +91,11 @@ pgBackupValidate(pgBackup *backup)
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 		pg_atomic_clear_flag(&file->lock);
 	}
+
+	/*
+	 * We use program version to calculate checksum in pgBackupValidateFiles()
+	 */
+	validate_backup_version = parse_program_version(backup->program_version);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -205,7 +212,18 @@ pgBackupValidateFiles(void *arg)
 			break;
 		}
 
-		crc = pgFileGetCRC(file->path);
+		/*
+		 * Pre 2.0.22 we use CRC-32C, but in newer version of pg_probackup we
+		 * use CRC-32.
+		 *
+		 * pg_control stores its content and checksum of the content, calculated
+		 * using CRC-32C. If we calculate checksum of the whole pg_control using
+		 * CRC-32C we get same checksum constantly. It might be because of the
+		 * CRC-32C algorithm.
+		 * To avoid this problem we need to use different algorithm, CRC-32 in
+		 * this case.
+		 */
+		crc = pgFileGetCRC(file->path, validate_backup_version <= 20021);
 		if (crc != file->crc)
 		{
 			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",

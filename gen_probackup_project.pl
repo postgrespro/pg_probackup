@@ -157,6 +157,7 @@ sub build_pgprobackup
 		'thread.c'
 		);
 	$probackup->AddFile('src/backend/access/transam/xlogreader.c');
+	$probackup->AddFile('src/backend/utils/hash/pg_crc.c');
 	$probackup->AddFiles(
 		'src/bin/pg_basebackup', 
 		'receivelog.c',

@@ -280,12 +280,14 @@ time2iso(char *buf, size_t len, time_t time)
 	}
 }
 
-/* Parse string representation of the server version */
-int
-parse_server_version(char *server_version_str)
+/*
+ * Parse string representation of the server version.
+ */
+uint32
+parse_server_version(const char *server_version_str)
 {
 	int			nfields;
-	int			result = 0;
+	uint32		result = 0;
 	int			major_version = 0;
 	int			minor_version = 0;
 
@@ -304,7 +306,31 @@ parse_server_version(char *server_version_str)
 		result = major_version * 10000;
 	}
 	else
-		elog(ERROR, "Unknown server version format");
+		elog(ERROR, "Unknown server version format %s", server_version_str);
+
+	return result;
+}
+
+/*
+ * Parse string representation of the program version.
+ */
+uint32
+parse_program_version(const char *program_version)
+{
+	int			nfields;
+	int			major = 0,
+				minor = 0,
+				micro = 0;
+	uint32		result = 0;
+
+	if (program_version == NULL || program_version[0] == '\0')
+		return 0;
+
+	nfields = sscanf(program_version, "%d.%d.%d", &major, &minor, &micro);
+	if (nfields == 3)
+		result = major * 10000 + minor * 100 + micro;
+	else
+		elog(ERROR, "Unknown program version format %s", program_version);
 
 	return result;
 }

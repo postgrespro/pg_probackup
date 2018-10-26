@@ -503,7 +503,7 @@ merge_files(void *arg)
 				 * do that.
 				 */
 				file->write_size = pgFileSize(to_path_tmp);
-				file->crc = pgFileGetCRC(to_path_tmp);
+				file->crc = pgFileGetCRC(to_path_tmp, false);
 			}
 			pgFileDelete(file);
 		}
