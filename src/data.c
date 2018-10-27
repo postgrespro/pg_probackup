@@ -1501,8 +1501,8 @@ validate_one_page(Page page, pgFile *file,
 			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 			if (lsn > stop_lsn)
-				elog(WARNING, "File: %s, block %u, checksum is not enabled."
-							  "page is from future: pageLSN %X/%X stopLSN %X/%X",
+				elog(WARNING, "File: %s, block %u, checksum is not enabled. "
+							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
 					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
 					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
 			else
@@ -1515,8 +1515,8 @@ validate_one_page(Page page, pgFile *file,
 			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 			if (lsn > stop_lsn)
-				elog(WARNING, "File: %s, block %u, checksum is correct."
-							  "page is from future: pageLSN %X/%X stopLSN %X/%X",
+				elog(WARNING, "File: %s, block %u, checksum is correct. "
+							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
 					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
 					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
 			else
