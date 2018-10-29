@@ -793,6 +793,10 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	private_data = (XLogPageReadPrivate *) xlogreader->private_data;
 	targetPageOff = targetPagePtr % private_data->xlog_seg_size;
 
+	if (interrupted)
+		elog(ERROR, "Thread [%d]: Interrupted during WAL reading",
+				private_data->thread_num);
+
 	/*
 	 * See if we need to switch to a new segment because the requested record
 	 * is not in the currently open one.

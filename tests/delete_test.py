@@ -58,47 +58,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_delete_archive_mix_compress_and_non_compressed_segments(self):
-        """delete full backups"""
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.start()
-
-        # full backup
-        self.backup_node(backup_dir, 'node', node)
-
-        pgbench = node.pgbench(
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        pgbench.wait()
-        pgbench.stdout.close()
-
-        self.backup_node(backup_dir, 'node', node)
-
-        pgbench = node.pgbench(
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        pgbench.wait()
-        pgbench.stdout.close()
-
-        self.backup_node(backup_dir, 'node', node)
-
-        show_backups = self.show_pb(backup_dir, 'node')
-        id_1 = show_backups[0]['ID']
-        id_2 = show_backups[1]['ID']
-        id_3 = show_backups[2]['ID']
-        self.delete_pb(backup_dir, 'node', id_2)
-        show_backups = self.show_pb(backup_dir, 'node')
-        self.assertEqual(show_backups[0]['ID'], id_1)
-        self.assertEqual(show_backups[1]['ID'], id_3)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        """stub"""
 
     # @unittest.skip("skip")
     def test_delete_increment_page(self):

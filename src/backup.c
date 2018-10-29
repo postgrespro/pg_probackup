@@ -306,7 +306,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 			to_path, strerror(errno_tmp));
 	}
 
-	INIT_CRC32C(file->crc);
+	INIT_TRADITIONAL_CRC32(file->crc);
 
 	/* read from stream and write to backup file */
 	while (1)
@@ -332,14 +332,14 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		{
 			write_buffer_size = Min(row_length, sizeof(buf));
 			memcpy(buf, copybuf, write_buffer_size);
-			COMP_CRC32C(file->crc, buf, write_buffer_size);
+			COMP_TRADITIONAL_CRC32(file->crc, buf, write_buffer_size);
 
 			/* TODO calc checksum*/
 			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
 			{
 				errno_tmp = errno;
 				/* oops */
-				FIN_CRC32C(file->crc);
+				FIN_TRADITIONAL_CRC32(file->crc);
 				fclose(out);
 				PQfinish(conn);
 				elog(ERROR, "cannot write to \"%s\": %s", to_path,
@@ -363,7 +363,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 	}
 
 	file->write_size = (int64) file->read_size;
-	FIN_CRC32C(file->crc);
+	FIN_TRADITIONAL_CRC32(file->crc);
 
 	fclose(out);
 }
@@ -2137,7 +2137,7 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else 
+			else
 			{
 				bool skip = false;
 
@@ -2147,7 +2147,7 @@ backup_files(void *arg)
 				{
 					calc_file_checksum(file);
 					/* ...and checksum is the same... */
-					if (EQ_CRC32C(file->crc, (*prev_file)->crc))
+					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
 						skip = true; /* ...skip copying file. */
 				}
 				if (skip ||
