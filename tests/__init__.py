@@ -21,7 +21,6 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
 #    suite.addTests(loader.loadTestsFromModule(logging))
     suite.addTests(loader.loadTestsFromModule(compression))
-    suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(delete_test))
     suite.addTests(loader.loadTestsFromModule(delta))
     suite.addTests(loader.loadTestsFromModule(exclude))
@@ -62,8 +61,6 @@ def load_tests(loader, tests, pattern):
 #  logging:
 #     https://jira.postgrespro.ru/browse/PGPRO-584
 #     https://jira.postgrespro.ru/secure/attachment/20420/20420_doc_logging.md
-#  ptrack:
-#      ptrack backup on replica should work correctly
 # archive:
 #      immediate recovery and full recovery
 # backward compatibility:
