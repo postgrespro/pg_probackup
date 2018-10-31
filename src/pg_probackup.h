@@ -555,6 +555,7 @@ extern uint64 get_system_identifier(char *pgdata);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
+extern void set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn);
 
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);
