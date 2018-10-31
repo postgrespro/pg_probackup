@@ -306,7 +306,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 			to_path, strerror(errno_tmp));
 	}
 
-	INIT_CRC32C(file->crc);
+	INIT_TRADITIONAL_CRC32(file->crc);
 
 	/* read from stream and write to backup file */
 	while (1)
@@ -332,14 +332,14 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		{
 			write_buffer_size = Min(row_length, sizeof(buf));
 			memcpy(buf, copybuf, write_buffer_size);
-			COMP_CRC32C(file->crc, buf, write_buffer_size);
+			COMP_TRADITIONAL_CRC32(file->crc, buf, write_buffer_size);
 
 			/* TODO calc checksum*/
 			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
 			{
 				errno_tmp = errno;
 				/* oops */
-				FIN_CRC32C(file->crc);
+				FIN_TRADITIONAL_CRC32(file->crc);
 				fclose(out);
 				PQfinish(conn);
 				elog(ERROR, "cannot write to \"%s\": %s", to_path,
@@ -363,7 +363,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 	}
 
 	file->write_size = (int64) file->read_size;
-	FIN_CRC32C(file->crc);
+	FIN_TRADITIONAL_CRC32(file->crc);
 
 	fclose(out);
 }
@@ -538,8 +538,8 @@ do_backup_instance(void)
 	}
 
 	/*
-	 * It`s illegal to take PTRACK backup if LSN from ptrack_control() is not equal to
-	 * stort_backup LSN of previous backup
+	 * It`s illegal to take PTRACK backup if LSN from ptrack_control() is not
+	 * equal to stop_lsn of previous backup.
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -1193,7 +1193,8 @@ pg_ptrack_support(void)
 
 	/* Now we support only ptrack versions upper than 1.5 */
 	if (strcmp(PQgetvalue(res_db, 0, 0), "1.5") != 0 &&
-		strcmp(PQgetvalue(res_db, 0, 0), "1.6") != 0)
+		strcmp(PQgetvalue(res_db, 0, 0), "1.6") != 0 &&
+		strcmp(PQgetvalue(res_db, 0, 0), "1.7") != 0)
 	{
 		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s", PQgetvalue(res_db, 0, 0));
 		PQclear(res_db);
@@ -1283,7 +1284,9 @@ pg_ptrack_clear(void)
 		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
 
 		tmp_conn = pgut_connect(dbname);
-		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()", 0, NULL);
+		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()",
+						   0, NULL);
+		PQclear(res);
 
 		sprintf(params[0], "%i", dbOid);
 		sprintf(params[1], "%i", tblspcOid);
@@ -1512,7 +1515,8 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	if (wait_prev_segment)
 		elog(LOG, "Looking for segment: %s", wal_segment);
 	else
-		elog(LOG, "Looking for LSN: %X/%X in segment: %s", (uint32) (lsn >> 32), (uint32) lsn, wal_segment);
+		elog(LOG, "Looking for LSN: %X/%X in segment: %s",
+			 (uint32) (lsn >> 32), (uint32) lsn, wal_segment);
 
 #ifdef HAVE_LIBZ
 	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
@@ -2137,7 +2141,7 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else 
+			else
 			{
 				bool skip = false;
 
@@ -2147,7 +2151,7 @@ backup_files(void *arg)
 				{
 					calc_file_checksum(file);
 					/* ...and checksum is the same... */
-					if (EQ_CRC32C(file->crc, (*prev_file)->crc))
+					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
 						skip = true; /* ...skip copying file. */
 				}
 				if (skip ||
@@ -2648,7 +2652,8 @@ get_last_ptrack_lsn(void)
 	uint32		lsn_lo;
 	XLogRecPtr	lsn;
 
-	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()", 0, NULL);
+	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()",
+					   0, NULL);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);

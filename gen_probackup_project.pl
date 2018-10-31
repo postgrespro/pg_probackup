@@ -7,7 +7,7 @@ my $pgsrc="";
 if (@ARGV==1) 
 {
 	$pgsrc = shift @ARGV;
-	if($pgsrc == "--help"){
+	if($pgsrc eq "--help"){
 		print STDERR "Usage $0 pg-source-dir \n";
 		print STDERR "Like this: \n";
 		print STDERR "$0 C:/PgProject/postgresql.10dev/postgrespro \n";
@@ -157,6 +157,7 @@ sub build_pgprobackup
 		'thread.c'
 		);
 	$probackup->AddFile('src/backend/access/transam/xlogreader.c');
+	$probackup->AddFile('src/backend/utils/hash/pg_crc.c');
 	$probackup->AddFiles(
 		'src/bin/pg_basebackup', 
 		'receivelog.c',

@@ -49,6 +49,10 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'vacuum t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
+        # Make full backup to clean every ptrack
+        self.backup_node(
+            backup_dir, 'node', node, options=['-j10', '--stream'])
+
         for i in idx_ptrack:
             # get fork size and calculate it in pages
             idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -57,11 +61,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # calculate md5sums for every page of this fork
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
-
-        # Make full backup to clean every ptrack
-        self.backup_node(
-            backup_dir, 'node', node, options=['-j10', '--stream'])
-        for i in idx_ptrack:
             idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                 node, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
@@ -159,11 +158,6 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 '--master-port={0}'.format(master.port)])
 
         for i in idx_ptrack:
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
-            self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
-
-        for i in idx_ptrack:
             # get fork size and calculate it in pages
             idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
             # get path to heap and index files
@@ -171,6 +165,9 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             # calculate md5sums for every page of this fork
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
+                replica, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
+            self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
 
         # Delete some rows, vacuum it and make checkpoint
         master.safe_psql('postgres', 'delete from t_heap where id%2 = 1')

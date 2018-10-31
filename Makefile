@@ -1,16 +1,23 @@
 PROGRAM = pg_probackup
-OBJS = src/backup.o src/catalog.o src/configure.o src/data.o \
-	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o \
-	src/pg_probackup.o src/restore.o src/show.o \
-	src/util.o src/validate.o src/datapagemap.o src/parsexlog.o \
-	src/xlogreader.o src/streamutil.o src/receivelog.o \
-	src/archive.o src/utils/parray.o src/utils/pgut.o src/utils/logger.o \
-	src/utils/json.o src/utils/thread.o src/merge.o
 
-EXTRA_CLEAN = src/datapagemap.c src/datapagemap.h src/xlogreader.c \
-	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h src/logging.h
+# utils
+OBJS = src/utils/json.o src/utils/logger.o src/utils/parray.o \
+	src/utils/pgut.o src/utils/thread.o
 
-INCLUDES = src/datapagemap.h src/logging.h src/receivelog.h src/streamutil.h
+OBJS += src/archive.o src/backup.o src/catalog.o src/configure.o src/data.o \
+	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o src/merge.o \
+	src/parsexlog.o src/pg_probackup.o src/restore.o src/show.o src/util.o \
+	src/validate.o
+
+# borrowed files
+OBJS += src/pg_crc.o src/datapagemap.o src/receivelog.o src/streamutil.o \
+	src/xlogreader.o
+
+EXTRA_CLEAN = src/pg_crc.c src/datapagemap.c src/datapagemap.h src/logging.h \
+	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h \
+	src/xlogreader.c
+
+INCLUDES = src/datapagemap.h src/logging.h src/streamutil.h src/receivelog.h
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -46,14 +53,14 @@ all: checksrcdir $(INCLUDES);
 
 $(PROGRAM): $(OBJS)
 
-src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
-	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
 src/datapagemap.c: $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.c $@
 src/datapagemap.h: $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.h $@
 src/logging.h: $(top_srcdir)/src/bin/pg_rewind/logging.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/logging.h $@
+src/pg_crc.c: $(top_srcdir)/src/backend/utils/hash/pg_crc.c
+	rm -f $@ && $(LN_S) $(srchome)/src/backend/utils/hash/pg_crc.c $@
 src/receivelog.c: $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/receivelog.c $@
 src/receivelog.h: $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
@@ -62,6 +69,8 @@ src/streamutil.c: $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.c $@
 src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.h $@
+src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
+	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
 
 
 ifeq (,$(filter 9.5 9.6,$(MAJORVERSION)))
