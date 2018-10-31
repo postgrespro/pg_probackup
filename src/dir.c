@@ -10,15 +10,14 @@
 
 #include "pg_probackup.h"
 
+#if PG_VERSION_NUM < 110000
+#include "catalog/catalog.h"
+#endif
+#include "catalog/pg_tablespace.h"
+
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <dirent.h>
-#include <time.h>
-
-#include "catalog/catalog.h"
-#include "catalog/pg_tablespace.h"
-#include "datapagemap.h"
 
 /*
  * The contents of these directories are removed or recreated during server
@@ -260,13 +259,35 @@ delete_file:
 }
 
 pg_crc32
-pgFileGetCRC(const char *file_path)
+pgFileGetCRC(const char *file_path, bool use_crc32c)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
 	char		buf[1024];
 	size_t		len;
 	int			errno_tmp;
+
+#define INIT_FILE_CRC32(crc) \
+do { \
+	if (use_crc32c) \
+		INIT_CRC32C(crc); \
+	else \
+		INIT_TRADITIONAL_CRC32(crc); \
+} while (0)
+#define COMP_FILE_CRC32(crc, data, len) \
+do { \
+	if (use_crc32c) \
+		COMP_CRC32C((crc), (data), (len)); \
+	else \
+		COMP_TRADITIONAL_CRC32(crc, data, len); \
+} while (0)
+#define FIN_FILE_CRC32(crc) \
+do { \
+	if (use_crc32c) \
+		FIN_CRC32C(crc); \
+	else \
+		FIN_TRADITIONAL_CRC32(crc); \
+} while (0)
 
 	/* open file in binary read mode */
 	fp = fopen(file_path, PG_BINARY_R);
@@ -275,20 +296,20 @@ pgFileGetCRC(const char *file_path)
 			file_path, strerror(errno));
 
 	/* calc CRC of backup file */
-	INIT_CRC32C(crc);
+	INIT_FILE_CRC32(crc);
 	while ((len = fread(buf, 1, sizeof(buf), fp)) == sizeof(buf))
 	{
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
-		COMP_CRC32C(crc, buf, len);
+		COMP_FILE_CRC32(crc, buf, len);
 	}
 	errno_tmp = errno;
 	if (!feof(fp))
 		elog(WARNING, "cannot read \"%s\": %s", file_path,
 			strerror(errno_tmp));
 	if (len > 0)
-		COMP_CRC32C(crc, buf, len);
-	FIN_CRC32C(crc);
+		COMP_FILE_CRC32(crc, buf, len);
+	FIN_FILE_CRC32(crc);
 
 	fclose(fp);
 
@@ -368,7 +389,7 @@ BlackListCompare(const void *str1, const void *str2)
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
  *
  * When omit_symlink is true, symbolic link is ignored and only file or
- * directory llnked to will be listed.
+ * directory linked to will be listed.
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
@@ -918,6 +939,8 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 	{
 		links = parray_new();
 		read_tablespace_map(links, backup_dir);
+		/* Sort links by a link name*/
+		parray_qsort(links, pgFileComparePath);
 	}
 
 	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
@@ -993,14 +1016,6 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 							 "match with previous created tablespace directory \"%s\" of symlink \"%s\"",
 							 linked_path, dir_created, link_name);
 				}
-
-				/*
-				 * This check was done in check_tablespace_mapping(). But do
-				 * it again.
-				 */
-				if (!dir_is_empty(linked_path))
-					elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-						 linked_path);
 
 				if (link_sep)
 					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
@@ -1102,7 +1117,6 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		parray_append(files, file);
 	}
 
-	parray_qsort(files, pgFileCompareLinked);
 	fclose(fp);
 }
 
@@ -1126,6 +1140,8 @@ check_tablespace_mapping(pgBackup *backup)
 
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	read_tablespace_map(links, this_backup_path);
+	/* Sort links by the path of a linked file*/
+	parray_qsort(links, pgFileCompareLinked);
 
 	if (log_level_console <= LOG || log_level_file <= LOG)
 		elog(LOG, "check tablespace directories of backup %s",
@@ -1303,7 +1319,13 @@ get_control_value(const char *str, const char *name,
 
 						*buf_int64_ptr = '\0';
 						if (!parse_int64(buf_int64, value_int64, 0))
-							goto bad_format;
+						{
+							/* We assume that too big value is -1 */
+							if (errno == ERANGE)
+								*value_int64 = BYTES_INVALID;
+							else
+								goto bad_format;
+						}
 					}
 
 					return true;
@@ -1363,8 +1385,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 
 	fp = fopen(file_txt, "rt");
 	if (fp == NULL)
-		elog(errno == ENOENT ? ERROR : ERROR,
-			"cannot open \"%s\": %s", file_txt, strerror(errno));
+		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
 
 	files = parray_new();
 

@@ -10,14 +10,11 @@
 
 #include "pg_probackup.h"
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <pthread.h>
+#include "access/timeline.h"
 
-#include "catalog/pg_control.h"
-#include "utils/logger.h"
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "utils/thread.h"
 
 typedef struct
@@ -48,7 +45,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					   bool is_restore)
 {
 	int			i = 0;
+	int			j = 0;
 	parray	   *backups;
+	pgBackup   *tmp_backup = NULL;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
@@ -111,14 +110,21 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		{
 
 			/* backup is not ok,
-			 * but in case of CORRUPT, ORPHAN or DONE revalidation can be done,
+			 * but in case of CORRUPT, ORPHAN or DONE revalidation is possible
+			 * unless --no-validate is used,
 			 * in other cases throw an error.
 			 */
+			 // 1. validate
+			 // 2. validate -i INVALID_ID <- allowed revalidate
+			 // 3. restore -i INVALID_ID <- allowed revalidate and restore
+			 // 4. restore <- impossible
+			 // 5. restore --no-validate <- forbidden
 			if (current_backup->status != BACKUP_STATUS_OK)
 			{
-				if (current_backup->status == BACKUP_STATUS_DONE ||
+				if ((current_backup->status == BACKUP_STATUS_DONE ||
 					current_backup->status == BACKUP_STATUS_ORPHAN ||
 					current_backup->status == BACKUP_STATUS_CORRUPT)
+					&& !rt->restore_no_validate)
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
 				else
@@ -160,25 +166,96 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * Save it as dest_backup
 			 */
 			dest_backup = current_backup;
-			dest_backup_index = i-1;
 		}
 	}
 
 	if (dest_backup == NULL)
 		elog(ERROR, "Backup satisfying target options is not found.");
 
+	dest_backup_index = get_backup_index_number(backups, dest_backup);
+
 	/* If we already found dest_backup, look for full backup. */
-	if (dest_backup)
+	if (dest_backup->backup_mode == BACKUP_MODE_FULL)
+			base_full_backup = dest_backup;
+	else
 	{
-		base_full_backup = current_backup;
+		int result;
 
-		if (current_backup->backup_mode != BACKUP_MODE_FULL)
+		result = scan_parent_chain(dest_backup, &tmp_backup);
+
+		if (result == 0)
 		{
-			base_full_backup = find_parent_backup(current_backup);
+			/* chain is broken, determine missing backup ID
+			 * and orphinize all his descendants
+			 */
+			char	   *missing_backup_id;
+			time_t 		missing_backup_start_time;
 
-			if (base_full_backup == NULL)
-				elog(ERROR, "Valid full backup for backup %s is not found.",
-					base36enc(current_backup->start_time));
+			missing_backup_start_time = tmp_backup->parent_backup;
+			missing_backup_id = base36enc_dup(tmp_backup->parent_backup);
+
+			for (j = get_backup_index_number(backups, tmp_backup); j >= 0; j--)
+			{
+				pgBackup *backup = (pgBackup *) parray_get(backups, j);
+
+				/* use parent backup start_time because he is missing
+				 * and we must orphinize his descendants
+				 */
+				if (is_parent(missing_backup_start_time, backup, false))
+				{
+					if (backup->status == BACKUP_STATUS_OK)
+					{
+						backup->status = BACKUP_STATUS_ORPHAN;
+						write_backup_status(backup);
+
+						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
+								base36enc(backup->start_time), missing_backup_id);
+					}
+					else
+					{
+						elog(WARNING, "Backup %s has missing parent %s",
+								base36enc(backup->start_time), missing_backup_id);
+					}
+				}
+			}
+			/* No point in doing futher */
+			elog(ERROR, "%s of backup %s failed.", action, base36enc(dest_backup->start_time));
+		}
+		else if (result == 1)
+		{
+			/* chain is intact, but at least one parent is invalid */
+			char	   *parent_backup_id;
+
+			/* parent_backup_id contain human-readable backup ID of oldest invalid backup */
+			parent_backup_id = base36enc_dup(tmp_backup->start_time);
+
+			for (j = get_backup_index_number(backups, tmp_backup) - 1; j >= 0; j--)
+			{
+
+				pgBackup *backup = (pgBackup *) parray_get(backups, j);
+
+				if (is_parent(tmp_backup->start_time, backup, false))
+				{
+					if (backup->status == BACKUP_STATUS_OK)
+					{
+						backup->status = BACKUP_STATUS_ORPHAN;
+						write_backup_status(backup);
+
+						elog(WARNING,
+							 "Backup %s is orphaned because his parent %s has status: %s",
+							 base36enc(backup->start_time),
+							 parent_backup_id,
+							 status2str(tmp_backup->status));
+					}
+					else
+					{
+						elog(WARNING, "Backup %s has parent %s with status: %s",
+								base36enc(backup->start_time), parent_backup_id,
+								status2str(tmp_backup->status));
+					}
+				}
+			}
+			tmp_backup = find_parent_full_backup(dest_backup);
 		}
 
 		/*
@@ -188,19 +265,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * TODO I think we should rewrite it someday to use double linked list
 		 * and avoid relying on sort order anymore.
 		 */
-		for (i = dest_backup_index; i < parray_num(backups); i++)
-		{
-			pgBackup * temp_backup = (pgBackup *) parray_get(backups, i);
-			if (temp_backup->start_time == base_full_backup->start_time)
-			{
-				base_full_backup_index = i;
-				break;
-			}
-		}
+		base_full_backup = tmp_backup;
 	}
 
 	if (base_full_backup == NULL)
 		elog(ERROR, "Full backup satisfying target options is not found.");
+
+	base_full_backup_index = get_backup_index_number(backups, base_full_backup);
 
 	/*
 	 * Ensure that directories provided in tablespace mapping are valid
@@ -216,27 +287,32 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		/*
 		 * Validate backups from base_full_backup to dest_backup.
+		 * At this point we are sure that parent chain is intact.
 		 */
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
 		{
-			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			tmp_backup = (pgBackup *) parray_get(backups, i);
 
-			pgBackupValidate(backup);
-			/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
-			if (backup->status == BACKUP_STATUS_CORRUPT)
+			if (is_parent(base_full_backup->start_time, tmp_backup, true))
 			{
-				corrupted_backup = backup;
-				corrupted_backup_index = i;
-				break;
+
+				pgBackupValidate(tmp_backup);
+				/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
+				if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
+				{
+					corrupted_backup = tmp_backup;
+					corrupted_backup_index = i;
+					break;
+				}
+				/* We do not validate WAL files of intermediate backups
+				 * It`s done to speed up restore
+				 */
 			}
-			/* We do not validate WAL files of intermediate backups
-			 * It`s done to speed up restore
-			 */
 		}
-		/* There is no point in wal validation
-		 * if there is corrupted backup between base_backup and dest_backup
-		 */
+
+		/* There is no point in wal validation of corrupted backups */
 		if (!corrupted_backup)
+		{
 			/*
 			 * Validate corresponding WAL files.
 			 * We pass base_full_backup timeline as last argument to this function,
@@ -245,39 +321,36 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
 						 rt->recovery_target_xid, rt->recovery_target_lsn,
 						 base_full_backup->tli, xlog_seg_size);
-
-		/* Set every incremental backup between corrupted backup and nearest FULL backup as orphans */
-		if (corrupted_backup)
+		}
+		/* Orphinize every OK descendant of corrupted backup */
+		else
 		{
-			for (i = corrupted_backup_index - 1; i >= 0; i--)
+			char	   *corrupted_backup_id;
+			corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
+
+			for (j = corrupted_backup_index - 1; j >= 0; j--)
 			{
-				pgBackup   *backup = (pgBackup *) parray_get(backups, i);
-				/* Mark incremental OK backup as orphan */
-				if (backup->backup_mode == BACKUP_MODE_FULL)
-					break;
-				if (backup->status != BACKUP_STATUS_OK)
-					continue;
-				else
+				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
+
+				if (is_parent(corrupted_backup->start_time, backup, false))
 				{
-					char	   *backup_id,
-							*corrupted_backup_id;
+					if (backup->status == BACKUP_STATUS_OK)
+					{
+						backup->status = BACKUP_STATUS_ORPHAN;
+						write_backup_status(backup);
 
-					backup->status = BACKUP_STATUS_ORPHAN;
-					pgBackupWriteBackupControlFile(backup);
-
-					backup_id = base36enc_dup(backup->start_time);
-					corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
-
-					elog(WARNING, "Backup %s is orphaned because his parent %s is corrupted",
-						backup_id, corrupted_backup_id);
-
-					free(backup_id);
-					free(corrupted_backup_id);
+						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
+							 base36enc(backup->start_time),
+							 corrupted_backup_id,
+							 status2str(corrupted_backup->status));
+					}
 				}
 			}
+			free(corrupted_backup_id);
 		}
 	}
 
+	// TODO: rewrite restore to use parent_chain
 	/*
 	 * If dest backup is corrupted or was orphaned in previous check
 	 * produce corresponding error message
@@ -297,7 +370,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		elog(ERROR, "Backup %s has status: %s",
 				base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
-	/* We ensured that all backups are valid, now restore if required */
+	/* We ensured that all backups are valid, now restore if required
+	 * TODO: use parent_link
+	 */
 	if (is_restore)
 	{
 		for (i = base_full_backup_index; i >= dest_backup_index; i--)
@@ -553,7 +628,7 @@ restore_files(void *arg)
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Restored file %s : " INT64_FORMAT " bytes",
+			elog(VERBOSE, "Restored file %s : " INT64_FORMAT " bytes",
 				 file->path, file->write_size);
 	}
 

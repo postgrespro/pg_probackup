@@ -9,19 +9,35 @@
  */
 
 #include "pg_probackup.h"
+
+#include "pg_getopt.h"
 #include "streamutil.h"
+
+#include <sys/stat.h>
+
 #include "utils/thread.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include "pg_getopt.h"
-
-const char *PROGRAM_VERSION	= "2.0.18";
+const char *PROGRAM_VERSION	= "2.0.22";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
+
+typedef enum ProbackupSubcmd
+{
+	NO_CMD = 0,
+	INIT_CMD,
+	ADD_INSTANCE_CMD,
+	DELETE_INSTANCE_CMD,
+	ARCHIVE_PUSH_CMD,
+	ARCHIVE_GET_CMD,
+	BACKUP_CMD,
+	RESTORE_CMD,
+	VALIDATE_CMD,
+	DELETE_CMD,
+	MERGE_CMD,
+	SHOW_CMD,
+	SET_CONFIG_CMD,
+	SHOW_CONFIG_CMD
+} ProbackupSubcmd;
 
 /* directory options */
 char	   *backup_path = NULL;
@@ -113,7 +129,7 @@ ShowFormat show_format = SHOW_PLAIN;
 
 /* current settings */
 pgBackup	current;
-ProbackupSubcmd backup_subcmd = NO_CMD;
+static ProbackupSubcmd backup_subcmd = NO_CMD;
 
 static bool help_opt = false;
 
@@ -182,8 +198,8 @@ static pgut_option options[] =
 	{ 's', 142, "log-filename",			&log_filename,		SOURCE_CMDLINE },
 	{ 's', 143, "error-log-filename",	&error_log_filename, SOURCE_CMDLINE },
 	{ 's', 144, "log-directory",		&log_directory,		SOURCE_CMDLINE },
-	{ 'u', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
-	{ 'u', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MIN },
+	{ 'U', 145, "log-rotation-size",	&log_rotation_size,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
+	{ 'U', 146, "log-rotation-age",		&log_rotation_age,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
 	/* connection options */
 	{ 's', 'd', "pgdatabase",			&pgut_dbname,		SOURCE_CMDLINE },
 	{ 's', 'h', "pghost",				&host,				SOURCE_CMDLINE },
@@ -534,7 +550,8 @@ main(int argc, char *argv[])
 			if (delete_expired)
 				return do_retention_purge();
 			else
-				return do_delete(current.backup_id);
+				do_delete(current.backup_id);
+			break;
 		case MERGE_CMD:
 			do_merge(current.backup_id);
 			break;

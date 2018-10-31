@@ -11,13 +11,26 @@
 #include "pg_probackup.h"
 
 #include <time.h>
-#include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
-#include "pqexpbuffer.h"
-
 #include "utils/json.h"
+
+typedef struct ShowBackendRow
+{
+	const char *instance;
+	const char *version;
+	char		backup_id[20];
+	char		recovery_time[100];
+	const char *mode;
+	const char *wal_mode;
+	char		tli[20];
+	char		duration[20];
+	char		data_bytes[20];
+	char		start_lsn[20];
+	char		stop_lsn[20];
+	const char *status;
+} ShowBackendRow;
 
 
 static void show_instance_start(void);
@@ -299,63 +312,194 @@ show_backup(time_t requested_backup_id)
 static void
 show_instance_plain(parray *backup_list, bool show_name)
 {
+#define SHOW_FIELDS_COUNT 12
 	int			i;
+	const char *names[SHOW_FIELDS_COUNT] =
+					{ "Instance", "Version", "ID", "Recovery Time",
+					  "Mode", "WAL", "Current/Parent TLI", "Time", "Data",
+					  "Start LSN", "Stop LSN", "Status" };
+	const char *field_formats[SHOW_FIELDS_COUNT] =
+					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
+					  " %-*s ", " %-*s ", " %-*s ", " %*s ", " %*s ",
+					  " %*s ", " %*s ", " %-*s "};
+	uint32		widths[SHOW_FIELDS_COUNT];
+	uint32		widths_sum = 0;
+	ShowBackendRow *rows;
 
-	if (show_name)
-		printfPQExpBuffer(&show_buf, "\nBACKUP INSTANCE '%s'\n", instance_name);
+	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
+		widths[i] = strlen(names[i]);
 
-	/* if you add new fields here, fix the header */
-	/* show header */
-	appendPQExpBufferStr(&show_buf,
-						 "============================================================================================================================================\n");
-	appendPQExpBufferStr(&show_buf,
-						 " Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI    Time    Data   Start LSN    Stop LSN    Status \n");
-	appendPQExpBufferStr(&show_buf,
-						 "============================================================================================================================================\n");
+	rows = (ShowBackendRow *) palloc(parray_num(backup_list) *
+									 sizeof(ShowBackendRow));
 
+	/*
+	 * Fill row values and calculate maximum width of each field.
+	 */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = parray_get(backup_list, i);
-		TimeLineID	parent_tli;
-		char		timestamp[100] = "----";
-		char		duration[20] = "----";
-		char		data_bytes_str[10] = "----";
+		ShowBackendRow *row = &rows[i];
+		int			cur = 0;
 
+		/* Instance */
+		row->instance = instance_name;
+		widths[cur] = Max(widths[cur], strlen(row->instance));
+		cur++;
+
+		/* Version */
+		row->version = backup->server_version[0] ?
+			backup->server_version : "----";
+		widths[cur] = Max(widths[cur], strlen(row->version));
+		cur++;
+
+		/* ID */
+		snprintf(row->backup_id, lengthof(row->backup_id), "%s",
+				 base36enc(backup->start_time));
+		widths[cur] = Max(widths[cur], strlen(row->backup_id));
+		cur++;
+
+		/* Recovery Time */
 		if (backup->recovery_time != (time_t) 0)
-			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+			time2iso(row->recovery_time, lengthof(row->recovery_time),
+					 backup->recovery_time);
+		else
+			StrNCpy(row->recovery_time, "----", 4);
+		widths[cur] = Max(widths[cur], strlen(row->recovery_time));
+		cur++;
+
+		/* Mode */
+		row->mode = pgBackupGetBackupMode(backup);
+		widths[cur] = Max(widths[cur], strlen(row->mode));
+		cur++;
+
+		/* WAL */
+		row->wal_mode = backup->stream ? "STREAM": "ARCHIVE";
+		widths[cur] = Max(widths[cur], strlen(row->wal_mode));
+		cur++;
+
+		/* Current/Parent TLI */
+		snprintf(row->tli, lengthof(row->tli), "%u / %u",
+				 backup->tli, get_parent_tli(backup->tli));
+		widths[cur] = Max(widths[cur], strlen(row->tli));
+		cur++;
+
+		/* Time */
 		if (backup->end_time != (time_t) 0)
-			snprintf(duration, lengthof(duration), "%.*lfs",  0,
+			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
 					 difftime(backup->end_time, backup->start_time));
+		else
+			StrNCpy(row->duration, "----", 4);
+		widths[cur] = Max(widths[cur], strlen(row->duration));
+		cur++;
 
-		/*
-		 * Calculate Data field, in the case of full backup this shows the
-		 * total amount of data. For an differential backup, this size is only
-		 * the difference of data accumulated.
-		 */
-		pretty_size(backup->data_bytes, data_bytes_str,
-					lengthof(data_bytes_str));
+		/* Data */
+		pretty_size(backup->data_bytes, row->data_bytes,
+					lengthof(row->data_bytes));
+		widths[cur] = Max(widths[cur], strlen(row->data_bytes));
+		cur++;
 
-		/* Get parent timeline before printing */
-		parent_tli = get_parent_tli(backup->tli);
+		/* Start LSN */
+		snprintf(row->start_lsn, lengthof(row->start_lsn), "%X/%X",
+				 (uint32) (backup->start_lsn >> 32),
+				 (uint32) backup->start_lsn);
+		widths[cur] = Max(widths[cur], strlen(row->start_lsn));
+		cur++;
 
-		appendPQExpBuffer(&show_buf,
-						  " %-11s %-8s %-6s  %-22s  %-6s  %-7s  %3d / %-3d            %5s  %6s  %2X/%-8X  %2X/%-8X  %-8s\n",
-						  instance_name,
-						  (backup->server_version[0] ? backup->server_version : "----"),
-						  base36enc(backup->start_time),
-						  timestamp,
-						  pgBackupGetBackupMode(backup),
-						  backup->stream ? "STREAM": "ARCHIVE",
-						  backup->tli,
-						  parent_tli,
-						  duration,
-						  data_bytes_str,
-						  (uint32) (backup->start_lsn >> 32),
-						  (uint32) backup->start_lsn,
-						  (uint32) (backup->stop_lsn >> 32),
-						  (uint32) backup->stop_lsn,
-						  status2str(backup->status));
+		/* Stop LSN */
+		snprintf(row->stop_lsn, lengthof(row->stop_lsn), "%X/%X",
+				 (uint32) (backup->stop_lsn >> 32),
+				 (uint32) backup->stop_lsn);
+		widths[cur] = Max(widths[cur], strlen(row->stop_lsn));
+		cur++;
+
+		/* Status */
+		row->status = status2str(backup->status);
+		widths[cur] = Max(widths[cur], strlen(row->status));
 	}
+
+	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
+		widths_sum += widths[i] + 2 /* two space */;
+
+	if (show_name)
+		appendPQExpBuffer(&show_buf, "\nBACKUP INSTANCE '%s'\n", instance_name);
+
+	/*
+	 * Print header.
+	 */
+	for (i = 0; i < widths_sum; i++)
+		appendPQExpBufferChar(&show_buf, '=');
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
+	{
+		appendPQExpBuffer(&show_buf, field_formats[i], widths[i], names[i]);
+	}
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	for (i = 0; i < widths_sum; i++)
+		appendPQExpBufferChar(&show_buf, '=');
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	/*
+	 * Print values.
+	 */
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		ShowBackendRow *row = &rows[i];
+		int			cur = 0;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->instance);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->version);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->backup_id);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->recovery_time);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->mode);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->wal_mode);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->tli);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->duration);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->data_bytes);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->start_lsn);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->stop_lsn);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->status);
+		cur++;
+
+		appendPQExpBufferChar(&show_buf, '\n');
+	}
+
+	pfree(rows);
 }
 
 /*

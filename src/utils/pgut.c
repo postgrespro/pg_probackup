@@ -9,24 +9,16 @@
  */
 
 #include "postgres_fe.h"
-#include "libpq/pqsignal.h"
 
 #include "getopt_long.h"
-#include <limits.h>
+#include "libpq-fe.h"
+#include "libpq/pqsignal.h"
+#include "pqexpbuffer.h"
+
 #include <time.h>
-#include <unistd.h>
 
-#include "logger.h"
 #include "pgut.h"
-
-/* old gcc doesn't have LLONG_MAX. */
-#ifndef LLONG_MAX
-#if defined(HAVE_LONG_INT_64) || !defined(HAVE_LONG_LONG_INT_64)
-#define LLONG_MAX		LONG_MAX
-#else
-#define LLONG_MAX		INT64CONST(0x7FFFFFFFFFFFFFFF)
-#endif
-#endif
+#include "logger.h"
 
 #define MAX_TZDISP_HOUR		15	/* maximum allowed hour part */
 #define SECS_PER_MINUTE		60
@@ -249,7 +241,7 @@ assign_option(pgut_option *opt, const char *optarg, pgut_optsrc src)
 				*(char **) opt->var = pgut_strdup(optarg);
 				if (strcmp(optarg,"") != 0)
 					return;
-				message = "a valid string. But provided: ";
+				message = "a valid string";
 				break;
 			case 't':
 				if (parse_time(optarg, opt->var,
@@ -298,7 +290,13 @@ convert_to_base_unit(int64 value, const char *unit,
 			if (table[i].multiplier < 0)
 				*base_value = value / (-table[i].multiplier);
 			else
+			{
+				/* Check for integer overflow first */
+				if (value > PG_INT64_MAX / table[i].multiplier)
+					return false;
+
 				*base_value = value * table[i].multiplier;
+			}
 			return true;
 		}
 	}
@@ -328,7 +326,13 @@ convert_to_base_unit_u(uint64 value, const char *unit,
 			if (table[i].multiplier < 0)
 				*base_value = value / (-table[i].multiplier);
 			else
+			{
+				/* Check for integer overflow first */
+				if (value > PG_UINT64_MAX / table[i].multiplier)
+					return false;
+
 				*base_value = value * table[i].multiplier;
+			}
 			return true;
 		}
 	}
@@ -366,6 +370,10 @@ convert_from_base_unit(int64 base_value, int base_unit,
 			 */
 			if (table[i].multiplier < 0)
 			{
+				/* Check for integer overflow first */
+				if (base_value > PG_INT64_MAX / (-table[i].multiplier))
+					continue;
+
 				*value = base_value * (-table[i].multiplier);
 				*unit = table[i].unit;
 				break;
@@ -410,6 +418,10 @@ convert_from_base_unit_u(uint64 base_value, int base_unit,
 			 */
 			if (table[i].multiplier < 0)
 			{
+				/* Check for integer overflow first */
+				if (base_value > PG_UINT64_MAX / (-table[i].multiplier))
+					continue;
+
 				*value = base_value * (-table[i].multiplier);
 				*unit = table[i].unit;
 				break;
@@ -607,7 +619,7 @@ parse_int32(const char *value, int32 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-		*result = INT_MAX;
+		*result = PG_INT32_MAX;
 		return true;
 	}
 
@@ -616,10 +628,15 @@ parse_int32(const char *value, int32 *result, int flags)
 	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
+	/* Check for integer overflow */
 	if (errno == ERANGE || val != (int64) ((int32) val))
 		return false;
 
 	if (!parse_unit(endptr, flags, val, &val))
+		return false;
+
+	/* Check for integer overflow again */
+	if (val != (int64) ((int32) val))
 		return false;
 
 	*result = val;
@@ -639,7 +656,7 @@ parse_uint32(const char *value, uint32 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-		*result = UINT_MAX;
+		*result = PG_UINT32_MAX;
 		return true;
 	}
 
@@ -648,10 +665,15 @@ parse_uint32(const char *value, uint32 *result, int flags)
 	if (endptr == value || (*endptr && flags == 0))
 		return false;
 
+	/* Check for integer overflow */
 	if (errno == ERANGE || val != (uint64) ((uint32) val))
 		return false;
 
 	if (!parse_unit_u(endptr, flags, val, &val))
+		return false;
+
+	/* Check for integer overflow again */
+	if (val != (uint64) ((uint32) val))
 		return false;
 
 	*result = val;
@@ -671,7 +693,7 @@ parse_int64(const char *value, int64 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-		*result = LLONG_MAX;
+		*result = PG_INT64_MAX;
 		return true;
 	}
 
@@ -709,13 +731,7 @@ parse_uint64(const char *value, uint64 *result, int flags)
 
 	if (strcmp(value, INFINITE_STR) == 0)
 	{
-#if defined(HAVE_LONG_INT_64)
-		*result = ULONG_MAX;
-#elif defined(HAVE_LONG_LONG_INT_64)
-		*result = ULLONG_MAX;
-#else
-		*result = ULONG_MAX;
-#endif
+		*result = PG_UINT64_MAX;
 		return true;
 	}
 
@@ -1637,31 +1653,6 @@ pgut_disconnect(PGconn *conn)
 		PQfinish(conn);
 }
 
-/*  set/get host and port for connecting standby server */
-const char *
-pgut_get_host()
-{
-	return host;
-}
-
-const char *
-pgut_get_port()
-{
-	return port;
-}
-
-void
-pgut_set_host(const char *new_host)
-{
-	host = new_host;
-}
-
-void
-pgut_set_port(const char *new_port)
-{
-	port = new_port;
-}
-
 
 PGresult *
 pgut_execute_parallel(PGconn* conn, 
@@ -2136,60 +2127,6 @@ get_username(void)
 	return ret;
 }
 
-int
-appendStringInfoFile(StringInfo str, FILE *fp)
-{
-	AssertArg(str != NULL);
-	AssertArg(fp != NULL);
-
-	for (;;)
-	{
-		int		rc;
-
-		if (str->maxlen - str->len < 2 && enlargeStringInfo(str, 1024) == 0)
-			return errno = ENOMEM;
-
-		rc = fread(str->data + str->len, 1, str->maxlen - str->len - 1, fp);
-		if (rc == 0)
-			break;
-		else if (rc > 0)
-		{
-			str->len += rc;
-			str->data[str->len] = '\0';
-		}
-		else if (ferror(fp) && errno != EINTR)
-			return errno;
-	}
-	return 0;
-}
-
-int
-appendStringInfoFd(StringInfo str, int fd)
-{
-	AssertArg(str != NULL);
-	AssertArg(fd != -1);
-
-	for (;;)
-	{
-		int		rc;
-
-		if (str->maxlen - str->len < 2 && enlargeStringInfo(str, 1024) == 0)
-			return errno = ENOMEM;
-
-		rc = read(fd, str->data + str->len, str->maxlen - str->len - 1);
-		if (rc == 0)
-			break;
-		else if (rc > 0)
-		{
-			str->len += rc;
-			str->data[str->len] = '\0';
-		}
-		else if (errno != EINTR)
-			return errno;
-	}
-	return 0;
-}
-
 void *
 pgut_malloc(size_t size)
 {
@@ -2224,36 +2161,6 @@ pgut_strdup(const char *str)
 		elog(ERROR, "could not duplicate string \"%s\": %s",
 			str, strerror(errno));
 	return ret;
-}
-
-char *
-strdup_with_len(const char *str, size_t len)
-{
-	char *r;
-
-	if (str == NULL)
-		return NULL;
-
-	r = pgut_malloc(len + 1);
-	memcpy(r, str, len);
-	r[len] = '\0';
-	return r;
-}
-
-/* strdup but trim whitespaces at head and tail */
-char *
-strdup_trim(const char *str)
-{
-	size_t	len;
-
-	if (str == NULL)
-		return NULL;
-
-	while (IsSpace(str[0])) { str++; }
-	len = strlen(str);
-	while (len > 0 && IsSpace(str[len - 1])) { len--; }
-
-	return strdup_with_len(str, len);
 }
 
 FILE *

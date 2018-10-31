@@ -56,6 +56,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_delete_archive_mix_compress_and_non_compressed_segments(self):
+        """stub"""
+
+    # @unittest.skip("skip")
     def test_delete_increment_page(self):
         """delete increment and all after him"""
         fname = self.id().split('.')[3]

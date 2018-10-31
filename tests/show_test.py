@@ -28,7 +28,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             self.backup_node(
                 backup_dir, 'node', node,
-                options=["--log-level-console=panic"]),
+                options=["--log-level-console=off"]),
             None
         )
         self.assertIn("OK", self.show_pb(backup_dir, 'node', as_text=True))
@@ -56,7 +56,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             self.backup_node(
                 backup_dir, 'node', node,
-                options=["--log-level-console=panic"]),
+                options=["--log-level-console=off"]),
             None
         )
         self.backup_node(backup_dir, 'node', node)
@@ -135,7 +135,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             backup_id, "backup.control")
         os.remove(file)
 
-        self.assertIn('control file "{0}" doesn\'t exist'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn('Control file "{0}" doesn\'t exist'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -165,7 +165,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fd = open(file, 'w')
         fd.close()
 
-        self.assertIn('control file "{0}" is empty'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn('Control file "{0}" is empty'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

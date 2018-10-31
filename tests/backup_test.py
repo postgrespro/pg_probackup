@@ -520,3 +520,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

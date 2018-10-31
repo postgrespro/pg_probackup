@@ -10,12 +10,9 @@
 
 #include "pg_probackup.h"
 
-#include <time.h>
+#include "catalog/pg_control.h"
 
-#include "storage/bufpage.h"
-#if PG_VERSION_NUM >= 110000
-#include "streamutil.h"
-#endif
+#include <time.h>
 
 const char *
 base36enc(long unsigned int value)
@@ -123,6 +120,46 @@ get_current_timeline(bool safe)
 	pg_free(buffer);
 
 	return ControlFile.checkPointCopy.ThisTimeLineID;
+}
+
+/*
+ * Get last check point record ptr from pg_tonrol.
+ */
+XLogRecPtr
+get_checkpoint_location(PGconn *conn)
+{
+#if PG_VERSION_NUM >= 90600
+	PGresult   *res;
+	uint32		lsn_hi;
+	uint32		lsn_lo;
+	XLogRecPtr	lsn;
+
+#if PG_VERSION_NUM >= 100000
+	res = pgut_execute(conn,
+					   "SELECT checkpoint_lsn FROM pg_catalog.pg_control_checkpoint()",
+					   0, NULL);
+#else
+	res = pgut_execute(conn,
+					   "SELECT checkpoint_location FROM pg_catalog.pg_control_checkpoint()",
+					   0, NULL);
+#endif
+	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
+	PQclear(res);
+	/* Calculate LSN */
+	lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
+
+	return lsn;
+#else
+	char	   *buffer;
+	size_t		size;
+	ControlFileData ControlFile;
+
+	buffer = fetchFile(conn, "global/pg_control", &size);
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.checkPoint;
+#endif
 }
 
 uint64
@@ -243,28 +280,14 @@ time2iso(char *buf, size_t len, time_t time)
 	}
 }
 
-/* copied from timestamp.c */
-pg_time_t
-timestamptz_to_time_t(TimestampTz t)
-{
-	pg_time_t	result;
-
-#ifdef HAVE_INT64_TIMESTAMP
-	result = (pg_time_t) (t / USECS_PER_SEC +
-				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
-#else
-	result = (pg_time_t) (t +
-				 ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY));
-#endif
-	return result;
-}
-
-/* Parse string representation of the server version */
-int
-parse_server_version(char *server_version_str)
+/*
+ * Parse string representation of the server version.
+ */
+uint32
+parse_server_version(const char *server_version_str)
 {
 	int			nfields;
-	int			result = 0;
+	uint32		result = 0;
 	int			major_version = 0;
 	int			minor_version = 0;
 
@@ -283,7 +306,31 @@ parse_server_version(char *server_version_str)
 		result = major_version * 10000;
 	}
 	else
-		elog(ERROR, "Unknown server version format");
+		elog(ERROR, "Unknown server version format %s", server_version_str);
+
+	return result;
+}
+
+/*
+ * Parse string representation of the program version.
+ */
+uint32
+parse_program_version(const char *program_version)
+{
+	int			nfields;
+	int			major = 0,
+				minor = 0,
+				micro = 0;
+	uint32		result = 0;
+
+	if (program_version == NULL || program_version[0] == '\0')
+		return 0;
+
+	nfields = sscanf(program_version, "%d.%d.%d", &major, &minor, &micro);
+	if (nfields == 3)
+		result = major * 10000 + minor * 100 + micro;
+	else
+		elog(ERROR, "Unknown program version format %s", program_version);
 
 	return result;
 }

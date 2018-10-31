@@ -165,6 +165,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="@PGSRC@\backend\access\transam\xlogreader.c" />
+    <ClCompile Include="@PGSRC@\backend\utils\hash\pg_crc.c" />
     <ClCompile Include="@PGSRC@\bin\pg_basebackup\receivelog.c" />
     <ClCompile Include="@PGSRC@\bin\pg_basebackup\streamutil.c" />
     <ClCompile Include="@PGSRC@\bin\pg_rewind\datapagemap.c" />

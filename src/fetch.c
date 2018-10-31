@@ -8,18 +8,10 @@
  *-------------------------------------------------------------------------
  */
 
-#include "postgres_fe.h"
-
-#include "catalog/catalog.h"
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-
 #include "pg_probackup.h"
+
+#include <sys/stat.h>
+#include <unistd.h>
 
 /*
  * Read a file into memory. The file to be read is <datadir>/<path>.

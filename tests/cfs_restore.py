@@ -93,7 +93,7 @@ class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
         )
 
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -151,7 +151,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in tablespace dir"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -189,7 +189,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -213,11 +213,13 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
-        self.node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
-        self.node_new.cleanup()
+        node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
+        node_new.cleanup()
 
         try:
-            self.restore_node(self.backup_dir, 'node', self.node_new, backup_id=self.backup_id)
+            self.restore_node(self.backup_dir, 'node', node_new, backup_id=self.backup_id)
+            node_new.append_conf("postgresql.auto.conf",
+                                 "port = {0}".format(node_new.port))
         except ProbackupException as e:
             self.fail(
                 "ERROR: Restore from full backup failed. \n {0} \n {1}".format(
@@ -230,7 +232,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
-            self.node_new.start()
+            node_new.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -240,10 +242,10 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
+            repr(node_new.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
             repr(self.table_t1)
         )
-        self.node_new.cleanup()
+        node_new.cleanup()
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -255,11 +257,13 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
-        self.node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
-        self.node_new.cleanup()
+        node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
+        node_new.cleanup()
 
         try:
-            self.restore_node(self.backup_dir, 'node', self.node_new, backup_id=self.backup_id, options=['-j', '5'])
+            self.restore_node(self.backup_dir, 'node', node_new, backup_id=self.backup_id, options=['-j', '5'])
+            node_new.append_conf("postgresql.auto.conf",
+                                 "port = {0}".format(node_new.port))
         except ProbackupException as e:
             self.fail(
                 "ERROR: Restore from full backup failed. \n {0} \n {1}".format(
@@ -272,7 +276,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in backup dir"
         )
         try:
-            self.node_new.start()
+            node_new.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -282,10 +286,10 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
+            repr(node_new.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
             repr(self.table_t1)
         )
-        self.node_new.cleanup()
+        node_new.cleanup()
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -319,7 +323,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in new tablespace location"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
@@ -365,7 +369,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             "ERROR: File pg_compression not found in new tablespace location"
         )
         try:
-            self.node.start()
+            self.node.slow_start()
         except ProbackupException as e:
             self.fail(
                 "ERROR: Instance not started after restore. \n {0} \n {1}".format(
