@@ -19,6 +19,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+#include "utils/configuration.h"
+
 /*
  * The contents of these directories are removed or recreated during server
  * start so they are not included in backups.  The directories themselves are
@@ -379,7 +381,8 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
-	if (root && pgdata && strcmp(root, pgdata) == 0 && fileExists(path))
+	if (root && instance_config.pgdata &&
+		strcmp(root, instance_config.pgdata) == 0 && fileExists(path))
 	{
 		FILE	   *black_list_file = NULL;
 		char		buf[MAXPGPATH * 2];
@@ -393,7 +396,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
 		{
-			join_path_components(black_item, pgdata, buf);
+			join_path_components(black_item, instance_config.pgdata, buf);
 
 			if (black_item[strlen(black_item) - 1] == '\n')
 				black_item[strlen(black_item) - 1] = '\0';
@@ -844,7 +847,7 @@ get_tablespace_created(const char *link)
  * Copy of function tablespace_list_append() from pg_basebackup.c.
  */
 void
-opt_tablespace_map(pgut_option *opt, const char *arg)
+opt_tablespace_map(ConfigOption *opt, const char *arg)
 {
 	TablespaceListCell *cell = pgut_new(TablespaceListCell);
 	char	   *dst;
@@ -1121,7 +1124,8 @@ check_tablespace_mapping(pgBackup *backup)
 	/* Sort links by the path of a linked file*/
 	parray_qsort(links, pgFileCompareLinked);
 
-	if (log_level_console <= LOG || log_level_file <= LOG)
+	if (logger_config.log_level_console <= LOG ||
+		logger_config.log_level_file <= LOG)
 		elog(LOG, "check tablespace directories of backup %s",
 			 base36enc(backup->start_time));
 

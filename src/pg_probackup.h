@@ -24,6 +24,7 @@
 #include "port/atomics.h"
 #endif
 
+#include "utils/configuration.h"
 #include "utils/logger.h"
 #include "utils/parray.h"
 #include "utils/pgut.h"
@@ -158,7 +159,11 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1)
 #define BLOCKNUM_INVALID	(-1)
 
-typedef struct pgBackupConfig
+/*
+ * An instance configuration. It can be stored in a configuration file or passed
+ * from command line.
+ */
+typedef struct InstanceConfig
 {
 	uint64		system_identifier;
 	uint32		xlog_seg_size;
@@ -173,24 +178,24 @@ typedef struct pgBackupConfig
 	const char *master_port;
 	const char *master_db;
 	const char *master_user;
-	int			replica_timeout;
+	uint32		replica_timeout;
 
-	int			archive_timeout;
+	/* Wait timeout for WAL segment archiving */
+	uint32		archive_timeout;
 
-	int			log_level_console;
-	int			log_level_file;
-	char	   *log_filename;
-	char	   *error_log_filename;
-	char	   *log_directory;
-	uint64		log_rotation_size;
-	uint64		log_rotation_age;
+	/* Logger parameters */
+	LoggerConfig logger;
 
+	/* Retention options. 0 disables the option. */
 	uint32		retention_redundancy;
 	uint32		retention_window;
 
 	CompressAlg	compress_alg;
 	int			compress_level;
-} pgBackupConfig;
+} InstanceConfig;
+
+extern ConfigOption instance_options[];
+extern InstanceConfig instance_config;
 
 typedef struct pgBackup pgBackup;
 
@@ -331,7 +336,6 @@ typedef struct
 /* directory options */
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
-extern char	   *pgdata;
 extern char		arclog_path[MAXPGPATH];
 
 /* common options */
@@ -345,15 +349,7 @@ extern char	   *replication_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
-#define ARCHIVE_TIMEOUT_DEFAULT 300
-extern uint32	archive_timeout;
 extern bool		is_remote_backup;
-extern const char *master_db;
-extern const char *master_host;
-extern const char *master_port;
-extern const char *master_user;
-#define REPLICA_TIMEOUT_DEFAULT 300
-extern uint32	replica_timeout;
 
 extern bool is_ptrack_support;
 extern bool is_checksum_enabled;
@@ -366,25 +362,13 @@ extern bool skip_block_validation;
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
-extern bool		apply_to_all;
 extern bool		force_delete;
 
-/* retention options. 0 disables the option */
-#define RETENTION_REDUNDANCY_DEFAULT 0
-#define RETENTION_WINDOW_DEFAULT 0
-
-extern uint32	retention_redundancy;
-extern uint32	retention_window;
-
 /* compression options */
-extern CompressAlg compress_alg;
-extern int		compress_level;
 extern bool		compress_shortcut;
 
 /* other options */
 extern char *instance_name;
-extern uint64 system_identifier;
-extern uint32 xlog_seg_size;
 
 /* show options */
 extern ShowFormat show_format;
@@ -435,13 +419,9 @@ extern int do_archive_get(char *wal_file_path, char *wal_file_name);
 
 
 /* in configure.c */
-extern int do_configure(bool show_only);
-extern void pgBackupConfigInit(pgBackupConfig *config);
-extern void writeBackupCatalogConfig(FILE *out, pgBackupConfig *config);
-extern void writeBackupCatalogConfigFile(pgBackupConfig *config);
-extern pgBackupConfig* readBackupCatalogConfigFile(void);
-
-extern uint32 get_config_xlog_seg_size(void);
+extern void do_show_config(void);
+extern void do_set_config(void);
+extern void init_config(InstanceConfig *config);
 
 /* in show.c */
 extern int do_show(time_t requested_backup_id);
@@ -510,7 +490,7 @@ extern void create_data_directories(const char *data_dir,
 									bool extract_tablespaces);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
-extern void opt_tablespace_map(pgut_option *opt, const char *arg);
+extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root);

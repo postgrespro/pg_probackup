@@ -275,6 +275,7 @@ do_validate_all(void)
 		errno = 0;
 		while ((dent = readdir(dir)))
 		{
+			char		conf_path[MAXPGPATH];
 			char		child[MAXPGPATH];
 			struct stat	st;
 
@@ -291,10 +292,16 @@ do_validate_all(void)
 			if (!S_ISDIR(st.st_mode))
 				continue;
 
+			/*
+			 * Initialize instance configuration.
+			 */
 			instance_name = dent->d_name;
-			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
+			sprintf(backup_instance_path, "%s/%s/%s",
+					backup_path, BACKUPS_DIR, instance_name);
 			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
-			xlog_seg_size = get_config_xlog_seg_size();
+			join_path_components(conf_path, backup_instance_path,
+								 BACKUP_CATALOG_CONF_FILE);
+			config_read_opt(conf_path, instance_options, ERROR, false);
 
 			do_validate_instance();
 		}
@@ -418,7 +425,8 @@ do_validate_instance(void)
 		/* Validate corresponding WAL files */
 		if (current_backup->status == BACKUP_STATUS_OK)
 			validate_wal(current_backup, arclog_path, 0,
-						 0, 0, base_full_backup->tli, xlog_seg_size);
+						 0, 0, base_full_backup->tli,
+						 instance_config.xlog_seg_size);
 
 		/*
 		 * Mark every descendant of corrupted backup as orphan
@@ -506,7 +514,7 @@ do_validate_instance(void)
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
 											 0, 0, current_backup->tli,
-											 xlog_seg_size);
+											 instance_config.xlog_seg_size);
 							}
 						}
 

@@ -227,7 +227,7 @@ doExtractPageMap(void *arg)
 #endif
 	if (xlogreader == NULL)
 		elog(ERROR, "Thread [%d]: out of memory", private_data->thread_num);
-	xlogreader->system_identifier = system_identifier;
+	xlogreader->system_identifier = instance_config.system_identifier;
 
 	found = XLogFindNextRecord(xlogreader, extract_arg->startpoint);
 
@@ -976,7 +976,7 @@ InitXLogPageRead(XLogPageReadPrivate *private_data, const char *archivedir,
 #endif
 		if (xlogreader == NULL)
 			elog(ERROR, "out of memory");
-		xlogreader->system_identifier = system_identifier;
+		xlogreader->system_identifier = instance_config.system_identifier;
 	}
 
 	return xlogreader;

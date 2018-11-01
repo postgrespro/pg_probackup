@@ -109,7 +109,7 @@ do_delete(time_t backup_id)
 			}
 		}
 
-		delete_walfiles(oldest_lsn, oldest_tli, xlog_seg_size);
+		delete_walfiles(oldest_lsn, oldest_tli, instance_config.xlog_seg_size);
 	}
 
 	/* cleanup */
@@ -125,9 +125,7 @@ int
 do_retention_purge(void)
 {
 	parray	   *backup_list;
-	uint32		backup_num;
 	size_t		i;
-	time_t		days_threshold = time(NULL) - (retention_window * 60 * 60 * 24);
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
 	bool		keep_next_backup = true;	/* Do not delete first full backup */
@@ -135,13 +133,13 @@ do_retention_purge(void)
 
 	if (delete_expired)
 	{
-		if (retention_redundancy > 0)
-			elog(LOG, "REDUNDANCY=%u", retention_redundancy);
-		if (retention_window > 0)
-			elog(LOG, "WINDOW=%u", retention_window);
+		if (instance_config.retention_redundancy > 0)
+			elog(LOG, "REDUNDANCY=%u", instance_config.retention_redundancy);
+		if (instance_config.retention_window > 0)
+			elog(LOG, "WINDOW=%u", instance_config.retention_window);
 
-		if (retention_redundancy == 0
-			&& retention_window == 0)
+		if (instance_config.retention_redundancy == 0
+			&& instance_config.retention_window == 0)
 		{
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
@@ -162,9 +160,15 @@ do_retention_purge(void)
 
 	/* Find target backups to be deleted */
 	if (delete_expired &&
-		(retention_redundancy > 0 || retention_window > 0))
+		(instance_config.retention_redundancy > 0 ||
+		 instance_config.retention_window > 0))
 	{
-		backup_num = 0;
+		time_t		days_threshold;
+		uint32		backup_num = 0;
+
+		days_threshold = time(NULL) -
+			(instance_config.retention_window * 60 * 60 * 24);
+
 		for (i = 0; i < parray_num(backup_list); i++)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
@@ -182,8 +186,9 @@ do_retention_purge(void)
 
 			/* Evaluate retention_redundancy if this backup is eligible for removal */
 			if (keep_next_backup ||
-				retention_redundancy >= backup_num_evaluate + 1 ||
-				(retention_window > 0 && backup->recovery_time >= days_threshold))
+				instance_config.retention_redundancy >= backup_num_evaluate + 1 ||
+				(instance_config.retention_window > 0 &&
+				 backup->recovery_time >= days_threshold))
 			{
 				/* Save LSN and Timeline to remove unnecessary WAL segments */
 				oldest_lsn = backup->start_lsn;
@@ -226,7 +231,7 @@ do_retention_purge(void)
 	/* Purge WAL files */
 	if (delete_wal)
 	{
-		delete_walfiles(oldest_lsn, oldest_tli, xlog_seg_size);
+		delete_walfiles(oldest_lsn, oldest_tli, instance_config.xlog_seg_size);
 	}
 
 	/* Cleanup */
@@ -439,7 +444,7 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	delete_walfiles(InvalidXLogRecPtr, 0, xlog_seg_size);
+	delete_walfiles(InvalidXLogRecPtr, 0, instance_config.xlog_seg_size);
 
 	/* Delete backup instance config file */
 	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);

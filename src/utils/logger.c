@@ -15,24 +15,17 @@
 #include "pgut.h"
 #include "thread.h"
 
+#include "utils/configuration.h"
+
 /* Logger parameters */
-
-int			log_level_console = LOG_LEVEL_CONSOLE_DEFAULT;
-int			log_level_file = LOG_LEVEL_FILE_DEFAULT;
-
-char	   *log_filename = NULL;
-char	   *error_log_filename = NULL;
-char	   *log_directory = NULL;
-/*
- * If log_path is empty logging is not initialized.
- * We will log only into stderr
- */
-char		log_path[MAXPGPATH] = "";
-
-/* Maximum size of an individual log file in kilobytes */
-uint64		log_rotation_size = 0;
-/* Maximum lifetime of an individual log file in minutes */
-uint64		log_rotation_age = 0;
+LoggerConfig logger_config = {
+	LOG_LEVEL_CONSOLE_DEFAULT,
+	LOG_LEVEL_FILE_DEFAULT,
+	LOG_FILENAME_DEFAULT,
+	NULL,
+	LOG_ROTATION_SIZE_DEFAULT,
+	LOG_ROTATION_AGE_DEFAULT
+};
 
 /* Implementation for logging.h */
 
@@ -68,17 +61,24 @@ static bool loggin_in_progress = false;
 
 static pthread_mutex_t log_file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/*
+ * Initialize logger.
+ *
+ * If log_directory wasn't set by a user we use full path:
+ * backup_directory/log
+ */
 void
-init_logger(const char *root_path)
+init_logger(const char *root_path, LoggerConfig *config)
 {
 	/* Set log path */
-	if (log_level_file != LOG_OFF || error_log_filename)
+	if (config->log_directory == NULL)
 	{
-		if (log_directory)
-			strcpy(log_path, log_directory);
-		else
-			join_path_components(log_path, root_path, LOG_DIRECTORY_DEFAULT);
+		config->log_directory = palloc(MAXPGPATH);
+		join_path_components(config->log_directory,
+							 root_path, LOG_DIRECTORY_DEFAULT);
 	}
+
+	logger_config = *config;
 }
 
 static void
@@ -157,10 +157,11 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
-	write_to_file = elevel >= log_level_file && log_path[0] != '\0';
-	write_to_error_log = elevel >= ERROR && error_log_filename &&
-		log_path[0] != '\0';
-	write_to_stderr = elevel >= log_level_console && !file_only;
+	write_to_file = elevel >= logger_config.log_level_file &&
+		logger_config.log_directory && logger_config.log_directory[0] != '\0';
+	write_to_error_log = elevel >= ERROR && logger_config.error_log_filename &&
+		logger_config.log_directory && logger_config.log_directory[0] != '\0';
+	write_to_stderr = elevel >= logger_config.log_level_console && !file_only;
 
 	pthread_lock(&log_file_mutex);
 #ifdef WIN32
@@ -192,10 +193,10 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	{
 		if (log_file == NULL)
 		{
-			if (log_filename == NULL)
+			if (logger_config.log_filename == NULL)
 				open_logfile(&log_file, LOG_FILENAME_DEFAULT);
 			else
-				open_logfile(&log_file, log_filename);
+				open_logfile(&log_file, logger_config.log_filename);
 		}
 
 		fprintf(log_file, "%s: ", strfbuf);
@@ -214,7 +215,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	if (write_to_error_log)
 	{
 		if (error_log_file == NULL)
-			open_logfile(&error_log_file, error_log_filename);
+			open_logfile(&error_log_file, logger_config.error_log_filename);
 
 		fprintf(error_log_file, "%s: ", strfbuf);
 		write_elevel(error_log_file, elevel);
@@ -263,7 +264,7 @@ elog_stderr(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < log_level_console && elevel < ERROR)
+	if (elevel < logger_config.log_level_console && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -290,7 +291,8 @@ elog(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < log_level_console && elevel < log_level_file && elevel < ERROR)
+	if (elevel < logger_config.log_level_console &&
+		elevel < logger_config.log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -310,7 +312,7 @@ elog_file(int elevel, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < log_level_file && elevel < ERROR)
+	if (elevel < logger_config.log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -351,7 +353,8 @@ pg_log(eLogType type, const char *fmt, ...)
 	 * Do not log message if severity level is less than log_level.
 	 * It is the little optimisation to put it here not in elog_internal().
 	 */
-	if (elevel < log_level_console && elevel < log_level_file && elevel < ERROR)
+	if (elevel < logger_config.log_level_console &&
+		elevel < logger_config.log_level_file && elevel < ERROR)
 		return;
 
 	va_start(args, fmt);
@@ -437,12 +440,13 @@ logfile_getname(const char *format, time_t timestamp)
 	size_t		len;
 	struct tm  *tm = localtime(&timestamp);
 
-	if (log_path[0] == '\0')
+	if (logger_config.log_directory == NULL ||
+		logger_config.log_directory[0] == '\0')
 		elog_stderr(ERROR, "logging path is not set");
 
 	filename = (char *) palloc(MAXPGPATH);
 
-	snprintf(filename, MAXPGPATH, "%s/", log_path);
+	snprintf(filename, MAXPGPATH, "%s/", logger_config.log_directory);
 
 	len = strlen(filename);
 
@@ -464,7 +468,7 @@ logfile_open(const char *filename, const char *mode)
 	/*
 	 * Create log directory if not present; ignore errors
 	 */
-	mkdir(log_path, S_IRWXU);
+	mkdir(logger_config.log_directory, S_IRWXU);
 
 	fh = fopen(filename, mode);
 
@@ -498,7 +502,7 @@ open_logfile(FILE **file, const char *filename_format)
 
 	filename = logfile_getname(filename_format, cur_time);
 
-	/* "log_path" was checked in logfile_getname() */
+	/* "log_directory" was checked in logfile_getname() */
 	snprintf(control, MAXPGPATH, "%s.rotation", filename);
 
 	if (stat(filename, &st) == -1)
@@ -516,10 +520,11 @@ open_logfile(FILE **file, const char *filename_format)
 	logfile_exists = true;
 
 	/* First check for rotation */
-	if (log_rotation_size > 0 || log_rotation_age > 0)
+	if (logger_config.log_rotation_size > 0 ||
+		logger_config.log_rotation_age > 0)
 	{
 		/* Check for rotation by age */
-		if (log_rotation_age > 0)
+		if (logger_config.log_rotation_age > 0)
 		{
 			struct stat	control_st;
 
@@ -550,7 +555,7 @@ open_logfile(FILE **file, const char *filename_format)
 
 					rotation_requested = (cur_time - creation_time) >
 						/* convert to seconds from milliseconds */
-						log_rotation_age / 1000;
+						logger_config.log_rotation_age / 1000;
 				}
 				else
 					elog_stderr(ERROR, "cannot read creation timestamp from "
@@ -561,10 +566,10 @@ open_logfile(FILE **file, const char *filename_format)
 		}
 
 		/* Check for rotation by size */
-		if (!rotation_requested && log_rotation_size > 0)
+		if (!rotation_requested && logger_config.log_rotation_size > 0)
 			rotation_requested = st.st_size >=
 				/* convert to bytes */
-				log_rotation_size * 1024L;
+				logger_config.log_rotation_size * 1024L;
 	}
 
 logfile_open:

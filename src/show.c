@@ -521,8 +521,8 @@ show_instance_json(parray *backup_list)
 	/* Begin of instance object */
 	json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
-	json_add_value(buf, "instance", instance_name, json_level, false);
-	json_add_key(buf, "backups", json_level, true);
+	json_add_value(buf, "instance", instance_name, json_level, true);
+	json_add_key(buf, "backups", json_level);
 
 	/*
 	 * List backups.
@@ -542,7 +542,7 @@ show_instance_json(parray *backup_list)
 		json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
 		json_add_value(buf, "id", base36enc(backup->start_time), json_level,
-					   false);
+					   true);
 
 		if (backup->parent_backup != 0)
 			json_add_value(buf, "parent-backup-id",
@@ -558,20 +558,20 @@ show_instance_json(parray *backup_list)
 					   deparse_compress_alg(backup->compress_alg), json_level,
 					   true);
 
-		json_add_key(buf, "compress-level", json_level, true);
+		json_add_key(buf, "compress-level", json_level);
 		appendPQExpBuffer(buf, "%d", backup->compress_level);
 
 		json_add_value(buf, "from-replica",
 					   backup->from_replica ? "true" : "false", json_level,
-					   true);
+					   false);
 
-		json_add_key(buf, "block-size", json_level, true);
+		json_add_key(buf, "block-size", json_level);
 		appendPQExpBuffer(buf, "%u", backup->block_size);
 
-		json_add_key(buf, "xlog-block-size", json_level, true);
+		json_add_key(buf, "xlog-block-size", json_level);
 		appendPQExpBuffer(buf, "%u", backup->wal_block_size);
 
-		json_add_key(buf, "checksum-version", json_level, true);
+		json_add_key(buf, "checksum-version", json_level);
 		appendPQExpBuffer(buf, "%u", backup->checksum_version);
 
 		json_add_value(buf, "program-version", backup->program_version,
@@ -579,10 +579,10 @@ show_instance_json(parray *backup_list)
 		json_add_value(buf, "server-version", backup->server_version,
 					   json_level, true);
 
-		json_add_key(buf, "current-tli", json_level, true);
+		json_add_key(buf, "current-tli", json_level);
 		appendPQExpBuffer(buf, "%d", backup->tli);
 
-		json_add_key(buf, "parent-tli", json_level, true);
+		json_add_key(buf, "parent-tli", json_level);
 		parent_tli = get_parent_tli(backup->tli);
 		appendPQExpBuffer(buf, "%u", parent_tli);
 
@@ -603,7 +603,7 @@ show_instance_json(parray *backup_list)
 			json_add_value(buf, "end-time", timestamp, json_level, true);
 		}
 
-		json_add_key(buf, "recovery-xid", json_level, true);
+		json_add_key(buf, "recovery-xid", json_level);
 		appendPQExpBuffer(buf, XID_FMT, backup->recovery_xid);
 
 		if (backup->recovery_time > 0)
@@ -614,13 +614,13 @@ show_instance_json(parray *backup_list)
 
 		if (backup->data_bytes != BYTES_INVALID)
 		{
-			json_add_key(buf, "data-bytes", json_level, true);
+			json_add_key(buf, "data-bytes", json_level);
 			appendPQExpBuffer(buf, INT64_FORMAT, backup->data_bytes);
 		}
 
 		if (backup->wal_bytes != BYTES_INVALID)
 		{
-			json_add_key(buf, "wal-bytes", json_level, true);
+			json_add_key(buf, "wal-bytes", json_level);
 			appendPQExpBuffer(buf, INT64_FORMAT, backup->wal_bytes);
 		}
 

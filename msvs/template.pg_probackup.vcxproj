@@ -187,6 +187,7 @@
     <ClCompile Include="..\src\show.c" />
     <ClCompile Include="..\src\status.c" />
     <ClCompile Include="..\src\util.c" />
+    <ClCompile Include="..\src\utils\configuration.c" />
     <ClCompile Include="..\src\utils\logger.c" />
     <ClCompile Include="..\src\utils\parray.c" />
     <ClCompile Include="..\src\utils\pgut.c" />
@@ -201,6 +202,7 @@
     <ClInclude Include="@PGSRC@\bin\pg_rewind\datapagemap.h" />
     <ClInclude Include="@PGSRC@\bin\pg_rewind\logging.h" />
     <ClInclude Include="..\src\pg_probackup.h" />
+    <ClInclude Include="..\src\utils\configuration.h" />
     <ClInclude Include="..\src\utils\logger.h" />
     <ClInclude Include="..\src\utils\parray.h" />
     <ClInclude Include="..\src\utils\pgut.h" />

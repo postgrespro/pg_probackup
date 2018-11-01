@@ -9,124 +9,271 @@
 
 #include "pg_probackup.h"
 
+#include "utils/configuration.h"
 #include "utils/json.h"
 
 
-static void opt_log_level_console(pgut_option *opt, const char *arg);
-static void opt_log_level_file(pgut_option *opt, const char *arg);
-static void opt_compress_alg(pgut_option *opt, const char *arg);
+static void assign_log_level_console(ConfigOption *opt, const char *arg);
+static void assign_log_level_file(ConfigOption *opt, const char *arg);
+static void assign_compress_alg(ConfigOption *opt, const char *arg);
+
+static char *get_log_level_console(ConfigOption *opt);
+static char *get_log_level_file(ConfigOption *opt);
+static char *get_compress_alg(ConfigOption *opt);
 
 static void show_configure_start(void);
 static void show_configure_end(void);
-static void show_configure(pgBackupConfig *config);
 
-static void show_configure_json(pgBackupConfig *config);
+static void show_configure_plain(ConfigOption *opt);
+static void show_configure_json(ConfigOption *opt);
 
-static pgBackupConfig *cur_config = NULL;
+#define ARCHIVE_TIMEOUT_DEFAULT		300
+#define REPLICA_TIMEOUT_DEFAULT		300
+
+#define RETENTION_REDUNDANCY_DEFAULT	0
+#define RETENTION_WINDOW_DEFAULT		0
+
+#define OPTION_INSTANCE_GROUP	"Backup instance information"
+#define OPTION_CONN_GROUP		"Connection parameters"
+#define OPTION_REPLICA_GROUP	"Replica parameters"
+#define OPTION_ARCHIVE_GROUP	"Archive parameters"
+#define OPTION_LOG_GROUP		"Logging parameters"
+#define OPTION_RETENTION_GROUP	"Retention parameters"
+#define OPTION_COMPRESS_GROUP	"Compression parameters"
+
+/*
+ * Short name should be non-printable ASCII character.
+ */
+ConfigOption instance_options[] =
+{
+	/* Instance options */
+	{
+		's', 'D', "pgdata",
+		&instance_config.pgdata, SOURCE_CMD, 0,
+		OPTION_INSTANCE_GROUP, 0, option_get_value
+	},
+	{
+		'U', 200, "system-identifier",
+		&instance_config.system_identifier, SOURCE_FILE_STRICT, 0,
+		OPTION_INSTANCE_GROUP, 0, option_get_value
+	},
+#if PG_VERSION_NUM >= 110000
+	{
+		'u', 201, "xlog-seg-size",
+		&instance_config.xlog_seg_size, SOURCE_FILE_STRICT, 0,
+		OPTION_INSTANCE_GROUP, 0, option_get_value
+	},
+#endif
+	/* Connection options */
+	{
+		's', 'd', "pgdatabase",
+		&instance_config.pgdatabase, SOURCE_CMD, 0,
+		OPTION_CONN_GROUP, 0, option_get_value
+	},
+	{
+		's', 'h', "pghost",
+		&instance_config.pghost, SOURCE_CMD, 0,
+		OPTION_CONN_GROUP, 0, option_get_value
+	},
+	{
+		's', 'p', "pgport",
+		&instance_config.pgport, SOURCE_CMD, 0,
+		OPTION_CONN_GROUP, 0, option_get_value
+	},
+	{
+		's', 'U', "pguser",
+		&instance_config.pguser, SOURCE_CMD, 0,
+		OPTION_CONN_GROUP, 0, option_get_value
+	},
+	/* Replica options */
+	{
+		's', 202, "master-db",
+		&instance_config.master_db, SOURCE_CMD, 0,
+		OPTION_REPLICA_GROUP, 0, option_get_value
+	},
+	{
+		's', 203, "master-host",
+		&instance_config.master_host, SOURCE_CMD, 0,
+		OPTION_REPLICA_GROUP, 0, option_get_value
+	},
+	{
+		's', 204, "master-port",
+		&instance_config.master_port, SOURCE_CMD, 0,
+		OPTION_REPLICA_GROUP, 0, option_get_value
+	},
+	{
+		's', 205, "master-user",
+		&instance_config.master_user, SOURCE_CMD, 0,
+		OPTION_REPLICA_GROUP, 0, option_get_value
+	},
+	{
+		'u', 206, "replica-timeout",
+		&instance_config.replica_timeout, SOURCE_CMD, SOURCE_DEFAULT,
+		OPTION_REPLICA_GROUP, OPTION_UNIT_S, option_get_value
+	},
+	/* Archive options */
+	{
+		'u', 207, "archive-timeout",
+		&instance_config.archive_timeout, SOURCE_CMD, SOURCE_DEFAULT,
+		OPTION_ARCHIVE_GROUP, OPTION_UNIT_S, option_get_value
+	},
+	/* Logging options */
+	{
+		'f', 208, "log-level-console",
+		assign_log_level_console, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, get_log_level_console
+	},
+	{
+		'f', 209, "log-level-file",
+		assign_log_level_file, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, get_log_level_file
+	},
+	{
+		's', 210, "log-filename",
+		&instance_config.logger.log_filename, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, option_get_value
+	},
+	{
+		's', 211, "error-log-filename",
+		&instance_config.logger.error_log_filename, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, option_get_value
+	},
+	{
+		's', 212, "log-directory",
+		&instance_config.logger.log_directory, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, option_get_value
+	},
+	{
+		'U', 213, "log-rotation-size",
+		&instance_config.logger.log_rotation_size, SOURCE_CMD, SOURCE_DEFAULT,
+		OPTION_LOG_GROUP, OPTION_UNIT_KB, option_get_value
+	},
+	{
+		'U', 214, "log-rotation-age",
+		&instance_config.logger.log_rotation_age, SOURCE_CMD, SOURCE_DEFAULT,
+		OPTION_LOG_GROUP, OPTION_UNIT_MS, option_get_value
+	},
+	/* Retention options */
+	{
+		'u', 215, "retention-redundancy",
+		&instance_config.retention_redundancy, SOURCE_CMD, 0,
+		OPTION_RETENTION_GROUP, 0, option_get_value
+	},
+	{
+		'u', 216, "retention-window",
+		&instance_config.retention_window, SOURCE_CMD, 0,
+		OPTION_RETENTION_GROUP, 0, option_get_value
+	},
+	/* Compression options */
+	{
+		'f', 217, "compress-algorithm",
+		assign_compress_alg, SOURCE_CMD, 0,
+		OPTION_COMPRESS_GROUP, 0, get_compress_alg
+	},
+	{
+		'u', 218, "compress-level",
+		&instance_config.compress_level, SOURCE_CMD, 0,
+		OPTION_COMPRESS_GROUP, 0, option_get_value
+	},
+	{ 0 }
+};
+
+/* An instance configuration with default options */
+InstanceConfig instance_config;
 
 static PQExpBufferData show_buf;
 static int32 json_level = 0;
+static const char *current_group = NULL;
 
 /*
- * All this code needs refactoring.
+ * Show configure options including default values.
  */
-
-/* Set configure options */
-int
-do_configure(bool show_only)
+void
+do_show_config(void)
 {
-	pgBackupConfig *config = readBackupCatalogConfigFile();
-	if (pgdata)
-		config->pgdata = pgdata;
-	if (pgut_dbname)
-		config->pgdatabase = pgut_dbname;
-	if (host)
-		config->pghost = host;
-	if (port)
-		config->pgport = port;
-	if (username)
-		config->pguser = username;
+	int			i;
 
-	if (master_host)
-		config->master_host = master_host;
-	if (master_port)
-		config->master_port = master_port;
-	if (master_db)
-		config->master_db = master_db;
-	if (master_user)
-		config->master_user = master_user;
+	show_configure_start();
 
-	if (replica_timeout)
-		config->replica_timeout = replica_timeout;
+	for (i = 0; instance_options[i].type; i++)
+	{
+		if (show_format == SHOW_PLAIN)
+			show_configure_plain(&instance_options[i]);
+		else
+			show_configure_json(&instance_options[i]);
+	}
 
-	if (archive_timeout)
-		config->archive_timeout = archive_timeout;
+	show_configure_end();
+}
 
-	if (log_level_console)
-		config->log_level_console = log_level_console;
-	if (log_level_file)
-		config->log_level_file = log_level_file;
-	if (log_filename)
-		config->log_filename = log_filename;
-	if (error_log_filename)
-		config->error_log_filename = error_log_filename;
-	if (log_directory)
-		config->log_directory = log_directory;
-	if (log_rotation_size)
-		config->log_rotation_size = log_rotation_size;
-	if (log_rotation_age)
-		config->log_rotation_age = log_rotation_age;
+/*
+ * Save configure options into BACKUP_CATALOG_CONF_FILE. Do not save default
+ * values into the file.
+ */
+void
+do_set_config(void)
+{
+	char		path[MAXPGPATH];
+	FILE	   *fp;
+	int			i;
 
-	if (retention_redundancy)
-		config->retention_redundancy = retention_redundancy;
-	if (retention_window)
-		config->retention_window = retention_window;
+	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+	fp = fopen(path, "wt");
+	if (fp == NULL)
+		elog(ERROR, "cannot create %s: %s",
+			 BACKUP_CATALOG_CONF_FILE, strerror(errno));
 
-	if (compress_alg)
-		config->compress_alg = compress_alg;
-	if (compress_level)
-		config->compress_level = compress_level;
+	current_group = NULL;
 
-	if (show_only)
-		show_configure(config);
-	else
-		writeBackupCatalogConfigFile(config);
+	for (i = 0; instance_options[i].type; i++)
+	{
+		ConfigOption *opt = &instance_options[i];
+		char	   *value;
 
-	return 0;
+		/* Save only options from command line */
+		if (opt->source != SOURCE_CMD &&
+			/* ...or options from the previous configure file */
+			opt->source != SOURCE_FILE && opt->source != SOURCE_FILE_STRICT)
+			continue;
+
+		value = opt->get_value(opt);
+		if (value == NULL)
+			continue;
+
+		if (current_group == NULL || strcmp(opt->group, current_group) != 0)
+		{
+			current_group = opt->group;
+			fprintf(fp, "# %s\n", current_group);
+		}
+
+		fprintf(fp, "%s = %s\n", opt->lname, value);
+		pfree(value);
+	}
+
+	fclose(fp);
 }
 
 void
-pgBackupConfigInit(pgBackupConfig *config)
+init_config(InstanceConfig *config)
 {
-	config->system_identifier = 0;
+	MemSet(config, 0, sizeof(InstanceConfig));
 
+	/*
+	 * Starting from PostgreSQL 11 WAL segment size may vary. Prior to
+	 * PostgreSQL 10 xlog_seg_size is equal to XLOG_SEG_SIZE.
+	 */
 #if PG_VERSION_NUM >= 110000
 	config->xlog_seg_size = 0;
 #else
 	config->xlog_seg_size = XLOG_SEG_SIZE;
 #endif
 
-	config->pgdata = NULL;
-	config->pgdatabase = NULL;
-	config->pghost = NULL;
-	config->pgport = NULL;
-	config->pguser = NULL;
-
-	config->master_host = NULL;
-	config->master_port = NULL;
-	config->master_db = NULL;
-	config->master_user = NULL;
 	config->replica_timeout = REPLICA_TIMEOUT_DEFAULT;
 
 	config->archive_timeout = ARCHIVE_TIMEOUT_DEFAULT;
 
-	config->log_level_console = LOG_LEVEL_CONSOLE_DEFAULT;
-	config->log_level_file = LOG_LEVEL_FILE_DEFAULT;
-	config->log_filename = LOG_FILENAME_DEFAULT;
-	config->error_log_filename = NULL;
-	config->log_directory = LOG_DIRECTORY_DEFAULT;
-	config->log_rotation_size = LOG_ROTATION_SIZE_DEFAULT;
-	config->log_rotation_age = LOG_ROTATION_AGE_DEFAULT;
+	/* Copy logger defaults */
+	config->logger = logger_config;
 
 	config->retention_redundancy = RETENTION_REDUNDANCY_DEFAULT;
 	config->retention_window = RETENTION_WINDOW_DEFAULT;
@@ -135,198 +282,40 @@ pgBackupConfigInit(pgBackupConfig *config)
 	config->compress_level = COMPRESS_LEVEL_DEFAULT;
 }
 
-void
-writeBackupCatalogConfig(FILE *out, pgBackupConfig *config)
+static void
+assign_log_level_console(ConfigOption *opt, const char *arg)
 {
-	uint64		res;
-	const char *unit;
-
-	fprintf(out, "#Backup instance info\n");
-	fprintf(out, "PGDATA = %s\n", config->pgdata);
-	fprintf(out, "system-identifier = " UINT64_FORMAT "\n", config->system_identifier);
-#if PG_VERSION_NUM >= 110000
-	fprintf(out, "xlog-seg-size = %u\n", config->xlog_seg_size);
-#endif
-
-	fprintf(out, "#Connection parameters:\n");
-	if (config->pgdatabase)
-		fprintf(out, "PGDATABASE = %s\n", config->pgdatabase);
-	if (config->pghost)
-		fprintf(out, "PGHOST = %s\n", config->pghost);
-	if (config->pgport)
-		fprintf(out, "PGPORT = %s\n", config->pgport);
-	if (config->pguser)
-		fprintf(out, "PGUSER = %s\n", config->pguser);
-
-	fprintf(out, "#Replica parameters:\n");
-	if (config->master_host)
-		fprintf(out, "master-host = %s\n", config->master_host);
-	if (config->master_port)
-		fprintf(out, "master-port = %s\n", config->master_port);
-	if (config->master_db)
-		fprintf(out, "master-db = %s\n", config->master_db);
-	if (config->master_user)
-		fprintf(out, "master-user = %s\n", config->master_user);
-
-	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_MS,
-								&res, &unit);
-	fprintf(out, "replica-timeout = " UINT64_FORMAT "%s\n", res, unit);
-
-	fprintf(out, "#Archive parameters:\n");
-	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_MS,
-								&res, &unit);
-	fprintf(out, "archive-timeout = " UINT64_FORMAT "%s\n", res, unit);
-
-	fprintf(out, "#Logging parameters:\n");
-	fprintf(out, "log-level-console = %s\n", deparse_log_level(config->log_level_console));
-	fprintf(out, "log-level-file = %s\n", deparse_log_level(config->log_level_file));
-	fprintf(out, "log-filename = %s\n", config->log_filename);
-	if (config->error_log_filename)
-		fprintf(out, "error-log-filename = %s\n", config->error_log_filename);
-
-	if (strcmp(config->log_directory, LOG_DIRECTORY_DEFAULT) == 0)
-		fprintf(out, "log-directory = %s/%s\n", backup_path, config->log_directory);
-	else
-		fprintf(out, "log-directory = %s\n", config->log_directory);
-	/* Convert values from base unit */
-	convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
-							 &res, &unit);
-	fprintf(out, "log-rotation-size = " UINT64_FORMAT "%s\n", res, (res)?unit:"KB");
-
-	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_MS,
-							 &res, &unit);
-	fprintf(out, "log-rotation-age = " UINT64_FORMAT "%s\n", res, (res)?unit:"min");
-
-	fprintf(out, "#Retention parameters:\n");
-	fprintf(out, "retention-redundancy = %u\n", config->retention_redundancy);
-	fprintf(out, "retention-window = %u\n", config->retention_window);
-
-	fprintf(out, "#Compression parameters:\n");
-
-	fprintf(out, "compress-algorithm = %s\n", deparse_compress_alg(config->compress_alg));
-	fprintf(out, "compress-level = %d\n", config->compress_level);
-}
-
-void
-writeBackupCatalogConfigFile(pgBackupConfig *config)
-{
-	char		path[MAXPGPATH];
-	FILE	   *fp;
-
-	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-	fp = fopen(path, "wt");
-	if (fp == NULL)
-		elog(ERROR, "cannot create %s: %s",
-			 BACKUP_CATALOG_CONF_FILE, strerror(errno));
-
-	writeBackupCatalogConfig(fp, config);
-	fclose(fp);
-}
-
-
-pgBackupConfig*
-readBackupCatalogConfigFile(void)
-{
-	pgBackupConfig *config = pgut_new(pgBackupConfig);
-	char		path[MAXPGPATH];
-
-	pgut_option options[] =
-	{
-		/* retention options */
-		{ 'u', 0, "retention-redundancy",	&(config->retention_redundancy),SOURCE_FILE_STRICT },
-		{ 'u', 0, "retention-window",		&(config->retention_window),	SOURCE_FILE_STRICT },
-		/* compression options */
-		{ 'f', 0, "compress-algorithm",		opt_compress_alg,				SOURCE_CMDLINE },
-		{ 'u', 0, "compress-level",			&(config->compress_level),		SOURCE_CMDLINE },
-		/* logging options */
-		{ 'f', 0, "log-level-console",		opt_log_level_console,			SOURCE_CMDLINE },
-		{ 'f', 0, "log-level-file",			opt_log_level_file,				SOURCE_CMDLINE },
-		{ 's', 0, "log-filename",			&(config->log_filename),		SOURCE_CMDLINE },
-		{ 's', 0, "error-log-filename",		&(config->error_log_filename),	SOURCE_CMDLINE },
-		{ 's', 0, "log-directory",			&(config->log_directory),		SOURCE_CMDLINE },
-		{ 'U', 0, "log-rotation-size",		&(config->log_rotation_size),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_KB },
-		{ 'U', 0, "log-rotation-age",		&(config->log_rotation_age),	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
-		/* connection options */
-		{ 's', 0, "pgdata",					&(config->pgdata),				SOURCE_FILE_STRICT },
-		{ 's', 0, "pgdatabase",				&(config->pgdatabase),			SOURCE_FILE_STRICT },
-		{ 's', 0, "pghost",					&(config->pghost),				SOURCE_FILE_STRICT },
-		{ 's', 0, "pgport",					&(config->pgport),				SOURCE_FILE_STRICT },
-		{ 's', 0, "pguser",					&(config->pguser),				SOURCE_FILE_STRICT },
-		/* replica options */
-		{ 's', 0, "master-host",			&(config->master_host),			SOURCE_FILE_STRICT },
-		{ 's', 0, "master-port",			&(config->master_port),			SOURCE_FILE_STRICT },
-		{ 's', 0, "master-db",				&(config->master_db),			SOURCE_FILE_STRICT },
-		{ 's', 0, "master-user",			&(config->master_user),			SOURCE_FILE_STRICT },
-		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
-		/* other options */
-		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
-#if PG_VERSION_NUM >= 110000
-		{'u', 0, "xlog-seg-size",			&config->xlog_seg_size,			SOURCE_FILE_STRICT},
-#endif
-		/* archive options */
-		{ 'u', 0, "archive-timeout",		&(config->archive_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
-		{0}
-	};
-
-	cur_config = config;
-
-	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-
-	pgBackupConfigInit(config);
-	pgut_readopt(path, options, ERROR, true);
-
-#if PG_VERSION_NUM >= 110000
-	if (!IsValidWalSegSize(config->xlog_seg_size))
-		elog(ERROR, "Invalid WAL segment size %u", config->xlog_seg_size);
-#endif
-
-	return config;
-}
-
-/*
- * Read xlog-seg-size from BACKUP_CATALOG_CONF_FILE.
- */
-uint32
-get_config_xlog_seg_size(void)
-{
-#if PG_VERSION_NUM >= 110000
-	char		path[MAXPGPATH];
-	uint32		seg_size;
-	pgut_option options[] =
-	{
-		{'u', 0, "xlog-seg-size", &seg_size, SOURCE_FILE_STRICT},
-		{0}
-	};
-
-	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-	pgut_readopt(path, options, ERROR, false);
-
-	if (!IsValidWalSegSize(seg_size))
-		elog(ERROR, "Invalid WAL segment size %u", seg_size);
-
-	return seg_size;
-
-#else
-	return (uint32) XLOG_SEG_SIZE;
-#endif
+	instance_config.logger.log_level_console = parse_log_level(arg);
 }
 
 static void
-opt_log_level_console(pgut_option *opt, const char *arg)
+assign_log_level_file(ConfigOption *opt, const char *arg)
 {
-	cur_config->log_level_console = parse_log_level(arg);
+	instance_config.logger.log_level_file = parse_log_level(arg);
 }
 
 static void
-opt_log_level_file(pgut_option *opt, const char *arg)
+assign_compress_alg(ConfigOption *opt, const char *arg)
 {
-	cur_config->log_level_file = parse_log_level(arg);
+	instance_config.compress_alg = parse_compress_alg(arg);
 }
 
-static void
-opt_compress_alg(pgut_option *opt, const char *arg)
+static char *
+get_log_level_console(ConfigOption *opt)
 {
-	cur_config->compress_alg = parse_compress_alg(arg);
+	return pstrdup(deparse_log_level(instance_config.logger.log_level_console));
+}
+
+static char *
+get_log_level_file(ConfigOption *opt)
+{
+	return pstrdup(deparse_log_level(instance_config.logger.log_level_file));
+}
+
+static char *
+get_compress_alg(ConfigOption *opt)
+{
+	return pstrdup(deparse_compress_alg(instance_config.compress_alg));
 }
 
 /*
@@ -335,12 +324,15 @@ opt_compress_alg(pgut_option *opt, const char *arg)
 static void
 show_configure_start(void)
 {
-	if (show_format == SHOW_PLAIN)
-		return;
-
-	/* For now we need buffer only for JSON format */
-	json_level = 0;
 	initPQExpBuffer(&show_buf);
+
+	if (show_format == SHOW_PLAIN)
+		current_group = NULL;
+	else
+	{
+		json_level = 0;
+		json_add(&show_buf, JT_BEGIN_OBJECT, &json_level);
+	}
 }
 
 /*
@@ -350,28 +342,38 @@ static void
 show_configure_end(void)
 {
 	if (show_format == SHOW_PLAIN)
-		return;
+		current_group = NULL;
 	else
+	{
+		json_add(&show_buf, JT_END_OBJECT, &json_level);
 		appendPQExpBufferChar(&show_buf, '\n');
+	}
 
 	fputs(show_buf.data, stdout);
 	termPQExpBuffer(&show_buf);
 }
 
 /*
- * Show configure information of pg_probackup.
+ * Plain output.
  */
+
 static void
-show_configure(pgBackupConfig *config)
+show_configure_plain(ConfigOption *opt)
 {
-	show_configure_start();
+	char	   *value;
 
-	if (show_format == SHOW_PLAIN)
-		writeBackupCatalogConfig(stdout, config);
-	else
-		show_configure_json(config);
+	value = opt->get_value(opt);
+	if (value == NULL)
+		return;
 
-	show_configure_end();
+	if (current_group == NULL || strcmp(opt->group, current_group) != 0)
+	{
+		current_group = opt->group;
+		appendPQExpBuffer(&show_buf, "# %s\n", current_group);
+	}
+
+	appendPQExpBuffer(&show_buf, "%s = %s\n", opt->lname, value);
+	pfree(value);
 }
 
 /*
@@ -379,109 +381,15 @@ show_configure(pgBackupConfig *config)
  */
 
 static void
-show_configure_json(pgBackupConfig *config)
+show_configure_json(ConfigOption *opt)
 {
-	PQExpBuffer	buf = &show_buf;
-	uint64		res;
-	const char *unit;
+	char	   *value;
 
-	json_add(buf, JT_BEGIN_OBJECT, &json_level);
+	value = opt->get_value(opt);
+	if (value == NULL)
+		return;
 
-	json_add_value(buf, "pgdata", config->pgdata, json_level, false);
-
-	json_add_key(buf, "system-identifier", json_level, true);
-	appendPQExpBuffer(buf, UINT64_FORMAT, config->system_identifier);
-
-#if PG_VERSION_NUM >= 110000
-	json_add_key(buf, "xlog-seg-size", json_level, true);
-	appendPQExpBuffer(buf, "%u", config->xlog_seg_size);
-#endif
-
-	/* Connection parameters */
-	if (config->pgdatabase)
-		json_add_value(buf, "pgdatabase", config->pgdatabase, json_level, true);
-	if (config->pghost)
-		json_add_value(buf, "pghost", config->pghost, json_level, true);
-	if (config->pgport)
-		json_add_value(buf, "pgport", config->pgport, json_level, true);
-	if (config->pguser)
-		json_add_value(buf, "pguser", config->pguser, json_level, true);
-
-	/* Replica parameters */
-	if (config->master_host)
-		json_add_value(buf, "master-host", config->master_host, json_level,
-					   true);
-	if (config->master_port)
-		json_add_value(buf, "master-port", config->master_port, json_level,
-					   true);
-	if (config->master_db)
-		json_add_value(buf, "master-db", config->master_db, json_level, true);
-	if (config->master_user)
-		json_add_value(buf, "master-user", config->master_user, json_level,
-					   true);
-
-	json_add_key(buf, "replica-timeout", json_level, true);
-	convert_from_base_unit_u(config->replica_timeout, OPTION_UNIT_MS,
-							 &res, &unit);
-	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, unit);
-
-	/* Archive parameters */
-	json_add_key(buf, "archive-timeout", json_level, true);
-	convert_from_base_unit_u(config->archive_timeout, OPTION_UNIT_MS,
-							 &res, &unit);
-	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, unit);
-
-	/* Logging parameters */
-	json_add_value(buf, "log-level-console",
-				   deparse_log_level(config->log_level_console), json_level,
-				   true);
-	json_add_value(buf, "log-level-file",
-				   deparse_log_level(config->log_level_file), json_level,
-				   true);
-	json_add_value(buf, "log-filename", config->log_filename, json_level,
-				   true);
-	if (config->error_log_filename)
-		json_add_value(buf, "error-log-filename", config->error_log_filename,
-					   json_level, true);
-
-	if (strcmp(config->log_directory, LOG_DIRECTORY_DEFAULT) == 0)
-	{
-		char		log_directory_fullpath[MAXPGPATH];
-
-		sprintf(log_directory_fullpath, "%s/%s",
-				backup_path, config->log_directory);
-
-		json_add_value(buf, "log-directory", log_directory_fullpath,
-					   json_level, true);
-	}
-	else
-		json_add_value(buf, "log-directory", config->log_directory,
-					   json_level, true);
-
-	json_add_key(buf, "log-rotation-size", json_level, true);
-	convert_from_base_unit_u(config->log_rotation_size, OPTION_UNIT_KB,
-							 &res, &unit);
-	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, (res)?unit:"KB");
-
-	json_add_key(buf, "log-rotation-age", json_level, true);
-	convert_from_base_unit_u(config->log_rotation_age, OPTION_UNIT_MS,
-							 &res, &unit);
-	appendPQExpBuffer(buf, UINT64_FORMAT "%s", res, (res)?unit:"min");
-
-	/* Retention parameters */
-	json_add_key(buf, "retention-redundancy", json_level, true);
-	appendPQExpBuffer(buf, "%u", config->retention_redundancy);
-
-	json_add_key(buf, "retention-window", json_level, true);
-	appendPQExpBuffer(buf, "%u", config->retention_window);
-
-	/* Compression parameters */
-	json_add_value(buf, "compress-algorithm",
-				   deparse_compress_alg(config->compress_alg), json_level,
-				   true);
-
-	json_add_key(buf, "compress-level", json_level, true);
-	appendPQExpBuffer(buf, "%d", config->compress_level);
-
-	json_add(buf, JT_END_OBJECT, &json_level);
+	json_add_value(&show_buf, opt->lname, value, json_level,
+				   opt->type == 's' || opt->flags & OPTION_UNIT);
+	pfree(value);
 }

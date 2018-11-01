@@ -150,7 +150,10 @@ get_remote_pgdata_filelist(parray *files)
 	int resultStatus;
 	int i;
 
-	backup_conn_replication = pgut_connect_replication(pgut_dbname);
+	backup_conn_replication = pgut_connect_replication(instance_config.pghost,
+													   instance_config.pgport,
+													   instance_config.pgdatabase,
+													   instance_config.pguser);
 
 	if (PQsendQuery(backup_conn_replication, "FILE_BACKUP FILELIST") == 0)
 		elog(ERROR,"%s: could not send replication command \"%s\": %s",
@@ -397,7 +400,10 @@ remote_backup_files(void *arg)
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
-		file_backup_conn = pgut_connect_replication(pgut_dbname);
+		file_backup_conn = pgut_connect_replication(instance_config.pghost,
+													instance_config.pgport,
+													instance_config.pgdatabase,
+													instance_config.pguser);
 
 		/* check for interrupt */
 		if (interrupted)
@@ -487,16 +493,19 @@ do_backup_instance(void)
 		TimeLineID	starttli;
 		XLogRecPtr	startpos;
 
-		backup_conn_replication = pgut_connect_replication(pgut_dbname);
+		backup_conn_replication = pgut_connect_replication(instance_config.pghost,
+														   instance_config.pgport,
+														   instance_config.pgdatabase,
+														   instance_config.pguser);
 
 		/* Check replication prorocol connection */
 		if (!RunIdentifySystem(backup_conn_replication, &sysidentifier,  &starttli, &startpos, NULL))
 			elog(ERROR, "Failed to send command for remote backup");
 
 // TODO implement the check
-// 		if (&sysidentifier != system_identifier)
+// 		if (&sysidentifier != instance_config.system_identifier)
 // 			elog(ERROR, "Backup data directory was initialized for system id %ld, but target backup directory system id is %ld",
-// 			system_identifier, sysidentifier);
+// 			instance_config.system_identifier, sysidentifier);
 
 		current.tli = starttli;
 
@@ -579,7 +588,10 @@ do_backup_instance(void)
 		/*
 		 * Connect in replication mode to the server.
 		 */
-		stream_thread_arg.conn = pgut_connect_replication(pgut_dbname);
+		stream_thread_arg.conn = pgut_connect_replication(instance_config.pghost,
+														  instance_config.pgport,
+														  instance_config.pgdatabase,
+														  instance_config.pguser);
 
 		if (!CheckServerVersionForStreaming(stream_thread_arg.conn))
 		{
@@ -616,7 +628,8 @@ do_backup_instance(void)
 	if (is_remote_backup)
 		get_remote_pgdata_filelist(backup_files_list);
 	else
-		dir_list_file(backup_files_list, pgdata, true, true, false);
+		dir_list_file(backup_files_list, instance_config.pgdata,
+					  true, true, false);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -632,7 +645,7 @@ do_backup_instance(void)
 	parray_qsort(backup_files_list, pgFileComparePath);
 
 	/* Extract information about files in backup_list parsing their names:*/
-	parse_backup_filelist_filenames(backup_files_list, pgdata);
+	parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -653,7 +666,7 @@ do_backup_instance(void)
 		 * reading WAL segments present in archives up to the point
 		 * where this backup has started.
 		 */
-		extractPageMap(arclog_path, current.tli, xlog_seg_size,
+		extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
 					   prev_backup->start_lsn, current.start_lsn,
 					   backup_files_list);
 	}
@@ -680,7 +693,7 @@ do_backup_instance(void)
 			char		database_path[MAXPGPATH];
 
 			if (!is_remote_backup)
-				dir_name = GetRelativePath(file->path, pgdata);
+				dir_name = GetRelativePath(file->path, instance_config.pgdata);
 			else
 				dir_name = file->path;
 
@@ -710,7 +723,7 @@ do_backup_instance(void)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
 
-		arg->from_root = pgdata;
+		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
@@ -790,7 +803,7 @@ do_backup_instance(void)
 	}
 
 	/* Print the list of files to backup catalog */
-	pgBackupWriteFileList(&current, backup_files_list, pgdata);
+	pgBackupWriteFileList(&current, backup_files_list, instance_config.pgdata);
 
 	/* Compute summary of size of regular files in the backup */
 	for (i = 0; i < parray_num(backup_files_list); i++)
@@ -816,9 +829,8 @@ do_backup_instance(void)
 int
 do_backup(time_t start_time)
 {
-
 	/* PGDATA and BACKUP_MODE are always required */
-	if (pgdata == NULL)
+	if (instance_config.pgdata == NULL)
 		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 	if (current.backup_mode == BACKUP_MODE_INVALID)
@@ -826,7 +838,9 @@ do_backup(time_t start_time)
 						 "(-b, --backup-mode)");
 
 	/* Create connection for PostgreSQL */
-	backup_conn = pgut_connect(pgut_dbname);
+	backup_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+							   instance_config.pgdatabase,
+							   instance_config.pguser);
 	pgut_atexit_push(backup_disconnect, NULL);
 
 	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
@@ -836,8 +850,8 @@ do_backup(time_t start_time)
 		elog(ERROR, "Failed to retreive wal_segment_size");
 #endif
 
-	current.compress_alg = compress_alg;
-	current.compress_level = compress_level;
+	current.compress_alg = instance_config.compress_alg;
+	current.compress_level = instance_config.compress_level;
 
 	/* Confirm data block size and xlog block size are compatible */
 	confirm_block_size("block_size", BLCKSZ);
@@ -886,11 +900,14 @@ do_backup(time_t start_time)
 	if (current.from_replica)
 	{
 		/* Check master connection options */
-		if (master_host == NULL)
+		if (instance_config.master_host == NULL)
 			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
 
 		/* Create connection to master server */
-		master_conn = pgut_connect_extended(master_host, master_port, master_db, master_user);
+		master_conn = pgut_connect(instance_config.master_host,
+								   instance_config.master_port,
+								   instance_config.master_db,
+								   instance_config.master_user);
 	}
 
 	/* Get exclusive lock of backup catalog */
@@ -929,9 +946,9 @@ do_backup(time_t start_time)
 	/* compute size of wal files of this backup stored in the archive */
 	if (!current.stream)
 	{
-		current.wal_bytes = xlog_seg_size *
-			(current.stop_lsn / xlog_seg_size -
-			 current.start_lsn / xlog_seg_size + 1);
+		current.wal_bytes = instance_config.xlog_seg_size *
+			(current.stop_lsn / instance_config.xlog_seg_size -
+			 current.start_lsn / instance_config.xlog_seg_size + 1);
 	}
 
 	/* Backup is done. Update backup status */
@@ -1038,17 +1055,17 @@ check_system_identifiers(void)
 	uint64		system_id_conn;
 	uint64		system_id_pgdata;
 
-	system_id_pgdata = get_system_identifier(pgdata);
+	system_id_pgdata = get_system_identifier(instance_config.pgdata);
 	system_id_conn = get_remote_system_identifier(backup_conn);
 
-	if (system_id_conn != system_identifier)
+	if (system_id_conn != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but connected instance system id is " UINT64_FORMAT,
-					system_identifier, system_id_conn);
-	if (system_id_pgdata != system_identifier)
+			 instance_config.system_identifier, system_id_conn);
+	if (system_id_pgdata != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but target backup directory system id is " UINT64_FORMAT,
-					system_identifier, system_id_pgdata);
+			 instance_config.system_identifier, system_id_pgdata);
 }
 
 /*
@@ -1283,7 +1300,9 @@ pg_ptrack_clear(void)
 		dbOid = atoi(PQgetvalue(res_db, i, 1));
 		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
 
-		tmp_conn = pgut_connect(dbname);
+		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+								instance_config.pgdatabase,
+								instance_config.pguser);
 		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()",
 						   0, NULL);
 		PQclear(res);
@@ -1399,7 +1418,9 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 			return NULL;
 		}
 
-		tmp_conn = pgut_connect(dbname);
+		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+								instance_config.pgdatabase,
+								instance_config.pguser);
 		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
 		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
@@ -1482,10 +1503,11 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	tli = get_current_timeline(false);
 
 	/* Compute the name of the WAL file containig requested LSN */
-	GetXLogSegNo(lsn, targetSegNo, xlog_seg_size);
+	GetXLogSegNo(lsn, targetSegNo, instance_config.xlog_seg_size);
 	if (wait_prev_segment)
 		targetSegNo--;
-	GetXLogFileName(wal_segment, tli, targetSegNo, xlog_seg_size);
+	GetXLogFileName(wal_segment, tli, targetSegNo,
+					instance_config.xlog_seg_size);
 
 	/*
 	 * In pg_start_backup we wait for 'lsn' in 'pg_wal' directory iff it is
@@ -1509,7 +1531,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	{
 		join_path_components(wal_segment_path, arclog_path, wal_segment);
 		wal_segment_dir = arclog_path;
-		timeout = archive_timeout;
+		timeout = instance_config.archive_timeout;
 	}
 
 	if (wait_prev_segment)
@@ -1552,7 +1574,8 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 			/*
 			 * A WAL segment found. Check LSN on it.
 			 */
-			if (wal_contains_lsn(wal_segment_dir, lsn, tli, xlog_seg_size))
+			if (wal_contains_lsn(wal_segment_dir, lsn, tli,
+								 instance_config.xlog_seg_size))
 				/* Target LSN was found */
 			{
 				elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
@@ -1650,11 +1673,12 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
 			elog(INFO, "Wait for target LSN %X/%X to be received by replica",
 				 (uint32) (lsn >> 32), (uint32) lsn);
 
-		if (replica_timeout > 0 && try_count > replica_timeout)
+		if (instance_config.replica_timeout > 0 &&
+			try_count > instance_config.replica_timeout)
 			elog(ERROR, "Target LSN %X/%X could not be recevied by replica "
 				 "in %d seconds",
 				 (uint32) (lsn >> 32), (uint32) lsn,
-				 replica_timeout);
+				 instance_config.replica_timeout);
 	}
 }
 
@@ -1962,7 +1986,8 @@ pg_stop_backup(pgBackup *backup)
 
 		elog(LOG, "Getting the Recovery Time from WAL");
 
-		if (!read_recovery_info(xlog_path, backup->tli, xlog_seg_size,
+		if (!read_recovery_info(xlog_path, backup->tli,
+								instance_config.xlog_seg_size,
 								backup->start_lsn, backup->stop_lsn,
 								&backup->recovery_time, &backup->recovery_xid))
 		{
@@ -2134,7 +2159,8 @@ backup_files(void *arg)
 				if (!backup_data_file(arguments, to_path, file,
 									  arguments->prev_start_lsn,
 									  current.backup_mode,
-									  compress_alg, compress_level))
+									  instance_config.compress_alg,
+									  instance_config.compress_level))
 				{
 					file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
@@ -2336,9 +2362,9 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 
 	rel_path = relpathperm(rnode, forknum);
 	if (segno > 0)
-		path = psprintf("%s/%s.%u", pgdata, rel_path, segno);
+		path = psprintf("%s/%s.%u", instance_config.pgdata, rel_path, segno);
 	else
-		path = psprintf("%s/%s", pgdata, rel_path);
+		path = psprintf("%s/%s", instance_config.pgdata, rel_path);
 
 	pg_free(rel_path);
 
@@ -2578,7 +2604,7 @@ StreamLog(void *arg)
 	/*
 	 * Always start streaming at the beginning of a segment
 	 */
-	startpos -= startpos % xlog_seg_size;
+	startpos -= startpos % instance_config.xlog_seg_size;
 
 	/* Initialize timeout */
 	stream_stop_timeout = 0;
@@ -2692,7 +2718,10 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 
 	if (arguments->backup_conn == NULL)
 	{
-		arguments->backup_conn = pgut_connect(pgut_dbname);
+		arguments->backup_conn = pgut_connect(instance_config.pghost,
+											  instance_config.pgport,
+											  instance_config.pgdatabase,
+											  instance_config.pguser);
 	}
 
 	if (arguments->cancel_conn == NULL)

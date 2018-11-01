@@ -1122,9 +1122,10 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
 		gz_out = gzopen(to_path_temp, PG_BINARY_W);
-		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
+		if (gzsetparams(gz_out, instance_config.compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
-				 compress_level, to_path_temp, get_gz_error(gz_out, errno));
+				 instance_config.compress_level, to_path_temp,
+				 get_gz_error(gz_out, errno));
 
 		to_path_p = gz_to_path;
 	}

@@ -112,7 +112,8 @@ get_current_timeline(bool safe)
 	size_t      size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
+	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
+					   safe);
 	if (safe && buffer == NULL)
 		return 0;
 
@@ -241,43 +242,14 @@ get_data_checksum_version(bool safe)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
+	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
+					   safe);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
 	return ControlFile.data_checksum_version;
-}
-
-
-/*
- * Convert time_t value to ISO-8601 format string. Always set timezone offset.
- */
-void
-time2iso(char *buf, size_t len, time_t time)
-{
-	struct tm  *ptm = gmtime(&time);
-	time_t		gmt = mktime(ptm);
-	time_t		offset;
-	char	   *ptr = buf;
-
-	ptm = localtime(&time);
-	offset = time - gmt + (ptm->tm_isdst ? 3600 : 0);
-
-	strftime(ptr, len, "%Y-%m-%d %H:%M:%S", ptm);
-
-	ptr += strlen(ptr);
-	snprintf(ptr, len - (ptr - buf), "%c%02d",
-			 (offset >= 0) ? '+' : '-',
-			 abs((int) offset) / SECS_PER_HOUR);
-
-	if (abs((int) offset) % SECS_PER_HOUR != 0)
-	{
-		ptr += strlen(ptr);
-		snprintf(ptr, len - (ptr - buf), ":%02d",
-				 abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
-	}
 }
 
 /*
