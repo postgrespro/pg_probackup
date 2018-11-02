@@ -71,7 +71,8 @@ checkControlFile(ControlFileData *ControlFile)
 			 "Either the file is corrupt, or it has a different layout than this program\n"
 			 "is expecting. The results below are untrustworthy.");
 
-	if (ControlFile->pg_control_version % 65536 == 0 && ControlFile->pg_control_version / 65536 != 0)
+	if ((ControlFile->pg_control_version % 65536 == 0 || ControlFile->pg_control_version % 65536 > 10000) &&
+			ControlFile->pg_control_version / 65536 != 0)
 		elog(ERROR, "possible byte ordering mismatch\n"
 			 "The byte ordering used to store the pg_control file might not match the one\n"
 			 "used by this program. In that case the results below would be incorrect, and\n"
