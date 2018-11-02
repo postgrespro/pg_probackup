@@ -93,7 +93,7 @@ do_add_instance(void)
 	dir_create_dir(arclog_path, DIR_PERMISSION);
 
 	/*
-	 * Wite initial config. system-identifier and pgdata are set in
+	 * Write initial config. system-identifier and pgdata are set in
 	 * init subcommand and will never be updated.
 	 */
 	pgBackupConfigInit(config);

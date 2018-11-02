@@ -12,6 +12,7 @@
 
 #include "pg_getopt.h"
 #include "streamutil.h"
+#include "utils/file.h"
 
 #include <sys/stat.h>
 
@@ -65,7 +66,6 @@ char	   *replication_slot = NULL;
 /* backup options */
 bool		backup_logs = false;
 bool		smooth_checkpoint;
-bool		is_remote_backup = false;
 /* Wait timeout for WAL segment archiving */
 uint32		archive_timeout = ARCHIVE_TIMEOUT_DEFAULT;
 const char *master_db = NULL;
@@ -73,6 +73,10 @@ const char *master_host = NULL;
 const char *master_port= NULL;
 const char *master_user = NULL;
 uint32		replica_timeout = REPLICA_TIMEOUT_DEFAULT;
+char       *ssh_host;
+char       *ssh_port;
+bool        is_remote_agent;
+bool		is_remote_backup;
 
 /* restore options */
 static char		   *target_time;
@@ -165,17 +169,19 @@ static pgut_option options[] =
 	{ 's', 16, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 17, "master-user",			&master_user,		SOURCE_CMDLINE, },
 	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
-	/* TODO not completed feature. Make it unavailiable from user level
-	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMDLINE, }, */
+    { 's', 19, "ssh-host",				&ssh_host,          SOURCE_CMDLINE, },
+    { 's', 20, "ssh-port",		        &ssh_port,          SOURCE_CMDLINE, },
+    { 'b', 21, "agent",				    &is_remote_agent,   SOURCE_CMDLINE, },
+    { 'b', 22, "remote",				&is_remote_backup,	SOURCE_CMDLINE, },
 	/* restore options */
-	{ 's', 20, "time",					&target_time,		SOURCE_CMDLINE },
-	{ 's', 21, "xid",					&target_xid,		SOURCE_CMDLINE },
-	{ 's', 22, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
-	{ 'u', 23, "timeline",				&target_tli,		SOURCE_CMDLINE },
+	{ 's', 30, "time",					&target_time,		SOURCE_CMDLINE },
+	{ 's', 31, "xid",					&target_xid,		SOURCE_CMDLINE },
+	{ 's', 32, "inclusive",				&target_inclusive,	SOURCE_CMDLINE },
+	{ 'u', 33, "timeline",				&target_tli,		SOURCE_CMDLINE },
 	{ 'f', 'T', "tablespace-mapping",	opt_tablespace_map,	SOURCE_CMDLINE },
-	{ 'b', 24, "immediate",				&target_immediate,	SOURCE_CMDLINE },
-	{ 's', 25, "recovery-target-name",	&target_name,		SOURCE_CMDLINE },
-	{ 's', 26, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
+	{ 'b', 34, "immediate",				&target_immediate,	SOURCE_CMDLINE },
+	{ 's', 35, "recovery-target-name",	&target_name,		SOURCE_CMDLINE },
+	{ 's', 36, "recovery-target-action", &target_action,	SOURCE_CMDLINE },
 	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
 	{ 'b', 27, "no-validate",			&restore_no_validate,	SOURCE_CMDLINE },
 	{ 's', 28, "lsn",					&target_lsn,		SOURCE_CMDLINE },
@@ -372,10 +378,28 @@ main(int argc, char *argv[])
 	if (!is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
-	/* Ensure that backup_path is a path to a directory */
-	rc = stat(backup_path, &stat_buf);
-	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-		elog(ERROR, "-B, --backup-path must be a path to directory");
+	if (ssh_host != NULL &&
+		(backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD))
+	{
+		if (is_remote_agent) {
+			if (backup_subcmd != BACKUP_CMD) {
+				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
+				return 0;
+			}
+			fio_redirect(STDIN_FILENO, STDOUT_FILENO);
+		} else {
+			/* Execute remote probackup */
+			remote_execute(argc, argv, backup_subcmd == BACKUP_CMD);
+		}
+	}
+
+	if (!is_remote_agent)
+	{
+		/* Ensure that backup_path is a path to a directory */
+		rc = stat(backup_path, &stat_buf);
+		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
+			elog(ERROR, "-B, --backup-path must be a path to directory");
+	}
 
 	/* command was initialized for a few commands */
 	if (command)
@@ -409,7 +433,7 @@ main(int argc, char *argv[])
 		 * for all commands except init, which doesn't take this parameter
 		 * and add-instance which creates new instance.
 		 */
-		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD && !is_remote_agent)
 		{
 			if (access(backup_instance_path, F_OK) != 0)
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -523,7 +547,7 @@ main(int argc, char *argv[])
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", is_remote_backup ? "true" : "false");
+						  stream_wal ? "true" : "false", ssh_host ? "true" : "false");
 
 				return do_backup(start_time);
 			}

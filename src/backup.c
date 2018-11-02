@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include "utils/thread.h"
+#include "utils/file.h"
 
 #define PG_STOP_BACKUP_TIMEOUT 300
 
@@ -572,7 +573,7 @@ do_backup_instance(void)
 	if (stream_wal)
 	{
 		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
-		dir_create_dir(dst_backup_path, DIR_PERMISSION);
+		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 		stream_thread_arg.basedir = dst_backup_path;
 
@@ -689,7 +690,7 @@ do_backup_instance(void)
 					DATABASE_DIR);
 
 			join_path_components(dirpath, database_path, dir_name);
-			dir_create_dir(dirpath, DIR_PERMISSION);
+			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
 
 		/* setup threads */
@@ -1847,16 +1848,15 @@ pg_stop_backup(pgBackup *backup)
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-			fp = fopen(backup_label, PG_BINARY_W);
+			fp = fio_open(backup_label, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
 
 			len = strlen(PQgetvalue(res, 0, 3));
-			if (fwrite(PQgetvalue(res, 0, 3), 1, len, fp) != len ||
-				fflush(fp) != 0 ||
-				fsync(fileno(fp)) != 0 ||
-				fclose(fp))
+			if (fio_write(fp, PQgetvalue(res, 0, 3), len) != len ||
+				fio_flush(fp) != 0 ||
+				fio_close(fp))
 				elog(ERROR, "can't write backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
 
@@ -1895,16 +1895,15 @@ pg_stop_backup(pgBackup *backup)
 			char		tablespace_map[MAXPGPATH];
 
 			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fopen(tablespace_map, PG_BINARY_W);
+			fp = fio_open(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 
 			len = strlen(val);
-			if (fwrite(val, 1, len, fp) != len ||
-				fflush(fp) != 0 ||
-				fsync(fileno(fp)) != 0 ||
-				fclose(fp))
+			if (fio_write(fp, val, len) != len ||
+				fio_flush(fp) != 0 ||
+				fio_close(fp))
 				elog(ERROR, "can't write tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 

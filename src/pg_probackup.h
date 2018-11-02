@@ -10,23 +10,23 @@
 #ifndef PG_PROBACKUP_H
 #define PG_PROBACKUP_H
 
-#include "postgres_fe.h"
-#include "libpq-fe.h"
-
-#include "access/xlog_internal.h"
-#include "utils/pg_crc.h"
+#include <postgres_fe.h>
+#include <libpq-fe.h>
+#include <access/xlog_internal.h>
+#include <utils/pg_crc.h>
 
 #ifdef FRONTEND
 #undef FRONTEND
-#include "port/atomics.h"
+#include <port/atomics.h>
 #define FRONTEND
 #else
-#include "port/atomics.h"
+#include <port/atomics.h>
 #endif
 
 #include "utils/logger.h"
 #include "utils/parray.h"
 #include "utils/pgut.h"
+#include "utils/file.h"
 
 #include "datapagemap.h"
 
@@ -325,11 +325,14 @@ extern char	   *replication_slot;
 extern bool		smooth_checkpoint;
 #define ARCHIVE_TIMEOUT_DEFAULT 300
 extern uint32	archive_timeout;
-extern bool		is_remote_backup;
+extern char *ssh_port;
+extern char *ssh_host;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;
 extern const char *master_user;
+extern bool	is_remote_backup;
+extern bool is_remote_agent;
 #define REPLICA_TIMEOUT_DEFAULT 300
 extern uint32	replica_timeout;
 
@@ -472,6 +475,7 @@ extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
+extern void remote_execute(int argc, char *argv[], bool do_backup);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
 #define COMPRESS_LEVEL_DEFAULT 1
@@ -484,7 +488,8 @@ extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool omit_symlink, bool add_root);
 extern void create_data_directories(const char *data_dir,
 									const char *backup_dir,
-									bool extract_tablespaces);
+									bool extract_tablespaces,
+									fio_location location);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(pgut_option *opt, const char *arg);

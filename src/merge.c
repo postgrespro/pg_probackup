@@ -182,7 +182,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	pgBackupGetPath(from_backup, from_database_path, lengthof(from_database_path),
 					DATABASE_DIR);
 
-	create_data_directories(to_database_path, from_backup_path, false);
+	create_data_directories(to_database_path, from_backup_path, false, FIO_BACKUP_HOST);
 
 	/*
 	 * Get list of files which will be modified or removed.

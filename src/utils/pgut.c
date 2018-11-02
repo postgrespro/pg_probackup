@@ -19,6 +19,7 @@
 
 #include "pgut.h"
 #include "logger.h"
+#include "file.h"
 
 #define MAX_TZDISP_HOUR		15	/* maximum allowed hour part */
 #define SECS_PER_MINUTE		60
@@ -1147,7 +1148,7 @@ pgut_readopt(const char *path, pgut_option options[], int elevel, bool strict)
 	if (!options)
 		return parsed_options;
 
-	if ((fp = pgut_fopen(path, "rt", true)) == NULL)
+	if ((fp = fio_open_stream(path, FIO_BACKUP_HOST)) == NULL)
 		return parsed_options;
 
 	while (fgets(buf, lengthof(buf), fp))
@@ -1181,7 +1182,7 @@ pgut_readopt(const char *path, pgut_option options[], int elevel, bool strict)
 		}
 	}
 
-	fclose(fp);
+	fio_close_stream(fp);
 
 	return parsed_options;
 }

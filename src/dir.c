@@ -9,6 +9,8 @@
  */
 
 #include "pg_probackup.h"
+#include "utils/file.h"
+
 
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
@@ -926,7 +928,7 @@ opt_tablespace_map(pgut_option *opt, const char *arg)
  */
 void
 create_data_directories(const char *data_dir, const char *backup_dir,
-						bool extract_tablespaces)
+						bool extract_tablespaces, fio_location location)
 {
 	parray	   *dirs,
 			   *links = NULL;
@@ -1026,11 +1028,11 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 						 linked_path, relative_ptr);
 
 				/* Firstly, create linked directory */
-				dir_create_dir(linked_path, DIR_PERMISSION);
+				fio_mkdir(linked_path, DIR_PERMISSION, location);
 
 				join_path_components(to_path, data_dir, PG_TBLSPC_DIR);
 				/* Create pg_tblspc directory just in case */
-				dir_create_dir(to_path, DIR_PERMISSION);
+				fio_mkdir(to_path, DIR_PERMISSION, location);
 
 				/* Secondly, create link */
 				join_path_components(to_path, to_path, link_name);
@@ -1057,7 +1059,7 @@ create_directory:
 
 		/* This is not symlink, create directory */
 		join_path_components(to_path, data_dir, relative_ptr);
-		dir_create_dir(to_path, DIR_PERMISSION);
+		fio_mkdir(to_path, DIR_PERMISSION, location);
 	}
 
 	if (extract_tablespaces)
@@ -1204,7 +1206,7 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
 
-		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+		fio_printf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\"",
@@ -1213,19 +1215,19 @@ print_file_list(FILE *out, const parray *files, const char *root)
 				deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
-			fprintf(out, ",\"segno\":\"%d\"", file->segno);
+			fio_printf(out, ",\"segno\":\"%d\"", file->segno);
 
 #ifndef WIN32
 		if (S_ISLNK(file->mode))
 #else
 		if (pgwin32_is_junction(file->path))
 #endif
-			fprintf(out, ",\"linked\":\"%s\"", file->linked);
+			fio_printf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != BLOCKNUM_INVALID)
-			fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
+			fio_printf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
-		fprintf(out, "}\n");
+		fio_printf(out, "}\n");
 	}
 }
 

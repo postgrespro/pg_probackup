@@ -8,12 +8,13 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
-
 #include <dirent.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "pg_probackup.h"
+#include "utils/file.h"
 
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
@@ -413,13 +414,13 @@ pgBackupCreateDir(pgBackup *backup)
 	if (!dir_is_empty(path))
 		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
-	dir_create_dir(path, DIR_PERMISSION);
+	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 	/* create directories for actual backup files */
 	for (i = 0; subdirs[i]; i++)
 	{
 		pgBackupGetPath(backup, path, lengthof(path), subdirs[i]);
-		dir_create_dir(path, DIR_PERMISSION);
+		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 	}
 
 	return 0;
@@ -433,46 +434,46 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 {
 	char		timestamp[100];
 
-	fprintf(out, "#Configuration\n");
-	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
-	fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
-	fprintf(out, "compress-alg = %s\n",
+	fio_printf(out, "#Configuration\n");
+	fio_printf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
+	fio_printf(out, "stream = %s\n", backup->stream ? "true" : "false");
+	fio_printf(out, "compress-alg = %s\n",
 			deparse_compress_alg(backup->compress_alg));
-	fprintf(out, "compress-level = %d\n", backup->compress_level);
-	fprintf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
+	fio_printf(out, "compress-level = %d\n", backup->compress_level);
+	fio_printf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
 
-	fprintf(out, "\n#Compatibility\n");
-	fprintf(out, "block-size = %u\n", backup->block_size);
-	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
-	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	fio_printf(out, "\n#Compatibility\n");
+	fio_printf(out, "block-size = %u\n", backup->block_size);
+	fio_printf(out, "xlog-block-size = %u\n", backup->wal_block_size);
+	fio_printf(out, "checksum-version = %u\n", backup->checksum_version);
 	if (backup->program_version[0] != '\0')
-		fprintf(out, "program-version = %s\n", backup->program_version);
+		fio_printf(out, "program-version = %s\n", backup->program_version);
 	if (backup->server_version[0] != '\0')
-		fprintf(out, "server-version = %s\n", backup->server_version);
+		fio_printf(out, "server-version = %s\n", backup->server_version);
 
-	fprintf(out, "\n#Result backup info\n");
-	fprintf(out, "timelineid = %d\n", backup->tli);
+	fio_printf(out, "\n#Result backup info\n");
+	fio_printf(out, "timelineid = %d\n", backup->tli);
 	/* LSN returned by pg_start_backup */
-	fprintf(out, "start-lsn = %X/%X\n",
+	fio_printf(out, "start-lsn = %X/%X\n",
 			(uint32) (backup->start_lsn >> 32),
 			(uint32) backup->start_lsn);
 	/* LSN returned by pg_stop_backup */
-	fprintf(out, "stop-lsn = %X/%X\n",
+	fio_printf(out, "stop-lsn = %X/%X\n",
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	fprintf(out, "start-time = '%s'\n", timestamp);
+	fio_printf(out, "start-time = '%s'\n", timestamp);
 	if (backup->end_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->end_time);
-		fprintf(out, "end-time = '%s'\n", timestamp);
+		fio_printf(out, "end-time = '%s'\n", timestamp);
 	}
-	fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
+	fio_printf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
-		fprintf(out, "recovery-time = '%s'\n", timestamp);
+		fio_printf(out, "recovery-time = '%s'\n", timestamp);
 	}
 
 	/*
@@ -480,20 +481,20 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	 * WAL segments in archive 'wal' directory.
 	 */
 	if (backup->data_bytes != BYTES_INVALID)
-		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
+		fio_printf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
 	if (backup->wal_bytes != BYTES_INVALID)
-		fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
+		fio_printf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
-	fprintf(out, "status = %s\n", status2str(backup->status));
+	fio_printf(out, "status = %s\n", status2str(backup->status));
 
 	/* 'parent_backup' is set if it is incremental backup */
 	if (backup->parent_backup != 0)
-		fprintf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
+		fio_printf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
 
 	/* print connection info except password */
 	if (backup->primary_conninfo)
-		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+		fio_printf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 }
 
 /*
@@ -506,14 +507,14 @@ write_backup(pgBackup *backup)
 	char	conf_path[MAXPGPATH];
 
 	pgBackupGetPath(backup, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
-	fp = fopen(conf_path, "wt");
+	fp = fio_open(conf_path, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open configuration file \"%s\": %s", conf_path,
 			strerror(errno));
 
 	pgBackupWriteControl(fp, backup);
 
-	fclose(fp);
+	fio_close(fp);
 }
 
 /*
@@ -527,16 +528,15 @@ pgBackupWriteFileList(pgBackup *backup, parray *files, const char *root)
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 
-	fp = fopen(path, "wt");
+	fp = fio_open(path, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
 		elog(ERROR, "cannot open file list \"%s\": %s", path,
 			strerror(errno));
 
 	print_file_list(fp, files, root);
 
-	if (fflush(fp) != 0 ||
-		fsync(fileno(fp)) != 0 ||
-		fclose(fp))
+	if (fio_flush(fp) != 0 ||
+		fio_close(fp))
 		elog(ERROR, "cannot write file list \"%s\": %s", path, strerror(errno));
 }
 

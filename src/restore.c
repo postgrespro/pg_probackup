@@ -445,7 +445,7 @@ restore_backup(pgBackup *backup)
 	 * this_backup_path = $BACKUP_PATH/backups/instance_name/backup_id
 	 */
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	create_data_directories(pgdata, this_backup_path, true);
+	create_data_directories(pgdata, this_backup_path, true, FIO_DB_HOST);
 
 	/*
 	 * Get list of files which need to be restored.
