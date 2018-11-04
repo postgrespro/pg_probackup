@@ -1206,7 +1206,7 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
 
-		fio_printf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+		fio_fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\"",
@@ -1215,19 +1215,19 @@ print_file_list(FILE *out, const parray *files, const char *root)
 				deparse_compress_alg(file->compress_alg));
 
 		if (file->is_datafile)
-			fio_printf(out, ",\"segno\":\"%d\"", file->segno);
+			fio_fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
 #ifndef WIN32
 		if (S_ISLNK(file->mode))
 #else
 		if (pgwin32_is_junction(file->path))
 #endif
-			fio_printf(out, ",\"linked\":\"%s\"", file->linked);
+			fio_fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != BLOCKNUM_INVALID)
-			fio_printf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
+			fio_fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
-		fio_printf(out, "}\n");
+		fio_fprintf(out, "}\n");
 	}
 }
 

@@ -419,12 +419,12 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	COMP_TRADITIONAL_CRC32(*crc, write_buffer, write_buffer_size);
 
 	/* write data page */
-	if (fio_write(out, write_buffer, write_buffer_size) != write_buffer_size)
+	if (fio_fwrite(out, write_buffer, write_buffer_size) != write_buffer_size)
 	{
 		int			errno_tmp = errno;
 
 		fclose(in);
-		fio_close(out);
+		fio_fclose(out);
 		elog(ERROR, "File: %s, cannot write backup at block %u : %s",
 			 file->path, blknum, strerror(errno_tmp));
 	}
@@ -512,7 +512,7 @@ backup_data_file(backup_files_arg* arguments,
 	nblocks = file->size/BLCKSZ;
 
 	/* open backup file for write  */
-	out = fio_open(to_path, PG_BINARY_W, FIO_BACKUP_HOST);
+	out = fio_fopen(to_path, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -575,13 +575,13 @@ backup_data_file(backup_files_arg* arguments,
 	{
 		int errno_tmp = errno;
 		fclose(in);
-		fio_close(out);
+		fio_fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", file->path,
 			 strerror(errno_tmp));
 	}
 
-	if (fio_flush(out) != 0 ||
-		fio_close(out))
+	if (fio_fflush(out) != 0 ||
+		fio_fclose(out))
 		elog(ERROR, "cannot write backup file \"%s\": %s",
 			 to_path, strerror(errno));
 	fclose(in);
@@ -638,7 +638,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	 * modified pages for differential restore. If the file does not exist,
 	 * re-open it with "w" to create an empty file.
 	 */
-	out = fio_open(to_path, PG_BINARY_W "+", FIO_DB_HOST);
+	out = fio_fopen(to_path, PG_BINARY_W "+", FIO_DB_HOST);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -734,27 +734,27 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		/*
 		 * Seek and write the restored page.
 		 */
-		if (fio_seek(out, write_pos) < 0)
+		if (fio_fseek(out, write_pos) < 0)
 			elog(ERROR, "cannot seek block %u of \"%s\": %s",
 				 blknum, to_path, strerror(errno));
 
 		if (write_header)
 		{
-			if (fio_write(out, &header, sizeof(header)) != sizeof(header))
+			if (fio_fwrite(out, &header, sizeof(header)) != sizeof(header))
 				elog(ERROR, "cannot write header of block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
 		}
 
 		if (header.compressed_size < BLCKSZ)
 		{
-			if (fio_write(out, page.data, BLCKSZ) != BLCKSZ)
+			if (fio_fwrite(out, page.data, BLCKSZ) != BLCKSZ)
 				elog(ERROR, "cannot write block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
 		}
 		else
 		{
 			/* if page wasn't compressed, we've read full block */
-			if (fio_write(out, compressed_page.data, BLCKSZ) != BLCKSZ)
+			if (fio_fwrite(out, compressed_page.data, BLCKSZ) != BLCKSZ)
 				elog(ERROR, "cannot write block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
 		}
@@ -772,7 +772,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		size_t		file_size = 0;
 
 		/* get file current size */
-		fio_seek(out, 0);
+		fio_fseek(out, 0);
 		file_size = ftell(out);
 
 		if (file_size > file->n_blocks * BLCKSZ)
@@ -792,7 +792,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		/*
 		 * Truncate file to this length.
 		 */
-		if (fio_truncate(out, write_pos) != 0)
+		if (fio_ftruncate(out, write_pos) != 0)
 			elog(ERROR, "cannot truncate \"%s\": %s",
 				 file->path, strerror(errno));
 		elog(VERBOSE, "Delta truncate file %s to block %u",
@@ -806,13 +806,13 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 
 		if (in)
 			fclose(in);
-		fio_close(out);
+		fio_fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
 	}
 
-	if (fio_flush(out) != 0 ||
-		fio_close(out))
+	if (fio_fflush(out) != 0 ||
+		fio_fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	if (in)
 		fclose(in);
@@ -858,7 +858,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fio_open(to_path, PG_BINARY_W, FIO_BACKUP_HOST);
+	out = fio_fopen(to_path, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -871,7 +871,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	if (fstat(fileno(in), &st) == -1)
 	{
 		fclose(in);
-		fio_close(out);
+		fio_fclose(out);
 		elog(ERROR, "cannot stat \"%s\": %s", file->path,
 			 strerror(errno));
 	}
@@ -884,12 +884,12 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
 			break;
 
-		if (fio_write(out, buf, read_len) != read_len)
+		if (fio_fwrite(out, buf, read_len) != read_len)
 		{
 			errno_tmp = errno;
 			/* oops */
 			fclose(in);
-			fio_close(out);
+			fio_fclose(out);
 			elog(ERROR, "cannot write to \"%s\": %s", to_path,
 				 strerror(errno_tmp));
 		}
@@ -903,7 +903,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	if (!feof(in))
 	{
 		fclose(in);
-		fio_close(out);
+		fio_fclose(out);
 		elog(ERROR, "cannot read backup mode file \"%s\": %s",
 			 file->path, strerror(errno_tmp));
 	}
@@ -911,12 +911,12 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	/* copy odd part. */
 	if (read_len > 0)
 	{
-		if (fio_write(out, buf, read_len) != read_len)
+		if (fio_fwrite(out, buf, read_len) != read_len)
 		{
 			errno_tmp = errno;
 			/* oops */
 			fclose(in);
-			fio_close(out);
+			fio_fclose(out);
 			elog(ERROR, "cannot write to \"%s\": %s", to_path,
 				 strerror(errno_tmp));
 		}
@@ -936,13 +936,13 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	{
 		errno_tmp = errno;
 		fclose(in);
-		fio_close(out);
+		fio_fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
 	}
 
-	if (fio_flush(out) != 0 ||
-		fio_close(out))
+	if (fio_fflush(out) != 0 ||
+		fio_fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fclose(in);
 
@@ -1059,7 +1059,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fio_open(to_path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+		out = fio_fopen(to_path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
 		if (out == NULL)
 			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
@@ -1097,7 +1097,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			else
 #endif
 			{
-				if (fio_write(out, buf, read_len) != read_len)
+				if (fio_fwrite(out, buf, read_len) != read_len)
 				{
 					errno_temp = errno;
 					unlink(to_path_temp);
@@ -1125,8 +1125,8 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
-		if (fio_flush(out) != 0 ||
-			fio_close(out))
+		if (fio_fflush(out) != 0 ||
+			fio_fclose(out))
 		{
 			errno_temp = errno;
 			unlink(to_path_temp);
@@ -1217,7 +1217,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-	out = fio_open(to_path_temp, PG_BINARY_W, FIO_DB_HOST);
+	out = fio_fopen(to_path_temp, PG_BINARY_W, FIO_DB_HOST);
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
 			 to_path_temp, strerror(errno));
@@ -1254,7 +1254,7 @@ get_wal_file(const char *from_path, const char *to_path)
 
 		if (read_len > 0)
 		{
-			if (fio_write(out, buf, read_len) != read_len)
+			if (fio_fwrite(out, buf, read_len) != read_len)
 			{
 				errno_temp = errno;
 				unlink(to_path_temp);
@@ -1278,8 +1278,8 @@ get_wal_file(const char *from_path, const char *to_path)
 		}
 	}
 
-	if (fio_flush(out) != 0 ||
-		fio_close(out))
+	if (fio_fflush(out) != 0 ||
+		fio_fclose(out))
 	{
 		errno_temp = errno;
 		unlink(to_path_temp);

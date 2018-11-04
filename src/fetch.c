@@ -34,7 +34,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
 	int		 len;
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", datadir, path);
 
-	if ((fd = open(fullpath, O_RDONLY | PG_BINARY, 0)) == -1)
+	if ((fd = fio_open(fullpath, O_RDONLY | PG_BINARY, FIO_DB_HOST)) == -1)
 	{
 		if (safe)
 			return NULL;
@@ -43,7 +43,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
 					fullpath, strerror(errno));
 	}
 
-	if (fstat(fd, &statbuf) < 0)
+	if (fio_stat(fd, &statbuf) < 0)
 	{
 		if (safe)
 			return NULL;
@@ -53,10 +53,9 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
 	}
 
 	len = statbuf.st_size;
-
 	buffer = pg_malloc(len + 1);
 
-	if (read(fd, buffer, len) != len)
+	if (fio_read(fd, buffer, len) != len)
 	{
 		if (safe)
 			return NULL;
@@ -65,7 +64,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
 				fullpath, strerror(errno));
 	}
 
-	close(fd);
+	fio_close(fd);
 
 	/* Zero-terminate the buffer. */
 	buffer[len] = '\0';

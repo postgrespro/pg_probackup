@@ -860,8 +860,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				 private_data->xlogpath);
 
 			private_data->xlogexists = true;
-			private_data->xlogfile = open(private_data->xlogpath,
-										  O_RDONLY | PG_BINARY, 0);
+			private_data->xlogfile = fio_open(private_data->xlogpath,
+											  O_RDONLY | PG_BINARY, FIO_DB_HOST);
 
 			if (private_data->xlogfile < 0)
 			{
@@ -910,14 +910,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	/* Read the requested page */
 	if (private_data->xlogfile != -1)
 	{
-		if (lseek(private_data->xlogfile, (off_t) targetPageOff, SEEK_SET) < 0)
+		if (fio_seek(private_data->xlogfile, (off_t) targetPageOff) < 0)
 		{
 			elog(WARNING, "Thread [%d]: Could not seek in WAL segment \"%s\": %s",
 				 private_data->thread_num, private_data->xlogpath, strerror(errno));
 			return -1;
 		}
 
-		if (read(private_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (fio_read(private_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 		{
 			elog(WARNING, "Thread [%d]: Could not read from WAL segment \"%s\": %s",
 				 private_data->thread_num, private_data->xlogpath, strerror(errno));
@@ -993,7 +993,7 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 	private_data = (XLogPageReadPrivate *) xlogreader->private_data;
 	if (private_data->xlogfile >= 0)
 	{
-		close(private_data->xlogfile);
+		fio_close(private_data->xlogfile);
 		private_data->xlogfile = -1;
 	}
 #ifdef HAVE_LIBZ

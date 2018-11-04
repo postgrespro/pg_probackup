@@ -133,11 +133,6 @@ extern char *pgut_strdup(const char *str);
 #define pgut_newarray(type, n)	((type *) pgut_malloc(sizeof(type) * (n)))
 
 /*
- * file operations
- */
-extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
-
-/*
  * Assert
  */
 #undef Assert

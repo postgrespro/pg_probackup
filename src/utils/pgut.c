@@ -2164,23 +2164,6 @@ pgut_strdup(const char *str)
 	return ret;
 }
 
-FILE *
-pgut_fopen(const char *path, const char *mode, bool missing_ok)
-{
-	FILE *fp;
-
-	if ((fp = fopen(path, mode)) == NULL)
-	{
-		if (missing_ok && errno == ENOENT)
-			return NULL;
-
-		elog(ERROR, "could not open file \"%s\": %s",
-			path, strerror(errno));
-	}
-
-	return fp;
-}
-
 #ifdef WIN32
 static int select_win32(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timeval * timeout);
 #define select		select_win32

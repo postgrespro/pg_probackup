@@ -11,13 +11,13 @@ OBJS += src/archive.o src/backup.o src/catalog.o src/configure.o src/data.o \
 
 # borrowed files
 OBJS += src/pg_crc.o src/datapagemap.o src/receivelog.o src/streamutil.o \
-	src/xlogreader.o
+	src/xlogreader.o src/walmethods.o
 
 EXTRA_CLEAN = src/pg_crc.c src/datapagemap.c src/datapagemap.h src/logging.h \
 	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h \
 	src/xlogreader.c
 
-INCLUDES = src/datapagemap.h src/logging.h src/streamutil.h src/receivelog.h
+INCLUDES = src/datapagemap.h src/logging.h src/streamutil.h src/receivelog.h src/walmethods.h
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -37,12 +37,6 @@ ifeq ($(top_srcdir),../..)
  endif
 else
 srchome=$(top_srcdir)
-endif
-
-ifeq (,$(filter 9.5 9.6,$(MAJORVERSION)))
-OBJS += src/walmethods.o
-EXTRA_CLEAN += src/walmethods.c src/walmethods.h
-INCLUDES += src/walmethods.h
 endif
 
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc -I$(top_srcdir)/$(subdir)/src
@@ -72,13 +66,6 @@ src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
 
-
-ifeq (,$(filter 9.5 9.6,$(MAJORVERSION)))
-src/walmethods.c: $(top_srcdir)/src/bin/pg_basebackup/walmethods.c
-	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/walmethods.c $@
-src/walmethods.h: $(top_srcdir)/src/bin/pg_basebackup/walmethods.h
-	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/walmethods.h $@
-endif
 
 ifeq ($(PORTNAME), aix)
 	CC=xlc_r

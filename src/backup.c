@@ -1822,6 +1822,7 @@ pg_stop_backup(pgBackup *backup)
 						 PQerrorMessage(conn), stop_backup_query);
 			}
 			elog(INFO, "pg_stop backup() successfully executed");
+			sleep(20);
 		}
 
 		backup_in_progress = false;
@@ -1848,15 +1849,15 @@ pg_stop_backup(pgBackup *backup)
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-			fp = fio_open(backup_label, PG_BINARY_W, FIO_BACKUP_HOST);
+			fp = fio_fopen(backup_label, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
 
 			len = strlen(PQgetvalue(res, 0, 3));
-			if (fio_write(fp, PQgetvalue(res, 0, 3), len) != len ||
-				fio_flush(fp) != 0 ||
-				fio_close(fp))
+			if (fio_fwrite(fp, PQgetvalue(res, 0, 3), len) != len ||
+				fio_fflush(fp) != 0 ||
+				fio_fclose(fp))
 				elog(ERROR, "can't write backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
 
@@ -1895,15 +1896,15 @@ pg_stop_backup(pgBackup *backup)
 			char		tablespace_map[MAXPGPATH];
 
 			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fio_open(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST);
+			fp = fio_fopen(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 
 			len = strlen(val);
-			if (fio_write(fp, val, len) != len ||
-				fio_flush(fp) != 0 ||
-				fio_close(fp))
+			if (fio_fwrite(fp, val, len) != len ||
+				fio_fflush(fp) != 0 ||
+				fio_fclose(fp))
 				elog(ERROR, "can't write tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 
