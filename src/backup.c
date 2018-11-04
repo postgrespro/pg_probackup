@@ -943,6 +943,16 @@ do_backup(time_t start_time)
 	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 	//		current.data_bytes);
 
+	if (is_remote_agent)
+		fio_transfer(&current.start_time,current.start_time);
+	else
+		complete_backup();
+
+	return 0;
+}
+
+void complete_backup(void)
+{
 	pgBackupValidate(&current);
 
 	elog(INFO, "Backup %s completed", base36enc(current.start_time));
@@ -953,8 +963,6 @@ do_backup(time_t start_time)
 	 */
 	if (delete_expired || delete_wal)
 		do_retention_purge();
-
-	return 0;
 }
 
 /*
@@ -1529,13 +1537,13 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	{
 		if (!file_exists)
 		{
-			file_exists = fileExists(wal_segment_path);
+			file_exists = fileExists(wal_segment_path, is_start_lsn ? FIO_DB_HOST : FIO_BACKUP_HOST);
 
 			/* Try to find compressed WAL file */
 			if (!file_exists)
 			{
 #ifdef HAVE_LIBZ
-				file_exists = fileExists(gz_wal_segment_path);
+				file_exists = fileExists(gz_wal_segment_path, is_start_lsn ? FIO_DB_HOST : FIO_BACKUP_HOST);
 				if (file_exists)
 					elog(LOG, "Found compressed WAL segment: %s", wal_segment_path);
 #endif
@@ -1822,7 +1830,6 @@ pg_stop_backup(pgBackup *backup)
 						 PQerrorMessage(conn), stop_backup_query);
 			}
 			elog(INFO, "pg_stop backup() successfully executed");
-			sleep(20);
 		}
 
 		backup_in_progress = false;
@@ -2155,7 +2162,7 @@ backup_files(void *arg)
 						skip = true; /* ...skip copying file. */
 				}
 				if (skip ||
-					!copy_file(arguments->from_root, arguments->to_root, file))
+					!copy_file(arguments->from_root, arguments->to_root, file, FIO_BACKUP_HOST))
 				{
 					file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup",

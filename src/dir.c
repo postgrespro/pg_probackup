@@ -162,8 +162,8 @@ pgFileNew(const char *path, bool omit_symlink)
 	struct stat		st;
 	pgFile		   *file;
 
-	/* stat the file */
-	if ((omit_symlink ? stat(path, &st) : lstat(path, &st)) == -1)
+    /* stat the file */
+    if (fio_stat(path, &st, omit_symlink, FIO_BACKUP_HOST) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno == ENOENT)
@@ -403,7 +403,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
-	if (root && pgdata && strcmp(root, pgdata) == 0 && fileExists(path))
+	if (root && pgdata && strcmp(root, pgdata) == 0 && fileExists(path, FIO_LOCAL_HOST))
 	{
 		FILE	   *black_list_file = NULL;
 		char		buf[MAXPGPATH * 2];
@@ -935,7 +935,7 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 	size_t		i;
 	char		backup_database_dir[MAXPGPATH],
 				to_path[MAXPGPATH];
-
+	sleep(30);
 	dirs = parray_new();
 	if (extract_tablespaces)
 	{
@@ -1088,7 +1088,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
 	/* Exit if database/tablespace_map doesn't exist */
-	if (!fileExists(map_path))
+	if (!fileExists(map_path, FIO_LOCAL_HOST))
 	{
 		elog(LOG, "there is no file tablespace_map");
 		return;
@@ -1490,11 +1490,11 @@ dir_is_empty(const char *path)
  * Return true if the path is a existing regular file.
  */
 bool
-fileExists(const char *path)
+fileExists(const char *path, fio_location location)
 {
 	struct stat buf;
 
-	if (stat(path, &buf) == -1 && errno == ENOENT)
+	if (fio_stat(path, &buf, true, location) == -1 && errno == ENOENT)
 		return false;
 	else if (!S_ISREG(buf.st_mode))
 		return false;

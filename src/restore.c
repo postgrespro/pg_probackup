@@ -587,14 +587,14 @@ restore_files(void *arg)
 			(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE
 			|| arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK))
 		{
-			elog(VERBOSE, "The file didn`t change. Skip restore: %s", file->path);
+			elog(INFO, "The file didn`t change. Skip restore: %s", file->path);
 			continue;
 		}
 
 		/* Directories were created before */
 		if (S_ISDIR(file->mode))
 		{
-			elog(VERBOSE, "directory, skip");
+			elog(INFO, "directory, skip");
 			continue;
 		}
 
@@ -611,7 +611,7 @@ restore_files(void *arg)
 		 * block and have BackupPageHeader meta information, so we cannot just
 		 * copy the file from backup.
 		 */
-		elog(VERBOSE, "Restoring file %s, is_datafile %i, is_cfs %i",
+		elog(INFO, "Restoring file %s, is_datafile %i, is_cfs %i",
 			 file->path, file->is_datafile?1:0, file->is_cfs?1:0);
 		if (file->is_datafile && !file->is_cfs)
 		{
@@ -624,7 +624,7 @@ restore_files(void *arg)
 							  false);
 		}
 		else
-			copy_file(from_root, pgdata, file);
+			copy_file(from_root, pgdata, file, FIO_DB_HOST);
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)

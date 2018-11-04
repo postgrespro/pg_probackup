@@ -17,12 +17,15 @@ typedef enum
 	FIO_READ,
 	FIO_LOAD,
 	FIO_STAT,
+	FIO_FSTAT,
 	FIO_SEND,
-	FIO_ACCESS
+	FIO_ACCESS,
+	FIO_TRANSFER
 } fio_operations;
 
 typedef enum
 {
+	FIO_LOCAL_HOST,
 	FIO_DB_HOST,
 	FIO_BACKUP_HOST
 } fio_location;
@@ -33,12 +36,19 @@ typedef enum
 #define SYS_CHECK(cmd) do if ((cmd) < 0) { perror(#cmd); exit(EXIT_FAILURE); } while (0)
 #define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) { fprintf(stderr, "%s:%d: proceeds %d bytes instead of %d\n", __FILE__, __LINE__, _rc, (int)(size)); exit(EXIT_FAILURE); } } while (0)
 
-typedef struct {
+typedef struct
+{
 	unsigned cop    : 4;
 	unsigned handle : 8;
 	unsigned size   : 20;
 	unsigned arg;
 } fio_header;
+
+typedef struct
+{
+	size_t* address;
+	size_t  value;
+} fio_binding;
 
 extern void    fio_redirect(int in, int out);
 extern void    fio_communicate(int in, int out);
@@ -51,13 +61,14 @@ extern int     fio_fflush(FILE* f);
 extern int     fio_fseek(FILE* f, off_t offs);
 extern int     fio_ftruncate(FILE* f, off_t size);
 extern int     fio_fclose(FILE* f);
+extern int     fio_ffstat(FILE* f, struct stat* st);
 
 extern int     fio_open(char const* name, int mode, fio_location location);
 extern ssize_t fio_write(int fd, void const* buf, size_t size);
 extern ssize_t fio_read(int fd, void* buf, size_t size);
 extern int     fio_flush(int fd);
 extern int     fio_seek(int fd, off_t offs);
-extern int     fio_stat(int fd, struct stat* st);
+extern int     fio_fstat(int fd, struct stat* st);
 extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 
@@ -66,9 +77,12 @@ extern int     fio_unlink(char const* path, fio_location location);
 extern int     fio_mkdir(char const* path, int mode, fio_location location);
 extern int     fio_chmod(char const* path, int mode, fio_location location);
 extern int     fio_access(char const* path, int mode, fio_location location);
+extern int     fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_location location);
 
-extern FILE*  fio_open_stream(char const* name, fio_location location);
-extern int    fio_close_stream(FILE* f);
+extern FILE*   fio_open_stream(char const* name, fio_location location);
+extern int     fio_close_stream(FILE* f);
+
+extern void    fio_transfer(void* addr, size_t value);
 
 #endif
 

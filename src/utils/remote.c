@@ -21,7 +21,7 @@ static int append_option(char* buf, size_t buf_size, size_t dst, char const* src
 	return dst + len + 1;
 }
 
-void remote_execute(int argc, char* argv[], bool listen)
+int remote_execute(int argc, char* argv[], bool listen)
 {
 	char cmd[MAX_CMDLINE_LENGTH];
 	size_t dst = 0;
@@ -66,6 +66,7 @@ void remote_execute(int argc, char* argv[], bool listen)
 		SYS_CHECK(close(outfd[1]));
 
 		SYS_CHECK(execvp(ssh_argv[0], ssh_argv));
+		return -1;
 	} else {
 		SYS_CHECK(close(outfd[0])); /* These are being used by the child */
 		SYS_CHECK(close(infd[1]));
@@ -74,9 +75,10 @@ void remote_execute(int argc, char* argv[], bool listen)
 			int status;
 			fio_communicate(infd[0], outfd[1]);
 			SYS_CHECK(wait(&status));
-			exit(status);
+			return status;
 		} else {
 			fio_redirect(infd[0], outfd[1]); /* write to stdout */
+			return 0;
 		}
 	}
 }

@@ -378,6 +378,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time);
+extern void complete_backup(void);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
@@ -475,7 +476,7 @@ extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
-extern void remote_execute(int argc, char *argv[], bool do_backup);
+extern int remote_execute(int argc, char *argv[], bool do_backup);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
 #define COMPRESS_LEVEL_DEFAULT 1
@@ -501,7 +502,7 @@ extern parray *dir_read_file_list(const char *root, const char *file_txt);
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
 
-extern bool fileExists(const char *path);
+extern bool fileExists(const char *path,  fio_location location);
 extern size_t pgFileSize(const char *path);
 
 extern pgFile *pgFileNew(const char *path, bool omit_symlink);
@@ -523,7 +524,7 @@ extern bool backup_data_file(backup_files_arg* arguments,
 extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
 							  bool write_header);
-extern bool copy_file(const char *from_root, const char *to_root, pgFile *file);
+extern bool copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location location);
 extern void move_file(const char *from_root, const char *to_root, pgFile *file);
 extern void push_wal_file(const char *from_path, const char *to_path,
 						  bool is_compress, bool overwrite);

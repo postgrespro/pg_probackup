@@ -448,7 +448,7 @@ merge_files(void *arg)
 				/*
 				 * We need to decompress target file only if it exists.
 				 */
-				if (fileExists(to_path_tmp))
+				if (fileExists(to_path_tmp, FIO_LOCAL_HOST))
 				{
 					/*
 					 * file->path points to the file in from_root directory. But we

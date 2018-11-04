@@ -389,7 +389,11 @@ main(int argc, char *argv[])
 			fio_redirect(STDIN_FILENO, STDOUT_FILENO);
 		} else {
 			/* Execute remote probackup */
-			remote_execute(argc, argv, backup_subcmd == BACKUP_CMD);
+			int status = remote_execute(argc, argv, backup_subcmd == BACKUP_CMD);
+			if (status != 0)
+			{
+				return status;
+			}
 		}
 	}
 
@@ -537,13 +541,22 @@ main(int argc, char *argv[])
 		case INIT_CMD:
 			return do_init();
 		case BACKUP_CMD:
+		    current.stream = stream_wal;
+		    if (ssh_host && !is_remote_agent)
+			{
+				current.status = BACKUP_STATUS_DONE;
+				StrNCpy(current.program_version, PROGRAM_VERSION,
+						sizeof(current.program_version));
+				complete_backup();
+				return 0;
+			}
+			else
 			{
 				const char *backup_mode;
 				time_t		start_time;
 
 				start_time = time(NULL);
 				backup_mode = deparse_backup_mode(current.backup_mode);
-				current.stream = stream_wal;
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,

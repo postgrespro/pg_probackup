@@ -305,23 +305,14 @@ dir_get_file_size(const char *pathname)
 {
 	struct stat statbuf;
 	static char tmppath[MAXPGPATH];
-	int fd;
 
 	snprintf(tmppath, sizeof(tmppath), "%s/%s",
 			 dir_data->basedir, pathname);
 
-	fd = fio_open(tmppath, O_RDONLY|PG_BINARY, FIO_BACKUP_HOST);
-	if (fd >= 0)
-	{
-		if (fio_stat(fd, &statbuf) != 0)
-		{
-			fio_close(fd);
-			return -1;
-		}
-		fio_close(fd);
-		return statbuf.st_size;
-	}
-	return -1;
+	if (fio_stat(tmppath, &statbuf, true, FIO_BACKUP_HOST) != 0)
+		return -1;
+
+	return statbuf.st_size;
 }
 
 static bool

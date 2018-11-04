@@ -86,22 +86,22 @@ static bool getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime
 
 typedef struct XLogPageReadPrivate
 {
-	int 		thread_num;
-	const char *archivedir;
-	TimeLineID	tli;
-	uint32		xlog_seg_size;
+	int 		 thread_num;
+	const char  *archivedir;
+	TimeLineID	 tli;
+	uint32		 xlog_seg_size;
 
-	bool		manual_switch;
-	bool		need_switch;
+	bool		 manual_switch;
+	bool		 need_switch;
 
-	int			xlogfile;
-	XLogSegNo	xlogsegno;
-	char		xlogpath[MAXPGPATH];
-	bool		xlogexists;
-
+	int			 xlogfile;
+	XLogSegNo	 xlogsegno;
+	char		 xlogpath[MAXPGPATH];
+	bool		 xlogexists;
+	fio_location location;
 #ifdef HAVE_LIBZ
-	gzFile		gz_xlogfile;
-	char		gz_xlogpath[MAXPGPATH];
+	gzFile		 gz_xlogfile;
+	char		 gz_xlogpath[MAXPGPATH];
 #endif
 } XLogPageReadPrivate;
 
@@ -853,7 +853,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		snprintf(private_data->xlogpath, MAXPGPATH, "%s/%s",
 				 private_data->archivedir, xlogfname);
 
-		if (fileExists(private_data->xlogpath))
+		if (fileExists(private_data->xlogpath, private_data->location))
 		{
 			elog(LOG, "Thread [%d]: Opening WAL segment \"%s\"",
 				 private_data->thread_num,
@@ -861,7 +861,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 			private_data->xlogexists = true;
 			private_data->xlogfile = fio_open(private_data->xlogpath,
-											  O_RDONLY | PG_BINARY, FIO_DB_HOST);
+											  O_RDONLY | PG_BINARY, private_data->location);
 
 			if (private_data->xlogfile < 0)
 			{
@@ -879,7 +879,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			snprintf(private_data->gz_xlogpath,
 					 sizeof(private_data->gz_xlogpath), "%s.gz",
 					 private_data->xlogpath);
-			if (fileExists(private_data->gz_xlogpath))
+			if (fileExists(private_data->gz_xlogpath, private_data->location))
 			{
 				elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
 					 private_data->thread_num, private_data->gz_xlogpath);
@@ -965,6 +965,7 @@ InitXLogPageRead(XLogPageReadPrivate *private_data, const char *archivedir,
 	private_data->tli = tli;
 	private_data->xlog_seg_size = xlog_seg_size;
 	private_data->xlogfile = -1;
+	private_data->location = FIO_BACKUP_HOST;
 
 	if (allocate_reader)
 	{

@@ -769,13 +769,8 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	 */
 	if (allow_truncate && file->n_blocks != BLOCKNUM_INVALID && !need_truncate)
 	{
-		size_t		file_size = 0;
-
-		/* get file current size */
-		fio_fseek(out, 0);
-		file_size = ftell(out);
-
-		if (file_size > file->n_blocks * BLCKSZ)
+		struct stat st;
+		if (fio_ffstat(out, &st) == 0 && st.st_size > file->n_blocks * BLCKSZ)
 		{
 			truncate_from = file->n_blocks;
 			need_truncate = true;
@@ -824,7 +819,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
  * it is either small control file or already compressed cfs file.
  */
 bool
-copy_file(const char *from_root, const char *to_root, pgFile *file)
+copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location location)
 {
 	char		to_path[MAXPGPATH];
 	FILE	   *in;
@@ -858,7 +853,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fio_fopen(to_path, PG_BINARY_W, FIO_BACKUP_HOST);
+	out = fio_fopen(to_path, PG_BINARY_W, location);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -932,7 +927,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	file->crc = crc;
 
 	/* update file permission */
-	if (fio_chmod(to_path, st.st_mode, FIO_BACKUP_HOST) == -1)
+	if (fio_chmod(to_path, st.st_mode, location) == -1)
 	{
 		errno_tmp = errno;
 		fclose(in);
@@ -1039,7 +1034,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	{
 		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
 
-		if (!overwrite && fileExists(gz_to_path))
+		if (!overwrite && fileExists(gz_to_path, FIO_BACKUP_HOST))
 			elog(ERROR, "WAL segment \"%s\" already exists.", gz_to_path);
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
@@ -1054,7 +1049,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
-		if (!overwrite && fileExists(to_path))
+		if (!overwrite && fileExists(to_path, FIO_BACKUP_HOST))
 			elog(ERROR, "WAL segment \"%s\" already exists.", to_path);
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
@@ -1335,9 +1330,8 @@ get_wal_file(const char *from_path, const char *to_path)
 bool
 calc_file_checksum(pgFile *file)
 {
-	FILE	   *in;
+	int	        in;
 	size_t		read_len = 0;
-	int			errno_tmp;
 	char		buf[BLCKSZ];
 	struct stat	st;
 	pg_crc32	crc;
@@ -1350,8 +1344,8 @@ calc_file_checksum(pgFile *file)
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, PG_BINARY_R);
-	if (in == NULL)
+	in = fio_open(file->path, O_RDONLY|PG_BINARY, FIO_BACKUP_HOST);
+	if (in <  0)
 	{
 		FIN_TRADITIONAL_CRC32(crc);
 		file->crc = crc;
@@ -1365,16 +1359,16 @@ calc_file_checksum(pgFile *file)
 	}
 
 	/* stat source file to change mode of destination file */
-	if (fstat(fileno(in), &st) == -1)
+	if (fio_fstat(in, &st) == -1)
 	{
-		fclose(in);
+		fio_close(in);
 		elog(ERROR, "cannot stat \"%s\": %s", file->path,
 			 strerror(errno));
 	}
 
 	for (;;)
 	{
-		read_len = fread(buf, 1, sizeof(buf), in);
+		read_len = fio_read(in, buf, sizeof(buf));
 
 		if(read_len == 0)
 			break;
@@ -1386,19 +1380,11 @@ calc_file_checksum(pgFile *file)
 		file->read_size += read_len;
 	}
 
-	errno_tmp = errno;
-	if (!feof(in))
-	{
-		fclose(in);
-		elog(ERROR, "cannot read backup mode file \"%s\": %s",
-			 file->path, strerror(errno_tmp));
-	}
-
 	/* finish CRC calculation and store into pgFile */
 	FIN_TRADITIONAL_CRC32(crc);
 	file->crc = crc;
 
-	fclose(in);
+	fio_close(in);
 
 	return true;
 }
