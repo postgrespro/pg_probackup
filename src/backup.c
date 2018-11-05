@@ -66,10 +66,11 @@ typedef struct
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
+	parray	   *files_list;
 } StreamThreadArg;
 
 static pthread_t stream_thread;
-static StreamThreadArg stream_thread_arg = {"", NULL, 1};
+static StreamThreadArg stream_thread_arg = {"", NULL, 1, NULL};
 
 static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
@@ -475,6 +476,7 @@ do_backup_instance(void)
 
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
+	parray	   *xlog_files_list = NULL;
 
 	elog(LOG, "Database backup start");
 
@@ -604,8 +606,12 @@ do_backup_instance(void)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
 		}
 
-		/* By default there are some error */
+		if (is_remote_agent)
+			xlog_files_list = parray_new();
+
+        /* By default there are some error */
 		stream_thread_arg.ret = 1;
+		stream_thread_arg.files_list = xlog_files_list;
 
 		pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
 	}
@@ -761,18 +767,18 @@ do_backup_instance(void)
 	/* Add archived xlog files into the list of files of this backup */
 	if (stream_wal)
 	{
-		parray	   *xlog_files_list;
-		char		pg_xlog_path[MAXPGPATH];
+		if (xlog_files_list == NULL)
+		{
+			char		pg_xlog_path[MAXPGPATH];
 
-		/* Scan backup PG_XLOG_DIR */
-		xlog_files_list = parray_new();
-		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false);
-
+			/* Scan backup PG_XLOG_DIR */
+			xlog_files_list = parray_new();
+			join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
+			dir_list_file(xlog_files_list, pg_xlog_path, false, true, false);
+		}
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
-
 			if (S_ISREG(file->mode))
 				calc_file_checksum(file);
 			/* Remove file path root prefix*/
@@ -784,7 +790,6 @@ do_backup_instance(void)
 				free(ptr);
 			}
 		}
-
 		/* Add xlog files into the list of backed up files */
 		parray_concat(backup_files_list, xlog_files_list);
 		parray_free(xlog_files_list);
@@ -1874,7 +1879,7 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true);
+				file = pgFileNew(backup_label, true, FIO_BACKUP_HOST);
 				calc_file_checksum(file);
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
@@ -1917,7 +1922,7 @@ pg_stop_backup(pgBackup *backup)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true);
+				file = pgFileNew(tablespace_map, true, FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 					calc_file_checksum(file);
 				free(file->path);
@@ -2608,7 +2613,7 @@ StreamLog(void *arg)
 		ctl.sysidentifier = NULL;
 
 #if PG_VERSION_NUM >= 100000
-		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
+		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true, stream_arg->files_list);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 #else

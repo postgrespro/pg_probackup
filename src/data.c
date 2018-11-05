@@ -1331,7 +1331,8 @@ bool
 calc_file_checksum(pgFile *file)
 {
 	int	        in;
-	size_t		read_len = 0;
+	ssize_t		read_len = 0;
+	int         errno_tmp;
 	char		buf[BLCKSZ];
 	struct stat	st;
 	pg_crc32	crc;
@@ -1366,13 +1367,8 @@ calc_file_checksum(pgFile *file)
 			 strerror(errno));
 	}
 
-	for (;;)
+	while  ((read_len = fio_read(in, buf, sizeof(buf))) > 0)
 	{
-		read_len = fio_read(in, buf, sizeof(buf));
-
-		if(read_len == 0)
-			break;
-
 		/* update CRC */
 		COMP_TRADITIONAL_CRC32(crc, buf, read_len);
 
@@ -1380,7 +1376,15 @@ calc_file_checksum(pgFile *file)
 		file->read_size += read_len;
 	}
 
-	/* finish CRC calculation and store into pgFile */
+    errno_tmp = errno;
+    if (read_len < 0)
+    {
+		fio_close(in);
+		elog(ERROR, "cannot read backup mode file \"%s\": %s",
+			 file->path, strerror(errno_tmp));
+	}
+
+    /* finish CRC calculation and store into pgFile */
 	FIN_TRADITIONAL_CRC32(crc);
 	file->crc = crc;
 

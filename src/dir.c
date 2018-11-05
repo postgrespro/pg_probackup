@@ -157,13 +157,13 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, bool omit_symlink)
+pgFileNew(const char *path, bool omit_symlink, fio_location location)
 {
 	struct stat		st;
 	pgFile		   *file;
 
     /* stat the file */
-    if (fio_stat(path, &st, omit_symlink, FIO_BACKUP_HOST) < 0)
+    if (fio_stat(path, &st, omit_symlink, location) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno == ENOENT)
@@ -432,7 +432,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, false);
+	file = pgFileNew(root, false, FIO_LOCAL_HOST);
 	if (file == NULL)
 		return;
 
@@ -661,7 +661,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		join_path_components(child, parent->path, dent->d_name);
 
-		file = pgFileNew(child, omit_symlink);
+		file = pgFileNew(child, omit_symlink, FIO_LOCAL_HOST);
 		if (file == NULL)
 			continue;
 
@@ -795,7 +795,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	{
 		pgFile	   *dir;
 
-		dir = pgFileNew(path, false);
+		dir = pgFileNew(path, false, FIO_LOCAL_HOST);
 		parray_append(files, dir);
 	}
 
@@ -935,7 +935,6 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 	size_t		i;
 	char		backup_database_dir[MAXPGPATH],
 				to_path[MAXPGPATH];
-	sleep(30);
 	dirs = parray_new();
 	if (extract_tablespaces)
 	{

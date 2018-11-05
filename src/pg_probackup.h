@@ -505,7 +505,7 @@ extern bool dir_is_empty(const char *path);
 extern bool fileExists(const char *path,  fio_location location);
 extern size_t pgFileSize(const char *path);
 
-extern pgFile *pgFileNew(const char *path, bool omit_symlink);
+extern pgFile *pgFileNew(const char *path, bool omit_symlink, fio_location location);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);

@@ -9,7 +9,7 @@
  *-------------------------------------------------------------------------
  */
 
-
+#include "utils/parray.h"
 typedef void *Walfile;
 
 typedef enum
@@ -86,7 +86,7 @@ struct WalWriteMethod
  *						   not all those required for pg_receivewal)
  */
 WalWriteMethod *CreateWalDirectoryMethod(const char *basedir,
-						 int compression, bool sync);
+										 int compression, bool sync, parray* file_list);
 
 /* Cleanup routines for previously-created methods */
 void		FreeWalDirectoryMethod(void);

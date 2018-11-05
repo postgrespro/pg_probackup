@@ -45,6 +45,7 @@ typedef struct DirectoryMethodData
 	char	   *basedir;
 	int			compression;
 	bool		sync;
+	parray     *files_list;
 } DirectoryMethodData;
 static DirectoryMethodData *dir_data = NULL;
 
@@ -231,6 +232,8 @@ dir_close(Walfile f, WalCloseMethod method)
 
 	if (r == 0)
 	{
+		char const* file_path = NULL;
+
 		/* Build path to the current version of the file */
 		if (method == CLOSE_NORMAL && df->temp_suffix)
 		{
@@ -246,6 +249,7 @@ dir_close(Walfile f, WalCloseMethod method)
 					 dir_data->basedir, df->pathname,
 					 dir_data->compression > 0 ? ".gz" : "");
 			r = durable_rename(tmppath, tmppath2, progname);
+			file_path = tmppath2;
 		}
 		else if (method == CLOSE_UNLINK)
 		{
@@ -263,12 +267,19 @@ dir_close(Walfile f, WalCloseMethod method)
 			 * CLOSE_NO_RENAME. In this case, fsync the file and containing
 			 * directory if sync mode is requested.
 			 */
+			file_path =  df->fullpath;
 			if (dir_data->sync && !is_remote_agent)
 			{
 				r = fsync_fname(df->fullpath, false, progname);
 				if (r == 0)
 					r = fsync_parent_path(df->fullpath, progname);
 			}
+		}
+		if (file_path && dir_data->files_list)
+		{
+			pgFile*	file = pgFileNew(file_path, false, FIO_BACKUP_HOST);
+			Assert(file != NULL);
+			parray_append(dir_data->files_list, file);
 		}
 	}
 
@@ -343,7 +354,7 @@ dir_finish(void)
 
 
 WalWriteMethod *
-CreateWalDirectoryMethod(const char *basedir, int compression, bool sync)
+CreateWalDirectoryMethod(const char *basedir, int compression, bool sync, parray* files_list)
 {
 	WalWriteMethod *method;
 
@@ -362,6 +373,7 @@ CreateWalDirectoryMethod(const char *basedir, int compression, bool sync)
 	dir_data->compression = compression;
 	dir_data->basedir = pg_strdup(basedir);
 	dir_data->sync = sync;
+	dir_data->files_list = files_list;
 
 	return method;
 }
