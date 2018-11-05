@@ -61,6 +61,7 @@ typedef struct DirectoryMethodFile
 	char	   *temp_suffix;
 #ifdef HAVE_LIBZ
 	gzFile		gzfp;
+	int         gz_tmp;
 #endif
 } DirectoryMethodFile;
 
@@ -74,11 +75,12 @@ dir_getlasterror(void)
 static Walfile
 dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_size)
 {
-	static char tmppath[MAXPGPATH];
-	int			fd;
+	char tmppath[MAXPGPATH];
+	int			fd = -1;
 	DirectoryMethodFile *f;
 #ifdef HAVE_LIBZ
 	gzFile		gzfp = NULL;
+	int         gz_tmp = -1;
 #endif
 
 	snprintf(tmppath, sizeof(tmppath), "%s/%s%s%s",
@@ -92,17 +94,12 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 	 * does not do any system calls to fsync() to make changes permanent on
 	 * disk.
 	 */
-	fd = fio_open(tmppath, O_WRONLY | O_CREAT | PG_BINARY, FIO_BACKUP_HOST);
-	if (fd < 0)
-		return NULL;
-
 #ifdef HAVE_LIBZ
 	if (dir_data->compression > 0)
 	{
-		gzfp = gzdopen(fd, "wb");
+		gzfp = fio_gzopen(tmppath, "wb", &gz_tmp, FIO_BACKUP_HOST);
 		if (gzfp == NULL)
 		{
-			close(fd);
 			return NULL;
 		}
 
@@ -113,8 +110,13 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 			return NULL;
 		}
 	}
+	else
 #endif
-
+	{
+		fd = fio_open(tmppath, O_WRONLY | O_CREAT | PG_BINARY, FIO_BACKUP_HOST);
+		if (fd < 0)
+			return NULL;
+	}
 	/* Do pre-padding on non-compressed files */
 	if (pad_to_size && dir_data->compression == 0)
 	{
@@ -173,7 +175,10 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 	f = pg_malloc0(sizeof(DirectoryMethodFile));
 #ifdef HAVE_LIBZ
 	if (dir_data->compression > 0)
+	{
 		f->gzfp = gzfp;
+		f->gz_tmp = gz_tmp;
+	}
 #endif
 	f->fd = fd;
 	f->currpos = 0;
@@ -218,14 +223,14 @@ dir_close(Walfile f, WalCloseMethod method)
 {
 	int			r;
 	DirectoryMethodFile *df = (DirectoryMethodFile *) f;
-	static char tmppath[MAXPGPATH];
-	static char tmppath2[MAXPGPATH];
+	char tmppath[MAXPGPATH];
+	char tmppath2[MAXPGPATH];
 
 	Assert(f != NULL);
 
 #ifdef HAVE_LIBZ
 	if (dir_data->compression > 0)
-		r = gzclose(df->gzfp);
+		r = fio_gzclose(df->gzfp, df->fullpath, df->gz_tmp);
 	else
 #endif
 		r = fio_close(df->fd);
@@ -248,7 +253,7 @@ dir_close(Walfile f, WalCloseMethod method)
 			snprintf(tmppath2, sizeof(tmppath2), "%s/%s%s",
 					 dir_data->basedir, df->pathname,
 					 dir_data->compression > 0 ? ".gz" : "");
-			r = durable_rename(tmppath, tmppath2, progname);
+			r = fio_rename(tmppath, tmppath2, FIO_BACKUP_HOST);
 			file_path = tmppath2;
 		}
 		else if (method == CLOSE_UNLINK)
@@ -258,7 +263,7 @@ dir_close(Walfile f, WalCloseMethod method)
 					 dir_data->basedir, df->pathname,
 					 dir_data->compression > 0 ? ".gz" : "",
 					 df->temp_suffix ? df->temp_suffix : "");
-			r = unlink(tmppath);
+			r = fio_unlink(tmppath, FIO_BACKUP_HOST);
 		}
 		else
 		{
@@ -267,7 +272,7 @@ dir_close(Walfile f, WalCloseMethod method)
 			 * CLOSE_NO_RENAME. In this case, fsync the file and containing
 			 * directory if sync mode is requested.
 			 */
-			file_path =  df->fullpath;
+			file_path = df->fullpath;
 			if (dir_data->sync && !is_remote_agent)
 			{
 				r = fsync_fname(df->fullpath, false, progname);
@@ -315,7 +320,7 @@ static ssize_t
 dir_get_file_size(const char *pathname)
 {
 	struct stat statbuf;
-	static char tmppath[MAXPGPATH];
+	char tmppath[MAXPGPATH];
 
 	snprintf(tmppath, sizeof(tmppath), "%s/%s",
 			 dir_data->basedir, pathname);
@@ -329,7 +334,7 @@ dir_get_file_size(const char *pathname)
 static bool
 dir_existsfile(const char *pathname)
 {
-	static char tmppath[MAXPGPATH];
+	char tmppath[MAXPGPATH];
 
 	snprintf(tmppath, sizeof(tmppath), "%s/%s",
 			 dir_data->basedir, pathname);

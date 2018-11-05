@@ -3,6 +3,10 @@
 
 #include <stdio.h>
 
+#ifdef HAVE_LIBZ
+#include <zlib.h>
+#endif
+
 typedef enum
 {
 	FIO_OPEN,
@@ -27,7 +31,8 @@ typedef enum
 {
 	FIO_LOCAL_HOST,
 	FIO_DB_HOST,
-	FIO_BACKUP_HOST
+	FIO_BACKUP_HOST,
+	FIO_REMOTE_HOST
 } fio_location;
 
 #define FIO_FDMAX 64
@@ -81,6 +86,11 @@ extern int     fio_stat(char const* path, struct stat* st, bool follow_symlinks,
 
 extern FILE*   fio_open_stream(char const* name, fio_location location);
 extern int     fio_close_stream(FILE* f);
+
+#ifdef HAVE_LIBZ
+extern gzFile  fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location location);
+extern int     fio_gzclose(gzFile file, char const* path, int tmp_fd);
+#endif
 
 extern void    fio_transfer(void* addr, size_t value);
 

@@ -36,7 +36,8 @@ static bool fio_is_remote_fd(int fd)
 
 static bool fio_is_remote(fio_location location)
 {
-	return (location == FIO_BACKUP_HOST && is_remote_agent)
+	return location == FIO_REMOTE_HOST
+		|| (location == FIO_BACKUP_HOST && is_remote_agent)
 		|| (location == FIO_DB_HOST && !is_remote_agent && ssh_host != NULL);
 }
 
@@ -580,6 +581,61 @@ int fio_chmod(char const* path, int mode, fio_location location)
 		return chmod(path, mode);
 	}
 }
+
+#ifdef HAVE_LIBZ
+gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location location)
+{
+	gzFile file;
+	if (fio_is_remote(location))
+	{
+		int fd = mkstemp("gz.XXXXXX");
+		if (fd < 0)
+			return NULL;
+		*tmp_fd = fd;
+		file = gzdopen(fd, mode);
+	}
+	else
+	{
+		*tmp_fd = -1;
+		file = gzopen(path, mode);
+	}
+	return file;
+}
+
+int fio_gzclose(gzFile file, char const* path, int tmp_fd)
+{
+	if (tmp_fd >= 0)
+	{
+		off_t size;
+		void* buf;
+		int fd;
+
+		SYS_CHECK(gzflush(file, Z_FINISH));
+
+		size = lseek(tmp_fd, 0,  SEEK_END);
+		buf = malloc(size);
+
+		lseek(tmp_fd, 0, SEEK_SET);
+		IO_CHECK(read(tmp_fd, buf, size), size);
+
+		SYS_CHECK(gzclose(file)); /* should close tmp_fd */
+
+		fd = fio_open(path, O_RDWR|O_CREAT|O_TRUNC, FILE_PERMISSIONS);
+		if (fd < 0) {
+			free(buf);
+			return -1;
+		}
+		IO_CHECK(fio_write(fd, buf, size), size);
+		free(buf);
+		return fio_close(fd);
+	}
+	else
+	{
+		return gzclose(file);
+	}
+}
+#endif
+
 
 static void fio_send_file(int out, char const* path)
 {

@@ -989,7 +989,7 @@ copy_meta(const char *from_path, const char *to_path, bool unlink_on_error, fio_
 	if (stat(from_path, &st) == -1)
 	{
 		if (unlink_on_error)
-			unlink(to_path);
+			fio_unlink(to_path, location);
 		elog(ERROR, "Cannot stat file \"%s\": %s",
 			 from_path, strerror(errno));
 	}
@@ -997,7 +997,7 @@ copy_meta(const char *from_path, const char *to_path, bool unlink_on_error, fio_
 	if (fio_chmod(to_path, st.st_mode, location) == -1)
 	{
 		if (unlink_on_error)
-			unlink(to_path);
+			fio_unlink(to_path, location);
 		elog(ERROR, "Cannot change mode of file \"%s\": %s",
 			 to_path, strerror(errno));
 	}
@@ -1020,6 +1020,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #ifdef HAVE_LIBZ
 	char		gz_to_path[MAXPGPATH];
 	gzFile		gz_out = NULL;
+	int         gz_tmp = -1;
 #endif
 
 	/* open file for read */
@@ -1039,7 +1040,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
-		gz_out = gzopen(to_path_temp, PG_BINARY_W);
+		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, &gz_tmp, FIO_BACKUP_HOST);
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 compress_level, to_path_temp, get_gz_error(gz_out, errno));
@@ -1070,7 +1071,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		if (ferror(in))
 		{
 			errno_temp = errno;
-			unlink(to_path_temp);
+			fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 			elog(ERROR,
 				 "Cannot read source WAL file \"%s\": %s",
 				 from_path, strerror(errno_temp));
@@ -1084,7 +1085,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 				if (gzwrite(gz_out, buf, read_len) != read_len)
 				{
 					errno_temp = errno;
-					unlink(to_path_temp);
+					fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 					elog(ERROR, "Cannot write to compressed WAL file \"%s\": %s",
 						 to_path_temp, get_gz_error(gz_out, errno_temp));
 				}
@@ -1095,7 +1096,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 				if (fio_fwrite(out, buf, read_len) != read_len)
 				{
 					errno_temp = errno;
-					unlink(to_path_temp);
+					fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 					elog(ERROR, "Cannot write to WAL file \"%s\": %s",
 						 to_path_temp, strerror(errno_temp));
 				}
@@ -1109,10 +1110,10 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #ifdef HAVE_LIBZ
 	if (is_compress)
 	{
-		if (gzclose(gz_out) != 0)
+		if (fio_gzclose(gz_out, to_path_temp, gz_tmp) != 0)
 		{
 			errno_temp = errno;
-			unlink(to_path_temp);
+			fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
 				 to_path_temp, get_gz_error(gz_out, errno_temp));
 		}
@@ -1124,7 +1125,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			fio_fclose(out))
 		{
 			errno_temp = errno;
-			unlink(to_path_temp);
+			fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 			elog(ERROR, "Cannot write WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno_temp));
 		}
@@ -1133,7 +1134,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	if (fclose(in))
 	{
 		errno_temp = errno;
-		unlink(to_path_temp);
+		fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot close source WAL file \"%s\": %s",
 			 from_path, strerror(errno_temp));
 	}
@@ -1144,7 +1145,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	if (fio_rename(to_path_temp, to_path_p, FIO_BACKUP_HOST) < 0)
 	{
 		errno_temp = errno;
-		unlink(to_path_temp);
+		fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot rename WAL file \"%s\" to \"%s\": %s",
 			 to_path_temp, to_path_p, strerror(errno_temp));
 	}
@@ -1229,7 +1230,7 @@ get_wal_file(const char *from_path, const char *to_path)
 			if (read_len != sizeof(buf) && !gzeof(gz_in))
 			{
 				errno_temp = errno;
-				unlink(to_path_temp);
+				fio_unlink(to_path_temp, FIO_DB_HOST);
 				elog(ERROR, "Cannot read compressed WAL file \"%s\": %s",
 					 gz_from_path, get_gz_error(gz_in, errno_temp));
 			}
@@ -1241,7 +1242,7 @@ get_wal_file(const char *from_path, const char *to_path)
 			if (ferror(in))
 			{
 				errno_temp = errno;
-				unlink(to_path_temp);
+				fio_unlink(to_path_temp, FIO_DB_HOST);
 				elog(ERROR, "Cannot read source WAL file \"%s\": %s",
 					 from_path, strerror(errno_temp));
 			}
@@ -1252,7 +1253,7 @@ get_wal_file(const char *from_path, const char *to_path)
 			if (fio_fwrite(out, buf, read_len) != read_len)
 			{
 				errno_temp = errno;
-				unlink(to_path_temp);
+				fio_unlink(to_path_temp, FIO_DB_HOST);
 				elog(ERROR, "Cannot write to WAL file \"%s\": %s", to_path_temp,
 					 strerror(errno_temp));
 			}
@@ -1277,7 +1278,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		fio_fclose(out))
 	{
 		errno_temp = errno;
-		unlink(to_path_temp);
+		fio_unlink(to_path_temp, FIO_DB_HOST);
 		elog(ERROR, "Cannot write WAL file \"%s\": %s",
 			 to_path_temp, strerror(errno_temp));
 	}
@@ -1288,7 +1289,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		if (gzclose(gz_in) != 0)
 		{
 			errno_temp = errno;
-			unlink(to_path_temp);
+			fio_unlink(to_path_temp, FIO_DB_HOST);
 			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
 				 gz_from_path, get_gz_error(gz_in, errno_temp));
 		}
@@ -1299,7 +1300,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		if (fclose(in))
 		{
 			errno_temp = errno;
-			unlink(to_path_temp);
+			fio_unlink(to_path_temp, FIO_DB_HOST);
 			elog(ERROR, "Cannot close source WAL file \"%s\": %s",
 				 from_path, strerror(errno_temp));
 		}
@@ -1311,7 +1312,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	if (fio_rename(to_path_temp, to_path, FIO_DB_HOST) < 0)
 	{
 		errno_temp = errno;
-		unlink(to_path_temp);
+		fio_unlink(to_path_temp, FIO_DB_HOST);
 		elog(ERROR, "Cannot rename WAL file \"%s\" to \"%s\": %s",
 			 to_path_temp, to_path, strerror(errno_temp));
 	}
