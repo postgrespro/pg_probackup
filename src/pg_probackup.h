@@ -57,6 +57,10 @@
 #define XID_FMT "%u"
 #endif
 
+/* Check if an XLogRecPtr value is pointed to 0 offset */
+#define XRecOffIsNull(xlrp) \
+		((xlrp) % XLOG_BLCKSZ == 0)
+
 typedef enum CompressAlg
 {
 	NOT_DEFINED_COMPRESS = 0,

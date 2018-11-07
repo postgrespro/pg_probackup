@@ -119,7 +119,7 @@ writeControlFile(ControlFileData *ControlFile, char *path)
 
 	/* copy controlFileSize */
 	buffer = pg_malloc(ControlFileSize);
-	memcpy(buffer, &ControlFile, sizeof(ControlFileData));
+	memcpy(buffer, ControlFile, sizeof(ControlFileData));
 
 	/* Write pg_control */
 	unlink(path);
@@ -136,8 +136,8 @@ writeControlFile(ControlFileData *ControlFile, char *path)
 	if (fsync(fd) != 0)
 		elog(ERROR, "Failed to fsync file: %s", path);
 
-	pg_free(buffer);
 	close(fd);
+	pg_free(buffer);
 }
 
 /*
@@ -290,9 +290,7 @@ get_data_checksum_version(bool safe)
 	return ControlFile.data_checksum_version;
 }
 
-/* MinRecoveryPoint 'as-is' is not to be trusted
- * Use STOP LSN instead
- */
+/* MinRecoveryPoint 'as-is' is not to be trusted */
 void
 set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn)
 {
@@ -301,19 +299,20 @@ set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_ba
 	size_t      size;
 	char		fullpath[MAXPGPATH];
 
-	elog(LOG, "Setting minRecPoint to STOP LSN: %X/%X",
-		(uint32) (stop_backup_lsn  >> 32),
-		(uint32) stop_backup_lsn);
-
-	/* Path to pg_control in backup */
-	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
-
-	/* First fetch file... */
-	buffer = slurpFile(backup_path, XLOG_CONTROL_FILE, &size, false);
+	/* First fetch file content */
+	buffer = slurpFile(pgdata, XLOG_CONTROL_FILE, &size, false);
 	if (buffer == NULL)
 		elog(ERROR, "ERROR");
 
 	digestControlFile(&ControlFile, buffer, size);
+
+	elog(LOG, "Current minRecPoint %X/%X",
+		(uint32) (ControlFile.minRecoveryPoint  >> 32),
+		(uint32) ControlFile.minRecoveryPoint);
+
+	elog(LOG, "Setting minRecPoint to %X/%X",
+		(uint32) (stop_backup_lsn  >> 32),
+		(uint32) stop_backup_lsn);
 
 	ControlFile.minRecoveryPoint = stop_backup_lsn;
 
@@ -327,7 +326,8 @@ set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_ba
 	/* paranoia */
 	checkControlFile(&ControlFile);
 
-	/* update pg_control */
+	/* overwrite pg_control */
+	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
 	writeControlFile(&ControlFile, fullpath);
 
 	/* Update pg_control checksum in backup_list */

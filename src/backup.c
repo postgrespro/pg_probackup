@@ -756,28 +756,25 @@ do_backup_instance(void)
 		parray_free(prev_backup_filelist);
 	}
 
-	/* Copy pg_control in case of backup from replica >= 9.6 */
+	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
+	 * First we must find pg_control in backup_files_list.
+	 */
 	if (current.from_replica && !exclusive_backup)
 	{
+		char		pg_control_path[MAXPGPATH];
+
+		snprintf(pg_control_path, sizeof(pg_control_path), "%s/%s", pgdata, "global/pg_control");
+
 		for (i = 0; i < parray_num(backup_files_list); i++)
 		{
 			pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
 
-			if (strcmp(tmp_file->name, "pg_control") == 0)
+			if (strcmp(tmp_file->path, pg_control_path) == 0)
 			{
 				pg_control = tmp_file;
 				break;
 			}
 		}
-
-		if (!pg_control)
-			elog(ERROR, "Failed to locate pg_control in copied files");
-
-		if (is_remote_backup)
-			remote_copy_file(NULL, pg_control);
-		else
-			if (!copy_file(pgdata, database_path, pg_control))
-					elog(ERROR, "Failed to copy pg_control");
 	}
 
 
@@ -1160,9 +1157,6 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 		 */
 		pg_switch_wal(conn);
 
-	//elog(INFO, "START LSN: %X/%X",
-	//	(uint32) (backup->start_lsn >> 32), (uint32) (backup->start_lsn));
-
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 		/* In PAGE mode wait for current segment... */
 			wait_wal_lsn(backup->start_lsn, true, false);
@@ -1175,8 +1169,10 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 		/* ...for others wait for previous segment */
 		wait_wal_lsn(backup->start_lsn, true, true);
 
-	/* Wait for start_lsn to be replayed by replica */
-	if (backup->from_replica)
+	/* In case of backup from replica for PostgreSQL 9.5
+	 * wait for start_lsn to be replayed by replica
+	 */
+	if (backup->from_replica && exclusive_backup)
 		wait_replica_wal_lsn(backup->start_lsn, true);
 }
 
@@ -1526,7 +1522,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	GetXLogFileName(wal_segment, tli, targetSegNo, xlog_seg_size);
 
 	/*
-	 * In pg_start_backup we wait for 'lsn' in 'pg_wal' directory iff it is
+	 * In pg_start_backup we wait for 'lsn' in 'pg_wal' directory if it is
 	 * stream and non-page backup. Page backup needs archived WAL files, so we
 	 * wait for 'lsn' in archive 'wal' directory for page backups.
 	 *
@@ -1547,7 +1543,12 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	{
 		join_path_components(wal_segment_path, arclog_path, wal_segment);
 		wal_segment_dir = arclog_path;
-		timeout = archive_timeout;
+
+		if (archive_timeout > 0)
+			timeout = archive_timeout;
+		else
+			timeout = ARCHIVE_TIMEOUT_DEFAULT;
+
 	}
 
 	if (wait_prev_segment)
@@ -1780,14 +1781,29 @@ pg_stop_backup(pgBackup *backup)
 			 * Stop the non-exclusive backup. Besides stop_lsn it returns from
 			 * pg_stop_backup(false) copy of the backup label and tablespace map
 			 * so they can be written to disk by the caller.
+			 * In case of backup from replica >= 9.6 we do not trust minRecPoint
+			 * and stop_backup LSN, so we use latest replayed LSN as STOP LSN.
 			 */
-			stop_backup_query = "SELECT"
-								" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
-								" current_timestamp(0)::timestamptz,"
-								" lsn,"
-								" labelfile,"
-								" spcmapfile"
-								" FROM pg_catalog.pg_stop_backup(false)";
+			if (current.from_replica)
+				stop_backup_query = "SELECT"
+									" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
+									" current_timestamp(0)::timestamptz,"
+#if PG_VERSION_NUM >= 100000
+									" pg_catalog.pg_last_wal_replay_lsn(),"
+#else
+									" pg_catalog.pg_last_xlog_replay_location(),"
+#endif
+									" labelfile,"
+									" spcmapfile"
+									" FROM pg_catalog.pg_stop_backup(false)";
+			else
+				stop_backup_query = "SELECT"
+									" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
+									" current_timestamp(0)::timestamptz,"
+									" lsn,"
+									" labelfile,"
+									" spcmapfile"
+									" FROM pg_catalog.pg_stop_backup(false)";
 
 		}
 		else
@@ -1873,14 +1889,14 @@ pg_stop_backup(pgBackup *backup)
 		/* Calculate LSN */
 		stop_backup_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
 
-		//if (!XRecOffIsValid(stop_backup_lsn))
-		//{
-		//	stop_backup_lsn = restore_lsn;
-		//}
-
 		if (!XRecOffIsValid(stop_backup_lsn))
-			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
-				 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
+		{
+			if (XRecOffIsNull(stop_backup_lsn))
+				stop_backup_lsn = stop_backup_lsn + SizeOfXLogLongPHD;
+			else
+				elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
+					 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
+		}
 
 		/* Write backup_label and tablespace_map */
 		if (!exclusive_backup)
