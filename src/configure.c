@@ -257,14 +257,14 @@ readBackupCatalogConfigFile(void)
 		{ 's', 0, "master-port",			&(config->master_port),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-db",				&(config->master_db),			SOURCE_FILE_STRICT },
 		{ 's', 0, "master-user",			&(config->master_user),			SOURCE_FILE_STRICT },
-		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
+		{ 'u', 0, "replica-timeout",		&(config->replica_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		/* other options */
 		{ 'U', 0, "system-identifier",		&(config->system_identifier),	SOURCE_FILE_STRICT },
 #if PG_VERSION_NUM >= 110000
 		{'u', 0, "xlog-seg-size",			&config->xlog_seg_size,			SOURCE_FILE_STRICT},
 #endif
 		/* archive options */
-		{ 'u', 0, "archive-timeout",		&(config->archive_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_MS },
+		{ 'u', 0, "archive-timeout",		&(config->archive_timeout),		SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
 		{0}
 	};
 
