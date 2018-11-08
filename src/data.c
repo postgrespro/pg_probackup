@@ -449,7 +449,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 		const char *errormsg = NULL;
 
 		/* The page was not truncated, so we need to compress it */
-		header.compressed_size = do_compress(compressed_page, BLCKSZ,
+		header.compressed_size = do_compress(compressed_page, sizeof(compressed_page),
 											 page, BLCKSZ, calg, clevel,
 											 &errormsg);
 		/* Something went wrong and errormsg was assigned, throw a warning */
@@ -459,7 +459,6 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 
 		file->compress_alg = calg;
 		file->read_size += BLCKSZ;
-		Assert (header.compressed_size <= BLCKSZ);
 
 		/* The page was successfully compressed. */
 		if (header.compressed_size > 0 && header.compressed_size < BLCKSZ)
