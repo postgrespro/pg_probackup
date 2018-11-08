@@ -28,6 +28,7 @@ typedef struct
 	bool		corrupted;
 	XLogRecPtr	stop_lsn;
 	uint32		checksum_version;
+	uint32		backup_version;
 
 	/*
 	 * Return value from the thread.
@@ -92,11 +93,6 @@ pgBackupValidate(pgBackup *backup)
 		pg_atomic_clear_flag(&file->lock);
 	}
 
-	/*
-	 * We use program version to calculate checksum in pgBackupValidateFiles()
-	 */
-	validate_backup_version = parse_program_version(backup->program_version);
-
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (validate_files_arg *)
@@ -111,6 +107,7 @@ pgBackupValidate(pgBackup *backup)
 		arg->corrupted = false;
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
+		arg->backup_version = parse_program_version(backup->program_version);
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -233,7 +230,9 @@ pgBackupValidateFiles(void *arg)
 			/* validate relation blocks */
 			if (file->is_datafile)
 			{
-				if (!check_file_pages(file, arguments->stop_lsn, arguments->checksum_version))
+				if (!check_file_pages(file, arguments->stop_lsn,
+									  arguments->checksum_version,
+									  arguments->backup_version))
 					arguments->corrupted = true;
 			}
 		}

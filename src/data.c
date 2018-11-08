@@ -57,7 +57,7 @@ zlib_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
  */
 static int32
 do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
-			CompressAlg alg, int level)
+			CompressAlg alg, int level, const char **errormsg)
 {
 	switch (alg)
 	{
@@ -66,7 +66,13 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			return -1;
 #ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
-			return zlib_compress(dst, dst_size, src, src_size, level);
+			{
+				int32		ret;
+				ret = zlib_compress(dst, dst_size, src, src_size, level);
+				if (ret != Z_OK && errormsg)
+					*errormsg = zError(ret);
+				return ret;
+			}
 #endif
 		case PGLZ_COMPRESS:
 			return pglz_compress(src, src_size, dst, PGLZ_strategy_always);
@@ -81,7 +87,7 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
  */
 static int32
 do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
-			  CompressAlg alg)
+			  CompressAlg alg, const char **errormsg)
 {
 	switch (alg)
 	{
@@ -90,7 +96,13 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			return -1;
 #ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
-			return zlib_decompress(dst, dst_size, src, src_size);
+			{
+				int32		ret;
+				ret = zlib_decompress(dst, dst_size, src, src_size);
+				if (ret != Z_OK && errormsg)
+					*errormsg = zError(ret);
+				return ret;
+			}
 #endif
 		case PGLZ_COMPRESS:
 			return pglz_decompress(src, src_size, dst, dst_size);
@@ -110,7 +122,7 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
  * But at least we will do this check only for pages which will no pass validation step.
  */
 static bool
-page_may_be_compressed(Page page, CompressAlg alg)
+page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 {
 	PageHeader	phdr;
 
@@ -127,7 +139,7 @@ page_may_be_compressed(Page page, CompressAlg alg)
 		  phdr->pd_special == MAXALIGN(phdr->pd_special)))
 	{
 		/* ... end only if it is invalid, then do more checks */
-		if (parse_program_version(current.program_version) >= 20023)
+		if (backup_version >= 20023)
 		{
 			/* Versions 2.0.23 and higher don't have such bug */
 			return false;
@@ -434,9 +446,16 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	}
 	else
 	{
+		const char *errormsg = NULL;
+
 		/* The page was not truncated, so we need to compress it */
 		header.compressed_size = do_compress(compressed_page, BLCKSZ,
-											 page, BLCKSZ, calg, clevel);
+											 page, BLCKSZ, calg, clevel,
+											 &errormsg);
+		/* Something went wrong and errormsg was assigned, throw a warning */
+		if (header.compressed_size < 0 && errormsg != NULL)
+			elog(WARNING, "An error occured during compressing block %u of file \"%s\": %s",
+				 blknum, file->path, errormsg);
 
 		file->compress_alg = calg;
 		file->read_size += BLCKSZ;
@@ -473,7 +492,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 
 		fclose(in);
 		fclose(out);
-		elog(ERROR, "File: %s, cannot write backup at block %u : %s",
+		elog(ERROR, "File: %s, cannot write backup at block %u: %s",
 			 file->path, blknum, strerror(errno_tmp));
 	}
 
@@ -661,7 +680,7 @@ backup_data_file(backup_files_arg* arguments,
  */
 void
 restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
-				  bool write_header)
+				  bool write_header, uint32 backup_version)
 {
 	FILE	   *in = NULL;
 	FILE	   *out = NULL;
@@ -766,14 +785,19 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 				blknum, file->path, read_len, header.compressed_size);
 
 		if (header.compressed_size != BLCKSZ
-			|| page_may_be_compressed(compressed_page.data, file->compress_alg))
+			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
+									  backup_version))
 		{
 			int32		uncompressed_size = 0;
+			const char *errormsg = NULL;
 
 			uncompressed_size = do_decompress(page.data, BLCKSZ,
 											  compressed_page.data,
 											  header.compressed_size,
-											  file->compress_alg);
+											  file->compress_alg, &errormsg);
+			if (uncompressed_size < 0 && errormsg != NULL)
+				elog(WARNING, "An error occured during decompressing block %u of file \"%s\": %s",
+					 blknum, file->path, errormsg);
 
 			if (uncompressed_size != BLCKSZ)
 				elog(ERROR, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
@@ -1578,7 +1602,8 @@ validate_one_page(Page page, pgFile *file,
 
 /* Valiate pages of datafile in backup one by one */
 bool
-check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
+check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
+				 uint32 backup_version)
 {
 	size_t		read_len = 0;
 	bool		is_valid = true;
@@ -1645,14 +1670,20 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 				blknum, file->path, read_len, header.compressed_size);
 
 		if (header.compressed_size != BLCKSZ
-			|| page_may_be_compressed(compressed_page.data, file->compress_alg))
+			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
+									  backup_version))
 		{
 			int32		uncompressed_size = 0;
+			const char *errormsg = NULL;
 
 			uncompressed_size = do_decompress(page.data, BLCKSZ,
 											  compressed_page.data,
 											  header.compressed_size,
-											  file->compress_alg);
+											  file->compress_alg,
+											  &errormsg);
+			if (uncompressed_size < 0 && errormsg != NULL)
+				elog(WARNING, "An error occured during decompressing block %u of file \"%s\": %s",
+					 blknum, file->path, errormsg);
 
 			if (uncompressed_size != BLCKSZ)
 			{

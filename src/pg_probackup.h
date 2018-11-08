@@ -517,7 +517,8 @@ extern bool backup_data_file(backup_files_arg* arguments,
 							 CompressAlg calg, int clevel);
 extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
-							  bool write_header);
+							  bool write_header,
+							  uint32 backup_version);
 extern bool copy_file(const char *from_root, const char *to_root, pgFile *file);
 extern void move_file(const char *from_root, const char *to_root, pgFile *file);
 extern void push_wal_file(const char *from_path, const char *to_path,
@@ -526,8 +527,8 @@ extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern bool calc_file_checksum(pgFile *file);
 
-extern bool check_file_pages(pgFile* file,
-							 XLogRecPtr stop_lsn, uint32 checksum_version);
+extern bool check_file_pages(pgFile* file, XLogRecPtr stop_lsn,
+							 uint32 checksum_version, uint32 backup_version);
 
 /* parsexlog.c */
 extern void extractPageMap(const char *archivedir,

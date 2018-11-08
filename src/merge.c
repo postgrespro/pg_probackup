@@ -457,14 +457,16 @@ merge_files(void *arg)
 					file->path = to_path_tmp;
 
 					/* Decompress first/target file */
-					restore_data_file(tmp_file_path, file, false, false);
+					restore_data_file(tmp_file_path, file, false, false,
+									  parse_program_version(to_backup->program_version));
 
 					file->path = prev_path;
 				}
 				/* Merge second/source file with first/target file */
 				restore_data_file(tmp_file_path, file,
 								  from_backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
-								  false);
+								  false,
+								  parse_program_version(from_backup->program_version));
 
 				elog(VERBOSE, "Compress file and save it to the directory \"%s\"",
 					 argument->to_root);
@@ -496,7 +498,8 @@ merge_files(void *arg)
 				/* We can merge in-place here */
 				restore_data_file(to_path_tmp, file,
 								  from_backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
-								  true);
+								  true,
+								  parse_program_version(from_backup->program_version));
 
 				/*
 				 * We need to calculate write_size, restore_data_file() doesn't
