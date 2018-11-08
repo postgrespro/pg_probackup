@@ -3,7 +3,7 @@
  * pgut.h
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2017, Postgres Professional
+ * Portions Copyright (c) 2017-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -115,7 +115,7 @@ extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams,
 							  const char **params);
 extern PGresult *pgut_execute_extended(PGconn* conn, const char *query, int nParams,
 							  const char **params, bool text_result, bool ok_error);
-extern PGresult *pgut_execute_parallel(PGconn* conn, PGcancel* thread_cancel_conn, 
+extern PGresult *pgut_execute_parallel(PGconn* conn, PGcancel* thread_cancel_conn,
 							  const char *query, int nParams,
 							  const char **params, bool text_result);
 extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int elevel);

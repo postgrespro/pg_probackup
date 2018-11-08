@@ -3,7 +3,7 @@
  * data.c: utils to parse and backup data pages
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -417,7 +417,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	BackupPageHeader header;
 	size_t		write_buffer_size = sizeof(header);
 	char		write_buffer[BLCKSZ+sizeof(header)];
-	char		compressed_page[BLCKSZ];
+	char		compressed_page[BLCKSZ*2]; /* compressed page may require more space than uncompressed */
 
 	if(page_state == SkipCurrentPage)
 		return;
@@ -444,7 +444,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 		Assert (header.compressed_size <= BLCKSZ);
 
 		/* The page was successfully compressed. */
-		if (header.compressed_size > 0)
+		if (header.compressed_size > 0 && header.compressed_size < BLCKSZ)
 		{
 			memcpy(write_buffer, &header, sizeof(header));
 			memcpy(write_buffer + sizeof(header),

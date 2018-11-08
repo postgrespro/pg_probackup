@@ -3,7 +3,7 @@
  * pgut.c
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2017, Postgres Professional
+ * Portions Copyright (c) 2017-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -1656,8 +1656,8 @@ pgut_disconnect(PGconn *conn)
 
 
 PGresult *
-pgut_execute_parallel(PGconn* conn, 
-					  PGcancel* thread_cancel_conn, const char *query, 
+pgut_execute_parallel(PGconn* conn,
+					  PGcancel* thread_cancel_conn, const char *query,
 					  int nParams, const char **params,
 					  bool text_result)
 {

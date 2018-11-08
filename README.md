@@ -7,7 +7,7 @@ The utility is compatible with:
 
 `PTRACK` backup support provided via following options:
 * vanilla PostgreSQL compiled with ptrack patch. Currently there are patches for [PostgreSQL 9.6](https://gist.githubusercontent.com/gsmol/5b615c971dfd461c76ef41a118ff4d97/raw/e471251983f14e980041f43bea7709b8246f4178/ptrack_9.6.6_v1.5.patch) and [PostgreSQL 10](https://gist.githubusercontent.com/gsmol/be8ee2a132b88463821021fd910d960e/raw/de24f9499f4f314a4a3e5fae5ed4edb945964df8/ptrack_10.1_v1.5.patch)
-* Postgres Pro Standard 9.5, 9.6, 10
+* Postgres Pro Standard 9.5, 9.6, 10, 11
 * Postgres Pro Enterprise 9.5, 9.6, 10
 
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
@@ -38,7 +38,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 `pg_probackup` currently has the following limitations:
 * Creating backups from a remote server is currently not supported.
-* The server from which the backup was taken and the restored server must be compatible by the [block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#guc-block-size) and [wal_block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#guc-wal-block-size) parameters and have the same major release number.
+* The server from which the backup was taken and the restored server must be compatible by the [block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-BLOCK-SIZE) and [wal_block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number.
 * Microsoft Windows operating system is not supported.
 * Configuration files outside of PostgreSQL data directory are not included into the backup and should be backed up separately.
 
@@ -85,7 +85,7 @@ Currently the latest documentation can be found at [Postgres Pro Enterprise docu
 
 ## Licence
 
-This module available under the same license as [PostgreSQL](https://www.postgresql.org/about/licence/).
+This module available under the [license](LICENSE) similar to [PostgreSQL](https://www.postgresql.org/about/licence/).
 
 ## Feedback
 
