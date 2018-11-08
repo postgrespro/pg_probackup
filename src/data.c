@@ -127,8 +127,7 @@ page_may_be_compressed(Page page, CompressAlg alg)
 		  phdr->pd_special == MAXALIGN(phdr->pd_special)))
 	{
 		/* ... end only if it is invalid, then do more checks */
-		int major, middle, minor;
-		if ( parse_program_version(current.program_version) >= 20023)
+		if (parse_program_version(current.program_version) >= 20023)
 		{
 			/* Versions 2.0.23 and higher don't have such bug */
 			return false;
