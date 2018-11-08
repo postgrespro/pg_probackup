@@ -99,6 +99,55 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 	return -1;
 }
 
+
+#define ZLIB_MAGIC 0x78
+
+/*
+ * Before version 2.0.23 there was a bug in pro_backup that pages which compressed
+ * size is exactly the same as original size are not treated as compressed.
+ * This check tries to detect and decompress such pages.
+ * There is no 100% criteria to determine whether page is compressed or not.
+ * But at least we will do this check only for pages which will no pass validation step.
+ */
+static bool
+page_may_be_compressed(Page page, CompressAlg alg)
+{
+	PageHeader	phdr;
+
+	phdr = (PageHeader) page;
+
+	/* First check if page header is valid (it seems to be fast enough check) */
+	if (!(PageGetPageSize(phdr) == BLCKSZ &&
+		  PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
+		  (phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
+		  phdr->pd_lower >= SizeOfPageHeaderData &&
+		  phdr->pd_lower <= phdr->pd_upper &&
+		  phdr->pd_upper <= phdr->pd_special &&
+		  phdr->pd_special <= BLCKSZ &&
+		  phdr->pd_special == MAXALIGN(phdr->pd_special)))
+	{
+		/* ... end only if it is invalid, then do more checks */
+		int major, middle, minor;
+		if ( parse_program_version(current.program_version) >= 20023)
+		{
+			/* Versions 2.0.23 and higher don't have such bug */
+			return false;
+		}
+#ifdef HAVE_LIBZ
+		/* For zlib we can check page magic:
+		 * https://stackoverflow.com/questions/9050260/what-does-a-zlib-header-look-like
+		 */
+		if (alg == ZLIB_COMPRESS && *(char*)page != ZLIB_MAGIC)
+		{
+			return false;
+		}
+#endif
+		/* otherwize let's try to decompress the page */
+		return true;
+	}
+	return false;
+}
+
 /*
  * When copying datafiles to backup we validate and compress them block
  * by block. Thus special header is required for each data block.
@@ -717,7 +766,8 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 
-		if (header.compressed_size != BLCKSZ)
+		if (header.compressed_size != BLCKSZ
+			|| page_may_be_compressed(compressed_page.data, file->compress_alg))
 		{
 			int32		uncompressed_size = 0;
 
@@ -1595,7 +1645,8 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 
-		if (header.compressed_size != BLCKSZ)
+		if (header.compressed_size != BLCKSZ
+			|| page_may_be_compressed(compressed_page.data, file->compress_alg))
 		{
 			int32		uncompressed_size = 0;
 
@@ -1605,9 +1656,15 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version)
 											  file->compress_alg);
 
 			if (uncompressed_size != BLCKSZ)
+			{
+				if (header.compressed_size == BLCKSZ)
+				{
+					is_valid = false;
+					continue;
+				}
 				elog(ERROR, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
 					 file->path, uncompressed_size);
-
+			}
 			if (validate_one_page(page.data, file, blknum,
 				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
 				is_valid = false;
