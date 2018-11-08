@@ -1716,6 +1716,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 	}
 
 	FIN_FILE_CRC32(use_crc32c, crc);
+	fclose(in);
 
 	if (crc != file->crc)
 	{
