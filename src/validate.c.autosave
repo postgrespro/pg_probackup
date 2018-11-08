@@ -35,6 +35,21 @@ typedef struct
 	int			ret;
 } validate_files_arg;
 
+if (is_absolute_path(host))
+	if (hostaddr && *hostaddr)
+		printf(_("You are connected to database \"%s\" as user \"%s\" on address \"%s\" at port \"%s\".\n"),
+			   db, PQuser(pset.db), hostaddr, PQport(pset.db));
+	else
+		printf(_("You are connected to database \"%s\" as user \"%s\" via socket in \"%s\" at port \"%s\".\n"),
+			   db, PQuser(pset.db), host, PQport(pset.db));
+else
+	if (hostaddr && *hostaddr && strcmp(host, hostaddr) != 0)
+		printf(_("You are connected to database \"%s\" as user \"%s\" on host \"%s\" (address \"%s\") at port \"%s\".\n"),
+			   db, PQuser(pset.db), host, hostaddr, PQport(pset.db));
+	else
+		printf(_("You are connected to database \"%s\" as user \"%s\" on host \"%s\" at port \"%s\".\n"),
+			   db, PQuser(pset.db), host, PQport(pset.db));
+
 /*
  * Validate backup files.
  */
