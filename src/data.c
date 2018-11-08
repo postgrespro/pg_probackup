@@ -69,7 +69,7 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			{
 				int32		ret;
 				ret = zlib_compress(dst, dst_size, src, src_size, level);
-				if (ret != Z_OK && errormsg)
+				if (ret < Z_OK && errormsg)
 					*errormsg = zError(ret);
 				return ret;
 			}
@@ -99,7 +99,7 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			{
 				int32		ret;
 				ret = zlib_decompress(dst, dst_size, src, src_size);
-				if (ret != Z_OK && errormsg)
+				if (ret < Z_OK && errormsg)
 					*errormsg = zError(ret);
 				return ret;
 			}
