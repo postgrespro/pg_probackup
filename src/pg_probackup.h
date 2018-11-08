@@ -65,6 +65,28 @@ typedef enum CompressAlg
 	ZLIB_COMPRESS,
 } CompressAlg;
 
+#define INIT_FILE_CRC32(use_crc32c, crc) \
+do { \
+	if (use_crc32c) \
+		INIT_CRC32C(crc); \
+	else \
+		INIT_TRADITIONAL_CRC32(crc); \
+} while (0)
+#define COMP_FILE_CRC32(use_crc32c, crc, data, len) \
+do { \
+	if (use_crc32c) \
+		COMP_CRC32C((crc), (data), (len)); \
+	else \
+		COMP_TRADITIONAL_CRC32(crc, data, len); \
+} while (0)
+#define FIN_FILE_CRC32(use_crc32c, crc) \
+do { \
+	if (use_crc32c) \
+		FIN_CRC32C(crc); \
+	else \
+		FIN_TRADITIONAL_CRC32(crc); \
+} while (0)
+
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
 {
@@ -339,6 +361,7 @@ extern bool exclusive_backup;
 
 /* restore options */
 extern bool restore_as_replica;
+extern bool skip_block_validation;
 
 /* delete options */
 extern bool		delete_wal;
@@ -527,9 +550,9 @@ extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern bool calc_file_checksum(pgFile *file);
 
-extern bool check_file_pages(pgFile* file, XLogRecPtr stop_lsn,
+extern bool check_file_pages(pgFile* file,
+							 XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
-
 /* parsexlog.c */
 extern void extractPageMap(const char *archivedir,
 						   TimeLineID tli, uint32 seg_size,

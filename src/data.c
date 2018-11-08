@@ -1601,12 +1601,14 @@ validate_one_page(Page page, pgFile *file,
 
 /* Valiate pages of datafile in backup one by one */
 bool
-check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
-				 uint32 backup_version)
+check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
+				 uint32 checksum_version, uint32 backup_version)
 {
 	size_t		read_len = 0;
 	bool		is_valid = true;
 	FILE		*in;
+	pg_crc32	crc;
+	bool use_crc32c = (backup_version <= 20021);
 
 	elog(VERBOSE, "validate relation blocks for file %s", file->name);
 
@@ -1622,6 +1624,9 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 		elog(ERROR, "cannot open file \"%s\": %s",
 			 file->path, strerror(errno));
 	}
+
+	/* calc CRC of backup file */
+	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* read and validate pages one by one */
 	while (true)
@@ -1647,6 +1652,8 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 					 blknum, file->path, strerror(errno_tmp));
 		}
 
+		COMP_FILE_CRC32(use_crc32c, crc, &header, read_len);
+
 		if (header.block < blknum)
 			elog(ERROR, "backup is broken at file->path %s block %u",
 				 file->path, blknum);
@@ -1667,6 +1674,8 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 		if (read_len != MAXALIGN(header.compressed_size))
 			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
 				blknum, file->path, read_len, header.compressed_size);
+
+		COMP_FILE_CRC32(use_crc32c, crc, compressed_page.data, read_len);
 
 		if (header.compressed_size != BLCKSZ
 			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
@@ -1704,6 +1713,15 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
 				is_valid = false;
 		}
+	}
+
+	FIN_FILE_CRC32(use_crc32c, crc);
+
+	if (crc != file->crc)
+	{
+		elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+				file->path, file->crc, crc);
+		is_valid = false;
 	}
 
 	return is_valid;

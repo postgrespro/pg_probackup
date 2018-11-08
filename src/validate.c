@@ -208,31 +208,41 @@ pgBackupValidateFiles(void *arg)
 		}
 
 		/*
-		 * Pre 2.0.22 we use CRC-32C, but in newer version of pg_probackup we
-		 * use CRC-32.
-		 *
-		 * pg_control stores its content and checksum of the content, calculated
-		 * using CRC-32C. If we calculate checksum of the whole pg_control using
-		 * CRC-32C we get same checksum constantly. It might be because of the
-		 * CRC-32C algorithm.
-		 * To avoid this problem we need to use different algorithm, CRC-32 in
-		 * this case.
+		 * If option skip-block-validation is set, compute only file-level CRC for
+		 * datafiles, otherwise check them block by block.
 		 */
-		crc = pgFileGetCRC(file->path, arguments->backup_version <= 20021);
-		if (crc != file->crc)
+		if (!file->is_datafile || skip_block_validation)
 		{
-			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-					file->path, file->crc, crc);
-			arguments->corrupted = true;
-
-			/* validate relation blocks */
-			if (file->is_datafile)
+			/*
+			 * Pre 2.0.22 we use CRC-32C, but in newer version of pg_probackup we
+			 * use CRC-32.
+			 *
+			 * pg_control stores its content and checksum of the content, calculated
+			 * using CRC-32C. If we calculate checksum of the whole pg_control using
+			 * CRC-32C we get same checksum constantly. It might be because of the
+			 * CRC-32C algorithm.
+			 * To avoid this problem we need to use different algorithm, CRC-32 in
+			 * this case.
+			 */
+			crc = pgFileGetCRC(file->path, arguments->backup_version <= 20021);
+			if (crc != file->crc)
 			{
-				if (!check_file_pages(file, arguments->stop_lsn,
-									  arguments->checksum_version,
-									  arguments->backup_version))
-					arguments->corrupted = true;
+				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+						file->path, file->crc, crc);
+				arguments->corrupted = true;
 			}
+		}
+		else
+		{
+			/*
+			 * validate relation block by block
+			 * check page headers, checksums (if enabled)
+			 * and compute checksum of the file
+			 */
+			if (!check_file_pages(file, arguments->stop_lsn,
+								  arguments->checksum_version,
+								  arguments->backup_version))
+				arguments->corrupted = true;
 		}
 	}
 
