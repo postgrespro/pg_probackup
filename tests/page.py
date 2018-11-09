@@ -936,6 +936,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'could not read WAL record at' in e.message and
+                'WAL file is from different database system: WAL file database system identifier is' in e.message and
+                'pg_control database system identifier is' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file_destination) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -961,6 +963,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'could not read WAL record at' in e.message and
+                'WAL file is from different database system: WAL file database system identifier is' in e.message and
+                'pg_control database system identifier is' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file_destination) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
