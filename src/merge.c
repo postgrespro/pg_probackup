@@ -59,7 +59,7 @@ do_merge(time_t backup_id)
 	if (instance_name == NULL)
 		elog(ERROR, "required parameter is not specified: --instance");
 
-	elog(LOG, "Merge started");
+	elog(INFO, "Merge started");
 
 	catalog_lock();
 
@@ -129,17 +129,21 @@ do_merge(time_t backup_id)
 	 */
 	for (i = full_backup_idx; i > dest_backup_idx; i--)
 	{
-		pgBackup   *to_backup = (pgBackup *) parray_get(backups, i);
 		pgBackup   *from_backup = (pgBackup *) parray_get(backups, i - 1);
 
-		merge_backups(to_backup, from_backup);
+		full_backup = (pgBackup *) parray_get(backups, i);
+		merge_backups(full_backup, from_backup);
 	}
+
+	pgBackupValidate(full_backup);
+	if (full_backup->status == BACKUP_STATUS_CORRUPT)
+		elog(ERROR, "Merging of backup %s failed", base36enc(backup_id));
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
 
-	elog(LOG, "Merge completed");
+	elog(INFO, "Merge of backup %s completed", base36enc(backup_id));
 }
 
 /*
@@ -166,6 +170,28 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	bool		merge_isok = true;
 
 	elog(INFO, "Merging backup %s with backup %s", from_backup_id, to_backup_id);
+
+	/*
+	 * Validate to_backup only if it is BACKUP_STATUS_OK. If it has
+	 * BACKUP_STATUS_MERGING status then it isn't valid backup until merging
+	 * finished.
+	 */
+	if (to_backup->status == BACKUP_STATUS_OK)
+	{
+		pgBackupValidate(to_backup);
+		if (to_backup->status == BACKUP_STATUS_CORRUPT)
+			elog(ERROR, "Interrupt merging");
+	}
+
+	/*
+	 * It is OK to validate from_backup if it has BACKUP_STATUS_OK or
+	 * BACKUP_STATUS_MERGING status.
+	 */
+	Assert(from_backup->status == BACKUP_STATUS_OK ||
+		   from_backup->status == BACKUP_STATUS_MERGING);
+	pgBackupValidate(from_backup);
+	if (from_backup->status == BACKUP_STATUS_CORRUPT)
+		elog(ERROR, "Interrupt merging");
 
 	/*
 	 * Previous merging was interrupted during deleting source backup. It is
@@ -302,6 +328,7 @@ delete_source_backup:
 	/*
 	 * Rename FULL backup directory.
 	 */
+	elog(INFO, "Rename %s to %s", to_backup_id, from_backup_id);
 	if (rename(to_backup_path, from_backup_path) == -1)
 		elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 			 to_backup_path, from_backup_path, strerror(errno));

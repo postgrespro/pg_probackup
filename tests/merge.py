@@ -694,8 +694,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb._execute('signal SIGKILL')
 
-        print(self.show_pb(backup_dir, as_text=True, as_json=False))
-
         # CORRUPT incremental backup
         # read block from future
         # block_size + backup_header = 8200
@@ -723,15 +721,13 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(
-                e.message,
-                'INSERT ERROR MESSAGE HERE\n',
+            self.assertTrue(
+                "WARNING: Backup {0} data files are corrupted".format(
+                    backup_id) in e.message and
+                "ERROR: Merging of backup {0} failed".format(
+                    backup_id) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
-
-        # Drop node and restore it
-        node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
