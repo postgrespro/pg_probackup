@@ -237,10 +237,11 @@ doExtractPageMap(void *arg)
 	 */
 	if (XLogRecPtrIsInvalid(found))
 	{
-		elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X",
+		elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X. %s",
 			 private_data->thread_num,
 			 (uint32) (extract_arg->startpoint >> 32),
-			 (uint32) (extract_arg->startpoint));
+			 (uint32) (extract_arg->startpoint),
+			 (xlogreader->errormsg_buf[0] != '\0')?xlogreader->errormsg_buf:"");
 		PrintXLogCorruptionMsg(private_data, ERROR);
 	}
 	extract_arg->startpoint = found;
