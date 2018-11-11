@@ -494,3 +494,70 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    def test_uncompressable_pages(self):
+        """
+        make archive node, create table with uncompressable toast pages,
+        take backup with compression, make sure that page was not compressed,
+        restore backup and check data correctness
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '30s'}
+            )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+#        node.safe_psql(
+#            "postgres",
+#            "create table t_heap as select i, "
+#            "repeat('1234567890abcdefghiyklmn', 1)::bytea, "
+#            "point(0,0) from generate_series(0,1) i")
+
+        node.safe_psql(
+            "postgres",
+            "create table t as select i, "
+            "repeat(md5(i::text),5006056) as fat_attr "
+            "from generate_series(0,10) i;")
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='full',
+            options=[
+                '--compress',
+                '--log-level-file=verbose'])
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='full',
+            options=[
+                '--compress',
+                '--log-level-file=verbose'])
+
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
+
+# create table t as select i, repeat(md5('1234567890'), 1)::bytea, point(0,0) from generate_series(0,1) i;
+
+
+# create table t_bytea_1(file oid);
+# INSERT INTO t_bytea_1 (file)
+#    VALUES (lo_import('/home/gsmol/git/postgres/contrib/pg_probackup/tests/expected/sample.random', 24593));
+# insert into t_bytea select string_agg(data,'') from pg_largeobject where pageno > 0;
+#
