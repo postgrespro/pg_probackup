@@ -3136,3 +3136,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
 # validate empty backup list
+# page from future during validate
+# page from future during backup
+
+# corrupt block, so file become unaligned:
+# 712                     Assert(header.compressed_size <= BLCKSZ);
+# 713
+# 714                     read_len = fread(compressed_page.data, 1,
+# 715                             MAXALIGN(header.compressed_size), in);
+# 716                     if (read_len != MAXALIGN(header.compressed_size))
+# -> 717                             elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+# 718                                     blknum, file->path, read_len, header.compressed_size);

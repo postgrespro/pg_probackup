@@ -817,7 +817,7 @@ do_backup_instance(void)
 	}
 
 	/* Print the list of files to backup catalog */
-	pgBackupWriteFileList(&current, backup_files_list, pgdata);
+	write_backup_filelist(&current, backup_files_list, pgdata);
 
 	/* Compute summary of size of regular files in the backup */
 	for (i = 0; i < parray_num(backup_files_list); i++)
