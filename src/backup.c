@@ -474,6 +474,7 @@ do_backup_instance(void)
 
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
+	parray	   *backup_list = NULL;
 
 	pgFile	   *pg_control = NULL;
 
@@ -515,7 +516,6 @@ do_backup_instance(void)
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
 		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
-		parray	   *backup_list;
 		char		prev_backup_filelist_path[MAXPGPATH];
 
 		/* get list of backups already taken */
@@ -525,7 +525,6 @@ do_backup_instance(void)
 		if (prev_backup == NULL)
 			elog(ERROR, "Valid backup on current timeline is not found. "
 						"Create new FULL backup before an incremental one.");
-		parray_free(backup_list);
 
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
 						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
@@ -830,6 +829,13 @@ do_backup_instance(void)
 		/* Count the amount of the data actually copied */
 		if (S_ISREG(file->mode))
 			current.data_bytes += file->write_size;
+	}
+
+	/* Cleanup */
+	if (backup_list)
+	{
+		parray_walk(backup_list, pgBackupFree);
+		parray_free(backup_list);
 	}
 
 	parray_walk(backup_files_list, pgFileFree);
