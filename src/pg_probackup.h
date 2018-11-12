@@ -3,7 +3,7 @@
  * pg_probackup.h: Backup/Recovery manager for PostgreSQL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -57,6 +57,10 @@
 #define XID_FMT "%u"
 #endif
 
+/* Check if an XLogRecPtr value is pointed to 0 offset */
+#define XRecOffIsNull(xlrp) \
+		((xlrp) % XLOG_BLCKSZ == 0)
+
 typedef enum CompressAlg
 {
 	NOT_DEFINED_COMPRESS = 0,
@@ -64,6 +68,28 @@ typedef enum CompressAlg
 	PGLZ_COMPRESS,
 	ZLIB_COMPRESS,
 } CompressAlg;
+
+#define INIT_FILE_CRC32(use_crc32c, crc) \
+do { \
+	if (use_crc32c) \
+		INIT_CRC32C(crc); \
+	else \
+		INIT_TRADITIONAL_CRC32(crc); \
+} while (0)
+#define COMP_FILE_CRC32(use_crc32c, crc, data, len) \
+do { \
+	if (use_crc32c) \
+		COMP_CRC32C((crc), (data), (len)); \
+	else \
+		COMP_TRADITIONAL_CRC32(crc, data, len); \
+} while (0)
+#define FIN_FILE_CRC32(use_crc32c, crc) \
+do { \
+	if (use_crc32c) \
+		FIN_CRC32C(crc); \
+	else \
+		FIN_TRADITIONAL_CRC32(crc); \
+} while (0)
 
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
@@ -339,6 +365,7 @@ extern bool exclusive_backup;
 
 /* restore options */
 extern bool restore_as_replica;
+extern bool skip_block_validation;
 
 /* delete options */
 extern bool		delete_wal;
@@ -425,6 +452,7 @@ extern int do_show(time_t requested_backup_id);
 
 /* in delete.c */
 extern void do_delete(time_t backup_id);
+extern void delete_backup_files(pgBackup *backup);
 extern int do_retention_purge(void);
 extern int do_delete_instance(void);
 
@@ -455,10 +483,11 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
-extern void pgBackupWriteFileList(pgBackup *backup, parray *files,
+extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root);
 
-extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir);
+extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
+							const char *subdir);
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
@@ -517,9 +546,9 @@ extern bool backup_data_file(backup_files_arg* arguments,
 							 CompressAlg calg, int clevel);
 extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
-							  bool write_header);
+							  bool write_header,
+							  uint32 backup_version);
 extern bool copy_file(const char *from_root, const char *to_root, pgFile *file);
-extern void move_file(const char *from_root, const char *to_root, pgFile *file);
 extern void push_wal_file(const char *from_path, const char *to_path,
 						  bool is_compress, bool overwrite);
 extern void get_wal_file(const char *from_path, const char *to_path);
@@ -527,8 +556,8 @@ extern void get_wal_file(const char *from_path, const char *to_path);
 extern bool calc_file_checksum(pgFile *file);
 
 extern bool check_file_pages(pgFile* file,
-							 XLogRecPtr stop_lsn, uint32 checksum_version);
-
+							 XLogRecPtr stop_lsn,
+							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
 extern void extractPageMap(const char *archivedir,
 						   TimeLineID tli, uint32 seg_size,
@@ -555,6 +584,7 @@ extern uint64 get_system_identifier(char *pgdata);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
+extern void set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn);
 
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);

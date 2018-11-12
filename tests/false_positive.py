@@ -143,7 +143,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose'],
+            options=['--stream'],
             gdb=True
         )
 
@@ -227,7 +227,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose'],
+            options=['--stream'],
             gdb=True
         )
 

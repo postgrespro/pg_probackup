@@ -2,7 +2,7 @@
  *
  * help.c
  *
- * Copyright (c) 2017-2017, Postgres Professional
+ * Copyright (c) 2017-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -118,6 +118,7 @@ help_pg_probackup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [--progress]\n"));
@@ -127,12 +128,14 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
 	printf(_("                 [--no-validate]\n"));
+	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
+	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
@@ -203,7 +206,8 @@ help_backup(void)
 	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
-	printf(_("                 [--replica-timeout=timeout]\n\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--skip-block-validation]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -215,6 +219,7 @@ help_backup(void)
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
+	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -279,6 +284,7 @@ help_restore(void)
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica] [--no-validate]\n\n"));
+	printf(_("                 [--skip-block-validation]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -305,6 +311,7 @@ help_restore(void)
 	printf(_("  -R, --restore-as-replica         write a minimal recovery.conf in the output directory\n"));
 	printf(_("                                   to ease setting up a standby server\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
+	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -335,6 +342,7 @@ help_validate(void)
 	printf(_("                 [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline]\n\n"));
+	printf(_("                 [--skip-block-validation]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -348,6 +356,7 @@ help_validate(void)
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
+	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));

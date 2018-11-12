@@ -2,7 +2,7 @@
 
 import unittest
 import os
-from .helpers.ptrack_helpers import ProbackupTest
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 module_name = "merge"
 
@@ -407,17 +407,17 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "delete from t_heap where ctid >= '(11,0)'")
+
         node.safe_psql(
             "postgres",
             "vacuum t_heap")
 
-        self.backup_node(
+        page_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        page_id = self.show_pb(backup_dir, "node")[1]["id"]
         self.merge_backup(backup_dir, "node", page_id)
 
         self.validate_pb(backup_dir)
@@ -602,7 +602,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
 
-        gdb.set_breakpoint('move_file')
+        gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
         if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
@@ -615,3 +615,132 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Try to continue failed MERGE
         self.merge_backup(backup_dir, "node", backup_id)
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_continue_failed_merge_with_corrupted_delta_backup(self):
+        """
+        Fail merge via gdb, corrupt DELTA backup, try to continue merge
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,1000) i"
+        )
+
+        old_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = 100500"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum full t_heap"
+        )
+
+        new_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        # DELTA BACKUP
+        backup_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        backup_id = self.show_pb(backup_dir, "node")[1]["id"]
+
+        # Failed MERGE
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+        gdb.set_breakpoint('copy_file')
+        gdb.run_until_break()
+
+        if gdb.continue_execution_until_break(2) != 'breakpoint-hit':
+            print('Failed to hit breakpoint')
+            exit(1)
+
+        gdb._execute('signal SIGKILL')
+
+        # CORRUPT incremental backup
+        # read block from future
+        # block_size + backup_header = 8200
+        file = os.path.join(
+            backup_dir, 'backups/node', backup_id_2, 'database', new_path)
+        with open(file, 'rb') as f:
+            f.seek(8200)
+            block_1 = f.read(8200)
+            f.close
+
+        # write block from future
+        file = os.path.join(
+            backup_dir, 'backups/node', backup_id, 'database', old_path)
+        with open(file, 'r+b') as f:
+            f.seek(8200)
+            f.write(block_1)
+            f.close
+
+        # Try to continue failed MERGE
+        try:
+            self.merge_backup(backup_dir, "node", backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of incremental backup corruption.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "WARNING: Backup {0} data files are corrupted".format(
+                    backup_id) in e.message and
+                "ERROR: Merging of backup {0} failed".format(
+                    backup_id) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+# 1. always use parent link when merging (intermediates may be from different chain)
+# 2. page backup we are merging with may disappear after failed merge,
+# it should not be possible to continue merge after that
+#   PAGE_A  MERGING (disappear)
+#   FULL    MERGING
+
+#   FULL    MERGING
+
+#   PAGE_B  OK      (new backup)
+#   FULL    MERGING
+
+# 3. Need new test with corrupted FULL backup

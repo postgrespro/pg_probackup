@@ -143,7 +143,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--stream']
         )
 
         pgdata = self.pgdata_content(node.data_dir)

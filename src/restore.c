@@ -3,7 +3,7 @@
  * restore.c: restore DB cluster and archived WAL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -621,7 +621,8 @@ restore_files(void *arg)
 								 file->path + strlen(from_root) + 1);
 			restore_data_file(to_path, file,
 							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
-							  false);
+							  false,
+							  parse_program_version(arguments->backup->program_version));
 		}
 		else
 			copy_file(from_root, pgdata, file);

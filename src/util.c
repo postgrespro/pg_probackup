@@ -3,7 +3,7 @@
  * util.c: log messages to log file or stderr, and misc code.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -13,6 +13,8 @@
 #include "catalog/pg_control.h"
 
 #include <time.h>
+
+#include <unistd.h>
 
 const char *
 base36enc(long unsigned int value)
@@ -98,6 +100,44 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 
 	/* Additional checks on control file */
 	checkControlFile(ControlFile);
+}
+
+/*
+ * Write ControlFile to pg_control
+ */
+static void
+writeControlFile(ControlFileData *ControlFile, char *path)
+{
+	int			fd;
+	char       *buffer = NULL;
+
+#if PG_VERSION_NUM >= 100000
+	int			ControlFileSize = PG_CONTROL_FILE_SIZE;
+#else
+	int			ControlFileSize = PG_CONTROL_SIZE;
+#endif
+
+	/* copy controlFileSize */
+	buffer = pg_malloc(ControlFileSize);
+	memcpy(buffer, ControlFile, sizeof(ControlFileData));
+
+	/* Write pg_control */
+	unlink(path);
+	fd = open(path,
+			  O_RDWR | O_CREAT | O_EXCL | PG_BINARY,
+			  S_IRUSR | S_IWUSR);
+
+	if (fd < 0)
+		elog(ERROR, "Failed to open file: %s", path);
+
+	if (write(fd, buffer, ControlFileSize) != ControlFileSize)
+		elog(ERROR, "Failed to overwrite file: %s", path);
+
+	if (fsync(fd) != 0)
+		elog(ERROR, "Failed to fsync file: %s", path);
+
+	close(fd);
+	pg_free(buffer);
 }
 
 /*
@@ -248,6 +288,52 @@ get_data_checksum_version(bool safe)
 	pg_free(buffer);
 
 	return ControlFile.data_checksum_version;
+}
+
+/* MinRecoveryPoint 'as-is' is not to be trusted */
+void
+set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn)
+{
+	ControlFileData ControlFile;
+	char       *buffer;
+	size_t      size;
+	char		fullpath[MAXPGPATH];
+
+	/* First fetch file content */
+	buffer = slurpFile(pgdata, XLOG_CONTROL_FILE, &size, false);
+	if (buffer == NULL)
+		elog(ERROR, "ERROR");
+
+	digestControlFile(&ControlFile, buffer, size);
+
+	elog(LOG, "Current minRecPoint %X/%X",
+		(uint32) (ControlFile.minRecoveryPoint  >> 32),
+		(uint32) ControlFile.minRecoveryPoint);
+
+	elog(LOG, "Setting minRecPoint to %X/%X",
+		(uint32) (stop_backup_lsn  >> 32),
+		(uint32) stop_backup_lsn);
+
+	ControlFile.minRecoveryPoint = stop_backup_lsn;
+
+	/* Update checksum in pg_control header */
+	INIT_CRC32C(ControlFile.crc);
+	COMP_CRC32C(ControlFile.crc,
+				(char *) &ControlFile,
+				offsetof(ControlFileData, crc));
+	FIN_CRC32C(ControlFile.crc);
+
+	/* paranoia */
+	checkControlFile(&ControlFile);
+
+	/* overwrite pg_control */
+	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
+	writeControlFile(&ControlFile, fullpath);
+
+	/* Update pg_control checksum in backup_list */
+	file->crc = pgFileGetCRC(fullpath, false);
+
+	pg_free(buffer);
 }
 
 
