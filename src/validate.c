@@ -3,7 +3,7 @@
  * validate.c: validate backup files.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -19,8 +19,6 @@ static void *pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);
 
 static bool corrupted_backup_found = false;
-/* Program version of a current backup */
-static uint32 validate_backup_version = 0;
 
 typedef struct
 {
@@ -28,6 +26,7 @@ typedef struct
 	bool		corrupted;
 	XLogRecPtr	stop_lsn;
 	uint32		checksum_version;
+	uint32		backup_version;
 
 	/*
 	 * Return value from the thread.
@@ -92,11 +91,6 @@ pgBackupValidate(pgBackup *backup)
 		pg_atomic_clear_flag(&file->lock);
 	}
 
-	/*
-	 * We use program version to calculate checksum in pgBackupValidateFiles()
-	 */
-	validate_backup_version = parse_program_version(backup->program_version);
-
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (validate_files_arg *)
@@ -111,6 +105,7 @@ pgBackupValidate(pgBackup *backup)
 		arg->corrupted = false;
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
+		arg->backup_version = parse_program_version(backup->program_version);
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -213,29 +208,41 @@ pgBackupValidateFiles(void *arg)
 		}
 
 		/*
-		 * Pre 2.0.22 we use CRC-32C, but in newer version of pg_probackup we
-		 * use CRC-32.
-		 *
-		 * pg_control stores its content and checksum of the content, calculated
-		 * using CRC-32C. If we calculate checksum of the whole pg_control using
-		 * CRC-32C we get same checksum constantly. It might be because of the
-		 * CRC-32C algorithm.
-		 * To avoid this problem we need to use different algorithm, CRC-32 in
-		 * this case.
+		 * If option skip-block-validation is set, compute only file-level CRC for
+		 * datafiles, otherwise check them block by block.
 		 */
-		crc = pgFileGetCRC(file->path, validate_backup_version <= 20021);
-		if (crc != file->crc)
+		if (!file->is_datafile || skip_block_validation)
 		{
-			elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-					file->path, file->crc, crc);
-			arguments->corrupted = true;
-
-			/* validate relation blocks */
-			if (file->is_datafile)
+			/*
+			 * Pre 2.0.22 we use CRC-32C, but in newer version of pg_probackup we
+			 * use CRC-32.
+			 *
+			 * pg_control stores its content and checksum of the content, calculated
+			 * using CRC-32C. If we calculate checksum of the whole pg_control using
+			 * CRC-32C we get same checksum constantly. It might be because of the
+			 * CRC-32C algorithm.
+			 * To avoid this problem we need to use different algorithm, CRC-32 in
+			 * this case.
+			 */
+			crc = pgFileGetCRC(file->path, arguments->backup_version <= 20021);
+			if (crc != file->crc)
 			{
-				if (!check_file_pages(file, arguments->stop_lsn, arguments->checksum_version))
-					arguments->corrupted = true;
+				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+						file->path, file->crc, crc);
+				arguments->corrupted = true;
 			}
+		}
+		else
+		{
+			/*
+			 * validate relation block by block
+			 * check page headers, checksums (if enabled)
+			 * and compute checksum of the file
+			 */
+			if (!check_file_pages(file, arguments->stop_lsn,
+								  arguments->checksum_version,
+								  arguments->backup_version))
+				arguments->corrupted = true;
 		}
 	}
 
