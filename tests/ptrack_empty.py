@@ -67,7 +67,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Take PTRACK backup
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['-j10', '--log-level-file=verbose'])
+            options=['-j10'])
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)

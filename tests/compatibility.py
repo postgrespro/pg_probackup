@@ -94,8 +94,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=['--log-level-file=verbose'])
+            backup_dir, 'node', node, backup_type='page')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -195,8 +194,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--log-level-file=verbose'])
+            backup_dir, 'node', node, backup_type='delta')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -296,8 +294,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--log-level-file=verbose'])
+            backup_dir, 'node', node, backup_type='delta')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)

@@ -407,17 +407,17 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "delete from t_heap where ctid >= '(11,0)'")
+
         node.safe_psql(
             "postgres",
             "vacuum t_heap")
 
-        self.backup_node(
+        page_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        page_id = self.show_pb(backup_dir, "node")[1]["id"]
         self.merge_backup(backup_dir, "node", page_id)
 
         self.validate_pb(backup_dir)

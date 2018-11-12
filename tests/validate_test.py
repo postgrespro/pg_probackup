@@ -50,7 +50,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.close
 
         self.backup_node(
-            backup_dir, 'node', node, options=["--log-level-file=verbose"])
+            backup_dir, 'node', node, options=['--log-level-file=verbose'])
 
         log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
 
@@ -259,8 +259,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Simple validate
         try:
             self.validate_pb(
-                backup_dir, 'node', backup_id=backup_id_2,
-                options=['--log-level-file=verbose'])
+                backup_dir, 'node', backup_id=backup_id_2)
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -364,8 +363,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate PAGE1
         try:
             self.validate_pb(
-                backup_dir, 'node', backup_id=backup_id_2,
-                options=['--log-level-file=verbose'])
+                backup_dir, 'node', backup_id=backup_id_2)
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -520,8 +518,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(
                 backup_dir, 'node',
-                backup_id=backup_id_4,
-                options=['--log-level-file=verbose'])
+                backup_id=backup_id_4)
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n"
@@ -721,7 +718,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.validate_pb(
                 backup_dir, 'node',
                 options=[
-                    '--log-level-file=verbose',
                     '-i', backup_id_4, '--xid={0}'.format(target_xid)])
             self.assertEqual(
                 1, 0,
@@ -866,7 +862,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate Instance
         try:
             self.validate_pb(
-                backup_dir, 'node', options=['--log-level-file=verbose'])
+                backup_dir, 'node')
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -1006,7 +1002,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate Instance
         try:
-            self.validate_pb(backup_dir, 'node', options=['--log-level-file=verbose'])
+            self.validate_pb(backup_dir, 'node')
             self.assertEqual(1, 0, "Expecting Error because of data files corruption.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
@@ -1092,7 +1088,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate Instance
         try:
-            self.validate_pb(backup_dir, 'node', options=['--log-level-file=verbose'])
+            self.validate_pb(backup_dir, 'node')
             self.assertEqual(1, 0, "Expecting Error because of data files corruption.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
@@ -1219,7 +1215,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 'node',
                 backup_id,
                 options=[
-                    "--log-level-console=verbose",
                     "--xid={0}".format(target_xid)])
             self.assertEqual(
                 1, 0,
@@ -1388,7 +1383,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 'node',
                 backup_id,
                 options=[
-                    "--log-level-console=verbose",
                     "--xid={0}".format(target_xid)])
             self.assertEqual(
                 1, 0,
@@ -1671,7 +1665,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         os.rename(file_new, file)
         try:
-            self.validate_pb(backup_dir, options=['--log-level-file=verbose'])
+            self.validate_pb(backup_dir)
         except ProbackupException as e:
             self.assertIn(
                 'WARNING: Some backups are not valid'.format(
@@ -1776,7 +1770,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_new)
 
         try:
-            self.validate_pb(backup_dir, options=['--log-level-file=verbose'])
+            self.validate_pb(backup_dir)
         except ProbackupException as e:
             self.assertIn(
                 'WARNING: Some backups are not valid'.format(

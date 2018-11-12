@@ -162,7 +162,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,256) i")
+            "from generate_series(0,2560) i")
 
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
 
@@ -173,6 +173,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Settings for Replica
         self.set_replica(master, replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
         replica.slow_start(replica=True)
 
         # Check data correctness on replica
@@ -186,7 +187,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(256,512) i")
+            "from generate_series(256,5120) i")
 
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
         self.add_instance(backup_dir, 'replica', replica)
@@ -195,13 +196,23 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             os.path.join(backup_dir, 'wal/master/000000010000000000000003'),
             os.path.join(backup_dir, 'wal/replica/000000010000000000000003'))
 
+        copyfile(
+            os.path.join(backup_dir, 'wal/master/000000010000000000000004'),
+            os.path.join(backup_dir, 'wal/replica/000000010000000000000004'))
+
+        copyfile(
+            os.path.join(backup_dir, 'wal/master/000000010000000000000005'),
+            os.path.join(backup_dir, 'wal/replica/000000010000000000000005'))
+
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
             options=[
-                '--archive-timeout=300',
+                '--archive-timeout=30',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+                '--master-port={0}'.format(master.port),
+                '--stream'])
+
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'replica', backup_id)['status'])
@@ -235,10 +246,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica',
             replica, backup_type='page',
             options=[
-                '--archive-timeout=300',
+                '--archive-timeout=30',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+                '--master-port={0}'.format(master.port),
+                '--stream'])
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -491,7 +503,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         #self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
         exit(1)
-        self.backup_node(backup_dir, 'replica', replica, options=["--log-level-file=verbose"])
+        self.backup_node(backup_dir, 'replica', replica)
         pgbench.wait()
 
         # pgbench

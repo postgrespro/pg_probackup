@@ -62,8 +62,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             "vacuum t_heap")
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=['--log-level-file=verbose'])
+            backup_dir, 'node', node, backup_type='page')
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -333,8 +332,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # PAGE BACKUP
         self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=["--log-level-file=verbose"])
+            backup_dir, 'node', node, backup_type='page')
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -727,7 +725,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.backup_node(
                 backup_dir, 'node', node,
                 backup_type='page',
-                options=["-j", "4", '--log-level-file=verbose'])
+                options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segment disappearance.\n "
@@ -797,8 +795,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # Single-thread PAGE backup
         try:
             self.backup_node(
-                backup_dir, 'node', node,
-                backup_type='page', options=['--log-level-file=verbose'])
+                backup_dir, 'node', node, backup_type='page')
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segment disappearance.\n "

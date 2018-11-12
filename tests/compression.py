@@ -55,9 +55,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         page_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
             options=[
-                '--stream', '--compress-algorithm=zlib',
-                '--log-level-console=verbose',
-                '--log-level-file=verbose'])
+                '--stream', '--compress-algorithm=zlib'])
 
         # PTRACK BACKUP
         node.safe_psql(
@@ -535,8 +533,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='full',
             options=[
-                '--compress',
-                '--log-level-file=verbose'])
+                '--compress'])
 
         node.cleanup()
 
@@ -547,8 +544,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='full',
             options=[
-                '--compress',
-                '--log-level-file=verbose'])
+                '--compress'])
 
         # Clean after yourself
         # self.del_test_dir(module_name, fname)
