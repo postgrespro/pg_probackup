@@ -22,6 +22,7 @@
 #endif
 
 #include "utils/thread.h"
+#include <time.h>
 
 /*
  * RmgrNames is an array of resource manager names, to make error messages
