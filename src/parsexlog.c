@@ -536,8 +536,8 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 */
 	if (backup->stream)
 	{
-		snprintf(backup_xlog_path, sizeof(backup_xlog_path), "/%s/%s/%s/%s",
-				backup_instance_path, backup_id, DATABASE_DIR, PG_XLOG_DIR);
+		pgBackupGetPath2(backup, backup_xlog_path, lengthof(backup_xlog_path),
+						 DATABASE_DIR, PG_XLOG_DIR);
 
 		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli,
 											   seg_size);
