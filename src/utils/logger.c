@@ -2,7 +2,7 @@
  *
  * logger.c: - log events into log file or stderr.
  *
- * Copyright (c) 2017-2017, Postgres Professional
+ * Copyright (c) 2017-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

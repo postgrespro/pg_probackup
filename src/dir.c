@@ -3,7 +3,7 @@
  * dir.c: directory operation utility.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -262,7 +262,7 @@ delete_file:
 }
 
 pg_crc32
-pgFileGetCRC(const char *file_path)
+pgFileGetCRC(const char *file_path, bool use_crc32c)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
@@ -277,20 +277,20 @@ pgFileGetCRC(const char *file_path)
 			file_path, strerror(errno));
 
 	/* calc CRC of backup file */
-	INIT_CRC32C(crc);
+	INIT_FILE_CRC32(use_crc32c, crc);
 	while ((len = fread(buf, 1, sizeof(buf), fp)) == sizeof(buf))
 	{
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
-		COMP_CRC32C(crc, buf, len);
+		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
 	}
 	errno_tmp = errno;
 	if (!feof(fp))
 		elog(WARNING, "cannot read \"%s\": %s", file_path,
 			strerror(errno_tmp));
 	if (len > 0)
-		COMP_CRC32C(crc, buf, len);
-	FIN_CRC32C(crc);
+		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
+	FIN_FILE_CRC32(use_crc32c, crc);
 
 	fclose(fp);
 

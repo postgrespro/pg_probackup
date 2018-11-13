@@ -3,7 +3,7 @@
  * restore.c: restore DB cluster and archived WAL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2017, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -33,6 +33,7 @@ static void restore_backup(pgBackup *backup);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
+static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
 
@@ -138,7 +139,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 				elog(LOG, "target timeline ID = %u", rt->recovery_target_tli);
 				/* Read timeline history files from archives */
-				timelines = readTimeLineHistory_probackup(rt->recovery_target_tli);
+				timelines = read_timeline_history(rt->recovery_target_tli);
 
 				if (!satisfy_timeline(timelines, current_backup))
 				{
@@ -149,6 +150,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 						/* Try to find another backup that satisfies target timeline */
 						continue;
 				}
+
+				parray_walk(timelines, pfree);
+				parray_free(timelines);
 			}
 
 			if (!satisfy_recovery_target(current_backup, rt))
@@ -652,7 +656,8 @@ restore_files(void *arg)
 								 file->path + strlen(from_root) + 1);
 			restore_data_file(to_path, file,
 							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
-							  false);
+							  false,
+							  parse_program_version(arguments->backup->program_version));
 		}
 		else if (file->is_extra)
 			copy_file(from_root, file->extradir, file);
@@ -763,7 +768,7 @@ create_recovery_conf(time_t backup_id,
  * based on readTimeLineHistory() in timeline.c
  */
 parray *
-readTimeLineHistory_probackup(TimeLineID targetTLI)
+read_timeline_history(TimeLineID targetTLI)
 {
 	parray	   *result;
 	char		path[MAXPGPATH];
@@ -852,8 +857,7 @@ readTimeLineHistory_probackup(TimeLineID targetTLI)
 	entry = pgut_new(TimeLineHistoryEntry);
 	entry->tli = targetTLI;
 	/* LSN in target timeline is valid */
-	/* TODO ensure that -1UL --> -1L fix is correct */
-	entry->end = (uint32) (-1L << 32) | -1L;
+	entry->end = InvalidXLogRecPtr;
 	parray_insert(result, 0, entry);
 
 	return result;
@@ -885,7 +889,8 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 
 		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
-			backup->stop_lsn < timeline->end)
+			(XLogRecPtrIsInvalid(timeline->end) ||
+			 backup->stop_lsn < timeline->end))
 			return true;
 	}
 	return false;

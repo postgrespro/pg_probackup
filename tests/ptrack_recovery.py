@@ -32,7 +32,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table
         node.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap tablespace somedata "
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap tablespace somedata "
             "as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,2560) i")

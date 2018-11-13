@@ -33,6 +33,7 @@
 /tests/helpers/*pyc
 
 # Extra files
+/src/pg_crc.c
 /src/datapagemap.c
 /src/datapagemap.h
 /src/logging.h

@@ -157,13 +157,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--stream']
         )
         pgdata = self.pgdata_content(node.data_dir)
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--stream']
         )
 
         self.restore_node(
@@ -246,14 +246,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 exit(1)
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=['--log-level-file=verbose']
-        )
+            backup_dir, 'node', node, backup_type='ptrack')
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=['--log-level-file=verbose']
-        )
+            backup_dir, 'node', node, backup_type='ptrack')
+
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
@@ -336,14 +333,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         )
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=['--log-level-file=verbose']
-        )
+            backup_dir, 'node', node, backup_type='ptrack')
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=['--log-level-file=verbose']
-        )
+            backup_dir, 'node', node, backup_type='ptrack')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -409,7 +402,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--stream']
         )
 
         node.safe_psql(
@@ -479,7 +472,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose'],
+            options=['--stream'],
             gdb=True
         )
 
@@ -566,7 +559,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         ptrack_backup_id = self.backup_node(
             backup_dir, 'node',
             node, backup_type='ptrack',
-            options=['--stream', '--log-level-file=verbose']
+            options=['--stream']
             )
 
         if self.paranoia:
@@ -989,7 +982,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.backup_node(
             backup_dir, 'node', node,
-            options=["--stream", "--log-level-file=verbose"])
+            options=["--stream"])
 
         # CREATE DATABASE DB1
         node.safe_psql("postgres", "create database db1")
@@ -1002,7 +995,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='ptrack',
-            options=["--stream", "--log-level-file=verbose"]
+            options=["--stream"]
         )
 
         if self.paranoia:
@@ -1133,7 +1126,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '-j10',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(node.port)
+                '--master-port={0}'.format(node.port),
+                '--stream'
                 ]
             )
 
@@ -1229,7 +1223,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             backup_type='ptrack',
-            options=["--stream", "--log-level-file=verbose"]
+            options=["--stream"]
         )
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -1315,7 +1309,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # PTRACK BACKUP
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=["--stream", '--log-level-file=verbose'])
+            options=["--stream"])
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -1476,7 +1470,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # FIRTS PTRACK BACKUP
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=["--stream", "--log-level-file=verbose"])
+            options=["--stream"])
 
         # GET PHYSICAL CONTENT FROM NODE
         if self.paranoia:
@@ -1517,7 +1511,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # SECOND PTRACK BACKUP
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=["--stream", "--log-level-file=verbose"])
+            options=["--stream"])
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -1586,6 +1580,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         pgbench = node.pgbench(options=['-T', '150', '-c', '2', '--no-vacuum'])
         pgbench.wait()
+
         node.safe_psql("postgres", "checkpoint")
 
         idx_ptrack['new_size'] = self.get_fork_size(
@@ -1607,12 +1602,12 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             )
 
         # GET LOGICAL CONTENT FROM NODE
-        result = node.safe_psql("postgres", "select * from pgbench_accounts")
+        # it`s stupid, because hint`s are ignored by ptrack
+        #result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # FIRTS PTRACK BACKUP
         self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=["--log-level-file=verbose"]
-        )
+            backup_dir, 'node', node, backup_type='ptrack')
+
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -1647,7 +1642,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         )
 
         # COMPARE RESTORED FILES
-        self.assertEqual(result, result_new, 'data is lost')
+        #self.assertEqual(result, result_new, 'data is lost')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1681,9 +1676,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.backup_node(
                 backup_dir, 'node', node, backup_type='ptrack',
                 options=[
-                    "--stream", "-j 30",
-                    "--log-level-file=verbose"]
-            )
+                    "--stream", "-j 30"])
+
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,

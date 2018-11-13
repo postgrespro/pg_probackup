@@ -34,7 +34,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table
         node.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap "
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
             "(id int DEFAULT nextval('t_seq'), text text, tsvector tsvector) "
             "tablespace somedata")
 
@@ -66,7 +67,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Take PTRACK backup
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['-j10', '--log-level-file=verbose'])
+            options=['-j10'])
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -120,7 +121,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table
         master.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap "
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
             "(id int DEFAULT nextval('t_seq'), text text, tsvector tsvector)")
         self.wait_until_replica_catch_with_master(master, replica)
 

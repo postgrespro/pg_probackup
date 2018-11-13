@@ -328,7 +328,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
-            options=["-j", "4", "--stream", '--log-level-file=verbose'])
+            options=["-j", "4", "--stream", "--log-level-file=verbose"])
 
         # open log file and check
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
@@ -520,3 +520,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

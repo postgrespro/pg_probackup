@@ -59,7 +59,7 @@ do_merge(time_t backup_id)
 	if (instance_name == NULL)
 		elog(ERROR, "required parameter is not specified: --instance");
 
-	elog(LOG, "Merge started");
+	elog(INFO, "Merge started");
 
 	catalog_lock();
 
@@ -77,7 +77,8 @@ do_merge(time_t backup_id)
 		{
 			if (backup->status != BACKUP_STATUS_OK &&
 				/* It is possible that previous merging was interrupted */
-				backup->status != BACKUP_STATUS_MERGING)
+				backup->status != BACKUP_STATUS_MERGING &&
+				backup->status != BACKUP_STATUS_DELETING)
 				elog(ERROR, "Backup %s has status: %s",
 					 base36enc(backup->start_time), status2str(backup->status));
 
@@ -128,17 +129,21 @@ do_merge(time_t backup_id)
 	 */
 	for (i = full_backup_idx; i > dest_backup_idx; i--)
 	{
-		pgBackup   *to_backup = (pgBackup *) parray_get(backups, i);
 		pgBackup   *from_backup = (pgBackup *) parray_get(backups, i - 1);
 
-		merge_backups(to_backup, from_backup);
+		full_backup = (pgBackup *) parray_get(backups, i);
+		merge_backups(full_backup, from_backup);
 	}
+
+	pgBackupValidate(full_backup);
+	if (full_backup->status == BACKUP_STATUS_CORRUPT)
+		elog(ERROR, "Merging of backup %s failed", base36enc(backup_id));
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
 
-	elog(LOG, "Merge completed");
+	elog(INFO, "Merge of backup %s completed", base36enc(backup_id));
 }
 
 /*
@@ -166,7 +171,36 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	int			i;
 	bool		merge_isok = true;
 
-	elog(LOG, "Merging backup %s with backup %s", from_backup_id, to_backup_id);
+	elog(INFO, "Merging backup %s with backup %s", from_backup_id, to_backup_id);
+
+	/*
+	 * Validate to_backup only if it is BACKUP_STATUS_OK. If it has
+	 * BACKUP_STATUS_MERGING status then it isn't valid backup until merging
+	 * finished.
+	 */
+	if (to_backup->status == BACKUP_STATUS_OK)
+	{
+		pgBackupValidate(to_backup);
+		if (to_backup->status == BACKUP_STATUS_CORRUPT)
+			elog(ERROR, "Interrupt merging");
+	}
+
+	/*
+	 * It is OK to validate from_backup if it has BACKUP_STATUS_OK or
+	 * BACKUP_STATUS_MERGING status.
+	 */
+	Assert(from_backup->status == BACKUP_STATUS_OK ||
+		   from_backup->status == BACKUP_STATUS_MERGING);
+	pgBackupValidate(from_backup);
+	if (from_backup->status == BACKUP_STATUS_CORRUPT)
+		elog(ERROR, "Interrupt merging");
+
+	/*
+	 * Previous merging was interrupted during deleting source backup. It is
+	 * safe just to delete it again.
+	 */
+	if (from_backup->status == BACKUP_STATUS_DELETING)
+		goto delete_source_backup;
 
 	to_backup->status = BACKUP_STATUS_MERGING;
 	write_backup_status(to_backup);
@@ -247,67 +281,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		elog(ERROR, "Data files merging failed");
 
 	/*
-	 * Files were copied into to_backup and deleted from from_backup. Remove
-	 * remaining directories from from_backup.
-	 */
-	parray_qsort(files, pgFileComparePathDesc);
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-
-		if (!S_ISDIR(file->mode))
-			continue;
-
-		if (rmdir(file->path))
-			elog(ERROR, "Could not remove directory \"%s\": %s",
-				 file->path, strerror(errno));
-	}
-	if (rmdir(from_database_path))
-		elog(ERROR, "Could not remove directory \"%s\": %s",
-			 from_database_path, strerror(errno));
-	if (unlink(control_file))
-		elog(ERROR, "Could not remove file \"%s\": %s",
-			 control_file, strerror(errno));
-
-	pgBackupGetPath(from_backup, control_file, lengthof(control_file),
-					BACKUP_CONTROL_FILE);
-	if (unlink(control_file))
-		elog(ERROR, "Could not remove file \"%s\": %s",
-			 control_file, strerror(errno));
-
-	if (rmdir(from_backup_path))
-		elog(ERROR, "Could not remove directory \"%s\": %s",
-			 from_backup_path, strerror(errno));
-
-	/*
-	 * Delete files which are not in from_backup file list.
-	 */
-	for (i = 0; i < parray_num(to_files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(to_files, i);
-
-		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
-		{
-			pgFileDelete(file);
-			elog(LOG, "Deleted \"%s\"", file->path);
-		}
-	}
-
-	/*
-	 * Rename FULL backup directory.
-	 */
-	if (rename(to_backup_path, from_backup_path) == -1)
-		elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
-			 to_backup_path, from_backup_path, strerror(errno));
-
-	/*
 	 * Update to_backup metadata.
 	 */
-	pgBackupCopy(to_backup, from_backup);
-	/* Correct metadata */
-	to_backup->backup_mode = BACKUP_MODE_FULL;
 	to_backup->status = BACKUP_STATUS_OK;
-	to_backup->parent_backup = INVALID_BACKUP_ID;
 	/* Compute summary of size of regular files in the backup */
 	to_backup->data_bytes = 0;
 	for (i = 0; i < parray_num(files); i++)
@@ -328,8 +304,47 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	else
 		to_backup->wal_bytes = BYTES_INVALID;
 
-	pgBackupWriteFileList(to_backup, files, from_database_path);
-	write_backup_status(to_backup);
+	write_backup_filelist(to_backup, files, from_database_path);
+	write_backup(to_backup);
+
+delete_source_backup:
+	/*
+	 * Files were copied into to_backup. It is time to remove source backup
+	 * entirely.
+	 */
+	delete_backup_files(from_backup);
+
+	/*
+	 * Delete files which are not in from_backup file list.
+	 */
+	for (i = 0; i < parray_num(to_files); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(to_files, i);
+
+		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
+		{
+			pgFileDelete(file);
+			elog(VERBOSE, "Deleted \"%s\"", file->path);
+		}
+	}
+
+	/*
+	 * Rename FULL backup directory.
+	 */
+	elog(INFO, "Rename %s to %s", to_backup_id, from_backup_id);
+	if (rename(to_backup_path, from_backup_path) == -1)
+		elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
+			 to_backup_path, from_backup_path, strerror(errno));
+
+	/*
+	 * Merging finished, now we can safely update ID of the destination backup.
+	 */
+	pgBackupCopy(to_backup, from_backup);
+	/* Correct metadata */
+	to_backup->backup_mode = BACKUP_MODE_FULL;
+	to_backup->status = BACKUP_STATUS_OK;
+	to_backup->parent_backup = INVALID_BACKUP_ID;
+	write_backup(to_backup);
 
 	/* Cleanup */
 	pfree(threads_args);
@@ -460,14 +475,16 @@ merge_files(void *arg)
 					file->path = to_path_tmp;
 
 					/* Decompress first/target file */
-					restore_data_file(tmp_file_path, file, false, false);
+					restore_data_file(tmp_file_path, file, false, false,
+									  parse_program_version(to_backup->program_version));
 
 					file->path = prev_path;
 				}
 				/* Merge second/source file with first/target file */
 				restore_data_file(tmp_file_path, file,
 								  from_backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
-								  false);
+								  false,
+								  parse_program_version(from_backup->program_version));
 
 				elog(VERBOSE, "Compress file and save it to the directory \"%s\"",
 					 argument->to_root);
@@ -499,19 +516,19 @@ merge_files(void *arg)
 				/* We can merge in-place here */
 				restore_data_file(to_path_tmp, file,
 								  from_backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
-								  true);
+								  true,
+								  parse_program_version(from_backup->program_version));
 
 				/*
 				 * We need to calculate write_size, restore_data_file() doesn't
 				 * do that.
 				 */
 				file->write_size = pgFileSize(to_path_tmp);
-				file->crc = pgFileGetCRC(to_path_tmp);
+				file->crc = pgFileGetCRC(to_path_tmp, false);
 			}
-			pgFileDelete(file);
 		}
 		else
-			move_file(argument->from_root, argument->to_root, file);
+			copy_file(argument->from_root, argument->to_root, file);
 
 		if (file->write_size != BYTES_INVALID)
 			elog(LOG, "Moved file \"%s\": " INT64_FORMAT " bytes",

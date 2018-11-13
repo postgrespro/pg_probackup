@@ -33,7 +33,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table and indexes
         node.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap tablespace somedata "
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap tablespace somedata "
             "as select i as id, nextval('t_seq') as t_seq, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
@@ -75,7 +76,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Take PTRACK backup to clean every ptrack
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['-j10', '--log-level-file=verbose'])
+            options=['-j10'])
         node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -151,7 +152,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Create table and indexes
         master.safe_psql(
             "postgres",
-            "create sequence t_seq; create table t_heap as select i as id, "
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap as select i as id, "
             "nextval('t_seq') as t_seq, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,2560) i")
