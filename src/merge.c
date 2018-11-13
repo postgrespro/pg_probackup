@@ -164,7 +164,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 				control_file[MAXPGPATH];
 	parray	   *files,
 			   *to_files;
-	pthread_t  *threads;
+	pthread_t  *threads = NULL;
 	merge_files_arg *threads_args;
 	int			i;
 	bool		merge_isok = true;
@@ -194,19 +194,6 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		elog(ERROR, "Interrupt merging");
 
 	/*
-	 * Previous merging was interrupted during deleting source backup. It is
-	 * safe just to delete it again.
-	 */
-	if (from_backup->status == BACKUP_STATUS_DELETING)
-		goto delete_source_backup;
-
-	to_backup->status = BACKUP_STATUS_MERGING;
-	write_backup_status(to_backup);
-
-	from_backup->status = BACKUP_STATUS_MERGING;
-	write_backup_status(from_backup);
-
-	/*
 	 * Make backup paths.
 	 */
 	pgBackupGetPath(to_backup, to_backup_path, lengthof(to_backup_path), NULL);
@@ -215,8 +202,6 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	pgBackupGetPath(from_backup, from_backup_path, lengthof(from_backup_path), NULL);
 	pgBackupGetPath(from_backup, from_database_path, lengthof(from_database_path),
 					DATABASE_DIR);
-
-	create_data_directories(to_database_path, from_backup_path, false);
 
 	/*
 	 * Get list of files which will be modified or removed.
@@ -237,6 +222,21 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	files = dir_read_file_list(from_database_path, control_file);
 	/* sort by size for load balancing */
 	parray_qsort(files, pgFileCompareSize);
+
+	/*
+	 * Previous merging was interrupted during deleting source backup. It is
+	 * safe just to delete it again.
+	 */
+	if (from_backup->status == BACKUP_STATUS_DELETING)
+		goto delete_source_backup;
+
+	to_backup->status = BACKUP_STATUS_MERGING;
+	write_backup_status(to_backup);
+
+	from_backup->status = BACKUP_STATUS_MERGING;
+	write_backup_status(from_backup);
+
+	create_data_directories(to_database_path, from_backup_path, false);
 
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (merge_files_arg *) palloc(sizeof(merge_files_arg) * num_threads);
@@ -344,8 +344,11 @@ delete_source_backup:
 	write_backup(to_backup);
 
 	/* Cleanup */
-	pfree(threads_args);
-	pfree(threads);
+	if (threads)
+	{
+		pfree(threads_args);
+		pfree(threads);
+	}
 
 	parray_walk(to_files, pgFileFree);
 	parray_free(to_files);
