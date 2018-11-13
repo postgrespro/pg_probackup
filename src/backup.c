@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include "utils/thread.h"
+#include <time.h>
 
 #define PG_STOP_BACKUP_TIMEOUT 300
 
