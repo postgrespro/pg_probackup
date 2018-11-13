@@ -28,7 +28,13 @@ extern int pthread_join(pthread_t th, void **thread_return);
 #include <pthread.h>
 #endif
 
+#ifdef WIN32
+extern DWORD main_tid;
+#else
 extern pthread_t main_tid;
+#endif
+
+
 
 extern int pthread_lock(pthread_mutex_t *mp);
 
