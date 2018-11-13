@@ -1,10 +1,15 @@
 # -*-perl-*- hey - emacs - this is a perl file
-BEGIN{
+# my $currpath = cwd();
+
+our $pgsrc;
+our $currpath;
+
+BEGIN {
+# path to the pg_pprobackup dir
+$currpath = File::Basename::dirname(Cwd::abs_path($0));
 use Cwd;
 use File::Basename;
-
-my $pgsrc="";
-if (@ARGV==1) 
+if (($#ARGV+1)==1) 
 {
 	$pgsrc = shift @ARGV;
 	if($pgsrc eq "--help"){
@@ -23,14 +28,13 @@ else
 	chdir($path);
 	chdir("../..");
 	$pgsrc = cwd();
+	$currpath = "contrib/pg_probackup";
 }
-
 chdir("$pgsrc/src/tools/msvc");
 push(@INC, "$pgsrc/src/tools/msvc");
 chdir("../../..") if (-d "../msvc" && -d "../../../src");
 
 }
-
 use Win32;
 use Carp;
 use strict;
@@ -84,22 +88,27 @@ my $vcver = build_pgprobackup($config);
 my $bconf     = $ENV{CONFIG}   || "Release";
 my $msbflags  = $ENV{MSBFLAGS} || "";
 my $buildwhat = $ARGV[1]       || "";
-if (uc($ARGV[0]) eq 'DEBUG')
-{
-	$bconf = "Debug";
-}
-elsif (uc($ARGV[0]) ne "RELEASE")
-{
-	$buildwhat = $ARGV[0] || "";
-}
 
+# if (uc($ARGV[0]) eq 'DEBUG')
+# {
+# 	$bconf = "Debug";
+# }
+# elsif (uc($ARGV[0]) ne "RELEASE")
+# {
+# 	$buildwhat = $ARGV[0] || "";
+# }
+
+# printf "currpath=$currpath";
+
+# exit(0);
 # ... and do it
 system("msbuild pg_probackup.vcxproj /verbosity:normal $msbflags /p:Configuration=$bconf" );
-
 
 # report status
 
 my $status = $? >> 8;
+printf("Status: $status\n");
+printf("Output file built in the folder $pgsrc/$bconf/pg_probackup\n");
 
 exit $status;
 
@@ -126,10 +135,10 @@ sub build_pgprobackup
 
 	#vvs test
 	my $probackup =
-	  $solution->AddProject('pg_probackup', 'exe', 'pg_probackup'); #, 'contrib/pg_probackup'
+	  $solution->AddProject("pg_probackup", 'exe', "pg_probackup"); #, 'contrib/pg_probackup'
 	$probackup->AddDefine('FRONTEND');
 	$probackup->AddFiles(
-		'contrib/pg_probackup/src', 
+		"$currpath/src", 
 		'archive.c',
 		'backup.c',
 		'catalog.c',
@@ -149,39 +158,39 @@ sub build_pgprobackup
 		'validate.c'
 		);
 	$probackup->AddFiles(
-		'contrib/pg_probackup/src/utils', 
+		"$currpath/src/utils", 
 		'json.c',
 		'logger.c',
 		'parray.c',
 		'pgut.c',
 		'thread.c'
 		);
-	$probackup->AddFile('src/backend/access/transam/xlogreader.c');
-	$probackup->AddFile('src/backend/utils/hash/pg_crc.c');
+	$probackup->AddFile("$pgsrc/src/backend/access/transam/xlogreader.c");
+	$probackup->AddFile("$pgsrc/src/backend/utils/hash/pg_crc.c");
 	$probackup->AddFiles(
-		'src/bin/pg_basebackup', 
+		"$pgsrc/src/bin/pg_basebackup", 
 		'receivelog.c',
 		'streamutil.c'
 		);
 
-	if (-e 'src/bin/pg_basebackup/walmethods.c') 
+	if (-e "$pgsrc/src/bin/pg_basebackup/walmethods.c") 
 	{
-		$probackup->AddFile('src/bin/pg_basebackup/walmethods.c');
+		$probackup->AddFile("$pgsrc/src/bin/pg_basebackup/walmethods.c");
 	}
 
-	$probackup->AddFile('src/bin/pg_rewind/datapagemap.c');
+	$probackup->AddFile("$pgsrc/src/bin/pg_rewind/datapagemap.c");
 
-	$probackup->AddFile('src/interfaces/libpq/pthread-win32.c');
+	$probackup->AddFile("$pgsrc/src/interfaces/libpq/pthread-win32.c");
 
-        $probackup->AddIncludeDir('src/bin/pg_basebackup');
-        $probackup->AddIncludeDir('src/bin/pg_rewind');
-        $probackup->AddIncludeDir('src/interfaces/libpq');
-        $probackup->AddIncludeDir('src');
-        $probackup->AddIncludeDir('src/port');
+        $probackup->AddIncludeDir("$pgsrc/src/bin/pg_basebackup");
+        $probackup->AddIncludeDir("$pgsrc/src/bin/pg_rewind");
+        $probackup->AddIncludeDir("$pgsrc/src/interfaces/libpq");
+        $probackup->AddIncludeDir("$pgsrc/src");
+        $probackup->AddIncludeDir("$pgsrc/src/port");
 
-        $probackup->AddIncludeDir('contrib/pg_probackup');
-        $probackup->AddIncludeDir('contrib/pg_probackup/src');
-        $probackup->AddIncludeDir('contrib/pg_probackup/src/utils');
+        $probackup->AddIncludeDir("$currpath");
+        $probackup->AddIncludeDir("$currpath/src");
+        $probackup->AddIncludeDir("$currpath/src/utils");
 
 	$probackup->AddReference($libpq, $libpgfeutils, $libpgcommon, $libpgport);
 	$probackup->AddLibrary('ws2_32.lib');
