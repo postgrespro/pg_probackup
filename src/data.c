@@ -14,6 +14,8 @@
 #include "storage/checksum_impl.h"
 #include <common/pg_lzcompress.h>
 
+#include <unistd.h>
+
 #include <sys/stat.h>
 
 #ifdef HAVE_LIBZ

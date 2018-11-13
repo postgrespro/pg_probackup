@@ -16,6 +16,8 @@
 
 #include <unistd.h>
 
+#include <sys/stat.h>
+
 const char *
 base36enc(long unsigned int value)
 {

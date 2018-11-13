@@ -22,6 +22,7 @@
 #endif
 
 #include "utils/thread.h"
+#include <unistd.h>
 #include <time.h>
 
 /*
