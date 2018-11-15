@@ -14,6 +14,7 @@
 #include "logger.h"
 #include "pgut.h"
 #include "thread.h"
+#include <time.h>
 
 #include "utils/configuration.h"
 

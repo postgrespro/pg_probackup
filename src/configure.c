@@ -27,9 +27,6 @@ static void show_configure_end(void);
 static void show_configure_plain(ConfigOption *opt);
 static void show_configure_json(ConfigOption *opt);
 
-#define ARCHIVE_TIMEOUT_DEFAULT		300
-#define REPLICA_TIMEOUT_DEFAULT		300
-
 #define RETENTION_REDUNDANCY_DEFAULT	0
 #define RETENTION_WINDOW_DEFAULT		0
 

@@ -22,6 +22,8 @@
 #endif
 
 #include "utils/thread.h"
+#include <unistd.h>
+#include <time.h>
 
 /*
  * RmgrNames is an array of resource manager names, to make error messages
@@ -237,10 +239,11 @@ doExtractPageMap(void *arg)
 	 */
 	if (XLogRecPtrIsInvalid(found))
 	{
-		elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X",
+		elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X. %s",
 			 private_data->thread_num,
 			 (uint32) (extract_arg->startpoint >> 32),
-			 (uint32) (extract_arg->startpoint));
+			 (uint32) (extract_arg->startpoint),
+			 (xlogreader->errormsg_buf[0] != '\0')?xlogreader->errormsg_buf:"");
 		PrintXLogCorruptionMsg(private_data, ERROR);
 	}
 	extract_arg->startpoint = found;
@@ -533,8 +536,8 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 */
 	if (backup->stream)
 	{
-		snprintf(backup_xlog_path, sizeof(backup_xlog_path), "/%s/%s/%s/%s",
-				backup_instance_path, backup_id, DATABASE_DIR, PG_XLOG_DIR);
+		pgBackupGetPath2(backup, backup_xlog_path, lengthof(backup_xlog_path),
+						 DATABASE_DIR, PG_XLOG_DIR);
 
 		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli,
 											   seg_size);

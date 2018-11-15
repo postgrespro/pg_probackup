@@ -511,18 +511,22 @@ write_backup(pgBackup *backup)
 	fp = fopen(conf_path, "wt");
 	if (fp == NULL)
 		elog(ERROR, "Cannot open configuration file \"%s\": %s", conf_path,
-			strerror(errno));
+			 strerror(errno));
 
 	pgBackupWriteControl(fp, backup);
 
-	fclose(fp);
+	if (fflush(fp) != 0 ||
+		fsync(fileno(fp)) != 0 ||
+		fclose(fp))
+		elog(ERROR, "Cannot write configuration file \"%s\": %s",
+			 conf_path, strerror(errno));
 }
 
 /*
  * Output the list of files to backup catalog DATABASE_FILE_LIST
  */
 void
-pgBackupWriteFileList(pgBackup *backup, parray *files, const char *root)
+write_backup_filelist(pgBackup *backup, parray *files, const char *root)
 {
 	FILE	   *fp;
 	char		path[MAXPGPATH];
@@ -531,7 +535,7 @@ pgBackupWriteFileList(pgBackup *backup, parray *files, const char *root)
 
 	fp = fopen(path, "wt");
 	if (fp == NULL)
-		elog(ERROR, "cannot open file list \"%s\": %s", path,
+		elog(ERROR, "Cannot open file list \"%s\": %s", path,
 			strerror(errno));
 
 	print_file_list(fp, files, root);
@@ -539,7 +543,7 @@ pgBackupWriteFileList(pgBackup *backup, parray *files, const char *root)
 	if (fflush(fp) != 0 ||
 		fsync(fileno(fp)) != 0 ||
 		fclose(fp))
-		elog(ERROR, "cannot write file list \"%s\": %s", path, strerror(errno));
+		elog(ERROR, "Cannot write file list \"%s\": %s", path, strerror(errno));
 }
 
 /*

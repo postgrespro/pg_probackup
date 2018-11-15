@@ -14,6 +14,8 @@
 #include "storage/checksum_impl.h"
 #include <common/pg_lzcompress.h>
 
+#include <unistd.h>
+
 #include <sys/stat.h>
 
 #ifdef HAVE_LIBZ
@@ -722,6 +724,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		size_t		read_len;
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
+		int32		uncompressed_size = 0;
 
 		/* File didn`t changed. Nothig to copy */
 		if (file->write_size == BYTES_INVALID)
@@ -777,17 +780,23 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 
 		Assert(header.compressed_size <= BLCKSZ);
 
+		/* read a page from file */
 		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
 			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 
+		/*
+		 * if page size is smaller than BLCKSZ, decompress the page.
+		 * BUGFIX for versions < 2.0.23: if page size is equal to BLCKSZ.
+		 * we have to check, whether it is compressed or not using
+		 * page_may_be_compressed() function.
+		 */
 		if (header.compressed_size != BLCKSZ
 			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
 									  backup_version))
 		{
-			int32		uncompressed_size = 0;
 			const char *errormsg = NULL;
 
 			uncompressed_size = do_decompress(page.data, BLCKSZ,
@@ -820,7 +829,11 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 					 blknum, file->path, strerror(errno));
 		}
 
-		if (header.compressed_size < BLCKSZ)
+		/* if we uncompressed the page - write page.data,
+		 * if page wasn't compressed -
+		 * write what we've read - compressed_page.data
+		 */
+		if (uncompressed_size == BLCKSZ)
 		{
 			if (fwrite(page.data, 1, BLCKSZ, out) != BLCKSZ)
 				elog(ERROR, "cannot write block %u of \"%s\": %s",
@@ -828,7 +841,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		}
 		else
 		{
-			/* if page wasn't compressed, we've read full block */
+			/*  */
 			if (fwrite(compressed_page.data, 1, BLCKSZ, out) != BLCKSZ)
 				elog(ERROR, "cannot write block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
@@ -1024,22 +1037,6 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 	fclose(in);
 
 	return true;
-}
-
-/*
- * Move file from one backup to another.
- * We do not apply compression to these files, because
- * it is either small control file or already compressed cfs file.
- */
-void
-move_file(const char *from_root, const char *to_root, pgFile *file)
-{
-	char		to_path[MAXPGPATH];
-
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	if (rename(file->path, to_path) == -1)
-		elog(ERROR, "Cannot move file \"%s\" to path \"%s\": %s",
-			 file->path, to_path, strerror(errno));
 }
 
 #ifdef HAVE_LIBZ

@@ -14,7 +14,6 @@
 #include <time.h>
 #include <unistd.h>
 
-static int delete_backup_files(pgBackup *backup);
 static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
 							uint32 xlog_seg_size);
 
@@ -250,7 +249,7 @@ do_retention_purge(void)
  * Delete backup files of the backup and update the status of the backup to
  * BACKUP_STATUS_DELETED.
  */
-static int
+void
 delete_backup_files(pgBackup *backup)
 {
 	size_t		i;
@@ -262,11 +261,15 @@ delete_backup_files(pgBackup *backup)
 	 * If the backup was deleted already, there is nothing to do.
 	 */
 	if (backup->status == BACKUP_STATUS_DELETED)
-		return 0;
+	{
+		elog(WARNING, "Backup %s already deleted",
+			 base36enc(backup->start_time));
+		return;
+	}
 
 	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 
-	elog(INFO, "delete: %s %s",
+	elog(INFO, "Delete: %s %s",
 		 base36enc(backup->start_time), timestamp);
 
 	/*
@@ -288,17 +291,17 @@ delete_backup_files(pgBackup *backup)
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
 		/* print progress */
-		elog(VERBOSE, "delete file(%zd/%lu) \"%s\"", i + 1,
+		elog(VERBOSE, "Delete file(%zd/%lu) \"%s\"", i + 1,
 			 (unsigned long) parray_num(files), file->path);
 
 		if (remove(file->path))
 		{
-			elog(WARNING, "can't remove \"%s\": %s", file->path,
-				strerror(errno));
-			parray_walk(files, pgFileFree);
-			parray_free(files);
-
-			return 1;
+			if (errno == ENOENT)
+				elog(VERBOSE, "File \"%s\" is absent", file->path);
+			else
+				elog(ERROR, "Cannot remove \"%s\": %s", file->path,
+					 strerror(errno));
+			return;
 		}
 	}
 
@@ -306,7 +309,7 @@ delete_backup_files(pgBackup *backup)
 	parray_free(files);
 	backup->status = BACKUP_STATUS_DELETED;
 
-	return 0;
+	return;
 }
 
 /*
