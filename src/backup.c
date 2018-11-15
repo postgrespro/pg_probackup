@@ -2173,7 +2173,7 @@ backup_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
-			pgFile	  **prev_file;
+			pgFile	  **prev_file = NULL;
 
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
@@ -2214,7 +2214,7 @@ backup_files(void *arg)
 				bool skip = false;
 
 				/* If non-data file has not changed since last backup... */
-				if (file->exists_in_prev &&
+				if (prev_file && file->exists_in_prev &&
 					buf.st_mtime < current.parent_backup)
 				{
 					calc_file_checksum(file);

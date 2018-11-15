@@ -165,7 +165,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	parray	   *files,
 			   *to_files;
 	pthread_t  *threads = NULL;
-	merge_files_arg *threads_args;
+	merge_files_arg *threads_args = NULL;
 	int			i;
 	bool		merge_isok = true;
 
