@@ -269,28 +269,6 @@ pgFileGetCRC(const char *file_path, bool use_crc32c)
 	size_t		len;
 	int			errno_tmp;
 
-#define INIT_FILE_CRC32(crc) \
-do { \
-	if (use_crc32c) \
-		INIT_CRC32C(crc); \
-	else \
-		INIT_TRADITIONAL_CRC32(crc); \
-} while (0)
-#define COMP_FILE_CRC32(crc, data, len) \
-do { \
-	if (use_crc32c) \
-		COMP_CRC32C((crc), (data), (len)); \
-	else \
-		COMP_TRADITIONAL_CRC32(crc, data, len); \
-} while (0)
-#define FIN_FILE_CRC32(crc) \
-do { \
-	if (use_crc32c) \
-		FIN_CRC32C(crc); \
-	else \
-		FIN_TRADITIONAL_CRC32(crc); \
-} while (0)
-
 	/* open file in binary read mode */
 	fp = fopen(file_path, PG_BINARY_R);
 	if (fp == NULL)
@@ -298,20 +276,20 @@ do { \
 			file_path, strerror(errno));
 
 	/* calc CRC of backup file */
-	INIT_FILE_CRC32(crc);
+	INIT_FILE_CRC32(use_crc32c, crc);
 	while ((len = fread(buf, 1, sizeof(buf), fp)) == sizeof(buf))
 	{
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
-		COMP_FILE_CRC32(crc, buf, len);
+		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
 	}
 	errno_tmp = errno;
 	if (!feof(fp))
 		elog(WARNING, "cannot read \"%s\": %s", file_path,
 			strerror(errno_tmp));
 	if (len > 0)
-		COMP_FILE_CRC32(crc, buf, len);
-	FIN_FILE_CRC32(crc);
+		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
+	FIN_FILE_CRC32(use_crc32c, crc);
 
 	fclose(fp);
 

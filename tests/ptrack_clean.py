@@ -76,7 +76,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Take PTRACK backup to clean every ptrack
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            options=['-j10', '--log-level-file=verbose'])
+            options=['-j10'])
         node.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:

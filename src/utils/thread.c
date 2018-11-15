@@ -9,8 +9,11 @@
 
 #include "thread.h"
 
+#ifdef WIN32
+DWORD main_tid = 0;
+#else
 pthread_t main_tid = 0;
-
+#endif
 #ifdef WIN32
 #include <errno.h>
 

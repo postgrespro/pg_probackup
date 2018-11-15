@@ -50,6 +50,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--master-db=db_name] [--master-host=host_name]
                  [--master-port=port] [--master-user=user_name]
                  [--replica-timeout=timeout]
+                 [--skip-block-validation]
 
   pg_probackup restore -B backup-path --instance=instance_name
                  [-D pgdata-path] [-i backup-id] [--progress]
@@ -59,12 +60,14 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--recovery-target-action=pause|promote|shutdown]
                  [--restore-as-replica]
                  [--no-validate]
+                 [--skip-block-validation]
 
   pg_probackup validate -B backup-path [--instance=instance_name]
                  [-i backup-id] [--progress]
                  [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]
                  [--recovery-target-name=target-name]
                  [--timeline=timeline]
+                 [--skip-block-validation]
 
   pg_probackup show -B backup-path
                  [--instance=instance_name [-i backup-id]]

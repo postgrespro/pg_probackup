@@ -80,13 +80,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         self.restore_node(
-            backup_dir,
-            'node',
-            node_restored,
-            options=[
-                "-j", "1",
-                "--log-level-file=verbose"
-            ]
+            backup_dir, 'node', node_restored
         )
 
         # Physical comparison
@@ -176,8 +170,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             'node',
             node_restored,
             options=[
-                "-j", "1",
-                "--log-level-file=verbose",
                 "-T", "{0}={1}".format(
                     old_tablespace, new_tablespace)]
         )
@@ -251,13 +243,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         self.restore_node(
-            backup_dir,
-            'node',
-            node_restored,
-            options=[
-                "-j", "1",
-                "--log-level-file=verbose"
-            ]
+            backup_dir, 'node', node_restored
         )
 
         # Physical comparison
@@ -683,7 +669,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             node_restored,
             backup_id=backup_id,
             options=[
-                "-j", "4", "--log-level-file=verbose",
+                "-j", "4",
                 "--immediate",
                 "--recovery-target-action=promote"])
 
@@ -717,7 +703,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             node_restored,
             backup_id=backup_id,
             options=[
-                "-j", "4", "--log-level-file=verbose",
+                "-j", "4",
                 "--immediate",
                 "--recovery-target-action=promote"]
         )
@@ -815,7 +801,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='delta',
-            options=["--stream", "--log-level-file=verbose"]
+            options=["--stream"]
         )
 #        if self.paranoia:
 #            pgdata_delta = self.pgdata_content(
@@ -844,7 +830,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             node_restored,
             backup_id=backup_id,
             options=[
-                "-j", "4", "--log-level-file=verbose",
+                "-j", "4",
                 "--immediate",
                 "--recovery-target-action=promote"])
 
@@ -1135,7 +1121,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_page_corruption_heal_via_ptrack_1(self):
+    def test_delta_corruption_heal_via_ptrack_1(self):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -1174,8 +1160,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 f.close
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
-            options=["-j", "4", "--stream", "--log-level-file=verbose"])
+            backup_dir, 'node', node,
+            backup_type="delta",
+            options=["-j", "4", "--stream", '--log-level-file=verbose'])
+
 
         # open log file and check
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:

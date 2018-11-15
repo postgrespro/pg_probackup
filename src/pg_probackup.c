@@ -17,8 +17,9 @@
 #include <sys/stat.h>
 
 #include "utils/thread.h"
+#include <time.h>
 
-const char *PROGRAM_VERSION	= "2.0.23";
+const char *PROGRAM_VERSION	= "2.0.24";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -92,6 +93,8 @@ static pgRecoveryTarget *recovery_target_options = NULL;
 
 bool restore_as_replica = false;
 bool restore_no_validate = false;
+
+bool skip_block_validation = false;
 
 /* delete options */
 bool		delete_wal = false;
@@ -185,6 +188,7 @@ static pgut_option options[] =
 	{ 'b', 'R', "restore-as-replica",	&restore_as_replica,	SOURCE_CMDLINE },
 	{ 'b', 27, "no-validate",			&restore_no_validate,	SOURCE_CMDLINE },
 	{ 's', 28, "lsn",					&target_lsn,		SOURCE_CMDLINE },
+	{ 'b', 29, "skip-block-validation", &skip_block_validation,	SOURCE_CMDLINE },
 	/* delete options */
 	{ 'b', 130, "wal",					&delete_wal,		SOURCE_CMDLINE },
 	{ 'b', 131, "expired",				&delete_expired,	SOURCE_CMDLINE },
