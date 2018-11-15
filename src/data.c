@@ -1418,75 +1418,13 @@ get_wal_file(const char *from_path, const char *to_path)
  * but created in process of backup, such as stream XLOG files,
  * PG_TABLESPACE_MAP_FILE and PG_BACKUP_LABEL_FILE.
  */
-bool
+void
 calc_file_checksum(pgFile *file)
 {
-	FILE	   *in;
-	size_t		read_len = 0;
-	int			errno_tmp;
-	char		buf[BLCKSZ];
-	struct stat	st;
-	pg_crc32	crc;
-
 	Assert(S_ISREG(file->mode));
-	INIT_TRADITIONAL_CRC32(crc);
 
-	/* reset size summary */
-	file->read_size = 0;
-	file->write_size = 0;
-
-	/* open backup mode file for read */
-	in = fopen(file->path, PG_BINARY_R);
-	if (in == NULL)
-	{
-		FIN_TRADITIONAL_CRC32(crc);
-		file->crc = crc;
-
-		/* maybe deleted, it's not error */
-		if (errno == ENOENT)
-			return false;
-
-		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
-			 strerror(errno));
-	}
-
-	/* stat source file to change mode of destination file */
-	if (fstat(fileno(in), &st) == -1)
-	{
-		fclose(in);
-		elog(ERROR, "cannot stat \"%s\": %s", file->path,
-			 strerror(errno));
-	}
-
-	for (;;)
-	{
-		read_len = fread(buf, 1, sizeof(buf), in);
-
-		if(read_len == 0)
-			break;
-
-		/* update CRC */
-		COMP_TRADITIONAL_CRC32(crc, buf, read_len);
-
-		file->write_size += read_len;
-		file->read_size += read_len;
-	}
-
-	errno_tmp = errno;
-	if (!feof(in))
-	{
-		fclose(in);
-		elog(ERROR, "cannot read backup mode file \"%s\": %s",
-			 file->path, strerror(errno_tmp));
-	}
-
-	/* finish CRC calculation and store into pgFile */
-	FIN_TRADITIONAL_CRC32(crc);
-	file->crc = crc;
-
-	fclose(in);
-
-	return true;
+	file->crc = pgFileGetCRC(file->path, false, false, &file->read_size);
+	file->write_size = file->read_size;
 }
 
 /*
@@ -1779,11 +1717,11 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 	else
 #endif
 	{
-		crc2 = pgFileGetCRC(path2);
+		crc2 = pgFileGetCRC(path2, false, true, NULL);
 	}
 
 	/* Get checksum of original file */
-	crc1 = pgFileGetCRC(path1);
+	crc1 = pgFileGetCRC(path1, false, true, NULL);
 
 	return EQ_CRC32C(crc1, crc2);
 }

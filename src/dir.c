@@ -259,36 +259,55 @@ delete_file:
 }
 
 pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c)
+pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
+			 size_t *bytes_read)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
 	char		buf[1024];
 	size_t		len;
+	size_t		total = 0;
 	int			errno_tmp;
+
+	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* open file in binary read mode */
 	fp = fopen(file_path, PG_BINARY_R);
 	if (fp == NULL)
-		elog(ERROR, "cannot open file \"%s\": %s",
-			file_path, strerror(errno));
+	{
+		if (!raise_on_deleted && errno == ENOENT)
+		{
+			FIN_FILE_CRC32(use_crc32c, crc);
+			return crc;
+		}
+		else
+			elog(ERROR, "cannot open file \"%s\": %s",
+				file_path, strerror(errno));
+	}
 
-	/* calc CRC of backup file */
-	INIT_FILE_CRC32(use_crc32c, crc);
-	while ((len = fread(buf, 1, sizeof(buf), fp)) == sizeof(buf))
+	/* calc CRC of file */
+	for (;;)
 	{
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
+
+		len = fread(buf, 1, sizeof(buf), fp);
+		if(len == 0)
+			break;
+		/* update CRC */
 		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
+		total += len;
 	}
+
+	if (bytes_read)
+		*bytes_read = total;
+
 	errno_tmp = errno;
 	if (!feof(fp))
 		elog(WARNING, "cannot read \"%s\": %s", file_path,
 			strerror(errno_tmp));
-	if (len > 0)
-		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-	FIN_FILE_CRC32(use_crc32c, crc);
 
+	FIN_FILE_CRC32(use_crc32c, crc);
 	fclose(fp);
 
 	return crc;
