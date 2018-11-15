@@ -29,6 +29,9 @@ typedef union DataPage
 	char		data[BLCKSZ];
 } DataPage;
 
+static bool
+fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed);
+
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
 static int32
@@ -1092,14 +1095,21 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	FILE	   *in = NULL;
 	FILE	   *out=NULL;
 	char		buf[XLOG_BLCKSZ];
-	const char *to_path_p = to_path;
+	const char *to_path_p;
 	char		to_path_temp[MAXPGPATH];
 	int			errno_temp;
 
 #ifdef HAVE_LIBZ
 	char		gz_to_path[MAXPGPATH];
 	gzFile		gz_out = NULL;
+	if (is_compress)
+	{
+		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
+		to_path_p = gz_to_path;
+	}
+	else
 #endif
+		to_path_p = to_path;
 
 	/* open file for read */
 	in = fopen(from_path, PG_BINARY_R);
@@ -1107,30 +1117,30 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
 
+	/* Check if possible to skip copying */
+	if (fileExists(to_path_p))
+	{
+		if (fileEqualCRC(from_path, to_path_p, is_compress))
+			return;
+			/* Do not copy and do not rise error. Just quit as normal. */
+		else if (!overwrite)
+			elog(ERROR, "WAL segment \"%s\" already exists.", to_path_p);
+	}
+
 	/* open backup file for write  */
 #ifdef HAVE_LIBZ
 	if (is_compress)
 	{
-		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
-
-		if (!overwrite && fileExists(gz_to_path))
-			elog(ERROR, "WAL segment \"%s\" already exists.", gz_to_path);
-
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
 		gz_out = gzopen(to_path_temp, PG_BINARY_W);
 		if (gzsetparams(gz_out, compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 compress_level, to_path_temp, get_gz_error(gz_out, errno));
-
-		to_path_p = gz_to_path;
 	}
 	else
 #endif
 	{
-		if (!overwrite && fileExists(to_path))
-			elog(ERROR, "WAL segment \"%s\" already exists.", to_path);
-
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
 		out = fopen(to_path_temp, PG_BINARY_W);
@@ -1408,75 +1418,13 @@ get_wal_file(const char *from_path, const char *to_path)
  * but created in process of backup, such as stream XLOG files,
  * PG_TABLESPACE_MAP_FILE and PG_BACKUP_LABEL_FILE.
  */
-bool
+void
 calc_file_checksum(pgFile *file)
 {
-	FILE	   *in;
-	size_t		read_len = 0;
-	int			errno_tmp;
-	char		buf[BLCKSZ];
-	struct stat	st;
-	pg_crc32	crc;
-
 	Assert(S_ISREG(file->mode));
-	INIT_TRADITIONAL_CRC32(crc);
 
-	/* reset size summary */
-	file->read_size = 0;
-	file->write_size = 0;
-
-	/* open backup mode file for read */
-	in = fopen(file->path, PG_BINARY_R);
-	if (in == NULL)
-	{
-		FIN_TRADITIONAL_CRC32(crc);
-		file->crc = crc;
-
-		/* maybe deleted, it's not error */
-		if (errno == ENOENT)
-			return false;
-
-		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
-			 strerror(errno));
-	}
-
-	/* stat source file to change mode of destination file */
-	if (fstat(fileno(in), &st) == -1)
-	{
-		fclose(in);
-		elog(ERROR, "cannot stat \"%s\": %s", file->path,
-			 strerror(errno));
-	}
-
-	for (;;)
-	{
-		read_len = fread(buf, 1, sizeof(buf), in);
-
-		if(read_len == 0)
-			break;
-
-		/* update CRC */
-		COMP_TRADITIONAL_CRC32(crc, buf, read_len);
-
-		file->write_size += read_len;
-		file->read_size += read_len;
-	}
-
-	errno_tmp = errno;
-	if (!feof(in))
-	{
-		fclose(in);
-		elog(ERROR, "cannot read backup mode file \"%s\": %s",
-			 file->path, strerror(errno_tmp));
-	}
-
-	/* finish CRC calculation and store into pgFile */
-	FIN_TRADITIONAL_CRC32(crc);
-	file->crc = crc;
-
-	fclose(in);
-
-	return true;
+	file->crc = pgFileGetCRC(file->path, false, false, &file->read_size);
+	file->write_size = file->read_size;
 }
 
 /*
@@ -1723,4 +1671,57 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 	}
 
 	return is_valid;
+}
+
+static bool
+fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
+{
+	pg_crc32	crc1;
+	pg_crc32	crc2;
+
+	/* Get checksum of backup file */
+#ifdef HAVE_LIBZ
+	if (path2_is_compressed)
+	{
+		char 		buf [1024];
+		gzFile		gz_in = NULL;
+
+		INIT_CRC32C(crc2);
+		gz_in = gzopen(path2, PG_BINARY_R);
+		if (gz_in == NULL)
+			/* File cannot be read */
+			elog(ERROR,
+					 "Cannot compare WAL file \"%s\" with compressed \"%s\"",
+					 path1, path2);
+
+		for (;;)
+		{
+			size_t read_len = 0;
+			read_len = gzread(gz_in, buf, sizeof(buf));
+			if (read_len != sizeof(buf) && !gzeof(gz_in))
+				/* An error occurred while reading the file */
+				elog(ERROR,
+					 "Cannot compare WAL file \"%s\" with compressed \"%s\"",
+					 path1, path2);
+
+			COMP_CRC32C(crc2, buf, read_len);
+			if (gzeof(gz_in) || read_len == 0)
+				break;
+		}
+		FIN_CRC32C(crc2);
+
+		if (gzclose(gz_in) != 0)
+			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
+				 path2, get_gz_error(gz_in, errno));
+	}
+	else
+#endif
+	{
+		crc2 = pgFileGetCRC(path2, false, true, NULL);
+	}
+
+	/* Get checksum of original file */
+	crc1 = pgFileGetCRC(path1, false, true, NULL);
+
+	return EQ_CRC32C(crc1, crc2);
 }

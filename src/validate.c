@@ -224,7 +224,8 @@ pgBackupValidateFiles(void *arg)
 			 * To avoid this problem we need to use different algorithm, CRC-32 in
 			 * this case.
 			 */
-			crc = pgFileGetCRC(file->path, arguments->backup_version <= 20021);
+			crc = pgFileGetCRC(file->path, arguments->backup_version <= 20021,
+							   true, NULL);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
