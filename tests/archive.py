@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import subprocess
 from sys import exit
 from time import sleep
-from shutil import copyfile
 
 
 module_name = 'archive'
@@ -248,7 +247,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.append_conf(
             'postgresql.auto.conf', "archive_command  = '{0} %p %f'".format(
                 archive_script_path))
+
         node.slow_start()
+
         try:
             self.backup_node(
                 backup_dir, 'node', node,
@@ -262,6 +263,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "Expecting Error because pg_stop_backup failed to answer.\n "
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
+
         except ProbackupException as e:
             self.assertTrue(
                 "ERROR: pg_stop_backup doesn't answer" in e.message and
@@ -327,9 +329,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
             self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
 
-        wal_src = os.path.join(node.data_dir, 'pg_wal', '000000010000000000000001')
+        wal_src = os.path.join(
+            node.data_dir, 'pg_wal', '000000010000000000000001')
         if self.archive_compress:
-            with open(wal_src, 'rb') as f_in, gzip.open(file, 'wb', compresslevel=1) as f_out:
+            with open(wal_src, 'rb') as f_in, gzip.open(
+                    file, 'wb', compresslevel=1) as f_out:
                 shutil.copyfileobj(f_in, f_out)
         else:
             shutil.copyfile(wal_src, file)
@@ -506,10 +510,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CHECKPOINT")
 
-#        copyfile(
-#            os.path.join(backup_dir, 'wal/master/000000010000000000000002'),
-#            os.path.join(backup_dir, 'wal/replica/000000010000000000000002'))
-
         backup_id = self.backup_node(
             backup_dir, 'replica',
             replica, backup_type='page',
@@ -604,10 +604,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0, 60000) i")
 
-        # TAKE FULL ARCHIVE BACKUP FROM REPLICA
-        copyfile(
-             os.path.join(backup_dir, 'wal/master/000000010000000000000001'),
-             os.path.join(backup_dir, 'wal/replica/000000010000000000000001'))
+        master.psql(
+            "postgres",
+            "CHECKPOINT")
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
