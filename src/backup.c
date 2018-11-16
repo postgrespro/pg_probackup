@@ -1802,7 +1802,11 @@ pg_stop_backup(pgBackup *backup)
 #endif
 									" labelfile,"
 									" spcmapfile"
+#if PG_VERSION_NUM >= 100000
+									" FROM pg_catalog.pg_stop_backup(false, false)";
+#else
 									" FROM pg_catalog.pg_stop_backup(false)";
+#endif
 			else
 				stop_backup_query = "SELECT"
 									" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
@@ -1810,7 +1814,11 @@ pg_stop_backup(pgBackup *backup)
 									" lsn,"
 									" labelfile,"
 									" spcmapfile"
+#if PG_VERSION_NUM >= 100000
+									" FROM pg_catalog.pg_stop_backup(false, false)";
+#else
 									" FROM pg_catalog.pg_stop_backup(false)";
+#endif
 
 		}
 		else
