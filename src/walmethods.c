@@ -22,7 +22,6 @@
 #endif
 
 #include "pgtar.h"
-#include "common/file_perm.h"
 #include "common/file_utils.h"
 
 #include "receivelog.h"
