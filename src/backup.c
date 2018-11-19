@@ -1343,7 +1343,7 @@ pg_ptrack_clear(void)
 		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
 
 		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
-								instance_config.pgdatabase,
+								dbname,
 								instance_config.pguser);
 		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()",
 						   0, NULL);
@@ -1461,7 +1461,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 		}
 
 		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
-								instance_config.pgdatabase,
+								dbname,
 								instance_config.pguser);
 		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
