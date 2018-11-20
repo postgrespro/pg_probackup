@@ -38,7 +38,7 @@ static bool fio_is_remote(fio_location location)
 {
 	return location == FIO_REMOTE_HOST
 		|| (location == FIO_BACKUP_HOST && is_remote_agent)
-		|| (location == FIO_DB_HOST && !is_remote_agent && ssh_host != NULL);
+		|| (location == FIO_DB_HOST && !is_remote_agent && IsSshConnection());
 }
 
 static ssize_t fio_read_all(int fd, void* buf, size_t size)

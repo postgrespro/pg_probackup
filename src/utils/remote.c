@@ -25,7 +25,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 {
 	char cmd[MAX_CMDLINE_LENGTH];
 	size_t dst = 0;
-	char* ssh_argv[6];
+	char* ssh_argv[8];
 	int ssh_argc;
 	int i;
 	int outfd[2];
@@ -33,12 +33,16 @@ int remote_execute(int argc, char* argv[], bool listen)
 	pid_t pid;
 
 	ssh_argc = 0;
-	ssh_argv[ssh_argc++] = (char*)"ssh";
-	if (ssh_port != 0) {
+	ssh_argv[ssh_argc++] = remote_proto;
+	if (remote_port != 0) {
 		ssh_argv[ssh_argc++] = (char*)"-p";
-		ssh_argv[ssh_argc++] = ssh_port;
+		ssh_argv[ssh_argc++] = remote_port;
 	}
-	ssh_argv[ssh_argc++] = ssh_host;
+	if (ssh_config != 0) {
+		ssh_argv[ssh_argc++] = (char*)"-F";
+		ssh_argv[ssh_argc++] = ssh_config;
+	}
+	ssh_argv[ssh_argc++] = remote_host;
 	ssh_argv[ssh_argc++] = cmd+1;
 	ssh_argv[ssh_argc] = NULL;
 

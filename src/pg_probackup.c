@@ -74,8 +74,10 @@ const char *master_host = NULL;
 const char *master_port= NULL;
 const char *master_user = NULL;
 uint32		replica_timeout = REPLICA_TIMEOUT_DEFAULT;
-char       *ssh_host;
-char       *ssh_port;
+char       *remote_host;
+char       *remote_port;
+char       *remote_proto = (char*)"ssh";
+char       *ssh_config;
 bool        is_remote_agent;
 bool		is_remote_backup;
 
@@ -172,10 +174,12 @@ static pgut_option options[] =
 	{ 's', 16, "master-port",			&master_port,		SOURCE_CMDLINE, },
 	{ 's', 17, "master-user",			&master_user,		SOURCE_CMDLINE, },
 	{ 'u', 18, "replica-timeout",		&replica_timeout,	SOURCE_CMDLINE,	SOURCE_DEFAULT,	OPTION_UNIT_S },
-    { 's', 19, "ssh-host",				&ssh_host,          SOURCE_CMDLINE, },
-    { 's', 20, "ssh-port",		        &ssh_port,          SOURCE_CMDLINE, },
-    { 'b', 21, "agent",				    &is_remote_agent,   SOURCE_CMDLINE, },
-    { 'b', 22, "remote",				&is_remote_backup,	SOURCE_CMDLINE, },
+    { 's', 19, "remote-host",			&remote_host,       SOURCE_CMDLINE, },
+    { 's', 20, "remote-port",	        &remote_port,       SOURCE_CMDLINE, },
+    { 's', 21, "remote-proto",	        &remote_proto,      SOURCE_CMDLINE, },
+    { 's', 22, "ssh-config",	        &ssh_config,        SOURCE_CMDLINE, },
+    { 'b', 23, "agent",				    &is_remote_agent,   SOURCE_CMDLINE, },
+    { 'b', 24, "remote",				&is_remote_backup,	SOURCE_CMDLINE, },
 	/* restore options */
 	{ 's', 30, "time",					&target_time,		SOURCE_CMDLINE },
 	{ 's', 31, "xid",					&target_xid,		SOURCE_CMDLINE },
@@ -382,8 +386,8 @@ main(int argc, char *argv[])
 	if (!is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
-	if (ssh_host != NULL &&
-		(backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD))
+	if (IsSshConnection()
+		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD))
 	{
 		if (is_remote_agent) {
 			if (backup_subcmd != BACKUP_CMD) {
@@ -546,7 +550,7 @@ main(int argc, char *argv[])
 			return do_init();
 		case BACKUP_CMD:
 		    current.stream = stream_wal;
-		    if (ssh_host && !is_remote_agent)
+		    if (IsSshConnection() && !is_remote_agent)
 			{
 				current.status = BACKUP_STATUS_DONE;
 				StrNCpy(current.program_version, PROGRAM_VERSION,
@@ -564,7 +568,7 @@ main(int argc, char *argv[])
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", ssh_host ? "true" : "false");
+						  stream_wal ? "true" : "false", remote_host ? "true" : "false");
 
 				return do_backup(start_time);
 			}

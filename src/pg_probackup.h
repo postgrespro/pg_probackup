@@ -332,6 +332,8 @@ typedef struct
 	XLByteInSeg(xlrp, logSegNo)
 #endif
 
+#define IsSshConnection() (remote_host != NULL && strcmp(remote_proto, "ssh") == 0)
+
 /* directory options */
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
@@ -351,8 +353,10 @@ extern char	   *replication_slot;
 extern bool		smooth_checkpoint;
 #define ARCHIVE_TIMEOUT_DEFAULT 300
 extern uint32	archive_timeout;
-extern char *ssh_port;
-extern char *ssh_host;
+extern char *remote_port;
+extern char *remote_host;
+extern char *remote_proto;
+extern char *ssh_config;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;
