@@ -1907,7 +1907,28 @@ pg_stop_backup(pgBackup *backup)
 		if (!XRecOffIsValid(stop_backup_lsn))
 		{
 			if (XRecOffIsNull(stop_backup_lsn))
-				stop_backup_lsn = stop_backup_lsn + SizeOfXLogLongPHD;
+			{
+				char	   *xlog_path,
+							stream_xlog_path[MAXPGPATH];
+				XLogSegNo	segno;
+
+				if (stream_wal)
+				{
+					pgBackupGetPath2(backup, stream_xlog_path,
+									 lengthof(stream_xlog_path),
+									 DATABASE_DIR, PG_XLOG_DIR);
+					xlog_path = stream_xlog_path;
+				}
+				else
+					xlog_path = arclog_path;
+
+				GetXLogSegNo(stop_backup_lsn, segno, xlog_seg_size);
+				/* Retreive stop_lsn from previous segment */
+				segno = segno - 1;
+				stop_backup_lsn = get_last_wal_lsn(xlog_path, backup->start_lsn,
+												   segno, backup->tli,
+												   xlog_seg_size);
+			}
 			else
 				elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
 					 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
