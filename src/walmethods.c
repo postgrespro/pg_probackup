@@ -22,7 +22,6 @@
 #endif
 
 #include "pgtar.h"
-#include "common/file_perm.h"
 #include "common/file_utils.h"
 
 #include "receivelog.h"
@@ -120,14 +119,14 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 	/* Do pre-padding on non-compressed files */
 	if (pad_to_size && dir_data->compression == 0)
 	{
-		PGAlignedXLogBlock zerobuf;
-		int			bytes;
+		char zerobuf[XLOG_BLCKSZ];
+		int	 bytes;
 
-		memset(zerobuf.data, 0, XLOG_BLCKSZ);
+		memset(zerobuf, 0, XLOG_BLCKSZ);
 		for (bytes = 0; bytes < pad_to_size; bytes += XLOG_BLCKSZ)
 		{
 			errno = 0;
-			if (fio_write(fd, zerobuf.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+			if (fio_write(fd, zerobuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 			{
 				int			save_errno = errno;
 
