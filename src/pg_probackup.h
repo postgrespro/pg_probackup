@@ -577,8 +577,8 @@ extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 							 TimeLineID target_tli, uint32 seg_size);
 extern XLogRecPtr get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
-								   XLogSegNo segno, TimeLineID tli,
-								   uint32 seg_size);
+								   XLogRecPtr stop_lsn, TimeLineID tli,
+								   bool seek_prev_segment, uint32 seg_size);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
