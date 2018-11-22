@@ -108,8 +108,8 @@ static int checkpoint_timeout(void);
 
 //static void backup_list_file(parray *files, const char *root, )
 static void parse_backup_filelist_filenames(parray *files, const char *root);
-static void wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
-						 bool wait_prev_lsn, bool wait_prev_segment);
+static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
+							   bool wait_prev_lsn, bool wait_prev_segment);
 static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
 static void *StreamLog(void *arg);
@@ -1502,8 +1502,11 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
  * be archived in archive 'wal' directory regardless stream mode.
  *
  * If 'wait_prev_segment' wait for previous segment.
+ *
+ * Returns LSN of last valid record if wait_prev_segment is not true, otherwise
+ * returns InvalidXLogRecPtr.
  */
-static void
+static XLogRecPtr
 wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_lsn,
 			 bool wait_prev_segment)
 {
@@ -1594,7 +1597,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_lsn,
 		{
 			/* Do not check LSN for previous WAL segment */
 			if (wait_prev_segment)
-				return;
+				return InvalidXLogRecPtr;
 
 			/*
 			 * A WAL segment found. Check LSN on it.
@@ -1605,7 +1608,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_lsn,
 					/* Target LSN was found */
 				{
 					elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
-					return;
+					return lsn;
 				}
 			}
 			else
@@ -1618,7 +1621,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_lsn,
 				{
 					/* LSN of the prior record was found */
 					elog(LOG, "Found LSN: %X/%X", (uint32) (res >> 32), (uint32) res);
-					return;
+					return res;
 				}
 			}
 		}
@@ -2053,17 +2056,20 @@ pg_stop_backup(pgBackup *backup)
 	{
 		char	   *xlog_path,
 					stream_xlog_path[MAXPGPATH];
+		XLogRecPtr	stop_valid_lsn = InvalidXLogRecPtr;
 
 		/* Wait for stop_lsn to be received by replica */
-		if (current.from_replica)
-			wait_replica_wal_lsn(stop_backup_lsn, false);
+		/* XXX Do we need this? */
+//		if (current.from_replica)
+//			wait_replica_wal_lsn(stop_backup_lsn, false);
 		/*
 		 * Wait for stop_lsn to be archived or streamed.
 		 * We wait for stop_lsn in stream mode just in case.
 		 */
 		if (!stop_lsn_exists)
-			wait_wal_lsn(stop_backup_lsn, false,
-						 !exclusive_backup && current.from_replica, false);
+			stop_valid_lsn = wait_wal_lsn(stop_backup_lsn, false,
+										  !exclusive_backup && current.from_replica,
+										  false);
 
 		if (stream_wal)
 		{
@@ -2082,7 +2088,7 @@ pg_stop_backup(pgBackup *backup)
 
 		/* iterate over WAL from stop_backup lsn to start_backup lsn */
 		if (!read_recovery_info(xlog_path, backup->tli, xlog_seg_size,
-								backup->start_lsn, backup->stop_lsn,
+								backup->start_lsn, stop_valid_lsn,
 								&backup->recovery_time, &backup->recovery_xid))
 		{
 			elog(LOG, "Failed to find Recovery Time in WAL. Forced to trust current_timestamp");
@@ -2649,7 +2655,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	if (!XLogRecPtrIsInvalid(stop_backup_lsn))
 	{
-		if (xlogpos > stop_backup_lsn)
+		if (xlogpos >= stop_backup_lsn)
 		{
 			stop_stream_lsn = xlogpos;
 			return true;
