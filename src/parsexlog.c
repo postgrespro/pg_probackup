@@ -922,14 +922,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	if (!IsInXLogSeg(targetPagePtr, private_data->xlogsegno,
 					 private_data->xlog_seg_size))
 	{
-		elog(VERBOSE, "Thread [%d]: Need to switch to segno next to %X/%X, current LSN %X/%X",
+		elog(VERBOSE, "Thread [%d]: Need to switch to the next WAL segment, page LSN %X/%X, record being read LSN %X/%X",
 			 private_data->thread_num,
 			 (uint32) (targetPagePtr >> 32), (uint32) (targetPagePtr),
 			 (uint32) (xlogreader->currRecPtr >> 32),
 			 (uint32) (xlogreader->currRecPtr ));
 
 		/*
-		 * if the last record on the page is not complete,
+		 * If the last record on the page is not complete,
 		 * we must continue reading pages in the same thread
 		 */
 		if (!XLogRecPtrIsInvalid(xlogreader->currRecPtr) &&
