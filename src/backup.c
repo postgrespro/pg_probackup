@@ -1612,7 +1612,8 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 			 * to get LSN of last valid record prior to the target LSN. But only
 			 * in case of a backup from a replica.
 			 */
-			if (!exclusive_backup && current.from_replica)
+			if (!exclusive_backup && current.from_replica &&
+				(try_count > timeout / 4))
 			{
 				XLogRecPtr	res;
 
