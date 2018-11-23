@@ -1545,20 +1545,17 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 						 DATABASE_DIR, PG_XLOG_DIR);
 		join_path_components(wal_segment_path, pg_wal_dir, wal_segment);
 		wal_segment_dir = pg_wal_dir;
-
-		timeout = (uint32) checkpoint_timeout();
-		timeout = timeout + timeout * 0.1;
 	}
 	else
 	{
 		join_path_components(wal_segment_path, arclog_path, wal_segment);
 		wal_segment_dir = arclog_path;
-
-		if (archive_timeout > 0)
-			timeout = archive_timeout;
-		else
-			timeout = ARCHIVE_TIMEOUT_DEFAULT;
 	}
+
+	if (archive_timeout > 0)
+		timeout = archive_timeout;
+	else
+		timeout = ARCHIVE_TIMEOUT_DEFAULT;
 
 	if (wait_prev_segment)
 		elog(LOG, "Looking for segment: %s", wal_segment);
