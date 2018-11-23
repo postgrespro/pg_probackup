@@ -515,7 +515,8 @@ extern pgFile *pgFileNew(const char *path, bool omit_symlink);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
-extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c);
+extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
+							 bool raise_on_deleted, size_t *bytes_read);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
@@ -536,7 +537,7 @@ extern void push_wal_file(const char *from_path, const char *to_path,
 						  bool is_compress, bool overwrite);
 extern void get_wal_file(const char *from_path, const char *to_path);
 
-extern bool calc_file_checksum(pgFile *file);
+extern void calc_file_checksum(pgFile *file);
 
 extern bool check_file_pages(pgFile* file,
 							 XLogRecPtr stop_lsn,
@@ -559,6 +560,9 @@ extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   TransactionId *recovery_xid);
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 							 TimeLineID target_tli, uint32 seg_size);
+extern XLogRecPtr get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
+								   XLogRecPtr stop_lsn, TimeLineID tli,
+								   bool seek_prev_segment, uint32 seg_size);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);

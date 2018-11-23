@@ -337,7 +337,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	writeControlFile(&ControlFile, fullpath);
 
 	/* Update pg_control checksum in backup_list */
-	file->crc = pgFileGetCRC(fullpath, false);
+	file->crc = pgFileGetCRC(fullpath, false, true, NULL);
 
 	pg_free(buffer);
 }

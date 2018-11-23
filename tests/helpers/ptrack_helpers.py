@@ -874,8 +874,8 @@ class ProbackupTest(object):
         return out_dict
 
     def set_archiving(
-            self, backup_dir, instance, node, replica=False, overwrite=False, compress=False,
-            old_binary=False):
+            self, backup_dir, instance, node, replica=False,
+            overwrite=False, compress=False, old_binary=False):
 
         if replica:
             archive_mode = 'always'

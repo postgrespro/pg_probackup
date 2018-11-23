@@ -108,8 +108,8 @@ static int checkpoint_timeout(void);
 
 //static void backup_list_file(parray *files, const char *root, )
 static void parse_backup_filelist_filenames(parray *files, const char *root);
-static void wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
-						 bool wait_prev_segment);
+static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
+							   bool wait_prev_segment);
 static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
 static void *StreamLog(void *arg);
@@ -1184,7 +1184,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 		/* In PAGE mode wait for current segment... */
-			wait_wal_lsn(backup->start_lsn, true, false);
+		wait_wal_lsn(backup->start_lsn, true, false);
 	/*
 	 * Do not wait start_lsn for stream backup.
 	 * Because WAL streaming will start after pg_start_backup() in stream
@@ -1524,8 +1524,11 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
  * be archived in archive 'wal' directory regardless stream mode.
  *
  * If 'wait_prev_segment' wait for previous segment.
+ *
+ * Returns LSN of last valid record if wait_prev_segment is not true, otherwise
+ * returns InvalidXLogRecPtr.
  */
-static void
+static XLogRecPtr
 wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 {
 	TimeLineID	tli;
@@ -1565,25 +1568,22 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 						 DATABASE_DIR, PG_XLOG_DIR);
 		join_path_components(wal_segment_path, pg_wal_dir, wal_segment);
 		wal_segment_dir = pg_wal_dir;
-
-		timeout = (uint32) checkpoint_timeout();
-		timeout = timeout + timeout * 0.1;
 	}
 	else
 	{
 		join_path_components(wal_segment_path, arclog_path, wal_segment);
 		wal_segment_dir = arclog_path;
-
-		if (instance_config.archive_timeout > 0)
-			timeout = instance_config.archive_timeout;
-		else
-			timeout = ARCHIVE_TIMEOUT_DEFAULT;
 	}
+
+	if (instance_config.archive_timeout > 0)
+		timeout = instance_config.archive_timeout;
+	else
+		timeout = ARCHIVE_TIMEOUT_DEFAULT;
 
 	if (wait_prev_segment)
 		elog(LOG, "Looking for segment: %s", wal_segment);
 	else
-		elog(LOG, "Looking for LSN: %X/%X in segment: %s",
+		elog(LOG, "Looking for LSN %X/%X in segment: %s",
 			 (uint32) (lsn >> 32), (uint32) lsn, wal_segment);
 
 #ifdef HAVE_LIBZ
@@ -1615,7 +1615,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 		{
 			/* Do not check LSN for previous WAL segment */
 			if (wait_prev_segment)
-				return;
+				return InvalidXLogRecPtr;
 
 			/*
 			 * A WAL segment found. Check LSN on it.
@@ -1625,7 +1625,29 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 				/* Target LSN was found */
 			{
 				elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
-				return;
+				return lsn;
+			}
+
+			/*
+			 * If we failed to get LSN of valid record in a reasonable time, try
+			 * to get LSN of last valid record prior to the target LSN. But only
+			 * in case of a backup from a replica.
+			 */
+			if (!exclusive_backup && current.from_replica &&
+				(try_count > timeout / 4))
+			{
+				XLogRecPtr	res;
+
+				res = get_last_wal_lsn(wal_segment_dir, current.start_lsn,
+									   lsn, tli, false,
+									   instance_config.xlog_seg_size);
+				if (!XLogRecPtrIsInvalid(res))
+				{
+					/* LSN of the prior record was found */
+					elog(LOG, "Found prior LSN: %X/%X, it is used as stop LSN",
+						 (uint32) (res >> 32), (uint32) res);
+					return res;
+				}
 			}
 		}
 
@@ -1748,6 +1770,7 @@ pg_stop_backup(pgBackup *backup)
 	size_t		len;
 	char	   *val = NULL;
 	char	   *stop_backup_query = NULL;
+	bool		stop_lsn_exists = false;
 
 	/*
 	 * We will use this values if there are no transactions between start_lsn
@@ -1826,7 +1849,11 @@ pg_stop_backup(pgBackup *backup)
 #endif
 									" labelfile,"
 									" spcmapfile"
+#if PG_VERSION_NUM >= 100000
+									" FROM pg_catalog.pg_stop_backup(false, false)";
+#else
 									" FROM pg_catalog.pg_stop_backup(false)";
+#endif
 			else
 				stop_backup_query = "SELECT"
 									" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
@@ -1834,7 +1861,11 @@ pg_stop_backup(pgBackup *backup)
 									" lsn,"
 									" labelfile,"
 									" spcmapfile"
+#if PG_VERSION_NUM >= 100000
+									" FROM pg_catalog.pg_stop_backup(false, false)";
+#else
 									" FROM pg_catalog.pg_stop_backup(false)";
+#endif
 
 		}
 		else
@@ -1923,7 +1954,29 @@ pg_stop_backup(pgBackup *backup)
 		if (!XRecOffIsValid(stop_backup_lsn))
 		{
 			if (XRecOffIsNull(stop_backup_lsn))
-				stop_backup_lsn = stop_backup_lsn + SizeOfXLogLongPHD;
+			{
+				char	   *xlog_path,
+							stream_xlog_path[MAXPGPATH];
+
+				if (stream_wal)
+				{
+					pgBackupGetPath2(backup, stream_xlog_path,
+									 lengthof(stream_xlog_path),
+									 DATABASE_DIR, PG_XLOG_DIR);
+					xlog_path = stream_xlog_path;
+				}
+				else
+					xlog_path = arclog_path;
+
+				stop_backup_lsn = get_last_wal_lsn(xlog_path, backup->start_lsn,
+												   stop_backup_lsn, backup->tli,
+												   true, instance_config.xlog_seg_size);
+				/*
+				 * Do not check existance of LSN again below using
+				 * wait_wal_lsn().
+				 */
+				stop_lsn_exists = true;
+			}
 			else
 				elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
 					 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
@@ -2029,13 +2082,15 @@ pg_stop_backup(pgBackup *backup)
 					stream_xlog_path[MAXPGPATH];
 
 		/* Wait for stop_lsn to be received by replica */
-		if (current.from_replica)
-			wait_replica_wal_lsn(stop_backup_lsn, false);
+		/* XXX Do we need this? */
+//		if (current.from_replica)
+//			wait_replica_wal_lsn(stop_backup_lsn, false);
 		/*
 		 * Wait for stop_lsn to be archived or streamed.
 		 * We wait for stop_lsn in stream mode just in case.
 		 */
-		wait_wal_lsn(stop_backup_lsn, false, false);
+		if (!stop_lsn_exists)
+			stop_backup_lsn = wait_wal_lsn(stop_backup_lsn, false, false);
 
 		if (stream_wal)
 		{
@@ -2623,7 +2678,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	if (!XLogRecPtrIsInvalid(stop_backup_lsn))
 	{
-		if (xlogpos > stop_backup_lsn)
+		if (xlogpos >= stop_backup_lsn)
 		{
 			stop_stream_lsn = xlogpos;
 			return true;
