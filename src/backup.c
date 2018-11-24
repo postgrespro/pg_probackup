@@ -307,7 +307,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 			to_path, strerror(errno_tmp));
 	}
 
-	INIT_TRADITIONAL_CRC32(file->crc);
+	INIT_FILE_CRC32(false, file->crc);
 
 	/* read from stream and write to backup file */
 	while (1)
@@ -333,14 +333,14 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		{
 			write_buffer_size = Min(row_length, sizeof(buf));
 			memcpy(buf, copybuf, write_buffer_size);
-			COMP_TRADITIONAL_CRC32(file->crc, buf, write_buffer_size);
+			COMP_FILE_CRC32(false, file->crc, buf, write_buffer_size);
 
 			/* TODO calc checksum*/
 			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
 			{
 				errno_tmp = errno;
 				/* oops */
-				FIN_TRADITIONAL_CRC32(file->crc);
+				FIN_FILE_CRC32(false, file->crc);
 				fclose(out);
 				PQfinish(conn);
 				elog(ERROR, "cannot write to \"%s\": %s", to_path,
@@ -364,7 +364,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 	}
 
 	file->write_size = (int64) file->read_size;
-	FIN_TRADITIONAL_CRC32(file->crc);
+	FIN_FILE_CRC32(false, file->crc);
 
 	fclose(out);
 }
