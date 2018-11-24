@@ -363,7 +363,7 @@ show_instance_plain(parray *backup_list, bool show_name)
 			time2iso(row->recovery_time, lengthof(row->recovery_time),
 					 backup->recovery_time);
 		else
-			StrNCpy(row->recovery_time, "----", 4);
+			StrNCpy(row->recovery_time, "----", sizeof(row->recovery_time));
 		widths[cur] = Max(widths[cur], strlen(row->recovery_time));
 		cur++;
 
@@ -388,7 +388,7 @@ show_instance_plain(parray *backup_list, bool show_name)
 			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
 					 difftime(backup->end_time, backup->start_time));
 		else
-			StrNCpy(row->duration, "----", 4);
+			StrNCpy(row->duration, "----", sizeof(row->duration));
 		widths[cur] = Max(widths[cur], strlen(row->duration));
 		cur++;
 
