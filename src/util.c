@@ -206,7 +206,7 @@ get_checkpoint_location(PGconn *conn)
 }
 
 uint64
-get_system_identifier(char *pgdata_path)
+get_system_identifier(const char *pgdata_path)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
@@ -293,7 +293,27 @@ get_data_checksum_version(bool safe)
 	return ControlFile.data_checksum_version;
 }
 
-/* MinRecoveryPoint 'as-is' is not to be trusted */
+pg_crc32c
+get_pgcontrol_checksum(const char *pgdata_path)
+{
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	if (buffer == NULL)
+		return 0;
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.crc;
+}
+
+/*
+ * Rewrite minRecoveryPoint of pg_control in backup directory. minRecoveryPoint
+ * 'as-is' is not to be trusted.
+ */
 void
 set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn)
 {
@@ -321,24 +341,44 @@ set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_ba
 
 	/* Update checksum in pg_control header */
 	INIT_CRC32C(ControlFile.crc);
-	COMP_CRC32C(ControlFile.crc,
-				(char *) &ControlFile,
+	COMP_CRC32C(ControlFile.crc, (char *) &ControlFile,
 				offsetof(ControlFileData, crc));
 	FIN_CRC32C(ControlFile.crc);
-
-	/* paranoia */
-	checkControlFile(&ControlFile);
 
 	/* overwrite pg_control */
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
 	writeControlFile(&ControlFile, fullpath);
 
 	/* Update pg_control checksum in backup_list */
-	file->crc = pgFileGetCRC(fullpath, false, true, NULL);
+	file->crc = ControlFile.crc;
 
 	pg_free(buffer);
 }
 
+/*
+ * Copy pg_control file to backup. We do not apply compression to this file.
+ */
+void
+copy_pgcontrol_file(const char *from_root, const char *to_root, pgFile *file)
+{
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+	char		to_path[MAXPGPATH];
+
+	buffer = slurpFile(from_root, XLOG_CONTROL_FILE, &size, false);
+
+	digestControlFile(&ControlFile, buffer, size);
+
+	file->crc = ControlFile.crc;
+	file->read_size = size;
+	file->write_size = size;
+
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	writeControlFile(&ControlFile, to_path);
+
+	pg_free(buffer);
+}
 
 /*
  * Convert time_t value to ISO-8601 format string. Always set timezone offset.

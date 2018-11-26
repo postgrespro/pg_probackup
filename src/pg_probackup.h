@@ -91,6 +91,7 @@ do { \
 		FIN_TRADITIONAL_CRC32(crc); \
 } while (0)
 
+
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
 {
@@ -555,8 +556,7 @@ extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern void calc_file_checksum(pgFile *file);
 
-extern bool check_file_pages(pgFile* file,
-							 XLogRecPtr stop_lsn,
+extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
 extern void extractPageMap(const char *archivedir,
@@ -583,11 +583,15 @@ extern XLogRecPtr get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
-extern uint64 get_system_identifier(char *pgdata);
+extern uint64 get_system_identifier(const char *pgdata_path);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
+extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
-extern void set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn);
+extern void set_min_recovery_point(pgFile *file, const char *backup_path,
+								   XLogRecPtr stop_backup_lsn);
+extern void copy_pgcontrol_file(const char *from_root, const char *to_root,
+								pgFile *file);
 
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);

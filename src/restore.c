@@ -628,6 +628,8 @@ restore_files(void *arg)
 							  false,
 							  parse_program_version(arguments->backup->program_version));
 		}
+		else if (strcmp(file->name, "pg_control") == 0)
+			copy_pgcontrol_file(from_root, pgdata, file);
 		else
 			copy_file(from_root, pgdata, file);
 

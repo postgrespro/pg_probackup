@@ -524,9 +524,11 @@ merge_files(void *arg)
 				 * do that.
 				 */
 				file->write_size = pgFileSize(to_path_tmp);
-				file->crc = pgFileGetCRC(to_path_tmp, false, true, NULL);
+				file->crc = pgFileGetCRC(to_path_tmp, true, true, NULL);
 			}
 		}
+		else if (strcmp(file->name, "pg_control") == 0)
+			copy_pgcontrol_file(argument->from_root, argument->to_root, file);
 		else
 			copy_file(argument->from_root, argument->to_root, file);
 

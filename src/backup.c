@@ -307,7 +307,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 			to_path, strerror(errno_tmp));
 	}
 
-	INIT_FILE_CRC32(false, file->crc);
+	INIT_FILE_CRC32(true, file->crc);
 
 	/* read from stream and write to backup file */
 	while (1)
@@ -333,14 +333,14 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		{
 			write_buffer_size = Min(row_length, sizeof(buf));
 			memcpy(buf, copybuf, write_buffer_size);
-			COMP_FILE_CRC32(false, file->crc, buf, write_buffer_size);
+			COMP_FILE_CRC32(true, file->crc, buf, write_buffer_size);
 
 			/* TODO calc checksum*/
 			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
 			{
 				errno_tmp = errno;
 				/* oops */
-				FIN_FILE_CRC32(false, file->crc);
+				FIN_FILE_CRC32(true, file->crc);
 				fclose(out);
 				PQfinish(conn);
 				elog(ERROR, "cannot write to \"%s\": %s", to_path,
@@ -364,7 +364,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 	}
 
 	file->write_size = (int64) file->read_size;
-	FIN_FILE_CRC32(false, file->crc);
+	FIN_FILE_CRC32(true, file->crc);
 
 	fclose(out);
 }
@@ -763,7 +763,8 @@ do_backup_instance(void)
 	{
 		char		pg_control_path[MAXPGPATH];
 
-		snprintf(pg_control_path, sizeof(pg_control_path), "%s/%s", pgdata, "global/pg_control");
+		snprintf(pg_control_path, sizeof(pg_control_path), "%s/%s",
+				 pgdata,"global/pg_control");
 
 		for (i = 0; i < parray_num(backup_files_list); i++)
 		{
@@ -2262,9 +2263,12 @@ backup_files(void *arg)
 					continue;
 				}
 			}
+			else if (strcmp(file->name, "pg_control") == 0)
+				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
+									file);
 			else
 			{
-				bool skip = false;
+				bool		skip = false;
 
 				/* If non-data file has not changed since last backup... */
 				if (prev_file && file->exists_in_prev &&
