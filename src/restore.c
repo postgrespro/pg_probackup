@@ -478,17 +478,18 @@ restore_backup(pgBackup *backup)
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
 
-			if (file->is_extra)
-				dir_name = GetRelativePath(file->path, extra_path);
-			else
-				dir_name = GetRelativePath(file->path, database_path);
-
-			elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
-
-			if (file->is_extra)
+			if (file->extra_dir_num)
+			{
 				join_path_components(dirpath, file->extradir, dir_name);
+				elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
+				dir_name = GetRelativePath(file->path, extra_path);
+			}
 			else
+			{
+				dir_name = GetRelativePath(file->path, database_path);
+				elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
 				join_path_components(dirpath, pgdata, dir_name);
+			}
 			dir_create_dir(dirpath, DIR_PERMISSION);
 		}
 
@@ -659,7 +660,7 @@ restore_files(void *arg)
 							  false,
 							  parse_program_version(arguments->backup->program_version));
 		}
-		else if (file->is_extra)
+		else if (file->extra_dir_num)
 			copy_file(from_root, file->extradir, file);
 		else
 			copy_file(from_root, pgdata, file);

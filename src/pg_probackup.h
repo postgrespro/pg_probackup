@@ -116,7 +116,6 @@ typedef struct pgFile
 	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
-	bool	is_extra;
 	bool	extra_dir_num;	/* Number of extra directory. 0 if not extra */
 	char	*extradir;		/* File from extra directory */
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */

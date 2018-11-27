@@ -175,7 +175,6 @@ pgFileNew(const char *path, bool omit_symlink, int extra_dir_num)
 	file = pgFileInit(path);
 	file->size = st.st_size;
 	file->mode = st.st_mode;
-	file->is_extra = extra_dir_num > 0;
 	file->extra_dir_num = extra_dir_num;
 	file->extradir = NULL;
 
@@ -228,6 +227,7 @@ pgFileInit(const char *path)
 	/* Number of blocks readed during backup */
 	file->n_blocks = BLOCKNUM_INVALID;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
+	file->extra_dir_num = 0;
 	return file;
 }
 
@@ -1198,18 +1198,16 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
-		else if(file->is_extra)
+		else if(file->extra_dir_num)
 			path = GetRelativePath(path, file->extradir);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\", \"is_extra\":\"%u\""
-					 ", \"extra_dir_num\":\"%u\"",
+					 "\"compress_alg\":\"%s\", \"extra_dir_num\":\"%u\"",
 				path, file->write_size, file->mode,
 				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
-				deparse_compress_alg(file->compress_alg),
-				file->is_extra ? 1 : 0, file->extra_dir_num);
+				deparse_compress_alg(file->compress_alg), file->extra_dir_num);
 
 		if (file->extradir)
 			fprintf(out, ",\"extradir\":\"%s\"", file->extradir);
@@ -1402,7 +1400,6 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
 					is_cfs,
-					is_extra,
 					extra_dir_num,
 					crc,
 					segno,
@@ -1416,7 +1413,6 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
 		get_control_value(buf, "crc", NULL, &crc, true);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
-		get_control_value(buf, "is_extra", NULL, &is_extra, false);
 		get_control_value(buf, "extra_dir_num", NULL, &extra_dir_num, false);
 
 		if (root)
@@ -1433,8 +1429,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 
 		file = pgFileInit(filepath);
 
-		file->is_extra = is_extra ? true : false;
-		if (is_extra)
+		if (extra_dir_num)
 		{
 			get_control_value(buf, "extradir", extradir_str, NULL, true);
 			file->extradir = pgut_strdup(extradir_str);

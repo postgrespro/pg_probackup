@@ -702,7 +702,7 @@ do_backup_instance(void)
 			char	   *dir_name;
 
 			if (!is_remote_backup)
-				if (file->is_extra)
+				if (file->extra_dir_num)
 					dir_name = GetRelativePath(file->path, file->extradir);
 				else
 					dir_name = GetRelativePath(file->path, pgdata);
