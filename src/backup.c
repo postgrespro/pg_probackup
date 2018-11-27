@@ -24,8 +24,6 @@
 #include "utils/thread.h"
 #include <time.h>
 
-#define PG_STOP_BACKUP_TIMEOUT 300
-
 /*
  * Macro needed to parse ptrack.
  * NOTE Keep those values syncronised with definitions in ptrack.h
@@ -1858,8 +1856,8 @@ pg_stop_backup(pgBackup *backup)
 	}
 
 	/*
-	 * Wait for the result of pg_stop_backup(),
-	 * but no longer than PG_STOP_BACKUP_TIMEOUT seconds
+	 * Wait for the result of pg_stop_backup(), but no longer than
+	 * archive_timeout seconds
 	 */
 	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
@@ -1882,14 +1880,14 @@ pg_stop_backup(pgBackup *backup)
 					elog(INFO, "wait for pg_stop_backup()");
 
 				/*
-				 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
+				 * If postgres haven't answered in archive_timeout seconds,
 				 * send an interrupt.
 				 */
-				if (pg_stop_backup_timeout > PG_STOP_BACKUP_TIMEOUT)
+				if (pg_stop_backup_timeout > archive_timeout)
 				{
 					pgut_cancel(conn);
 					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
-						 PG_STOP_BACKUP_TIMEOUT);
+						 archive_timeout);
 				}
 			}
 			else
