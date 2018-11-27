@@ -406,7 +406,7 @@ pgBackupCreateDir(pgBackup *backup)
 {
 	int		i;
 	char	path[MAXPGPATH];
-	char   *subdirs[] = { DATABASE_DIR, EXTRA_DIR, NULL };
+	char   *subdirs[] = { DATABASE_DIR, NULL };
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 

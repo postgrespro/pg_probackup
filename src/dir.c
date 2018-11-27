@@ -120,7 +120,8 @@ static int BlackListCompare(const void *str1, const void *str2);
 static bool dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list, bool is_extra);
+								   bool omit_symlink, parray *black_list, 
+								   int extra_dir_num);
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
 								  bool exclude);
@@ -156,7 +157,7 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, bool omit_symlink, bool is_extra)
+pgFileNew(const char *path, bool omit_symlink, int extra_dir_num)
 {
 	struct stat		st;
 	pgFile		   *file;
@@ -174,7 +175,8 @@ pgFileNew(const char *path, bool omit_symlink, bool is_extra)
 	file = pgFileInit(path);
 	file->size = st.st_size;
 	file->mode = st.st_mode;
-	file->is_extra = is_extra;
+	file->is_extra = extra_dir_num > 0;
+	file->extra_dir_num = extra_dir_num;
 	file->extradir = NULL;
 
 	return file;
@@ -374,7 +376,7 @@ BlackListCompare(const void *str1, const void *str2)
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
-			  bool add_root, bool is_extra)
+			  bool add_root, int extra_dir_num)
 {
 	pgFile	   *file;
 	parray	   *black_list = NULL;
@@ -411,7 +413,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, false, is_extra);
+	file = pgFileNew(root, false, extra_dir_num);
 	if (file == NULL)
 		return;
 
@@ -427,7 +429,8 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_append(files, file);
 	}
 
-	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list, is_extra);
+	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list,
+						   extra_dir_num);
 }
 
 /*
@@ -615,7 +618,7 @@ dir_check_file(const char *root, pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, const char *root, pgFile *parent,
-		bool exclude, bool omit_symlink, parray *black_list, bool is_extra)
+		bool exclude, bool omit_symlink, parray *black_list, int extra_dir_num)
 {
 	DIR		    *dir;
 	struct dirent *dent;
@@ -644,7 +647,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		join_path_components(child, parent->path, dent->d_name);
 
-		file = pgFileNew(child, omit_symlink, is_extra);
+		file = pgFileNew(child, omit_symlink, extra_dir_num);
 		if (file == NULL)
 			continue;
 
@@ -677,7 +680,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		}
 
 		/* If it is extra dir, remember it */
-		if (is_extra)
+		if (extra_dir_num)
 		{
 			file->extradir = pgut_strdup(root);
 			dirname(file->extradir);
@@ -705,7 +708,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, root, file, exclude, omit_symlink,
-								   black_list, is_extra);
+								   black_list, extra_dir_num);
 	}
 
 	if (errno && errno != ENOENT)
@@ -1201,11 +1204,12 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\", \"is_extra\":\"%u\"",
+					 "\"compress_alg\":\"%s\", \"is_extra\":\"%u\""
+					 ", \"extra_dir_num\":\"%u\"",
 				path, file->write_size, file->mode,
 				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
 				deparse_compress_alg(file->compress_alg),
-				file->is_extra ? 1 : 0);
+				file->is_extra ? 1 : 0, file->extra_dir_num);
 
 		if (file->extradir)
 			fprintf(out, ",\"extradir\":\"%s\"", file->extradir);
@@ -1399,6 +1403,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 					is_datafile,
 					is_cfs,
 					is_extra,
+					extra_dir_num,
 					crc,
 					segno,
 					n_blocks;
@@ -1412,10 +1417,15 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 		get_control_value(buf, "crc", NULL, &crc, true);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 		get_control_value(buf, "is_extra", NULL, &is_extra, false);
+		get_control_value(buf, "extra_dir_num", NULL, &extra_dir_num, false);
 
 		if (root)
-			if (is_extra)
-				join_path_components(filepath, extra_path, path);
+			if (extra_dir_num)
+			{
+				char temp[MAXPGPATH];
+				sprintf(temp, "%s%ld", extra_path, extra_dir_num);
+				join_path_components(filepath, temp, path);
+			}
 			else
 				join_path_components(filepath, root, path);
 		else

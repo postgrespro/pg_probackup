@@ -117,6 +117,7 @@ typedef struct pgFile
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
 	bool	is_extra;
+	bool	extra_dir_num;	/* Number of extra directory. 0 if not extra */
 	char	*extradir;		/* File from extra directory */
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
@@ -516,7 +517,7 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool omit_symlink, bool add_root, bool is_extra);
+						  bool omit_symlink, bool add_root, int extra_dir_num);
 extern void create_data_directories(const char *data_dir,
 									const char *backup_dir,
 									bool extract_tablespaces);
@@ -534,7 +535,7 @@ extern bool dir_is_empty(const char *path);
 extern bool fileExists(const char *path);
 extern size_t pgFileSize(const char *path);
 
-extern pgFile *pgFileNew(const char *path, bool omit_symlink, bool is_extra);
+extern pgFile *pgFileNew(const char *path, bool omit_symlink, int extra_dir_num);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);

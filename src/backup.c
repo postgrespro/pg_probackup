@@ -463,8 +463,7 @@ do_backup_instance(void)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
-	char		extra_path[MAXPGPATH];
-	char	   *extradirs[] = { NULL, NULL, NULL, NULL };
+	char		extra_path[MAXPGPATH]; /* Temp value. Used as template */
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -478,23 +477,22 @@ do_backup_instance(void)
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
 	parray	   *backup_list = NULL;
+	parray	   *extra_dirs = NULL;
 
 	pgFile	   *pg_control = NULL;
 
 	elog(LOG, "Database backup start");
-	i = 0;
+	extra_dirs = parray_new();
+	/* TODO: Add path validation */
 	if(extradir)
 	{
 		p = strtok(extradir,":");
 		while(p!=NULL)
 		{
-			extradirs[i] = (char *)palloc(strlen(p) + 1);
-			strcpy(extradirs[i],p);
-			elog(WARNING,"%s",extradirs[i]);
-			i++;
+			char * dir = (char *)palloc(strlen(p) + 1);
+			strcpy(dir,p);
+			parray_append(extra_dirs, dir);
 			p=strtok(NULL,":");
-			if (i==3)
-				break;
 		}
 	}
 
@@ -654,11 +652,10 @@ do_backup_instance(void)
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
 
 	/* Append to backup list all files dirictories from extra dirictory option */
-	for (i = 0; extradirs[i]; i++)
-	{
-		elog(WARNING,"%s",extradirs[i]);
-		dir_list_file(backup_files_list, extradirs[i], true, true, true, true);
-	}
+	for (i = 0; i < parray_num(extra_dirs); i++)
+		/* Extra dirs numeration starts with 1. 0 value is not extra dir */
+		dir_list_file(backup_files_list, (char *) parray_get(extra_dirs, i),
+					  true, true, true, i+1);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -714,8 +711,12 @@ do_backup_instance(void)
 
 			elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
 
-			if (file->is_extra)
-				join_path_components(dirpath, extra_path, dir_name);
+			if (file->extra_dir_num)
+			{
+				char		temp[MAXPGPATH];
+				sprintf(temp, "%s%d", extra_path, file->extra_dir_num);
+				join_path_components(dirpath, temp, dir_name);
+			}
 			else
 				join_path_components(dirpath, database_path, dir_name);
 			dir_create_dir(dirpath, DIR_PERMISSION);
@@ -782,6 +783,12 @@ do_backup_instance(void)
 	{
 		parray_walk(prev_backup_filelist, pgFileFree);
 		parray_free(prev_backup_filelist);
+	}
+	/* clean extra directories list */
+	if (extra_dirs)
+	{
+		parray_walk(extra_dirs, pfree);
+		parray_free(extra_dirs);
 	}
 
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
@@ -2237,10 +2244,12 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (file->is_extra)
+			else if (file->extra_dir_num)
 			{
+				char temp[MAXPGPATH];
+				sprintf(temp, "%s%d", arguments->extra, file->extra_dir_num);
 				if (!copy_file(file->extradir,
-							   arguments->extra,
+							   temp,
 							   file))
 				{
 					file->write_size = BYTES_INVALID;
