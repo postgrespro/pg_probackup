@@ -357,6 +357,7 @@ extern char *remote_port;
 extern char *remote_host;
 extern char *remote_proto;
 extern char *ssh_config;
+extern char *ssh_options;
 extern const char *master_db;
 extern const char *master_host;
 extern const char *master_port;

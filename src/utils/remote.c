@@ -7,7 +7,8 @@
 #include "pg_probackup.h"
 #include "file.h"
 
-#define MAX_CMDLINE_LENGTH 4096
+#define MAX_CMDLINE_LENGTH  4096
+#define MAX_CMDLINE_OPTIONS 256
 
 static int append_option(char* buf, size_t buf_size, size_t dst, char const* src)
 {
@@ -21,11 +22,50 @@ static int append_option(char* buf, size_t buf_size, size_t dst, char const* src
 	return dst + len + 1;
 }
 
+static int split_options(int argc, char* argv[], int max_options, char* options)
+{
+	char* opt = options;
+	char in_quote = '\0';
+	while (true) {
+		switch (*opt) {
+		  case '\'':
+		  case '\"':
+			if (!in_quote) {
+				in_quote = *opt++;
+				continue;
+			}
+			if (*opt == in_quote && *++opt != in_quote) {
+				in_quote = '\0';
+				continue;
+			}
+			break;
+		  case '\0':
+			if (opt != options) {
+				argv[argc++] = options;
+				if (argc >= max_options)
+					elog(ERROR, "Too much options");
+			}
+			return argc;
+		  case ' ':
+			argv[argc++] = options;
+			if (argc >= max_options)
+				elog(ERROR, "Too much options");
+			*opt++ = '\0';
+			options = opt;
+			continue;
+		  default:
+			break;
+		}
+		opt += 1;
+	}
+	return argc;
+}
+
 int remote_execute(int argc, char* argv[], bool listen)
 {
 	char cmd[MAX_CMDLINE_LENGTH];
 	size_t dst = 0;
-	char* ssh_argv[8];
+	char* ssh_argv[MAX_CMDLINE_OPTIONS];
 	int ssh_argc;
 	int i;
 	int outfd[2];
@@ -34,13 +74,16 @@ int remote_execute(int argc, char* argv[], bool listen)
 
 	ssh_argc = 0;
 	ssh_argv[ssh_argc++] = remote_proto;
-	if (remote_port != 0) {
+	if (remote_port != NULL) {
 		ssh_argv[ssh_argc++] = (char*)"-p";
 		ssh_argv[ssh_argc++] = remote_port;
 	}
-	if (ssh_config != 0) {
+	if (ssh_config != NULL) {
 		ssh_argv[ssh_argc++] = (char*)"-F";
 		ssh_argv[ssh_argc++] = ssh_config;
+	}
+	if (ssh_options != NULL) {
+		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, ssh_options);
 	}
 	ssh_argv[ssh_argc++] = remote_host;
 	ssh_argv[ssh_argc++] = cmd+1;

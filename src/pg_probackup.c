@@ -78,6 +78,7 @@ char       *remote_host;
 char       *remote_port;
 char       *remote_proto = (char*)"ssh";
 char       *ssh_config;
+char       *ssh_options;
 bool        is_remote_agent;
 bool		is_remote_backup;
 
@@ -178,8 +179,9 @@ static pgut_option options[] =
     { 's', 20, "remote-port",	        &remote_port,       SOURCE_CMDLINE, },
     { 's', 21, "remote-proto",	        &remote_proto,      SOURCE_CMDLINE, },
     { 's', 22, "ssh-config",	        &ssh_config,        SOURCE_CMDLINE, },
-    { 'b', 23, "agent",				    &is_remote_agent,   SOURCE_CMDLINE, },
-    { 'b', 24, "remote",				&is_remote_backup,	SOURCE_CMDLINE, },
+    { 's', 23, "ssh-options",	        &ssh_options,       SOURCE_CMDLINE, },
+    { 'b', 24, "agent",				    &is_remote_agent,   SOURCE_CMDLINE, },
+    { 'b', 25, "remote",				&is_remote_backup,	SOURCE_CMDLINE, },
 	/* restore options */
 	{ 's', 30, "time",					&target_time,		SOURCE_CMDLINE },
 	{ 's', 31, "xid",					&target_xid,		SOURCE_CMDLINE },
