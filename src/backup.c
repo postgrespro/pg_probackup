@@ -730,7 +730,7 @@ do_backup_instance(void)
 	parray_qsort(backup_files_list, pgFileCompareSize);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
-		parray_qsort(prev_backup_filelist, pgFileComparePath);
+		parray_qsort(prev_backup_filelist, pgFileComparePathWithExtra);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -2216,11 +2216,13 @@ backup_files(void *arg)
 				char	   *relative;
 				pgFile		key;
 
-				relative = GetRelativePath(file->path, arguments->from_root);
+				relative = GetRelativePath(file->path, file->extra_dir_num ?
+										   file->extradir:arguments->from_root);
 				key.path = relative;
+				key.extra_dir_num = file->extra_dir_num;
 
 				prev_file = (pgFile **) parray_bsearch(arguments->prev_filelist,
-													   &key, pgFileComparePath);
+											&key, pgFileComparePathWithExtra);
 				if (prev_file)
 					/* File exists in previous backup */
 					file->exists_in_prev = true;
@@ -2244,21 +2246,10 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (file->extra_dir_num)
-			{
-				char temp[MAXPGPATH];
-				sprintf(temp, "%s%d", arguments->extra, file->extra_dir_num);
-				if (!copy_file(file->extradir,
-							   temp,
-							   file))
-				{
-					file->write_size = BYTES_INVALID;
-					elog(VERBOSE, "File \"%s\" was not copied extra files to backup", file->path);
-					continue;
-				}
-			}
 			else 
 			{
+				const char *src;
+				const char *dst;
 				bool skip = false;
 
 				/* If non-data file has not changed since last backup... */
@@ -2270,8 +2261,20 @@ backup_files(void *arg)
 					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
 						skip = true; /* ...skip copying file. */
 				}
-				if (skip ||
-					!copy_file(arguments->from_root, arguments->to_root, file))
+				/* Set file paths */
+				if (file->extra_dir_num)
+				{
+					char temp[MAXPGPATH];
+					sprintf(temp, "%s%d", arguments->extra, file->extra_dir_num);
+					src = file->extradir;
+					dst = temp;
+				}
+				else
+				{
+					src = arguments->from_root;
+					dst = arguments->to_root;
+				}
+				if (skip || !copy_file(src, dst, file))
 				{
 					file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup",

@@ -329,6 +329,30 @@ pgFileComparePath(const void *f1, const void *f2)
 	return strcmp(f1p->path, f2p->path);
 }
 
+/* 
+ * Compare two pgFile with their path and extra_dir_num
+ * in ascending order of ASCII code.
+ */
+int
+pgFileComparePathWithExtra(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	pgFile *f2p = *(pgFile **)f2;
+	int 		res;
+
+	res = strcmp(f1p->path, f2p->path);
+	if (!res)
+	{
+		if (f1p->extra_dir_num > f2p->extra_dir_num)
+			return 1;
+		else if (f1p->extra_dir_num < f2p->extra_dir_num)
+			return -1;
+		else
+			return 0;
+	}
+	return res;
+}
+
 /* Compare two pgFile with their path in descending order of ASCII code. */
 int
 pgFileComparePathDesc(const void *f1, const void *f2)
@@ -1440,6 +1464,7 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
+		file->extra_dir_num = extra_dir_num;
 
 		/*
 		 * Optional fields

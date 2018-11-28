@@ -116,7 +116,7 @@ typedef struct pgFile
 	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
-	bool	extra_dir_num;	/* Number of extra directory. 0 if not extra */
+	int		extra_dir_num;	/* Number of extra directory. 0 if not extra */
 	char	*extradir;		/* File from extra directory */
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
@@ -540,6 +540,7 @@ extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c);
 extern int pgFileComparePath(const void *f1, const void *f2);
+extern int pgFileComparePathWithExtra(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
