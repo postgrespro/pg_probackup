@@ -22,6 +22,7 @@ static bool corrupted_backup_found = false;
 
 typedef struct
 {
+	const char *base_path;
 	parray	   *files;
 	bool		corrupted;
 	XLogRecPtr	stop_lsn;
@@ -101,6 +102,7 @@ pgBackupValidate(pgBackup *backup)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
 
+		arg->base_path = base_path;
 		arg->files = files;
 		arg->corrupted = false;
 		arg->stop_lsn = backup->stop_lsn;
@@ -223,9 +225,17 @@ pgBackupValidateFiles(void *arg)
 			 * CRC-32C algorithm.
 			 * To avoid this problem we need to use different algorithm, CRC-32 in
 			 * this case.
+			 *
+			 * Starting from 2.0.25 we calculate crc of pg_control differently.
 			 */
-			crc = pgFileGetCRC(file->path, arguments->backup_version <= 20021,
-							   true, NULL);
+			if (arguments->backup_version >= 20025 &&
+				strcmp(file->name, "pg_control") == 0)
+				crc = get_pgcontrol_checksum(arguments->base_path);
+			else
+				crc = pgFileGetCRC(file->path,
+								   arguments->backup_version <= 20021 ||
+								   arguments->backup_version >= 20025,
+								   true, NULL);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",

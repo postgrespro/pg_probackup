@@ -24,8 +24,6 @@
 #include "utils/thread.h"
 #include <time.h>
 
-#define PG_STOP_BACKUP_TIMEOUT 300
-
 /*
  * Macro needed to parse ptrack.
  * NOTE Keep those values syncronised with definitions in ptrack.h
@@ -310,7 +308,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 			to_path, strerror(errno_tmp));
 	}
 
-	INIT_TRADITIONAL_CRC32(file->crc);
+	INIT_FILE_CRC32(true, file->crc);
 
 	/* read from stream and write to backup file */
 	while (1)
@@ -336,14 +334,14 @@ remote_copy_file(PGconn *conn, pgFile* file)
 		{
 			write_buffer_size = Min(row_length, sizeof(buf));
 			memcpy(buf, copybuf, write_buffer_size);
-			COMP_TRADITIONAL_CRC32(file->crc, buf, write_buffer_size);
+			COMP_FILE_CRC32(true, file->crc, buf, write_buffer_size);
 
 			/* TODO calc checksum*/
 			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
 			{
 				errno_tmp = errno;
 				/* oops */
-				FIN_TRADITIONAL_CRC32(file->crc);
+				FIN_FILE_CRC32(true, file->crc);
 				fclose(out);
 				PQfinish(conn);
 				elog(ERROR, "cannot write to \"%s\": %s", to_path,
@@ -367,7 +365,7 @@ remote_copy_file(PGconn *conn, pgFile* file)
 	}
 
 	file->write_size = (int64) file->read_size;
-	FIN_TRADITIONAL_CRC32(file->crc);
+	FIN_FILE_CRC32(true, file->crc);
 
 	fclose(out);
 }
@@ -1883,8 +1881,8 @@ pg_stop_backup(pgBackup *backup)
 	}
 
 	/*
-	 * Wait for the result of pg_stop_backup(),
-	 * but no longer than PG_STOP_BACKUP_TIMEOUT seconds
+	 * Wait for the result of pg_stop_backup(), but no longer than
+	 * archive_timeout seconds
 	 */
 	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
@@ -1907,14 +1905,14 @@ pg_stop_backup(pgBackup *backup)
 					elog(INFO, "wait for pg_stop_backup()");
 
 				/*
-				 * If postgres haven't answered in PG_STOP_BACKUP_TIMEOUT seconds,
+				 * If postgres haven't answered in archive_timeout seconds,
 				 * send an interrupt.
 				 */
-				if (pg_stop_backup_timeout > PG_STOP_BACKUP_TIMEOUT)
+				if (pg_stop_backup_timeout > instance_config.archive_timeout)
 				{
 					pgut_cancel(conn);
 					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
-						 PG_STOP_BACKUP_TIMEOUT);
+						 instance_config.archive_timeout);
 				}
 			}
 			else
@@ -2290,9 +2288,12 @@ backup_files(void *arg)
 					continue;
 				}
 			}
+			else if (strcmp(file->name, "pg_control") == 0)
+				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
+									file);
 			else
 			{
-				bool skip = false;
+				bool		skip = false;
 
 				/* If non-data file has not changed since last backup... */
 				if (prev_file && file->exists_in_prev &&
