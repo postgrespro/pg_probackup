@@ -99,9 +99,11 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'ptrack_enable': 'on', 'wal_level': 'replica',
-                'max_wal_senders': '2', 'autovacuum': 'off',
-                'checkpoint_timeout': '30s'}
+                'ptrack_enable': 'on',
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'autovacuum': 'off',
+                'archive_timeout': '30s'}
             )
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -150,7 +152,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 '-j10',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port)
+                '--master-port={0}'.format(master.port),
+                '--stream'
                 ]
             )
         # TODO: check that all ptrack are nullified

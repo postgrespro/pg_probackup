@@ -127,10 +127,11 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.init_pb(backup_dir))
         self.add_instance(backup_dir, 'node', node)
 
-        node.start()
+        node.slow_start()
 
         # syntax error in pg_probackup.conf
-        with open(os.path.join(backup_dir, "backups", "node", "pg_probackup.conf"), "a") as conf:
+        conf_file = os.path.join(backup_dir, "backups", "node", "pg_probackup.conf")
+        with open(conf_file, "a") as conf:
             conf.write(" = INFINITE\n")
         try:
             self.backup_node(backup_dir, 'node', node)
@@ -139,7 +140,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertEqual(e.message,
-                'ERROR: syntax error in " = INFINITE"\n',
+                'ERROR: Syntax error in " = INFINITE"\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.clean_pb(backup_dir)
@@ -147,7 +148,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
 
         # invalid value in pg_probackup.conf
-        with open(os.path.join(backup_dir, "backups", "node", "pg_probackup.conf"), "a") as conf:
+        with open(conf_file, "a") as conf:
             conf.write("BACKUP_MODE=\n")
 
         try:
@@ -157,7 +158,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertEqual(e.message,
-                'ERROR: invalid backup-mode ""\n',
+                'ERROR: Invalid option "BACKUP_MODE" in file "{0}"\n'.format(conf_file),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.clean_pb(backup_dir)
@@ -165,7 +166,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
 
         # Command line parameters should override file values
-        with open(os.path.join(backup_dir, "backups", "node", "pg_probackup.conf"), "a") as conf:
+        with open(conf_file, "a") as conf:
             conf.write("retention-redundancy=1\n")
 
         self.assertEqual(self.show_config(backup_dir, 'node')['retention-redundancy'], '1')
@@ -178,11 +179,11 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertEqual(e.message,
-                'ERROR: option system-identifier cannot be specified in command line\n',
+                'ERROR: Option system-identifier cannot be specified in command line\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # invalid value in pg_probackup.conf
-        with open(os.path.join(backup_dir, "backups", "node", "pg_probackup.conf"), "a") as conf:
+        with open(conf_file, "a") as conf:
             conf.write("SMOOTH_CHECKPOINT=FOO\n")
 
         try:
@@ -192,7 +193,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertEqual(e.message,
-                "ERROR: option -C, --smooth-checkpoint should be a boolean: 'FOO'\n",
+                'ERROR: Invalid option "SMOOTH_CHECKPOINT" in file "{0}"\n'.format(conf_file),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.clean_pb(backup_dir)
@@ -200,8 +201,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
 
         # invalid option in pg_probackup.conf
-        pbconf_path = os.path.join(backup_dir, "backups", "node", "pg_probackup.conf")
-        with open(pbconf_path, "a") as conf:
+        with open(conf_file, "a") as conf:
             conf.write("TIMELINEID=1\n")
 
         try:
@@ -211,7 +211,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertEqual(e.message,
-                'ERROR: invalid option "TIMELINEID" in file "{0}"\n'.format(pbconf_path),
+                'ERROR: Invalid option "TIMELINEID" in file "{0}"\n'.format(conf_file),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself

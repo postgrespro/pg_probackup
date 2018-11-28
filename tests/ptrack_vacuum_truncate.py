@@ -147,7 +147,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 '-j10',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port)
+                '--master-port={0}'.format(master.port),
+                '--stream'
                 ]
             )
 
