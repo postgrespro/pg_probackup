@@ -295,9 +295,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	}
 	/* compute size of wal files of this backup stored in the archive */
 	if (!to_backup->stream)
-		to_backup->wal_bytes = xlog_seg_size *
-			(to_backup->stop_lsn / xlog_seg_size -
-			 to_backup->start_lsn / xlog_seg_size + 1);
+		to_backup->wal_bytes = instance_config.xlog_seg_size *
+			(to_backup->stop_lsn / instance_config.xlog_seg_size -
+			 to_backup->start_lsn / instance_config.xlog_seg_size + 1);
 	else
 		to_backup->wal_bytes = BYTES_INVALID;
 
@@ -524,9 +524,11 @@ merge_files(void *arg)
 				 * do that.
 				 */
 				file->write_size = pgFileSize(to_path_tmp);
-				file->crc = pgFileGetCRC(to_path_tmp, false);
+				file->crc = pgFileGetCRC(to_path_tmp, true, true, NULL, FIO_LOCAL_HOST);
 			}
 		}
+		else if (strcmp(file->name, "pg_control") == 0)
+			copy_pgcontrol_file(argument->from_root, argument->to_root, file, FIO_LOCAL_HOST);
 		else
 			copy_file(argument->from_root, argument->to_root, file, FIO_LOCAL_HOST);
 

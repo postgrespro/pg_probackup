@@ -158,7 +158,8 @@ sub build_pgprobackup
 		'validate.c'
 		);
 	$probackup->AddFiles(
-		"$currpath/src/utils", 
+		"$currpath/src/utils",
+		'configuration.c',
 		'json.c',
 		'logger.c',
 		'parray.c',

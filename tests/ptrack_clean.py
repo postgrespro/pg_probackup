@@ -130,7 +130,9 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'ptrack_enable': 'on',
                 'wal_level': 'replica',
-                'max_wal_senders': '2'})
+                'max_wal_senders': '2',
+                'archive_timeout': '30s'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
@@ -237,7 +239,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             options=[
                 '-j10', '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+                '--master-port={0}'.format(master.port),
+                '--stream'])
         master.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:

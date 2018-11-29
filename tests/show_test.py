@@ -197,7 +197,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fd.write("statuss = OK")
         fd.close()
 
-        self.assertIn('invalid option "statuss" in file'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn(
+            'WARNING: Invalid option "statuss" in file'.format(file),
+            self.show_pb(backup_dir, 'node', as_text=True))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # self.del_test_dir(module_name, fname)

@@ -1,8 +1,8 @@
 PROGRAM = pg_probackup
 
 # utils
-OBJS = src/utils/json.o src/utils/logger.o src/utils/parray.o \
-	src/utils/pgut.o src/utils/thread.o src/utils/remote.o src/utils/file.o
+OBJS = src/utils/configuration.o src/utils/json.o src/utils/logger.o \
+	src/utils/parray.o src/utils/pgut.o src/utils/thread.o src/utils/remote.o src/utils/file.o
 
 OBJS += src/archive.o src/backup.o src/catalog.o src/configure.o src/data.o \
 	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o src/merge.o \

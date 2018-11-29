@@ -2,6 +2,7 @@
 #define __FILE__H__
 
 #include <stdio.h>
+#include <sys/stat.h>
 
 #ifdef HAVE_LIBZ
 #include <zlib.h>

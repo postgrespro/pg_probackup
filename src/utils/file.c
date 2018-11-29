@@ -591,7 +591,26 @@ gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location 
 		int fd = mkstemp("gz.XXXXXX");
 		if (fd < 0)
 			return NULL;
-		*tmp_fd = fd;
+		if (strcmp(mode, PG_BINARY_W) == 0)
+		{
+			*tmp_fd = fd;
+		}
+		else
+		{
+			int rd = fio_open(path, O_RDONLY|PG_BINARY, location);
+			struct stat st;
+			void* buf;
+			if (rd < 0) {
+				return NULL;
+			}
+			SYS_CHECK(fio_fstat(rd, &st));
+			buf = malloc(st.st_size);
+			IO_CHECK(fio_read(rd, buf, st.st_size), st.st_size);
+			IO_CHECK(write(fd, buf, st.st_size), st.st_size);
+			SYS_CHECK(fio_close(rd));
+			free(buf);
+			*tmp_fd = -1;
+		}
 		file = gzdopen(fd, mode);
 	}
 	else

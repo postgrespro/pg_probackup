@@ -21,7 +21,7 @@ do_init(void)
 {
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
-	int results;
+	int			results;
 
 	results = pg_check_dir(backup_path);
 	if (results == 4)	/* exists and not empty*/
@@ -54,17 +54,16 @@ do_add_instance(void)
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
 	struct stat st;
-	pgBackupConfig *config = pgut_new(pgBackupConfig);
 
 	/* PGDATA is always required */
-	if (pgdata == NULL)
+	if (instance_config.pgdata == NULL)
 		elog(ERROR, "Required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
 	/* Read system_identifier from PGDATA */
-	system_identifier = get_system_identifier(pgdata);
+	instance_config.system_identifier = get_system_identifier(instance_config.pgdata);
 	/* Starting from PostgreSQL 11 read WAL segment size from PGDATA */
-	xlog_seg_size = get_xlog_seg_size(pgdata);
+	instance_config.xlog_seg_size = get_xlog_seg_size(instance_config.pgdata);
 
 	/* Ensure that all root directories already exist */
 	if (access(backup_path, F_OK) != 0)
@@ -93,14 +92,19 @@ do_add_instance(void)
 	dir_create_dir(arclog_path, DIR_PERMISSION);
 
 	/*
-	 * Write initial config. system-identifier and pgdata are set in
-	 * init subcommand and will never be updated.
+	 * Write initial configuration file.
+	 * system-identifier, xlog-seg-size and pgdata are set in init subcommand
+	 * and will never be updated.
+	 *
+	 * We need to manually set options source to save them to the configuration
+	 * file.
 	 */
-	pgBackupConfigInit(config);
-	config->system_identifier = system_identifier;
-	config->xlog_seg_size = xlog_seg_size;
-	config->pgdata = pgdata;
-	writeBackupCatalogConfigFile(config);
+	config_set_opt(instance_options, &instance_config.system_identifier,
+				   SOURCE_FILE);
+	config_set_opt(instance_options, &instance_config.xlog_seg_size,
+				   SOURCE_FILE);
+	/* pgdata was set through command line */
+	do_set_config();
 
 	elog(INFO, "Instance '%s' successfully inited", instance_name);
 	return 0;

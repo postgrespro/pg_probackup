@@ -9,9 +9,9 @@ module_name = 'ptrack_clean'
 
 class SimpleTest(ProbackupTest, unittest.TestCase):
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_ptrack_clean(self):
+    def test_ptrack_empty(self):
         """Take backups of every available types and check that PTRACK is clean"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -87,9 +87,9 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_ptrack_clean_replica(self):
+    def test_ptrack_empty_replica(self):
         """Take backups of every available types from master and check that PTRACK on replica is clean"""
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
