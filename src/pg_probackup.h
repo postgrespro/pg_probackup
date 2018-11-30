@@ -296,6 +296,7 @@ typedef struct
 	PGconn	   *backup_conn;
 	PGcancel   *cancel_conn;
 
+	bool checkdb_only;
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.
@@ -391,6 +392,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time);
+extern int do_checkdb(void);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
@@ -524,6 +526,8 @@ extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
+extern bool check_data_file(backup_files_arg* arguments,
+							pgFile *file);
 extern bool backup_data_file(backup_files_arg* arguments,
 							 const char *to_path, pgFile *file,
 							 XLogRecPtr prev_backup_start_lsn,

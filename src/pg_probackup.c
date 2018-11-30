@@ -38,7 +38,8 @@ typedef enum ProbackupSubcmd
 	MERGE_CMD,
 	SHOW_CMD,
 	SET_CONFIG_CMD,
-	SHOW_CONFIG_CMD
+	SHOW_CONFIG_CMD,
+	CHECKDB_CMD
 } ProbackupSubcmd;
 
 /* directory options */
@@ -234,6 +235,8 @@ main(int argc, char *argv[])
 			backup_subcmd = SET_CONFIG_CMD;
 		else if (strcmp(argv[1], "show-config") == 0)
 			backup_subcmd = SHOW_CONFIG_CMD;
+		else if (strcmp(argv[1], "checkdb") == 0)
+			backup_subcmd = CHECKDB_CMD;
 		else if (strcmp(argv[1], "--help") == 0 ||
 				 strcmp(argv[1], "-?") == 0 ||
 				 strcmp(argv[1], "help") == 0)
@@ -268,6 +271,7 @@ main(int argc, char *argv[])
 	 * Make command string before getopt_long() will call. It permutes the
 	 * content of argv.
 	 */
+	/* TODO why do we do that only for some commands? */
 	command_name = pstrdup(argv[1]);
 	if (backup_subcmd == BACKUP_CMD ||
 		backup_subcmd == RESTORE_CMD ||
@@ -309,8 +313,8 @@ main(int argc, char *argv[])
 	if (help_opt)
 		help_command(command_name);
 
-	/* backup_path is required for all pg_probackup commands except help */
-	if (backup_path == NULL)
+	/* backup_path is required for all pg_probackup commands except help and checkdb */
+	if (backup_path == NULL && backup_subcmd != CHECKDB_CMD)
 	{
 		/*
 		 * If command line argument is not set, try to read BACKUP_PATH
@@ -320,17 +324,22 @@ main(int argc, char *argv[])
 		if (backup_path == NULL)
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
-	canonicalize_path(backup_path);
 
-	/* Ensure that backup_path is an absolute path */
-	if (!is_absolute_path(backup_path))
-		elog(ERROR, "-B, --backup-path must be an absolute path");
+	if (backup_path != NULL)
+	{
+		canonicalize_path(backup_path);
 
-	/* Ensure that backup_path is a path to a directory */
-	rc = stat(backup_path, &stat_buf);
-	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-		elog(ERROR, "-B, --backup-path must be a path to directory");
+		/* Ensure that backup_path is an absolute path */
+		if (!is_absolute_path(backup_path))
+			elog(ERROR, "-B, --backup-path must be an absolute path");
 
+		/* Ensure that backup_path is a path to a directory */
+		rc = stat(backup_path, &stat_buf);
+		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
+			elog(ERROR, "-B, --backup-path must be a path to directory");
+	}
+
+	/* TODO What is this block about?*/
 	/* command was initialized for a few commands */
 	if (command)
 	{
@@ -340,9 +349,10 @@ main(int argc, char *argv[])
 		command = NULL;
 	}
 
+	/* TODO it would be better to list commands that require instance option */
 	/* Option --instance is required for all commands except init and show */
 	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
-		backup_subcmd != VALIDATE_CMD)
+		backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
 	{
 		if (instance_name == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
@@ -352,7 +362,7 @@ main(int argc, char *argv[])
 	 * If --instance option was passed, construct paths for backup data and
 	 * xlog files of this backup instance.
 	 */
-	if (instance_name)
+	if ((backup_path != NULL) && instance_name)
 	{
 		sprintf(backup_instance_path, "%s/%s/%s",
 				backup_path, BACKUPS_DIR, instance_name);
@@ -375,20 +385,25 @@ main(int argc, char *argv[])
 	 * Read options from env variables or from config file,
 	 * unless we're going to set them via set-config.
 	 */
-	if (instance_name)
+	if (((backup_path != NULL) && instance_name)
+		&& backup_subcmd != SET_CONFIG_CMD)
 	{
-		char		path[MAXPGPATH];
-
+		char		config_path[MAXPGPATH];
 		/* Read environment variables */
 		config_get_opt_env(instance_options);
 
 		/* Read options from configuration file */
-		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-		config_read_opt(path, instance_options, ERROR, true);
+		join_path_components(config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+		config_read_opt(config_path, instance_options, ERROR, true);
 	}
 
+	/* Just read environment variables */
+	if (backup_path == NULL && backup_subcmd == CHECKDB_CMD)
+		config_get_opt_env(instance_options);
+	
 	/* Initialize logger */
-	init_logger(backup_path, &instance_config.logger);
+	if (backup_subcmd != CHECKDB_CMD)
+		init_logger(backup_path, &instance_config.logger);
 
 	/*
 	 * We have read pgdata path from command line or from configuration file.
@@ -516,6 +531,9 @@ main(int argc, char *argv[])
 			break;
 		case SET_CONFIG_CMD:
 			do_set_config();
+			break;
+		case CHECKDB_CMD:
+			do_checkdb();
 			break;
 		case NO_CMD:
 			/* Should not happen */

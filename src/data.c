@@ -503,6 +503,67 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	file->write_size += write_buffer_size;
 }
 
+bool
+check_data_file(backup_files_arg* arguments,
+				pgFile *file)
+{
+	FILE		*in;
+	BlockNumber	blknum = 0;
+	BlockNumber	nblocks = 0;
+	int			n_blocks_skipped = 0;
+	int			page_state;
+	char		curr_page[BLCKSZ];
+
+	/* reset size summary */
+	file->read_size = 0;
+	file->write_size = 0;
+
+	/* open backup mode file for read */
+	in = fopen(file->path, PG_BINARY_R);
+	if (in == NULL)
+	{
+		FIN_FILE_CRC32(true, file->crc);
+
+		/*
+		 * If file is not found, this is not en error.
+		 * It could have been deleted by concurrent postgres transaction.
+		 */
+		if (errno == ENOENT)
+		{
+			elog(LOG, "File \"%s\" is not found", file->path);
+			return false;
+		}
+
+		elog(ERROR, "cannot open file \"%s\": %s",
+			 file->path, strerror(errno));
+	}
+
+	if (file->size % BLCKSZ != 0)
+	{
+		fclose(in);
+		elog(ERROR, "File: %s, invalid file size %lu", file->path, file->size);
+	}
+
+	/*
+	 * Compute expected number of blocks in the file.
+	 * NOTE This is a normal situation, if the file size has changed
+	 * since the moment we computed it.
+	 */
+	nblocks = file->size/BLCKSZ;
+
+	for (blknum = 0; blknum < nblocks; blknum++)
+	{
+		page_state = prepare_page(arguments, file, 0, //0 = InvalidXLogRecPtr
+									blknum, nblocks, in, &n_blocks_skipped,
+									BACKUP_MODE_FULL, curr_page);
+		if (page_state == PageIsTruncated)
+			break;
+	}
+
+	return true;
+	fclose(in);
+}
+
 /*
  * Backup data file in the from_root directory to the to_root directory with
  * same relative path. If prev_backup_start_lsn is not NULL, only pages with

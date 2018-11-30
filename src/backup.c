@@ -98,6 +98,7 @@ static void *backup_files(void *arg);
 static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
+static void do_check_instance(void);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_switch_wal(PGconn *conn);
@@ -459,6 +460,100 @@ remote_backup_files(void *arg)
 	return NULL;
 }
 
+/* TODO think about merging it with do_backup_instance */
+static void
+do_check_instance(void)
+{
+	int			i;
+	char		database_path[MAXPGPATH];
+
+	/* arrays with meta info for multi threaded backup */
+	pthread_t	*threads;
+	backup_files_arg *threads_args;
+	bool		backup_isok = true;
+
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
+
+	/* initialize backup list */
+	backup_files_list = parray_new();
+
+	/* list files with the logical path. omit $PGDATA */
+	dir_list_file(backup_files_list, instance_config.pgdata, true, true, false);
+
+	/*
+	 * Sort pathname ascending. It is necessary to create intermediate
+	 * directories sequentially.
+	 *
+	 * For example:
+	 * 1 - create 'base'
+	 * 2 - create 'base/1'
+	 *
+	 * Sorted array is used at least in parse_backup_filelist_filenames(),
+	 * extractPageMap(), make_pagemap_from_ptrack().
+	 */
+	parray_qsort(backup_files_list, pgFileComparePath);
+	/* Extract information about files in backup_list parsing their names:*/
+	parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
+
+	/* setup threads */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+		pg_atomic_clear_flag(&file->lock);
+	}
+
+	/* Sort by size for load balancing */
+	parray_qsort(backup_files_list, pgFileCompareSize);
+
+	/* init thread args with own file lists */
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
+
+	for (i = 0; i < num_threads; i++)
+	{
+		backup_files_arg *arg = &(threads_args[i]);
+
+		arg->from_root = instance_config.pgdata;
+		arg->to_root = database_path;
+		arg->files_list = backup_files_list;
+		arg->prev_filelist = NULL;
+		arg->prev_start_lsn = InvalidXLogRecPtr;
+		arg->backup_conn = NULL;
+		arg->cancel_conn = NULL;
+		arg->checkdb_only = true;
+		/* By default there are some error */
+		arg->ret = 1;
+	}
+
+	/* Run threads */
+	elog(INFO, "Start checking data files");
+	for (i = 0; i < num_threads; i++)
+	{
+		backup_files_arg *arg = &(threads_args[i]);
+
+		elog(VERBOSE, "Start thread num: %i", i);
+
+		pthread_create(&threads[i], NULL, backup_files, arg);
+	}
+
+	/* Wait threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret == 1)
+			backup_isok = false;
+	}
+	if (backup_isok)
+		elog(INFO, "Data files are transfered");
+	else
+		elog(ERROR, "Data files transferring failed");
+
+	parray_walk(backup_files_list, pgFileFree);
+	parray_free(backup_files_list);
+	backup_files_list = NULL;
+}
+
 /*
  * Take a backup of a single postgresql instance.
  * Move files from 'pgdata' to a subdirectory in 'backup_path'.
@@ -730,6 +825,7 @@ do_backup_instance(void)
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->backup_conn = NULL;
 		arg->cancel_conn = NULL;
+		arg->checkdb_only = false;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -854,6 +950,53 @@ do_backup_instance(void)
 	parray_walk(backup_files_list, pgFileFree);
 	parray_free(backup_files_list);
 	backup_files_list = NULL;
+}
+
+/* Entry point of pg_probackup CHECKDB subcommand. */
+/* TODO think about merging it with do_backup */
+int
+do_checkdb(void)
+{
+	/* PGDATA is always required */
+	if (instance_config.pgdata == NULL)
+		elog(ERROR, "required parameter not specified: PGDATA "
+						 "(-D, --pgdata)");
+
+	/* Create connection for PostgreSQL */
+	backup_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+							   instance_config.pgdatabase,
+							   instance_config.pguser);
+	pgut_atexit_push(backup_disconnect, NULL);
+
+	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
+
+	/* Confirm data block size and xlog block size are compatible */
+	confirm_block_size("block_size", BLCKSZ);
+	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
+
+	current.from_replica = pg_is_in_recovery();
+
+	/* Confirm that this server version is supported */
+	check_server_version();
+
+	/* Do we need that? */
+	current.checksum_version = get_data_checksum_version(true);
+
+	is_checksum_enabled = pg_checksum_enable();
+
+	if (is_checksum_enabled)
+		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
+					"Data block corruption will be detected");
+	else
+		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
+						"pg_probackup have no way to detect data block corruption without them. "
+						"Reinitialize PGDATA with option '--data-checksums'.");
+
+	StrNCpy(current.server_version, server_version_str,
+			sizeof(current.server_version));
+
+	do_check_instance();
+	return 0;
 }
 
 /*
@@ -2268,6 +2411,7 @@ backup_files(void *arg)
 					/* File exists in previous backup */
 					file->exists_in_prev = true;
 			}
+
 			/* copy the file into backup */
 			if (file->is_datafile && !file->is_cfs)
 			{
@@ -2276,8 +2420,12 @@ backup_files(void *arg)
 				join_path_components(to_path, arguments->to_root,
 									 file->path + strlen(arguments->from_root) + 1);
 
+				if (arguments->checkdb_only)
+				{
+					check_data_file(arguments, file);
+				}
 				/* backup block by block if datafile AND not compressed by cfs*/
-				if (!backup_data_file(arguments, to_path, file,
+				else if (!backup_data_file(arguments, to_path, file,
 									  arguments->prev_start_lsn,
 									  current.backup_mode,
 									  instance_config.compress_alg,
@@ -2288,10 +2436,10 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (strcmp(file->name, "pg_control") == 0)
+			else if (strcmp(file->name, "pg_control") == 0 && !arguments->checkdb_only)
 				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
 									file);
-			else
+			else if (!arguments->checkdb_only)
 			{
 				bool		skip = false;
 
