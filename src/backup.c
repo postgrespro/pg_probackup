@@ -47,6 +47,8 @@ const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
+static parray *index_list = NULL;
+
 
 /* We need critical section for datapagemap_add() in case of using threads */
 static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -99,7 +101,10 @@ static void *check_files(void *arg);
 static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
-static void do_check_instance(void);
+static void do_check_instance(bool do_amcheck);
+static parray* get_index_list(void);
+static bool amcheck_one_index(backup_files_arg *arguments,
+				 Oid indexrelid);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_switch_wal(PGconn *conn);
@@ -463,7 +468,7 @@ remote_backup_files(void *arg)
 
 /* TODO think about merging it with do_backup_instance */
 static void
-do_check_instance(void)
+do_check_instance(bool do_amcheck)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -507,6 +512,9 @@ do_check_instance(void)
 	/* Sort by size for load balancing */
 	parray_qsort(backup_files_list, pgFileCompareSize);
 
+	if (do_amcheck)
+		index_list = get_index_list();
+
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
@@ -522,6 +530,7 @@ do_check_instance(void)
 		arg->prev_start_lsn = InvalidXLogRecPtr;
 		arg->backup_conn = NULL;
 		arg->cancel_conn = NULL;
+		arg->index_list = index_list;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -954,7 +963,7 @@ do_backup_instance(void)
 /* Entry point of pg_probackup CHECKDB subcommand. */
 /* TODO think about merging it with do_backup */
 int
-do_checkdb(void)
+do_checkdb(bool do_amcheck)
 {
 	/* PGDATA is always required */
 	if (instance_config.pgdata == NULL)
@@ -994,7 +1003,7 @@ do_checkdb(void)
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
 
-	do_check_instance();
+	do_check_instance(do_amcheck);
 	return 0;
 }
 
@@ -2337,6 +2346,11 @@ check_files(void *arg)
 	int			i;
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int			n_backup_files_list = parray_num(arguments->files_list);
+	int			n_indexes = 0;
+
+	/* We only have index_list in amcheck mode */
+	if (arguments->index_list)
+		n_indexes = parray_num(arguments->index_list);
 
 	/* check a file */
 	for (i = 0; i < n_backup_files_list; i++)
@@ -2351,7 +2365,7 @@ check_files(void *arg)
 
 		/* check for interrupt */
 		if (interrupted)
-			elog(ERROR, "interrupted during backup");
+			elog(ERROR, "interrupted during checkdb");
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
@@ -2400,11 +2414,29 @@ check_files(void *arg)
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
 
+
+	/* check index with amcheck */
+	for (i = 0; i < n_indexes; i++)
+	{
+		pg_indexEntry *ind = (pg_indexEntry *) parray_get(arguments->index_list, i);
+
+		elog(VERBOSE, "Checking index:  \"%s\" ", ind->name);
+		if (!pg_atomic_test_set_flag(&ind->lock))
+			continue;
+
+		/* check for interrupt */
+		if (interrupted)
+			elog(ERROR, "interrupted during checkdb --amcheck");
+		
+		amcheck_one_index(arguments, ind->indexrelid);
+	}
+
 	/* Close connection */
 	if (arguments->backup_conn)
 		pgut_disconnect(arguments->backup_conn);
 
 	/* Data files transferring is successful */
+	/* TODO  where should we set arguments->ret to 1? */
 	arguments->ret = 0;
 
 	return NULL;
@@ -3104,4 +3136,142 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 	pfree(params[3]);
 
 	return result;
+}
+
+/* Clear ptrack files in all databases of the instance we connected to */
+static parray*
+get_index_list(void)
+{
+	PGresult   *res_db,
+			   *res;
+	const char *dbname;
+	int			i;
+	Oid dbOid, tblspcOid;
+	char *params[2];
+	const char *indexname;
+	Oid indexrelid;
+
+	params[0] = palloc(64);
+	params[1] = palloc(64);
+	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
+						  0, NULL);
+
+	for(i = 0; i < PQntuples(res_db); i++)
+	{
+		PGconn	   *tmp_conn;
+
+		dbname = PQgetvalue(res_db, i, 0);
+		if (strcmp(dbname, "template0") == 0)
+			continue;
+
+		dbOid = atoi(PQgetvalue(res_db, i, 1));
+		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
+
+		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+								dbname,
+								instance_config.pguser);
+
+		res = pgut_execute(tmp_conn, "select * from pg_extension where extname='amcheck'", 0, NULL);
+
+		if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		{
+			PQclear(res);
+			elog(ERROR, "cannot check if amcheck is installed in database %s: %s",
+				dbname, PQerrorMessage(tmp_conn));
+		}
+
+		if (PQntuples(res) < 1)
+		{
+			elog(VERBOSE, "extension amcheck is not installed in database %s", dbname);
+			continue;
+		}	
+	
+		PQclear(res);
+		res = pgut_execute(tmp_conn, "SELECT cls.oid, cls.relname"
+									 " FROM pg_index idx "
+									 " JOIN pg_class cls ON cls.oid=idx.indexrelid "
+									 " JOIN pg_am am ON am.oid=cls.relam "
+									 " WHERE am.amname='btree'; ", 0, NULL);
+
+		/* TODO filter system indexes to add them to list only once */
+		/* TODO maybe save tablename for load balancing */
+		for(i = 0; i < PQntuples(res); i++)
+		{
+			pg_indexEntry *ind = (pg_indexEntry *) pgut_malloc(sizeof(pg_indexEntry));
+			char *name = NULL;
+
+			ind->indexrelid = atoi(PQgetvalue(res, i, 0));
+			name = PQgetvalue(res, i, 1);
+			ind->name = pgut_malloc(strlen(name) + 1);
+			strcpy(ind->name, name);	/* enough buffer size guaranteed */
+
+			pg_atomic_clear_flag(&ind->lock);
+
+			if (index_list == NULL)
+				index_list = parray_new();
+
+			/* TODO maybe keep structure with index name and some other fileds? */
+			parray_append(index_list, ind);
+		}
+
+		PQclear(res);
+
+		pgut_disconnect(tmp_conn);
+	}
+
+	pfree(params[0]);
+	pfree(params[1]);
+	PQclear(res_db);
+	return index_list;
+}
+
+/* check one index. Return true if everything is ok, false otherwise. */
+static bool
+amcheck_one_index(backup_files_arg *arguments,
+				 Oid indexrelid)
+{
+	PGresult   *res;
+	char	   *params[1];
+	char	   *result;
+
+	params[0] = palloc(64);
+
+	/*
+	 * Use tmp_conn, since we may work in parallel threads.
+	 * We can connect to any database.
+	 */
+	sprintf(params[0], "%i", indexrelid);
+
+	if (arguments->backup_conn == NULL)
+	{
+		arguments->backup_conn = pgut_connect(instance_config.pghost,
+											  instance_config.pgport,
+											  instance_config.pgdatabase,
+											  instance_config.pguser);
+	}
+
+	if (arguments->cancel_conn == NULL)
+		arguments->cancel_conn = PQgetCancel(arguments->backup_conn);
+
+	res = pgut_execute_parallel(arguments->backup_conn,
+								arguments->cancel_conn,
+					"SELECT bt_index_check($1)",
+					1, (const char **)params, true);
+
+	/* TODO now this check is hidden inside pgut_execute_parallel
+	 * We need to handle failed check as an error.
+	 */
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		elog(VERBOSE, "amcheck failed for relation oid %u: %s",
+					   indexrelid, PQresultErrorMessage(res));
+
+		pfree(params[0]);
+		PQclear(res);
+		return false;
+	}
+
+	pfree(params[0]);
+	PQclear(res);
+	return true;
 }

@@ -129,6 +129,13 @@ typedef struct pgFile
 							   * i.e. datafiles without _ptrack */
 } pgFile;
 
+typedef struct pg_indexEntry
+{
+	Oid indexrelid;
+	char *name;
+	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
+} pg_indexEntry;
+
 /* Special values of datapagemap_t bitmapsize */
 #define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
 
@@ -295,6 +302,7 @@ typedef struct
 
 	PGconn	   *backup_conn;
 	PGcancel   *cancel_conn;
+	parray	   *index_list;
 
 	/*
 	 * Return value from the thread.
@@ -391,7 +399,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time);
-extern int do_checkdb(void);
+extern int do_checkdb(bool do_amcheck);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
