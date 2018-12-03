@@ -472,7 +472,6 @@ do_backup_instance(void)
 	pthread_t	*threads;
 	backup_files_arg *threads_args;
 	bool		backup_isok = true;
-	char	   *p;
 
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
@@ -482,19 +481,8 @@ do_backup_instance(void)
 	pgFile	   *pg_control = NULL;
 
 	elog(LOG, "Database backup start");
-	extra_dirs = parray_new();
-	/* TODO: Add path validation */
-	if(extradir)
-	{
-		p = strtok(extradir,":");
-		while(p!=NULL)
-		{
-			char * dir = (char *)palloc(strlen(p) + 1);
-			strcpy(dir,p);
-			parray_append(extra_dirs, dir);
-			p=strtok(NULL,":");
-		}
-	}
+	if(current.extra_dir_str)
+		extra_dirs = make_extra_directory_list(current.extra_dir_str);
 
 	/* Initialize size summary */
 	current.data_bytes = 0;
@@ -633,7 +621,17 @@ do_backup_instance(void)
 	if (is_remote_backup)
 		get_remote_pgdata_filelist(backup_files_list);
 	else
-		dir_list_file(backup_files_list, pgdata, true, true, false, false);
+		dir_list_file(backup_files_list, pgdata, true, true, false, 0);
+
+	/*
+	 * Append to backup list all files and directories
+	 * from extra directory option
+	 */
+	if (extra_dirs)
+		for (i = 0; i < parray_num(extra_dirs); i++)
+			/* Extra dirs numeration starts with 1. 0 value is not extra dir */
+			dir_list_file(backup_files_list, parray_get(extra_dirs, i),
+						  true, true, false, i+1);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -650,12 +648,6 @@ do_backup_instance(void)
 
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_backup_filelist_filenames(backup_files_list, pgdata);
-
-	/* Append to backup list all files dirictories from extra dirictory option */
-	for (i = 0; i < parray_num(extra_dirs); i++)
-		/* Extra dirs numeration starts with 1. 0 value is not extra dir */
-		dir_list_file(backup_files_list, (char *) parray_get(extra_dirs, i),
-					  true, true, true, i+1);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -786,10 +778,7 @@ do_backup_instance(void)
 	}
 	/* clean extra directories list */
 	if (extra_dirs)
-	{
-		parray_walk(extra_dirs, pfree);
-		parray_free(extra_dirs);
-	}
+		free_dir_list(extra_dirs);
 
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in backup_files_list.
@@ -980,6 +969,10 @@ do_backup(time_t start_time)
 	current.start_time = start_time;
 	StrNCpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));
+
+	/* Save list of extra directories */
+	if(extradir)
+		current.extra_dir_str = extradir;
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
@@ -2246,7 +2239,7 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else 
+			else
 			{
 				const char *src;
 				const char *dst;

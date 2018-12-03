@@ -21,6 +21,7 @@ typedef struct
 {
 	parray	   *files;
 	pgBackup   *backup;
+	parray	   *extra_dirs;
 
 	/*
 	 * Return value from the thread.
@@ -29,14 +30,14 @@ typedef struct
 	int			ret;
 } restore_files_arg;
 
-static void restore_backup(pgBackup *backup);
+static void restore_backup(pgBackup *backup, const char *extra_dir_str);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
-
+static bool backup_contains_extra(const char *dir, parray *dirs_list);
 
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
@@ -387,7 +388,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
 						base36enc(dest_backup->start_time), dest_backup->server_version);
 
-			restore_backup(backup);
+			restore_backup(backup, dest_backup->extra_dir_str);
 		}
 
 		/*
@@ -414,7 +415,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
  * Restore one backup.
  */
 void
-restore_backup(pgBackup *backup)
+restore_backup(pgBackup *backup, const char *extra_dir_str)
 {
 	char		timestamp[100];
 	char		this_backup_path[MAXPGPATH];
@@ -422,6 +423,7 @@ restore_backup(pgBackup *backup)
 	char		extra_path[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
+	parray	   *extra_dirs;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
@@ -453,6 +455,15 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	create_data_directories(pgdata, this_backup_path, true);
 
+	if(extra_dir_str)
+	{
+		extra_dirs = make_extra_directory_list(extra_dir_str);
+		for (int i = 0; i < parray_num(extra_dirs); i++)
+		{
+			dir_create_dir(parray_get(extra_dirs, i), DIR_PERMISSION);
+		}
+	}
+
 	/*
 	 * Get list of files which need to be restored.
 	 */
@@ -472,25 +483,23 @@ restore_backup(pgBackup *backup)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
 
-		/* if the entry was a directory, create it in the backup */
-		if (S_ISDIR(file->mode))
+		/* if the entry was an extra directory, create it in the backup */
+		if (file->extra_dir_num && S_ISDIR(file->mode))
 		{
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
 
-			if (file->extra_dir_num)
+			if (backup_contains_extra(file->extradir, extra_dirs))
 			{
+				char		container_dir[MAXPGPATH];
+				makeExtraDirPathByNum(container_dir, extra_path,
+									  file->extra_dir_num);
+				dir_name = GetRelativePath(file->path, container_dir);
+				elog(VERBOSE, "Create directory \"%s\" NAME %s",
+					 dir_name, file->name);
 				join_path_components(dirpath, file->extradir, dir_name);
-				elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
-				dir_name = GetRelativePath(file->path, extra_path);
+				dir_create_dir(dirpath, DIR_PERMISSION);
 			}
-			else
-			{
-				dir_name = GetRelativePath(file->path, database_path);
-				elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
-				join_path_components(dirpath, pgdata, dir_name);
-			}
-			dir_create_dir(dirpath, DIR_PERMISSION);
 		}
 
 		/* setup threads */
@@ -506,6 +515,7 @@ restore_backup(pgBackup *backup)
 
 		arg->files = files;
 		arg->backup = backup;
+		arg->extra_dirs = extra_dirs;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -661,7 +671,10 @@ restore_files(void *arg)
 							  parse_program_version(arguments->backup->program_version));
 		}
 		else if (file->extra_dir_num)
-			copy_file(from_root, file->extradir, file);
+		{
+			if (backup_contains_extra(file->extradir, arguments->extra_dirs))
+				copy_file(from_root, file->extradir, file);
+		}
 		else
 			copy_file(from_root, pgdata, file);
 
@@ -1031,4 +1044,12 @@ parseRecoveryTargetOptions(const char *target_time,
 		elog(ERROR, "--inclusive option applies when either --time or --xid is specified");
 
 	return rt;
+}
+
+/* Check if "dir" presents in "dirs_list" */
+static bool
+backup_contains_extra(const char *dir, parray *dirs_list)
+{
+	void *temp = parray_bsearch(dirs_list, dir, BlackListCompare);
+	return temp != NULL;
 }

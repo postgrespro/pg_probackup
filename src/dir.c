@@ -115,8 +115,6 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
-static int BlackListCompare(const void *str1, const void *str2);
-
 static bool dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
@@ -385,7 +383,8 @@ pgFileCompareSize(const void *f1, const void *f2)
 		return 0;
 }
 
-static int
+/* Compare two strings */
+int
 BlackListCompare(const void *str1, const void *str2)
 {
 	return strcmp(*(char **) str1, *(char **) str2);
@@ -446,15 +445,19 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
 		return;
 	}
-	if (add_root)
+	if (extra_dir_num)
 	{
-		file->extradir = dirname(pgut_strdup(file->path));
-		elog(VERBOSE,"Dir_list_file add root Name: %s Path: %s %s",file->name, file->path, file->extradir);
-		parray_append(files, file);
+		file->extradir = pgut_strdup(file->path);
+		elog(VERBOSE,"Dir_list_file add root Name: %s Path: %s %s",
+			 file->name, file->path, file->extradir);
 	}
+	if (add_root)
+		parray_append(files, file);
 
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list,
 						   extra_dir_num);
+
+	free_dir_list(black_list);
 }
 
 /*
@@ -705,10 +708,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		/* If it is extra dir, remember it */
 		if (extra_dir_num)
-		{
-			file->extradir = pgut_strdup(root);
-			dirname(file->extradir);
-		}
+			file->extradir = parent->extradir;
 
 		/* We add the directory anyway */
 		if (S_ISDIR(file->mode))
@@ -1549,4 +1549,46 @@ pgFileSize(const char *path)
 		elog(ERROR, "Cannot stat file \"%s\": %s", path, strerror(errno));
 
 	return buf.st_size;
+}
+
+/*
+ * Construct parray containing extra directories paths
+ * from string like /path1:/path2
+ */
+parray *
+make_extra_directory_list(const char *colon_separated_dirs)
+{
+	char	   *p;
+	parray	   *list = parray_new();
+	char	   *tmp = palloc(strlen(colon_separated_dirs) + 1);
+
+	/* TODO: Add path validation */
+	strcpy(tmp, colon_separated_dirs);
+	p = strtok(tmp,":");
+	while(p!=NULL)
+	{
+		char * dir = (char *)palloc(strlen(p) + 1);
+		strcpy(dir,p);
+		parray_append(list, dir);
+		p=strtok(NULL,":");
+	}
+	pfree(tmp);
+	parray_qsort(list, BlackListCompare);
+	return list;
+}
+
+/* Free memory of parray containing strings */
+void
+free_dir_list(parray *list)
+{
+	parray_walk(list, pfree);
+	parray_free(list);
+}
+
+/* Append to string "pattern_path" int "dir_num" */
+void
+makeExtraDirPathByNum(char *ret_path, const char *pattern_path,
+					  const int dir_num)
+{
+	sprintf(ret_path, "%s%d", pattern_path, dir_num);
 }

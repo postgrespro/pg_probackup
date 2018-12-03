@@ -406,7 +406,26 @@ pgBackupCreateDir(pgBackup *backup)
 {
 	int		i;
 	char	path[MAXPGPATH];
-	char   *subdirs[] = { DATABASE_DIR, NULL };
+	parray *subdirs = parray_new();
+	char   *temp;
+
+	temp = palloc(strlen(DATABASE_DIR) + 1);
+	parray_append(subdirs, temp);
+
+	/* Add extra dirs containers */
+	if (backup->extra_dir_str)
+	{
+		parray *extradirs_list = make_extra_directory_list(backup->extra_dir_str);
+		for (int i = 0; i < parray_num(extradirs_list); i++)
+		{
+			/* 20 chars is enough to hold the extradir number in string. */
+			temp = palloc(strlen(EXTRA_DIR) + 20);
+			/* Numeration of extradirs starts with 1 */
+			makeExtraDirPathByNum(temp, EXTRA_DIR, i+1);
+			parray_append(subdirs, temp);
+		}
+		free_dir_list(extradirs_list);
+	}
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 
@@ -416,12 +435,13 @@ pgBackupCreateDir(pgBackup *backup)
 	dir_create_dir(path, DIR_PERMISSION);
 
 	/* create directories for actual backup files */
-	for (i = 0; subdirs[i]; i++)
+	for (i = 0; i < parray_num(subdirs); i++)
 	{
-		pgBackupGetPath(backup, path, lengthof(path), subdirs[i]);
+		pgBackupGetPath(backup, path, lengthof(path), parray_get(subdirs, i));
 		dir_create_dir(path, DIR_PERMISSION);
 	}
 
+	free_dir_list(subdirs);
 	return 0;
 }
 
@@ -494,6 +514,10 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* print connection info except password */
 	if (backup->primary_conninfo)
 		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+
+	/* print extra directories list */
+	if (backup->extra_dir_str)
+		fprintf(out, "extra-directory = '%s'\n", backup->extra_dir_str);
 }
 
 /*
@@ -587,6 +611,7 @@ readBackupControlFile(const char *path)
 		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
+		{'s', 0, "extra-directory",		&backup->extra_dir_str, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -816,6 +841,7 @@ pgBackupInit(pgBackup *backup)
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
+	backup->extra_dir_str = NULL;
 }
 
 /*
@@ -830,6 +856,8 @@ pgBackupCopy(pgBackup *dst, pgBackup *src)
 
 	if (src->primary_conninfo)
 		dst->primary_conninfo = pstrdup(src->primary_conninfo);
+	if (src->extra_dir_str)
+		dst->extra_dir_str = pstrdup(src->extra_dir_str);
 }
 
 /* free pgBackup object */
@@ -839,6 +867,7 @@ pgBackupFree(void *backup)
 	pgBackup *b = (pgBackup *) backup;
 
 	pfree(b->primary_conninfo);
+	pfree(b->extra_dir_str);
 	pfree(backup);
 }
 

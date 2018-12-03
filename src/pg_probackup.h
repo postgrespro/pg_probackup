@@ -251,6 +251,7 @@ struct pgBackup
 	pgBackup		*parent_backup_link;
 	char			*primary_conninfo; /* Connection parameters of the backup
 										* in the format suitable for recovery.conf */
+	char			*extra_dir_str;	/* List of extra directories, separated by ':' */
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -527,6 +528,10 @@ extern void check_tablespace_mapping(pgBackup *backup);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root);
 extern parray *dir_read_file_list(const char *root, const char *extra_path, const char *file_txt);
+extern parray *make_extra_directory_list(const char *colon_separated_dirs);
+extern void free_dir_list(parray *list);
+extern void makeExtraDirPathByNum(char *ret_path, const char *pattern_path,
+								  const int dir_num);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
@@ -544,6 +549,7 @@ extern int pgFileComparePathWithExtra(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
+extern int BlackListCompare(const void *str1, const void *str2);
 
 /* in data.c */
 extern bool backup_data_file(backup_files_arg* arguments,
