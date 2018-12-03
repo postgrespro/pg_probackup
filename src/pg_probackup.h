@@ -296,7 +296,6 @@ typedef struct
 	PGconn	   *backup_conn;
 	PGcancel   *cancel_conn;
 
-	bool checkdb_only;
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.

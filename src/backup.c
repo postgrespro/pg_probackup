@@ -95,6 +95,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
+static void *check_files(void *arg);
 static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
@@ -521,7 +522,6 @@ do_check_instance(void)
 		arg->prev_start_lsn = InvalidXLogRecPtr;
 		arg->backup_conn = NULL;
 		arg->cancel_conn = NULL;
-		arg->checkdb_only = true;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -534,7 +534,7 @@ do_check_instance(void)
 
 		elog(VERBOSE, "Start thread num: %i", i);
 
-		pthread_create(&threads[i], NULL, backup_files, arg);
+		pthread_create(&threads[i], NULL, check_files, arg);
 	}
 
 	/* Wait threads */
@@ -545,9 +545,9 @@ do_check_instance(void)
 			backup_isok = false;
 	}
 	if (backup_isok)
-		elog(INFO, "Data files are transfered");
+		elog(INFO, "Data files are checked");
 	else
-		elog(ERROR, "Data files transferring failed");
+		elog(ERROR, "Data files checking failed");
 
 	parray_walk(backup_files_list, pgFileFree);
 	parray_free(backup_files_list);
@@ -825,7 +825,6 @@ do_backup_instance(void)
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->backup_conn = NULL;
 		arg->cancel_conn = NULL;
-		arg->checkdb_only = false;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -2332,6 +2331,85 @@ backup_disconnect(bool fatal, void *userdata)
 		pgut_disconnect(master_conn);
 }
 
+static void *
+check_files(void *arg)
+{
+	int			i;
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int			n_backup_files_list = parray_num(arguments->files_list);
+
+	/* check a file */
+	for (i = 0; i < n_backup_files_list; i++)
+	{
+		int			ret;
+		struct stat	buf;
+		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
+
+		elog(VERBOSE, "Checking file:  \"%s\" ", file->path);
+		if (!pg_atomic_test_set_flag(&file->lock))
+			continue;
+
+		/* check for interrupt */
+		if (interrupted)
+			elog(ERROR, "interrupted during backup");
+
+		if (progress)
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, n_backup_files_list, file->path);
+
+		/* stat file to check its current state */
+		ret = stat(file->path, &buf);
+		if (ret == -1)
+		{
+			if (errno == ENOENT)
+			{
+				/*
+				 * If file is not found, this is not en error.
+				 * It could have been deleted by concurrent postgres transaction.
+				 */
+				file->write_size = BYTES_INVALID;
+				elog(LOG, "File \"%s\" is not found", file->path);
+				continue;
+			}
+			else
+			{
+				elog(ERROR,
+					"can't stat file to backup \"%s\": %s",
+					file->path, strerror(errno));
+			}
+		}
+
+		/* No need to check directories */
+		if (S_ISDIR(buf.st_mode))
+			continue;
+
+		if (S_ISREG(buf.st_mode))
+		{
+			/* check only uncompressed datafiles */
+			if (file->is_datafile && !file->is_cfs)
+			{
+				char		to_path[MAXPGPATH];
+
+				join_path_components(to_path, arguments->to_root,
+									 file->path + strlen(arguments->from_root) + 1);
+
+				check_data_file(arguments, file);
+			}
+		}
+		else
+			elog(WARNING, "unexpected file type %d", buf.st_mode);
+	}
+
+	/* Close connection */
+	if (arguments->backup_conn)
+		pgut_disconnect(arguments->backup_conn);
+
+	/* Data files transferring is successful */
+	arguments->ret = 0;
+
+	return NULL;
+}
+
 /*
  * Take a backup of the PGDATA at a file level.
  * Copy all directories and files listed in backup_files_list.
@@ -2420,12 +2498,8 @@ backup_files(void *arg)
 				join_path_components(to_path, arguments->to_root,
 									 file->path + strlen(arguments->from_root) + 1);
 
-				if (arguments->checkdb_only)
-				{
-					check_data_file(arguments, file);
-				}
 				/* backup block by block if datafile AND not compressed by cfs*/
-				else if (!backup_data_file(arguments, to_path, file,
+				if (!backup_data_file(arguments, to_path, file,
 									  arguments->prev_start_lsn,
 									  current.backup_mode,
 									  instance_config.compress_alg,
@@ -2436,10 +2510,10 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (strcmp(file->name, "pg_control") == 0 && !arguments->checkdb_only)
+			else if (strcmp(file->name, "pg_control") == 0)
 				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
 									file);
-			else if (!arguments->checkdb_only)
+			else
 			{
 				bool		skip = false;
 
