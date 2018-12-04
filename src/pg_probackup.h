@@ -360,6 +360,7 @@ extern char	   *replication_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
+extern char *remote_path;
 extern char *remote_port;
 extern char *remote_host;
 extern char *remote_proto;

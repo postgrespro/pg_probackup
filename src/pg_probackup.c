@@ -69,6 +69,7 @@ bool		backup_logs = false;
 bool		smooth_checkpoint;
 char       *remote_host;
 char       *remote_port;
+char       *remote_path;
 char       *remote_proto = (char*)"ssh";
 char       *ssh_config;
 char       *ssh_options;
@@ -145,10 +146,11 @@ static ConfigOption cmd_options[] =
     { 's', 19, "remote-host",			&remote_host,       SOURCE_CMD_STRICT, },
     { 's', 20, "remote-port",	        &remote_port,       SOURCE_CMD_STRICT, },
     { 's', 21, "remote-proto",	        &remote_proto,      SOURCE_CMD_STRICT, },
-    { 's', 22, "ssh-config",	        &ssh_config,        SOURCE_CMD_STRICT, },
-    { 's', 23, "ssh-options",	        &ssh_options,       SOURCE_CMD_STRICT, },
-    { 'b', 24, "agent",				    &is_remote_agent,   SOURCE_CMD_STRICT, },
-    { 'b', 25, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, },
+    { 's', 22, "remote-path",	        &remote_path,       SOURCE_CMD_STRICT, },
+    { 's', 23, "ssh-config",	        &ssh_config,        SOURCE_CMD_STRICT, },
+    { 's', 24, "ssh-options",	        &ssh_options,       SOURCE_CMD_STRICT, },
+    { 'b', 25, "agent",				    &is_remote_agent,   SOURCE_CMD_STRICT, },
+    { 'b', 26, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, },
 	/* restore options */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
 	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },

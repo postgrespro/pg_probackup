@@ -71,6 +71,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 	int outfd[2];
 	int infd[2];
 	pid_t pid;
+	char* pg_probackup = argv[0];
 
 	ssh_argc = 0;
 	ssh_argv[ssh_argc++] = remote_proto;
@@ -86,10 +87,20 @@ int remote_execute(int argc, char* argv[], bool listen)
 		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, ssh_options);
 	}
 	ssh_argv[ssh_argc++] = remote_host;
-	ssh_argv[ssh_argc++] = cmd+1;
+	ssh_argv[ssh_argc++] = cmd;
 	ssh_argv[ssh_argc] = NULL;
 
-	for (i = 0; i < argc; i++) {
+	if (remote_path)
+	{
+		char* sep = strrchr(pg_probackup, '/');
+		if (sep != NULL) {
+			pg_probackup = sep + 1;
+		}
+		dst = snprintf(cmd, sizeof(cmd), "%s/%s", remote_path, pg_probackup);
+	} else {
+		dst = snprintf(cmd, sizeof(cmd), "%s", pg_probackup);
+	}
+	for (i = 1; i < argc; i++) {
 		dst = append_option(cmd, sizeof(cmd), dst, argv[i]);
 	}
 	dst = append_option(cmd, sizeof(cmd), dst, "--agent");
