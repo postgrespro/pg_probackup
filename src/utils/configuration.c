@@ -11,6 +11,7 @@
 #include "configuration.h"
 #include "logger.h"
 #include "pgut.h"
+#include "file.h"
 
 #include "datatype/timestamp.h"
 
@@ -555,7 +556,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 		}
 	}
 
-	fclose(fp);
+	fio_close_stream(fp);
 
 	return parsed_options;
 }
