@@ -139,7 +139,7 @@ int fio_open(char const* path, int mode, fio_location location)
 		hdr.cop = FIO_OPEN;
 		hdr.handle = i;
 		hdr.size = strlen(path) + 1;
-		hdr.arg = mode;
+		hdr.arg = mode & ~O_EXCL;
 		fio_fdset |= 1 << i;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
