@@ -168,6 +168,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	merge_files_arg *threads_args = NULL;
 	int			i;
 	bool		merge_isok = true;
+	int64		to_data_bytes,
+				to_wal_bytes;
 
 	elog(INFO, "Merging backup %s with backup %s", from_backup_id, to_backup_id);
 
@@ -282,26 +284,28 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	to_backup->status = BACKUP_STATUS_OK;
 	/* Compute summary of size of regular files in the backup */
-	to_backup->data_bytes = 0;
+	to_data_bytes = 0;
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
 		if (S_ISDIR(file->mode))
-			to_backup->data_bytes += 4096;
+			to_data_bytes += 4096;
 		/* Count the amount of the data actually copied */
 		else if (S_ISREG(file->mode))
-			to_backup->data_bytes += file->write_size;
+			to_data_bytes += file->write_size;
 	}
 	/* compute size of wal files of this backup stored in the archive */
 	if (!to_backup->stream)
-		to_backup->wal_bytes = instance_config.xlog_seg_size *
+		to_wal_bytes = instance_config.xlog_seg_size *
 			(to_backup->stop_lsn / instance_config.xlog_seg_size -
 			 to_backup->start_lsn / instance_config.xlog_seg_size + 1);
 	else
-		to_backup->wal_bytes = BYTES_INVALID;
+		to_wal_bytes = BYTES_INVALID;
 
 	write_backup_filelist(to_backup, files, from_database_path);
+	to_backup->data_bytes = to_data_bytes;
+	to_backup->wal_bytes = to_wal_bytes;
 	write_backup(to_backup);
 
 delete_source_backup:
@@ -314,6 +318,7 @@ delete_source_backup:
 	/*
 	 * Delete files which are not in from_backup file list.
 	 */
+	parray_qsort(files, pgFileComparePathDesc);
 	for (i = 0; i < parray_num(to_files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
@@ -341,6 +346,9 @@ delete_source_backup:
 	to_backup->backup_mode = BACKUP_MODE_FULL;
 	to_backup->status = BACKUP_STATUS_OK;
 	to_backup->parent_backup = INVALID_BACKUP_ID;
+	/* Restore sizes */
+	to_backup->data_bytes = to_data_bytes;
+	to_backup->wal_bytes = to_wal_bytes;
 	write_backup(to_backup);
 
 	/* Cleanup */
