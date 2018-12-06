@@ -999,7 +999,7 @@ do_backup(time_t start_time)
 	//		current.data_bytes);
 
 	if (is_remote_agent)
-		fio_transfer(&current.start_time,current.start_time);
+		fio_transfer(FIO_BACKUP_START_TIME);
 	else
 		complete_backup();
 

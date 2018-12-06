@@ -16,6 +16,11 @@ static void* fio_stdin_buffer;
 static int fio_stdout = 0;
 static int fio_stdin = 0;
 
+static fio_binding fio_bindings[] =
+{
+	{&current.start_time, sizeof(time_t)}
+};
+
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
 void fio_redirect(int in, int out)
@@ -682,23 +687,22 @@ static void fio_send_file(int out, char const* path)
 	}
 }
 
-void fio_transfer(void* addr, size_t value)
+void fio_transfer(fio_shared_variable var)
 {
-	struct {
-		fio_header  hdr;
-		fio_binding bind;
-	} msg;
+	size_t var_size = fio_bindings[var].size;
+	fio_header* msg = (fio_header*)malloc(sizeof(fio_header) + var_size);
 
-	msg.hdr.cop = FIO_TRANSFER;
-	msg.hdr.size = sizeof(fio_binding);
-	msg.bind.address = (size_t*)addr;
-	msg.bind.value = value;
+	msg->cop = FIO_TRANSFER;
+	msg->arg = var;
+	msg->size = var_size;
+	memcpy(msg+1, fio_bindings[var].address, var_size);
 
 	SYS_CHECK(pthread_mutex_lock(&fio_write_mutex));
 
-	IO_CHECK(fio_write_all(fio_stdout, &msg, sizeof(msg)), sizeof(msg));
+	IO_CHECK(fio_write_all(fio_stdout, &msg, sizeof(fio_header) + var_size), sizeof(fio_header) + var_size);
 
 	SYS_CHECK(pthread_mutex_unlock(&fio_write_mutex));
+	free(msg);
 }
 
 void fio_communicate(int in, int out)
@@ -778,7 +782,8 @@ void fio_communicate(int in, int out)
 			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
 			break;
 		  case FIO_TRANSFER:
-			*((fio_binding*)buf)->address = ((fio_binding*)buf)->value;
+			Assert(hdr.size == fio_bindings[hdr.arg].size);
+			memcpy(fio_bindings[hdr.arg].address, buf, hdr.size);
 			break;
 		  default:
 			Assert(false);

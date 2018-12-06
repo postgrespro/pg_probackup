@@ -36,6 +36,11 @@ typedef enum
 	FIO_REMOTE_HOST
 } fio_location;
 
+typedef enum
+{
+	FIO_BACKUP_START_TIME
+} fio_shared_variable;
+
 #define FIO_FDMAX 64
 #define FIO_PIPE_MARKER 0x40000000
 
@@ -50,10 +55,11 @@ typedef struct
 	unsigned arg;
 } fio_header;
 
+
 typedef struct
 {
-	size_t* address;
-	size_t  value;
+	void*  address;
+	size_t size;
 } fio_binding;
 
 extern void    fio_redirect(int in, int out);
@@ -93,7 +99,7 @@ extern gzFile  fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_l
 extern int     fio_gzclose(gzFile file, char const* path, int tmp_fd);
 #endif
 
-extern void    fio_transfer(void* addr, size_t value);
+extern void    fio_transfer(fio_shared_variable var);
 
 #endif
 
