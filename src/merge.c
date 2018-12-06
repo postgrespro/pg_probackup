@@ -385,7 +385,7 @@ merge_files(void *arg)
 			elog(ERROR, "Interrupted during merging backups");
 
 		if (progress)
-			elog(LOG, "Progress: (%d/%d). Process file \"%s\"",
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
 				 i + 1, num_files, file->path);
 
 		/*

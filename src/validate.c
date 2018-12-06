@@ -156,9 +156,10 @@ pgBackupValidateFiles(void *arg)
 {
 	int			i;
 	validate_files_arg *arguments = (validate_files_arg *)arg;
+	int			num_files = parray_num(arguments->files);
 	pg_crc32	crc;
 
-	for (i = 0; i < parray_num(arguments->files); i++)
+	for (i = 0; i < num_files; i++)
 	{
 		struct stat st;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
@@ -186,9 +187,9 @@ pgBackupValidateFiles(void *arg)
 		if (file->is_cfs)
 			continue;
 
-		/* print progress */
-		elog(VERBOSE, "Validate files: (%d/%lu) %s",
-			 i + 1, (unsigned long) parray_num(arguments->files), file->path);
+		if (progress)
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, num_files, file->path);
 
 		if (stat(file->path, &st) == -1)
 		{

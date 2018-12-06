@@ -582,7 +582,7 @@ restore_files(void *arg)
 		rel_path = GetRelativePath(file->path,from_root);
 
 		if (progress)
-			elog(LOG, "Progress: (%d/%lu). Process file %s ",
+			elog(INFO, "Progress: (%d/%lu). Process file %s ",
 				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
 
 		/*
