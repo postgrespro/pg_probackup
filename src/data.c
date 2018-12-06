@@ -98,6 +98,8 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 	{
 		case NONE_COMPRESS:
 		case NOT_DEFINED_COMPRESS:
+		    if (errormsg)
+				*errormsg = "Invalid compression algorithm";
 			return -1;
 #ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
