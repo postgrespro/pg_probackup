@@ -548,7 +548,8 @@ write_backup(pgBackup *backup)
  * Output the list of files to backup catalog DATABASE_FILE_LIST
  */
 void
-write_backup_filelist(pgBackup *backup, parray *files, const char *root)
+write_backup_filelist(pgBackup *backup, parray *files, const char *root,
+					  const char *extra_prefix)
 {
 	FILE	   *fp;
 	char		path[MAXPGPATH];
@@ -560,7 +561,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path,
 			strerror(errno));
 
-	print_file_list(fp, files, root);
+	print_file_list(fp, files, root, extra_prefix);
 
 	if (fflush(fp) != 0 ||
 		fsync(fileno(fp)) != 0 ||

@@ -491,7 +491,7 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
-								  const char *root);
+								  const char *root, const char *extra_prefix);
 
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);
@@ -526,12 +526,14 @@ extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(pgut_option *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
 
-extern void print_file_list(FILE *out, const parray *files, const char *root);
+extern void print_file_list(FILE *out, const parray *files, const char *root,
+							const char *extra_prefix);
 extern parray *dir_read_file_list(const char *root, const char *extra_path, const char *file_txt);
 extern parray *make_extra_directory_list(const char *colon_separated_dirs);
 extern void free_dir_list(parray *list);
 extern void makeExtraDirPathByNum(char *ret_path, const char *pattern_path,
 								  const int dir_num);
+extern bool backup_contains_extra(const char *dir, parray *dirs_list);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);

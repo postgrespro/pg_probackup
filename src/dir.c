@@ -174,7 +174,6 @@ pgFileNew(const char *path, bool omit_symlink, int extra_dir_num)
 	file->size = st.st_size;
 	file->mode = st.st_mode;
 	file->extra_dir_num = extra_dir_num;
-	file->extradir = NULL;
 
 	return file;
 }
@@ -226,6 +225,7 @@ pgFileInit(const char *path)
 	file->n_blocks = BLOCKNUM_INVALID;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	file->extra_dir_num = 0;
+	file->extradir = NULL;
 	return file;
 }
 
@@ -457,7 +457,8 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list,
 						   extra_dir_num);
 
-	free_dir_list(black_list);
+	if (black_list)
+		free_dir_list(black_list);
 }
 
 /*
@@ -1209,7 +1210,8 @@ check_tablespace_mapping(pgBackup *backup)
  * Print backup content list.
  */
 void
-print_file_list(FILE *out, const parray *files, const char *root)
+print_file_list(FILE *out, const parray *files, const char *root,
+				const char *extra_prefix)
 {
 	size_t		i;
 
@@ -1222,8 +1224,18 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
-		else if(file->extra_dir_num)
-			path = GetRelativePath(path, file->extradir);
+		else if (file->extra_dir_num)
+		{
+			if (extra_prefix)
+			{
+				char extra_root[MAXPGPATH];
+				makeExtraDirPathByNum(extra_root, extra_prefix,
+									  file->extra_dir_num);
+				path = GetRelativePath(path, extra_root);
+			}
+			else
+				path = GetRelativePath(path, file->extradir);
+		}
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
@@ -1443,7 +1455,9 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 			if (extra_dir_num)
 			{
 				char temp[MAXPGPATH];
-				sprintf(temp, "%s%ld", extra_path, extra_dir_num);
+
+				Assert(extra_path);
+				makeExtraDirPathByNum(temp, extra_path, extra_dir_num);
 				join_path_components(filepath, temp, path);
 			}
 			else
@@ -1585,10 +1599,22 @@ free_dir_list(parray *list)
 	parray_free(list);
 }
 
-/* Append to string "pattern_path" int "dir_num" */
+/* Append to string "path_prefix" int "dir_num" */
 void
-makeExtraDirPathByNum(char *ret_path, const char *pattern_path,
+makeExtraDirPathByNum(char *ret_path, const char *path_prefix,
 					  const int dir_num)
 {
-	sprintf(ret_path, "%s%d", pattern_path, dir_num);
+	sprintf(ret_path, "%s%d", path_prefix, dir_num);
+}
+
+/* Check if "dir" presents in "dirs_list" */
+bool
+backup_contains_extra(const char *dir, parray *dirs_list)
+{
+	void *search_result;
+
+	if (!dirs_list) /* There is no extra dirs in backup */
+		return false;
+	search_result = parray_bsearch(dirs_list, dir, BlackListCompare);
+	return search_result != NULL;
 }

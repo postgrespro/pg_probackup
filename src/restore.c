@@ -37,7 +37,6 @@ static void create_recovery_conf(time_t backup_id,
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
-static bool backup_contains_extra(const char *dir, parray *dirs_list);
 
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
@@ -1044,12 +1043,4 @@ parseRecoveryTargetOptions(const char *target_time,
 		elog(ERROR, "--inclusive option applies when either --time or --xid is specified");
 
 	return rt;
-}
-
-/* Check if "dir" presents in "dirs_list" */
-static bool
-backup_contains_extra(const char *dir, parray *dirs_list)
-{
-	void *temp = parray_bsearch(dirs_list, dir, BlackListCompare);
-	return temp != NULL;
 }

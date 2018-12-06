@@ -18,12 +18,14 @@ typedef struct
 {
 	parray	   *to_files;
 	parray	   *files;
+	parray	   *from_extra;
 
 	pgBackup   *to_backup;
 	pgBackup   *from_backup;
-
 	const char *to_root;
 	const char *from_root;
+	const char *to_extra_prefix;
+	const char *from_extra_prefix;
 
 	/*
 	 * Return value from the thread.
@@ -34,6 +36,10 @@ typedef struct
 
 static void merge_backups(pgBackup *backup, pgBackup *next_backup);
 static void *merge_files(void *arg);
+static void
+reorder_extra_dirs(pgBackup *to_backup, parray *to_extra, parray *from_extra);
+static int
+get_extra_index(const char *key, const parray *list);
 
 /*
  * Implementation of MERGE command.
@@ -159,13 +165,15 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 			   *from_backup_id = base36enc_dup(from_backup->start_time);
 	char		to_backup_path[MAXPGPATH],
 				to_database_path[MAXPGPATH],
+				to_extra_prefix[MAXPGPATH],
 				from_backup_path[MAXPGPATH],
 				from_database_path[MAXPGPATH],
-				control_file[MAXPGPATH],
-				extra_path[MAXPGPATH]; /* TODO: implement merging backups with 
-										* extra files */
+				from_extra_prefix[MAXPGPATH],
+				control_file[MAXPGPATH];
 	parray	   *files,
-			   *to_files;
+			   *to_files,
+			   *to_extra,
+			   *from_extra;
 	pthread_t  *threads;
 	merge_files_arg *threads_args;
 	int			i;
@@ -214,9 +222,13 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	pgBackupGetPath(to_backup, to_backup_path, lengthof(to_backup_path), NULL);
 	pgBackupGetPath(to_backup, to_database_path, lengthof(to_database_path),
 					DATABASE_DIR);
+	pgBackupGetPath(to_backup, to_extra_prefix, lengthof(to_database_path),
+					EXTRA_DIR);
 	pgBackupGetPath(from_backup, from_backup_path, lengthof(from_backup_path), NULL);
 	pgBackupGetPath(from_backup, from_database_path, lengthof(from_database_path),
 					DATABASE_DIR);
+	pgBackupGetPath(from_backup, from_extra_prefix, lengthof(from_database_path),
+					EXTRA_DIR);
 
 	create_data_directories(to_database_path, from_backup_path, false);
 
@@ -228,7 +240,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_files = dir_read_file_list(from_database_path, /* Use from_database_path
 													   * so root path will be
 													   * equal with 'files' */
-								  extra_path,		  /* TODO: make use of it */
+								  from_extra_prefix,
 								  control_file);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(to_files, pgFileComparePathDesc);
@@ -237,12 +249,25 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(from_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	files = dir_read_file_list(from_database_path, extra_path, control_file);
+	files = dir_read_file_list(from_database_path, from_extra_prefix, control_file);
 	/* sort by size for load balancing */
 	parray_qsort(files, pgFileCompareSize);
 
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (merge_files_arg *) palloc(sizeof(merge_files_arg) * num_threads);
+
+	/* Create extra directories lists */
+	if (to_backup->extra_dir_str)
+		to_extra = make_extra_directory_list(to_backup->extra_dir_str);
+	if (from_backup->extra_dir_str)
+		from_extra = make_extra_directory_list(from_backup->extra_dir_str);
+
+	/*
+	 * Rename extra directoties in to_backup (if exists)
+	 * according to numeration of extra dirs in from_backup.
+	 */
+	if (to_extra)
+		reorder_extra_dirs(to_backup, to_extra, from_extra);
 
 	/* Setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -262,6 +287,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		arg->from_backup = from_backup;
 		arg->to_root = to_database_path;
 		arg->from_root = from_database_path;
+		arg->from_extra = from_extra;
+		arg->to_extra_prefix = to_extra_prefix;
+		arg->from_extra_prefix = from_extra_prefix;
 		/* By default there are some error */
 		arg->ret = 1;
 
@@ -304,7 +332,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	else
 		to_backup->wal_bytes = BYTES_INVALID;
 
-	write_backup_filelist(to_backup, files, from_database_path);
+	write_backup_filelist(to_backup, files, from_database_path,
+						  from_extra_prefix);
 	write_backup(to_backup);
 
 delete_source_backup:
@@ -320,6 +349,11 @@ delete_source_backup:
 	for (i = 0; i < parray_num(to_files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
+
+		if (file->extra_dir_num &&
+			backup_contains_extra(file->extradir, from_extra))
+			/* Dir already removed*/
+			continue;
 
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
@@ -527,6 +561,21 @@ merge_files(void *arg)
 				file->crc = pgFileGetCRC(to_path_tmp, false);
 			}
 		}
+		else if (file->extra_dir_num)
+		{
+			char from_root[MAXPGPATH];
+			char to_root[MAXPGPATH];
+			int new_dir_num;
+
+			Assert(argument->from_extra);
+			new_dir_num = get_extra_index(file->extradir, argument->from_extra);
+			makeExtraDirPathByNum(from_root, argument->from_extra_prefix,
+								  file->extra_dir_num);
+			makeExtraDirPathByNum(to_root, argument->to_extra_prefix,
+								  new_dir_num);
+			copy_file(from_root, to_root, file);
+			file->extra_dir_num = new_dir_num;
+		}
 		else
 			copy_file(argument->from_root, argument->to_root, file);
 
@@ -539,4 +588,66 @@ merge_files(void *arg)
 	argument->ret = 0;
 
 	return NULL;
+}
+
+/* Recursively delete a directory and its contents */
+static void
+remove_dir_with_files(const char *path)
+{
+	parray *files = parray_new();
+	dir_list_file(files, path, true, true, true, 0);
+	parray_qsort(files, pgFileComparePathDesc);
+	for (int i = 0; i < parray_num(files); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+
+		pgFileDelete(file);
+		elog(VERBOSE, "Deleted \"%s\"", file->path);
+	}
+}
+
+/* Get index of extra directory */
+static int
+get_extra_index(const char *key, const parray *list)
+{
+	if (!list) /* Nowhere to search */
+		return -1;
+	for (int i = 0; i < parray_num(list); i++)
+	{
+		if (strcmp(key, parray_get(list, i)) == 0)
+			return i + 1;
+	}
+	return -1;
+}
+
+/* Rename directories in to_backup according to order in from_extra */
+static void
+reorder_extra_dirs(pgBackup *to_backup, parray *to_extra, parray *from_extra)
+{
+	char extradir_template[MAXPGPATH];
+
+	Assert(to_extra);
+	pgBackupGetPath(to_backup, extradir_template,
+					lengthof(extradir_template), EXTRA_DIR);
+	for (int i = 0; i < parray_num(to_extra); i++)
+	{
+		int from_num = get_extra_index(parray_get(to_extra, i), from_extra);
+		if (from_num == -1)
+		{
+			char old_path[MAXPGPATH];
+			makeExtraDirPathByNum(old_path, extradir_template, i + 1);
+			remove_dir_with_files(old_path);
+		}
+		else if (from_num != i + 1)
+		{
+			char old_path[MAXPGPATH];
+			char new_path[MAXPGPATH];
+			makeExtraDirPathByNum(old_path, extradir_template, i + 1);
+			makeExtraDirPathByNum(new_path, extradir_template, from_num);
+			elog(VERBOSE, "Rename %s to %s", old_path, new_path);
+			if (rename (old_path, new_path) == -1)
+				elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
+					 old_path, new_path, strerror(errno));
+		}
+	}
 }
