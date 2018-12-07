@@ -25,7 +25,7 @@
  *
  */
 char *
-slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
+slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fio_location location)
 {
 	int		 fd;
 	char	   *buffer;
@@ -34,7 +34,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe)
 	int		 len;
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", datadir, path);
 
-	if ((fd = fio_open(fullpath, O_RDONLY | PG_BINARY, FIO_DB_HOST)) == -1)
+	if ((fd = fio_open(fullpath, O_RDONLY | PG_BINARY, location)) == -1)
 	{
 		if (safe)
 			return NULL;

@@ -18,7 +18,8 @@ static int fio_stdin = 0;
 
 static fio_binding fio_bindings[] =
 {
-	{&current.start_time, sizeof(current.start_time)}
+	{&current.start_time, sizeof(current.start_time)},
+	{&current.stop_lsn, sizeof(current.stop_lsn)}
 };
 
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)

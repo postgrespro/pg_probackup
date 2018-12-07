@@ -38,7 +38,8 @@ typedef enum
 
 typedef enum
 {
-	FIO_BACKUP_START_TIME
+	FIO_BACKUP_START_TIME,
+	FIO_BACKUP_STOP_LSN
 } fio_shared_variable;
 
 #define FIO_FDMAX 64

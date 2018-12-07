@@ -154,7 +154,7 @@ get_current_timeline(bool safe)
 
 	/* First fetch file... */
 	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
-					   safe);
+					   safe, FIO_DB_HOST);
 	if (safe && buffer == NULL)
 		return 0;
 
@@ -212,7 +212,7 @@ get_system_identifier(const char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -263,7 +263,7 @@ get_xlog_seg_size(char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -284,7 +284,7 @@ get_data_checksum_version(bool safe)
 
 	/* First fetch file... */
 	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
-					   safe);
+					   safe, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -301,7 +301,7 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_BACKUP_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -324,7 +324,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	char		fullpath[MAXPGPATH];
 
 	/* First fetch file content */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
+	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 	if (buffer == NULL)
 		elog(ERROR, "ERROR");
 
@@ -367,7 +367,7 @@ copy_pgcontrol_file(const char *from_root, const char *to_root, pgFile *file, fi
 	size_t		size;
 	char		to_path[MAXPGPATH];
 
-	buffer = slurpFile(from_root, XLOG_CONTROL_FILE, &size, false);
+	buffer = slurpFile(from_root, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 
 	digestControlFile(&ControlFile, buffer, size);
 

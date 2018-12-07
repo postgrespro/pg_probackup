@@ -454,7 +454,8 @@ extern int do_delete_instance(void);
 extern char *slurpFile(const char *datadir,
 					   const char *path,
 					   size_t *filesize,
-					   bool safe);
+					   bool safe,
+					   fio_location location);
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
