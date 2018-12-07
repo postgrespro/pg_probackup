@@ -20,7 +20,7 @@
 #include "utils/thread.h"
 #include <time.h>
 
-const char *PROGRAM_VERSION	= "2.0.25";
+const char *PROGRAM_VERSION	= "2.0.26";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -73,7 +73,7 @@ char       *remote_path;
 char       *remote_proto = (char*)"ssh";
 char       *ssh_config;
 char       *ssh_options;
-bool        is_remote_agent;
+char       *remote_agent;
 bool		is_remote_backup;
 
 /* restore options */
@@ -149,7 +149,7 @@ static ConfigOption cmd_options[] =
     { 's', 22, "remote-path",	        &remote_path,       SOURCE_CMD_STRICT, },
     { 's', 23, "ssh-config",	        &ssh_config,        SOURCE_CMD_STRICT, },
     { 's', 24, "ssh-options",	        &ssh_options,       SOURCE_CMD_STRICT, },
-    { 'b', 25, "agent",				    &is_remote_agent,   SOURCE_CMD_STRICT, },
+    { 's', 25, "agent",				    &remote_agent,   SOURCE_CMD_STRICT, },
     { 'b', 26, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, },
 	/* restore options */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
@@ -318,6 +318,10 @@ main(int argc, char *argv[])
 	/* Parse command line only arguments */
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
+	if (remote_agent != NULL && strcmp(remote_agent, current.program_version) != 0)
+		elog(ERROR, "Agent version %s doesn't match master pg_probackup version %s",
+			 remote_agent, current.program_version);
+
 	pgut_init();
 
 	if (help_opt)
@@ -343,7 +347,7 @@ main(int argc, char *argv[])
 	if (IsSshConnection()
 		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD))
 	{
-		if (is_remote_agent) {
+		if (remote_agent) {
 			if (backup_subcmd != BACKUP_CMD) {
 				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 				return 0;
@@ -359,7 +363,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (!is_remote_agent)
+	if (!remote_agent)
 	{
 		/* Ensure that backup_path is a path to a directory */
 		rc = stat(backup_path, &stat_buf);
@@ -399,7 +403,7 @@ main(int argc, char *argv[])
 		 * for all commands except init, which doesn't take this parameter
 		 * and add-instance which creates new instance.
 		 */
-		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD && !is_remote_agent)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD && !remote_agent)
 		{
 			if (access(backup_instance_path, F_OK) != 0)
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -506,7 +510,7 @@ main(int argc, char *argv[])
 			return do_init();
 		case BACKUP_CMD:
 		    current.stream = stream_wal;
-		    if (IsSshConnection() && !is_remote_agent)
+		    if (IsSshConnection() && !remote_agent)
 			{
 				current.status = BACKUP_STATUS_DONE;
 				StrNCpy(current.program_version, PROGRAM_VERSION,

@@ -618,7 +618,7 @@ do_backup_instance(void)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
 		}
 
-		if (is_remote_agent)
+		if (remote_agent)
 			xlog_files_list = parray_new();
 
         /* By default there are some error */
@@ -998,7 +998,7 @@ do_backup(time_t start_time)
 	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 	//		current.data_bytes);
 
-	if (is_remote_agent)
+	if (remote_agent)
 	{
 		fio_transfer(FIO_BACKUP_START_TIME);
 		fio_transfer(FIO_BACKUP_STOP_LSN);

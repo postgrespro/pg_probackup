@@ -360,14 +360,16 @@ extern char	   *replication_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
+
+/* remote probackup options */
 extern char *remote_path;
 extern char *remote_port;
 extern char *remote_host;
 extern char *remote_proto;
 extern char *ssh_config;
 extern char *ssh_options;
-extern bool	is_remote_backup;
-extern bool is_remote_agent;
+extern char* remote_agent;
+extern bool	 is_remote_backup;
 
 extern bool is_ptrack_support;
 extern bool is_checksum_enabled;

@@ -43,8 +43,8 @@ static bool fio_is_remote_fd(int fd)
 static bool fio_is_remote(fio_location location)
 {
 	return location == FIO_REMOTE_HOST
-		|| (location == FIO_BACKUP_HOST && is_remote_agent)
-		|| (location == FIO_DB_HOST && !is_remote_agent && IsSshConnection());
+		|| (location == FIO_BACKUP_HOST && remote_agent)
+		|| (location == FIO_DB_HOST && !remote_agent && IsSshConnection());
 }
 
 static ssize_t fio_read_all(int fd, void* buf, size_t size)
@@ -833,11 +833,7 @@ void fio_communicate(int in, int out)
 			}
 			break;
 		  case FIO_CLOSEDIR:
-			entry = readdir(dir[hdr.handle]);
-			hdr.cop = FIO_SEND;
-			hdr.size = 0;
-			hdr.arg = closedir(dir[hdr.handle]);
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)),  sizeof(hdr));
+			SYS_CHECK(closedir(dir[hdr.handle]));
 			break;
 		  case FIO_OPEN:
 			SYS_CHECK(fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSIONS));

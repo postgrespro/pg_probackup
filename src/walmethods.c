@@ -156,7 +156,7 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 	 * important when using synchronous mode, where the file is modified and
 	 * fsynced in-place, without a directory fsync.
 	 */
-	if (!is_remote_agent && dir_data->sync)
+	if (!remote_agent && dir_data->sync)
 	{
 		if (fsync_fname(tmppath, false, progname) != 0 ||
 			fsync_parent_path(tmppath, progname) != 0)
@@ -272,7 +272,7 @@ dir_close(Walfile f, WalCloseMethod method)
 			 * directory if sync mode is requested.
 			 */
 			file_path = df->fullpath;
-			if (dir_data->sync && !is_remote_agent)
+			if (dir_data->sync && !remote_agent)
 			{
 				r = fsync_fname(df->fullpath, false, progname);
 				if (r == 0)
@@ -344,7 +344,7 @@ dir_existsfile(const char *pathname)
 static bool
 dir_finish(void)
 {
-	if (dir_data->sync && !is_remote_agent)
+	if (dir_data->sync && !remote_agent)
 	{
 		/*
 		 * Files are fsynced when they are closed, but we need to fsync the

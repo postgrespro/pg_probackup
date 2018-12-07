@@ -104,6 +104,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 		dst = append_option(cmd, sizeof(cmd), dst, argv[i]);
 	}
 	dst = append_option(cmd, sizeof(cmd), dst, "--agent");
+	dst = append_option(cmd, sizeof(cmd), dst, current.program_version);
 	cmd[dst] = '\0';
 
 	SYS_CHECK(pipe(infd));
