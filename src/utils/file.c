@@ -18,7 +18,7 @@ static int fio_stdin = 0;
 
 static fio_binding fio_bindings[] =
 {
-	{&current.start_time, sizeof(time_t)}
+	{&current.start_time, sizeof(current.start_time)}
 };
 
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
@@ -699,7 +699,7 @@ void fio_transfer(fio_shared_variable var)
 
 	SYS_CHECK(pthread_mutex_lock(&fio_write_mutex));
 
-	IO_CHECK(fio_write_all(fio_stdout, &msg, sizeof(fio_header) + var_size), sizeof(fio_header) + var_size);
+	IO_CHECK(fio_write_all(fio_stdout, msg, sizeof(fio_header) + var_size), sizeof(fio_header) + var_size);
 
 	SYS_CHECK(pthread_mutex_unlock(&fio_write_mutex));
 	free(msg);
