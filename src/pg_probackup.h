@@ -47,7 +47,7 @@
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
-#define EXTRA_DIR				"extradir"
+#define EXTRA_DIR				"extra_directories/extradir"
 
 /* Direcotry/File permission */
 #define DIR_PERMISSION		(0700)
