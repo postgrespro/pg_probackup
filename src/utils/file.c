@@ -126,6 +126,94 @@ int fio_close_stream(FILE* f)
 	return fclose(f);
 }
 
+DIR* fio_opendir(char const* path, fio_location location)
+{
+	DIR* dir;
+	if (fio_is_remote(location))
+	{
+		int i;
+		fio_header hdr;
+		unsigned long mask;
+
+		SYS_CHECK(pthread_mutex_lock(&fio_write_mutex));
+
+		mask = fio_fdset;
+		for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
+		if (i == FIO_FDMAX) {
+			return NULL;
+		}
+		hdr.cop = FIO_OPENDIR;
+		hdr.handle = i;
+		hdr.size = strlen(path) + 1;
+		fio_fdset |= 1 << i;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
+
+		SYS_CHECK(pthread_mutex_unlock(&fio_write_mutex));
+
+		dir = (DIR*)(size_t)(i + 1);
+	}
+	else
+	{
+		dir = opendir(path);
+	}
+	return dir;
+}
+
+struct dirent* fio_readdir(DIR *dir)
+{
+	if (fio_is_remote_file((FILE*)dir))
+	{
+		fio_header hdr;
+		static struct dirent entry;
+
+		SYS_CHECK(pthread_mutex_lock(&fio_read_mutex));
+
+		SYS_CHECK(pthread_mutex_lock(&fio_write_mutex));
+		hdr.cop = FIO_READDIR;
+		hdr.handle = (size_t)dir - 1;
+		hdr.size = 0;
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		SYS_CHECK(pthread_mutex_unlock(&fio_write_mutex));
+
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_SEND);
+		if (hdr.size) {
+			Assert(hdr.size == sizeof(entry));
+			IO_CHECK(fio_read_all(fio_stdin, &entry, sizeof(entry)), sizeof(entry));
+		}
+		SYS_CHECK(pthread_mutex_unlock(&fio_read_mutex));
+
+		return hdr.size ? &entry : NULL;
+	}
+	else
+	{
+		return readdir(dir);
+	}
+}
+
+int fio_closedir(DIR *dir)
+{
+	if (fio_is_remote_file((FILE*)dir))
+	{
+		fio_header hdr;
+		hdr.cop = FIO_CLOSEDIR;
+		hdr.handle = (size_t)dir - 1;
+		hdr.size = 0;
+
+		SYS_CHECK(pthread_mutex_lock(&fio_write_mutex));
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		SYS_CHECK(pthread_mutex_unlock(&fio_write_mutex));
+		return 0;
+	}
+	else
+	{
+		return closedir(dir);
+	}
+}
+
+
 int fio_open(char const* path, int mode, fio_location location)
 {
 	int fd;
@@ -709,6 +797,8 @@ void fio_transfer(fio_shared_variable var)
 void fio_communicate(int in, int out)
 {
 	int fd[FIO_FDMAX];
+	DIR* dir[FIO_FDMAX];
+	struct dirent* entry;
 	size_t buf_size = 128*1024;
 	char* buf = (char*)malloc(buf_size);
 	fio_header hdr;
@@ -726,6 +816,28 @@ void fio_communicate(int in, int out)
 		switch (hdr.cop) {
 		  case FIO_LOAD:
 			fio_send_file(out, buf);
+			break;
+		  case FIO_OPENDIR:
+			dir[hdr.handle] = opendir(buf);
+			break;
+		  case FIO_READDIR:
+			entry = readdir(dir[hdr.handle]);
+			hdr.cop = FIO_SEND;
+			if (entry != NULL) {
+				hdr.size = sizeof(*entry);
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				IO_CHECK(fio_write_all(out, entry, hdr.size), hdr.size);
+			} else {
+				hdr.size = 0;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
+			break;
+		  case FIO_CLOSEDIR:
+			entry = readdir(dir[hdr.handle]);
+			hdr.cop = FIO_SEND;
+			hdr.size = 0;
+			hdr.arg = closedir(dir[hdr.handle]);
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)),  sizeof(hdr));
 			break;
 		  case FIO_OPEN:
 			SYS_CHECK(fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSIONS));

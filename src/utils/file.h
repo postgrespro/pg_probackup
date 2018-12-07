@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 #ifdef HAVE_LIBZ
 #include <zlib.h>
@@ -25,7 +26,10 @@ typedef enum
 	FIO_FSTAT,
 	FIO_SEND,
 	FIO_ACCESS,
-	FIO_TRANSFER
+	FIO_TRANSFER,
+	FIO_OPENDIR,
+	FIO_READDIR,
+	FIO_CLOSEDIR
 } fio_operations;
 
 typedef enum
@@ -50,8 +54,8 @@ typedef enum
 
 typedef struct
 {
-	unsigned cop    : 4;
-	unsigned handle : 8;
+	unsigned cop    : 5;
+	unsigned handle : 7;
 	unsigned size   : 20;
 	unsigned arg;
 } fio_header;
@@ -91,7 +95,9 @@ extern int     fio_mkdir(char const* path, int mode, fio_location location);
 extern int     fio_chmod(char const* path, int mode, fio_location location);
 extern int     fio_access(char const* path, int mode, fio_location location);
 extern int     fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_location location);
-
+extern DIR*    fio_opendir(char const* path, fio_location location);
+extern struct dirent * fio_readdir(DIR *dirp);
+extern int     fio_closedir(DIR *dirp);
 extern FILE*   fio_open_stream(char const* name, fio_location location);
 extern int     fio_close_stream(FILE* f);
 

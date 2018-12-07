@@ -123,7 +123,7 @@ static int BlackListCompare(const void *str1, const void *str2);
 static bool dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list);
+								   bool omit_symlink, parray *black_list, fio_location location);
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
 								  bool exclude);
@@ -394,7 +394,7 @@ BlackListCompare(const void *str1, const void *str2)
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
-			  bool add_root)
+			  bool add_root, fio_location location)
 {
 	pgFile	   *file;
 	parray	   *black_list = NULL;
@@ -403,14 +403,14 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
 	if (root && instance_config.pgdata &&
-		strcmp(root, instance_config.pgdata) == 0 && fileExists(path, FIO_LOCAL_HOST))
+		strcmp(root, instance_config.pgdata) == 0 && fileExists(path, location))
 	{
 		FILE	   *black_list_file = NULL;
 		char		buf[MAXPGPATH * 2];
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fopen(path, PG_BINARY_R);
+		black_list_file = fio_open_stream(path, location);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));
@@ -428,7 +428,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 			parray_append(black_list, black_item);
 		}
 
-		fclose(black_list_file);
+		fio_close_stream(black_list_file);
 		parray_qsort(black_list, BlackListCompare);
 	}
 
@@ -444,7 +444,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list);
+	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list, location);
 }
 
 /*
@@ -632,7 +632,7 @@ dir_check_file(const char *root, pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, const char *root, pgFile *parent,
-					   bool exclude, bool omit_symlink, parray *black_list)
+					   bool exclude, bool omit_symlink, parray *black_list, fio_location location)
 {
 	DIR		    *dir;
 	struct dirent *dent;
@@ -641,7 +641,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		elog(ERROR, "\"%s\" is not a directory", parent->path);
 
 	/* Open directory and list contents */
-	dir = opendir(parent->path);
+	dir = fio_opendir(parent->path, location);
 	if (dir == NULL)
 	{
 		if (errno == ENOENT)
@@ -654,7 +654,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 	}
 
 	errno = 0;
-	while ((dent = readdir(dir)))
+	while ((dent = fio_readdir(dir)))
 	{
 		pgFile	   *file;
 		char		child[MAXPGPATH];
@@ -715,17 +715,17 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, root, file, exclude, omit_symlink,
-								   black_list);
+								   black_list, location);
 	}
 
 	if (errno && errno != ENOENT)
 	{
 		int			errno_tmp = errno;
-		closedir(dir);
+		fio_closedir(dir);
 		elog(ERROR, "cannot read directory \"%s\": %s",
 			 parent->path, strerror(errno_tmp));
 	}
-	closedir(dir);
+	fio_closedir(dir);
 }
 
 /*
