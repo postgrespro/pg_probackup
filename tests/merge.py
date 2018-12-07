@@ -875,8 +875,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Backup {0} data files are corrupted".format(
-                    backup_id) in e.message and
                 "ERROR: Merging of backup {0} failed".format(
                     backup_id) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
