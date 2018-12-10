@@ -343,16 +343,6 @@ main(int argc, char *argv[])
 			elog(ERROR, "-B, --backup-path must be a path to directory");
 	}
 
-	/* TODO What is this block about?*/
-	/* command was initialized for a few commands */
-	if (command)
-	{
-		elog_file(INFO, "command: %s", command);
-
-		pfree(command);
-		command = NULL;
-	}
-
 	/* TODO it would be better to list commands that require instance option */
 	/* Option --instance is required for all commands except init and show */
 	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
@@ -404,10 +394,19 @@ main(int argc, char *argv[])
 	/* Just read environment variables */
 	if (backup_path == NULL && backup_subcmd == CHECKDB_CMD)
 		config_get_opt_env(instance_options);
-	
+
 	/* Initialize logger */
 	if (backup_subcmd != CHECKDB_CMD)
 		init_logger(backup_path, &instance_config.logger);
+
+	/* command was initialized for a few commands */
+	if (command)
+	{
+		elog_file(INFO, "command: %s", command);
+
+		pfree(command);
+		command = NULL;
+	}
 
 	/*
 	 * We have read pgdata path from command line or from configuration file.
