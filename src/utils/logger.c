@@ -232,18 +232,23 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	 * Write to stderr if the message was not written to log file.
 	 * Write to stderr if the message level is greater than WARNING anyway.
 	 */
-	if (write_to_stderr)
+	if (write_to_stderr && write_to_file)
 	{
 		write_elevel(stderr, elevel);
-		if (write_to_file)
-			vfprintf(stderr, fmt, std_args);
-		else
-			vfprintf(stderr, fmt, args);
+
+		vfprintf(stderr, fmt, std_args);
 		fputc('\n', stderr);
 		fflush(stderr);
 
-		if (write_to_file)
-			va_end(std_args);
+		va_end(std_args);
+	}
+	else if (write_to_stderr)
+	{
+		write_elevel(stderr, elevel);
+
+		vfprintf(stderr, fmt, args);
+		fputc('\n', stderr);
+		fflush(stderr);
 	}
 
 	exit_if_necessary(elevel);
