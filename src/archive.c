@@ -27,7 +27,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 	char		backup_wal_file_path[MAXPGPATH];
 	char		absolute_wal_file_path[MAXPGPATH];
 	char		current_dir[MAXPGPATH];
-	int64		system_id;
+	uint64		system_id;
 	bool		is_compress = false;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
@@ -50,7 +50,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 
 	if(system_id != instance_config.system_identifier)
 		elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
-					"Instance '%s' should have SYSTEM_ID = %ld instead of %ld",
+					"Instance '%s' should have SYSTEM_ID = " UINT64_FORMAT " instead of " UINT64_FORMAT,
 			 wal_file_name, instance_name, instance_config.system_identifier,
 			 system_id);
 

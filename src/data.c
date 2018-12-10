@@ -232,8 +232,8 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 			return 0;
 		}
 		else
-			elog(WARNING, "File: %s, block %u, expected block size %d,"
-					  "but read %lu, try again",
+			elog(WARNING, "File: %s, block %u, expected block size %u,"
+					  "but read %zu, try again",
 					   file->path, blknum, BLCKSZ, read_len);
 	}
 
@@ -382,7 +382,7 @@ prepare_page(backup_files_arg *arguments,
 		else if (page_size != BLCKSZ)
 		{
 			free(ptrack_page);
-			elog(ERROR, "File: %s, block %u, expected block size %d, but read %lu",
+			elog(ERROR, "File: %s, block %u, expected block size %d, but read %zu",
 					   file->path, absolute_blknum, BLCKSZ, page_size);
 		}
 		else
@@ -574,7 +574,7 @@ backup_data_file(backup_files_arg* arguments,
 	if (file->size % BLCKSZ != 0)
 	{
 		fclose(in);
-		elog(ERROR, "File: %s, invalid file size %lu", file->path, file->size);
+		elog(ERROR, "File: %s, invalid file size %zu", file->path, file->size);
 	}
 
 	/*
@@ -789,7 +789,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
-			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+			elog(ERROR, "cannot read block %u of \"%s\" read %zu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 
 		/*
@@ -1620,7 +1620,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
-			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+			elog(ERROR, "cannot read block %u of \"%s\" read %zu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 
 		COMP_FILE_CRC32(use_crc32c, crc, compressed_page.data, read_len);
