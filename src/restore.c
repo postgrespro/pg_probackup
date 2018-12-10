@@ -480,7 +480,7 @@ restore_backup(pgBackup *backup)
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
-		elog(LOG, "Start thread for num:%li", parray_num(files));
+		elog(LOG, "Start thread for num:%zu", parray_num(files));
 
 		pthread_create(&threads[i], NULL, restore_files, arg);
 	}
