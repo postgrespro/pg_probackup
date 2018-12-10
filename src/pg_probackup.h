@@ -167,6 +167,7 @@ typedef enum ShowFormat
 #define INVALID_BACKUP_ID	0    /* backup ID is not provided by user */
 #define BYTES_INVALID		(-1)
 #define BLOCKNUM_INVALID	(-1)
+#define PROGRAM_VERSION	"2.0.26"
 
 /*
  * An instance configuration. It can be stored in a configuration file or passed
