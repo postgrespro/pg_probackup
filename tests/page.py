@@ -3,6 +3,8 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
+import gzip
+import shutil
 
 module_name = 'page'
 
@@ -781,7 +783,22 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             wals_dir, f)) and not f.endswith('.backup')]
         wals = map(str, wals)
  #       file = os.path.join(wals_dir, max(wals))
-        file = os.path.join(wals_dir, '000000010000000000000004')
+
+        if self.archive_compress:
+            original_file = os.path.join(wals_dir, '000000010000000000000004.gz')
+            tmp_file = os.path.join(backup_dir, '000000010000000000000004')
+
+            with gzip.open(original_file, 'rb') as f_in, open(tmp_file, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+
+            # drop healthy file
+            os.remove(original_file)
+            file = tmp_file
+
+        else:
+            file = os.path.join(wals_dir, '000000010000000000000004')
+
+        # corrupt file
         print(file)
         with open(file, "rb+", 0) as f:
             f.seek(42)
@@ -790,7 +807,14 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             f.close
 
         if self.archive_compress:
-            file = file[:-3]
+            # compress corrupted file and replace with it old file
+            with open(file, 'rb') as f_in, gzip.open(original_file, 'wb', compresslevel=1) as f_out:
+                shutil.copyfileobj(f_in, f_out)
+
+            file = os.path.join(wals_dir, '000000010000000000000004.gz')
+
+        #if self.archive_compress:
+        #    file = file[:-3]
 
         # Single-thread PAGE backup
         try:
@@ -914,9 +938,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         print(file)
         print(file_destination)
         os.rename(file, file_destination)
-
-        if self.archive_compress:
-            file_destination = file_destination[:-3]
 
         # Single-thread PAGE backup
         try:

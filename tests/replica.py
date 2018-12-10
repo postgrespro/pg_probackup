@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import subprocess
 from sys import exit
 import time
-from shutil import copyfile
 
 
 module_name = 'replica'
@@ -27,8 +26,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s', 'ptrack_enable': 'on'}
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'ptrack_enable': 'on'}
             )
         master.start()
         self.init_pb(backup_dir)
@@ -144,7 +144,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'wal_level': 'replica',
                 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s',
                 'archive_timeout': '10s'}
             )
         self.init_pb(backup_dir)
@@ -171,7 +170,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'master', replica)
 
         # Settings for Replica
-        self.set_replica(master, replica)
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
         replica.slow_start(replica=True)
@@ -187,31 +187,23 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(256,5120) i")
+            "from generate_series(256,25120) i")
 
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
-        self.add_instance(backup_dir, 'replica', replica)
 
-        copyfile(
-            os.path.join(backup_dir, 'wal/master/000000010000000000000003'),
-            os.path.join(backup_dir, 'wal/replica/000000010000000000000003'))
+        master.psql(
+            "postgres",
+            "CHECKPOINT")
 
-        copyfile(
-            os.path.join(backup_dir, 'wal/master/000000010000000000000004'),
-            os.path.join(backup_dir, 'wal/replica/000000010000000000000004'))
-
-        copyfile(
-            os.path.join(backup_dir, 'wal/master/000000010000000000000005'),
-            os.path.join(backup_dir, 'wal/replica/000000010000000000000005'))
+        self.wait_until_replica_catch_with_master(master, replica)
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
             options=[
-                '--archive-timeout=30',
+                '--archive-timeout=60',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
-                '--stream'])
+                '--master-port={0}'.format(master.port)])
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -222,8 +214,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             base_dir="{0}/{1}/node".format(module_name, fname))
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
+
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
+
+        node.append_conf(
+            'postgresql.auto.conf', 'archive_mode = off'.format(node.port))
+
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
@@ -234,23 +231,25 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Change data on master, make PAGE backup from replica,
         # restore taken backup and check that restored data equal
         # to original data
-        master.psql(
-            "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
-            "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(512,22680) i")
+        master.pgbench_init(scale=5)
 
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        pgbench = master.pgbench(
+            options=['-T', '30', '-c', '2', '--no-vacuum'])
 
         backup_id = self.backup_node(
             backup_dir, 'replica',
             replica, backup_type='page',
             options=[
-                '--archive-timeout=30',
+                '--archive-timeout=60',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
-                '--stream'])
+                '--master-port={0}'.format(master.port)])
+
+        pgbench.wait()
+
+        self.switch_wal_segment(master)
+
+        before = master.safe_psql("postgres", "SELECT * FROM pgbench_accounts")
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -258,17 +257,21 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE PAGE BACKUP TAKEN FROM replica
         self.restore_node(
-            backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
+            backup_dir, 'replica', data_dir=node.data_dir,
+            backup_id=backup_id)
 
         node.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node.port))
+
         node.append_conf(
             'postgresql.auto.conf', 'archive_mode = off')
+
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
-        after = node.safe_psql("postgres", "SELECT * FROM t_heap")
-        self.assertEqual(before, after)
+        after = node.safe_psql("postgres", "SELECT * FROM pgbench_accounts")
+        self.assertEqual(
+            before, after, 'Restored data is not equal to original')
 
         self.add_instance(backup_dir, 'node', node)
         self.backup_node(
@@ -290,8 +293,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s'}
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'archive_timeout': '10s'}
             )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
@@ -310,7 +314,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,256) i")
+            "from generate_series(0,8192) i")
 
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
 
@@ -320,6 +324,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'master', replica, options=['-R'])
 
         # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         replica.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(replica.port))
@@ -328,13 +333,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         replica.slow_start(replica=True)
 
-        self.add_instance(backup_dir, 'replica', replica)
-
-        copyfile(
-            os.path.join(backup_dir, 'wal/master/000000010000000000000003'),
-            os.path.join(backup_dir, 'wal/replica/000000010000000000000003'))
-
-        self.backup_node(backup_dir, 'replica', replica)
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            options=['--archive-timeout=30s', '--stream'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -353,14 +354,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s'}
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'archive_timeout': '10s'}
             )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
-        # force more frequent wal switch
-        #master.append_conf('postgresql.auto.conf', 'archive_timeout  = 10')
         master.slow_start()
 
         replica = self.make_simple_node(
@@ -369,6 +369,22 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'master', master)
 
+        master.psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,165000) i")
+
+        master.psql(
+            "postgres",
+            "CHECKPOINT")
+
+        master.psql(
+            "postgres",
+            "create table t_heap_1 as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,165000) i")
+
         self.restore_node(
             backup_dir, 'master', replica, options=['-R'])
 
@@ -376,36 +392,35 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
-        # stupid hack
-        copyfile(
-            os.path.join(backup_dir, 'wal/master/000000010000000000000001'),
-            os.path.join(backup_dir, 'wal/replica/000000010000000000000001'))
-
         replica.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(replica.port))
 
-        replica.append_conf(
-            'postgresql.auto.conf', 'hot_standby = on')
+        replica.slow_start(replica=True)
+
+        self.wait_until_replica_catch_with_master(master, replica)
 
         replica.append_conf(
             'recovery.conf', "recovery_min_apply_delay = '300s'")
 
-        replica.slow_start(replica=True)
+        replica.restart()
 
         master.pgbench_init(scale=10)
 
         pgbench = master.pgbench(
-            options=['-T', '30', '-c', '2', '--no-vacuum'])
+            options=['-T', '60', '-c', '2', '--no-vacuum'])
 
         self.backup_node(
-            backup_dir, 'replica', replica)
+            backup_dir, 'replica',
+            replica, options=['--archive-timeout=60s'])
 
         self.backup_node(
             backup_dir, 'replica', replica,
-            data_dir=replica.data_dir, backup_type='page')
+            data_dir=replica.data_dir,
+            backup_type='page', options=['--archive-timeout=60s'])
 
         self.backup_node(
-            backup_dir, 'replica', replica, backup_type='delta')
+            backup_dir, 'replica', replica,
+            backup_type='delta', options=['--archive-timeout=60s'])
 
         pgbench.wait()
 
@@ -425,109 +440,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_type='delta', options=['--stream'])
 
         pgbench.wait()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    @unittest.skip("skip")
-    def test_make_block_from_future(self):
-        """
-        make archive master, take full backups from master,
-        restore full backup as replica, launch pgbench,
-        """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s'}
-            )
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'master', master)
-        self.set_archiving(backup_dir, 'master', master)
-        # force more frequent wal switch
-        #master.append_conf('postgresql.auto.conf', 'archive_timeout  = 10')
-        master.slow_start()
-
-        replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
-        replica.cleanup()
-
-        self.backup_node(backup_dir, 'master', master)
-
-        self.restore_node(
-            backup_dir, 'master', replica, options=['-R'])
-
-        # Settings for Replica
-        self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(replica.port))
-        replica.append_conf(
-            'postgresql.auto.conf', 'hot_standby = on')
-
-        replica.slow_start(replica=True)
-
-        self.add_instance(backup_dir, 'replica', replica)
-
-        replica.safe_psql(
-            'postgres',
-            'checkpoint')
-
-        master.pgbench_init(scale=10)
-
-        self.wait_until_replica_catch_with_master(master, replica)
-
-
-#        print(replica.safe_psql(
-#            'postgres',
-#            'select * from pg_catalog.pg_last_xlog_receive_location()'))
-#
-#        print(replica.safe_psql(
-#            'postgres',
-#            'select * from pg_catalog.pg_last_xlog_replay_location()'))
-#
-#        print(replica.safe_psql(
-#            'postgres',
-#            'select * from pg_catalog.pg_control_checkpoint()'))
-#
-#        replica.safe_psql(
-#            'postgres',
-#            'checkpoint')
-
-        pgbench = master.pgbench(options=['-T', '30', '-c', '2', '--no-vacuum'])
-
-        time.sleep(5)
-
-        #self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
-        exit(1)
-        self.backup_node(backup_dir, 'replica', replica)
-        pgbench.wait()
-
-        # pgbench
-        master.safe_psql(
-            "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, "
-            "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,256000) i")
-
-
-        master.safe_psql(
-            'postgres',
-            'checkpoint')
-
-        replica.safe_psql(
-            'postgres',
-            'checkpoint')
-
-        replica.safe_psql(
-            'postgres',
-            'select * from pg_')
-
-        self.backup_node(backup_dir, 'replica', replica)
-        exit(1)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -28,7 +28,6 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 	char		absolute_wal_file_path[MAXPGPATH];
 	char		current_dir[MAXPGPATH];
 	int64		system_id;
-	pgBackupConfig *config;
 	bool		is_compress = false;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
@@ -44,16 +43,16 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 		elog(ERROR, "getcwd() error");
 
 	/* verify that archive-push --instance parameter is valid */
-	config = readBackupCatalogConfigFile();
 	system_id = get_system_identifier(current_dir);
 
-	if (config->pgdata == NULL)
+	if (instance_config.pgdata == NULL)
 		elog(ERROR, "cannot read pg_probackup.conf for this instance");
 
-	if(system_id != config->system_identifier)
+	if(system_id != instance_config.system_identifier)
 		elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
 					"Instance '%s' should have SYSTEM_ID = %ld instead of %ld",
-					wal_file_name, instance_name, config->system_identifier, system_id);
+			 wal_file_name, instance_name, instance_config.system_identifier,
+			 system_id);
 
 	/* Create 'archlog_path' directory. Do nothing if it already exists. */
 	dir_create_dir(arclog_path, DIR_PERMISSION);
@@ -63,11 +62,11 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 
 	elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
 
-	if (compress_alg == PGLZ_COMPRESS)
+	if (instance_config.compress_alg == PGLZ_COMPRESS)
 		elog(ERROR, "pglz compression is not supported");
 
 #ifdef HAVE_LIBZ
-	if (compress_alg == ZLIB_COMPRESS)
+	if (instance_config.compress_alg == ZLIB_COMPRESS)
 		is_compress = IsXLogFileName(wal_file_name);
 #endif
 

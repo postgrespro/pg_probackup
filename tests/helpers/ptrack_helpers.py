@@ -60,19 +60,6 @@ idx_ptrack = {
     }
 }
 
-archive_script = """
-#!/bin/bash
-count=$(ls {backup_dir}/test00* | wc -l)
-if [ $count -ge {count_limit} ]
-then
-    exit 1
-else
-    cp $1 {backup_dir}/wal/{node_name}/$2
-    count=$((count+1))
-    touch {backup_dir}/test00$count
-    exit 0
-fi
-"""
 warning = """
 Wrong splint in show_pb
 Original Header:
@@ -874,8 +861,8 @@ class ProbackupTest(object):
         return out_dict
 
     def set_archiving(
-            self, backup_dir, instance, node, replica=False, overwrite=False, compress=False,
-            old_binary=False):
+            self, backup_dir, instance, node, replica=False,
+            overwrite=False, compress=False, old_binary=False):
 
         if replica:
             archive_mode = 'always'

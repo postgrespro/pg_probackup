@@ -1519,9 +1519,16 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node1', node1,
             backup_type='page', options=["--stream"])
         self.restore_node(backup_dir, 'node1', data_dir=node2.data_dir)
+
         node2.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node2.port))
+        node2.append_conf(
+            'postgresql.auto.conf', 'archive_mode = off')
         node2.slow_start()
+
+        node2.append_conf(
+            'postgresql.auto.conf', 'archive_mode = on')
+        node2.restart()
 
         timeline_node1 = node1.get_control_data()["Latest checkpoint's TimeLineID"]
         timeline_node2 = node2.get_control_data()["Latest checkpoint's TimeLineID"]

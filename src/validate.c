@@ -22,6 +22,7 @@ static bool corrupted_backup_found = false;
 
 typedef struct
 {
+	const char *base_path;
 	parray	   *files;
 	bool		corrupted;
 	XLogRecPtr	stop_lsn;
@@ -103,6 +104,7 @@ pgBackupValidate(pgBackup *backup)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
 
+		arg->base_path = base_path;
 		arg->files = files;
 		arg->corrupted = false;
 		arg->stop_lsn = backup->stop_lsn;
@@ -156,9 +158,10 @@ pgBackupValidateFiles(void *arg)
 {
 	int			i;
 	validate_files_arg *arguments = (validate_files_arg *)arg;
+	int			num_files = parray_num(arguments->files);
 	pg_crc32	crc;
 
-	for (i = 0; i < parray_num(arguments->files); i++)
+	for (i = 0; i < num_files; i++)
 	{
 		struct stat st;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
@@ -186,9 +189,9 @@ pgBackupValidateFiles(void *arg)
 		if (file->is_cfs)
 			continue;
 
-		/* print progress */
-		elog(VERBOSE, "Validate files: (%d/%lu) %s",
-			 i + 1, (unsigned long) parray_num(arguments->files), file->path);
+		if (progress)
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, num_files, file->path);
 
 		if (stat(file->path, &st) == -1)
 		{
@@ -225,8 +228,17 @@ pgBackupValidateFiles(void *arg)
 			 * CRC-32C algorithm.
 			 * To avoid this problem we need to use different algorithm, CRC-32 in
 			 * this case.
+			 *
+			 * Starting from 2.0.25 we calculate crc of pg_control differently.
 			 */
-			crc = pgFileGetCRC(file->path, arguments->backup_version <= 20021);
+			if (arguments->backup_version >= 20025 &&
+				strcmp(file->name, "pg_control") == 0)
+				crc = get_pgcontrol_checksum(arguments->base_path);
+			else
+				crc = pgFileGetCRC(file->path,
+								   arguments->backup_version <= 20021 ||
+								   arguments->backup_version >= 20025,
+								   true, NULL);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
@@ -277,6 +289,7 @@ do_validate_all(void)
 		errno = 0;
 		while ((dent = readdir(dir)))
 		{
+			char		conf_path[MAXPGPATH];
 			char		child[MAXPGPATH];
 			struct stat	st;
 
@@ -293,10 +306,16 @@ do_validate_all(void)
 			if (!S_ISDIR(st.st_mode))
 				continue;
 
+			/*
+			 * Initialize instance configuration.
+			 */
 			instance_name = dent->d_name;
-			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
+			sprintf(backup_instance_path, "%s/%s/%s",
+					backup_path, BACKUPS_DIR, instance_name);
 			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
-			xlog_seg_size = get_config_xlog_seg_size();
+			join_path_components(conf_path, backup_instance_path,
+								 BACKUP_CATALOG_CONF_FILE);
+			config_read_opt(conf_path, instance_options, ERROR, false);
 
 			do_validate_instance();
 		}
@@ -420,7 +439,8 @@ do_validate_instance(void)
 		/* Validate corresponding WAL files */
 		if (current_backup->status == BACKUP_STATUS_OK)
 			validate_wal(current_backup, arclog_path, 0,
-						 0, 0, base_full_backup->tli, xlog_seg_size);
+						 0, 0, base_full_backup->tli,
+						 instance_config.xlog_seg_size);
 
 		/*
 		 * Mark every descendant of corrupted backup as orphan
@@ -508,7 +528,7 @@ do_validate_instance(void)
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
 											 0, 0, current_backup->tli,
-											 xlog_seg_size);
+											 instance_config.xlog_seg_size);
 							}
 						}
 

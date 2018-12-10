@@ -24,6 +24,7 @@
 #include "port/atomics.h"
 #endif
 
+#include "utils/configuration.h"
 #include "utils/logger.h"
 #include "utils/parray.h"
 #include "utils/pgut.h"
@@ -48,6 +49,10 @@
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 #define EXTRA_DIR				"extra_directories/extradir"
+
+/* Timeout defaults */
+#define ARCHIVE_TIMEOUT_DEFAULT		300
+#define REPLICA_TIMEOUT_DEFAULT		300
 
 /* Direcotry/File permission */
 #define DIR_PERMISSION		(0700)
@@ -91,6 +96,7 @@ do { \
 	else \
 		FIN_TRADITIONAL_CRC32(crc); \
 } while (0)
+
 
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
@@ -165,7 +171,11 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1)
 #define BLOCKNUM_INVALID	(-1)
 
-typedef struct pgBackupConfig
+/*
+ * An instance configuration. It can be stored in a configuration file or passed
+ * from command line.
+ */
+typedef struct InstanceConfig
 {
 	uint64		system_identifier;
 	uint32		xlog_seg_size;
@@ -180,24 +190,24 @@ typedef struct pgBackupConfig
 	const char *master_port;
 	const char *master_db;
 	const char *master_user;
-	int			replica_timeout;
+	uint32		replica_timeout;
 
-	int			archive_timeout;
+	/* Wait timeout for WAL segment archiving */
+	uint32		archive_timeout;
 
-	int			log_level_console;
-	int			log_level_file;
-	char	   *log_filename;
-	char	   *error_log_filename;
-	char	   *log_directory;
-	uint64		log_rotation_size;
-	uint64		log_rotation_age;
+	/* Logger parameters */
+	LoggerConfig logger;
 
+	/* Retention options. 0 disables the option. */
 	uint32		retention_redundancy;
 	uint32		retention_window;
 
 	CompressAlg	compress_alg;
 	int			compress_level;
-} pgBackupConfig;
+} InstanceConfig;
+
+extern ConfigOption instance_options[];
+extern InstanceConfig instance_config;
 
 typedef struct pgBackup pgBackup;
 
@@ -340,7 +350,6 @@ typedef struct
 /* directory options */
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
-extern char	   *pgdata;
 extern char		arclog_path[MAXPGPATH];
 
 /* extra directory to backup */
@@ -357,15 +366,7 @@ extern char	   *replication_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
-#define ARCHIVE_TIMEOUT_DEFAULT 300
-extern uint32	archive_timeout;
 extern bool		is_remote_backup;
-extern const char *master_db;
-extern const char *master_host;
-extern const char *master_port;
-extern const char *master_user;
-#define REPLICA_TIMEOUT_DEFAULT 300
-extern uint32	replica_timeout;
 
 extern bool is_ptrack_support;
 extern bool is_checksum_enabled;
@@ -378,25 +379,13 @@ extern bool skip_block_validation;
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
-extern bool		apply_to_all;
 extern bool		force_delete;
 
-/* retention options. 0 disables the option */
-#define RETENTION_REDUNDANCY_DEFAULT 0
-#define RETENTION_WINDOW_DEFAULT 0
-
-extern uint32	retention_redundancy;
-extern uint32	retention_window;
-
 /* compression options */
-extern CompressAlg compress_alg;
-extern int		compress_level;
 extern bool		compress_shortcut;
 
 /* other options */
 extern char *instance_name;
-extern uint64 system_identifier;
-extern uint32 xlog_seg_size;
 
 /* show options */
 extern ShowFormat show_format;
@@ -446,13 +435,9 @@ extern int do_archive_get(char *wal_file_path, char *wal_file_name);
 
 
 /* in configure.c */
-extern int do_configure(bool show_only);
-extern void pgBackupConfigInit(pgBackupConfig *config);
-extern void writeBackupCatalogConfig(FILE *out, pgBackupConfig *config);
-extern void writeBackupCatalogConfigFile(pgBackupConfig *config);
-extern pgBackupConfig* readBackupCatalogConfigFile(void);
-
-extern uint32 get_config_xlog_seg_size(void);
+extern void do_show_config(void);
+extern void do_set_config(void);
+extern void init_config(InstanceConfig *config);
 
 /* in show.c */
 extern int do_show(time_t requested_backup_id);
@@ -523,7 +508,7 @@ extern void create_data_directories(const char *data_dir,
 									bool extract_tablespaces);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
-extern void opt_tablespace_map(pgut_option *opt, const char *arg);
+extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
@@ -545,7 +530,8 @@ extern pgFile *pgFileNew(const char *path, bool omit_symlink, int extra_dir_num)
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
-extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c);
+extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
+							 bool raise_on_deleted, size_t *bytes_read);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathWithExtra(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
@@ -568,10 +554,9 @@ extern void push_wal_file(const char *from_path, const char *to_path,
 						  bool is_compress, bool overwrite);
 extern void get_wal_file(const char *from_path, const char *to_path);
 
-extern bool calc_file_checksum(pgFile *file);
+extern void calc_file_checksum(pgFile *file);
 
-extern bool check_file_pages(pgFile* file,
-							 XLogRecPtr stop_lsn,
+extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
 extern void extractPageMap(const char *archivedir,
@@ -591,15 +576,22 @@ extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   TransactionId *recovery_xid);
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 							 TimeLineID target_tli, uint32 seg_size);
+extern XLogRecPtr get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
+								   XLogRecPtr stop_lsn, TimeLineID tli,
+								   bool seek_prev_segment, uint32 seg_size);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
-extern uint64 get_system_identifier(char *pgdata);
+extern uint64 get_system_identifier(const char *pgdata_path);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
+extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
-extern void set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn);
+extern void set_min_recovery_point(pgFile *file, const char *backup_path,
+								   XLogRecPtr stop_backup_lsn);
+extern void copy_pgcontrol_file(const char *from_root, const char *to_root,
+								pgFile *file);
 
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);

@@ -20,6 +20,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+#include "utils/configuration.h"
+
 /*
  * The contents of these directories are removed or recreated during server
  * start so they are not included in backups.  The directories themselves are
@@ -262,36 +264,55 @@ delete_file:
 }
 
 pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c)
+pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
+			 size_t *bytes_read)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
 	char		buf[1024];
 	size_t		len;
+	size_t		total = 0;
 	int			errno_tmp;
+
+	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* open file in binary read mode */
 	fp = fopen(file_path, PG_BINARY_R);
 	if (fp == NULL)
-		elog(ERROR, "cannot open file \"%s\": %s",
-			file_path, strerror(errno));
+	{
+		if (!raise_on_deleted && errno == ENOENT)
+		{
+			FIN_FILE_CRC32(use_crc32c, crc);
+			return crc;
+		}
+		else
+			elog(ERROR, "cannot open file \"%s\": %s",
+				file_path, strerror(errno));
+	}
 
-	/* calc CRC of backup file */
-	INIT_FILE_CRC32(use_crc32c, crc);
-	while ((len = fread(buf, 1, sizeof(buf), fp)) == sizeof(buf))
+	/* calc CRC of file */
+	for (;;)
 	{
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
+
+		len = fread(buf, 1, sizeof(buf), fp);
+		if(len == 0)
+			break;
+		/* update CRC */
 		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
+		total += len;
 	}
+
+	if (bytes_read)
+		*bytes_read = total;
+
 	errno_tmp = errno;
 	if (!feof(fp))
 		elog(WARNING, "cannot read \"%s\": %s", file_path,
 			strerror(errno_tmp));
-	if (len > 0)
-		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-	FIN_FILE_CRC32(use_crc32c, crc);
 
+	FIN_FILE_CRC32(use_crc32c, crc);
 	fclose(fp);
 
 	return crc;
@@ -407,7 +428,8 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
-	if (root && pgdata && strcmp(root, pgdata) == 0 && fileExists(path))
+	if (root && instance_config.pgdata &&
+		strcmp(root, instance_config.pgdata) == 0 && fileExists(path))
 	{
 		FILE	   *black_list_file = NULL;
 		char		buf[MAXPGPATH * 2];
@@ -421,7 +443,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
 		{
-			join_path_components(black_item, pgdata, buf);
+			join_path_components(black_item, instance_config.pgdata, buf);
 
 			if (black_item[strlen(black_item) - 1] == '\n')
 				black_item[strlen(black_item) - 1] = '\0';
@@ -886,7 +908,7 @@ get_tablespace_created(const char *link)
  * Copy of function tablespace_list_append() from pg_basebackup.c.
  */
 void
-opt_tablespace_map(pgut_option *opt, const char *arg)
+opt_tablespace_map(ConfigOption *opt, const char *arg)
 {
 	TablespaceListCell *cell = pgut_new(TablespaceListCell);
 	char	   *dst;
@@ -1163,7 +1185,8 @@ check_tablespace_mapping(pgBackup *backup)
 	/* Sort links by the path of a linked file*/
 	parray_qsort(links, pgFileCompareLinked);
 
-	if (log_level_console <= LOG || log_level_file <= LOG)
+	if (logger_config.log_level_console <= LOG ||
+		logger_config.log_level_file <= LOG)
 		elog(LOG, "check tablespace directories of backup %s",
 			 base36enc(backup->start_time));
 

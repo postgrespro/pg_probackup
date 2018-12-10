@@ -16,6 +16,8 @@
 
 #include <unistd.h>
 
+#include <sys/stat.h>
+
 const char *
 base36enc(long unsigned int value)
 {
@@ -73,7 +75,8 @@ checkControlFile(ControlFileData *ControlFile)
 			 "Either the file is corrupt, or it has a different layout than this program\n"
 			 "is expecting. The results below are untrustworthy.");
 
-	if (ControlFile->pg_control_version % 65536 == 0 && ControlFile->pg_control_version / 65536 != 0)
+	if ((ControlFile->pg_control_version % 65536 == 0 || ControlFile->pg_control_version % 65536 > 10000) &&
+			ControlFile->pg_control_version / 65536 != 0)
 		elog(ERROR, "possible byte ordering mismatch\n"
 			 "The byte ordering used to store the pg_control file might not match the one\n"
 			 "used by this program. In that case the results below would be incorrect, and\n"
@@ -152,7 +155,8 @@ get_current_timeline(bool safe)
 	size_t      size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
+	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
+					   safe);
 	if (safe && buffer == NULL)
 		return 0;
 
@@ -203,7 +207,7 @@ get_checkpoint_location(PGconn *conn)
 }
 
 uint64
-get_system_identifier(char *pgdata_path)
+get_system_identifier(const char *pgdata_path)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
@@ -281,7 +285,8 @@ get_data_checksum_version(bool safe)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata, "global/pg_control", &size, safe);
+	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
+					   safe);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -290,9 +295,30 @@ get_data_checksum_version(bool safe)
 	return ControlFile.data_checksum_version;
 }
 
-/* MinRecoveryPoint 'as-is' is not to be trusted */
+pg_crc32c
+get_pgcontrol_checksum(const char *pgdata_path)
+{
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	if (buffer == NULL)
+		return 0;
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.crc;
+}
+
+/*
+ * Rewrite minRecoveryPoint of pg_control in backup directory. minRecoveryPoint
+ * 'as-is' is not to be trusted.
+ */
 void
-set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_backup_lsn)
+set_min_recovery_point(pgFile *file, const char *backup_path,
+					   XLogRecPtr stop_backup_lsn)
 {
 	ControlFileData ControlFile;
 	char       *buffer;
@@ -300,7 +326,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_ba
 	char		fullpath[MAXPGPATH];
 
 	/* First fetch file content */
-	buffer = slurpFile(pgdata, XLOG_CONTROL_FILE, &size, false);
+	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
 	if (buffer == NULL)
 		elog(ERROR, "ERROR");
 
@@ -318,52 +344,43 @@ set_min_recovery_point(pgFile *file, const char *backup_path, XLogRecPtr stop_ba
 
 	/* Update checksum in pg_control header */
 	INIT_CRC32C(ControlFile.crc);
-	COMP_CRC32C(ControlFile.crc,
-				(char *) &ControlFile,
+	COMP_CRC32C(ControlFile.crc, (char *) &ControlFile,
 				offsetof(ControlFileData, crc));
 	FIN_CRC32C(ControlFile.crc);
-
-	/* paranoia */
-	checkControlFile(&ControlFile);
 
 	/* overwrite pg_control */
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
 	writeControlFile(&ControlFile, fullpath);
 
 	/* Update pg_control checksum in backup_list */
-	file->crc = pgFileGetCRC(fullpath, false);
+	file->crc = ControlFile.crc;
 
 	pg_free(buffer);
 }
 
-
 /*
- * Convert time_t value to ISO-8601 format string. Always set timezone offset.
+ * Copy pg_control file to backup. We do not apply compression to this file.
  */
 void
-time2iso(char *buf, size_t len, time_t time)
+copy_pgcontrol_file(const char *from_root, const char *to_root, pgFile *file)
 {
-	struct tm  *ptm = gmtime(&time);
-	time_t		gmt = mktime(ptm);
-	time_t		offset;
-	char	   *ptr = buf;
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+	char		to_path[MAXPGPATH];
 
-	ptm = localtime(&time);
-	offset = time - gmt + (ptm->tm_isdst ? 3600 : 0);
+	buffer = slurpFile(from_root, XLOG_CONTROL_FILE, &size, false);
 
-	strftime(ptr, len, "%Y-%m-%d %H:%M:%S", ptm);
+	digestControlFile(&ControlFile, buffer, size);
 
-	ptr += strlen(ptr);
-	snprintf(ptr, len - (ptr - buf), "%c%02d",
-			 (offset >= 0) ? '+' : '-',
-			 abs((int) offset) / SECS_PER_HOUR);
+	file->crc = ControlFile.crc;
+	file->read_size = size;
+	file->write_size = size;
 
-	if (abs((int) offset) % SECS_PER_HOUR != 0)
-	{
-		ptr += strlen(ptr);
-		snprintf(ptr, len - (ptr - buf), ":%02d",
-				 abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
-	}
+	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	writeControlFile(&ControlFile, to_path);
+
+	pg_free(buffer);
 }
 
 /*

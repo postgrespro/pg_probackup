@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "utils/configuration.h"
+
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
 
@@ -588,7 +590,7 @@ readBackupControlFile(const char *path)
 	char	   *compress_alg = NULL;
 	int			parsed_options;
 
-	pgut_option options[] =
+	ConfigOption options[] =
 	{
 		{'s', 0, "backup-mode",			&backup_mode, SOURCE_FILE_STRICT},
 		{'u', 0, "timelineid",			&backup->tli, SOURCE_FILE_STRICT},
@@ -624,7 +626,7 @@ readBackupControlFile(const char *path)
 		return NULL;
 	}
 
-	parsed_options = pgut_readopt(path, options, WARNING, true);
+	parsed_options = config_read_opt(path, options, WARNING, true);
 
 	if (parsed_options == 0)
 	{

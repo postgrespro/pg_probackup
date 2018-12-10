@@ -12,6 +12,8 @@
 static void json_add_indent(PQExpBuffer buf, int32 level);
 static void json_add_escaped(PQExpBuffer buf, const char *str);
 
+static bool add_comma = false;
+
 /*
  * Start or end json token. Currently it is a json object or array.
  *
@@ -25,6 +27,7 @@ json_add(PQExpBuffer buf, JsonToken type, int32 *level)
 		case JT_BEGIN_ARRAY:
 			appendPQExpBufferChar(buf, '[');
 			*level += 1;
+			add_comma = false;
 			break;
 		case JT_END_ARRAY:
 			*level -= 1;
@@ -33,11 +36,13 @@ json_add(PQExpBuffer buf, JsonToken type, int32 *level)
 			else
 				json_add_indent(buf, *level);
 			appendPQExpBufferChar(buf, ']');
+			add_comma = true;
 			break;
 		case JT_BEGIN_OBJECT:
 			json_add_indent(buf, *level);
 			appendPQExpBufferChar(buf, '{');
 			*level += 1;
+			add_comma = false;
 			break;
 		case JT_END_OBJECT:
 			*level -= 1;
@@ -46,6 +51,7 @@ json_add(PQExpBuffer buf, JsonToken type, int32 *level)
 			else
 				json_add_indent(buf, *level);
 			appendPQExpBufferChar(buf, '}');
+			add_comma = true;
 			break;
 		default:
 			break;
@@ -56,7 +62,7 @@ json_add(PQExpBuffer buf, JsonToken type, int32 *level)
  * Add json object's key. If it isn't first key we need to add a comma.
  */
 void
-json_add_key(PQExpBuffer buf, const char *name, int32 level, bool add_comma)
+json_add_key(PQExpBuffer buf, const char *name, int32 level)
 {
 	if (add_comma)
 		appendPQExpBufferChar(buf, ',');
@@ -64,6 +70,8 @@ json_add_key(PQExpBuffer buf, const char *name, int32 level, bool add_comma)
 
 	json_add_escaped(buf, name);
 	appendPQExpBufferStr(buf, ": ");
+
+	add_comma = true;
 }
 
 /*
@@ -72,10 +80,14 @@ json_add_key(PQExpBuffer buf, const char *name, int32 level, bool add_comma)
  */
 void
 json_add_value(PQExpBuffer buf, const char *name, const char *value,
-			   int32 level, bool add_comma)
+			   int32 level, bool escaped)
 {
-	json_add_key(buf, name, level, add_comma);
-	json_add_escaped(buf, value);
+	json_add_key(buf, name, level);
+
+	if (escaped)
+		json_add_escaped(buf, value);
+	else
+		appendPQExpBufferStr(buf, value);
 }
 
 static void

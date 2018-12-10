@@ -60,12 +60,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 	if (is_restore)
 	{
-		if (pgdata == NULL)
+		if (instance_config.pgdata == NULL)
 			elog(ERROR,
 				"required parameter not specified: PGDATA (-D, --pgdata)");
 		/* Check if restore destination empty */
-		if (!dir_is_empty(pgdata))
-			elog(ERROR, "restore destination is not empty: \"%s\"", pgdata);
+		if (!dir_is_empty(instance_config.pgdata))
+			elog(ERROR, "restore destination is not empty: \"%s\"",
+				 instance_config.pgdata);
 	}
 
 	if (instance_name == NULL)
@@ -324,7 +325,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 */
 			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
 						 rt->recovery_target_xid, rt->recovery_target_lsn,
-						 base_full_backup->tli, xlog_seg_size);
+						 base_full_backup->tli, instance_config.xlog_seg_size);
 		}
 		/* Orphinize every OK descendant of corrupted backup */
 		else
@@ -452,7 +453,7 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	 * this_backup_path = $BACKUP_PATH/backups/instance_name/backup_id
 	 */
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	create_data_directories(pgdata, this_backup_path, true);
+	create_data_directories(instance_config.pgdata, this_backup_path, true);
 
 	if(extra_dir_str)
 	{
@@ -540,7 +541,8 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (log_level_console <= LOG || log_level_file <= LOG)
+	if (logger_config.log_level_console <= LOG ||
+		logger_config.log_level_file <= LOG)
 		elog(LOG, "restore %s backup completed", base36enc(backup->start_time));
 }
 
@@ -562,12 +564,12 @@ remove_deleted_files(pgBackup *backup)
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
 	pgBackupGetPath(backup, extra_path, lengthof(extra_path), EXTRA_DIR);
 	/* Read backup's filelist using target database path as base path */
-	files = dir_read_file_list(pgdata, extra_path, filelist_path);
+	files = dir_read_file_list(instance_config.pgdata, extra_path, filelist_path);
 	parray_qsort(files, pgFileComparePathDesc);
 
 	/* Get list of files actually existing in target database */
 	files_restored = parray_new();
-	dir_list_file(files_restored, pgdata, true, true, false, false);
+	dir_list_file(files_restored, instance_config.pgdata, true, true, false, false);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(files_restored, pgFileComparePathDesc);
 
@@ -579,8 +581,10 @@ remove_deleted_files(pgBackup *backup)
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
 			pgFileDelete(file);
-			if (log_level_console <= LOG || log_level_file <= LOG)
-				elog(LOG, "deleted %s", GetRelativePath(file->path, pgdata));
+			if (logger_config.log_level_console <= LOG ||
+				logger_config.log_level_file <= LOG)
+				elog(LOG, "deleted %s", GetRelativePath(file->path,
+														instance_config.pgdata));
 		}
 	}
 
@@ -619,7 +623,7 @@ restore_files(void *arg)
 		rel_path = GetRelativePath(file->path,from_root);
 
 		if (progress)
-			elog(LOG, "Progress: (%d/%lu). Process file %s ",
+			elog(INFO, "Progress: (%d/%lu). Process file %s ",
 				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
 
 		/*
@@ -662,20 +666,22 @@ restore_files(void *arg)
 		{
 			char		to_path[MAXPGPATH];
 
-			join_path_components(to_path, pgdata,
+			join_path_components(to_path, instance_config.pgdata,
 								 file->path + strlen(from_root) + 1);
 			restore_data_file(to_path, file,
 							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
 							  false,
 							  parse_program_version(arguments->backup->program_version));
 		}
+		else if (strcmp(file->name, "pg_control") == 0)
+			copy_pgcontrol_file(from_root, instance_config.pgdata, file);
 		else if (file->extra_dir_num)
 		{
 			if (backup_contains_extra(file->extradir, arguments->extra_dirs))
 				copy_file(from_root, file->extradir, file);
 		}
 		else
-			copy_file(from_root, pgdata, file);
+			copy_file(from_root, instance_config.pgdata, file);
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)
@@ -710,7 +716,7 @@ create_recovery_conf(time_t backup_id,
 	elog(LOG, "----------------------------------------");
 	elog(LOG, "creating recovery.conf");
 
-	snprintf(path, lengthof(path), "%s/recovery.conf", pgdata);
+	snprintf(path, lengthof(path), "%s/recovery.conf", instance_config.pgdata);
 	fp = fopen(path, "wt");
 	if (fp == NULL)
 		elog(ERROR, "cannot open recovery.conf \"%s\": %s", path,
