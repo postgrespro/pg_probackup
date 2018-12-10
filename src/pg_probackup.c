@@ -331,15 +331,6 @@ main(int argc, char *argv[])
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
-	/* command was initialized for a few commands */
-	if (command)
-	{
-		elog_file(INFO, "command: %s", command);
-
-		pfree(command);
-		command = NULL;
-	}
-
 	/* Option --instance is required for all commands except init and show */
 	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
 		backup_subcmd != VALIDATE_CMD)
@@ -389,6 +380,15 @@ main(int argc, char *argv[])
 
 	/* Initialize logger */
 	init_logger(backup_path, &instance_config.logger);
+
+	/* command was initialized for a few commands */
+	if (command)
+	{
+		elog_file(INFO, "command: %s", command);
+
+		pfree(command);
+		command = NULL;
+	}
 
 	/*
 	 * We have read pgdata path from command line or from configuration file.
