@@ -667,6 +667,23 @@ class ProbackupTest(object):
 
         return self.run_pb(cmd_list + options, async, gdb, old_binary)
 
+    def checkdb_node(
+            self, instance, backup_dir=False, data_dir=False,
+            options=[], async=False, gdb=False, old_binary=False
+            ):
+
+        cmd_list = ["checkdb"]
+
+        if backup_dir:
+            cmd_list += ["-B", backup_dir]
+
+        if data_dir:
+            cmd_list += ["-D", data_dir]
+
+        cmd_list += ["--instance={0}".format(instance)]
+
+        return self.run_pb(cmd_list + options, async, gdb, old_binary)
+
     def merge_backup(
             self, backup_dir, instance, backup_id, async=False,
             gdb=False, old_binary=False, options=[]):

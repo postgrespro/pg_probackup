@@ -7,7 +7,8 @@ from . import init_test, merge, option_test, show_test, compatibility, \
     ptrack_vacuum, ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
     false_positive, replica, compression, page, ptrack, archive, \
-    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test
+    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test, \
+    checkdb
 
 
 def load_tests(loader, tests, pattern):
@@ -16,6 +17,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup_test))
     suite.addTests(loader.loadTestsFromModule(compatibility))
+    suite.addTests(loader.loadTestsFromModule(checkdb))
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))
 #    suite.addTests(loader.loadTestsFromModule(cfs_restore))
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
