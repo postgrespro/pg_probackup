@@ -40,10 +40,10 @@ typedef enum
 
 void pg_log(eLogType type, const char *fmt,...) pg_attribute_printf(2, 3);
 
-static void elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
-						  pg_attribute_printf(3, 0);
+static void elog_internal(int elevel, bool file_only, const char *message);
 static void elog_stderr(int elevel, const char *fmt, ...)
 						pg_attribute_printf(2, 3);
+static char *get_log_message(const char *fmt, va_list args) pg_attribute_printf(1, 0);
 
 /* Functions to work with log files */
 static void open_logfile(FILE **file, const char *filename_format);
@@ -74,7 +74,7 @@ init_logger(const char *root_path, LoggerConfig *config)
 	/* Set log path */
 	if (config->log_directory == NULL)
 	{
-		config->log_directory = palloc(MAXPGPATH);
+		config->log_directory = pgut_malloc(MAXPGPATH);
 		join_path_components(config->log_directory,
 							 root_path, LOG_DIRECTORY_DEFAULT);
 	}
@@ -148,13 +148,11 @@ exit_if_necessary(int elevel)
  * Actual implementation for elog() and pg_log().
  */
 static void
-elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
+elog_internal(int elevel, bool file_only, const char *message)
 {
 	bool		write_to_file,
 				write_to_error_log,
 				write_to_stderr;
-	va_list		error_args,
-				std_args;
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
@@ -165,21 +163,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 	write_to_stderr = elevel >= logger_config.log_level_console && !file_only;
 
 	pthread_lock(&log_file_mutex);
-#ifdef WIN32
-	std_args = NULL;
-	error_args = NULL;
-#endif
 	loggin_in_progress = true;
-
-	/* We need copy args only if we need write to error log file */
-	if (write_to_error_log)
-		va_copy(error_args, args);
-	/*
-	 * We need copy args only if we need write to stderr. But do not copy args
-	 * if we need to log only to stderr.
-	 */
-	if (write_to_stderr && write_to_file)
-		va_copy(std_args, args);
 
 	if (write_to_file || write_to_error_log)
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
@@ -203,8 +187,7 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		fprintf(log_file, "%s: ", strfbuf);
 		write_elevel(log_file, elevel);
 
-		vfprintf(log_file, fmt, args);
-		fputc('\n', log_file);
+		fprintf(log_file, "%s\n", message);
 		fflush(log_file);
 	}
 
@@ -221,33 +204,19 @@ elog_internal(int elevel, bool file_only, const char *fmt, va_list args)
 		fprintf(error_log_file, "%s: ", strfbuf);
 		write_elevel(error_log_file, elevel);
 
-		vfprintf(error_log_file, fmt, error_args);
-		fputc('\n', error_log_file);
+		fprintf(error_log_file, "%s\n", message);
 		fflush(error_log_file);
-
-		va_end(error_args);
 	}
 
 	/*
 	 * Write to stderr if the message was not written to log file.
 	 * Write to stderr if the message level is greater than WARNING anyway.
 	 */
-	if (write_to_stderr && write_to_file)
+	if (write_to_stderr)
 	{
 		write_elevel(stderr, elevel);
 
-		vfprintf(stderr, fmt, std_args);
-		fputc('\n', stderr);
-		fflush(stderr);
-
-		va_end(std_args);
-	}
-	else if (write_to_stderr)
-	{
-		write_elevel(stderr, elevel);
-
-		vfprintf(stderr, fmt, args);
-		fputc('\n', stderr);
+		fprintf(stderr, "%s\n", message);
 		fflush(stderr);
 	}
 
@@ -286,11 +255,43 @@ elog_stderr(int elevel, const char *fmt, ...)
 }
 
 /*
+ * Formats text data under the control of fmt and returns it in an allocated
+ * buffer.
+ */
+static char *
+get_log_message(const char *fmt, va_list args)
+{
+	size_t		len = 256;		/* initial assumption about buffer size */
+
+	for (;;)
+	{
+		char	   *result;
+		size_t		newlen;
+		va_list		copy_args;
+
+		result = (char *) pgut_malloc(len);
+
+		/* Try to format the data */
+		va_copy(copy_args, args);
+		newlen = pvsnprintf(result, len, fmt, copy_args);
+		va_end(copy_args);
+
+		if (newlen < len)
+			return result;		/* success */
+
+		/* Release buffer and loop around to try again with larger len. */
+		pfree(result);
+		len = newlen;
+	}
+}
+
+/*
  * Logs to stderr or to log file and exit if ERROR.
  */
 void
 elog(int elevel, const char *fmt, ...)
 {
+	char	   *message;
 	va_list		args;
 
 	/*
@@ -302,8 +303,11 @@ elog(int elevel, const char *fmt, ...)
 		return;
 
 	va_start(args, fmt);
-	elog_internal(elevel, false, fmt, args);
+	message = get_log_message(fmt, args);
 	va_end(args);
+
+	elog_internal(elevel, false, message);
+	pfree(message);
 }
 
 /*
@@ -312,6 +316,7 @@ elog(int elevel, const char *fmt, ...)
 void
 elog_file(int elevel, const char *fmt, ...)
 {
+	char	   *message;
 	va_list		args;
 
 	/*
@@ -322,8 +327,11 @@ elog_file(int elevel, const char *fmt, ...)
 		return;
 
 	va_start(args, fmt);
-	elog_internal(elevel, true, fmt, args);
+	message = get_log_message(fmt, args);
 	va_end(args);
+
+	elog_internal(elevel, true, message);
+	pfree(message);
 }
 
 /*
@@ -332,6 +340,7 @@ elog_file(int elevel, const char *fmt, ...)
 void
 pg_log(eLogType type, const char *fmt, ...)
 {
+	char	   *message;
 	va_list		args;
 	int			elevel = INFO;
 
@@ -364,8 +373,11 @@ pg_log(eLogType type, const char *fmt, ...)
 		return;
 
 	va_start(args, fmt);
-	elog_internal(elevel, false, fmt, args);
+	message = get_log_message(fmt, args);
 	va_end(args);
+
+	elog_internal(elevel, false, message);
+	pfree(message);
 }
 
 /*
@@ -450,7 +462,7 @@ logfile_getname(const char *format, time_t timestamp)
 		logger_config.log_directory[0] == '\0')
 		elog_stderr(ERROR, "logging path is not set");
 
-	filename = (char *) palloc(MAXPGPATH);
+	filename = (char *) pgut_malloc(MAXPGPATH);
 
 	snprintf(filename, MAXPGPATH, "%s/", logger_config.log_directory);
 
