@@ -71,12 +71,16 @@ static pthread_mutex_t log_file_mutex = PTHREAD_MUTEX_INITIALIZER;
 void
 init_logger(const char *root_path, LoggerConfig *config)
 {
-	/* Set log path */
-	if (config->log_directory == NULL)
+	/*
+	 * If logging to file is enabled and log_directory wasn't set
+	 * by user, init the path with default value: backup_directory/log/
+	 * */
+	if (config->log_level_file != LOG_OFF
+		&& config->log_directory == NULL)
 	{
-		config->log_directory = pgut_malloc(MAXPGPATH);
-		join_path_components(config->log_directory,
-							 root_path, LOG_DIRECTORY_DEFAULT);
+			config->log_directory = pgut_malloc(MAXPGPATH);
+			join_path_components(config->log_directory,
+								root_path, LOG_DIRECTORY_DEFAULT);
 	}
 
 	logger_config = *config;
