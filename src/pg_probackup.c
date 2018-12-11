@@ -317,9 +317,9 @@ main(int argc, char *argv[])
 	/* Parse command line only arguments */
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
-	if (remote_agent != NULL && strcmp(remote_agent, current.program_version) != 0)
+	if (remote_agent != NULL && strcmp(remote_agent, PROGRAM_VERSION) != 0)
 		elog(ERROR, "Agent version %s doesn't match master pg_probackup version %s",
-			 remote_agent, current.program_version);
+			 remote_agent, PROGRAM_VERSION);
 
 	pgut_init();
 
