@@ -211,7 +211,7 @@ pgFileInit(const char *path)
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 
 	/* Get file name from the path */
-	file_name = strrchr(file->path, '/');
+	file_name = last_dir_separator(file->path);
 	if (file_name == NULL)
 		file->name = file->path;
 	else
