@@ -704,8 +704,8 @@ on_interrupt(void)
 	interrupted = true;
 
 	/*
-	 * User promts password, call on_cleanup() byhand. If we don't do that we
-	 * will stuck forever until an user enters a password.
+	 * User promts password, call on_cleanup() byhand. Unless we do that we will
+	 * get stuck forever until a user enters a password.
 	 */
 	if (in_password)
 	{
