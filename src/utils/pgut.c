@@ -783,22 +783,6 @@ on_cleanup(void)
 	call_atexit_callbacks(false);
 }
 
-void
-exit_or_abort(int exitcode)
-{
-	if (in_cleanup)
-	{
-		/* oops, error in cleanup*/
-		call_atexit_callbacks(true);
-		abort();
-	}
-	else
-	{
-		/* normal exit */
-		exit(exitcode);
-	}
-}
-
 void *
 pgut_malloc(size_t size)
 {

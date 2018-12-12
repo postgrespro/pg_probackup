@@ -40,7 +40,6 @@ extern void pgut_atexit_push(pgut_atexit_callback callback, void *userdata);
 extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
 
 extern void pgut_init(void);
-extern void exit_or_abort(int exitcode);
 
 /*
  * Database connections
