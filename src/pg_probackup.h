@@ -133,6 +133,8 @@ typedef struct pg_indexEntry
 {
 	Oid indexrelid;
 	char *name;
+	char *dbname;
+	char *amcheck_nspname; /* schema where amcheck extention is located */
 	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
 } pg_indexEntry;
 

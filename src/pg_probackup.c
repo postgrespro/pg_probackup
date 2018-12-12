@@ -396,7 +396,7 @@ main(int argc, char *argv[])
 		config_get_opt_env(instance_options);
 
 	if (backup_subcmd == CHECKDB_CMD
-	&& (&instance_config.logger.log_level_file != LOG_OFF)
+	&& (instance_config.logger.log_level_file != LOG_OFF)
 	&& (&instance_config.logger.log_directory == NULL))
 		elog(ERROR, "Cannot save checkdb logs to a file. "
 		"You must specify --log-directory option when running checkdb with "
