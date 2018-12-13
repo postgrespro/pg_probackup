@@ -168,6 +168,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1)
 #define BLOCKNUM_INVALID	(-1)
 #define PROGRAM_VERSION	"2.0.26"
+#define AGENT_PROTOCOL_VERSION 20026
 
 /*
  * An instance configuration. It can be stored in a configuration file or passed

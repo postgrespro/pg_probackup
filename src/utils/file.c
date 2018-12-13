@@ -22,31 +22,37 @@ static fio_binding fio_bindings[] =
 	{&current.stop_lsn, sizeof(current.stop_lsn)}
 };
 
+/* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
+/* Use specified file descriptors as stding/stdout for FIO functions */
 void fio_redirect(int in, int out)
 {
 	fio_stdin = in;
 	fio_stdout = out;
 }
 
+/* Check if FILE handle is local or remote (created by FIO) */
 static bool fio_is_remote_file(FILE* file)
 {
 	return (size_t)file <= FIO_FDMAX;
 }
 
+/* Check if file descriptor is local or remote (created by FIO) */
 static bool fio_is_remote_fd(int fd)
 {
 	return (fd & FIO_PIPE_MARKER) != 0;
 }
 
+/* Check if specified location is local for current node */
 static bool fio_is_remote(fio_location location)
 {
 	return location == FIO_REMOTE_HOST
-		|| (location == FIO_BACKUP_HOST && remote_agent)
+		|| (location == FIO_BACKUP_HOST && remote_agent) /* agent is launched at Postgres side */
 		|| (location == FIO_DB_HOST && !remote_agent && IsSshConnection());
 }
 
+/* Try to read specified amount of bytes unless error or EOF are encountered */
 static ssize_t fio_read_all(int fd, void* buf, size_t size)
 {
 	size_t offs = 0;
@@ -66,6 +72,7 @@ static ssize_t fio_read_all(int fd, void* buf, size_t size)
 	return offs;
 }
 
+/* Try to write specified amount of bytes unless error is encountered */
 static ssize_t fio_write_all(int fd, void const* buf, size_t size)
 {
 	size_t offs = 0;
@@ -83,6 +90,7 @@ static ssize_t fio_write_all(int fd, void const* buf, size_t size)
 	return offs;
 }
 
+/* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
 FILE* fio_open_stream(char const* path, fio_location location)
 {
 	FILE* f;
@@ -116,6 +124,7 @@ FILE* fio_open_stream(char const* path, fio_location location)
 	return f;
 }
 
+/* Close input stream */
 int fio_close_stream(FILE* f)
 {
 	if (fio_stdin_buffer)
@@ -126,6 +135,7 @@ int fio_close_stream(FILE* f)
 	return fclose(f);
 }
 
+/* Open directory */
 DIR* fio_opendir(char const* path, fio_location location)
 {
 	DIR* dir;
@@ -161,6 +171,7 @@ DIR* fio_opendir(char const* path, fio_location location)
 	return dir;
 }
 
+/* Get next directory entry */
 struct dirent* fio_readdir(DIR *dir)
 {
 	if (fio_is_remote_file((FILE*)dir))
@@ -193,6 +204,7 @@ struct dirent* fio_readdir(DIR *dir)
 	}
 }
 
+/* Close directory */
 int fio_closedir(DIR *dir)
 {
 	if (fio_is_remote_file((FILE*)dir))
@@ -213,7 +225,7 @@ int fio_closedir(DIR *dir)
 	}
 }
 
-
+/* Open file */
 int fio_open(char const* path, int mode, fio_location location)
 {
 	int fd;
@@ -250,6 +262,7 @@ int fio_open(char const* path, int mode, fio_location location)
 	return fd;
 }
 
+/* Open stdio file */
 FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 {
 	FILE* f;
@@ -266,6 +279,7 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 	return f;
 }
 
+/* Format output to file stream */
 int fio_fprintf(FILE* f, char const* format, ...)
 {
 	int rc;
@@ -291,6 +305,7 @@ int fio_fprintf(FILE* f, char const* format, ...)
 	return rc;
 }
 
+/* Flush stream data  (does nothing for remote file) */
 int fio_fflush(FILE* f)
 {
 	int rc = 0;
@@ -304,11 +319,13 @@ int fio_fflush(FILE* f)
 	return rc;
 }
 
+/* Sync file to the disk (does nothing for remote file) */
 int fio_flush(int fd)
 {
 	return fio_is_remote_fd(fd) ? 0 : fsync(fd);
 }
 
+/* Close output stream */
 int fio_fclose(FILE* f)
 {
 	return fio_is_remote_file(f)
@@ -316,6 +333,7 @@ int fio_fclose(FILE* f)
 		: fclose(f);
 }
 
+/* Close file */
 int fio_close(int fd)
 {
 	if (fio_is_remote_fd(fd))
@@ -340,6 +358,7 @@ int fio_close(int fd)
 	}
 }
 
+/* Truncate stdio file */
 int fio_ftruncate(FILE* f, off_t size)
 {
 	return fio_is_remote_file(f)
@@ -347,6 +366,7 @@ int fio_ftruncate(FILE* f, off_t size)
 		: ftruncate(fileno(f), size);
 }
 
+/* Truncate file */
 int fio_truncate(int fd, off_t size)
 {
 	if (fio_is_remote_fd(fd))
@@ -371,6 +391,7 @@ int fio_truncate(int fd, off_t size)
 	}
 }
 
+/* Set position in stdio file */
 int fio_fseek(FILE* f, off_t offs)
 {
 	return fio_is_remote_file(f)
@@ -378,6 +399,7 @@ int fio_fseek(FILE* f, off_t offs)
 		: fseek(f, offs, SEEK_SET);
 }
 
+/* Set position in file */
 int fio_seek(int fd, off_t offs)
 {
 	if (fio_is_remote_fd(fd))
@@ -402,6 +424,7 @@ int fio_seek(int fd, off_t offs)
 	}
 }
 
+/* Write data to stdio file */
 size_t fio_fwrite(FILE* f, void const* buf, size_t size)
 {
 	return fio_is_remote_file(f)
@@ -409,6 +432,7 @@ size_t fio_fwrite(FILE* f, void const* buf, size_t size)
 		: fwrite(buf, 1, size, f);
 }
 
+/* Write data to the file */
 ssize_t fio_write(int fd, void const* buf, size_t size)
 {
 	if (fio_is_remote_fd(fd))
@@ -433,6 +457,7 @@ ssize_t fio_write(int fd, void const* buf, size_t size)
 	}
 }
 
+/* Read data from stdio file */
 size_t fio_fread(FILE* f, void* buf, size_t size)
 {
 	return fio_is_remote_file(f)
@@ -440,6 +465,7 @@ size_t fio_fread(FILE* f, void* buf, size_t size)
 		: fread(buf, 1, size, f);
 }
 
+/* Read data from file */
 ssize_t fio_read(int fd, void* buf, size_t size)
 {
 	if (fio_is_remote_fd(fd))
@@ -472,6 +498,7 @@ ssize_t fio_read(int fd, void* buf, size_t size)
 	}
 }
 
+/* Get information about stdio file */
 int fio_ffstat(FILE* f, struct stat* st)
 {
 	return fio_is_remote_file(f)
@@ -479,6 +506,7 @@ int fio_ffstat(FILE* f, struct stat* st)
 		: fio_fstat(fileno(f), st);
 }
 
+/* Get information about file descriptor */
 int fio_fstat(int fd, struct stat* st)
 {
 	if (fio_is_remote_fd(fd))
@@ -510,6 +538,7 @@ int fio_fstat(int fd, struct stat* st)
 	}
 }
 
+/* Get information about file */
 int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -544,6 +573,7 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_locati
 	}
 }
 
+/* Check presence of the file */
 int fio_access(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -576,6 +606,7 @@ int fio_access(char const* path, int mode, fio_location location)
 	}
 }
 
+/* Rename file */
 int fio_rename(char const* old_path, char const* new_path, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -602,6 +633,7 @@ int fio_rename(char const* old_path, char const* new_path, fio_location location
 	}
 }
 
+/* Remove file */
 int fio_unlink(char const* path, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -626,6 +658,7 @@ int fio_unlink(char const* path, fio_location location)
 	}
 }
 
+/* Create directory */
 int fio_mkdir(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -651,6 +684,7 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 	}
 }
 
+/* Checnge file mode */
 int fio_chmod(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -677,6 +711,8 @@ int fio_chmod(char const* path, int mode, fio_location location)
 }
 
 #ifdef HAVE_LIBZ
+/* Open compressed file. In case of remove file, it is fetched to local temporary file in read-only mode or is written
+ * to temoporary file and rtansfered to remote host by fio_gzclose. */
 gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location location)
 {
 	gzFile file;
@@ -715,6 +751,7 @@ gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location 
 	return file;
 }
 
+/* Close compressed file. In case of writing remote file, content of temporary file is trasfered to remote host */
 int fio_gzclose(gzFile file, char const* path, int tmp_fd)
 {
 	if (tmp_fd >= 0)
@@ -749,7 +786,7 @@ int fio_gzclose(gzFile file, char const* path, int tmp_fd)
 }
 #endif
 
-
+/* Send file content */
 static void fio_send_file(int out, char const* path)
 {
 	int fd = open(path, O_RDONLY);
@@ -776,6 +813,7 @@ static void fio_send_file(int out, char const* path)
 	}
 }
 
+/* Send values of variables. Variables are described infio_bindings array and "var" is index in this array. */
 void fio_transfer(fio_shared_variable var)
 {
 	size_t var_size = fio_bindings[var].size;
@@ -794,6 +832,7 @@ void fio_transfer(fio_shared_variable var)
 	free(msg);
 }
 
+/* Execute commands at remote host */
 void fio_communicate(int in, int out)
 {
 	int fd[FIO_FDMAX];

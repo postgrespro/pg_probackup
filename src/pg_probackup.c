@@ -318,9 +318,12 @@ main(int argc, char *argv[])
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
 	if (remote_agent != NULL && strcmp(remote_agent, PROGRAM_VERSION) != 0)
-		elog(ERROR, "Agent version %s doesn't match master pg_probackup version %s",
+	{
+		uint32 agent_version = parse_program_version(remote_agent);
+		elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
+			 "Agent version %s doesn't match master pg_probackup version %s",
 			 remote_agent, PROGRAM_VERSION);
-
+	}
 	pgut_init();
 
 	if (help_opt)
