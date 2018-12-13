@@ -363,8 +363,9 @@ main(int argc, char *argv[])
 	}
 
 	/*
-	 * Read options from env variables or from config file,
-	 * unless we're going to set them via set-config.
+	 * We read options from command line, now we need to read them from
+	 * configuration file since we got backup path and instance name.
+	 * For some commands an instance option isn't required, see above.
 	 */
 	if (instance_name)
 	{
