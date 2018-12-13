@@ -347,7 +347,8 @@ main(int argc, char *argv[])
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
 	if (IsSshConnection()
-		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD))
+		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD ||
+			backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD))
 	{
 		if (remote_agent) {
 			if (backup_subcmd != BACKUP_CMD) {
@@ -357,8 +358,8 @@ main(int argc, char *argv[])
 			fio_redirect(STDIN_FILENO, STDOUT_FILENO);
 		} else {
 			/* Execute remote probackup */
-			int status = remote_execute(argc, argv, backup_subcmd == BACKUP_CMD);
-			if (status != 0)
+			int status = remote_execute(argc, argv, backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD);
+			if (status != 0 || backup_subcmd == ARCHIVE_PUSH_CMD)
 			{
 				return status;
 			}
