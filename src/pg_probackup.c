@@ -377,11 +377,8 @@ main(int argc, char *argv[])
 	}
 
 	/*
-	 * Read options from env variables or from config file,
-	 * unless we're going to set them via set-config.
-	 */
-	if (((backup_path != NULL) && instance_name)
-		&& backup_subcmd != SET_CONFIG_CMD)
+	 * Read options from env variables or from config file */
+	if ((backup_path != NULL) && instance_name)
 	{
 		char		config_path[MAXPGPATH];
 		/* Read environment variables */
