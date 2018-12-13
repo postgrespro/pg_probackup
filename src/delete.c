@@ -283,7 +283,7 @@ delete_backup_files(pgBackup *backup)
 	/* list files to be deleted */
 	files = parray_new();
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
-	dir_list_file(files, path, false, true, true, false);
+	dir_list_file(files, path, false, true, true, 0);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);

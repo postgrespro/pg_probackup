@@ -854,6 +854,7 @@ void
 pgBackupCopy(pgBackup *dst, pgBackup *src)
 {
 	pfree(dst->primary_conninfo);
+	pfree(dst->extra_dir_str);
 
 	memcpy(dst, src, sizeof(pgBackup));
 

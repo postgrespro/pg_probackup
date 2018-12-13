@@ -22,6 +22,7 @@ typedef struct
 	parray	   *files;
 	pgBackup   *backup;
 	parray	   *extra_dirs;
+	char	   *extra_prefix;
 
 	/*
 	 * Return value from the thread.
@@ -420,10 +421,10 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	char		timestamp[100];
 	char		this_backup_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
-	char		extra_path[MAXPGPATH];
+	char		extra_prefix[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
-	parray	   *extra_dirs;
+	parray	   *extra_dirs = NULL;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
@@ -468,15 +469,15 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	 * Get list of files which need to be restored.
 	 */
 	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
-	pgBackupGetPath(backup, extra_path, lengthof(extra_path), EXTRA_DIR);
+	pgBackupGetPath(backup, extra_prefix, lengthof(extra_prefix), EXTRA_DIR);
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(database_path, extra_path, list_path);
+	files = dir_read_file_list(database_path, extra_prefix, list_path);
 
 	/* Restore directories in do_backup_instance way */
 	parray_qsort(files, pgFileComparePath);
 
 	/*
-	 * Make directories before backup
+	 * Make extra directories before restore
 	 * and setup threads at the same time
 	 */
 	for (i = 0; i < parray_num(files); i++)
@@ -492,11 +493,10 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 			if (backup_contains_extra(file->extradir, extra_dirs))
 			{
 				char		container_dir[MAXPGPATH];
-				makeExtraDirPathByNum(container_dir, extra_path,
+				makeExtraDirPathByNum(container_dir, extra_prefix,
 									  file->extra_dir_num);
 				dir_name = GetRelativePath(file->path, container_dir);
-				elog(VERBOSE, "Create directory \"%s\" NAME %s",
-					 dir_name, file->name);
+				elog(VERBOSE, "Create directory \"%s\"", dir_name);
 				join_path_components(dirpath, file->extradir, dir_name);
 				dir_create_dir(dirpath, DIR_PERMISSION);
 			}
@@ -516,6 +516,7 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 		arg->files = files;
 		arg->backup = backup;
 		arg->extra_dirs = extra_dirs;
+		arg->extra_prefix = extra_prefix;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -558,18 +559,18 @@ remove_deleted_files(pgBackup *backup)
 	parray	   *files;
 	parray	   *files_restored;
 	char		filelist_path[MAXPGPATH];
-	char		extra_path[MAXPGPATH];
+	char		extra_prefix[MAXPGPATH];
 	int			i;
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
-	pgBackupGetPath(backup, extra_path, lengthof(extra_path), EXTRA_DIR);
+	pgBackupGetPath(backup, extra_prefix, lengthof(extra_prefix), EXTRA_DIR);
 	/* Read backup's filelist using target database path as base path */
-	files = dir_read_file_list(instance_config.pgdata, extra_path, filelist_path);
+	files = dir_read_file_list(instance_config.pgdata, extra_prefix, filelist_path);
 	parray_qsort(files, pgFileComparePathDesc);
 
 	/* Get list of files actually existing in target database */
 	files_restored = parray_new();
-	dir_list_file(files_restored, instance_config.pgdata, true, true, false, false);
+	dir_list_file(files_restored, instance_config.pgdata, true, true, false, 0);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(files_restored, pgFileComparePathDesc);
 
@@ -678,7 +679,7 @@ restore_files(void *arg)
 		else if (file->extra_dir_num)
 		{
 			if (backup_contains_extra(file->extradir, arguments->extra_dirs))
-				copy_file(from_root, file->extradir, file);
+				copy_file(arguments->extra_prefix, file->extradir, file);
 		}
 		else
 			copy_file(from_root, instance_config.pgdata, file);

@@ -43,7 +43,7 @@ void
 pgBackupValidate(pgBackup *backup)
 {
 	char		base_path[MAXPGPATH];
-	char		extra_path[MAXPGPATH];
+	char		extra_prefix[MAXPGPATH];
 	char		path[MAXPGPATH];
 	parray	   *files;
 	bool		corrupted = false;
@@ -83,9 +83,9 @@ pgBackupValidate(pgBackup *backup)
 		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
-	pgBackupGetPath(backup, extra_path, lengthof(extra_path), EXTRA_DIR);
+	pgBackupGetPath(backup, extra_prefix, lengthof(extra_prefix), EXTRA_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, extra_path, path);
+	files = dir_read_file_list(base_path, extra_prefix, path);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)

@@ -513,7 +513,7 @@ extern void check_tablespace_mapping(pgBackup *backup);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *extra_prefix);
-extern parray *dir_read_file_list(const char *root, const char *extra_path, const char *file_txt);
+extern parray *dir_read_file_list(const char *root, const char *extra_prefix, const char *file_txt);
 extern parray *make_extra_directory_list(const char *colon_separated_dirs);
 extern void free_dir_list(parray *list);
 extern void makeExtraDirPathByNum(char *ret_path, const char *pattern_path,

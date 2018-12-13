@@ -15,7 +15,6 @@
 #endif
 #include "catalog/pg_tablespace.h"
 
-#include <libgen.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -468,11 +467,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		return;
 	}
 	if (extra_dir_num)
-	{
 		file->extradir = pgut_strdup(file->path);
-		elog(VERBOSE,"Dir_list_file add root Name: %s Path: %s %s",
-			 file->name, file->path, file->extradir);
-	}
 	if (add_root)
 		parray_append(files, file);
 
@@ -835,7 +830,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	{
 		pgFile	   *dir;
 
-		dir = pgFileNew(path, false, false);
+		dir = pgFileNew(path, false, 0);
 		parray_append(files, dir);
 	}
 
@@ -1436,7 +1431,7 @@ bad_format:
  * If root is not NULL, path will be absolute path.
  */
 parray *
-dir_read_file_list(const char *root, const char *extra_path, const char *file_txt)
+dir_read_file_list(const char *root, const char *extra_prefix, const char *file_txt)
 {
 	FILE   *fp;
 	parray *files;
@@ -1479,8 +1474,8 @@ dir_read_file_list(const char *root, const char *extra_path, const char *file_tx
 			{
 				char temp[MAXPGPATH];
 
-				Assert(extra_path);
-				makeExtraDirPathByNum(temp, extra_path, extra_dir_num);
+				Assert(extra_prefix);
+				makeExtraDirPathByNum(temp, extra_prefix, extra_dir_num);
 				join_path_components(filepath, temp, path);
 			}
 			else

@@ -468,7 +468,7 @@ do_backup_instance(void)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
-	char		extra_path[MAXPGPATH]; /* Temp value. Used as template */
+	char		extra_prefix[MAXPGPATH]; /* Temp value. Used as template */
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -579,7 +579,7 @@ do_backup_instance(void)
 	pg_start_backup(label, smooth_checkpoint, &current);
 
 	pgBackupGetPath(&current, database_path, lengthof(database_path),DATABASE_DIR);
-	pgBackupGetPath(&current, extra_path, lengthof(extra_path), EXTRA_DIR);
+	pgBackupGetPath(&current, extra_prefix, lengthof(extra_prefix), EXTRA_DIR);
 
 	/* start stream replication */
 	if (stream_wal)
@@ -712,12 +712,12 @@ do_backup_instance(void)
 			else
 				dir_name = file->path;
 
-			elog(VERBOSE, "Create directory \"%s\" NAME %s", dir_name, file->name);
+			elog(VERBOSE, "Create directory \"%s\"", dir_name);
 
 			if (file->extra_dir_num)
 			{
 				char		temp[MAXPGPATH];
-				snprintf(temp, MAXPGPATH, "%s%d", extra_path, file->extra_dir_num);
+				snprintf(temp, MAXPGPATH, "%s%d", extra_prefix, file->extra_dir_num);
 				join_path_components(dirpath, temp, dir_name);
 			}
 			else
@@ -745,7 +745,7 @@ do_backup_instance(void)
 
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
-		arg->extra = extra_path;
+		arg->extra = extra_prefix;
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
 		arg->prev_start_lsn = prev_backup_start_lsn;
@@ -829,7 +829,7 @@ do_backup_instance(void)
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, false);
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0);
 
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
@@ -2040,7 +2040,7 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true, false);
+				file = pgFileNew(backup_label, true, 0);
 				calc_file_checksum(file);
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
@@ -2084,7 +2084,7 @@ pg_stop_backup(pgBackup *backup)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true, false);
+				file = pgFileNew(tablespace_map, true, 0);
 				if (S_ISREG(file->mode))
 					calc_file_checksum(file);
 				free(file->path);
@@ -2331,6 +2331,7 @@ backup_files(void *arg)
 				const char *src;
 				const char *dst;
 				bool		skip = false;
+				char		extra_dst[MAXPGPATH];
 
 				/* If non-data file has not changed since last backup... */
 				if (prev_file && file->exists_in_prev &&
@@ -2344,10 +2345,10 @@ backup_files(void *arg)
 				/* Set file paths */
 				if (file->extra_dir_num)
 				{
-					char temp[MAXPGPATH];
-					sprintf(temp, "%s%d", arguments->extra, file->extra_dir_num);
+					makeExtraDirPathByNum(extra_dst, arguments->extra,
+										  file->extra_dir_num);
 					src = file->extradir;
-					dst = temp;
+					dst = extra_dst;
 				}
 				else
 				{

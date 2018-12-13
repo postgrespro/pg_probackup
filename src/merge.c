@@ -170,9 +170,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 				from_extra_prefix[MAXPGPATH],
 				control_file[MAXPGPATH];
 	parray	   *files,
-			   *to_files,
-			   *to_extra,
-			   *from_extra;
+			   *to_files;
+	parray	   *to_extra = NULL,
+			   *from_extra = NULL;
 	pthread_t  *threads = NULL;
 	merge_files_arg *threads_args = NULL;
 	int			i;
@@ -273,6 +273,23 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
+		/* if the entry was an extra directory, create it in the backup */
+		if (file->extra_dir_num && S_ISDIR(file->mode))
+		{
+			char		dirpath[MAXPGPATH];
+			char	   *dir_name;
+			char		old_container[MAXPGPATH];
+			char		new_container[MAXPGPATH];
+
+			makeExtraDirPathByNum(old_container, from_extra_prefix,
+								  file->extra_dir_num);
+			makeExtraDirPathByNum(new_container, to_extra_prefix,
+								  file->extra_dir_num);
+			dir_name = GetRelativePath(file->path, old_container);
+			elog(VERBOSE, "Create directory \"%s\"", dir_name);
+			join_path_components(dirpath, new_container, dir_name);
+			dir_create_dir(dirpath, DIR_PERMISSION);
+		}
 		pg_atomic_init_flag(&file->lock);
 	}
 
@@ -316,6 +333,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_backup->stop_lsn = from_backup->stop_lsn;
 	to_backup->recovery_time = from_backup->recovery_time;
 	to_backup->recovery_xid = from_backup->recovery_xid;
+	to_backup->extra_dir_str = from_backup->extra_dir_str;
 	/*
 	 * If one of the backups isn't "stream" backup then the target backup become
 	 * non-stream backup too.
@@ -625,7 +643,6 @@ reorder_extra_dirs(pgBackup *to_backup, parray *to_extra, parray *from_extra)
 {
 	char extradir_template[MAXPGPATH];
 
-	Assert(to_extra);
 	pgBackupGetPath(to_backup, extradir_template,
 					lengthof(extradir_template), EXTRA_DIR);
 	for (int i = 0; i < parray_num(to_extra); i++)
