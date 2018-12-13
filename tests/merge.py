@@ -473,7 +473,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_merge_tablespaces(self):
         """
-        Create tablespace with table
+        Create tablespace with table, take FULL backup,
+        create another tablespace with another table and drop previous
+        tablespace, take page backup, merge it and restore
+
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -550,7 +553,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_merge_tablespaces_1(self):
         """
-        Some test here
+        Create tablespace with table, take FULL backup,
+        create another tablespace with another table, take page backup,
+        drop first tablespace and take delta backup,
+        merge it and restore
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1202,3 +1208,4 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 #   FULL    MERGING
 
 # 3. Need new test with corrupted FULL backup
+# 4. different compression levels
