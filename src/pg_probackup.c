@@ -345,7 +345,6 @@ main(int argc, char *argv[])
 			elog(ERROR, "-B, --backup-path must be a path to directory");
 	}
 
-	/* TODO it would be better to list commands that require instance option */
 	/* Option --instance is required for all commands except init and show */
 	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
 		backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)

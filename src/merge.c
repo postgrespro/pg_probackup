@@ -91,7 +91,8 @@ do_merge(time_t backup_id)
 		}
 		else
 		{
-			Assert(dest_backup);
+			if (dest_backup == NULL)
+				elog(ERROR, "Target backup %s was not found", base36enc(backup_id));
 
 			if (backup->start_time != prev_parent)
 				continue;
@@ -335,6 +336,20 @@ delete_source_backup:
 		}
 	}
 
+	/*
+	 * Rename FULL backup directory.
+	 */
+	elog(INFO, "Rename %s to %s", to_backup_id, from_backup_id);
+	if (rename(to_backup_path, from_backup_path) == -1)
+		elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
+			 to_backup_path, from_backup_path, strerror(errno));
+
+	/*
+	 * Merging finished, now we can safely update ID of the destination backup.
+	 */
+	to_backup->start_time = from_backup->start_time;
+	write_backup(to_backup);
+
 	/* Cleanup */
 	if (threads)
 	{
@@ -525,6 +540,12 @@ merge_files(void *arg)
 			copy_pgcontrol_file(argument->from_root, argument->to_root, file);
 		else
 			copy_file(argument->from_root, argument->to_root, file);
+
+		/*
+		 * We need to save compression algorithm type of the target backup to be
+		 * able to restore in the future.
+		 */
+		file->compress_alg = to_backup->compress_alg;
 
 		if (file->write_size != BYTES_INVALID)
 			elog(LOG, "Moved file \"%s\": " INT64_FORMAT " bytes",

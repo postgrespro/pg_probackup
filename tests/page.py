@@ -1,6 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from testgres import QueryException
 from datetime import datetime, timedelta
 import subprocess
 import gzip
@@ -1027,6 +1028,123 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             backup_type='page', options=["-j", "4"])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_create_db(self):
+        """
+        Make node, take full backup, create database db1, take page backup,
+        restore database and check it presense
+        """
+        self.maxDiff = None
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_size': '10GB',
+                'max_wal_senders': '2',
+                'checkpoint_timeout': '5min',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL BACKUP
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
+
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        # CREATE DATABASE DB1
+        node.safe_psql("postgres", "create database db1")
+        node.safe_psql(
+            "db1",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(i::text)::tsvector as tsvector from generate_series(0,1000) i")
+
+        # PAGE BACKUP
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE
+        node_restored = self.make_simple_node(
+            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+        )
+
+        node_restored.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            backup_id=backup_id, options=["-j", "4"])
+
+        # COMPARE PHYSICAL CONTENT
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.slow_start()
+
+        node_restored.safe_psql('db1', 'select 1')
+        node_restored.cleanup()
+
+        # DROP DATABASE DB1
+        node.safe_psql(
+            "postgres", "drop database db1")
+        # SECOND PTRACK BACKUP
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        # RESTORE SECOND PTRACK BACKUP
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            backup_id=backup_id, options=["-j", "4"]
+        )
+
+        # COMPARE PHYSICAL CONTENT
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(
+                node_restored.data_dir, ignore_ptrack=False)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # START RESTORED NODE
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        node_restored.slow_start()
+
+        try:
+            node_restored.safe_psql('db1', 'select 1')
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because we are connecting to deleted database"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd)
+            )
+        except QueryException as e:
+            self.assertTrue(
+                'FATAL:  database "db1" does not exist' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd)
+            )
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
