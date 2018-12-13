@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #include "pg_probackup.h"
 #include "file.h"
@@ -61,6 +62,13 @@ static int split_options(int argc, char* argv[], int max_options, char* options)
 	return argc;
 }
 
+static int child_pid;
+
+static void kill_child(void)
+{
+	kill(child_pid, SIGTERM);
+}
+
 int remote_execute(int argc, char* argv[], bool listen)
 {
 	char cmd[MAX_CMDLINE_LENGTH];
@@ -70,7 +78,6 @@ int remote_execute(int argc, char* argv[], bool listen)
 	int i;
 	int outfd[2];
 	int infd[2];
-	pid_t pid;
 	char* pg_probackup = argv[0];
 
 	ssh_argc = 0;
@@ -110,9 +117,9 @@ int remote_execute(int argc, char* argv[], bool listen)
 	SYS_CHECK(pipe(infd));
 	SYS_CHECK(pipe(outfd));
 
-	SYS_CHECK(pid = fork());
+	SYS_CHECK(child_pid = fork());
 
-	if (pid == 0) { /* child */
+	if (child_pid == 0) { /* child */
 		SYS_CHECK(close(STDIN_FILENO));
 		SYS_CHECK(close(STDOUT_FILENO));
 
@@ -129,7 +136,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 	} else {
 		SYS_CHECK(close(outfd[0])); /* These are being used by the child */
 		SYS_CHECK(close(infd[1]));
-
+		atexit(kill_child);
 		if (listen) {
 			int status;
 			fio_communicate(infd[0], outfd[1]);
