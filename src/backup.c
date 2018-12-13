@@ -918,7 +918,14 @@ do_checkdb(bool do_block_validation, bool do_amcheck)
 	}
 
 	if (do_amcheck)
+	{
 		index_list = get_index_list();
+
+		/* no need to setup threads. there's nothing to do */
+		if ((!index_list) & (!do_block_validation))
+			elog(ERROR, "Cannot perform 'checkdb --amcheck', since "
+						"this backup instance does not contain any databases with amcheck installed");
+	}
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -942,8 +949,10 @@ do_checkdb(bool do_block_validation, bool do_amcheck)
 
 	pgut_atexit_push(threads_conn_disconnect, NULL);
 
-	/* Run threads */
+	/* TODO write better info message */
 	elog(INFO, "Start checking data files");
+
+	/* Run threads */
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
@@ -960,6 +969,8 @@ do_checkdb(bool do_block_validation, bool do_amcheck)
 		if (threads_args[i].ret == 1)
 			backup_isok = false;
 	}
+
+	/* TODO write better info message */
 	if (backup_isok)
 		elog(INFO, "Data files are checked");
 	else
@@ -2335,7 +2346,7 @@ backup_disconnect(bool fatal, void *userdata)
 }
 
 /*
- * Disconnect backup connections created in threads during quit pg_probackup.
+ * Disconnect checkdb connections created in threads during quit pg_probackup.
  */
 static void
 threads_conn_disconnect(bool fatal, void *userdata)
@@ -2343,8 +2354,8 @@ threads_conn_disconnect(bool fatal, void *userdata)
 	int i;
 
 	elog(VERBOSE, "threads_conn_disconnect, num_threads %d", num_threads);
-	for (i = 0; i < num_threads; i++)
-	{
+// 	for (i = 0; i < num_threads; i++)
+// 	{
 // 		backup_files_arg *arg = &(threads_args[i]);
 // 
 // 		if (arg->backup_conn)
@@ -2352,7 +2363,7 @@ threads_conn_disconnect(bool fatal, void *userdata)
 // 			pgut_cancel(arg->backup_conn);
 // 			pgut_disconnect(arg->backup_conn);
 // 		}
-	}
+// 	}
 }
 
 static void *
@@ -3182,6 +3193,7 @@ get_index_list(void)
 	Oid dbOid, tblspcOid;
 	char *params[2];
 	Oid indexrelid;
+	bool first_db_with_amcheck = true;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -3228,14 +3240,30 @@ get_index_list(void)
 
 		PQclear(res);
 
-		res = pgut_execute(tmp_conn, "SELECT cls.oid, cls.relname"
+		/*
+		 * In order to avoid duplicates, select global indexes
+		 * (tablespace pg_global with oid 1664) only once
+		 */
+		if (first_db_with_amcheck)
+		{
+			res = pgut_execute(tmp_conn, "SELECT cls.oid, cls.relname"
 									 " FROM pg_index idx "
 									 " JOIN pg_class cls ON cls.oid=idx.indexrelid "
 									 " JOIN pg_am am ON am.oid=cls.relam "
-									 " WHERE am.amname='btree'; ", 0, NULL);
+									 " WHERE am.amname='btree' AND cls.relpersistence != 't'"
+									 " AND idx.indisready AND idx.indisvalid; ", 0, NULL);
+			first_db_with_amcheck = false;
+		}
+		else
+			res = pgut_execute(tmp_conn, "SELECT cls.oid, cls.relname"
+									 " FROM pg_index idx "
+									 " JOIN pg_class cls ON cls.oid=idx.indexrelid "
+									 " JOIN pg_am am ON am.oid=cls.relam "
+									 " WHERE am.amname='btree' AND cls.relpersistence != 't'"
+									 " AND idx.indisready AND idx.indisvalid AND cls.reltablespace!=1664; ", 0, NULL);
 
-		/* TODO filter system indexes to add them to list only once */
-		/* TODO maybe save tablename for load balancing */
+
+		/* add info needed to check indexes into index_list */
 		for(i = 0; i < PQntuples(res); i++)
 		{
 			pg_indexEntry *ind = (pg_indexEntry *) pgut_malloc(sizeof(pg_indexEntry));
@@ -3266,6 +3294,7 @@ get_index_list(void)
 	pfree(params[0]);
 	pfree(params[1]);
 	PQclear(res_db);
+
 	return index_list;
 }
 
