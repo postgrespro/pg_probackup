@@ -97,12 +97,13 @@ static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
 static void threads_conn_disconnect(bool fatal, void *userdata);
 
+static void pgdata_basic_setup(void);
+
 static void *backup_files(void *arg);
 static void *check_files(void *arg);
 static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
-static void do_check_instance(bool do_amcheck);
 static parray* get_index_list(void);
 static bool amcheck_one_index(backup_files_arg *arguments,
 				 pg_indexEntry *ind);
@@ -465,105 +466,6 @@ remote_backup_files(void *arg)
 	arguments->ret = 0;
 
 	return NULL;
-}
-
-/* TODO think about merging it with do_backup_instance */
-static void
-do_check_instance(bool do_amcheck)
-{
-	int			i;
-	char		database_path[MAXPGPATH];
-
-	/* arrays with meta info for multi threaded backup */
-	pthread_t	*threads;
-	backup_files_arg *threads_args;
-	bool		backup_isok = true;
-
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
-
-	/* initialize backup list */
-	backup_files_list = parray_new();
-
-	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(backup_files_list, instance_config.pgdata, true, true, false);
-
-	/*
-	 * Sort pathname ascending. It is necessary to create intermediate
-	 * directories sequentially.
-	 *
-	 * For example:
-	 * 1 - create 'base'
-	 * 2 - create 'base/1'
-	 *
-	 * Sorted array is used at least in parse_backup_filelist_filenames(),
-	 * extractPageMap(), make_pagemap_from_ptrack().
-	 */
-	parray_qsort(backup_files_list, pgFileComparePath);
-	/* Extract information about files in backup_list parsing their names:*/
-	parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
-
-	/* setup threads */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-		pg_atomic_clear_flag(&file->lock);
-	}
-
-	/* Sort by size for load balancing */
-	parray_qsort(backup_files_list, pgFileCompareSize);
-
-	if (do_amcheck)
-		index_list = get_index_list();
-
-	/* init thread args with own file lists */
-	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
-
-	for (i = 0; i < num_threads; i++)
-	{
-		backup_files_arg *arg = &(threads_args[i]);
-
-		arg->from_root = instance_config.pgdata;
-		arg->to_root = database_path;
-		arg->files_list = backup_files_list;
-		arg->prev_filelist = NULL;
-		arg->prev_start_lsn = InvalidXLogRecPtr;
-		arg->backup_conn = NULL;
-		arg->cancel_conn = NULL;
-		arg->index_list = index_list;
-		/* By default there are some error */
-		arg->ret = 1;
-	}
-
-	pgut_atexit_push(threads_conn_disconnect, NULL);
-
-	/* Run threads */
-	elog(INFO, "Start checking data files");
-	for (i = 0; i < num_threads; i++)
-	{
-		backup_files_arg *arg = &(threads_args[i]);
-
-		elog(VERBOSE, "Start thread num: %i", i);
-
-		pthread_create(&threads[i], NULL, check_files, arg);
-	}
-
-	/* Wait threads */
-	for (i = 0; i < num_threads; i++)
-	{
-		pthread_join(threads[i], NULL);
-		if (threads_args[i].ret == 1)
-			backup_isok = false;
-	}
-	if (backup_isok)
-		elog(INFO, "Data files are checked");
-	else
-		elog(ERROR, "Data files checking failed");
-
-	parray_walk(backup_files_list, pgFileFree);
-	parray_free(backup_files_list);
-	backup_files_list = NULL;
 }
 
 /*
@@ -964,9 +866,123 @@ do_backup_instance(void)
 }
 
 /* Entry point of pg_probackup CHECKDB subcommand. */
-/* TODO think about merging it with do_backup */
+/* TODO consider moving some code common with do_backup_instance
+ * to separate function ot to pgdata_basic_setup */
 int
-do_checkdb(bool do_amcheck)
+do_checkdb(bool do_block_validation, bool do_amcheck)
+{
+	int			i;
+	char		database_path[MAXPGPATH];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t	*threads;
+	backup_files_arg *threads_args;
+	bool		backup_isok = true;
+
+	pgdata_basic_setup();
+
+	if (do_block_validation)
+	{
+		pgBackupGetPath(&current, database_path, lengthof(database_path),
+						DATABASE_DIR);
+
+		/* initialize backup list */
+		backup_files_list = parray_new();
+
+		/* list files with the logical path. omit $PGDATA */
+		dir_list_file(backup_files_list, instance_config.pgdata, true, true, false);
+
+		/*
+		* Sort pathname ascending. It is necessary to create intermediate
+		* directories sequentially.
+		*
+		* For example:
+		* 1 - create 'base'
+		* 2 - create 'base/1'
+		*
+		* Sorted array is used at least in parse_backup_filelist_filenames(),
+		* extractPageMap(), make_pagemap_from_ptrack().
+		*/
+		parray_qsort(backup_files_list, pgFileComparePath);
+		/* Extract information about files in backup_list parsing their names:*/
+		parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
+
+		/* setup threads */
+		for (i = 0; i < parray_num(backup_files_list); i++)
+		{
+			pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+			pg_atomic_clear_flag(&file->lock);
+		}
+
+		/* Sort by size for load balancing */
+		parray_qsort(backup_files_list, pgFileCompareSize);
+	}
+
+	if (do_amcheck)
+		index_list = get_index_list();
+
+	/* init thread args with own file lists */
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
+
+	for (i = 0; i < num_threads; i++)
+	{
+		backup_files_arg *arg = &(threads_args[i]);
+
+		arg->from_root = instance_config.pgdata;
+		arg->to_root = database_path;
+		arg->files_list = backup_files_list;
+		arg->index_list = index_list;
+		arg->prev_filelist = NULL;
+		arg->prev_start_lsn = InvalidXLogRecPtr;
+		arg->backup_conn = NULL;
+		arg->cancel_conn = NULL;
+		/* By default there are some error */
+		arg->ret = 1;
+	}
+
+	pgut_atexit_push(threads_conn_disconnect, NULL);
+
+	/* Run threads */
+	elog(INFO, "Start checking data files");
+	for (i = 0; i < num_threads; i++)
+	{
+		backup_files_arg *arg = &(threads_args[i]);
+
+		elog(VERBOSE, "Start thread num: %i", i);
+
+		pthread_create(&threads[i], NULL, check_files, arg);
+	}
+
+	/* Wait threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret == 1)
+			backup_isok = false;
+	}
+	if (backup_isok)
+		elog(INFO, "Data files are checked");
+	else
+		elog(ERROR, "Data files checking failed");
+
+	if (backup_files_list)
+	{
+		parray_walk(backup_files_list, pgFileFree);
+		parray_free(backup_files_list);
+		backup_files_list = NULL;
+	}
+
+	return 0;
+}
+
+/*
+ * Common code for CHECKDB and BACKUP commands.
+ * Ensure that we're able to connect to the instance
+ * check compatibility and fill basic info.
+ * TODO maybe move it to pg_probackup.c
+ */
+static void
+pgdata_basic_setup(void)
 {
 	/* PGDATA is always required */
 	if (instance_config.pgdata == NULL)
@@ -990,7 +1006,6 @@ do_checkdb(bool do_amcheck)
 	/* Confirm that this server version is supported */
 	check_server_version();
 
-	/* Do we need that? */
 	current.checksum_version = get_data_checksum_version(true);
 
 	is_checksum_enabled = pg_checksum_enable();
@@ -1005,9 +1020,6 @@ do_checkdb(bool do_amcheck)
 
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
-
-	do_check_instance(do_amcheck);
-	return 0;
 }
 
 /*
@@ -1016,21 +1028,16 @@ do_checkdb(bool do_amcheck)
 int
 do_backup(time_t start_time)
 {
-	/* PGDATA and BACKUP_MODE are always required */
-	if (instance_config.pgdata == NULL)
-		elog(ERROR, "required parameter not specified: PGDATA "
-						 "(-D, --pgdata)");
+	/*
+	 * setup backup_conn, do some compatibility checks and
+	 * fill basic info about instance
+	 */
+	pgdata_basic_setup();
+
+	/* below perform checks specific for backup command */
 	if (current.backup_mode == BACKUP_MODE_INVALID)
 		elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
-
-	/* Create connection for PostgreSQL */
-	backup_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
-							   instance_config.pgdatabase,
-							   instance_config.pguser);
-	pgut_atexit_push(backup_disconnect, NULL);
-
-	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
 
 #if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(backup_conn))
@@ -1040,31 +1047,10 @@ do_backup(time_t start_time)
 	current.compress_alg = instance_config.compress_alg;
 	current.compress_level = instance_config.compress_level;
 
-	/* Confirm data block size and xlog block size are compatible */
-	confirm_block_size("block_size", BLCKSZ);
-	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
-
-	current.from_replica = pg_is_in_recovery();
-
-	/* Confirm that this server version is supported */
-	check_server_version();
-
 	/* TODO fix it for remote backup*/
 	if (!is_remote_backup)
 		current.checksum_version = get_data_checksum_version(true);
 
-	is_checksum_enabled = pg_checksum_enable();
-
-	if (is_checksum_enabled)
-		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
-					"Data block corruption will be detected");
-	else
-		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
-						"pg_probackup have no way to detect data block corruption without them. "
-						"Reinitialize PGDATA with option '--data-checksums'.");
-
-	StrNCpy(current.server_version, server_version_str,
-			sizeof(current.server_version));
 	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support();
@@ -2374,13 +2360,12 @@ check_files(void *arg)
 {
 	int			i;
 	backup_files_arg *arguments = (backup_files_arg *) arg;
-	int			n_backup_files_list = parray_num(arguments->files_list);
+	int			n_backup_files_list = 0;
 	int			n_indexes = 0;
 	char dbname[NAMEDATALEN];
 
-	/* We only have index_list in amcheck mode */
-	if (arguments->index_list)
-		n_indexes = parray_num(arguments->index_list);
+	if (arguments->files_list)
+		n_backup_files_list = parray_num(arguments->files_list);
 
 	/* check a file */
 	for (i = 0; i < n_backup_files_list; i++)
@@ -2444,8 +2429,10 @@ check_files(void *arg)
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
 
+	/* Check indexes with amcheck */
+	if (arguments->index_list)
+		n_indexes = parray_num(arguments->index_list);
 
-	/* check index with amcheck */
 	/* TODO sort index_list by dbname */
 	for (i = 0; i < n_indexes; i++)
 	{
@@ -3190,7 +3177,7 @@ get_index_list(void)
 	PGresult   *res_db,
 			   *res;
 	const char *dbname;
-	const char *nspname = NULL;
+	char *nspname = NULL;
 	int			i;
 	Oid dbOid, tblspcOid;
 	char *params[2];
@@ -3229,7 +3216,7 @@ get_index_list(void)
 
 		if (PQntuples(res) < 1)
 		{
-			elog(VERBOSE, "extension amcheck is not installed in database %s", dbname);
+			elog(WARNING, "extension amcheck is not installed in database %s", dbname);
 			continue;
 		}
 

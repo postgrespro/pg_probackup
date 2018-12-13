@@ -401,7 +401,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time);
-extern int do_checkdb(bool do_amcheck);
+extern int do_checkdb(bool do_block_validation, bool do_amcheck);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,

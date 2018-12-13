@@ -86,6 +86,7 @@ bool restore_no_validate = false;
 
 bool skip_block_validation = false;
 
+bool do_block_validation = false;
 bool do_amcheck = false;
 
 /* delete options */
@@ -155,6 +156,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 155, "amcheck", &do_amcheck,	SOURCE_CMD_STRICT },
+	{ 'b', 156, "block-validation", &do_block_validation,	SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
@@ -542,7 +544,7 @@ main(int argc, char *argv[])
 			do_set_config();
 			break;
 		case CHECKDB_CMD:
-			do_checkdb(do_amcheck);
+			do_checkdb(do_block_validation, do_amcheck);
 			break;
 		case NO_CMD:
 			/* Should not happen */
