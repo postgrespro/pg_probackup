@@ -1123,7 +1123,7 @@ class ProbackupTest(object):
         for directory in restored_pgdata['dirs']:
             if directory not in original_pgdata['dirs']:
                 fail = True
-                error_message += '\nDirectory is not present'
+                error_message += '\nDirectory was not present'
                 error_message += ' in original PGDATA: {0}\n'.format(
                     os.path.join(restored_pgdata['pgdata'], directory))
 
