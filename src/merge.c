@@ -208,10 +208,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(to_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	to_files = dir_read_file_list(from_database_path, /* Use from_database_path
-													   * so root path will be
-													   * equal with 'files' */
-								  control_file);
+	to_files = dir_read_file_list(NULL, control_file);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(to_files, pgFileComparePathDesc);
 	/*
@@ -219,7 +216,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(from_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	files = dir_read_file_list(from_database_path, control_file);
+	files = dir_read_file_list(NULL, control_file);
 	/* sort by size for load balancing */
 	parray_qsort(files, pgFileCompareSize);
 
@@ -331,8 +328,18 @@ delete_source_backup:
 
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
+			char		to_file_path[MAXPGPATH];
+			char	   *prev_path;
+
+			/* We need full path, file object has relative path */
+			join_path_components(to_file_path, to_database_path, file->path);
+			prev_path = file->path;
+			file->path = to_file_path;
+
 			pgFileDelete(file);
 			elog(VERBOSE, "Deleted \"%s\"", file->path);
+
+			file->path = prev_path;
 		}
 	}
 
@@ -378,13 +385,14 @@ merge_files(void *arg)
 	pgBackup   *from_backup = argument->from_backup;
 	int			i,
 				num_files = parray_num(argument->files);
-	int			to_root_len = strlen(argument->to_root);
 
 	for (i = 0; i < num_files; i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(argument->files, i);
 		pgFile	   *to_file;
 		pgFile	  **res_file;
+		char		from_file_path[MAXPGPATH];
+		char	   *prev_file_path;
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
@@ -429,19 +437,23 @@ merge_files(void *arg)
 			continue;
 		}
 
+		/* We need to make full path, file object has relative path */
+		join_path_components(from_file_path, argument->from_root, file->path);
+		prev_file_path = file->path;
+		file->path = from_file_path;
+
 		/*
 		 * Move the file. We need to decompress it and compress again if
 		 * necessary.
 		 */
-		elog(VERBOSE, "Moving file \"%s\", is_datafile %d, is_cfs %d",
+		elog(VERBOSE, "Merging file \"%s\", is_datafile %d, is_cfs %d",
 			 file->path, file->is_database, file->is_cfs);
 
 		if (file->is_datafile && !file->is_cfs)
 		{
-			char		to_path_tmp[MAXPGPATH];	/* Path of target file */
+			char		to_file_path[MAXPGPATH];	/* Path of target file */
 
-			join_path_components(to_path_tmp, argument->to_root,
-								 file->path + to_root_len + 1);
+			join_path_components(to_file_path, argument->to_root, prev_file_path);
 
 			/*
 			 * We need more complicate algorithm if target file should be
@@ -453,7 +465,7 @@ merge_files(void *arg)
 				char		tmp_file_path[MAXPGPATH];
 				char	   *prev_path;
 
-				snprintf(tmp_file_path, MAXPGPATH, "%s_tmp", to_path_tmp);
+				snprintf(tmp_file_path, MAXPGPATH, "%s_tmp", to_file_path);
 
 				/* Start the magic */
 
@@ -479,7 +491,7 @@ merge_files(void *arg)
 					 * need the file in directory to_root.
 					 */
 					prev_path = to_file->path;
-					to_file->path = to_path_tmp;
+					to_file->path = to_file_path;
 					/* Decompress target file into temporary one */
 					restore_data_file(tmp_file_path, to_file, false, false,
 									  parse_program_version(to_backup->program_version));
@@ -494,7 +506,7 @@ merge_files(void *arg)
 								  false,
 								  parse_program_version(from_backup->program_version));
 
-				elog(VERBOSE, "Compress file and save it to the directory \"%s\"",
+				elog(VERBOSE, "Compress file and save it into the directory \"%s\"",
 					 argument->to_root);
 
 				/* Again we need to change path */
@@ -504,7 +516,7 @@ merge_files(void *arg)
 				file->size = pgFileSize(file->path);
 				/* Now we can compress the file */
 				backup_data_file(NULL, /* We shouldn't need 'arguments' here */
-								 to_path_tmp, file,
+								 to_file_path, file,
 								 to_backup->start_lsn,
 								 to_backup->backup_mode,
 								 to_backup->compress_alg,
@@ -523,7 +535,7 @@ merge_files(void *arg)
 			else
 			{
 				/* We can merge in-place here */
-				restore_data_file(to_path_tmp, file,
+				restore_data_file(to_file_path, file,
 								  from_backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
 								  true,
 								  parse_program_version(from_backup->program_version));
@@ -532,8 +544,8 @@ merge_files(void *arg)
 				 * We need to calculate write_size, restore_data_file() doesn't
 				 * do that.
 				 */
-				file->write_size = pgFileSize(to_path_tmp);
-				file->crc = pgFileGetCRC(to_path_tmp, true, true, NULL);
+				file->write_size = pgFileSize(to_file_path);
+				file->crc = pgFileGetCRC(to_file_path, true, true, NULL);
 			}
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
@@ -548,8 +560,11 @@ merge_files(void *arg)
 		file->compress_alg = to_backup->compress_alg;
 
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Moved file \"%s\": " INT64_FORMAT " bytes",
+			elog(LOG, "Merged file \"%s\": " INT64_FORMAT " bytes",
 				 file->path, file->write_size);
+
+		/* Restore relative path */
+		file->path = prev_file_path;
 	}
 
 	/* Data files merging is successful */
