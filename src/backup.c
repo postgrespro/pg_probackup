@@ -100,11 +100,16 @@ static void threads_conn_disconnect(bool fatal, void *userdata);
 static void pgdata_basic_setup(void);
 
 static void *backup_files(void *arg);
-static void *check_files(void *arg);
 static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
-static parray* get_index_list(void);
+
+static void do_block_validation(void);
+static void do_amcheck(void);
+static void *check_files(void *arg);
+static void *check_indexes(void *arg);
+static parray* get_index_list(PGresult* res_db, int db_number,
+							  bool* first_db_with_amcheck, PGconn* db_conn);
 static bool amcheck_one_index(backup_files_arg *arguments,
 				 pg_indexEntry *ind);
 
@@ -865,11 +870,8 @@ do_backup_instance(void)
 	backup_files_list = NULL;
 }
 
-/* Entry point of pg_probackup CHECKDB subcommand. */
-/* TODO consider moving some code common with do_backup_instance
- * to separate function ot to pgdata_basic_setup */
-int
-do_checkdb(bool do_block_validation, bool do_amcheck)
+static void
+do_block_validation(void)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -878,54 +880,40 @@ do_checkdb(bool do_block_validation, bool do_amcheck)
 	backup_files_arg *threads_args;
 	bool		backup_isok = true;
 
-	pgdata_basic_setup();
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
 
-	if (do_block_validation)
+	/* initialize backup list */
+	backup_files_list = parray_new();
+
+	/* list files with the logical path. omit $PGDATA */
+	dir_list_file(backup_files_list, instance_config.pgdata, true, true, false);
+
+	/*
+	 * Sort pathname ascending. It is necessary to create intermediate
+	 * directories sequentially.
+	 *
+	 * For example:
+	 * 1 - create 'base'
+	 * 2 - create 'base/1'
+	 *
+	 * Sorted array is used at least in parse_backup_filelist_filenames(),
+	 * extractPageMap(), make_pagemap_from_ptrack().
+	 */
+	parray_qsort(backup_files_list, pgFileComparePath);
+	/* Extract information about files in backup_list parsing their names:*/
+	parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
+
+	/* setup threads */
+	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
-		pgBackupGetPath(&current, database_path, lengthof(database_path),
-						DATABASE_DIR);
-
-		/* initialize backup list */
-		backup_files_list = parray_new();
-
-		/* list files with the logical path. omit $PGDATA */
-		dir_list_file(backup_files_list, instance_config.pgdata, true, true, false);
-
-		/*
-		* Sort pathname ascending. It is necessary to create intermediate
-		* directories sequentially.
-		*
-		* For example:
-		* 1 - create 'base'
-		* 2 - create 'base/1'
-		*
-		* Sorted array is used at least in parse_backup_filelist_filenames(),
-		* extractPageMap(), make_pagemap_from_ptrack().
-		*/
-		parray_qsort(backup_files_list, pgFileComparePath);
-		/* Extract information about files in backup_list parsing their names:*/
-		parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
-
-		/* setup threads */
-		for (i = 0; i < parray_num(backup_files_list); i++)
-		{
-			pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-			pg_atomic_clear_flag(&file->lock);
-		}
-
-		/* Sort by size for load balancing */
-		parray_qsort(backup_files_list, pgFileCompareSize);
+		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+		pg_atomic_clear_flag(&file->lock);
 	}
 
-	if (do_amcheck)
-	{
-		index_list = get_index_list();
+	/* Sort by size for load balancing */
+	parray_qsort(backup_files_list, pgFileCompareSize);
 
-		/* no need to setup threads. there's nothing to do */
-		if ((!index_list) & (!do_block_validation))
-			elog(ERROR, "Cannot perform 'checkdb --amcheck', since "
-						"this backup instance does not contain any databases with amcheck installed");
-	}
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -938,7 +926,7 @@ do_checkdb(bool do_block_validation, bool do_amcheck)
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
 		arg->files_list = backup_files_list;
-		arg->index_list = index_list;
+		arg->index_list = NULL;
 		arg->prev_filelist = NULL;
 		arg->prev_start_lsn = InvalidXLogRecPtr;
 		arg->backup_conn = NULL;
@@ -982,6 +970,122 @@ do_checkdb(bool do_block_validation, bool do_amcheck)
 		parray_free(backup_files_list);
 		backup_files_list = NULL;
 	}
+}
+
+static void
+do_amcheck(void)
+{
+	int			i;
+	char		database_path[MAXPGPATH];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t	*threads;
+	backup_files_arg *threads_args;
+	bool		backup_isok = true;
+	const char *dbname;
+	PGresult   *res_db;
+	int n_databases = 0;
+	bool first_db_with_amcheck = false;
+	PGconn *db_conn = NULL;
+	
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
+
+	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
+						  0, NULL);
+	n_databases =  PQntuples(res_db);
+	elog(WARNING, "number of databases found: %d", n_databases);
+
+	/* TODO Warn user that one connection is used for snaphot */
+	if (num_threads > 1)
+		num_threads--;
+
+	/* For each database check indexes. In parallel. */
+	for(i = 0; i < n_databases; i++)
+	{
+		if (index_list != NULL)
+			free(index_list);
+
+		elog(WARNING, "get index list for db %d of %d", i, n_databases);
+		index_list = get_index_list(res_db, i,
+									&first_db_with_amcheck, db_conn);
+		if (index_list == NULL)
+		{
+			if (db_conn)
+				pgut_disconnect(db_conn);
+			continue;
+		}
+
+		/* init thread args with own file lists */
+		threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+		threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
+
+		for (i = 0; i < num_threads; i++)
+		{
+			backup_files_arg *arg = &(threads_args[i]);
+
+			arg->from_root = instance_config.pgdata;
+			arg->to_root = database_path;
+			arg->files_list = NULL;
+			arg->index_list = index_list;
+			arg->prev_filelist = NULL;
+			arg->prev_start_lsn = InvalidXLogRecPtr;
+			arg->backup_conn = NULL;
+			arg->cancel_conn = NULL;
+			/* By default there are some error */
+			arg->ret = 1;
+		}
+
+		pgut_atexit_push(threads_conn_disconnect, NULL);
+
+		/* TODO write better info message */
+		elog(INFO, "Start checking data files");
+
+		/* Run threads */
+		for (i = 0; i < num_threads; i++)
+		{
+			backup_files_arg *arg = &(threads_args[i]);
+
+			elog(VERBOSE, "Start thread num: %i", i);
+
+			pthread_create(&threads[i], NULL, check_indexes, arg);
+		}
+
+		/* Wait threads */
+		for (i = 0; i < num_threads; i++)
+		{
+			pthread_join(threads[i], NULL);
+			if (threads_args[i].ret == 1)
+				backup_isok = false;
+		}
+		pgut_disconnect(db_conn);
+	}
+
+	/* TODO write better info message */
+	if (backup_isok)
+		elog(INFO, "Indexes  are checked");
+	else
+		elog(ERROR, "Indexs checking failed");
+
+	if (backup_files_list)
+	{
+		parray_walk(backup_files_list, pgFileFree);
+		parray_free(backup_files_list);
+		backup_files_list = NULL;
+	}
+}
+
+/* Entry point of pg_probackup CHECKDB subcommand. */
+/* TODO consider moving some code common with do_backup_instance
+ * to separate function ot to pgdata_basic_setup */
+int
+do_checkdb(bool need_block_validation, bool need_amcheck)
+{
+	pgdata_basic_setup();
+
+	if (need_block_validation)
+		do_block_validation();
+	if (need_amcheck)
+		do_amcheck();
 
 	return 0;
 }
@@ -2372,7 +2476,6 @@ check_files(void *arg)
 	int			i;
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int			n_backup_files_list = 0;
-	int			n_indexes = 0;
 	char dbname[NAMEDATALEN];
 
 	if (arguments->files_list)
@@ -2440,11 +2543,29 @@ check_files(void *arg)
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
 
+	/* Close connection */
+	if (arguments->backup_conn)
+		pgut_disconnect(arguments->backup_conn);
+
+	/* Data files transferring is successful */
+	/* TODO  where should we set arguments->ret to 1? */
+	arguments->ret = 0;
+
+	return NULL;
+}
+
+static void *
+check_indexes(void *arg)
+{
+	int			i;
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int			n_indexes = 0;
+
 	/* Check indexes with amcheck */
 	if (arguments->index_list)
 		n_indexes = parray_num(arguments->index_list);
 
-	/* TODO sort index_list by dbname */
+	elog(WARNING, "n_indexes %d", n_indexes);
 	for (i = 0; i < n_indexes; i++)
 	{
 		pg_indexEntry *ind = (pg_indexEntry *) parray_get(arguments->index_list, i);
@@ -2456,19 +2577,33 @@ check_files(void *arg)
 		if (interrupted)
 			elog(ERROR, "interrupted during checkdb --amcheck");
 
-		elog(VERBOSE, "Checking index:  \"%s\" ", ind->name);
+		elog(VERBOSE, "Checking index number %d of %d :  \"%s\" ", i,n_indexes, ind->name);
 
-		/* reconnect, if index to check is in another database */
-		if (strcmp((const char *) &dbname, ind->dbname) != 0)
+		if (arguments->backup_conn == NULL)
 		{
-			if (arguments->backup_conn)
-				pgut_disconnect(arguments->backup_conn);
+			PGresult   *res;
+			char		*query;
 
 			arguments->backup_conn = pgut_connect(instance_config.pghost,
 												instance_config.pgport,
 												ind->dbname,
 												instance_config.pguser);
 			arguments->cancel_conn = PQgetCancel(arguments->backup_conn);
+
+			res = pgut_execute_parallel(arguments->backup_conn,
+										arguments->cancel_conn,
+									"BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;", 0, NULL, false);
+			PQclear(res);
+
+			query = palloc(strlen("SET TRANSACTION SNAPSHOT '' ") + strlen(ind->snapshot));
+			sprintf(query, "SET TRANSACTION SNAPSHOT '%s'", ind->snapshot);
+
+			res = pgut_execute_parallel(arguments->backup_conn,
+										arguments->cancel_conn,
+										query, 0, NULL, false);
+			PQclear(res);
+
+			free(query);
 		}
 
 		amcheck_one_index(arguments, ind);
@@ -3183,117 +3318,136 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 
 /* Clear ptrack files in all databases of the instance we connected to */
 static parray*
-get_index_list(void)
+get_index_list(PGresult *res_db, int db_number,
+			   bool *first_db_with_amcheck, PGconn *db_conn)
 {
-	PGresult   *res_db,
-			   *res;
-	const char *dbname;
+	PGresult   *res;
 	char *nspname = NULL;
-	int			i;
+	char *snapshot = NULL;
 	Oid dbOid, tblspcOid;
-	char *params[2];
 	Oid indexrelid;
-	bool first_db_with_amcheck = true;
+	int i;
 
-	params[0] = palloc(64);
-	params[1] = palloc(64);
-	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
-						  0, NULL);
+	dbname = PQgetvalue(res_db, db_number, 0);
+	if (strcmp(dbname, "template0") == 0)
+		return NULL;
 
-	for(i = 0; i < PQntuples(res_db); i++)
+	elog(WARNING, "get_index_list db_number %d dbname %s", db_number, dbname);
+
+	dbOid = atoi(PQgetvalue(res_db, db_number, 1));
+	tblspcOid = atoi(PQgetvalue(res_db, db_number, 2));
+
+	db_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+							dbname,
+							instance_config.pguser);
+
+	res = pgut_execute(db_conn, "select extname, nspname, extversion from pg_namespace "
+									"n join pg_extension e on n.oid=e.extnamespace where e.extname='amcheck'",
+									0, NULL);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		PGconn	   *tmp_conn;
-
-		dbname = PQgetvalue(res_db, i, 0);
-		if (strcmp(dbname, "template0") == 0)
-			continue;
-
-		dbOid = atoi(PQgetvalue(res_db, i, 1));
-		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
-
-		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
-								dbname,
-								instance_config.pguser);
-
-		res = pgut_execute(tmp_conn, "select extname, nspname, extversion from pg_namespace "
-									 "n join pg_extension e on n.oid=e.extnamespace where e.extname='amcheck'",
-									 0, NULL);
-
-		if (PQresultStatus(res) != PGRES_TUPLES_OK)
-		{
-			PQclear(res);
-			elog(ERROR, "cannot check if amcheck is installed in database %s: %s",
-				dbname, PQerrorMessage(tmp_conn));
-		}
-
-		if (PQntuples(res) < 1)
-		{
-			elog(WARNING, "extension amcheck is not installed in database %s", dbname);
-			continue;
-		}
-
-		if (nspname)
-			free(nspname);
-
-		nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
-		strcpy(nspname, PQgetvalue(res, 0, 1));
-
 		PQclear(res);
-
-		/*
-		 * In order to avoid duplicates, select global indexes
-		 * (tablespace pg_global with oid 1664) only once
-		 */
-		if (first_db_with_amcheck)
-		{
-			res = pgut_execute(tmp_conn, "SELECT cls.oid, cls.relname"
-									 " FROM pg_index idx "
-									 " JOIN pg_class cls ON cls.oid=idx.indexrelid "
-									 " JOIN pg_am am ON am.oid=cls.relam "
-									 " WHERE am.amname='btree' AND cls.relpersistence != 't'"
-									 " AND idx.indisready AND idx.indisvalid; ", 0, NULL);
-			first_db_with_amcheck = false;
-		}
-		else
-			res = pgut_execute(tmp_conn, "SELECT cls.oid, cls.relname"
-									 " FROM pg_index idx "
-									 " JOIN pg_class cls ON cls.oid=idx.indexrelid "
-									 " JOIN pg_am am ON am.oid=cls.relam "
-									 " WHERE am.amname='btree' AND cls.relpersistence != 't'"
-									 " AND idx.indisready AND idx.indisvalid AND cls.reltablespace!=1664; ", 0, NULL);
-
-
-		/* add info needed to check indexes into index_list */
-		for(i = 0; i < PQntuples(res); i++)
-		{
-			pg_indexEntry *ind = (pg_indexEntry *) pgut_malloc(sizeof(pg_indexEntry));
-			char *name = NULL;
-
-			ind->indexrelid = atoi(PQgetvalue(res, i, 0));
-			name = PQgetvalue(res, i, 1);
-			ind->name = pgut_malloc(strlen(name) + 1);
-			strcpy(ind->name, name);	/* enough buffer size guaranteed */
-
-			ind->dbname = pgut_malloc(strlen(dbname) + 1);
-			strcpy(ind->dbname, dbname);	/* enough buffer size guaranteed */
-
-			ind->amcheck_nspname = pgut_malloc(strlen(nspname) + 1);
-			strcpy(ind->amcheck_nspname, nspname);
-			pg_atomic_clear_flag(&ind->lock);
-
-			if (index_list == NULL)
-				index_list = parray_new();
-
-			parray_append(index_list, ind);
-		}
-
-		PQclear(res);
-		pgut_disconnect(tmp_conn);
+		elog(ERROR, "cannot check if amcheck is installed in database %s: %s",
+			dbname, PQerrorMessage(db_conn));
 	}
 
-	pfree(params[0]);
-	pfree(params[1]);
-	PQclear(res_db);
+	if (PQntuples(res) < 1)
+	{
+		elog(WARNING, "extension amcheck is not installed in database %s", dbname);
+		return NULL;
+	}
+
+	nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
+	strcpy(nspname, PQgetvalue(res, 0, 1));
+	elog(WARNING, "index_list for db %s nspname %s", dbname, nspname);
+
+	/*
+	 * In order to avoid duplicates, select global indexes
+	 * (tablespace pg_global with oid 1664) only once
+	 */
+	if (*first_db_with_amcheck)
+	{
+		elog(WARNING, "FIRST AMCHECK for db %s nspname %s", dbname, nspname);
+		res = pgut_execute(db_conn, "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;", 0, NULL);
+		PQclear(res);
+
+		res = pgut_execute(db_conn, "SELECT pg_export_snapshot();", 0, NULL);
+
+		if (PQntuples(res) < 1)
+			elog(ERROR, "Failed to export snapshot for amcheck in database %s", dbname);
+
+		snapshot = pgut_malloc(strlen(PQgetvalue(res, 0, 0)) + 1);
+		strcpy(snapshot, PQgetvalue(res, 0, 0));
+
+		elog(WARNING, "exported snapshot '%s'", snapshot);
+		PQclear(res);
+
+		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname"
+									" FROM pg_index idx "
+									" JOIN pg_class cls ON cls.oid=idx.indexrelid "
+									" JOIN pg_am am ON am.oid=cls.relam "
+									" WHERE am.amname='btree' AND cls.relpersistence != 't'"
+									" AND idx.indisready AND idx.indisvalid; ", 0, NULL);
+		*first_db_with_amcheck = false;
+	}
+	else
+	{
+		elog(WARNING, "NOT FIRST AMCHECK for db %s nspname %s", dbname, nspname);
+
+		res = pgut_execute(db_conn, "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;", 0, NULL);
+		PQclear(res);
+
+		res = pgut_execute(db_conn, "SELECT pg_export_snapshot();", 0, NULL);
+
+		if (PQntuples(res) < 1)
+			elog(ERROR, "Failed to export snapshot for amcheck in database %s", dbname);
+
+		if (snapshot)
+			free(snapshot);
+		snapshot = pgut_malloc(strlen(PQgetvalue(res, 0, 0)) + 1);
+		strcpy(snapshot, PQgetvalue(res, 0, 0));
+
+		elog(WARNING, "exported snapshot '%s'", snapshot);
+		PQclear(res);
+
+		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname"
+									" FROM pg_index idx "
+									" JOIN pg_class cls ON cls.oid=idx.indexrelid "
+									" JOIN pg_am am ON am.oid=cls.relam "
+									" WHERE am.amname='btree' AND cls.relpersistence != 't'"
+									" AND idx.indisready AND idx.indisvalid AND cls.reltablespace!=1664; ", 0, NULL);
+	}
+
+	/* add info needed to check indexes into index_list */
+	for(i = 0; i < PQntuples(res); i++)
+	{
+		pg_indexEntry *ind = (pg_indexEntry *) pgut_malloc(sizeof(pg_indexEntry));
+		char *name = NULL;
+
+		ind->indexrelid = atoi(PQgetvalue(res, i, 0));
+		name = PQgetvalue(res, i, 1);
+		ind->name = pgut_malloc(strlen(name) + 1);
+		strcpy(ind->name, name);	/* enough buffer size guaranteed */
+
+		ind->dbname = pgut_malloc(strlen(dbname) + 1);
+		strcpy(ind->dbname, dbname);
+
+		ind->snapshot = pgut_malloc(strlen(snapshot) + 1);
+		strcpy(ind->snapshot, snapshot);
+
+		ind->amcheck_nspname = pgut_malloc(strlen(nspname) + 1);
+		strcpy(ind->amcheck_nspname, nspname);
+		pg_atomic_clear_flag(&ind->lock);
+
+		if (index_list == NULL)
+			index_list = parray_new();
+
+// 		elog(WARNING, "add to index_list index '%s' dbname '%s'",ind->name, ind->dbname);
+		parray_append(index_list, ind);
+	}
+
+	PQclear(res);
 
 	return index_list;
 }
@@ -3310,6 +3464,8 @@ amcheck_one_index(backup_files_arg *arguments,
 	params[0] = palloc(64);
 
 	sprintf(params[0], "%i", ind->indexrelid);
+
+// 	elog(WARNING, "amcheck_one_index %s", ind->name);
 
 	query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1)")+1);
 	sprintf(query, "SELECT %s.bt_index_check($1)", ind->amcheck_nspname);

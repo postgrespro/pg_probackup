@@ -134,6 +134,7 @@ typedef struct pg_indexEntry
 	Oid indexrelid;
 	char *name;
 	char *dbname;
+	char *snapshot; /* snapshot for index check */
 	char *amcheck_nspname; /* schema where amcheck extention is located */
 	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
 } pg_indexEntry;
@@ -401,7 +402,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time);
-extern int do_checkdb(bool do_block_validation, bool do_amcheck);
+extern int do_checkdb(bool need_block_validation, bool need_amcheck);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
