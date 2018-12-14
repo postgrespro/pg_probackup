@@ -582,7 +582,7 @@ compress_init(void)
 	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
 	{
 #ifndef HAVE_LIBZ
-		if (compress_alg == ZLIB_COMPRESS)
+		if (instance_config.compress_alg == ZLIB_COMPRESS)
 			elog(ERROR, "This build does not support zlib compression");
 		else
 #endif
