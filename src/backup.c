@@ -981,10 +981,9 @@ do_amcheck(void)
 	pthread_t	*threads;
 	backup_files_arg *threads_args;
 	bool		backup_isok = true;
-	const char *dbname;
 	PGresult   *res_db;
 	int n_databases = 0;
-	bool first_db_with_amcheck = false;
+	bool first_db_with_amcheck = true;
 	PGconn *db_conn = NULL;
 	
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
@@ -993,7 +992,6 @@ do_amcheck(void)
 	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
 						  0, NULL);
 	n_databases =  PQntuples(res_db);
-	elog(WARNING, "number of databases found: %d", n_databases);
 
 	/* TODO Warn user that one connection is used for snaphot */
 	if (num_threads > 1)
@@ -1002,10 +1000,14 @@ do_amcheck(void)
 	/* For each database check indexes. In parallel. */
 	for(i = 0; i < n_databases; i++)
 	{
-		if (index_list != NULL)
-			free(index_list);
+		int j;
 
-		elog(WARNING, "get index list for db %d of %d", i, n_databases);
+		if (index_list != NULL)
+		{
+			free(index_list);
+			index_list = NULL;
+		}
+
 		index_list = get_index_list(res_db, i,
 									&first_db_with_amcheck, db_conn);
 		if (index_list == NULL)
@@ -1019,9 +1021,9 @@ do_amcheck(void)
 		threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 		threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
 
-		for (i = 0; i < num_threads; i++)
+		for (j = 0; j < num_threads; j++)
 		{
-			backup_files_arg *arg = &(threads_args[i]);
+			backup_files_arg *arg = &(threads_args[j]);
 
 			arg->from_root = instance_config.pgdata;
 			arg->to_root = database_path;
@@ -1037,24 +1039,23 @@ do_amcheck(void)
 
 		pgut_atexit_push(threads_conn_disconnect, NULL);
 
-		/* TODO write better info message */
-		elog(INFO, "Start checking data files");
+		elog(INFO, "Start checking indexes with amcheck");
 
 		/* Run threads */
-		for (i = 0; i < num_threads; i++)
+		for (j = 0; j < num_threads; j++)
 		{
-			backup_files_arg *arg = &(threads_args[i]);
+			backup_files_arg *arg = &(threads_args[j]);
 
-			elog(VERBOSE, "Start thread num: %i", i);
+			elog(VERBOSE, "Start thread num: %i", j);
 
-			pthread_create(&threads[i], NULL, check_indexes, arg);
+			pthread_create(&threads[j], NULL, check_indexes, arg);
 		}
 
 		/* Wait threads */
-		for (i = 0; i < num_threads; i++)
+		for (j = 0; j < num_threads; j++)
 		{
-			pthread_join(threads[i], NULL);
-			if (threads_args[i].ret == 1)
+			pthread_join(threads[j], NULL);
+			if (threads_args[j].ret == 1)
 				backup_isok = false;
 		}
 		pgut_disconnect(db_conn);
@@ -1062,7 +1063,7 @@ do_amcheck(void)
 
 	/* TODO write better info message */
 	if (backup_isok)
-		elog(INFO, "Indexes  are checked");
+		elog(INFO, "Indexes are checked");
 	else
 		elog(ERROR, "Indexs checking failed");
 
@@ -2476,7 +2477,6 @@ check_files(void *arg)
 	int			i;
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int			n_backup_files_list = 0;
-	char dbname[NAMEDATALEN];
 
 	if (arguments->files_list)
 		n_backup_files_list = parray_num(arguments->files_list);
@@ -2536,7 +2536,8 @@ check_files(void *arg)
 				join_path_components(to_path, arguments->to_root,
 									 file->path + strlen(arguments->from_root) + 1);
 
-				check_data_file(arguments, file);
+				if (!check_data_file(arguments, file))
+					arguments->ret = 1;
 			}
 		}
 		else
@@ -2565,7 +2566,6 @@ check_indexes(void *arg)
 	if (arguments->index_list)
 		n_indexes = parray_num(arguments->index_list);
 
-	elog(WARNING, "n_indexes %d", n_indexes);
 	for (i = 0; i < n_indexes; i++)
 	{
 		pg_indexEntry *ind = (pg_indexEntry *) parray_get(arguments->index_list, i);
@@ -2606,14 +2606,15 @@ check_indexes(void *arg)
 			free(query);
 		}
 
-		amcheck_one_index(arguments, ind);
+		/* remember that we have a failed check */
+		if (!amcheck_one_index(arguments, ind))
+			arguments->ret = 1;
 	}
 
 	/* Close connection */
 	if (arguments->backup_conn)
 		pgut_disconnect(arguments->backup_conn);
 
-	/* Data files transferring is successful */
 	/* TODO  where should we set arguments->ret to 1? */
 	arguments->ret = 0;
 
@@ -3324,18 +3325,11 @@ get_index_list(PGresult *res_db, int db_number,
 	PGresult   *res;
 	char *nspname = NULL;
 	char *snapshot = NULL;
-	Oid dbOid, tblspcOid;
-	Oid indexrelid;
 	int i;
 
 	dbname = PQgetvalue(res_db, db_number, 0);
 	if (strcmp(dbname, "template0") == 0)
 		return NULL;
-
-	elog(WARNING, "get_index_list db_number %d dbname %s", db_number, dbname);
-
-	dbOid = atoi(PQgetvalue(res_db, db_number, 1));
-	tblspcOid = atoi(PQgetvalue(res_db, db_number, 2));
 
 	db_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
 							dbname,
@@ -3360,7 +3354,6 @@ get_index_list(PGresult *res_db, int db_number,
 
 	nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
 	strcpy(nspname, PQgetvalue(res, 0, 1));
-	elog(WARNING, "index_list for db %s nspname %s", dbname, nspname);
 
 	/*
 	 * In order to avoid duplicates, select global indexes
@@ -3368,7 +3361,6 @@ get_index_list(PGresult *res_db, int db_number,
 	 */
 	if (*first_db_with_amcheck)
 	{
-		elog(WARNING, "FIRST AMCHECK for db %s nspname %s", dbname, nspname);
 		res = pgut_execute(db_conn, "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;", 0, NULL);
 		PQclear(res);
 
@@ -3380,7 +3372,6 @@ get_index_list(PGresult *res_db, int db_number,
 		snapshot = pgut_malloc(strlen(PQgetvalue(res, 0, 0)) + 1);
 		strcpy(snapshot, PQgetvalue(res, 0, 0));
 
-		elog(WARNING, "exported snapshot '%s'", snapshot);
 		PQclear(res);
 
 		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname"
@@ -3393,8 +3384,6 @@ get_index_list(PGresult *res_db, int db_number,
 	}
 	else
 	{
-		elog(WARNING, "NOT FIRST AMCHECK for db %s nspname %s", dbname, nspname);
-
 		res = pgut_execute(db_conn, "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;", 0, NULL);
 		PQclear(res);
 
@@ -3408,7 +3397,6 @@ get_index_list(PGresult *res_db, int db_number,
 		snapshot = pgut_malloc(strlen(PQgetvalue(res, 0, 0)) + 1);
 		strcpy(snapshot, PQgetvalue(res, 0, 0));
 
-		elog(WARNING, "exported snapshot '%s'", snapshot);
 		PQclear(res);
 
 		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname"
@@ -3459,13 +3447,12 @@ amcheck_one_index(backup_files_arg *arguments,
 {
 	PGresult   *res;
 	char	   *params[1];
-	char	   *result;
 	char		*query;
 	params[0] = palloc(64);
 
 	sprintf(params[0], "%i", ind->indexrelid);
 
-// 	elog(WARNING, "amcheck_one_index %s", ind->name);
+	elog(VERBOSE, "amcheck index: '%s'", ind->name);
 
 	query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1)")+1);
 	sprintf(query, "SELECT %s.bt_index_check($1)", ind->amcheck_nspname);
