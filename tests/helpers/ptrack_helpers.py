@@ -122,15 +122,15 @@ def slow_start(self, replica=False):
         while True:
             try:
                 self.poll_query_until(
-                    "postgres",
-                    "SELECT not pg_is_in_recovery()")
+                    'postgres',
+                    'SELECT not pg_is_in_recovery()')
                 break
             except Exception as e:
                 continue
     else:
         self.poll_query_until(
-            "postgres",
-            "SELECT pg_is_in_recovery()")
+            'postgres',
+            'SELECT pg_is_in_recovery()')
 
 #        while True:
 #            try:
@@ -155,18 +155,18 @@ class ProbackupTest(object):
 
         self.test_env = os.environ.copy()
         envs_list = [
-            "LANGUAGE",
-            "LC_ALL",
-            "PGCONNECT_TIMEOUT",
-            "PGDATA",
-            "PGDATABASE",
-            "PGHOSTADDR",
-            "PGREQUIRESSL",
-            "PGSERVICE",
-            "PGSSLMODE",
-            "PGUSER",
-            "PGPORT",
-            "PGHOST"
+            'LANGUAGE',
+            'LC_ALL',
+            'PGCONNECT_TIMEOUT',
+            'PGDATA',
+            'PGDATABASE',
+            'PGHOSTADDR',
+            'PGREQUIRESSL',
+            'PGSERVICE',
+            'PGSSLMODE',
+            'PGUSER',
+            'PGPORT',
+            'PGHOST'
         ]
 
         for e in envs_list:
@@ -175,8 +175,8 @@ class ProbackupTest(object):
             except:
                 pass
 
-        self.test_env["LC_MESSAGES"] = "C"
-        self.test_env["LC_TIME"] = "C"
+        self.test_env['LC_MESSAGES'] = 'C'
+        self.test_env['LC_TIME'] = 'C'
 
         self.paranoia = False
         if 'PG_PROBACKUP_PARANOIA' in self.test_env:
@@ -210,19 +210,19 @@ class ProbackupTest(object):
 
         self.user = self.get_username()
         self.probackup_path = None
-        if "PGPROBACKUPBIN" in self.test_env:
+        if 'PGPROBACKUPBIN' in self.test_env:
             if (
-                os.path.isfile(self.test_env["PGPROBACKUPBIN"]) and
-                os.access(self.test_env["PGPROBACKUPBIN"], os.X_OK)
+                os.path.isfile(self.test_env['PGPROBACKUPBIN']) and
+                os.access(self.test_env['PGPROBACKUPBIN'], os.X_OK)
             ):
-                self.probackup_path = self.test_env["PGPROBACKUPBIN"]
+                self.probackup_path = self.test_env['PGPROBACKUPBIN']
             else:
                 if self.verbose:
                     print('PGPROBACKUPBIN is not an executable file')
 
         if not self.probackup_path:
             probackup_path_tmp = os.path.join(
-                testgres.get_pg_config()["BINDIR"], 'pg_probackup')
+                testgres.get_pg_config()['BINDIR'], 'pg_probackup')
 
             if os.path.isfile(probackup_path_tmp):
                 if not os.access(probackup_path_tmp, os.X_OK):
@@ -233,7 +233,7 @@ class ProbackupTest(object):
 
         if not self.probackup_path:
             probackup_path_tmp = os.path.abspath(os.path.join(
-                self.dir_path, "../pg_probackup"))
+                self.dir_path, '../pg_probackup'))
 
             if os.path.isfile(probackup_path_tmp):
                 if not os.access(probackup_path_tmp, os.X_OK):
@@ -247,16 +247,16 @@ class ProbackupTest(object):
             exit(1)
 
         os.environ['PATH'] = os.path.dirname(
-            self.probackup_path) + ":" + os.environ['PATH']
+            self.probackup_path) + ':' + os.environ['PATH']
 
         self.probackup_old_path = None
 
-        if "PGPROBACKUPBIN_OLD" in self.test_env:
+        if 'PGPROBACKUPBIN_OLD' in self.test_env:
             if (
-                os.path.isfile(self.test_env["PGPROBACKUPBIN_OLD"]) and
-                os.access(self.test_env["PGPROBACKUPBIN_OLD"], os.X_OK)
+                os.path.isfile(self.test_env['PGPROBACKUPBIN_OLD']) and
+                os.access(self.test_env['PGPROBACKUPBIN_OLD'], os.X_OK)
             ):
-                self.probackup_old_path = self.test_env["PGPROBACKUPBIN_OLD"]
+                self.probackup_old_path = self.test_env['PGPROBACKUPBIN_OLD']
             else:
                 if self.verbose:
                     print('PGPROBACKUPBIN_OLD is not an executable file')
@@ -280,40 +280,37 @@ class ProbackupTest(object):
            initdb_params=initdb_params, allow_streaming=set_replication)
 
         # Sane default parameters
-        node.append_conf("postgresql.auto.conf", "max_connections = 100")
-        node.append_conf("postgresql.auto.conf", "shared_buffers = 10MB")
-        node.append_conf("postgresql.auto.conf", "fsync = on")
-        node.append_conf("postgresql.auto.conf", "wal_level = logical")
-        node.append_conf("postgresql.auto.conf", "hot_standby = 'off'")
+        node.append_conf('postgresql.auto.conf', 'max_connections = 100')
+        node.append_conf('postgresql.auto.conf', 'shared_buffers = 10MB')
+        node.append_conf('postgresql.auto.conf', 'fsync = on')
+        node.append_conf('postgresql.auto.conf', 'wal_level = logical')
+        node.append_conf('postgresql.auto.conf', 'hot_standby = off')
 
         node.append_conf(
-            "postgresql.auto.conf", "log_line_prefix = '%t [%p]: [%l-1] '")
-        node.append_conf("postgresql.auto.conf", "log_statement = none")
-        node.append_conf("postgresql.auto.conf", "log_duration = on")
+            'postgresql.auto.conf', "log_line_prefix = '%t [%p]: [%l-1] '")
+        node.append_conf('postgresql.auto.conf', 'log_statement = none')
+        node.append_conf('postgresql.auto.conf', 'log_duration = on')
         node.append_conf(
-            "postgresql.auto.conf", "log_min_duration_statement = 0")
-        node.append_conf("postgresql.auto.conf", "log_connections = on")
-        node.append_conf("postgresql.auto.conf", "log_disconnections = on")
+            'postgresql.auto.conf', 'log_min_duration_statement = 0')
+        node.append_conf('postgresql.auto.conf', 'log_connections = on')
+        node.append_conf('postgresql.auto.conf', 'log_disconnections = on')
 
         # Apply given parameters
         for key, value in six.iteritems(pg_options):
-            node.append_conf("postgresql.auto.conf", "%s = %s" % (key, value))
+            node.append_conf('postgresql.auto.conf', '%s = %s' % (key, value))
 
         # Allow replication in pg_hba.conf
         if set_replication:
             node.append_conf(
-                "pg_hba.conf",
-                "local replication all trust\n")
-            node.append_conf(
-                "postgresql.auto.conf",
-                "max_wal_senders = 10")
+                'postgresql.auto.conf',
+                'max_wal_senders = 10')
 
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
         res = node.execute(
-            "postgres",
-            "select exists"
+            'postgres',
+            'select exists'
             " (select 1 from pg_tablespace where spcname = '{0}')".format(
                 tblspc_name)
             )
@@ -329,11 +326,11 @@ class ProbackupTest(object):
         cmd = "CREATE TABLESPACE {0} LOCATION '{1}'".format(
             tblspc_name, tblspc_path)
         if cfs:
-            cmd += " with (compression=true)"
+            cmd += ' with (compression=true)'
 
         if not os.path.exists(tblspc_path):
             os.makedirs(tblspc_path)
-        res = node.safe_psql("postgres", cmd)
+        res = node.safe_psql('postgres', cmd)
         # Check that tablespace was successfully created
         # self.assertEqual(
         #     res[0], 0,
@@ -344,13 +341,13 @@ class ProbackupTest(object):
 
     def get_fork_size(self, node, fork_name):
         return node.execute(
-            "postgres",
+            'postgres',
             "select pg_relation_size('{0}')/8192".format(fork_name))[0][0]
 
     def get_fork_path(self, node, fork_name):
         return os.path.join(
             node.base_dir, 'data', node.execute(
-                "postgres",
+                'postgres',
                 "select pg_relation_filepath('{0}')".format(
                     fork_name))[0][0]
             )
@@ -378,7 +375,7 @@ class ProbackupTest(object):
                 end_page = pages_per_segment[segment_number]
             else:
                 file_desc = os.open(
-                    file+".{0}".format(segment_number), os.O_RDONLY
+                    file+'.{0}'.format(segment_number), os.O_RDONLY
                     )
                 start_page = max(md5_per_page)+1
                 end_page = end_page + pages_per_segment[segment_number]
@@ -481,8 +478,8 @@ class ProbackupTest(object):
                                 idx_dict['ptrack'][PageNum])
                         )
                         print(
-                            "  Old checksumm: {0}\n"
-                            "  New checksumm: {1}".format(
+                            '  Old checksumm: {0}\n'
+                            '  New checksumm: {1}'.format(
                                 idx_dict['old_pages'][PageNum],
                                 idx_dict['new_pages'][PageNum])
                         )
@@ -545,7 +542,7 @@ class ProbackupTest(object):
 
     def run_pb(self, command, async=False, gdb=False, old_binary=False):
         if not self.probackup_old_path and old_binary:
-            print("PGPROBACKUPBIN_OLD is not set")
+            print('PGPROBACKUPBIN_OLD is not set')
             exit(1)
 
         if old_binary:
@@ -571,7 +568,7 @@ class ProbackupTest(object):
                     [binary_path] + command,
                     stderr=subprocess.STDOUT,
                     env=self.test_env
-                    ).decode("utf-8")
+                    ).decode('utf-8')
                 if command[0] == 'backup':
                     # return backup ID
                     for line in self.output.splitlines():
@@ -580,7 +577,7 @@ class ProbackupTest(object):
                 else:
                     return self.output
         except subprocess.CalledProcessError as e:
-            raise ProbackupException(e.output.decode("utf-8"), self.cmd)
+            raise ProbackupException(e.output.decode('utf-8'), self.cmd)
 
     def run_binary(self, command, async=False):
         if self.verbose:
@@ -599,18 +596,18 @@ class ProbackupTest(object):
                     command,
                     stderr=subprocess.STDOUT,
                     env=self.test_env
-                    ).decode("utf-8")
+                    ).decode('utf-8')
                 return self.output
         except subprocess.CalledProcessError as e:
-            raise ProbackupException(e.output.decode("utf-8"), command)
+            raise ProbackupException(e.output.decode('utf-8'), command)
 
     def init_pb(self, backup_dir, old_binary=False):
 
         shutil.rmtree(backup_dir, ignore_errors=True)
 
         return self.run_pb([
-            "init",
-            "-B", backup_dir
+            'init',
+            '-B', backup_dir
             ],
             old_binary=old_binary
         )
@@ -618,10 +615,10 @@ class ProbackupTest(object):
     def add_instance(self, backup_dir, instance, node, old_binary=False):
 
         return self.run_pb([
-            "add-instance",
-            "--instance={0}".format(instance),
-            "-B", backup_dir,
-            "-D", node.data_dir
+            'add-instance',
+            '--instance={0}'.format(instance),
+            '-B', backup_dir,
+            '-D', node.data_dir
             ],
             old_binary=old_binary
         )
@@ -629,9 +626,9 @@ class ProbackupTest(object):
     def del_instance(self, backup_dir, instance, old_binary=False):
 
         return self.run_pb([
-            "del-instance",
-            "--instance={0}".format(instance),
-            "-B", backup_dir
+            'del-instance',
+            '--instance={0}'.format(instance),
+            '-B', backup_dir
             ],
             old_binary=old_binary
         )
@@ -641,7 +638,7 @@ class ProbackupTest(object):
 
     def backup_node(
             self, backup_dir, instance, node, data_dir=False,
-            backup_type="full", options=[], async=False, gdb=False,
+            backup_type='full', options=[], async=False, gdb=False,
             old_binary=False
             ):
         if not node and not data_dir:
@@ -655,15 +652,15 @@ class ProbackupTest(object):
             pgdata = data_dir
 
         cmd_list = [
-            "backup",
-            "-B", backup_dir,
+            'backup',
+            '-B', backup_dir,
             # "-D", pgdata,
-            "-p", "%i" % node.port,
-            "-d", "postgres",
-            "--instance={0}".format(instance)
+            '-p', '%i' % node.port,
+            '-d', 'postgres',
+            '--instance={0}'.format(instance)
         ]
         if backup_type:
-            cmd_list += ["-b", backup_type]
+            cmd_list += ['-b', backup_type]
 
         return self.run_pb(cmd_list + options, async, gdb, old_binary)
 
@@ -671,10 +668,10 @@ class ProbackupTest(object):
             self, backup_dir, instance, backup_id, async=False,
             gdb=False, old_binary=False, options=[]):
         cmd_list = [
-            "merge",
-            "-B", backup_dir,
-            "--instance={0}".format(instance),
-            "-i", backup_id
+            'merge',
+            '-B', backup_dir,
+            '--instance={0}'.format(instance),
+            '-i', backup_id
         ]
 
         return self.run_pb(cmd_list + options, async, gdb, old_binary)
@@ -687,13 +684,13 @@ class ProbackupTest(object):
             data_dir = node.data_dir
 
         cmd_list = [
-            "restore",
-            "-B", backup_dir,
-            "-D", data_dir,
-            "--instance={0}".format(instance)
+            'restore',
+            '-B', backup_dir,
+            '-D', data_dir,
+            '--instance={0}'.format(instance)
         ]
         if backup_id:
-            cmd_list += ["-i", backup_id]
+            cmd_list += ['-i', backup_id]
 
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 
@@ -705,17 +702,17 @@ class ProbackupTest(object):
         backup_list = []
         specific_record = {}
         cmd_list = [
-            "show",
-            "-B", backup_dir,
+            'show',
+            '-B', backup_dir,
         ]
         if instance:
-            cmd_list += ["--instance={0}".format(instance)]
+            cmd_list += ['--instance={0}'.format(instance)]
 
         if backup_id:
-            cmd_list += ["-i", backup_id]
+            cmd_list += ['-i', backup_id]
 
         if as_json:
-            cmd_list += ["--format=json"]
+            cmd_list += ['--format=json']
 
         if as_text:
             # You should print it when calling as_text=true
@@ -750,7 +747,7 @@ class ProbackupTest(object):
                 # inverse list so oldest record come first
                 body = body[::-1]
                 # split string in list with string for every header element
-                header_split = re.split("  +", header)
+                header_split = re.split('  +', header)
                 # Remove empty items
                 for i in header_split:
                     if i == '':
@@ -762,7 +759,7 @@ class ProbackupTest(object):
                 for backup_record in body:
                     backup_record = backup_record.rstrip()
                     # split list with str for every backup record element
-                    backup_record_split = re.split("  +", backup_record)
+                    backup_record_split = re.split('  +', backup_record)
                     # Remove empty items
                     for i in backup_record_split:
                         if i == '':
@@ -787,7 +784,7 @@ class ProbackupTest(object):
                 ]
                 # print sanitized_show
                 for line in sanitized_show:
-                    name, var = line.partition(" = ")[::2]
+                    name, var = line.partition(' = ')[::2]
                     var = var.strip('"')
                     var = var.strip("'")
                     specific_record[name.strip()] = var
@@ -799,13 +796,13 @@ class ProbackupTest(object):
             ):
 
         cmd_list = [
-            "validate",
-            "-B", backup_dir
+            'validate',
+            '-B', backup_dir
         ]
         if instance:
-            cmd_list += ["--instance={0}".format(instance)]
+            cmd_list += ['--instance={0}'.format(instance)]
         if backup_id:
-            cmd_list += ["-i", backup_id]
+            cmd_list += ['-i', backup_id]
 
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 
@@ -813,48 +810,48 @@ class ProbackupTest(object):
             self, backup_dir, instance,
             backup_id=None, options=[], old_binary=False):
         cmd_list = [
-            "delete",
-            "-B", backup_dir
+            'delete',
+            '-B', backup_dir
         ]
 
-        cmd_list += ["--instance={0}".format(instance)]
+        cmd_list += ['--instance={0}'.format(instance)]
         if backup_id:
-            cmd_list += ["-i", backup_id]
+            cmd_list += ['-i', backup_id]
 
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 
     def delete_expired(
             self, backup_dir, instance, options=[], old_binary=False):
         cmd_list = [
-            "delete", "--expired", "--wal",
-            "-B", backup_dir,
-            "--instance={0}".format(instance)
+            'delete', '--expired', '--wal',
+            '-B', backup_dir,
+            '--instance={0}'.format(instance)
         ]
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 
     def show_config(self, backup_dir, instance, old_binary=False):
         out_dict = {}
         cmd_list = [
-            "show-config",
-            "-B", backup_dir,
-            "--instance={0}".format(instance)
+            'show-config',
+            '-B', backup_dir,
+            '--instance={0}'.format(instance)
         ]
 
         res = self.run_pb(cmd_list, old_binary=old_binary).splitlines()
         for line in res:
             if not line.startswith('#'):
-                name, var = line.partition(" = ")[::2]
+                name, var = line.partition(' = ')[::2]
                 out_dict[name] = var
         return out_dict
 
     def get_recovery_conf(self, node):
         out_dict = {}
         with open(
-            os.path.join(node.data_dir, "recovery.conf"), "r"
+            os.path.join(node.data_dir, 'recovery.conf'), 'r'
         ) as recovery_conf:
             for line in recovery_conf:
                 try:
-                    key, value = line.split("=")
+                    key, value = line.split('=')
                 except:
                     continue
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
@@ -870,35 +867,29 @@ class ProbackupTest(object):
         else:
             archive_mode = 'on'
 
-        # node.append_conf(
-        #     "postgresql.auto.conf",
-        #     "wal_level = archive"
-        # )
         node.append_conf(
-                "postgresql.auto.conf",
-                "archive_mode = {0}".format(archive_mode)
+                'postgresql.auto.conf',
+                'archive_mode = {0}'.format(archive_mode)
                 )
-        archive_command = "{0} archive-push -B {1} --instance={2} ".format(
+        archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
             self.probackup_path, backup_dir, instance)
 
+        if self.archive_compress or compress:
+            archive_command = archive_command + '--compress '
+
+        if overwrite:
+            archive_command = archive_command + '--overwrite '
+
         if os.name == 'posix':
-            if self.archive_compress or compress:
-                archive_command = archive_command + "--compress "
+            archive_command = archive_command + '--wal-file-path %p --wal-file-name %f'
 
-            if overwrite:
-                archive_command = archive_command + "--overwrite "
-
-            archive_command = archive_command + "--wal-file-path %p --wal-file-name %f"
+        elif os.name == 'nt':
+            archive_command = archive_command + '--wal-file-path "%p" --wal-file-name "%f"'
 
         node.append_conf(
-                    "postgresql.auto.conf",
+                    'postgresql.auto.conf',
                     "archive_command = '{0}'".format(
                         archive_command))
-        # elif os.name == 'nt':
-        #    node.append_conf(
-        #            "postgresql.auto.conf",
-        #            "archive_command = 'copy %p {0}\\%f'".format(archive_dir)
-        #            )
 
     def set_replica(
             self, master, replica,
@@ -906,18 +897,18 @@ class ProbackupTest(object):
             synchronous=False
             ):
         replica.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(replica.port))
+            'postgresql.auto.conf', 'port = {0}'.format(replica.port))
         replica.append_conf('postgresql.auto.conf', 'hot_standby = on')
-        replica.append_conf('recovery.conf', "standby_mode = 'on'")
+        replica.append_conf('recovery.conf', 'standby_mode = on')
         replica.append_conf(
-            "recovery.conf",
+            'recovery.conf',
             "primary_conninfo = 'user={0} port={1} application_name={2}"
             " sslmode=prefer sslcompression=1'".format(
                 self.user, master.port, replica_name)
         )
         if synchronous:
             master.append_conf(
-                "postgresql.auto.conf",
+                'postgresql.auto.conf',
                 "synchronous_standby_names='{0}'".format(replica_name)
             )
             master.append_conf(
@@ -927,7 +918,7 @@ class ProbackupTest(object):
             master.reload()
 
     def wrong_wal_clean(self, node, wal_size):
-        wals_dir = os.path.join(self.backup_dir(node), "wal")
+        wals_dir = os.path.join(self.backup_dir(node), 'wal')
         wals = [
             f for f in os.listdir(wals_dir) if os.path.isfile(
                 os.path.join(wals_dir, f))
@@ -939,25 +930,25 @@ class ProbackupTest(object):
 
     def guc_wal_segment_size(self, node):
         var = node.execute(
-            "postgres",
+            'postgres',
             "select setting from pg_settings where name = 'wal_segment_size'"
         )
         return int(var[0][0]) * self.guc_wal_block_size(node)
 
     def guc_wal_block_size(self, node):
         var = node.execute(
-            "postgres",
+            'postgres',
             "select setting from pg_settings where name = 'wal_block_size'"
         )
         return int(var[0][0])
 
     def get_pgpro_edition(self, node):
         if node.execute(
-            "postgres",
+            'postgres',
             "select exists (select 1 from"
             " pg_proc where proname = 'pgpro_edition')"
         )[0][0]:
-            var = node.execute("postgres", "select pgpro_edition()")
+            var = node.execute('postgres', 'select pgpro_edition()')
             return str(var[0][0])
         else:
             return False
@@ -969,9 +960,9 @@ class ProbackupTest(object):
     def version_to_num(self, version):
         if not version:
             return 0
-        parts = version.split(".")
+        parts = version.split('.')
         while len(parts) < 3:
-            parts.append("0")
+            parts.append('0')
         num = 0
         for part in parts:
             num = num * 100 + int(re.sub("[^\d]", "", part))
@@ -986,25 +977,25 @@ class ProbackupTest(object):
         """
         if isinstance(node, testgres.PostgresNode):
             if self.version_to_num(
-                node.safe_psql("postgres", "show server_version")
+                node.safe_psql('postgres', 'show server_version')
                     ) >= self.version_to_num('10.0'):
-                node.safe_psql("postgres", "select pg_switch_wal()")
+                node.safe_psql('postgres', 'select pg_switch_wal()')
             else:
-                node.safe_psql("postgres", "select pg_switch_xlog()")
+                node.safe_psql('postgres', 'select pg_switch_xlog()')
         else:
             if self.version_to_num(
-                node.execute("show server_version")[0][0]
+                node.execute('show server_version')[0][0]
                     ) >= self.version_to_num('10.0'):
-                node.execute("select pg_switch_wal()")
+                node.execute('select pg_switch_wal()')
             else:
-                node.execute("select pg_switch_xlog()")
+                node.execute('select pg_switch_xlog()')
 
     def wait_until_replica_catch_with_master(self, master, replica):
 
         if self.version_to_num(
                 master.safe_psql(
-                    "postgres",
-                    "show server_version")) >= self.version_to_num('10.0'):
+                    'postgres',
+                    'show server_version')) >= self.version_to_num('10.0'):
             master_function = 'pg_catalog.pg_current_wal_lsn()'
             replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
         else:
@@ -1022,7 +1013,7 @@ class ProbackupTest(object):
 
     def get_version(self, node):
         return self.version_to_num(
-            testgres.get_pg_config()["VERSION"].split(" ")[1])
+            testgres.get_pg_config()['VERSION'].split(" ")[1])
 
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
@@ -1217,7 +1208,7 @@ class ProbackupTest(object):
             host = '127.0.0.1'
 
         return psycopg2.connect(
-            database="postgres",
+            database='postgres',
             host='127.0.0.1',
             port=port,
             async=True
@@ -1233,7 +1224,7 @@ class ProbackupTest(object):
             elif state == psycopg2.extensions.POLL_READ:
                 select.select([connection.fileno()], [], [])
             else:
-                raise psycopg2.OperationalError("poll() returned %s" % state)
+                raise psycopg2.OperationalError('poll() returned %s' % state)
 
     def gdb_attach(self, pid):
         return GDBobj([str(pid)], self.verbose, attach=True)
@@ -1254,7 +1245,7 @@ class GDBobj(ProbackupTest):
         # Check gdb presense
         try:
             gdb_version, _ = subprocess.Popen(
-                ["gdb", "--version"],
+                ['gdb', '--version'],
                 stdout=subprocess.PIPE
             ).communicate()
         except OSError:
