@@ -7,7 +7,7 @@ import six
 import testgres
 import hashlib
 import re
-import pwd
+import getpass
 import select
 import psycopg2
 from time import sleep
@@ -89,8 +89,14 @@ def dir_files(base_dir):
 
 def is_enterprise():
     # pg_config --help
+    if os.name == 'posix':
+        cmd = [os.environ['PG_CONFIG'], '--help']
+
+    elif os.name == 'nt':
+        cmd = [[os.environ['PG_CONFIG']], ['--help']]
+
     p = subprocess.Popen(
-        [os.environ['PG_CONFIG'], '--help'],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
@@ -955,7 +961,7 @@ class ProbackupTest(object):
 
     def get_username(self):
         """ Returns current user name """
-        return pwd.getpwuid(os.getuid())[0]
+        return getpass.getuser()
 
     def version_to_num(self, version):
         if not version:
