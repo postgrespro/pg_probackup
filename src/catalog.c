@@ -847,23 +847,6 @@ pgBackupInit(pgBackup *backup)
 	backup->extra_dir_str = NULL;
 }
 
-/*
- * Copy backup metadata from **src** into **dst**.
- */
-void
-pgBackupCopy(pgBackup *dst, pgBackup *src)
-{
-	pfree(dst->primary_conninfo);
-	pfree(dst->extra_dir_str);
-
-	memcpy(dst, src, sizeof(pgBackup));
-
-	if (src->primary_conninfo)
-		dst->primary_conninfo = pstrdup(src->primary_conninfo);
-	if (src->extra_dir_str)
-		dst->extra_dir_str = pstrdup(src->extra_dir_str);
-}
-
 /* free pgBackup object */
 void
 pgBackupFree(void *backup)

@@ -211,7 +211,7 @@ pgFileInit(const char *path)
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 
 	/* Get file name from the path */
-	file_name = strrchr(file->path, '/');
+	file_name = last_dir_separator(file->path);
 	if (file_name == NULL)
 		file->name = file->path;
 	else
@@ -474,8 +474,8 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list,
 						   extra_dir_num);
 
-	if (black_list)
-		free_dir_list(black_list);
+	if (!add_root)
+		pgFileFree(file);
 }
 
 /*
@@ -1242,18 +1242,8 @@ print_file_list(FILE *out, const parray *files, const char *root,
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
-		else if (file->extra_dir_num)
-		{
-			if (extra_prefix)
-			{
-				char extra_root[MAXPGPATH];
-				makeExtraDirPathByNum(extra_root, extra_prefix,
-									  file->extra_dir_num);
-				path = GetRelativePath(path, extra_root);
-			}
-			else
-				path = GetRelativePath(path, file->extradir);
-		}
+		else if (file->extra_dir_num && !extra_prefix)
+			path = GetRelativePath(path, file->extradir);
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
@@ -1469,17 +1459,15 @@ dir_read_file_list(const char *root, const char *extra_prefix, const char *file_
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 		get_control_value(buf, "extra_dir_num", NULL, &extra_dir_num, false);
 
-		if (root)
-			if (extra_dir_num)
-			{
-				char temp[MAXPGPATH];
+		if (extra_dir_num && extra_prefix)
+		{
+			char temp[MAXPGPATH];
 
-				Assert(extra_prefix);
-				makeExtraDirPathByNum(temp, extra_prefix, extra_dir_num);
-				join_path_components(filepath, temp, path);
-			}
-			else
-				join_path_components(filepath, root, path);
+			makeExtraDirPathByNum(temp, extra_prefix, extra_dir_num);
+			join_path_components(filepath, temp, path);
+		}
+		else if (root)
+			join_path_components(filepath, root, path);
 		else
 			strcpy(filepath, path);
 

@@ -1047,7 +1047,7 @@ class ProbackupTest(object):
         except:
             pass
 
-    def pgdata_content(self, directory, ignore_ptrack=True):
+    def pgdata_content(self, pgdata, ignore_ptrack=True):
         """ return dict with directory content. "
         " TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = [
@@ -1064,9 +1064,10 @@ class ProbackupTest(object):
 #            '_ptrack'
 #        )
         directory_dict = {}
-        directory_dict['pgdata'] = directory
+        directory_dict['pgdata'] = pgdata
         directory_dict['files'] = {}
-        for root, dirs, files in os.walk(directory, followlinks=True):
+        directory_dict['dirs'] = []
+        for root, dirs, files in os.walk(pgdata, followlinks=True):
             dirs[:] = [d for d in dirs if d not in dirs_to_ignore]
             for file in files:
                 if (
@@ -1076,7 +1077,7 @@ class ProbackupTest(object):
                         continue
 
                 file_fullpath = os.path.join(root, file)
-                file_relpath = os.path.relpath(file_fullpath, directory)
+                file_relpath = os.path.relpath(file_fullpath, pgdata)
                 directory_dict['files'][file_relpath] = {'is_datafile': False}
                 directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
                     open(file_fullpath, 'rb').read()).hexdigest()
@@ -1089,12 +1090,51 @@ class ProbackupTest(object):
                             file_fullpath, size_in_pages
                         )
 
+        for root, dirs, files in os.walk(pgdata, topdown=False, followlinks=True):
+            for directory in dirs:
+                directory_path = os.path.join(root, directory)
+                directory_relpath = os.path.relpath(directory_path, pgdata)
+
+                found = False
+                for d in dirs_to_ignore:
+                    if d in directory_relpath:
+                        found = True
+                        break
+
+                # check if directory already here as part of larger directory
+                if not found:
+                    for d in directory_dict['dirs']:
+                        # print("OLD dir {0}".format(d))
+                        if directory_relpath in d:
+                            found = True
+                            break
+
+                if not found:
+                    directory_dict['dirs'].append(directory_relpath)
+
         return directory_dict
 
     def compare_pgdata(self, original_pgdata, restored_pgdata):
         """ return dict with directory content. DO IT BEFORE RECOVERY"""
         fail = False
         error_message = 'Restored PGDATA is not equal to original!\n'
+
+        # Compare directories
+        for directory in restored_pgdata['dirs']:
+            if directory not in original_pgdata['dirs']:
+                fail = True
+                error_message += '\nDirectory was not present'
+                error_message += ' in original PGDATA: {0}\n'.format(
+                    os.path.join(restored_pgdata['pgdata'], directory))
+
+        for directory in original_pgdata['dirs']:
+            if directory not in restored_pgdata['dirs']:
+                fail = True
+                error_message += '\nDirectory dissappeared'
+                error_message += ' in restored PGDATA: {0}\n'.format(
+                    os.path.join(restored_pgdata['pgdata'], directory))
+
+
         for file in restored_pgdata['files']:
             # File is present in RESTORED PGDATA
             # but not present in ORIGINAL

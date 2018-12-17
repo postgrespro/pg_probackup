@@ -53,6 +53,14 @@ pgBackupValidate(pgBackup *backup)
 	validate_files_arg *threads_args;
 	int			i;
 
+	/* Check backup version */
+	if (backup->program_version &&
+		parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
+		elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
+			"pg_probackup do not guarantee to be forward compatible. "
+			"Please upgrade pg_probackup binary.",
+				PROGRAM_VERSION, base36enc(backup->start_time), backup->program_version);
+
 	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE &&

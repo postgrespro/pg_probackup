@@ -334,15 +334,6 @@ main(int argc, char *argv[])
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
-	/* command was initialized for a few commands */
-	if (command)
-	{
-		elog_file(INFO, "command: %s", command);
-
-		pfree(command);
-		command = NULL;
-	}
-
 	/* Option --instance is required for all commands except init and show */
 	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
 		backup_subcmd != VALIDATE_CMD)
@@ -375,8 +366,9 @@ main(int argc, char *argv[])
 	}
 
 	/*
-	 * Read options from env variables or from config file,
-	 * unless we're going to set them via set-config.
+	 * We read options from command line, now we need to read them from
+	 * configuration file since we got backup path and instance name.
+	 * For some commands an instance option isn't required, see above.
 	 */
 	if (instance_name)
 	{
@@ -392,6 +384,15 @@ main(int argc, char *argv[])
 
 	/* Initialize logger */
 	init_logger(backup_path, &instance_config.logger);
+
+	/* command was initialized for a few commands */
+	if (command)
+	{
+		elog_file(INFO, "command: %s", command);
+
+		pfree(command);
+		command = NULL;
+	}
 
 	/*
 	 * We have read pgdata path from command line or from configuration file.
@@ -584,7 +585,7 @@ compress_init(void)
 	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
 	{
 #ifndef HAVE_LIBZ
-		if (compress_alg == ZLIB_COMPRESS)
+		if (instance_config.compress_alg == ZLIB_COMPRESS)
 			elog(ERROR, "This build does not support zlib compression");
 		else
 #endif

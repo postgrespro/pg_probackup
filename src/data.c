@@ -232,8 +232,8 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 			return 0;
 		}
 		else
-			elog(WARNING, "File: %s, block %u, expected block size %d,"
-					  "but read %lu, try again",
+			elog(WARNING, "File: %s, block %u, expected block size %u,"
+					  "but read %zu, try again",
 					   file->path, blknum, BLCKSZ, read_len);
 	}
 
@@ -382,7 +382,7 @@ prepare_page(backup_files_arg *arguments,
 		else if (page_size != BLCKSZ)
 		{
 			free(ptrack_page);
-			elog(ERROR, "File: %s, block %u, expected block size %d, but read %lu",
+			elog(ERROR, "File: %s, block %u, expected block size %d, but read %zu",
 					   file->path, absolute_blknum, BLCKSZ, page_size);
 		}
 		else
@@ -574,7 +574,7 @@ backup_data_file(backup_files_arg* arguments,
 	if (file->size % BLCKSZ != 0)
 	{
 		fclose(in);
-		elog(ERROR, "File: %s, invalid file size %lu", file->path, file->size);
+		elog(ERROR, "File: %s, invalid file size %zu", file->path, file->size);
 	}
 
 	/*
@@ -789,7 +789,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
-			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+			elog(ERROR, "cannot read block %u of \"%s\" read %zu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 
 		/*
@@ -829,6 +829,8 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 
 		if (write_header)
 		{
+			/* We uncompressed the page, so its size is BLCKSZ */
+			header.compressed_size = BLCKSZ;
 			if (fwrite(&header, 1, sizeof(header), out) != sizeof(header))
 				elog(ERROR, "cannot write header of block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
@@ -1592,19 +1594,23 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 			if (read_len == 0 && feof(in))
 				break;		/* EOF found */
 			else if (read_len != 0 && feof(in))
-				elog(ERROR,
+				elog(WARNING,
 					 "odd size page found at block %u of \"%s\"",
 					 blknum, file->path);
 			else
-				elog(ERROR, "cannot read header of block %u of \"%s\": %s",
+				elog(WARNING, "cannot read header of block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno_tmp));
+			return false;
 		}
 
 		COMP_FILE_CRC32(use_crc32c, crc, &header, read_len);
 
 		if (header.block < blknum)
-			elog(ERROR, "backup is broken at file->path %s block %u",
+		{
+			elog(WARNING, "backup is broken at file->path %s block %u",
 				 file->path, blknum);
+			return false;
+		}
 
 		blknum = header.block;
 
@@ -1620,8 +1626,11 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
-			elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+		{
+			elog(WARNING, "cannot read block %u of \"%s\" read %zu of %d",
 				blknum, file->path, read_len, header.compressed_size);
+			return false;
+		}
 
 		COMP_FILE_CRC32(use_crc32c, crc, compressed_page.data, read_len);
 
@@ -1648,11 +1657,13 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 					is_valid = false;
 					continue;
 				}
-				elog(ERROR, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
+				elog(WARNING, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
 					 file->path, uncompressed_size);
+				return false;
 			}
+
 			if (validate_one_page(page.data, file, blknum,
-				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
+								  stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
 				is_valid = false;
 		}
 		else
