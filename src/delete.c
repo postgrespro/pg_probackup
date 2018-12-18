@@ -296,15 +296,7 @@ delete_backup_files(pgBackup *backup)
 			elog(INFO, "Progress: (%zd/%zd). Process file \"%s\"",
 				 i + 1, num_files, file->path);
 
-		if (remove(file->path))
-		{
-			if (errno == ENOENT)
-				elog(VERBOSE, "File \"%s\" is absent", file->path);
-			else
-				elog(ERROR, "Cannot remove \"%s\": %s", file->path,
-					 strerror(errno));
-			return;
-		}
+		pgFileDelete(file);
 	}
 
 	parray_walk(files, pgFileFree);
