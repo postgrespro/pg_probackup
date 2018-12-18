@@ -877,8 +877,15 @@ class ProbackupTest(object):
                 'postgresql.auto.conf',
                 'archive_mode = {0}'.format(archive_mode)
                 )
-        archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
-            self.probackup_path, backup_dir, instance)
+        if os.name == 'posix':
+            archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
+                self.probackup_path, backup_dir, instance)
+
+        elif os.name == 'nt':
+            archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
+                self.probackup_path.replace("\\","\\\\"),
+                backup_dir.replace("\\","\\\\"),
+                instance)
 
         if self.archive_compress or compress:
             archive_command = archive_command + '--compress '
