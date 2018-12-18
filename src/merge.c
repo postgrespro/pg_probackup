@@ -61,8 +61,6 @@ do_merge(time_t backup_id)
 
 	elog(INFO, "Merge started");
 
-	catalog_lock();
-
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
@@ -124,6 +122,8 @@ do_merge(time_t backup_id)
 			 base36enc(backup_id));
 
 	Assert(full_backup_idx != dest_backup_idx);
+
+	catalog_lock_backup_list(backups, full_backup_idx, dest_backup_idx);
 
 	/*
 	 * Found target and full backups, merge them and intermediate backups

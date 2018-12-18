@@ -28,9 +28,6 @@ do_delete(time_t backup_id)
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 
@@ -75,6 +72,8 @@ do_delete(time_t backup_id)
 
 		if (parray_num(delete_list) == 0)
 			elog(ERROR, "no backup found, cannot delete");
+
+		catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0);
 
 		/* Delete backups from the end of list */
 		for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
@@ -146,9 +145,6 @@ do_retention_purge(void)
 		}
 	}
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 	if (parray_num(backup_list) == 0)
@@ -205,6 +201,8 @@ do_retention_purge(void)
 
 				continue;
 			}
+
+			lock_backup(backup);
 
 			/* Delete backup and update status to DELETED */
 			delete_backup_files(backup);
@@ -437,6 +435,8 @@ do_delete_instance(void)
 
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+
+	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{

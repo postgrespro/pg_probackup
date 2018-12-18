@@ -74,8 +74,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 	elog(LOG, "%s begin.", action);
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
@@ -300,7 +298,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 			if (is_parent(base_full_backup->start_time, tmp_backup, true))
 			{
-
+				lock_backup(tmp_backup);
 				pgBackupValidate(tmp_backup);
 				/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
 				if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
@@ -387,6 +385,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			if (rt->lsn_specified && parse_server_version(backup->server_version) < 100000)
 				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
 						base36enc(dest_backup->start_time), dest_backup->server_version);
+
+			/*
+			 * Backup was locked during validation if no-validate wasn't
+			 * specified.
+			 */
+			if (rt->restore_no_validate)
+				lock_backup(backup);
 
 			restore_backup(backup);
 		}

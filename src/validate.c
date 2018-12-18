@@ -53,8 +53,8 @@ pgBackupValidate(pgBackup *backup)
 	int			i;
 
 	/* Check backup version */
-	if (backup->program_version &&
-		parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
+	if (parse_program_version(backup->program_version) >
+		parse_program_version(PROGRAM_VERSION))
 		elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
 			"pg_probackup do not guarantee to be forward compatible. "
 			"Please upgrade pg_probackup binary.",
@@ -356,9 +356,6 @@ do_validate_instance(void)
 
 	elog(INFO, "Validate backups of the instance '%s'", instance_name);
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
@@ -439,6 +436,7 @@ do_validate_instance(void)
 		else
 			base_full_backup = current_backup;
 
+		lock_backup(current_backup);
 		/* Valiate backup files*/
 		pgBackupValidate(current_backup);
 
@@ -525,6 +523,7 @@ do_validate_instance(void)
 
 						if (backup->status == BACKUP_STATUS_ORPHAN)
 						{
+							lock_backup(backup);
 							/* Revaliate backup files*/
 							pgBackupValidate(backup);
 

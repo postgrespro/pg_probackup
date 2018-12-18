@@ -943,9 +943,6 @@ do_backup(time_t start_time)
 								   instance_config.master_user);
 	}
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/*
 	 * Ensure that backup directory was initialized for the same PostgreSQL
 	 * instance we opened connection to. And that target backup database PGDATA
@@ -954,7 +951,6 @@ do_backup(time_t start_time)
 	/* TODO fix it for remote backup */
 	if (!is_remote_backup)
 		check_system_identifiers();
-
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -965,6 +961,7 @@ do_backup(time_t start_time)
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "cannot create backup directory");
+	lock_backup(&current);
 	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");

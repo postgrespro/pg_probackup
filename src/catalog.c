@@ -21,23 +21,73 @@ static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
 
 static bool exit_hook_registered = false;
-static char lock_file[MAXPGPATH];
+static parray *lock_files = NULL;
 
 static void
 unlink_lock_atexit(void)
 {
-	int			res;
-	res = unlink(lock_file);
-	if (res != 0 && res != ENOENT)
-		elog(WARNING, "%s: %s", lock_file, strerror(errno));
+	int			i;
+
+	if (lock_files == NULL)
+		return;
+
+	for (i = 0; i < parray_num(lock_files); i++)
+	{
+		char	   *lock_file = (char *) parray_get(lock_files, i);
+		int			res;
+
+		res = unlink(lock_file);
+		if (res != 0 && res != ENOENT)
+			elog(WARNING, "%s: %s", lock_file, strerror(errno));
+	}
+
+	parray_walk(lock_files, pfree);
+	parray_free(lock_files);
+	lock_files = NULL;
 }
 
 /*
- * Create a lockfile.
+ * Read backup meta information from BACKUP_CONTROL_FILE.
+ * If no backup matches, return NULL.
+ */
+pgBackup *
+read_backup(time_t timestamp)
+{
+	pgBackup	tmp;
+	char		conf_path[MAXPGPATH];
+
+	tmp.start_time = timestamp;
+	pgBackupGetPath(&tmp, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
+
+	return readBackupControlFile(conf_path);
+}
+
+/*
+ * Save the backup status into BACKUP_CONTROL_FILE.
+ *
+ * We need to reread the backup using its ID and save it changing only its
+ * status.
  */
 void
-catalog_lock(void)
+write_backup_status(pgBackup *backup)
 {
+	pgBackup   *tmp;
+
+	tmp = read_backup(backup->start_time);
+
+	tmp->status = backup->status;
+	write_backup(tmp);
+
+	pgBackupFree(tmp);
+}
+
+/*
+ * Create exclusive lockfile in the backup's directory.
+ */
+void
+lock_backup(pgBackup *backup)
+{
+	char		lock_file[MAXPGPATH];
 	int			fd;
 	char		buffer[MAXPGPATH * 2 + 256];
 	int			ntries;
@@ -46,7 +96,7 @@ catalog_lock(void)
 	pid_t		my_pid,
 				my_p_pid;
 
-	join_path_components(lock_file, backup_instance_path, BACKUP_CATALOG_PID);
+	pgBackupGetPath(backup, lock_file, lengthof(lock_file), BACKUP_CATALOG_PID);
 
 	/*
 	 * If the PID in the lockfile is our own PID or our parent's or
@@ -200,41 +250,11 @@ catalog_lock(void)
 		atexit(unlink_lock_atexit);
 		exit_hook_registered = true;
 	}
-}
 
-/*
- * Read backup meta information from BACKUP_CONTROL_FILE.
- * If no backup matches, return NULL.
- */
-pgBackup *
-read_backup(time_t timestamp)
-{
-	pgBackup	tmp;
-	char		conf_path[MAXPGPATH];
-
-	tmp.start_time = timestamp;
-	pgBackupGetPath(&tmp, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
-
-	return readBackupControlFile(conf_path);
-}
-
-/*
- * Save the backup status into BACKUP_CONTROL_FILE.
- *
- * We need to reread the backup using its ID and save it changing only its
- * status.
- */
-void
-write_backup_status(pgBackup *backup)
-{
-	pgBackup   *tmp;
-
-	tmp = read_backup(backup->start_time);
-
-	tmp->status = backup->status;
-	write_backup(tmp);
-
-	pgBackupFree(tmp);
+	/* Use parray so that the lock files are unlinked in a loop */
+	if (lock_files == NULL)
+		lock_files = parray_new();
+	parray_append(lock_files, pgut_strdup(lock_file));
 }
 
 /*
@@ -379,6 +399,26 @@ err_proc:
 	elog(ERROR, "Failed to get backup list");
 
 	return NULL;
+}
+
+/*
+ * Lock list of backups. Function goes in backward direction.
+ */
+void
+catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
+{
+	int			start_idx,
+				end_idx;
+	int			i;
+
+	if (parray_num(backup_list) == 0)
+		return;
+
+	start_idx = Max(from_idx, to_idx);
+	end_idx = Min(from_idx, to_idx);
+
+	for (i = start_idx; i >= end_idx; i--)
+		lock_backup((pgBackup *) parray_get(backup_list, i));
 }
 
 /*
