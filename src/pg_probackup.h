@@ -123,7 +123,6 @@ typedef struct pgFile
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
 	int		extra_dir_num;	/* Number of extra directory. 0 if not extra */
-	char	*extradir;		/* File from extra directory */
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
@@ -292,10 +291,11 @@ typedef struct
 {
 	const char *from_root;
 	const char *to_root;
-	const char *extra;
+	const char *extra_prefix;
 
 	parray	   *files_list;
 	parray	   *prev_filelist;
+	parray	   *extra_dirs;
 	XLogRecPtr	prev_start_lsn;
 
 	PGconn	   *backup_conn;
@@ -476,7 +476,8 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
-								  const char *root, const char *extra_prefix);
+								  const char *root, const char *extra_prefix,
+								  parray *extra_list);
 
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);
@@ -511,7 +512,7 @@ extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
-							const char *extra_prefix);
+							const char *extra_prefix, parray *extra_list);
 extern parray *dir_read_file_list(const char *root, const char *extra_prefix, const char *file_txt);
 extern parray *make_extra_directory_list(const char *colon_separated_dirs);
 extern void free_dir_list(parray *list);

@@ -21,7 +21,8 @@ typedef struct
 {
 	parray	   *files;
 	pgBackup   *backup;
-	parray	   *extra_dirs;
+	parray	   *req_extra_dirs;
+	parray	   *cur_extra_dirs;
 	char	   *extra_prefix;
 
 	/*
@@ -424,7 +425,8 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	char		extra_prefix[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
-	parray	   *extra_dirs = NULL;
+	parray	   *requested_extra_dirs = NULL;
+	parray	   *current_extra_dirs = NULL;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
@@ -458,12 +460,15 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 
 	if(extra_dir_str)
 	{
-		extra_dirs = make_extra_directory_list(extra_dir_str);
-		for (int i = 0; i < parray_num(extra_dirs); i++)
+		requested_extra_dirs = make_extra_directory_list(extra_dir_str);
+		for (int i = 0; i < parray_num(requested_extra_dirs); i++)
 		{
-			dir_create_dir(parray_get(extra_dirs, i), DIR_PERMISSION);
+			dir_create_dir(parray_get(requested_extra_dirs, i), DIR_PERMISSION);
 		}
 	}
+
+	if(backup->extra_dir_str)
+		current_extra_dirs = make_extra_directory_list(backup->extra_dir_str);
 
 	/*
 	 * Get list of files which need to be restored.
@@ -489,15 +494,21 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 		{
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
+			char	   *extra_path;
 
-			if (backup_contains_extra(file->extradir, extra_dirs))
+			if (!current_extra_dirs ||
+				parray_num(current_extra_dirs) < file->extra_dir_num - 1)
+				elog(ERROR, "Inconsistent extra directory backup metadata");
+
+			extra_path = parray_get(current_extra_dirs, file->extra_dir_num - 1);
+			if (backup_contains_extra(extra_path, requested_extra_dirs))
 			{
 				char		container_dir[MAXPGPATH];
 				makeExtraDirPathByNum(container_dir, extra_prefix,
 									  file->extra_dir_num);
 				dir_name = GetRelativePath(file->path, container_dir);
 				elog(VERBOSE, "Create directory \"%s\"", dir_name);
-				join_path_components(dirpath, file->extradir, dir_name);
+				join_path_components(dirpath, extra_path, dir_name);
 				dir_create_dir(dirpath, DIR_PERMISSION);
 			}
 		}
@@ -515,7 +526,8 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 
 		arg->files = files;
 		arg->backup = backup;
-		arg->extra_dirs = extra_dirs;
+		arg->req_extra_dirs = requested_extra_dirs;
+		arg->cur_extra_dirs = current_extra_dirs;
 		arg->extra_prefix = extra_prefix;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
@@ -678,8 +690,10 @@ restore_files(void *arg)
 			copy_pgcontrol_file(from_root, instance_config.pgdata, file);
 		else if (file->extra_dir_num)
 		{
-			if (backup_contains_extra(file->extradir, arguments->extra_dirs))
-				copy_file(arguments->extra_prefix, file->extradir, file);
+			char	   *extra_path = parray_get(arguments->cur_extra_dirs,
+												file->extra_dir_num - 1);
+			if (backup_contains_extra(extra_path, arguments->req_extra_dirs))
+				copy_file(arguments->extra_prefix, extra_path, file);
 		}
 		else
 			copy_file(from_root, instance_config.pgdata, file);

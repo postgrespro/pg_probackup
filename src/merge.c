@@ -324,7 +324,10 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_backup->stop_lsn = from_backup->stop_lsn;
 	to_backup->recovery_time = from_backup->recovery_time;
 	to_backup->recovery_xid = from_backup->recovery_xid;
+
+	pfree(to_backup->extra_dir_str);
 	to_backup->extra_dir_str = from_backup->extra_dir_str;
+	from_backup->extra_dir_str = NULL; /* For safe pgBackupFree() */
 	/*
 	 * If one of the backups isn't "stream" backup then the target backup become
 	 * non-stream backup too.
@@ -351,7 +354,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		to_backup->wal_bytes = BYTES_INVALID;
 
 	write_backup_filelist(to_backup, files, from_database_path,
-						  from_extra_prefix);
+						  from_extra_prefix, NULL);
 	write_backup(to_backup);
 
 delete_source_backup:
@@ -370,7 +373,8 @@ delete_source_backup:
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
 
 		if (file->extra_dir_num &&
-			backup_contains_extra(file->extradir, from_extra))
+			backup_contains_extra(parray_get(to_extra, file->extra_dir_num - 1),
+								  from_extra))
 			/* Dir already removed*/
 			continue;
 
@@ -403,8 +407,6 @@ delete_source_backup:
 	 * Merging finished, now we can safely update ID of the destination backup.
 	 */
 	to_backup->start_time = from_backup->start_time;
-	if (from_backup->extra_dir_str)
-		to_backup->extra_dir_str = from_backup->extra_dir_str;
 	write_backup(to_backup);
 
 	/* Cleanup */
@@ -612,18 +614,20 @@ merge_files(void *arg)
 			copy_pgcontrol_file(argument->from_root, argument->to_root, file);
 		else if (file->extra_dir_num)
 		{
-			char from_root[MAXPGPATH];
-			char to_root[MAXPGPATH];
-			int new_dir_num;
+			char	from_root[MAXPGPATH];
+			char	to_root[MAXPGPATH];
+			int		new_dir_num;
+			char   *file_extra_path = parray_get(argument->from_extra,
+												 file->extra_dir_num - 1);
 
 			Assert(argument->from_extra);
-			new_dir_num = get_extra_index(file->extradir, argument->from_extra);
+			new_dir_num = get_extra_index(file_extra_path,
+										  argument->from_extra);
 			makeExtraDirPathByNum(from_root, argument->from_extra_prefix,
 								  file->extra_dir_num);
 			makeExtraDirPathByNum(to_root, argument->to_extra_prefix,
 								  new_dir_num);
 			copy_file(from_root, to_root, file);
-			file->extra_dir_num = new_dir_num;
 		}
 		else
 			copy_file(argument->from_root, argument->to_root, file);

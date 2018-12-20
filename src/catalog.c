@@ -551,7 +551,7 @@ write_backup(pgBackup *backup)
  */
 void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
-					  const char *extra_prefix)
+					  const char *extra_prefix, parray *extra_list)
 {
 	FILE	   *fp;
 	char		path[MAXPGPATH];
@@ -563,7 +563,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		elog(ERROR, "Cannot open file list \"%s\": %s", path,
 			strerror(errno));
 
-	print_file_list(fp, files, root, extra_prefix);
+	print_file_list(fp, files, root, extra_prefix, extra_list);
 
 	if (fflush(fp) != 0 ||
 		fsync(fileno(fp)) != 0 ||

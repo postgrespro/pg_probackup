@@ -119,7 +119,7 @@ typedef struct TablespaceCreatedList
 static bool dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list, 
+								   bool omit_symlink, parray *black_list,
 								   int extra_dir_num);
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
@@ -226,7 +226,6 @@ pgFileInit(const char *path)
 	file->n_blocks = BLOCKNUM_INVALID;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
 	file->extra_dir_num = 0;
-	file->extradir = NULL;
 	return file;
 }
 
@@ -347,7 +346,7 @@ pgFileComparePath(const void *f1, const void *f2)
 	return strcmp(f1p->path, f2p->path);
 }
 
-/* 
+/*
  * Compare two pgFile with their path and extra_dir_num
  * in ascending order of ASCII code.
  */
@@ -466,8 +465,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
 		return;
 	}
-	if (extra_dir_num)
-		file->extradir = pgut_strdup(file->path);
 	if (add_root)
 		parray_append(files, file);
 
@@ -725,8 +722,6 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		}
 
 		/* If it is extra dir, remember it */
-		if (extra_dir_num)
-			file->extradir = parent->extradir;
 
 		/* We add the directory anyway */
 		if (S_ISDIR(file->mode))
@@ -1229,7 +1224,7 @@ check_tablespace_mapping(pgBackup *backup)
  */
 void
 print_file_list(FILE *out, const parray *files, const char *root,
-				const char *extra_prefix)
+				const char *extra_prefix, parray *extra_list)
 {
 	size_t		i;
 
@@ -1243,7 +1238,11 @@ print_file_list(FILE *out, const parray *files, const char *root,
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
 		else if (file->extra_dir_num && !extra_prefix)
-			path = GetRelativePath(path, file->extradir);
+		{
+			Assert(extra_list);
+			path = GetRelativePath(path, parray_get(extra_list,
+													file->extra_dir_num - 1));
+		}
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
@@ -1253,8 +1252,8 @@ print_file_list(FILE *out, const parray *files, const char *root,
 				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
 				deparse_compress_alg(file->compress_alg), file->extra_dir_num);
 
-		if (file->extradir)
-			fprintf(out, ",\"extradir\":\"%s\"", file->extradir);
+		//if (file->extradir)
+		//	fprintf(out, ",\"extradir\":\"%s\"", file->extradir);
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
@@ -1439,7 +1438,6 @@ dir_read_file_list(const char *root, const char *extra_prefix, const char *file_
 		char		filepath[MAXPGPATH];
 		char		linked[MAXPGPATH];
 		char		compress_alg_string[MAXPGPATH];
-		char		extradir_str[MAXPGPATH];
 		int64		write_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
@@ -1473,11 +1471,6 @@ dir_read_file_list(const char *root, const char *extra_prefix, const char *file_
 
 		file = pgFileInit(filepath);
 
-		if (extra_dir_num)
-		{
-			get_control_value(buf, "extradir", extradir_str, NULL, true);
-			file->extradir = pgut_strdup(extradir_str);
-		}
 		file->write_size = (int64) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;

@@ -706,7 +706,8 @@ do_backup_instance(void)
 
 			if (!is_remote_backup)
 				if (file->extra_dir_num)
-					dir_name = GetRelativePath(file->path, file->extradir);
+					dir_name = GetRelativePath(file->path,
+							   parray_get(extra_dirs, file->extra_dir_num - 1));
 				else
 					dir_name = GetRelativePath(file->path, instance_config.pgdata);
 			else
@@ -745,7 +746,8 @@ do_backup_instance(void)
 
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
-		arg->extra = extra_prefix;
+		arg->extra_prefix = extra_prefix;
+		arg->extra_dirs = extra_dirs;
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
 		arg->prev_start_lsn = prev_backup_start_lsn;
@@ -787,9 +789,6 @@ do_backup_instance(void)
 		parray_walk(prev_backup_filelist, pgFileFree);
 		parray_free(prev_backup_filelist);
 	}
-	/* clean extra directories list */
-	if (extra_dirs)
-		free_dir_list(extra_dirs);
 
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in backup_files_list.
@@ -853,7 +852,12 @@ do_backup_instance(void)
 	}
 
 	/* Print the list of files to backup catalog */
-	write_backup_filelist(&current, backup_files_list, instance_config.pgdata, NULL);
+	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
+						  NULL, extra_dirs);
+
+	/* clean extra directories list */
+	if (extra_dirs)
+		free_dir_list(extra_dirs);
 
 	/* Compute summary of size of regular files in the backup */
 	for (i = 0; i < parray_num(backup_files_list); i++)
@@ -2285,6 +2289,11 @@ backup_files(void *arg)
 		if (S_ISREG(buf.st_mode))
 		{
 			pgFile	  **prev_file = NULL;
+			char	   *extra_path = NULL;
+
+			if (file->extra_dir_num)
+				extra_path = parray_get(arguments->extra_dirs,
+										file->extra_dir_num - 1);
 
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
@@ -2293,7 +2302,7 @@ backup_files(void *arg)
 				pgFile		key;
 
 				relative = GetRelativePath(file->path, file->extra_dir_num ?
-										   file->extradir:arguments->from_root);
+										   extra_path : arguments->from_root);
 				key.path = relative;
 				key.extra_dir_num = file->extra_dir_num;
 
@@ -2345,9 +2354,9 @@ backup_files(void *arg)
 				/* Set file paths */
 				if (file->extra_dir_num)
 				{
-					makeExtraDirPathByNum(extra_dst, arguments->extra,
+					makeExtraDirPathByNum(extra_dst, arguments->extra_prefix,
 										  file->extra_dir_num);
-					src = file->extradir;
+					src = extra_path;
 					dst = extra_dst;
 				}
 				else
