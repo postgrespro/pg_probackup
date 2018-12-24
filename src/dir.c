@@ -124,10 +124,13 @@ static void dir_list_file_internal(parray *files, const char *root,
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
 								  bool exclude);
+static void free_extra_remap_list(void *cell);
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
 static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
+/* Extra directories mapping */
+static parray *extra_remap_list = NULL;
 
 /*
  * Create directory, also create parent directories if necessary.
@@ -949,6 +952,57 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 	tablespace_dirs.tail = cell;
 }
 
+void
+opt_extradir_map(ConfigOption *opt, const char *arg)
+{
+	TablespaceListCell *cell = pgut_new(TablespaceListCell);
+	char	   *dst;
+	char	   *dst_ptr;
+	const char *arg_ptr;
+
+	extra_remap_list = parray_new();
+	dst_ptr = dst = cell->old_dir;
+	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
+	{
+		if (dst_ptr - dst >= MAXPGPATH)
+			elog(ERROR, "directory name too long");
+
+		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
+			;					/* skip backslash escaping = */
+		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
+		{
+			if (*cell->new_dir)
+				elog(ERROR, "multiple \"=\" signs in extra directory mapping\n");
+			else
+				dst = dst_ptr = cell->new_dir;
+		}
+		else
+			*dst_ptr++ = *arg_ptr;
+	}
+
+	if (!*cell->old_dir || !*cell->new_dir)
+		elog(ERROR, "invalid extra directory mapping format \"%s\", "
+			 "must be \"OLDDIR=NEWDIR\"", arg);
+
+	/*
+	 * This check isn't absolutely necessary.  But all tablespaces are created
+	 * with absolute directories, so specifying a non-absolute path here would
+	 * just never match, possibly confusing users.  It's also good to be
+	 * consistent with the new_dir check.
+	 */
+	if (!is_absolute_path(cell->old_dir))
+		elog(ERROR, "old directory is not an absolute path "
+					"in extra directory mapping: %s\n",
+			 cell->old_dir);
+
+	if (!is_absolute_path(cell->new_dir))
+		elog(ERROR, "new directory is not an absolute path "
+					"in extra directory mapping: %s\n",
+			 cell->new_dir);
+
+	parray_append(extra_remap_list, cell);
+}
+
 /*
  * Create backup directories from **backup_dir** to **data_dir**. Doesn't raise
  * an error if target directories exist.
@@ -1217,6 +1271,43 @@ check_tablespace_mapping(pgBackup *backup)
 	free(tmp_file);
 	parray_walk(links, pgFileFree);
 	parray_free(links);
+}
+
+char *
+check_extra_dir_mapping(char *current_dir)
+{
+	if (!extra_remap_list)
+		return current_dir;
+
+	for (int i = 0; i < parray_num(extra_remap_list); i++)
+	{
+		TablespaceListCell *cell = parray_get(extra_remap_list, i);
+		char *old_dir = cell->old_dir;
+
+		if (strcmp(old_dir, current_dir) == 0)
+			return cell->new_dir;
+	}
+	return current_dir;
+}
+
+static void
+free_extra_remap_list(void *cell)
+{
+	TablespaceListCell *cell_ptr;
+	if (cell == NULL)
+		return;
+	cell_ptr = (TablespaceListCell *)cell;
+	pfree(cell_ptr);
+}
+
+void
+clean_extra_dirs_remap_list(void)
+{
+	if (extra_remap_list)
+	{
+		parray_walk(extra_remap_list, free_extra_remap_list);
+		parray_free(extra_remap_list);
+	}
 }
 
 /*

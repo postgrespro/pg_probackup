@@ -137,7 +137,8 @@ static ConfigOption cmd_options[] =
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
-	{ 's', 155, "extra-directory",	&extradir,		SOURCE_CMD_STRICT },
+	{ 's', 155, "extra-directory",	&extradir,			SOURCE_CMD_STRICT },
+	{ 'f', 'E', "extra-mapping",	opt_extradir_map,	SOURCE_CMD_STRICT },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, }, */
 	/* restore options */

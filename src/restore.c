@@ -463,7 +463,9 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 		requested_extra_dirs = make_extra_directory_list(extra_dir_str);
 		for (int i = 0; i < parray_num(requested_extra_dirs); i++)
 		{
-			dir_create_dir(parray_get(requested_extra_dirs, i), DIR_PERMISSION);
+			char *extra_path = parray_get(requested_extra_dirs, i);
+			extra_path = check_extra_dir_mapping(extra_path);
+			dir_create_dir(extra_path, DIR_PERMISSION);
 		}
 	}
 
@@ -504,6 +506,8 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 			if (backup_contains_extra(extra_path, requested_extra_dirs))
 			{
 				char		container_dir[MAXPGPATH];
+
+				extra_path = check_extra_dir_mapping(extra_path);
 				makeExtraDirPathByNum(container_dir, extra_prefix,
 									  file->extra_dir_num);
 				dir_name = GetRelativePath(file->path, container_dir);
@@ -553,6 +557,8 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	/* cleanup */
 	parray_walk(files, pgFileFree);
 	parray_free(files);
+
+	clean_extra_dirs_remap_list();
 
 	if (logger_config.log_level_console <= LOG ||
 		logger_config.log_level_file <= LOG)
@@ -693,7 +699,10 @@ restore_files(void *arg)
 			char	   *extra_path = parray_get(arguments->cur_extra_dirs,
 												file->extra_dir_num - 1);
 			if (backup_contains_extra(extra_path, arguments->req_extra_dirs))
+			{
+				extra_path = check_extra_dir_mapping(extra_path);
 				copy_file(arguments->extra_prefix, extra_path, file);
+			}
 		}
 		else
 			copy_file(from_root, instance_config.pgdata, file);
