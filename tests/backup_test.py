@@ -199,7 +199,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "WARNING: Backup file".format(
                     file) in e.message and
                 "is not found".format(file) in e.message and
-                "{0}\" is not found".format(file) in e.message and
                 "WARNING: Backup {0} data files are corrupted".format(
                     backup_id) in e.message and
                 "WARNING: Some backups are not valid" in e.message,
