@@ -894,6 +894,7 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 	char	   *dst_ptr;
 	const char *arg_ptr;
 
+	memset(cell, 0, sizeof(TablespaceListCell));
 	dst_ptr = dst = cell->old_dir;
 	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
 	{
