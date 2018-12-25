@@ -459,22 +459,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1000) i")
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', node, backup_type="full",
-                options=["-j", "4", "--stream"])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of too many levels "
-                "of symbolic linking\n"
-                " Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'Too many levels of symbolic links' in e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        backup_id_1 = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
 
         node.safe_psql(
             "postgres",
@@ -495,7 +482,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             ).rstrip()
 
         list = []
-        for root, dirs, files in os.walk(backup_dir):
+        for root, dirs, files in os.walk(os.path.join(
+                backup_dir, 'backups/node', backup_id_1)):
             for file in files:
                 if file == relfilenode:
                     path = os.path.join(root, file)
