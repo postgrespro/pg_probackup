@@ -2216,9 +2216,9 @@ backup_files(void *arg)
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
 
-		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
+		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
 		if (interrupted)
