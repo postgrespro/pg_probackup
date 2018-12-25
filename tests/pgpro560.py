@@ -28,7 +28,7 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         file = os.path.join(node.base_dir,'data', 'global', 'pg_control')
         os.remove(file)
@@ -60,13 +60,13 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        node1.start()
+        node1.slow_start()
         node2 = self.make_simple_node(base_dir="{0}/{1}/node2".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
-        node2.start()
+        node2.slow_start()
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

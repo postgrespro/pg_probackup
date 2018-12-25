@@ -25,7 +25,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -56,7 +56,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             print('Killing postmaster. Losing Ptrack changes')
         node.stop(['-m', 'immediate', '-D', node.data_dir])
         if not node.status():
-            node.start()
+            node.slow_start()
         else:
             print("Die! Die! Why won't you die?... Why won't you die?")
             exit(1)

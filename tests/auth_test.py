@@ -43,7 +43,7 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql("postgres", "CREATE ROLE backup with LOGIN")
 
@@ -203,25 +203,26 @@ class AuthTest(unittest.TestCase):
         cls.pb.add_instance(cls.backup_dir, cls.node.name, cls.node)
         cls.pb.set_archiving(cls.backup_dir, cls.node.name, cls.node)
         try:
-            cls.node.start()
+            cls.node.slow_start()
         except StartNodeException:
             raise unittest.skip("Node hasn't started")
 
-        cls.node.safe_psql("postgres",
-                           "CREATE ROLE backup WITH LOGIN PASSWORD 'password'; \
-                       GRANT USAGE ON SCHEMA pg_catalog TO backup; \
-                       GRANT EXECUTE ON FUNCTION current_setting(text) TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_switch_xlog() TO backup; \
-                       GRANT EXECUTE ON FUNCTION txid_current() TO backup; \
-                       GRANT EXECUTE ON FUNCTION txid_current_snapshot() TO backup; \
-                       GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup; \
-                       GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;")
+        cls.node.safe_psql(
+            "postgres",
+            "CREATE ROLE backup WITH LOGIN PASSWORD 'password'; "
+            "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+            "GRANT EXECUTE ON FUNCTION current_setting(text) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_switch_xlog() TO backup; "
+            "GRANT EXECUTE ON FUNCTION txid_current() TO backup; "
+            "GRANT EXECUTE ON FUNCTION txid_current_snapshot() TO backup; "
+            "GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;")
         cls.pgpass_file = os.path.join(os.path.expanduser('~'), '.pgpass')
 
     @classmethod

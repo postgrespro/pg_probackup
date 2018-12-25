@@ -41,7 +41,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -89,7 +89,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -123,7 +123,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
         node.safe_psql(
@@ -180,7 +180,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -214,7 +214,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -252,7 +252,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -279,7 +279,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL BACKUP
         node.safe_psql(
@@ -318,7 +318,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -334,7 +334,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
         delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
@@ -365,7 +365,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         # self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL BACKUP
         node.safe_psql(
@@ -401,7 +401,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
         full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
@@ -417,7 +417,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-        node.start()
+        node.slow_start()
         delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
@@ -451,7 +451,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         # self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -533,7 +533,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
@@ -599,7 +599,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
 
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -627,7 +627,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL BACKUP
         node.safe_psql(
@@ -681,7 +681,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # DROP DATABASE DB1
         node.safe_psql(
@@ -716,7 +716,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         try:
             node_restored.safe_psql('db1', 'select 1')
@@ -761,7 +761,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL BACKUP
         node.safe_psql(
@@ -842,7 +842,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -868,7 +868,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL BACKUP
         self.create_tblspace_in_node(node, 'somedata')
@@ -961,7 +961,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
         # FULL backup
@@ -1029,7 +1029,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1056,7 +1056,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -1115,7 +1115,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1134,7 +1134,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -1193,7 +1193,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -1218,7 +1218,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 f.write(b"bla")
                 f.flush()
                 f.close
-        node.start()
+        node.slow_start()
 
         try:
             self.backup_node(

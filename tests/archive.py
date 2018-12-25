@@ -732,7 +732,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
         if self.get_version(node) < 100000:
             pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
         else:
@@ -806,7 +806,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
         if self.get_version(node) < self.version_to_num('10.0'):
             return unittest.skip('You need PostgreSQL 10 for this test')
         else:

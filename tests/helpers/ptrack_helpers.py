@@ -218,10 +218,10 @@ class ProbackupTest(object):
         self.probackup_path = None
         if 'PGPROBACKUPBIN' in self.test_env:
             if (
-                os.path.isfile(self.test_env['PGPROBACKUPBIN']) and
-                os.access(self.test_env['PGPROBACKUPBIN'], os.X_OK)
+                os.path.isfile(self.test_env["PGPROBACKUPBIN"]) and
+                os.access(self.test_env["PGPROBACKUPBIN"], os.X_OK)
             ):
-                self.probackup_path = self.test_env['PGPROBACKUPBIN']
+                self.probackup_path = self.test_env["PGPROBACKUPBIN"]
             else:
                 if self.verbose:
                     print('PGPROBACKUPBIN is not an executable file')

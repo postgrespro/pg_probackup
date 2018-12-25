@@ -24,7 +24,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # full backup
         self.backup_node(backup_dir, 'node', node)
@@ -72,7 +72,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # full backup mode
         self.backup_node(backup_dir, 'node', node)
@@ -112,7 +112,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # full backup mode
         self.backup_node(backup_dir, 'node', node)
@@ -152,7 +152,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",

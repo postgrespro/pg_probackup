@@ -26,7 +26,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -107,7 +107,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # Create table and indexes
         node.safe_psql(
@@ -185,7 +185,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
@@ -198,7 +198,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start()
 
         # Create table and indexes
         master.safe_psql(
@@ -285,7 +285,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
@@ -298,7 +298,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, 'replica', synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start()
 
         # Create table and indexes
         master.safe_psql(

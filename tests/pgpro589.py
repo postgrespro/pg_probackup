@@ -30,7 +30,7 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
 
         # make erroneus archive_command
         node.append_conf("postgresql.auto.conf", "archive_command = 'exit 0'")
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=5)
         pgbench = node.pgbench(

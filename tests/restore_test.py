@@ -27,7 +27,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
         pgbench = node.pgbench(
@@ -74,7 +74,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
 
@@ -122,7 +122,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
 
@@ -192,7 +192,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.append_conf("postgresql.auto.conf", "TimeZone = Europe/Moscow")
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
         before = node.execute("postgres", "SELECT * FROM pgbench_branches")
@@ -240,7 +240,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
         with node.connect("postgres") as con:
@@ -304,7 +304,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
         with node.connect("postgres") as con:
@@ -371,7 +371,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
         with node.connect("postgres") as con:
@@ -444,7 +444,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
         with node.connect("postgres") as con:
@@ -513,7 +513,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
 
@@ -561,7 +561,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
 
@@ -620,7 +620,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
 
@@ -675,7 +675,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=2)
 
@@ -741,7 +741,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # wal_segment_size = self.guc_wal_segment_size(node)
         node.pgbench_init(scale=2)
@@ -805,7 +805,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # Create tablespace
         tblspc_path = os.path.join(node.base_dir, "tblspc")
@@ -921,7 +921,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # Full backup
         self.backup_node(backup_dir, 'node', node)
@@ -1004,7 +1004,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(
             backup_dir, 'node', node, options=["--stream"])
@@ -1054,7 +1054,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(
             backup_dir, 'node', node, options=["--stream"])
@@ -1103,7 +1103,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(
             backup_dir, 'node', node, options=["--stream"])
@@ -1151,7 +1151,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         if self.paranoia:
@@ -1206,7 +1206,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
 
@@ -1255,7 +1255,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
 
@@ -1336,7 +1336,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
 

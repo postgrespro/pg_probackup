@@ -27,7 +27,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         show_backup = self.show_pb(backup_dir, 'node')[0]
@@ -97,7 +97,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -121,7 +121,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         try:
             self.backup_node(backup_dir, 'node', node, backup_type="page")
@@ -177,7 +177,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         file = os.path.join(
@@ -241,7 +241,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -272,7 +272,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -301,7 +301,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -358,7 +358,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -383,7 +383,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 f.write(b"bla")
                 f.flush()
                 f.close
-        node.start()
+        node.slow_start()
 
         try:
             self.backup_node(
@@ -431,7 +431,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(
             node, 'tblspace1',

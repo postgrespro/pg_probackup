@@ -23,7 +23,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.assertEqual(
             self.backup_node(
@@ -51,7 +51,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.assertEqual(
             self.backup_node(
@@ -79,7 +79,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -125,7 +125,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -154,7 +154,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -185,7 +185,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 

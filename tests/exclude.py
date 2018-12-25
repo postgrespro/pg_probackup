@@ -28,7 +28,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         conn = node.connect()
         with node.connect("postgres") as conn:
@@ -122,7 +122,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         conn = node.connect()
         with node.connect("postgres") as conn:

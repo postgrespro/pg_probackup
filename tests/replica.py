@@ -30,7 +30,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'max_wal_senders': '2',
                 'ptrack_enable': 'on'}
             )
-        master.start()
+        master.slow_start()
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
 

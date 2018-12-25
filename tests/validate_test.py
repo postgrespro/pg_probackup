@@ -221,7 +221,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
@@ -306,7 +306,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -429,7 +429,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL1
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
@@ -628,7 +628,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL1
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
@@ -812,7 +812,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -960,7 +960,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -1046,7 +1046,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -1121,7 +1121,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
@@ -1183,7 +1183,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         with node.connect("postgres") as con:
             con.execute("CREATE TABLE tbl0005 (a text)")
@@ -1255,7 +1255,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=3)
 
@@ -1333,7 +1333,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -1427,7 +1427,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(
             backup_dir, 'node', node, options=["--stream"])
@@ -1470,7 +1470,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         recovery_time = self.show_pb(
@@ -1500,7 +1500,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node1', node1)
         self.set_archiving(backup_dir, 'node1', node1)
-        node1.start()
+        node1.slow_start()
 
         backup_id = self.backup_node(
             backup_dir, 'node1', node1, options=["--stream"])
@@ -1594,7 +1594,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -1717,7 +1717,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -1829,7 +1829,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -2179,7 +2179,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -2405,7 +2405,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -2481,7 +2481,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -2623,7 +2623,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -2744,7 +2744,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -2932,7 +2932,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -3080,7 +3080,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
