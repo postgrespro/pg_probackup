@@ -54,7 +54,7 @@ char		backup_instance_path[MAXPGPATH];
  */
 char		arclog_path[MAXPGPATH] = "";
 
-/* extra directory to backup */
+/* colon separated extra directories list ("/path1:/path2") */
 char	   *extradir = NULL;
 /* common options */
 static char *backup_id_string = NULL;

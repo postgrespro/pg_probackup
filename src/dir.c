@@ -984,12 +984,6 @@ opt_extradir_map(ConfigOption *opt, const char *arg)
 		elog(ERROR, "invalid extra directory mapping format \"%s\", "
 			 "must be \"OLDDIR=NEWDIR\"", arg);
 
-	/*
-	 * This check isn't absolutely necessary.  But all tablespaces are created
-	 * with absolute directories, so specifying a non-absolute path here would
-	 * just never match, possibly confusing users.  It's also good to be
-	 * consistent with the new_dir check.
-	 */
 	if (!is_absolute_path(cell->old_dir))
 		elog(ERROR, "old directory is not an absolute path "
 					"in extra directory mapping: %s\n",
@@ -1338,13 +1332,10 @@ print_file_list(FILE *out, const parray *files, const char *root,
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\", \"extra_dir_num\":\"%u\"",
+					 "\"compress_alg\":\"%s\", \"extra_dir_num\":\"%d\"",
 				path, file->write_size, file->mode,
 				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
 				deparse_compress_alg(file->compress_alg), file->extra_dir_num);
-
-		//if (file->extradir)
-		//	fprintf(out, ",\"extradir\":\"%s\"", file->extradir);
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
