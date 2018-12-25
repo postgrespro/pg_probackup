@@ -252,8 +252,13 @@ class ProbackupTest(object):
             print('pg_probackup binary is not found')
             exit(1)
 
-        os.environ['PATH'] = os.path.dirname(
-            self.probackup_path) + ':' + os.environ['PATH']
+        if os.name == 'posix':
+            os.environ['PATH'] = os.path.dirname(
+                self.probackup_path) + ':' + os.environ['PATH']
+
+        elif os.name == 'nt':
+            os.environ['PATH'] = os.path.dirname(
+                self.probackup_path) + ';' + os.environ['PATH']
 
         self.probackup_old_path = None
 
