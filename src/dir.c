@@ -415,6 +415,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
 		{
+			black_item[0] = '\0';
 			join_path_components(black_item, instance_config.pgdata, buf);
 
 			if (black_item[strlen(black_item) - 1] == '\n')
@@ -423,7 +424,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 			if (black_item[0] == '#' || black_item[0] == '\0')
 				continue;
 
-			parray_append(black_list, black_item);
+			parray_append(black_list, pgut_strdup(black_item));
 		}
 
 		fclose(black_list_file);
@@ -446,6 +447,12 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 	if (!add_root)
 		pgFileFree(file);
+
+	if (black_list)
+	{
+		parray_walk(black_list, pfree);
+		parray_free(black_list);
+	}
 }
 
 #define CHECK_FALSE				0
