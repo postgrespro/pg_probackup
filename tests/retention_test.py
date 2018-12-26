@@ -15,7 +15,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """purge backups using redundancy-based retention policy"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -72,7 +72,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """purge backups using window-based retention policy"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -126,7 +126,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """purge backups using window-based retention policy"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )

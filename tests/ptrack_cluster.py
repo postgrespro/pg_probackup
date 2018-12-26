@@ -15,7 +15,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_btree(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -96,7 +96,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_gist(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -174,7 +174,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_btree_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -190,7 +190,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -274,7 +274,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_gist_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -290,7 +290,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)

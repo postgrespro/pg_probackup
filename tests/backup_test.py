@@ -17,7 +17,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -89,7 +89,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """full backup with smooth checkpoint"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
         )
@@ -113,7 +113,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """page-level backup without validated full backup"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
@@ -169,7 +169,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """page-level backup with corrupted full backup"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
@@ -234,7 +234,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """ptrack multi thread backup mode"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
@@ -262,7 +262,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """ptrack multi thread backup mode and stream"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -293,7 +293,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -350,7 +350,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -423,7 +423,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """PGPRO-1376 """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}

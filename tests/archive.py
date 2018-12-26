@@ -21,7 +21,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -79,7 +79,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -228,7 +228,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -283,7 +283,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -352,7 +352,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -418,7 +418,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -432,7 +432,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         master.psql(
@@ -481,7 +481,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE FULL BACKUP TAKEN FROM replica
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node'))
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
         node.append_conf(
@@ -550,14 +550,14 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '10s'}
             )
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.init_pb(backup_dir)
@@ -640,7 +640,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -648,7 +648,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '10s'}
             )
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.init_pb(backup_dir)
@@ -723,7 +723,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -797,7 +797,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={

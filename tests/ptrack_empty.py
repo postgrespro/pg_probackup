@@ -15,7 +15,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         """Take backups of every available types and check that PTRACK is clean"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -58,7 +58,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         tblspace1 = self.get_tblspace_path(node, 'somedata')
@@ -93,7 +93,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         """Take backups of every available types from master and check that PTRACK on replica is clean"""
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -108,7 +108,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -151,7 +151,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.wait_until_replica_catch_with_master(master, replica)
 
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         # Take PTRACK backup

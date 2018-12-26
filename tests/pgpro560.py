@@ -20,11 +20,12 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         check that backup failed
         """
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -55,17 +56,19 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         check that backup failed
         """
         fname = self.id().split('.')[3]
-        node1 = self.make_simple_node(base_dir="{0}/{1}/node1".format(module_name, fname),
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
+
         node1.slow_start()
-        node2 = self.make_simple_node(base_dir="{0}/{1}/node2".format(module_name, fname),
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
+
         node2.slow_start()
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

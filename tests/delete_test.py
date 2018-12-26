@@ -16,10 +16,10 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         """delete full backups"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -64,10 +64,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     def test_delete_increment_page(self):
         """delete increment and all after him"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -104,10 +105,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     def test_delete_increment_ptrack(self):
         """delete increment and all after him"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
-            )
+            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -144,10 +146,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     def test_delete_orphaned_wal_segments(self):
         """make archive node, make three full backups, delete second backup without --wal option, then delete orphaned wals via --wal option"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
