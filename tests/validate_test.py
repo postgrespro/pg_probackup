@@ -249,7 +249,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file
         file = os.path.join(
-            backup_dir, 'backups/node', backup_id_2, 'database', file_path)
+            backup_dir, 'backups', 'node',
+            backup_id_2, 'database', file_path)
         with open(file, "r+b", 0) as f:
             f.seek(42)
             f.write(b"blah")
@@ -342,7 +343,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in FULL backup
         file_full = os.path.join(
-            backup_dir, 'backups/node',
+            backup_dir, 'backups', 'node',
             backup_id_1, 'database', file_path_t_heap)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
@@ -352,7 +353,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in PAGE1 backup
         file_page1 = os.path.join(
-            backup_dir, 'backups/node',
+            backup_dir, 'backups', 'node',
             backup_id_2, 'database', file_path_t_heap_1)
         with open(file_page1, "rb+", 0) as f:
             f.seek(42)
@@ -379,8 +380,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_1) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_full) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_1) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -499,7 +499,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in PAGE2 and PAGE5 backups
         file_page1 = os.path.join(
-            backup_dir, 'backups/node', backup_id_3, 'database', file_page_2)
+            backup_dir, 'backups', 'node', backup_id_3, 'database', file_page_2)
         with open(file_page1, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -507,7 +507,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.close
 
         file_page4 = os.path.join(
-            backup_dir, 'backups/node', backup_id_6, 'database', file_page_5)
+            backup_dir, 'backups', 'node', backup_id_6, 'database', file_page_5)
         with open(file_page4, "rb+", 0) as f:
             f.seek(42)
             f.write(b"blah")
@@ -547,8 +547,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_3) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_page1) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_3) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -698,7 +697,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in PAGE2 and PAGE5 backups
         file_page1 = os.path.join(
-            backup_dir, 'backups/node', backup_id_3, 'database', file_page_2)
+            backup_dir, 'backups', 'node',
+            backup_id_3, 'database', file_page_2)
         with open(file_page1, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -706,7 +706,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.close
 
         file_page4 = os.path.join(
-            backup_dir, 'backups/node', backup_id_6, 'database', file_page_5)
+            backup_dir, 'backups', 'node',
+            backup_id_6, 'database', file_page_5)
         with open(file_page4, "rb+", 0) as f:
             f.seek(42)
             f.write(b"blah")
@@ -747,8 +748,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_3) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_page1) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_3) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -851,7 +851,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in FULL backup
         file_full = os.path.join(
-            backup_dir, 'backups/node', backup_id_2,
+            backup_dir, 'backups', 'node', backup_id_2,
             'database', file_path_t_heap1)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
@@ -906,8 +906,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_2) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_full) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_2) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -964,7 +963,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
         file_path_t_heap = node.safe_psql(
             "postgres",
             "select pg_relation_filepath('t_heap')").rstrip()
@@ -973,14 +974,18 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
         # PAGE1
         backup_id_2 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # PAGE2
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(20000,30000) i")
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(20000,30000) i")
         backup_id_3 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # FULL1
@@ -989,11 +994,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # PAGE3
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(30000,40000) i")
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(30000,40000) i")
         backup_id_5 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # Corrupt some file in FULL backup
-        file_full = os.path.join(backup_dir, 'backups/node', backup_id_1, 'database', file_path_t_heap)
+        file_full = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id_1, 'database', file_path_t_heap)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -1009,7 +1018,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(backup_id_1) in e.message
                 and "INFO: Validate backups of the instance 'node'" in e.message
-                and 'WARNING: Invalid CRC of backup file "{0}"'.format(file_full) in e.message
+                and 'WARNING: Invalid CRC of backup file' in e.message
                 and 'WARNING: Backup {0} data files are corrupted'.format(backup_id_1) in e.message,
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -1050,7 +1059,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
         file_path_t_heap = node.safe_psql(
             "postgres",
             "select pg_relation_filepath('t_heap')").rstrip()
@@ -1059,27 +1071,40 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
         # PAGE1
-        backup_id_2 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
         # PAGE2
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(20000,30000) i")
-        backup_id_3 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(20000,30000) i")
+
+        backup_id_3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
         # FULL1
-        backup_id_4 = self.backup_node(backup_dir, 'node', node)
+        backup_id_4 = self.backup_node(
+            backup_dir, 'node', node)
 
         # PAGE3
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(30000,40000) i")
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(30000,40000) i")
         backup_id_5 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # Corrupt some file in FULL backup
-        file_full = os.path.join(backup_dir, 'backups/node', backup_id_1, 'database', file_path_t_heap)
+        file_full = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id_1, 'database', file_path_t_heap)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -1089,13 +1114,16 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate Instance
         try:
             self.validate_pb(backup_dir, 'node')
-            self.assertEqual(1, 0, "Expecting Error because of data files corruption.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of data files corruption.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(backup_id_1) in e.message
                 and "INFO: Validate backups of the instance 'node'" in e.message
-                and 'WARNING: Invalid CRC of backup file "{0}"'.format(file_full) in e.message
+                and 'WARNING: Invalid CRC of backup file' in e.message
                 and 'WARNING: Backup {0} data files are corrupted'.format(backup_id_1) in e.message,
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 

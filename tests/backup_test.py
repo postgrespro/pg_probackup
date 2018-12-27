@@ -484,7 +484,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         list = []
         for root, dirs, files in os.walk(os.path.join(
-                backup_dir, 'backups/node', backup_id_1)):
+                backup_dir, 'backups', 'node', backup_id_1)):
             for file in files:
                 if file == relfilenode:
                     path = os.path.join(root, file)

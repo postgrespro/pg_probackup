@@ -1164,7 +1164,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # read block from future
         # block_size + backup_header = 8200
         file = os.path.join(
-            backup_dir, 'backups/node', backup_id_2, 'database', new_path)
+            backup_dir, 'backups', 'node',
+            backup_id_2, 'database', new_path)
         with open(file, 'rb') as f:
             f.seek(8200)
             block_1 = f.read(8200)
@@ -1172,7 +1173,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # write block from future
         file = os.path.join(
-            backup_dir, 'backups/node', backup_id, 'database', old_path)
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', old_path)
         with open(file, 'r+b') as f:
             f.seek(8200)
             f.write(block_1)
