@@ -833,10 +833,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(
+            self.assertIn(
+                'ERROR: restore destination is not empty: "{0}"'.format(node.data_dir),
                 e.message,
-                'ERROR: restore destination is not empty: "{0}"\n'.format(
-                    node.data_dir),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
