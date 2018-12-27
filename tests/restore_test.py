@@ -5,6 +5,7 @@ import subprocess
 from datetime import datetime
 import sys
 import time
+import shutil
 
 
 module_name = 'restore'
@@ -840,7 +841,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # 2 - Try to restore to existing tablespace directory
-        node.cleanup()
+        shutil.rmtree(node.data_dir, ignore_errors=True)
         try:
             self.restore_node(backup_dir, 'node', node)
             # we should die here because exception is what we expect to happen
