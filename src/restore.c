@@ -407,6 +407,11 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
+	if (extra_remap_list)
+	{
+		parray_walk(extra_remap_list, free_extra_remap_list);
+		parray_free(extra_remap_list);
+	}
 
 	elog(INFO, "%s of backup %s completed.",
 		 action, base36enc(dest_backup->start_time));
@@ -557,8 +562,6 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	/* cleanup */
 	parray_walk(files, pgFileFree);
 	parray_free(files);
-
-	clean_extra_dirs_remap_list();
 
 	if (logger_config.log_level_console <= LOG ||
 		logger_config.log_level_file <= LOG)

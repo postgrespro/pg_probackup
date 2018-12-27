@@ -991,8 +991,11 @@ do_backup(time_t start_time)
 			sizeof(current.program_version));
 
 	/* Save list of extra directories */
-	if(extradir)
-		current.extra_dir_str = extradir;
+	if (instance_config.extra_dir_str &&
+		strcmp(instance_config.extra_dir_str, "none") != 0)
+	{
+		current.extra_dir_str = instance_config.extra_dir_str;
+	}
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))

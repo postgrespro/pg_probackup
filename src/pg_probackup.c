@@ -137,8 +137,6 @@ static ConfigOption cmd_options[] =
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
-	{ 's', 155, "extra-directory",	&extradir,			SOURCE_CMD_STRICT },
-	{ 'f', 'E', "extra-mapping",	opt_extradir_map,	SOURCE_CMD_STRICT },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, }, */
 	/* restore options */
@@ -147,6 +145,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
 	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
+	{ 'f', 155, "extra-mapping",	opt_extradir_map,	SOURCE_CMD_STRICT },
 	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },

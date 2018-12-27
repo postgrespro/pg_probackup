@@ -180,6 +180,7 @@ typedef struct InstanceConfig
 	uint32		xlog_seg_size;
 
 	char	   *pgdata;
+	char	   *extra_dir_str;
 	const char *pgdatabase;
 	const char *pghost;
 	const char *pgport;
@@ -352,9 +353,6 @@ extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
 
-/* extra directory to backup */
-extern char	   *extradir;
-
 /* common options */
 extern int		num_threads;
 extern bool		stream_wal;
@@ -396,6 +394,7 @@ extern pgBackup current;
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */
 extern const char *pgdata_exclude_dir[];
+extern parray *extra_remap_list;
 
 /* in backup.c */
 extern int do_backup(time_t start_time);
@@ -522,6 +521,7 @@ extern void free_dir_list(parray *list);
 extern void makeExtraDirPathByNum(char *ret_path, const char *pattern_path,
 								  const int dir_num);
 extern bool backup_contains_extra(const char *dir, parray *dirs_list);
+extern void free_extra_remap_list(void *cell);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
@@ -540,7 +540,6 @@ extern int pgFileComparePathWithExtra(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
-extern int BlackListCompare(const void *str1, const void *str2);
 
 /* in data.c */
 extern bool backup_data_file(backup_files_arg* arguments,

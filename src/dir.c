@@ -116,6 +116,8 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
+static int BlackListCompare(const void *str1, const void *str2);
+
 static bool dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
@@ -124,13 +126,12 @@ static void dir_list_file_internal(parray *files, const char *root,
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
 								  bool exclude);
-static void free_extra_remap_list(void *cell);
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
 static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
 /* Extra directories mapping */
-static parray *extra_remap_list = NULL;
+parray *extra_remap_list = NULL;
 
 /*
  * Create directory, also create parent directories if necessary.
@@ -405,8 +406,7 @@ pgFileCompareSize(const void *f1, const void *f2)
 		return 0;
 }
 
-/* Compare two strings */
-int
+static int
 BlackListCompare(const void *str1, const void *str2)
 {
 	return strcmp(*(char **) str1, *(char **) str2);
@@ -724,8 +724,6 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 			continue;
 		}
 
-		/* If it is extra dir, remember it */
-
 		/* We add the directory anyway */
 		if (S_ISDIR(file->mode))
 			parray_append(files, file);
@@ -960,7 +958,9 @@ opt_extradir_map(ConfigOption *opt, const char *arg)
 	char	   *dst_ptr;
 	const char *arg_ptr;
 
-	extra_remap_list = parray_new();
+	memset(cell, 0, sizeof(TablespaceListCell));
+	if (!extra_remap_list)
+		extra_remap_list = parray_new();
 	dst_ptr = dst = cell->old_dir;
 	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
 	{
@@ -1284,7 +1284,7 @@ check_extra_dir_mapping(char *current_dir)
 	return current_dir;
 }
 
-static void
+void
 free_extra_remap_list(void *cell)
 {
 	TablespaceListCell *cell_ptr;
@@ -1292,16 +1292,6 @@ free_extra_remap_list(void *cell)
 		return;
 	cell_ptr = (TablespaceListCell *)cell;
 	pfree(cell_ptr);
-}
-
-void
-clean_extra_dirs_remap_list(void)
-{
-	if (extra_remap_list)
-	{
-		parray_walk(extra_remap_list, free_extra_remap_list);
-		parray_free(extra_remap_list);
-	}
 }
 
 /*
@@ -1657,14 +1647,16 @@ make_extra_directory_list(const char *colon_separated_dirs)
 	parray	   *list = parray_new();
 	char	   *tmp = palloc(strlen(colon_separated_dirs) + 1);
 
-	/* TODO: Add path validation */
 	strcpy(tmp, colon_separated_dirs);
 	p = strtok(tmp,":");
 	while(p!=NULL)
 	{
 		char * dir = (char *)palloc(strlen(p) + 1);
 		strcpy(dir,p);
-		parray_append(list, dir);
+		if (is_absolute_path(dir))
+			parray_append(list, dir);
+		else
+			elog(ERROR, "Extra directory \"%s\" is not an absolute path", dir);
 		p=strtok(NULL,":");
 	}
 	pfree(tmp);
