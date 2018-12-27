@@ -840,7 +840,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # 2 - Try to restore to existing tablespace directory
-        shutil.rmtree(node.data_dir, ignore_errors=True)
+        tblspc_path_tmp = os.path.join(node.base_dir, "tblspc_tmp")
+        os.rename(tblspc_path, tblspc_path_tmp)
+        node.cleanup()
+        os.rename(tblspc_path_tmp, tblspc_path)
         try:
             self.restore_node(backup_dir, 'node', node)
             # we should die here because exception is what we expect to happen
@@ -850,10 +853,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "not empty.\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(
+            self.assertIn(
+                'ERROR: restore tablespace destination is not empty:',
                 e.message,
-                'ERROR: restore tablespace destination '
-                'is not empty: "{0}"\n'.format(tblspc_path),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
