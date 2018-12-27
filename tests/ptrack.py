@@ -89,11 +89,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # DISABLE PTRACK
         node.safe_psql('postgres', "alter system set ptrack_enable to off")
-        node.restart()
+        node.stop()
+        node.slow_start()
 
         # ENABLE PTRACK
         node.safe_psql('postgres', "alter system set ptrack_enable to on")
-        node.restart()
+        node.stop()
+        node.slow_start()
 
         # PTRACK BACKUP
         try:

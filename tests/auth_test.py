@@ -126,7 +126,8 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             "test1", "create table t1 as select generate_series(0,100)")
 
         node.append_conf("postgresql.auto.conf", "ptrack_enable = 'on'")
-        node.restart()
+        node.stop()
+        node.slow_start()
 
         try:
             self.backup_node(

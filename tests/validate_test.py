@@ -1528,7 +1528,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node2.append_conf(
             'postgresql.auto.conf', 'archive_mode = on')
-        node2.restart()
+        node2.stop()
+        node2.slow_start()
 
         timeline_node1 = node1.get_control_data()["Latest checkpoint's TimeLineID"]
         timeline_node2 = node2.get_control_data()["Latest checkpoint's TimeLineID"]
