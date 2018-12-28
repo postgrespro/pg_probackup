@@ -56,7 +56,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         with open(log_file_path) as f:
             self.assertTrue(
-                'LOG: File: {0} blknum 1, empty page'.format(file) in f.read(),
+                '{0} blknum 1, empty page'.format(file_path) in f.read(),
                 'Failed to detect nullified block')
 
         self.validate_pb(backup_dir)
@@ -3134,6 +3134,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.run_binary(
             [
                 pg_resetxlog_path,
+                '-D',
                 os.path.join(backup_dir, 'backups', 'node', backup_id, 'database'),
                 '-o 42',
                 '-f'
