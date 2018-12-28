@@ -519,6 +519,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	TimestampTz last_time = 0;
 	char		last_timestamp[100],
 				target_timestamp[100];
+	XLogRecPtr	last_lsn = InvalidXLogRecPtr;
 	bool		all_wal = false;
 	char		backup_xlog_path[MAXPGPATH];
 
@@ -585,6 +586,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	/* We can restore at least up to the backup end */
 	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time);
 	last_xid = backup->recovery_xid;
+	last_lsn = backup->stop_lsn;
 
 	if ((TransactionIdIsValid(target_xid) && target_xid == last_xid)
 		|| (target_time != 0 && backup->recovery_time >= target_time)
@@ -608,6 +610,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 		timestamp_record = getRecordTimestamp(xlogreader, &last_time);
 		if (XLogRecGetXid(xlogreader) != InvalidTransactionId)
 			last_xid = XLogRecGetXid(xlogreader);
+		last_lsn = xlogreader->ReadRecPtr;
 
 		/* Check target xid */
 		if (TransactionIdIsValid(target_xid) && target_xid == last_xid)
@@ -616,12 +619,19 @@ validate_wal(pgBackup *backup, const char *archivedir,
 			break;
 		}
 		/* Check target time */
-		else if (target_time != 0 && timestamp_record && timestamptz_to_time_t(last_time) >= target_time)
+		else if (target_time != 0 && timestamp_record &&
+				 timestamptz_to_time_t(last_time) >= target_time)
 		{
 			all_wal = true;
 			break;
 		}
-		/* If there are no target xid and target time */
+		/* Check target lsn */
+		else if (XRecOffIsValid(target_xid) && last_lsn >= target_lsn)
+		{
+			all_wal = true;
+			break;
+		}
+		/* If there are no target xid, target time and target lsn */
 		else if (!TransactionIdIsValid(target_xid) && target_time == 0 &&
 			xlogreader->ReadRecPtr == backup->stop_lsn)
 		{
@@ -638,15 +648,17 @@ validate_wal(pgBackup *backup, const char *archivedir,
 
 	/* There are all needed WAL records */
 	if (all_wal)
-		elog(INFO, "backup validation completed successfully on time %s and xid " XID_FMT,
-			 last_timestamp, last_xid);
+		elog(INFO, "backup validation completed successfully on time %s, xid " XID_FMT " and LSN %X/%X",
+			 last_timestamp, last_xid,
+			 (uint32) (last_lsn >> 32), (uint32) last_lsn);
 	/* Some needed WAL records are absent */
 	else
 	{
 		PrintXLogCorruptionMsg(&private, WARNING);
 
-		elog(WARNING, "recovery can be done up to time %s and xid " XID_FMT,
-				last_timestamp, last_xid);
+		elog(WARNING, "recovery can be done up to time %s, xid " XID_FMT " and LSN %X/%X",
+				last_timestamp, last_xid,
+			 (uint32) (last_lsn >> 32), (uint32) last_lsn);
 
 		if (target_time > 0)
 			time2iso(target_timestamp, lengthof(target_timestamp),
