@@ -117,9 +117,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(
+            self.assertIn(
+                'ERROR: Backup satisfying target options is not found',
                 e.message,
-                'ERROR: Backup satisfying target options is not found.\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1309,8 +1309,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WAL segment \"{0}\" is absent".format(
-                    file) in e.message and
+                "is absent" in e.message and
                 "WARNING: There are not enough WAL records to consistenly "
                 "restore backup {0}".format(backup_id) in e.message and
                 "WARNING: Backup {0} WAL segments are corrupted".format(
