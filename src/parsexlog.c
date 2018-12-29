@@ -626,14 +626,14 @@ validate_wal(pgBackup *backup, const char *archivedir,
 			break;
 		}
 		/* Check target lsn */
-		else if (XRecOffIsValid(target_xid) && last_lsn >= target_lsn)
+		else if (XRecOffIsValid(target_lsn) && last_lsn >= target_lsn)
 		{
 			all_wal = true;
 			break;
 		}
 		/* If there are no target xid, target time and target lsn */
 		else if (!TransactionIdIsValid(target_xid) && target_time == 0 &&
-			xlogreader->ReadRecPtr == backup->stop_lsn)
+				 !XRecOffIsValid(target_lsn))
 		{
 			all_wal = true;
 			/* We don't stop here. We want to get last_xid and last_time */
