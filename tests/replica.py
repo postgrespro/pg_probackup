@@ -3,7 +3,6 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
 import subprocess
-from sys import exit
 import time
 
 
@@ -52,7 +51,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Check data correctness on replica
         replica.slow_start(replica=True)
-        exit(1)
         after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
