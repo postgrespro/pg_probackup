@@ -404,7 +404,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             'recovery.conf', "recovery_min_apply_delay = '300s'")
 
         replica.stop()
-        replica.slow_start()
+        replica.slow_start(replica=True)
 
         master.pgbench_init(scale=10)
 
