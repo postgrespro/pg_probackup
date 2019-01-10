@@ -2453,7 +2453,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="full",
-            options=["-j", "4"], async=False, gdb=False)
+            options=["-j", "4"], asynchronous=False, gdb=False)
 
         node.stop()
         node.cleanup()
@@ -3138,7 +3138,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '-o 42',
                 '-f'
             ],
-            async=False)
+            asynchronous=False)
 
         md5_after = hashlib.md5(
             open(pg_control_path, 'rb').read()).hexdigest()

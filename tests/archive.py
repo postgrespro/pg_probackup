@@ -742,7 +742,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             [
                 pg_receivexlog_path, '-p', str(node.port), '--synchronous',
                 '-D', os.path.join(backup_dir, 'wal', 'node')
-            ], async=True)
+            ], asynchronous=True)
 
         if pg_receivexlog.returncode:
             self.assertFalse(
@@ -816,7 +816,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             [
                 pg_receivexlog_path, '-p', str(node.port), '--synchronous',
                 '-Z', '9', '-D', os.path.join(backup_dir, 'wal', 'node')
-            ], async=True)
+            ], asynchronous=True)
 
         if pg_receivexlog.returncode:
             self.assertFalse(

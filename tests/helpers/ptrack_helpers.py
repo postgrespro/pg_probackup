@@ -124,7 +124,11 @@ def slow_start(self, replica=False):
     #    raise_operational_error=False)
 
     self.start()
-    if not replica:
+    if replica:
+        self.poll_query_until(
+            'postgres',
+            'SELECT pg_is_in_recovery()')
+    else:
         while True:
             try:
                 self.poll_query_until(
@@ -133,10 +137,6 @@ def slow_start(self, replica=False):
                 break
             except Exception as e:
                 continue
-    else:
-        self.poll_query_until(
-            'postgres',
-            'SELECT pg_is_in_recovery()')
 
 #        while True:
 #            try:
@@ -551,7 +551,7 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, async=False, gdb=False, old_binary=False):
+    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False):
         if not self.probackup_old_path and old_binary:
             print('PGPROBACKUPBIN_OLD is not set')
             exit(1)
@@ -567,7 +567,7 @@ class ProbackupTest(object):
                 print(self.cmd)
             if gdb:
                 return GDBobj([binary_path] + command, self.verbose)
-            if async:
+            if asynchronous:
                 return subprocess.Popen(
                     self.cmd,
                     stdout=subprocess.PIPE,
@@ -590,11 +590,11 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode('utf-8'), self.cmd)
 
-    def run_binary(self, command, async=False):
+    def run_binary(self, command, asynchronous=False):
         if self.verbose:
                 print([' '.join(map(str, command))])
         try:
-            if async:
+            if asynchronous:
                 return subprocess.Popen(
                     command,
                     stdin=subprocess.PIPE,
@@ -649,7 +649,7 @@ class ProbackupTest(object):
 
     def backup_node(
             self, backup_dir, instance, node, data_dir=False,
-            backup_type='full', options=[], async=False, gdb=False,
+            backup_type='full', options=[], asynchronous=False, gdb=False,
             old_binary=False
             ):
         if not node and not data_dir:
@@ -673,10 +673,10 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ['-b', backup_type]
 
-        return self.run_pb(cmd_list + options, async, gdb, old_binary)
+        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary)
 
     def merge_backup(
-            self, backup_dir, instance, backup_id, async=False,
+            self, backup_dir, instance, backup_id, asynchronous=False,
             gdb=False, old_binary=False, options=[]):
         cmd_list = [
             'merge',
@@ -685,7 +685,7 @@ class ProbackupTest(object):
             '-i', backup_id
         ]
 
-        return self.run_pb(cmd_list + options, async, gdb, old_binary)
+        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary)
 
     def restore_node(
             self, backup_dir, instance, node=False,
