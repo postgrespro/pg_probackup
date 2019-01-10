@@ -126,12 +126,14 @@ static void dir_list_file_internal(parray *files, const char *root,
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
 								  bool exclude);
+static void opt_path_map(ConfigOption *opt, const char *arg,
+						 TablespaceList *list, const char *type);
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
 static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
 /* Extra directories mapping */
-parray *extra_remap_list = NULL;
+static TablespaceList extra_remap_list = {NULL, NULL};
 
 /*
  * Create directory, also create parent directories if necessary.
@@ -893,13 +895,14 @@ get_tablespace_created(const char *link)
 }
 
 /*
- * Split argument into old_dir and new_dir and append to tablespace mapping
+ * Split argument into old_dir and new_dir and append to mapping
  * list.
  *
  * Copy of function tablespace_list_append() from pg_basebackup.c.
  */
-void
-opt_tablespace_map(ConfigOption *opt, const char *arg)
+static void
+opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
+			 const char *type)
 {
 	TablespaceListCell *cell = pgut_new(TablespaceListCell);
 	char	   *dst;
@@ -917,7 +920,7 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
 		{
 			if (*cell->new_dir)
-				elog(ERROR, "multiple \"=\" signs in tablespace mapping\n");
+				elog(ERROR, "multiple \"=\" signs in %s mapping\n", type);
 			else
 				dst = dst_ptr = cell->new_dir;
 		}
@@ -926,8 +929,8 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 	}
 
 	if (!*cell->old_dir || !*cell->new_dir)
-		elog(ERROR, "invalid tablespace mapping format \"%s\", "
-			 "must be \"OLDDIR=NEWDIR\"", arg);
+		elog(ERROR, "invalid %s mapping format \"%s\", "
+			 "must be \"OLDDIR=NEWDIR\"", type, arg);
 
 	/*
 	 * This check isn't absolutely necessary.  But all tablespaces are created
@@ -936,65 +939,32 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 	 * consistent with the new_dir check.
 	 */
 	if (!is_absolute_path(cell->old_dir))
-		elog(ERROR, "old directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->old_dir);
+		elog(ERROR, "old directory is not an absolute path in %s mapping: %s\n",
+			 type, cell->old_dir);
 
 	if (!is_absolute_path(cell->new_dir))
-		elog(ERROR, "new directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->new_dir);
+		elog(ERROR, "new directory is not an absolute path in %s mapping: %s\n",
+			 type, cell->new_dir);
 
-	if (tablespace_dirs.tail)
-		tablespace_dirs.tail->next = cell;
+	if (list->tail)
+		list->tail->next = cell;
 	else
-		tablespace_dirs.head = cell;
-	tablespace_dirs.tail = cell;
+		list->head = cell;
+	list->tail = cell;
 }
 
+/* Parse tablespace mapping */
+void
+opt_tablespace_map(ConfigOption *opt, const char *arg)
+{
+	opt_path_map(opt, arg, &tablespace_dirs, "tablespace");
+}
+
+/* Parse extra directories mapping */
 void
 opt_extradir_map(ConfigOption *opt, const char *arg)
 {
-	TablespaceListCell *cell = pgut_new(TablespaceListCell);
-	char	   *dst;
-	char	   *dst_ptr;
-	const char *arg_ptr;
-
-	memset(cell, 0, sizeof(TablespaceListCell));
-	if (!extra_remap_list)
-		extra_remap_list = parray_new();
-	dst_ptr = dst = cell->old_dir;
-	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
-	{
-		if (dst_ptr - dst >= MAXPGPATH)
-			elog(ERROR, "directory name too long");
-
-		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
-			;					/* skip backslash escaping = */
-		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
-		{
-			if (*cell->new_dir)
-				elog(ERROR, "multiple \"=\" signs in extra directory mapping\n");
-			else
-				dst = dst_ptr = cell->new_dir;
-		}
-		else
-			*dst_ptr++ = *arg_ptr;
-	}
-
-	if (!*cell->old_dir || !*cell->new_dir)
-		elog(ERROR, "invalid extra directory mapping format \"%s\", "
-			 "must be \"OLDDIR=NEWDIR\"", arg);
-
-	if (!is_absolute_path(cell->old_dir))
-		elog(ERROR, "old directory is not an absolute path "
-					"in extra directory mapping: %s\n",
-			 cell->old_dir);
-
-	if (!is_absolute_path(cell->new_dir))
-		elog(ERROR, "new directory is not an absolute path "
-					"in extra directory mapping: %s\n",
-			 cell->new_dir);
-
-	parray_append(extra_remap_list, cell);
+	opt_path_map(opt, arg, &extra_remap_list, "extra directory");
 }
 
 /*
@@ -1270,28 +1240,16 @@ check_tablespace_mapping(pgBackup *backup)
 char *
 check_extra_dir_mapping(char *current_dir)
 {
-	if (!extra_remap_list)
-		return current_dir;
+	TablespaceListCell *cell;
 
-	for (int i = 0; i < parray_num(extra_remap_list); i++)
+	for (cell = extra_remap_list.head; cell; cell = cell->next)
 	{
-		TablespaceListCell *cell = parray_get(extra_remap_list, i);
 		char *old_dir = cell->old_dir;
 
 		if (strcmp(old_dir, current_dir) == 0)
 			return cell->new_dir;
 	}
 	return current_dir;
-}
-
-void
-free_extra_remap_list(void *cell)
-{
-	TablespaceListCell *cell_ptr;
-	if (cell == NULL)
-		return;
-	cell_ptr = (TablespaceListCell *)cell;
-	pfree(cell_ptr);
 }
 
 /*

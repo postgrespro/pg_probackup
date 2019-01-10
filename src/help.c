@@ -222,7 +222,7 @@ help_backup(void)
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
-	printf(_("      --skip-block-validation      sextra-directoryet to validate only file-level checksum\n"));
+	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 	printf(_("  -E  --extra-directory=extra-directory-path\n"));
 	printf(_("                                   backup some directory not from pgdata \n"));
 

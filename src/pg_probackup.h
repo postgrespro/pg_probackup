@@ -394,7 +394,6 @@ extern pgBackup current;
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */
 extern const char *pgdata_exclude_dir[];
-extern parray *extra_remap_list;
 
 /* in backup.c */
 extern int do_backup(time_t start_time);
@@ -511,7 +510,6 @@ extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void opt_extradir_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
 extern char* check_extra_dir_mapping(char *current_dir);
-extern void clean_extra_dirs_remap_list(void);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *extra_prefix, parray *extra_list);
@@ -521,7 +519,6 @@ extern void free_dir_list(parray *list);
 extern void makeExtraDirPathByNum(char *ret_path, const char *pattern_path,
 								  const int dir_num);
 extern bool backup_contains_extra(const char *dir, parray *dirs_list);
-extern void free_extra_remap_list(void *cell);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
