@@ -992,7 +992,7 @@ do_backup(time_t start_time)
 
 	/* Save list of extra directories */
 	if (instance_config.extra_dir_str &&
-		strcmp(instance_config.extra_dir_str, "none") != 0)
+		pg_strcasecmp(instance_config.extra_dir_str, "none") != 0)
 	{
 		current.extra_dir_str = instance_config.extra_dir_str;
 	}
