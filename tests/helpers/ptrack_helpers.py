@@ -1229,7 +1229,7 @@ class ProbackupTest(object):
             database='postgres',
             host='127.0.0.1',
             port=port,
-            async=True
+            async_=True
         )
 
     def wait(self, connection):
