@@ -1198,6 +1198,93 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    def test_continue_failed_merge_2(self):
+        """
+        Check that failed MERGE on delete can be continued
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,1000) i"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        backup_id = self.show_pb(backup_dir, "node")[2]["id"]
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+
+        gdb.set_breakpoint('pgFileDelete')
+        gdb.run_until_break()
+
+        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
+            print('Failed to hit breakpoint')
+            exit(1)
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        backup_id_deleted = self.show_pb(backup_dir, "node")[1]["id"]
+
+        # Try to continue failed MERGE
+        try:
+            self.merge_backup(backup_dir, "node", backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of backup corruption.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "ERROR: Backup {0} has status: DELETING".format(
+                    backup_id_deleted) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # 1. always use parent link when merging (intermediates may be from different chain)
 # 2. page backup we are merging with may disappear after failed merge,
 # it should not be possible to continue merge after that
