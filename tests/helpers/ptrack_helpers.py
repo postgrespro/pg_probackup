@@ -722,8 +722,9 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ['-i', backup_id]
 
+        # AHTUNG, WARNING will break json parsing
         if as_json:
-            cmd_list += ['--format=json']
+            cmd_list += ['--format=json', '--log-level-console=error']
 
         if as_text:
             # You should print it when calling as_text=true
