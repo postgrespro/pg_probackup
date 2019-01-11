@@ -1200,7 +1200,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
     def test_continue_failed_merge_2(self):
         """
-        Check that failed MERGE on delete can be continued
+        Check that failed MERGE on delete can`t be continued
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
