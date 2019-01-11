@@ -816,20 +816,6 @@ pgBackupInit(pgBackup *backup)
 	backup->server_version[0] = '\0';
 }
 
-/*
- * Copy backup metadata from **src** into **dst**.
- */
-void
-pgBackupCopy(pgBackup *dst, pgBackup *src)
-{
-	pfree(dst->primary_conninfo);
-
-	memcpy(dst, src, sizeof(pgBackup));
-
-	if (src->primary_conninfo)
-		dst->primary_conninfo = pstrdup(src->primary_conninfo);
-}
-
 /* free pgBackup object */
 void
 pgBackupFree(void *backup)

@@ -256,6 +256,7 @@ delete_backup_files(pgBackup *backup)
 	char		path[MAXPGPATH];
 	char		timestamp[100];
 	parray	   *files;
+	size_t		num_files;
 
 	/*
 	 * If the backup was deleted already, there is nothing to do.
@@ -286,23 +287,16 @@ delete_backup_files(pgBackup *backup)
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);
-	for (i = 0; i < parray_num(files); i++)
+	num_files = parray_num(files);
+	for (i = 0; i < num_files; i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
-		/* print progress */
-		elog(VERBOSE, "Delete file(%zd/%lu) \"%s\"", i + 1,
-			 (unsigned long) parray_num(files), file->path);
+		if (progress)
+			elog(INFO, "Progress: (%zd/%zd). Process file \"%s\"",
+				 i + 1, num_files, file->path);
 
-		if (remove(file->path))
-		{
-			if (errno == ENOENT)
-				elog(VERBOSE, "File \"%s\" is absent", file->path);
-			else
-				elog(ERROR, "Cannot remove \"%s\": %s", file->path,
-					 strerror(errno));
-			return;
-		}
+		pgFileDelete(file);
 	}
 
 	parray_walk(files, pgFileFree);

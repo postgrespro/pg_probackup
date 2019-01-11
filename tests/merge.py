@@ -3,6 +3,7 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+import shutil
 
 module_name = "merge"
 
@@ -18,14 +19,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=["--data-checksums"]
         )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, "node", node)
         self.set_archiving(backup_dir, "node", node)
-        node.start()
+        node.slow_start()
 
         # Do full backup
         self.backup_node(backup_dir, "node", node)
@@ -107,14 +108,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=["--data-checksums"]
         )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, "node", node)
         self.set_archiving(backup_dir, "node", node)
-        node.start()
+        node.slow_start()
 
         # Do full compressed backup
         self.backup_node(backup_dir, "node", node, options=[
@@ -163,11 +164,476 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.del_test_dir(module_name, fname)
 
+    def test_merge_compressed_backups_1(self):
+        """
+        Test MERGE command with compressed backups
+        """
+        fname = self.id().split(".")[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+
+        # Initialize instance and backup directory
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=["--data-checksums"],
+            pg_options={
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, "node", node)
+        self.set_archiving(backup_dir, "node", node)
+        node.slow_start()
+
+        # Fill with data
+        node.pgbench_init(scale=5)
+
+        # Do compressed FULL backup
+        self.backup_node(backup_dir, "node", node, options=[
+            '--compress-algorithm=zlib', '--stream'])
+        show_backup = self.show_pb(backup_dir, "node")[0]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "FULL")
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do compressed DELTA backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="delta",
+            options=['--compress-algorithm=zlib', '--stream'])
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do compressed PAGE backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="page",
+            options=['--compress-algorithm=zlib'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        show_backup = self.show_pb(backup_dir, "node")[2]
+        page_id = show_backup["id"]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "PAGE")
+
+        # Merge all backups
+        self.merge_backup(backup_dir, "node", page_id)
+        show_backups = self.show_pb(backup_dir, "node")
+
+        self.assertEqual(len(show_backups), 1)
+        self.assertEqual(show_backups[0]["status"], "OK")
+        self.assertEqual(show_backups[0]["backup-mode"], "FULL")
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        node.cleanup()
+        self.del_test_dir(module_name, fname)
+
+    def test_merge_compressed_and_uncompressed_backups(self):
+        """
+        Test MERGE command with compressed and uncompressed backups
+        """
+        fname = self.id().split(".")[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+
+        # Initialize instance and backup directory
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=["--data-checksums"],
+            pg_options={
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, "node", node)
+        self.set_archiving(backup_dir, "node", node)
+        node.slow_start()
+
+        # Fill with data
+        node.pgbench_init(scale=5)
+
+        # Do compressed FULL backup
+        self.backup_node(backup_dir, "node", node, options=[
+            '--compress-algorithm=zlib', '--stream'])
+        show_backup = self.show_pb(backup_dir, "node")[0]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "FULL")
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do compressed DELTA backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="delta",
+            options=['--compress-algorithm=zlib', '--stream'])
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do uncompressed PAGE backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="page")
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        show_backup = self.show_pb(backup_dir, "node")[2]
+        page_id = show_backup["id"]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "PAGE")
+
+        # Merge all backups
+        self.merge_backup(backup_dir, "node", page_id)
+        show_backups = self.show_pb(backup_dir, "node")
+
+        self.assertEqual(len(show_backups), 1)
+        self.assertEqual(show_backups[0]["status"], "OK")
+        self.assertEqual(show_backups[0]["backup-mode"], "FULL")
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        node.cleanup()
+        self.del_test_dir(module_name, fname)
+
+    def test_merge_compressed_and_uncompressed_backups_1(self):
+        """
+        Test MERGE command with compressed and uncompressed backups
+        """
+        fname = self.id().split(".")[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+
+        # Initialize instance and backup directory
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=["--data-checksums"],
+            pg_options={
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, "node", node)
+        self.set_archiving(backup_dir, "node", node)
+        node.slow_start()
+
+        # Fill with data
+        node.pgbench_init(scale=5)
+
+        # Do compressed FULL backup
+        self.backup_node(backup_dir, "node", node, options=[
+            '--compress-algorithm=zlib', '--stream'])
+        show_backup = self.show_pb(backup_dir, "node")[0]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "FULL")
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do uncompressed DELTA backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="delta",
+            options=['--stream'])
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do compressed PAGE backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="page",
+            options=['--compress-algorithm=zlib'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        show_backup = self.show_pb(backup_dir, "node")[2]
+        page_id = show_backup["id"]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "PAGE")
+
+        # Merge all backups
+        self.merge_backup(backup_dir, "node", page_id)
+        show_backups = self.show_pb(backup_dir, "node")
+
+        self.assertEqual(len(show_backups), 1)
+        self.assertEqual(show_backups[0]["status"], "OK")
+        self.assertEqual(show_backups[0]["backup-mode"], "FULL")
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        node.cleanup()
+        self.del_test_dir(module_name, fname)
+
+    def test_merge_compressed_and_uncompressed_backups_2(self):
+        """
+        Test MERGE command with compressed and uncompressed backups
+        """
+        fname = self.id().split(".")[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+
+        # Initialize instance and backup directory
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=["--data-checksums"],
+            pg_options={
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, "node", node)
+        self.set_archiving(backup_dir, "node", node)
+        node.slow_start()
+
+        # Fill with data
+        node.pgbench_init(scale=5)
+
+        # Do uncompressed FULL backup
+        self.backup_node(backup_dir, "node", node)
+        show_backup = self.show_pb(backup_dir, "node")[0]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "FULL")
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do compressed DELTA backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="delta",
+            options=['--compress-algorithm=zlib', '--stream'])
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # Do uncompressed PAGE backup
+        self.backup_node(
+            backup_dir, "node", node, backup_type="page")
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        show_backup = self.show_pb(backup_dir, "node")[2]
+        page_id = show_backup["id"]
+
+        self.assertEqual(show_backup["status"], "OK")
+        self.assertEqual(show_backup["backup-mode"], "PAGE")
+
+        # Merge all backups
+        self.merge_backup(backup_dir, "node", page_id)
+        show_backups = self.show_pb(backup_dir, "node")
+
+        self.assertEqual(len(show_backups), 1)
+        self.assertEqual(show_backups[0]["status"], "OK")
+        self.assertEqual(show_backups[0]["backup-mode"], "FULL")
+
+        # Drop node and restore it
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        node.cleanup()
+        self.del_test_dir(module_name, fname)
+
+
     # @unittest.skip("skip")
     def test_merge_tablespaces(self):
         """
-        Some test here
+        Create tablespace with table, take FULL backup,
+        create another tablespace with another table and drop previous
+        tablespace, take page backup, merge it and restore
+
         """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace somedata as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # Create new tablespace
+        self.create_tblspace_in_node(node, 'somedata1')
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap1 tablespace somedata1 as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "drop table t_heap"
+        )
+
+        # Drop old tablespace
+        node.safe_psql(
+            "postgres",
+            "drop tablespace somedata"
+        )
+
+        # PAGE backup
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.stop()
+        shutil.rmtree(
+            self.get_tblspace_path(node, 'somedata'),
+            ignore_errors=True)
+        shutil.rmtree(
+            self.get_tblspace_path(node, 'somedata1'),
+            ignore_errors=True)
+        node.cleanup()
+
+        self.merge_backup(backup_dir, 'node', backup_id)
+
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4"])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+
+        # this compare should fall because we lost some directories
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+    # @unittest.skip("skip")
+    def test_merge_tablespaces_1(self):
+        """
+        Create tablespace with table, take FULL backup,
+        create another tablespace with another table, take page backup,
+        drop first tablespace and take delta backup,
+        merge it and restore
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'autovacuum': 'off'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+        node.safe_psql(
+            "postgres",
+            "create table t_heap tablespace somedata as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+
+        # CREATE NEW TABLESPACE
+        self.create_tblspace_in_node(node, 'somedata1')
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap1 tablespace somedata1 as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,100) i"
+        )
+
+        # PAGE backup
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        node.safe_psql(
+            "postgres",
+            "drop table t_heap"
+        )
+        node.safe_psql(
+            "postgres",
+            "drop tablespace somedata"
+        )
+
+        # DELTA backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="delta")
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.stop()
+        shutil.rmtree(
+            self.get_tblspace_path(node, 'somedata'),
+            ignore_errors=True)
+        shutil.rmtree(
+            self.get_tblspace_path(node, 'somedata1'),
+            ignore_errors=True)
+        node.cleanup()
+
+        self.merge_backup(backup_dir, 'node', backup_id)
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=["-j", "4"])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     def test_merge_page_truncate(self):
         """
@@ -179,7 +645,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -190,13 +656,13 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
         node.safe_psql(
@@ -274,7 +740,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -285,13 +751,13 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
         node.safe_psql(
@@ -369,7 +835,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -381,13 +847,13 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
         node.safe_psql(
@@ -465,7 +931,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -478,7 +944,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -517,7 +983,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+            base_dir=os.path.join(module_name, fname, 'node_restored')
         )
         node_restored.cleanup()
 
@@ -540,7 +1006,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -553,7 +1019,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica'
@@ -563,7 +1029,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL backup
         self.backup_node(backup_dir, 'node', node)
@@ -631,7 +1097,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica'
@@ -641,7 +1107,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL backup
         self.backup_node(backup_dir, 'node', node)
@@ -698,7 +1164,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # read block from future
         # block_size + backup_header = 8200
         file = os.path.join(
-            backup_dir, 'backups/node', backup_id_2, 'database', new_path)
+            backup_dir, 'backups', 'node',
+            backup_id_2, 'database', new_path)
         with open(file, 'rb') as f:
             f.seek(8200)
             block_1 = f.read(8200)
@@ -706,7 +1173,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # write block from future
         file = os.path.join(
-            backup_dir, 'backups/node', backup_id, 'database', old_path)
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', old_path)
         with open(file, 'r+b') as f:
             f.seek(8200)
             f.write(block_1)
@@ -722,10 +1190,95 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Backup {0} data files are corrupted".format(
-                    backup_id) in e.message and
                 "ERROR: Merging of backup {0} failed".format(
                     backup_id) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_continue_failed_merge_2(self):
+        """
+        Check that failed MERGE on delete can`t be continued
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True, initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica'
+            }
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(0,1000) i"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap"
+        )
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap"
+        )
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta'
+        )
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        backup_id = self.show_pb(backup_dir, "node")[2]["id"]
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+
+        gdb.set_breakpoint('pgFileDelete')
+        gdb.run_until_break()
+
+        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
+            print('Failed to hit breakpoint')
+            exit(1)
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        backup_id_deleted = self.show_pb(backup_dir, "node")[1]["id"]
+
+        # Try to continue failed MERGE
+        try:
+            self.merge_backup(backup_dir, "node", backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of backup corruption.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "ERROR: Backup {0} has status: DELETING".format(
+                    backup_id_deleted) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -744,3 +1297,4 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 #   FULL    MERGING
 
 # 3. Need new test with corrupted FULL backup
+# 4. different compression levels

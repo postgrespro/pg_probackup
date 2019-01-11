@@ -1682,6 +1682,11 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 					 (uint32) (lsn >> 32), (uint32) lsn, wal_segment_path);
 		}
 
+		if (!stream_wal && is_start_lsn && try_count == 30)
+			elog(WARNING, "By default pg_probackup assume WAL delivery method to be ARCHIVE. "
+				 "If continius archiving is not set up, use '--stream' option to make autonomous backup. "
+				 "Otherwise check that continius archiving works correctly.");
+
 		if (timeout > 0 && try_count > timeout)
 		{
 			if (file_exists)
@@ -2226,9 +2231,9 @@ backup_files(void *arg)
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
 
-		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
+		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
 		if (interrupted)

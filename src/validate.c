@@ -52,6 +52,13 @@ pgBackupValidate(pgBackup *backup)
 	validate_files_arg *threads_args;
 	int			i;
 
+	/* Check backup version */
+	if (parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
+		elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
+			"pg_probackup do not guarantee to be forward compatible. "
+			"Please upgrade pg_probackup binary.",
+				PROGRAM_VERSION, base36enc(backup->start_time), backup->program_version);
+
 	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE &&
@@ -156,9 +163,10 @@ pgBackupValidateFiles(void *arg)
 {
 	int			i;
 	validate_files_arg *arguments = (validate_files_arg *)arg;
+	int			num_files = parray_num(arguments->files);
 	pg_crc32	crc;
 
-	for (i = 0; i < parray_num(arguments->files); i++)
+	for (i = 0; i < num_files; i++)
 	{
 		struct stat st;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
@@ -186,9 +194,9 @@ pgBackupValidateFiles(void *arg)
 		if (file->is_cfs)
 			continue;
 
-		/* print progress */
-		elog(VERBOSE, "Validate files: (%d/%lu) %s",
-			 i + 1, (unsigned long) parray_num(arguments->files), file->path);
+		if (progress)
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, num_files, file->path);
 
 		if (stat(file->path, &st) == -1)
 		{

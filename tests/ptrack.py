@@ -21,7 +21,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -70,7 +70,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -89,11 +89,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # DISABLE PTRACK
         node.safe_psql('postgres', "alter system set ptrack_enable to off")
-        node.restart()
+        node.stop()
+        node.slow_start()
 
         # ENABLE PTRACK
         node.safe_psql('postgres', "alter system set ptrack_enable to on")
-        node.restart()
+        node.stop()
+        node.slow_start()
 
         # PTRACK BACKUP
         try:
@@ -128,7 +130,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -139,7 +141,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node_restored'),
         )
 
         self.init_pb(backup_dir)
@@ -190,7 +192,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -201,7 +203,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node_restored'),
         )
 
         self.init_pb(backup_dir)
@@ -286,7 +288,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -298,7 +300,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node_restored'),
         )
 
         self.init_pb(backup_dir)
@@ -372,7 +374,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -383,7 +385,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node_restored'),
         )
 
         self.init_pb(backup_dir)
@@ -448,7 +450,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -520,7 +522,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -616,7 +618,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -722,7 +724,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -806,7 +808,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -878,7 +880,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -955,7 +957,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1003,7 +1005,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+            base_dir=os.path.join(module_name, fname, 'node_restored')
         )
 
         node_restored.cleanup()
@@ -1082,7 +1084,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1106,7 +1108,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(
@@ -1159,7 +1161,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+            base_dir=os.path.join(module_name, fname, 'node_restored')
         )
         node_restored.cleanup()
 
@@ -1183,7 +1185,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -1232,7 +1234,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+            base_dir=os.path.join(module_name, fname, 'node_restored')
         )
         node_restored.cleanup()
 
@@ -1280,7 +1282,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1317,7 +1319,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
         self.restore_node(
             backup_dir, 'node',
@@ -1351,7 +1353,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1435,7 +1437,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1478,7 +1480,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Restore ptrack backup
         restored_node = self.make_simple_node(
-            base_dir="{0}/{1}/restored_node".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'restored_node'))
         restored_node.cleanup()
         tblspc_path_new = self.get_tblspace_path(
             restored_node, 'somedata_restored')
@@ -1548,7 +1550,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1613,7 +1615,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE NODE
         restored_node = self.make_simple_node(
-            base_dir="{0}/{1}/restored_node".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'restored_node'))
         restored_node.cleanup()
         tblspc_path = self.get_tblspace_path(node, 'somedata')
         tblspc_path_new = self.get_tblspace_path(
@@ -1655,7 +1657,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={

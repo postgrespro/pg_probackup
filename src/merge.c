@@ -91,7 +91,8 @@ do_merge(time_t backup_id)
 		}
 		else
 		{
-			Assert(dest_backup);
+			if (dest_backup == NULL)
+				elog(ERROR, "Target backup %s was not found", base36enc(backup_id));
 
 			if (backup->start_time != prev_parent)
 				continue;
@@ -131,7 +132,6 @@ do_merge(time_t backup_id)
 	{
 		pgBackup   *from_backup = (pgBackup *) parray_get(backups, i - 1);
 
-		full_backup = (pgBackup *) parray_get(backups, i);
 		merge_backups(full_backup, from_backup);
 	}
 
@@ -208,10 +208,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(to_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	to_files = dir_read_file_list(from_database_path, /* Use from_database_path
-													   * so root path will be
-													   * equal with 'files' */
-								  control_file);
+	to_files = dir_read_file_list(NULL, control_file);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(to_files, pgFileComparePathDesc);
 	/*
@@ -219,7 +216,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(from_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	files = dir_read_file_list(from_database_path, control_file);
+	files = dir_read_file_list(NULL, control_file);
 	/* sort by size for load balancing */
 	parray_qsort(files, pgFileCompareSize);
 
@@ -281,6 +278,16 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 * Update to_backup metadata.
 	 */
 	to_backup->status = BACKUP_STATUS_OK;
+	to_backup->parent_backup = INVALID_BACKUP_ID;
+	to_backup->start_lsn = from_backup->start_lsn;
+	to_backup->stop_lsn = from_backup->stop_lsn;
+	to_backup->recovery_time = from_backup->recovery_time;
+	to_backup->recovery_xid = from_backup->recovery_xid;
+	/*
+	 * If one of the backups isn't "stream" backup then the target backup become
+	 * non-stream backup too.
+	 */
+	to_backup->stream = to_backup->stream && from_backup->stream;
 	/* Compute summary of size of regular files in the backup */
 	to_backup->data_bytes = 0;
 	for (i = 0; i < parray_num(files); i++)
@@ -314,14 +321,25 @@ delete_source_backup:
 	/*
 	 * Delete files which are not in from_backup file list.
 	 */
+	parray_qsort(files, pgFileComparePathDesc);
 	for (i = 0; i < parray_num(to_files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
 
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
+			char		to_file_path[MAXPGPATH];
+			char	   *prev_path;
+
+			/* We need full path, file object has relative path */
+			join_path_components(to_file_path, to_database_path, file->path);
+			prev_path = file->path;
+			file->path = to_file_path;
+
 			pgFileDelete(file);
 			elog(VERBOSE, "Deleted \"%s\"", file->path);
+
+			file->path = prev_path;
 		}
 	}
 
@@ -336,11 +354,7 @@ delete_source_backup:
 	/*
 	 * Merging finished, now we can safely update ID of the destination backup.
 	 */
-	pgBackupCopy(to_backup, from_backup);
-	/* Correct metadata */
-	to_backup->backup_mode = BACKUP_MODE_FULL;
-	to_backup->status = BACKUP_STATUS_OK;
-	to_backup->parent_backup = INVALID_BACKUP_ID;
+	to_backup->start_time = from_backup->start_time;
 	write_backup(to_backup);
 
 	/* Cleanup */
@@ -371,11 +385,14 @@ merge_files(void *arg)
 	pgBackup   *from_backup = argument->from_backup;
 	int			i,
 				num_files = parray_num(argument->files);
-	int			to_root_len = strlen(argument->to_root);
 
 	for (i = 0; i < num_files; i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(argument->files, i);
+		pgFile	   *to_file;
+		pgFile	  **res_file;
+		char		from_file_path[MAXPGPATH];
+		char	   *prev_file_path;
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
@@ -384,17 +401,24 @@ merge_files(void *arg)
 		if (interrupted)
 			elog(ERROR, "Interrupted during merging backups");
 
+		/* Directories were created before */
+		if (S_ISDIR(file->mode))
+			continue;
+
 		if (progress)
-			elog(LOG, "Progress: (%d/%d). Process file \"%s\"",
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
 				 i + 1, num_files, file->path);
+
+		res_file = parray_bsearch(argument->to_files, file,
+								  pgFileComparePathDesc);
+		to_file = (res_file) ? *res_file : NULL;
 
 		/*
 		 * Skip files which haven't changed since previous backup. But in case
 		 * of DELTA backup we should consider n_blocks to truncate the target
 		 * backup.
 		 */
-		if (file->write_size == BYTES_INVALID &&
-			file->n_blocks == -1)
+		if (file->write_size == BYTES_INVALID && file->n_blocks == -1)
 		{
 			elog(VERBOSE, "Skip merging file \"%s\", the file didn't change",
 				 file->path);
@@ -403,43 +427,36 @@ merge_files(void *arg)
 			 * If the file wasn't changed in PAGE backup, retreive its
 			 * write_size from previous FULL backup.
 			 */
-			if (S_ISREG(file->mode))
+			if (to_file)
 			{
-				pgFile	  **res_file;
-
-				res_file = parray_bsearch(argument->to_files, file,
-										  pgFileComparePathDesc);
-				if (res_file && *res_file)
-				{
-					file->compress_alg = (*res_file)->compress_alg;
-					file->write_size = (*res_file)->write_size;
-					file->crc = (*res_file)->crc;
-				}
+				file->compress_alg = to_file->compress_alg;
+				file->write_size = to_file->write_size;
+				file->crc = to_file->crc;
 			}
 
 			continue;
 		}
 
-		/* Directories were created before */
-		if (S_ISDIR(file->mode))
-			continue;
+		/* We need to make full path, file object has relative path */
+		join_path_components(from_file_path, argument->from_root, file->path);
+		prev_file_path = file->path;
+		file->path = from_file_path;
 
 		/*
 		 * Move the file. We need to decompress it and compress again if
 		 * necessary.
 		 */
-		elog(VERBOSE, "Moving file \"%s\", is_datafile %d, is_cfs %d",
+		elog(VERBOSE, "Merging file \"%s\", is_datafile %d, is_cfs %d",
 			 file->path, file->is_database, file->is_cfs);
 
 		if (file->is_datafile && !file->is_cfs)
 		{
-			char		to_path_tmp[MAXPGPATH];	/* Path of target file */
+			char		to_file_path[MAXPGPATH];	/* Path of target file */
 
-			join_path_components(to_path_tmp, argument->to_root,
-								 file->path + to_root_len + 1);
+			join_path_components(to_file_path, argument->to_root, prev_file_path);
 
 			/*
-			 * We need more complicate algorithm if target file exists and it is
+			 * We need more complicate algorithm if target file should be
 			 * compressed.
 			 */
 			if (to_backup->compress_alg == PGLZ_COMPRESS ||
@@ -448,54 +465,58 @@ merge_files(void *arg)
 				char		tmp_file_path[MAXPGPATH];
 				char	   *prev_path;
 
-				snprintf(tmp_file_path, MAXPGPATH, "%s_tmp", to_path_tmp);
+				snprintf(tmp_file_path, MAXPGPATH, "%s_tmp", to_file_path);
 
 				/* Start the magic */
 
 				/*
 				 * Merge files:
-				 * - decompress first file
-				 * - decompress second file and merge with first decompressed file
+				 * - if target file exists restore and decompress it to the temp
+				 *   path
+				 * - decompress source file if necessary and merge it with the
+				 *   target decompressed file
 				 * - compress result file
 				 */
 
-				elog(VERBOSE, "File is compressed, decompress to the temporary file \"%s\"",
-					 tmp_file_path);
-
-				prev_path = file->path;
 				/*
-				 * We need to decompress target file only if it exists.
+				 * We need to decompress target file if it exists.
 				 */
-				if (fileExists(to_path_tmp, FIO_LOCAL_HOST))
+				if (to_file)
 				{
+					elog(VERBOSE, "Merge target and source files into the temporary path \"%s\"",
+						 tmp_file_path);
+
 					/*
 					 * file->path points to the file in from_root directory. But we
 					 * need the file in directory to_root.
 					 */
-					file->path = to_path_tmp;
-
-					/* Decompress first/target file */
-					restore_data_file(tmp_file_path, file, false, false,
+					prev_path = to_file->path;
+					to_file->path = to_file_path;
+					/* Decompress target file into temporary one */
+					restore_data_file(tmp_file_path, to_file, false, false,
 									  parse_program_version(to_backup->program_version));
-
-					file->path = prev_path;
+					to_file->path = prev_path;
 				}
-				/* Merge second/source file with first/target file */
+				else
+					elog(VERBOSE, "Restore source file into the temporary path \"%s\"",
+						 tmp_file_path);
+				/* Merge source file with target file */
 				restore_data_file(tmp_file_path, file,
 								  from_backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
 								  false,
 								  parse_program_version(from_backup->program_version));
 
-				elog(VERBOSE, "Compress file and save it to the directory \"%s\"",
+				elog(VERBOSE, "Compress file and save it into the directory \"%s\"",
 					 argument->to_root);
 
-				/* Again we need change path */
+				/* Again we need to change path */
+				prev_path = file->path;
 				file->path = tmp_file_path;
 				/* backup_data_file() requires file size to calculate nblocks */
 				file->size = pgFileSize(file->path);
 				/* Now we can compress the file */
 				backup_data_file(NULL, /* We shouldn't need 'arguments' here */
-								 to_path_tmp, file,
+								 to_file_path, file,
 								 to_backup->start_lsn,
 								 to_backup->backup_mode,
 								 to_backup->compress_alg,
@@ -514,7 +535,7 @@ merge_files(void *arg)
 			else
 			{
 				/* We can merge in-place here */
-				restore_data_file(to_path_tmp, file,
+				restore_data_file(to_file_path, file,
 								  from_backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
 								  true,
 								  parse_program_version(from_backup->program_version));
@@ -523,8 +544,8 @@ merge_files(void *arg)
 				 * We need to calculate write_size, restore_data_file() doesn't
 				 * do that.
 				 */
-				file->write_size = pgFileSize(to_path_tmp);
-				file->crc = pgFileGetCRC(to_path_tmp, true, true, NULL, FIO_LOCAL_HOST);
+				file->write_size = pgFileSize(to_file_path);
+				file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST);
 			}
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
@@ -532,9 +553,18 @@ merge_files(void *arg)
 		else
 			copy_file(argument->from_root, argument->to_root, file, FIO_LOCAL_HOST);
 
+		/*
+		 * We need to save compression algorithm type of the target backup to be
+		 * able to restore in the future.
+		 */
+		file->compress_alg = to_backup->compress_alg;
+
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Moved file \"%s\": " INT64_FORMAT " bytes",
+			elog(LOG, "Merged file \"%s\": " INT64_FORMAT " bytes",
 				 file->path, file->write_size);
+
+		/* Restore relative path */
+		file->path = prev_file_path;
 	}
 
 	/* Data files merging is successful */

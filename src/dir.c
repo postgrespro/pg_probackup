@@ -120,7 +120,7 @@ typedef struct TablespaceCreatedList
 
 static int BlackListCompare(const void *str1, const void *str2);
 
-static bool dir_check_file(const char *root, pgFile *file);
+static char dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
 								   bool omit_symlink, parray *black_list, fio_location location);
@@ -213,7 +213,7 @@ pgFileInit(const char *path)
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
 
 	/* Get file name from the path */
-	file_name = strrchr(file->path, '/');
+	file_name = last_dir_separator(file->path);
 	if (file_name == NULL)
 		file->name = file->path;
 	else
@@ -417,6 +417,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
 		{
+			black_item[0] = '\0';
 			join_path_components(black_item, instance_config.pgdata, buf);
 
 			if (black_item[strlen(black_item) - 1] == '\n')
@@ -425,7 +426,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 			if (black_item[0] == '#' || black_item[0] == '\0')
 				continue;
 
-			parray_append(black_list, black_item);
+			parray_append(black_list, pgut_strdup(black_item));
 		}
 
 		fio_close_stream(black_list_file);
@@ -445,7 +446,20 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_append(files, file);
 
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list, location);
+
+	if (!add_root)
+		pgFileFree(file);
+
+	if (black_list)
+	{
+		parray_walk(black_list, pfree);
+		parray_free(black_list);
+	}
 }
+
+#define CHECK_FALSE				0
+#define CHECK_TRUE				1
+#define CHECK_EXCLUDE_FALSE		2
 
 /*
  * Check file or directory.
@@ -455,16 +469,21 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
  * Skip files:
  * - skip temp tables files
  * - skip unlogged tables files
+ * Skip recursive tablespace content
  * Set flags for:
  * - database directories
  * - datafiles
  */
-static bool
+static char
 dir_check_file(const char *root, pgFile *file)
 {
 	const char *rel_path;
 	int			i;
 	int			sscanf_res;
+	bool		in_tablespace = false;
+
+	rel_path = GetRelativePath(file->path, root);
+	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path);
 
 	/* Check if we need to exclude file by name */
 	if (S_ISREG(file->mode))
@@ -477,7 +496,7 @@ dir_check_file(const char *root, pgFile *file)
 				{
 					/* Skip */
 					elog(VERBOSE, "Excluding file: %s", file->name);
-					return false;
+					return CHECK_FALSE;
 				}
 		}
 
@@ -486,14 +505,14 @@ dir_check_file(const char *root, pgFile *file)
 			{
 				/* Skip */
 				elog(VERBOSE, "Excluding file: %s", file->name);
-				return false;
+				return CHECK_FALSE;
 			}
 	}
 	/*
 	 * If the directory name is in the exclude list, do not list the
 	 * contents.
 	 */
-	else if (S_ISDIR(file->mode))
+	else if (S_ISDIR(file->mode) && !in_tablespace)
 	{
 		/*
 		 * If the item in the exclude list starts with '/', compare to
@@ -509,19 +528,17 @@ dir_check_file(const char *root, pgFile *file)
 				{
 					elog(VERBOSE, "Excluding directory content: %s",
 						 file->name);
-					return false;
+					return CHECK_EXCLUDE_FALSE;
 				}
 			}
 			else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 			{
 				elog(VERBOSE, "Excluding directory content: %s",
 					 file->name);
-				return false;
+				return CHECK_EXCLUDE_FALSE;
 			}
 		}
 	}
-
-	rel_path = GetRelativePath(file->path, root);
 
 	/*
 	 * Do not copy tablespaces twice. It may happen if the tablespace is located
@@ -538,14 +555,33 @@ dir_check_file(const char *root, pgFile *file)
 		 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
 		 */
 		if (!path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path))
-			return false;
+			return CHECK_FALSE;
 		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%s",
 							&tblspcOid, tmp_rel_path);
 		if (sscanf_res == 0)
-			return false;
+			return CHECK_FALSE;
 	}
 
-	if (path_is_prefix_of_path("global", rel_path))
+	if (in_tablespace)
+	{
+		char		tmp_rel_path[MAXPGPATH];
+
+		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
+							&(file->tblspcOid), tmp_rel_path,
+							&(file->dbOid));
+
+		/*
+		 * We should skip other files and directories rather than
+		 * TABLESPACE_VERSION_DIRECTORY, if this is recursive tablespace.
+		 */
+		if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
+			return CHECK_FALSE;
+
+		if (sscanf_res == 3 && S_ISDIR(file->mode) &&
+			strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
+			file->is_database = true;
+	}
+	else if (path_is_prefix_of_path("global", rel_path))
 	{
 		file->tblspcOid = GLOBALTABLESPACE_OID;
 
@@ -561,22 +597,10 @@ dir_check_file(const char *root, pgFile *file)
 		if (S_ISDIR(file->mode) && strcmp(file->name, "base") != 0)
 			file->is_database = true;
 	}
-	else if (path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path))
-	{
-		char		tmp_rel_path[MAXPGPATH];
-
-		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
-							&(file->tblspcOid), tmp_rel_path,
-							&(file->dbOid));
-
-		if (sscanf_res == 3 && S_ISDIR(file->mode) &&
-			strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
-			file->is_database = true;
-	}
 
 	/* Do not backup ptrack_init files */
 	if (S_ISREG(file->mode) && strcmp(file->name, "ptrack_init") == 0)
-		return false;
+		return CHECK_FALSE;
 
 	/*
 	 * Check files located inside database directories including directory
@@ -586,10 +610,10 @@ dir_check_file(const char *root, pgFile *file)
 		file->name && file->name[0])
 	{
 		if (strcmp(file->name, "pg_internal.init") == 0)
-			return false;
+			return CHECK_FALSE;
 		/* Do not backup temp files */
 		else if (file->name[0] == 't' && isdigit(file->name[1]))
-			return false;
+			return CHECK_FALSE;
 		else if (isdigit(file->name[0]))
 		{
 			char	   *fork_name;
@@ -604,14 +628,14 @@ dir_check_file(const char *root, pgFile *file)
 
 				/* Do not backup ptrack files */
 				if (strcmp(file->forkName, "ptrack") == 0)
-					return false;
+					return CHECK_FALSE;
 			}
 			else
 			{
 				len = strlen(file->name);
 				/* reloid.cfm */
 				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
-					return true;
+					return CHECK_TRUE;
 
 				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
 									&(file->segno), suffix);
@@ -623,7 +647,7 @@ dir_check_file(const char *root, pgFile *file)
 		}
 	}
 
-	return true;
+	return CHECK_TRUE;
 }
 
 /*
@@ -658,6 +682,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 	{
 		pgFile	   *file;
 		char		child[MAXPGPATH];
+		char		check_res;
 
 		join_path_components(child, parent->path, dent->d_name);
 
@@ -693,21 +718,24 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 			continue;
 		}
 
-		/* We add the directory anyway */
-		if (S_ISDIR(file->mode))
-			parray_append(files, file);
-
-		if (exclude && !dir_check_file(root, file))
+		if (exclude)
 		{
-			if (S_ISREG(file->mode))
+			check_res = dir_check_file(root, file);
+			if (check_res == CHECK_FALSE)
+			{
+				/* Skip */
 				pgFileFree(file);
-			/* Skip */
-			continue;
+				continue;
+			}
+			else if (check_res == CHECK_EXCLUDE_FALSE)
+			{
+				/* We add the directory itself which content was excluded */
+				parray_append(files, file);
+				continue;
+			}
 		}
 
-		/* At least add the file */
-		if (S_ISREG(file->mode))
-			parray_append(files, file);
+		parray_append(files, file);
 
 		/*
 		 * If the entry is a directory call dir_list_file_internal()
@@ -875,6 +903,7 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 	char	   *dst_ptr;
 	const char *arg_ptr;
 
+	memset(cell, 0, sizeof(TablespaceListCell));
 	dst_ptr = dst = cell->old_dir;
 	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
 	{
@@ -1217,12 +1246,8 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		if (file->is_datafile)
 			fio_fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
-#ifndef WIN32
-		if (S_ISLNK(file->mode))
-#else
-		if (pgwin32_is_junction(file->path))
-#endif
-			fio_fprintf(out, ",\"linked\":\"%s\"", file->linked);
+		if (file->linked)
+			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != BLOCKNUM_INVALID)
 			fio_fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
