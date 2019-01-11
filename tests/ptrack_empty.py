@@ -116,7 +116,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.slow_start()
+        replica.slow_start(replica=True)
 
         # Create table
         master.safe_psql(
