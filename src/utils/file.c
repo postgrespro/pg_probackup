@@ -275,6 +275,8 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 	else
 	{
 		f = fopen(path, mode);
+		if (f == NULL && strcmp(mode, PG_BINARY_R "+") == 0)
+			f = fopen(path,  PG_BINARY_W);
 	}
 	return f;
 }

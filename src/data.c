@@ -711,7 +711,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	 * modified pages for differential restore. If the file does not exist,
 	 * re-open it with "w" to create an empty file.
 	 */
-	out = fio_fopen(to_path, PG_BINARY_W "+", FIO_DB_HOST);
+	out = fio_fopen(to_path, PG_BINARY_R "+", FIO_DB_HOST);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
