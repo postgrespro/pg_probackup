@@ -124,17 +124,15 @@ def slow_start(self, replica=False):
 #       "SELECT not pg_is_in_recovery()",
 #       suppress={testgres.NodeConnection})
     if replica:
-        query = 'SELECT not pg_is_in_recovery()'
-    else:
         query = 'SELECT pg_is_in_recovery()'
+    else:
+        query = 'SELECT not pg_is_in_recovery()'
 
     self.start()
     while True:
         try:
-            self.safe_psql(
-                'postgres',
-                query)
-            break
+            if self.safe_psql('postgres', query) == 't\n':
+                break
         except testgres.QueryException as e:
             if 'database system is starting up' in e[0]:
                 continue
