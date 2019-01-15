@@ -17,8 +17,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -45,8 +44,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -73,8 +71,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -119,8 +116,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -135,7 +131,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             backup_id, "backup.control")
         os.remove(file)
 
-        self.assertIn('Control file "{0}" doesn\'t exist'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn(
+            'Control file "{0}" doesn\'t exist'.format(file),
+            self.show_pb(backup_dir, 'node', as_text=True))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -148,8 +146,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -165,7 +162,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fd = open(file, 'w')
         fd.close()
 
-        self.assertIn('Control file "{0}" is empty'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn(
+            'Control file "{0}" is empty'.format(file),
+            self.show_pb(backup_dir, 'node', as_text=True, as_json=False))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -179,8 +178,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
