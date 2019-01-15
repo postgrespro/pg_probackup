@@ -118,34 +118,26 @@ class ProbackupException(Exception):
 def slow_start(self, replica=False):
 
     # wait for https://github.com/postgrespro/testgres/pull/50
-    # self.poll_query_until(
-    #    "postgres",
-    #    "SELECT not pg_is_in_recovery()",
-    #    raise_operational_error=False)
+#    self.start()
+#    self.poll_query_until(
+#       "postgres",
+#       "SELECT not pg_is_in_recovery()",
+#       suppress={testgres.NodeConnection})
+    if replica:
+        query = 'SELECT pg_is_in_recovery()'
+    else:
+        query = 'SELECT not pg_is_in_recovery()'
 
     self.start()
-    if replica:
-        self.poll_query_until(
-            'postgres',
-            'SELECT pg_is_in_recovery()')
-    else:
-        while True:
-            try:
-                self.poll_query_until(
-                    'postgres',
-                    'SELECT not pg_is_in_recovery()')
+    while True:
+        try:
+            if self.safe_psql('postgres', query) == 't\n':
                 break
-            except Exception as e:
+        except testgres.QueryException as e:
+            if 'database system is starting up' in e[0]:
                 continue
-
-#        while True:
-#            try:
-#                self.poll_query_until(
-#                    "postgres",
-#                    "SELECT pg_is_in_recovery()")
-#                break
-#            except ProbackupException as e:
-#                continue
+            else:
+                raise e
 
 
 class ProbackupTest(object):
