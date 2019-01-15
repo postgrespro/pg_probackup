@@ -3,7 +3,6 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
 import subprocess
-from sys import exit
 import time
 
 
@@ -22,7 +21,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -30,7 +29,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'max_wal_senders': '2',
                 'ptrack_enable': 'on'}
             )
-        master.start()
+        master.slow_start()
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
 
@@ -45,7 +44,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # take full backup and restore it
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
         self.set_replica(master, replica)
@@ -79,7 +78,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE FULL BACKUP TAKEN FROM PREVIOUS STEP
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node'))
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
 
@@ -138,7 +137,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -152,7 +151,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'master', master)
@@ -211,7 +210,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE FULL BACKUP TAKEN FROM replica
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node'))
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
 
@@ -289,7 +288,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -305,7 +304,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'master', master)
@@ -350,7 +349,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -364,7 +363,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'master', master)
@@ -402,7 +401,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         replica.append_conf(
             'recovery.conf', "recovery_min_apply_delay = '300s'")
 
-        replica.restart()
+        replica.stop()
+        replica.slow_start(replica=True)
 
         master.pgbench_init(scale=10)
 

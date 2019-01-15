@@ -17,7 +17,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -27,7 +27,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         show_backup = self.show_pb(backup_dir, 'node')[0]
@@ -89,7 +89,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """full backup with smooth checkpoint"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
         )
@@ -97,7 +97,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -113,7 +113,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """page-level backup without validated full backup"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
@@ -121,7 +121,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         try:
             self.backup_node(backup_dir, 'node', node, backup_type="page")
@@ -169,7 +169,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """page-level backup with corrupted full backup"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
@@ -177,7 +177,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         file = os.path.join(
@@ -195,12 +195,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "INFO: Validate backups of the instance 'node'\n" in e.message and
-                "WARNING: Backup file \"{0}\" is not found\n".format(
+                "INFO: Validate backups of the instance 'node'" in e.message and
+                "WARNING: Backup file".format(
                     file) in e.message and
-                "WARNING: Backup {0} data files are corrupted\n".format(
+                "is not found".format(file) in e.message and
+                "WARNING: Backup {0} data files are corrupted".format(
                     backup_id) in e.message and
-                "WARNING: Some backups are not valid\n" in e.message,
+                "WARNING: Some backups are not valid" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -233,7 +234,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """ptrack multi thread backup mode"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
             )
@@ -241,7 +242,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -261,7 +262,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """ptrack multi thread backup mode and stream"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -272,7 +273,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -292,7 +293,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -301,7 +302,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -349,7 +350,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -358,7 +359,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -383,7 +384,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 f.write(b"bla")
                 f.flush()
                 f.close
-        node.start()
+        node.slow_start()
 
         try:
             self.backup_node(
@@ -422,7 +423,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """PGPRO-1376 """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -431,7 +432,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(
             node, 'tblspace1',
@@ -459,22 +460,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1000) i")
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', node, backup_type="full",
-                options=["-j", "4", "--stream"])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of too many levels "
-                "of symbolic linking\n"
-                " Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'Too many levels of symbolic links' in e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        backup_id_1 = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
 
         node.safe_psql(
             "postgres",
@@ -495,7 +483,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             ).rstrip()
 
         list = []
-        for root, dirs, files in os.walk(backup_dir):
+        for root, dirs, files in os.walk(os.path.join(
+                backup_dir, 'backups', 'node', backup_id_1)):
             for file in files:
                 if file == relfilenode:
                     path = os.path.join(root, file)

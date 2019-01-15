@@ -19,7 +19,7 @@
 #include "utils/thread.h"
 #include <time.h>
 
-const char *PROGRAM_VERSION	= "2.0.25";
+const char *PROGRAM_VERSION	= "2.0.26";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -71,10 +71,10 @@ bool		smooth_checkpoint;
 bool		is_remote_backup = false;
 
 /* restore options */
-static char		   *target_time;
-static char		   *target_xid;
-static char		   *target_lsn;
-static char		   *target_inclusive;
+static char		   *target_time = NULL;
+static char		   *target_xid = NULL;
+static char		   *target_lsn = NULL;
+static char		   *target_inclusive = NULL;
 static TimeLineID	target_tli;
 static bool			target_immediate;
 static char		   *target_name = NULL;

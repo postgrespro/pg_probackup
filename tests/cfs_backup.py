@@ -34,7 +34,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.add_instance(self.backup_dir, 'node', self.node)
         self.set_archiving(self.backup_dir, 'node', self.node)
 
-        self.node.start()
+        self.node.slow_start()
 
         self.create_tblspace_in_node(self.node, tblspace_name, cfs=True)
 
@@ -745,7 +745,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             self.backup_dir, 'node', self.node,
             backup_id=backup_id_full, options=["-j", "4"])
-        self.node.start()
+        self.node.slow_start()
         self.assertEqual(
             full_result,
             self.node.safe_psql("postgres", "SELECT * FROM t_heap"),
@@ -760,7 +760,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             self.backup_dir, 'node', self.node,
             backup_id=backup_id_page, options=["-j", "4"])
-        self.node.start()
+        self.node.slow_start()
         self.assertEqual(
             page_result,
             self.node.safe_psql("postgres", "SELECT * FROM t_heap"),
@@ -879,7 +879,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             self.backup_dir, 'node', self.node,
             backup_id=backup_id_full, options=["-j", "4"])
-        self.node.start()
+        self.node.slow_start()
         self.assertEqual(
             full_result_1,
             self.node.safe_psql("postgres", "SELECT * FROM t_heap_1"),
@@ -905,7 +905,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             self.backup_dir, 'node', self.node,
             backup_id=backup_id_page, options=["-j", "4"])
-        self.node.start()
+        self.node.slow_start()
         self.assertEqual(
             page_result_1,
             self.node.safe_psql("postgres", "SELECT * FROM t_heap_1"),
