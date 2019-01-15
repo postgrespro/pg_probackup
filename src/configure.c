@@ -450,6 +450,6 @@ show_configure_json(ConfigOption *opt)
 		return;
 
 	json_add_value(&show_buf, opt->lname, value, json_level,
-				   opt->type == 's' || opt->flags & OPTION_UNIT);
+				   true);
 	pfree(value);
 }
