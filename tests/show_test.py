@@ -133,7 +133,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'Control file "{0}" doesn\'t exist'.format(file),
-            self.show_pb(backup_dir, 'node', as_text=True))
+            self.show_pb(backup_dir, 'node', as_text=True, as_json=False))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
