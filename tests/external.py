@@ -56,7 +56,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, options=["-j", "4"])
 
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.base_dir)
+            pgdata_restored = self.pgdata_content(
+                node.base_dir, exclude_dirs=['logs'])
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
@@ -147,10 +148,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     external_dir2_old, external_dir2_new)])
 
         if self.paranoia:
-            pgdata = self.pgdata_content(node.base_dir)
+            pgdata = self.pgdata_content(
+                node.base_dir, exclude_dirs=['logs'])
 
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.base_dir)
+            pgdata_restored = self.pgdata_content(
+                node_restored.base_dir, exclude_dirs=['logs'])
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
@@ -158,7 +161,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_backup_multiple_extra_dir(self):
+    def test_backup_multiple_external(self):
         """make node, """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -176,11 +179,49 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir1_old = self.get_tblspace_path(node, 'external_dir1')
         external_dir2_old = self.get_tblspace_path(node, 'external_dir2')
 
-        # copy some directory from PGDATA to external directories
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        # fill external directories with data
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir1_old, options=["-j", "4"])
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir2_old, options=["-j", "4"])
+
+        self.set_config(
+            backup_dir, 'node',
+            options=[
+                '-E', external_dir1_old])
+
+        # cmdline option MUST override options in config
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="delta",
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}".format(external_dir2_old)])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(
+                node.base_dir, exclude_dirs=['logs', 'external_dir1'])
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=["-j", "4"])
         
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(
+                node.base_dir, exclude_dirs=['logs'])
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
         # extra directory contain symlink to file
         # extra directory contain symlink to directory
@@ -192,3 +233,5 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # extra directory contain multuple directories, some of them my be empty
         # forbid to external-dirs to point to tablespace directories
         # check that not changed files are not copied by next backup
+        # merge
+        # complex merge
