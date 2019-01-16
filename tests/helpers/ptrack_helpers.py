@@ -626,6 +626,16 @@ class ProbackupTest(object):
 
         return self.run_pb(cmd + options, old_binary=old_binary)
 
+    def set_config(self, backup_dir, instance, old_binary=False, options=[]):
+
+        cmd = [
+            'set-config',
+            '--instance={0}'.format(instance),
+            '-B', backup_dir,
+            ]
+
+        return self.run_pb(cmd + options, old_binary=old_binary)
+
     def del_instance(self, backup_dir, instance, old_binary=False):
 
         return self.run_pb([
@@ -1087,6 +1097,7 @@ class ProbackupTest(object):
                 directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
                     open(file_fullpath, 'rb').read()).hexdigest()
 
+                # crappy algorithm
                 if file.isdigit():
                     directory_dict['files'][file_relpath]['is_datafile'] = True
                     size_in_pages = os.path.getsize(file_fullpath)/8192
