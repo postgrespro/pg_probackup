@@ -1414,11 +1414,11 @@ get_wal_file(const char *from_path, const char *to_path)
  * PG_TABLESPACE_MAP_FILE and PG_BACKUP_LABEL_FILE.
  */
 void
-calc_file_checksum(pgFile *file)
+calc_file_checksum(pgFile *file, fio_location location)
 {
 	Assert(S_ISREG(file->mode));
 
-	file->crc = pgFileGetCRC(file->path, true, false, &file->read_size, FIO_BACKUP_HOST);
+	file->crc = pgFileGetCRC(file->path, true, false, &file->read_size, location);
 	file->write_size = file->read_size;
 }
 

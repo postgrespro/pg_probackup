@@ -555,7 +555,7 @@ extern void push_wal_file(const char *from_path, const char *to_path,
 						  bool is_compress, bool overwrite);
 extern void get_wal_file(const char *from_path, const char *to_path);
 
-extern void calc_file_checksum(pgFile *file);
+extern void calc_file_checksum(pgFile *file, fio_location location);
 
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
