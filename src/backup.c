@@ -540,7 +540,7 @@ do_backup_instance(void)
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
 						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
-		prev_backup_filelist = dir_read_file_list(NULL, prev_backup_filelist_path);
+		prev_backup_filelist = dir_read_file_list(NULL, prev_backup_filelist_path, FIO_BACKUP_HOST);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;

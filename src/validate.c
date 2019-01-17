@@ -90,7 +90,7 @@ pgBackupValidate(pgBackup *backup)
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, path);
+	files = dir_read_file_list(base_path, path, FIO_BACKUP_HOST);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)

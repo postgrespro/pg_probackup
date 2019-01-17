@@ -1404,13 +1404,13 @@ bad_format:
  * If root is not NULL, path will be absolute path.
  */
 parray *
-dir_read_file_list(const char *root, const char *file_txt)
+dir_read_file_list(const char *root, const char *file_txt, fio_location location)
 {
 	FILE   *fp;
 	parray *files;
 	char	buf[MAXPGPATH * 2];
 
-	fp = fopen(file_txt, "rt");
+	fp = fio_open_stream(file_txt, location);
 	if (fp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
 
@@ -1469,7 +1469,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		parray_append(files, file);
 	}
 
-	fclose(fp);
+	fio_close_stream(fp);
 	return files;
 }
 

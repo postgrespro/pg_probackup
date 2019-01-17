@@ -520,7 +520,7 @@ extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root);
-extern parray *dir_read_file_list(const char *root, const char *file_txt);
+extern parray *dir_read_file_list(const char *root, const char *file_txt, fio_location location);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);

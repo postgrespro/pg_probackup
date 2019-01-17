@@ -208,7 +208,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(to_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	to_files = dir_read_file_list(NULL, control_file);
+	to_files = dir_read_file_list(NULL, control_file, FIO_BACKUP_HOST);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(to_files, pgFileComparePathDesc);
 	/*
@@ -216,7 +216,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(from_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	files = dir_read_file_list(NULL, control_file);
+	files = dir_read_file_list(NULL, control_file, FIO_BACKUP_HOST);
 	/* sort by size for load balancing */
 	parray_qsort(files, pgFileCompareSize);
 
