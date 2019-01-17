@@ -296,7 +296,7 @@ delete_backup_files(pgBackup *backup)
 			elog(INFO, "Progress: (%zd/%zd). Process file \"%s\"",
 				 i + 1, num_files, file->path);
 
-		pgFileDelete(file);
+		fio_unlink(file->path, FIO_BACKUP_HOST);
 	}
 
 	parray_walk(files, pgFileFree);

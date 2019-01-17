@@ -667,7 +667,7 @@ backup_data_file(backup_files_arg* arguments,
 	 */
 	if (n_blocks_read != 0 && n_blocks_read == n_blocks_skipped)
 	{
-		if (remove(to_path) == -1)
+		if (fio_unlink(to_path, FIO_BACKUP_HOST) == -1)
 			elog(ERROR, "cannot remove file \"%s\": %s", to_path,
 				 strerror(errno));
 		return false;
