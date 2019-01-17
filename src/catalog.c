@@ -247,14 +247,14 @@ pgBackupGetBackupMode(pgBackup *backup)
 }
 
 static bool
-IsDir(const char *dirpath, const char *entry)
+IsDir(const char *dirpath, const char *entry, fio_location location)
 {
 	char		path[MAXPGPATH];
 	struct stat	st;
 
 	snprintf(path, MAXPGPATH, "%s/%s", dirpath, entry);
 
-	return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+	return fio_stat(path, &st, false, location) == 0 && S_ISDIR(st.st_mode);
 }
 
 /*
@@ -289,7 +289,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 		char data_path[MAXPGPATH];
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_instance_path, data_ent->d_name)
+		if (!IsDir(backup_instance_path, data_ent->d_name, FIO_BACKUP_HOST)
 			|| data_ent->d_name[0] == '.')
 			continue;
 
