@@ -273,7 +273,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 	int		i;
 
 	/* open backup instance backups directory */
-	data_dir = opendir(backup_instance_path);
+	data_dir = fio_opendir(backup_instance_path, FIO_BACKUP_HOST);
 	if (data_dir == NULL)
 	{
 		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
@@ -283,7 +283,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 	/* scan the directory and list backups */
 	backups = parray_new();
-	for (; (data_ent = readdir(data_dir)) != NULL; errno = 0)
+	for (; (data_ent = fio_readdir(data_dir)) != NULL; errno = 0)
 	{
 		char backup_conf_path[MAXPGPATH];
 		char data_path[MAXPGPATH];
@@ -336,7 +336,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 		goto err_proc;
 	}
 
-	closedir(data_dir);
+	fio_closedir(data_dir);
 	data_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
@@ -369,7 +369,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 err_proc:
 	if (data_dir)
-		closedir(data_dir);
+		fio_closedir(data_dir);
 	if (backup)
 		pgBackupFree(backup);
 	if (backups)
