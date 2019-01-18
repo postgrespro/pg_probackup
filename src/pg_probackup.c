@@ -351,7 +351,7 @@ main(int argc, char *argv[])
 			backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD))
 	{
 		if (remote_agent) {
-			if (backup_subcmd != BACKUP_CMD) {
+			if (backup_subcmd != BACKUP_CMD && backup_subcmd != ARCHIVE_PUSH_CMD) {
 				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 				return 0;
 			}
