@@ -29,6 +29,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 	char		current_dir[MAXPGPATH];
 	uint64		system_id;
 	bool		is_compress = false;
+	char*       pgdata = instance_config.pgdata;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
 		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
@@ -39,11 +40,14 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 	if (wal_file_path == NULL)
 		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
 
-	if (!getcwd(current_dir, sizeof(current_dir)))
-		elog(ERROR, "getcwd() error");
-
+	if (pgdata == NULL)
+	{
+		if (!getcwd(current_dir, sizeof(current_dir)))
+			elog(ERROR, "getcwd() error");
+		pgdata = current_dir;
+	}
 	/* verify that archive-push --instance parameter is valid */
-	system_id = get_system_identifier(current_dir);
+	system_id = get_system_identifier(pgdata);
 
 	if (instance_config.pgdata == NULL)
 		elog(ERROR, "cannot read pg_probackup.conf for this instance");
@@ -57,7 +61,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 	/* Create 'archlog_path' directory. Do nothing if it already exists. */
 	fio_mkdir(arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
-	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
+	join_path_components(absolute_wal_file_path, pgdata, wal_file_path);
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
 
 	elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
@@ -87,6 +91,7 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 	char		backup_wal_file_path[MAXPGPATH];
 	char		absolute_wal_file_path[MAXPGPATH];
 	char		current_dir[MAXPGPATH];
+	char*       pgdata = instance_config.pgdata;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
 		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
@@ -97,10 +102,13 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 	if (wal_file_path == NULL)
 		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
 
-	if (!getcwd(current_dir, sizeof(current_dir)))
-		elog(ERROR, "getcwd() error");
-
-	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
+	if (pgdata == NULL)
+	{
+		if (!getcwd(current_dir, sizeof(current_dir)))
+			elog(ERROR, "getcwd() error");
+		pgdata = current_dir;
+	}
+	join_path_components(absolute_wal_file_path, pgdata, wal_file_path);
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
 
 	elog(INFO, "pg_probackup archive-get from %s to %s",
