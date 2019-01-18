@@ -914,7 +914,7 @@ void fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_RENAME:
-			SYS_CHECK(rename(buf, buf + strlen(buf)));
+			SYS_CHECK(rename(buf, buf + strlen(buf) + 1));
 			break;
 		  case FIO_UNLINK:
 			SYS_CHECK(unlink(buf));
