@@ -66,14 +66,7 @@ char	   *replication_slot = NULL;
 /* backup options */
 bool		backup_logs = false;
 bool		smooth_checkpoint;
-char       *remote_host;
-char       *remote_port;
-char       *remote_path;
-char       *remote_proto = (char*)"ssh";
-char       *ssh_config;
-char       *ssh_options;
 char       *remote_agent;
-bool		is_remote_backup;
 
 /* restore options */
 static char		   *target_time = NULL;
@@ -142,15 +135,6 @@ static ConfigOption cmd_options[] =
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
-	/* remote options */
-	{ 's', 19, "remote-proto",	        &remote_proto,      SOURCE_CMD_STRICT, },
-	{ 'b', 20, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, },
-	{ 's', 21, "remote-host",			&remote_host,       SOURCE_CMD_STRICT, },
-	{ 's', 22, "remote-port",	        &remote_port,       SOURCE_CMD_STRICT, },
-	{ 's', 23, "remote-path",	        &remote_path,       SOURCE_CMD_STRICT, },
-	{ 's', 24, "ssh-config",	        &ssh_config,        SOURCE_CMD_STRICT, },
-	{ 's', 25, "ssh-options",	        &ssh_options,       SOURCE_CMD_STRICT, },
-	{ 's', 26, "agent",				    &remote_agent,   SOURCE_CMD_STRICT, },
 	/* restore options */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
 	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
@@ -182,6 +166,8 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	/* remote options */
+	{ 's', 155, "agent",			&remote_agent,      SOURCE_CMD_STRICT, },
 	{ 0 }
 };
 
@@ -531,9 +517,9 @@ main(int argc, char *argv[])
 				start_time = time(NULL);
 				backup_mode = deparse_backup_mode(current.backup_mode);
 
-				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
+				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", remote_host ? "true" : "false");
+						  stream_wal ? "true" : "false", instance_config.remote.enabled ? "true" : "false");
 
 				return do_backup(start_time);
 			}

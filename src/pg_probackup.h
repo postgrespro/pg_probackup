@@ -25,6 +25,7 @@
 
 #include "utils/configuration.h"
 #include "utils/logger.h"
+#include "utils/remote.h"
 #include "utils/parray.h"
 #include "utils/pgut.h"
 #include "utils/file.h"
@@ -197,6 +198,9 @@ typedef struct InstanceConfig
 	/* Logger parameters */
 	LoggerConfig logger;
 
+	/* Remote access parameters */
+	RemoteConfig remote;
+
 	/* Retention options. 0 disables the option. */
 	uint32		retention_redundancy;
 	uint32		retention_window;
@@ -344,7 +348,7 @@ typedef struct
 	XLByteInSeg(xlrp, logSegNo)
 #endif
 
-#define IsSshConnection() (remote_host != NULL && strcmp(remote_proto, "ssh") == 0)
+#define IsSshConnection() (instance_config.remote.enabled && strcmp(instance_config.remote.proto, "ssh") == 0)
 
 /* directory options */
 extern char	   *backup_path;
@@ -364,14 +368,7 @@ extern char	   *replication_slot;
 extern bool		smooth_checkpoint;
 
 /* remote probackup options */
-extern char *remote_path;
-extern char *remote_port;
-extern char *remote_host;
-extern char *remote_proto;
-extern char *ssh_config;
-extern char *ssh_options;
 extern char* remote_agent;
-extern bool	 is_remote_backup;
 
 extern bool is_ptrack_support;
 extern bool is_checksum_enabled;

@@ -37,6 +37,7 @@ static void show_configure_json(ConfigOption *opt);
 #define OPTION_LOG_GROUP		"Logging parameters"
 #define OPTION_RETENTION_GROUP	"Retention parameters"
 #define OPTION_COMPRESS_GROUP	"Compression parameters"
+#define OPTION_REMOTE_GROUP		"Remote access parameters"
 
 /*
  * Short name should be non-printable ASCII character.
@@ -172,6 +173,42 @@ ConfigOption instance_options[] =
 		&instance_config.compress_level, SOURCE_CMD, 0,
 		OPTION_COMPRESS_GROUP, 0, option_get_value
 	},
+	/* Remote backup options */
+	{
+		's', 219, "remote-proto",
+		&instance_config.remote.proto, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	{
+		's', 220, "remote-host",
+		&instance_config.remote.host, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	{
+		's', 221, "remote-port",
+		&instance_config.remote.port, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	{
+		's', 222, "remote-path",
+		&instance_config.remote.path, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	{
+		's', 223, "ssh-options",
+		&instance_config.remote.ssh_options, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	{
+		's', 224, "ssh-config",
+		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	{
+		'b', 225, "remote",
+		&instance_config.remote.enabled, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
 	{ 0 }
 };
 
@@ -277,6 +314,8 @@ init_config(InstanceConfig *config)
 
 	config->compress_alg = COMPRESS_ALG_DEFAULT;
 	config->compress_level = COMPRESS_LEVEL_DEFAULT;
+
+	config->remote.proto = (char*)"ssh";
 }
 
 static void

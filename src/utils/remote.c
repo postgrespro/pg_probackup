@@ -83,29 +83,29 @@ int remote_execute(int argc, char* argv[], bool listen)
 	char* pg_probackup = argv[0];
 
 	ssh_argc = 0;
-	ssh_argv[ssh_argc++] = remote_proto;
-	if (remote_port != NULL) {
+	ssh_argv[ssh_argc++] = instance_config.remote.proto;
+	if (instance_config.remote.port != NULL) {
 		ssh_argv[ssh_argc++] = (char*)"-p";
-		ssh_argv[ssh_argc++] = remote_port;
+		ssh_argv[ssh_argc++] = instance_config.remote.port;
 	}
-	if (ssh_config != NULL) {
+	if (instance_config.remote.ssh_config != NULL) {
 		ssh_argv[ssh_argc++] = (char*)"-F";
-		ssh_argv[ssh_argc++] = ssh_config;
+		ssh_argv[ssh_argc++] = instance_config.remote.ssh_config;
 	}
-	if (ssh_options != NULL) {
-		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, ssh_options);
+	if (instance_config.remote.ssh_options != NULL) {
+		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, instance_config.remote.ssh_options);
 	}
-	ssh_argv[ssh_argc++] = remote_host;
+	ssh_argv[ssh_argc++] = instance_config.remote.host;
 	ssh_argv[ssh_argc++] = cmd;
 	ssh_argv[ssh_argc] = NULL;
 
-	if (remote_path)
+	if (instance_config.remote.path)
 	{
 		char* sep = strrchr(pg_probackup, '/');
 		if (sep != NULL) {
 			pg_probackup = sep + 1;
 		}
-		dst = snprintf(cmd, sizeof(cmd), "%s/%s", remote_path, pg_probackup);
+		dst = snprintf(cmd, sizeof(cmd), "%s/%s", instance_config.remote.path, pg_probackup);
 	} else {
 		dst = snprintf(cmd, sizeof(cmd), "%s", pg_probackup);
 	}
