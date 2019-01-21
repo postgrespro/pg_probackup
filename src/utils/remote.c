@@ -155,7 +155,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 				int offs, rc;
 				for (offs = 0; (rc = read(errfd[0], &buf[offs], sizeof(buf) - offs)) > 0; offs += rc);
 				buf[offs] = '\0';
-				elog(ERROR, buf);
+				elog(ERROR, "%s", strncmp(buf, "ERROR: ", 6) == 0 ? buf + 6 : buf);
 			}
 			return status;
 		} else {
