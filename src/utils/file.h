@@ -49,8 +49,8 @@ typedef enum
 #define FIO_FDMAX 64
 #define FIO_PIPE_MARKER 0x40000000
 
-#define SYS_CHECK(cmd) do if ((cmd) < 0) { elog(ERROR, "%s: %m", #cmd); exit(EXIT_FAILURE); } while (0)
-#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) { elog(ERROR, "%s:%d: proceeds %d bytes instead of %d\n", __FILE__, __LINE__, _rc, (int)(size)); exit(EXIT_FAILURE); } } while (0)
+#define SYS_CHECK(cmd) do if ((cmd) < 0) { elog(ERROR, "%s: %s", #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
+#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) { elog(ERROR, "%s:%d: proceeds %d bytes instead of %d: %s\n", __FILE__, __LINE__, _rc, (int)(size), strerror(errno)); exit(EXIT_FAILURE); } } while (0)
 
 typedef struct
 {

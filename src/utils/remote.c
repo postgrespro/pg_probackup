@@ -138,7 +138,8 @@ int remote_execute(int argc, char* argv[], bool listen)
 		SYS_CHECK(close(errfd[0]));
 		SYS_CHECK(close(errfd[1]));
 
-		SYS_CHECK(execvp(ssh_argv[0], ssh_argv));
+		if (execvp(ssh_argv[0], ssh_argv) < 0)
+			elog(ERROR, "Failed to spawn %s: %s", ssh_argv[0], strerror(errno));
 		return -1;
 	} else {
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
