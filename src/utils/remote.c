@@ -10,6 +10,7 @@
 
 #define MAX_CMDLINE_LENGTH  4096
 #define MAX_CMDLINE_OPTIONS 256
+#define ERR_BUF_SIZE        1024
 
 static int append_option(char* buf, size_t buf_size, size_t dst, char const* src)
 {
@@ -78,6 +79,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 	int i;
 	int outfd[2];
 	int infd[2];
+	int errfd[2];
 	char* pg_probackup = argv[0];
 
 	ssh_argc = 0;
@@ -116,31 +118,45 @@ int remote_execute(int argc, char* argv[], bool listen)
 
 	SYS_CHECK(pipe(infd));
 	SYS_CHECK(pipe(outfd));
+	SYS_CHECK(pipe(errfd));
 
 	SYS_CHECK(child_pid = fork());
 
 	if (child_pid == 0) { /* child */
 		SYS_CHECK(close(STDIN_FILENO));
 		SYS_CHECK(close(STDOUT_FILENO));
+		SYS_CHECK(close(STDERR_FILENO));
 
 		SYS_CHECK(dup2(outfd[0], STDIN_FILENO));
-		SYS_CHECK(dup2(infd[1], STDOUT_FILENO));
+		SYS_CHECK(dup2(infd[1],  STDOUT_FILENO));
+		SYS_CHECK(dup2(errfd[1], STDERR_FILENO));
 
 		SYS_CHECK(close(infd[0]));
 		SYS_CHECK(close(infd[1]));
 		SYS_CHECK(close(outfd[0]));
 		SYS_CHECK(close(outfd[1]));
+		SYS_CHECK(close(errfd[0]));
+		SYS_CHECK(close(errfd[1]));
 
 		SYS_CHECK(execvp(ssh_argv[0], ssh_argv));
 		return -1;
 	} else {
-		SYS_CHECK(close(outfd[0])); /* These are being used by the child */
-		SYS_CHECK(close(infd[1]));
+		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
+		SYS_CHECK(close(outfd[0]));
+		SYS_CHECK(close(errfd[1]));
 		atexit(kill_child);
 		if (listen) {
 			int status;
 			fio_communicate(infd[0], outfd[1]);
 			SYS_CHECK(wait(&status));
+			if (status != 0)
+			{
+				char buf[ERR_BUF_SIZE];
+				int offs, rc;
+				for (offs = 0; (rc = read(errfd[0], &buf[offs], sizeof(buf) - offs)) > 0; offs += rc);
+				buf[offs] = '\0';
+				elog(ERROR, buf);
+			}
 			return status;
 		} else {
 			fio_redirect(infd[0], outfd[1]); /* write to stdout */
