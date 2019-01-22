@@ -268,15 +268,23 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 	FILE* f;
 	if (fio_is_remote(location))
 	{
-		int flags = O_RDWR|O_CREAT|PG_BINARY|(strchr(mode, '+') ? 0 : O_TRUNC);
-		int fd = fio_open(path, flags, location);
+		int flags = O_RDWR|O_CREAT;
+		int fd;
+		if (strcmp(mode, PG_BINARY_W) == 0) {
+			flags |= O_TRUNC|PG_BINARY;
+		} else if (strncmp(mode, PG_BINARY_R, strlen(PG_BINARY_R)) == 0) {
+			flags |= PG_BINARY;
+		} else if (strcmp(mode, "a") == 0) {
+			flags |= O_APPEND;
+		}
+		fd = fio_open(path, flags, location);
 		f = (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER);
 	}
 	else
 	{
 		f = fopen(path, mode);
 		if (f == NULL && strcmp(mode, PG_BINARY_R "+") == 0)
-			f = fopen(path,  PG_BINARY_W);
+			f = fopen(path, PG_BINARY_W);
 	}
 	return f;
 }
