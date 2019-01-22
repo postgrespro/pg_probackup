@@ -167,7 +167,7 @@ static ConfigOption cmd_options[] =
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
 	/* remote options */
-	{ 's', 155, "agent",			&remote_agent,      SOURCE_CMD_STRICT, },
+	{ 's', 155, "agent",			&remote_agent,      SOURCE_CMD_STRICT },
 	{ 0 }
 };
 

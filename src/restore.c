@@ -457,7 +457,7 @@ restore_backup(pgBackup *backup)
 	 */
 	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(database_path, list_path, FIO_DB_HOST);
+	files = dir_read_file_list(database_path, list_path, FIO_BACKUP_HOST);
 
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (restore_files_arg *) palloc(sizeof(restore_files_arg)*num_threads);
@@ -523,7 +523,7 @@ remove_deleted_files(pgBackup *backup)
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
 	/* Read backup's filelist using target database path as base path */
-	files = dir_read_file_list(instance_config.pgdata, filelist_path, FIO_DB_HOST);
+	files = dir_read_file_list(instance_config.pgdata, filelist_path, FIO_BACKUP_HOST);
 	parray_qsort(files, pgFileComparePathDesc);
 
 	/* Get list of files actually existing in target database */
