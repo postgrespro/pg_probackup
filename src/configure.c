@@ -280,7 +280,10 @@ do_set_config(void)
 			fprintf(fp, "# %s\n", current_group);
 		}
 
-		fprintf(fp, "%s = %s\n", opt->lname, value);
+		if (strchr(value, ' '))
+			fprintf(fp, "%s = '%s'\n", opt->lname, value);
+		else
+			fprintf(fp, "%s = %s\n", opt->lname, value);
 		pfree(value);
 	}
 
