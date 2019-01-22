@@ -204,11 +204,6 @@ ConfigOption instance_options[] =
 		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
-	{
-		'b', 225, "remote",
-		&instance_config.remote.enabled, SOURCE_CMD, 0,
-		OPTION_REMOTE_GROUP, 0, option_get_value
-	},
 	{ 0 }
 };
 

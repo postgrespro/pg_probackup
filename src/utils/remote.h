@@ -18,7 +18,6 @@ typedef struct RemoteConfig
 	char* path;
 	char *ssh_config;
 	char *ssh_options;
-	bool  enabled;
 } RemoteConfig;
 
 #endif

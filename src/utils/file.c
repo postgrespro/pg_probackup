@@ -49,7 +49,7 @@ static bool fio_is_remote(fio_location location)
 {
 	return location == FIO_REMOTE_HOST
 		|| (location == FIO_BACKUP_HOST && remote_agent) /* agent is launched at Postgres side */
-		|| (location == FIO_DB_HOST && !remote_agent && IsSshConnection());
+		|| (location == FIO_DB_HOST && !remote_agent && IsSshProtocol());
 }
 
 /* Try to read specified amount of bytes unless error or EOF are encountered */

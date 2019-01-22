@@ -333,7 +333,7 @@ main(int argc, char *argv[])
 	if (!is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
-	if (IsSshConnection()
+	if (IsSshProtocol()
 		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD ||
 			backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD))
 	{
@@ -501,7 +501,7 @@ main(int argc, char *argv[])
 			return do_init();
 		case BACKUP_CMD:
 		    current.stream = stream_wal;
-		    if (IsSshConnection() && !remote_agent)
+		    if (IsSshProtocol() && !remote_agent)
 			{
 				current.status = BACKUP_STATUS_DONE;
 				StrNCpy(current.program_version, PROGRAM_VERSION,
@@ -519,7 +519,7 @@ main(int argc, char *argv[])
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", instance_config.remote.enabled ? "true" : "false");
+						  stream_wal ? "true" : "false", instance_config.remote.host ? "true" : "false");
 
 				return do_backup(start_time);
 			}

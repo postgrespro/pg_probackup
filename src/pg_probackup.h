@@ -348,7 +348,8 @@ typedef struct
 	XLByteInSeg(xlrp, logSegNo)
 #endif
 
-#define IsSshConnection() (instance_config.remote.enabled && strcmp(instance_config.remote.proto, "ssh") == 0)
+#define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
+#define IsReplicationProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "replication") == 0)
 
 /* directory options */
 extern char	   *backup_path;

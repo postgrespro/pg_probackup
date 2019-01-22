@@ -492,7 +492,7 @@ do_backup_instance(void)
 	current.data_bytes = 0;
 
 	/* Obtain current timeline */
-	if (instance_config.remote.enabled)
+	if (IsReplicationProtocol())
 	{
 		char	   *sysidentifier;
 		TimeLineID	starttli;
@@ -632,7 +632,8 @@ do_backup_instance(void)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	if (instance_config.remote.enabled)
+
+	if (IsReplicationProtocol())
 		get_remote_pgdata_filelist(backup_files_list);
 	else
 		dir_list_file(backup_files_list, instance_config.pgdata,
@@ -699,7 +700,7 @@ do_backup_instance(void)
 			char	   *dir_name;
 			char		database_path[MAXPGPATH];
 
-			if (!instance_config.remote.enabled)
+			if (!IsReplicationProtocol())
 				dir_name = GetRelativePath(file->path, instance_config.pgdata);
 			else
 				dir_name = file->path;
@@ -749,7 +750,7 @@ do_backup_instance(void)
 
 		elog(VERBOSE, "Start thread num: %i", i);
 
-		if (!instance_config.remote.enabled)
+		if (!IsReplicationProtocol())
 			pthread_create(&threads[i], NULL, backup_files, arg);
 		else
 			pthread_create(&threads[i], NULL, remote_backup_files, arg);
@@ -902,7 +903,7 @@ do_backup(time_t start_time)
 	check_server_version();
 
 	/* TODO fix it for remote backup*/
-	if (!instance_config.remote.enabled)
+	if (!IsReplicationProtocol())
 		current.checksum_version = get_data_checksum_version(true);
 
 	is_checksum_enabled = pg_checksum_enable();
@@ -958,7 +959,7 @@ do_backup(time_t start_time)
 	 * belogns to the same instance.
 	 */
 	/* TODO fix it for remote backup */
-	if (!instance_config.remote.enabled)
+	if (!IsReplicationProtocol())
 		check_system_identifiers();
 
 
