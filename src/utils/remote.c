@@ -15,13 +15,21 @@
 static int append_option(char* buf, size_t buf_size, size_t dst, char const* src)
 {
 	size_t len = strlen(src);
-	if (dst + len + 1 >= buf_size) {
+	if (dst + len + 3 >= buf_size) {
 		fprintf(stderr, "Too long command line\n");
 		exit(EXIT_FAILURE);
 	}
-	buf[dst] = ' ';
-	memcpy(&buf[dst+1], src, len);
-	return dst + len + 1;
+	buf[dst++] = ' ';
+	if (strchr(src, ' ') != NULL) { /* need quotes */
+		buf[dst++] = '\'';
+		memcpy(&buf[dst], src, len);
+		dst += len;
+		buf[dst++] = '\'';
+	} else {
+		memcpy(&buf[dst], src, len);
+		dst += len;
+	}
+	return dst;
 }
 
 static int split_options(int argc, char* argv[], int max_options, char* options)
@@ -93,7 +101,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 		ssh_argv[ssh_argc++] = instance_config.remote.ssh_config;
 	}
 	if (instance_config.remote.ssh_options != NULL) {
-		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, instance_config.remote.ssh_options);
+		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, pg_strdup(instance_config.remote.ssh_options));
 	}
 	ssh_argv[ssh_argc++] = instance_config.remote.host;
 	ssh_argv[ssh_argc++] = cmd;
