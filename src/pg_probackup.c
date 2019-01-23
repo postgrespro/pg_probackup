@@ -333,6 +333,23 @@ main(int argc, char *argv[])
 	if (!is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
+	/*
+	 * We read options from command line, now we need to read them from
+	 * configuration file since we got backup path and instance name.
+	 * For some commands an instance option isn't required, see above.
+	 */
+	if (instance_name)
+	{
+		char		path[MAXPGPATH];
+
+		/* Read environment variables */
+		config_get_opt_env(instance_options);
+
+		/* Read options from configuration file */
+		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+		config_read_opt(path, instance_options, ERROR, true);
+	}
+
 	if (IsSshProtocol()
 		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD ||
 			backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD))
@@ -390,23 +407,6 @@ main(int argc, char *argv[])
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
 		}
-	}
-
-	/*
-	 * We read options from command line, now we need to read them from
-	 * configuration file since we got backup path and instance name.
-	 * For some commands an instance option isn't required, see above.
-	 */
-	if (instance_name)
-	{
-		char		path[MAXPGPATH];
-
-		/* Read environment variables */
-		config_get_opt_env(instance_options);
-
-		/* Read options from configuration file */
-		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-		config_read_opt(path, instance_options, ERROR, true);
 	}
 
 	/* Initialize logger */
