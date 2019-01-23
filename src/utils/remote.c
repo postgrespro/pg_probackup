@@ -97,6 +97,8 @@ static void* error_reader_proc(void* arg)
 				elog(ERROR, "%s", buf + 7);
 			} if (strncmp(buf, "WARNING: ", 9) == 0) {
 				elog(WARNING, "%s", buf + 9);
+			} if (strncmp(buf, "VERBOSE: ", 9) == 0) {
+				elog(VERBOSE, "%s", buf + 9);
 			} else if (strncmp(buf, "LOG: ", 5) == 0) {
 				elog(LOG, "%s", buf + 5);
 			} else if (strncmp(buf, "INFO: ", 6) == 0) {
