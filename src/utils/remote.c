@@ -79,12 +79,20 @@ static void kill_child(void)
 	kill(child_pid, SIGTERM);
 }
 
+
+static void print_message(char const* buf)
+{
+	char const* const severity[] = {"VERBOSE", "LOG", "INFO", "NOTICE", "WARNING", "FATAL", "ERROR", ""};
+	size_t i;
+	for (i = 0; strncmp(buf, severity[i], strlen(severity[i])) != 0; i++);
+	elog(i+VERBOSE, "%s", buf + strlen(severity[i]) + 2);
+}
+
 static void* error_reader_proc(void* arg)
 {
 	int* errfd = (int*)arg;
 	char buf[ERR_BUF_SIZE];
 	int offs = 0, rc;
-
 	while ((rc = read(errfd[0], &buf[offs], sizeof(buf) - offs)) > 0)
 	{
 		char* nl;
@@ -93,21 +101,14 @@ static void* error_reader_proc(void* arg)
 		nl = strchr(buf, '\n');
 		if (nl != NULL) {
 			*nl = '\0';
-			if (strncmp(buf, "ERROR: ", 7) == 0) {
-				elog(ERROR, "%s", buf + 7);
-			} if (strncmp(buf, "WARNING: ", 9) == 0) {
-				elog(WARNING, "%s", buf + 9);
-			} if (strncmp(buf, "VERBOSE: ", 9) == 0) {
-				elog(VERBOSE, "%s", buf + 9);
-			} else if (strncmp(buf, "LOG: ", 5) == 0) {
-				elog(LOG, "%s", buf + 5);
-			} else if (strncmp(buf, "INFO: ", 6) == 0) {
-				elog(INFO, "%s", buf + 6);
-			} else {
-				elog(LOG, "%s", buf);
-			}
+			print_message(buf);
 			memmove(buf, nl+1, offs -= (nl + 1 - buf));
 		}
+	}
+	if (offs != 0)
+	{
+		buf[offs] = '\0';
+		print_message(buf);
 	}
 	return NULL;
 }
