@@ -162,8 +162,8 @@ elog_internal(int elevel, bool file_only, const char *message)
 		&& logger_config.log_directory[0] != '\0'
 		&& !remote_agent;
 	write_to_error_log = elevel >= ERROR && logger_config.error_log_filename &&
-		logger_config.log_directory && logger_config.log_directory[0] != '\0';
-	write_to_stderr = elevel >= (remote_agent ? ERROR : logger_config.log_level_console) && !file_only;
+		logger_config.log_directory && logger_config.log_directory[0] != '\0'&& !remote_agent;
+	write_to_stderr = (elevel >= (remote_agent ? ERROR : logger_config.log_level_console) && !file_only) || remote_agent;
 
 	pthread_lock(&log_file_mutex);
 	loggin_in_progress = true;

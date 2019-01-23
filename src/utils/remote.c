@@ -4,13 +4,14 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <pthread.h>
 
 #include "pg_probackup.h"
 #include "file.h"
 
 #define MAX_CMDLINE_LENGTH  4096
 #define MAX_CMDLINE_OPTIONS 256
-#define ERR_BUF_SIZE        1024
+#define ERR_BUF_SIZE        4096
 
 static int append_option(char* buf, size_t buf_size, size_t dst, char const* src)
 {
@@ -78,6 +79,37 @@ static void kill_child(void)
 	kill(child_pid, SIGTERM);
 }
 
+static void* error_reader_proc(void* arg)
+{
+	int* errfd = (int*)arg;
+	char buf[ERR_BUF_SIZE];
+	int offs = 0, rc;
+
+	while ((rc = read(errfd[0], &buf[offs], sizeof(buf) - offs)) > 0)
+	{
+		char* nl;
+		offs += rc;
+		buf[offs] = '\0';
+		nl = strchr(buf, '\n');
+		if (nl != NULL) {
+			*nl = '\0';
+			if (strncmp(buf, "ERROR: ", 7) == 0) {
+				elog(ERROR, "%s", buf + 7);
+			} if (strncmp(buf, "WARNING: ", 9) == 0) {
+				elog(WARNING, "%s", buf + 9);
+			} else if (strncmp(buf, "LOG: ", 5) == 0) {
+				elog(LOG, "%s", buf + 5);
+			} else if (strncmp(buf, "INFO: ", 6) == 0) {
+				elog(INFO, "%s", buf + 6);
+			} else {
+				elog(LOG, "%s", buf);
+			}
+			memmove(buf, nl+1, offs -= (nl + 1 - buf));
+		}
+	}
+	return NULL;
+}
+
 int remote_execute(int argc, char* argv[], bool listen)
 {
 	char cmd[MAX_CMDLINE_LENGTH];
@@ -89,6 +121,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 	int infd[2];
 	int errfd[2];
 	char* pg_probackup = argv[0];
+	pthread_t error_reader_thread;
 
 	ssh_argc = 0;
 	ssh_argv[ssh_argc++] = instance_config.remote.proto;
@@ -178,18 +211,13 @@ int remote_execute(int argc, char* argv[], bool listen)
 		SYS_CHECK(close(errfd[1]));
 		atexit(kill_child);
 
+		pthread_create(&error_reader_thread, NULL, error_reader_proc, errfd);
+
 		if (listen) {
 			int status;
 			fio_communicate(infd[0], outfd[1]);
+
 			SYS_CHECK(wait(&status));
-			if (status != 0)
-			{
-				char buf[ERR_BUF_SIZE];
-				int offs, rc;
-				for (offs = 0; (rc = read(errfd[0], &buf[offs], sizeof(buf) - offs)) > 0; offs += rc);
-				buf[offs] = '\0';
-				elog(ERROR, "%s", strncmp(buf, "ERROR: ", 6) == 0 ? buf + 6 : buf);
-			}
 			return status;
 		} else {
 			fio_redirect(infd[0], outfd[1]); /* write to stdout */
