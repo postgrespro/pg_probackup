@@ -117,11 +117,34 @@ int remote_execute(int argc, char* argv[], bool listen)
 	} else {
 		dst = snprintf(cmd, sizeof(cmd), "%s", pg_probackup);
 	}
+
 	for (i = 1; i < argc; i++) {
 		dst = append_option(cmd, sizeof(cmd), dst, argv[i]);
 	}
+
 	dst = append_option(cmd, sizeof(cmd), dst, "--agent");
 	dst = append_option(cmd, sizeof(cmd), dst, PROGRAM_VERSION);
+
+	for (i = 0; instance_options[i].type; i++) {
+		ConfigOption *opt = &instance_options[i];
+		char	     *value;
+		char         *cmd_opt;
+
+        /* Path only options from file */
+		if (opt->source != SOURCE_FILE)
+			continue;
+
+		value = opt->get_value(opt);
+		if (value == NULL)
+			continue;
+
+		cmd_opt = psprintf("--%s=%s", opt->lname, value);
+
+		dst = append_option(cmd, sizeof(cmd), dst, cmd_opt);
+		pfree(value);
+		pfree(cmd_opt);
+	}
+
 	cmd[dst] = '\0';
 
 	SYS_CHECK(pipe(infd));
@@ -154,6 +177,7 @@ int remote_execute(int argc, char* argv[], bool listen)
 		SYS_CHECK(close(outfd[0]));
 		SYS_CHECK(close(errfd[1]));
 		atexit(kill_child);
+
 		if (listen) {
 			int status;
 			fio_communicate(infd[0], outfd[1]);

@@ -34,6 +34,15 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fi
 	int		 len;
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", datadir, path);
 
+	if (fio_access(fullpath, R_OK, location) != 0)
+	{
+		if (safe)
+			return NULL;
+		else
+			elog(ERROR, "could not open file \"%s\" for reading: %s",
+				fullpath, strerror(errno));
+	}
+
 	if ((fd = fio_open(fullpath, O_RDONLY | PG_BINARY, location)) == -1)
 	{
 		if (safe)

@@ -329,47 +329,6 @@ main(int argc, char *argv[])
 	}
 	canonicalize_path(backup_path);
 
-	/* Ensure that backup_path is an absolute path */
-	if (!is_absolute_path(backup_path))
-		elog(ERROR, "-B, --backup-path must be an absolute path");
-
-	/*
-	 * We read options from command line, now we need to read them from
-	 * configuration file since we got backup path and instance name.
-	 * For some commands an instance option isn't required, see above.
-	 */
-	if (instance_name)
-	{
-		char		path[MAXPGPATH];
-
-		/* Read environment variables */
-		config_get_opt_env(instance_options);
-
-		/* Read options from configuration file */
-		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-		config_read_opt(path, instance_options, ERROR, true);
-	}
-
-	if (IsSshProtocol()
-		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD ||
-			backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD))
-	{
-		if (remote_agent) {
-			if (backup_subcmd != BACKUP_CMD && backup_subcmd != ARCHIVE_PUSH_CMD) {
-				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
-				return 0;
-			}
-			fio_redirect(STDIN_FILENO, STDOUT_FILENO);
-		} else {
-			/* Execute remote probackup */
-			int status = remote_execute(argc, argv, backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD);
-			if (status != 0 || backup_subcmd == ARCHIVE_PUSH_CMD)
-			{
-				return status;
-			}
-		}
-	}
-
 	if (!remote_agent)
 	{
 		/* Ensure that backup_path is a path to a directory */
@@ -377,6 +336,11 @@ main(int argc, char *argv[])
 		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 			elog(ERROR, "-B, --backup-path must be a path to directory");
 	}
+
+	/* Ensure that backup_path is an absolute path */
+	if (!is_absolute_path(backup_path))
+		elog(ERROR, "-B, --backup-path must be an absolute path");
+
 
 	/* Option --instance is required for all commands except init and show */
 	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
@@ -409,8 +373,45 @@ main(int argc, char *argv[])
 		}
 	}
 
+	/*
+	 * We read options from command line, now we need to read them from
+	 * configuration file since we got backup path and instance name.
+	 * For some commands an instance option isn't required, see above.
+	 */
+	if (instance_name && !remote_agent)
+	{
+		char		path[MAXPGPATH];
+
+		/* Read environment variables */
+		config_get_opt_env(instance_options);
+
+		/* Read options from configuration file */
+		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
+		config_read_opt(path, instance_options, ERROR, true);
+	}
+
 	/* Initialize logger */
 	init_logger(backup_path, &instance_config.logger);
+
+	if (IsSshProtocol()
+		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD ||
+			backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD))
+	{
+		if (remote_agent) {
+			if (backup_subcmd != BACKUP_CMD && backup_subcmd != ARCHIVE_PUSH_CMD) {
+				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
+				return 0;
+			}
+			fio_redirect(STDIN_FILENO, STDOUT_FILENO);
+		} else {
+			/* Execute remote probackup */
+			int status = remote_execute(argc, argv, backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD);
+			if (status != 0 || backup_subcmd == ARCHIVE_PUSH_CMD)
+			{
+				return status;
+			}
+		}
+	}
 
 	/* command was initialized for a few commands */
 	if (command)
