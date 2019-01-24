@@ -230,11 +230,13 @@ write_backup_status(pgBackup *backup)
 	pgBackup   *tmp;
 
 	tmp = read_backup(backup->start_time);
+	if (tmp != NULL)
+	{
+		tmp->status = backup->status;
+		write_backup(tmp);
 
-	tmp->status = backup->status;
-	write_backup(tmp);
-
-	pgBackupFree(tmp);
+		pgBackupFree(tmp);
+	}
 }
 
 /*
