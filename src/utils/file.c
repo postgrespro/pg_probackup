@@ -664,7 +664,7 @@ int fio_unlink(char const* path, fio_location location)
 	}
 	else
 	{
-		return unlink(path);
+		return remove(path);
 	}
 }
 
@@ -925,7 +925,7 @@ void fio_communicate(int in, int out)
 			SYS_CHECK(rename(buf, buf + strlen(buf) + 1));
 			break;
 		  case FIO_UNLINK:
-			SYS_CHECK(unlink(buf));
+			SYS_CHECK(remove(buf));
 			break;
 		  case FIO_MKDIR:
 			SYS_CHECK(dir_create_dir(buf, hdr.arg));

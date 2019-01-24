@@ -686,7 +686,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		join_path_components(child, parent->path, dent->d_name);
 
-		file = pgFileNew(child, omit_symlink, FIO_LOCAL_HOST);
+		file = pgFileNew(child, omit_symlink, location);
 		if (file == NULL)
 			continue;
 
