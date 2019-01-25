@@ -26,7 +26,6 @@ typedef enum
 	FIO_FSTAT,
 	FIO_SEND,
 	FIO_ACCESS,
-	FIO_TRANSFER,
 	FIO_OPENDIR,
 	FIO_READDIR,
 	FIO_CLOSEDIR
@@ -40,17 +39,11 @@ typedef enum
 	FIO_REMOTE_HOST  /* date is located at remote host */
 } fio_location;
 
-typedef enum
-{
-	FIO_BACKUP_START_TIME,
-	FIO_BACKUP_STOP_LSN
-} fio_shared_variable;
-
 #define FIO_FDMAX 64
 #define FIO_PIPE_MARKER 0x40000000
 
-#define SYS_CHECK(cmd) do if ((cmd) < 0) { elog(ERROR, "%s: %s", #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
-#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) { elog(ERROR, "%s:%d: proceeds %d bytes instead of %d: %s\n", __FILE__, __LINE__, _rc, (int)(size), strerror(errno)); exit(EXIT_FAILURE); } } while (0)
+#define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
+#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) { fprintf(stderr, "%s:%d: proceeds %d bytes instead of %d: %s\n", __FILE__, __LINE__, _rc, (int)(size), _rc < 0 ? "end of data" :  strerror(errno)); exit(EXIT_FAILURE); } } while (0)
 
 typedef struct
 {
@@ -105,8 +98,6 @@ extern int     fio_close_stream(FILE* f);
 extern gzFile  fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location location);
 extern int     fio_gzclose(gzFile file, char const* path, int tmp_fd);
 #endif
-
-extern void    fio_transfer(fio_shared_variable var);
 
 #endif
 

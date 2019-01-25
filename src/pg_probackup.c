@@ -41,6 +41,9 @@ typedef enum ProbackupSubcmd
 	SHOW_CONFIG_CMD
 } ProbackupSubcmd;
 
+
+char       *pg_probackup; /* Program name (argv[0]) */
+
 /* directory options */
 char	   *backup_path = NULL;
 /*
@@ -182,6 +185,8 @@ main(int argc, char *argv[])
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
 	int			rc;
+
+	pg_probackup = argv[0];
 
 	/* Initialize current backup */
 	pgBackupInit(&current);

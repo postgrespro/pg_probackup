@@ -352,6 +352,7 @@ typedef struct
 #define IsReplicationProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "replication") == 0)
 
 /* directory options */
+extern char    *pg_probackup;
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
@@ -497,7 +498,7 @@ extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
-extern int remote_execute(int argc, char *argv[], bool do_backup);
+extern bool launch_agent(void);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
 #define COMPRESS_LEVEL_DEFAULT 1

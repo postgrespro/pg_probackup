@@ -220,7 +220,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		elog(ERROR, "File: %s, could not seek to block %u: %s",
 				file->path, blknum, strerror(errno));
 
-	read_len = fread(page, 1, BLCKSZ, in);
+	read_len = fio_fread(in, page, BLCKSZ);
 
 	if (read_len != BLCKSZ)
 	{
@@ -552,7 +552,7 @@ backup_data_file(backup_files_arg* arguments,
 	INIT_FILE_CRC32(true, file->crc);
 
 	/* open backup mode file for read */
-	in = fopen(file->path, PG_BINARY_R);
+	in = fio_fopen(file->path, PG_BINARY_R, FIO_DB_HOST);
 	if (in == NULL)
 	{
 		FIN_FILE_CRC32(true, file->crc);
@@ -589,7 +589,7 @@ backup_data_file(backup_files_arg* arguments,
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
-		fclose(in);
+		fio_fclose(in);
 		elog(ERROR, "cannot open backup file \"%s\": %s",
 			 to_path, strerror(errno_tmp));
 	}
@@ -647,7 +647,7 @@ backup_data_file(backup_files_arg* arguments,
 	if (fio_chmod(to_path, FILE_PERMISSION, FIO_BACKUP_HOST) == -1)
 	{
 		int errno_tmp = errno;
-		fclose(in);
+		fio_fclose(in);
 		fio_fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", file->path,
 			 strerror(errno_tmp));
@@ -657,7 +657,7 @@ backup_data_file(backup_files_arg* arguments,
 		fio_fclose(out))
 		elog(ERROR, "cannot write backup file \"%s\": %s",
 			 to_path, strerror(errno));
-	fclose(in);
+	fio_fclose(in);
 
 	FIN_FILE_CRC32(true, file->crc);
 
