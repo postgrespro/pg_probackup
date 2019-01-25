@@ -85,7 +85,11 @@ static void print_message(char const* buf)
 	char const* const severity[] = {"VERBOSE", "LOG", "INFO", "NOTICE", "WARNING", "FATAL", "ERROR", ""};
 	size_t i;
 	for (i = 0; strncmp(buf, severity[i], strlen(severity[i])) != 0; i++);
-	elog(i+VERBOSE > ERROR ? LOG : i + VERBOSE, "%s", buf + strlen(severity[i]) + 2);
+	if (i + VERBOSE > ERROR) {
+		elog(LOG, "%s", buf);
+	} else {
+		elog(i+VERBOSE, "%s", buf + strlen(severity[i]) + 2);
+	}
 }
 
 static void* error_reader_proc(void* arg)
