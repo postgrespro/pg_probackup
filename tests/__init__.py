@@ -8,7 +8,7 @@ from . import init_test, merge, option_test, show_test, compatibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
     false_positive, replica, compression, page, ptrack, archive, \
     exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test, \
-    time_stamp
+    time_stamp, snapfs
 
 
 def load_tests(loader, tests, pattern):
@@ -46,6 +46,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(restore_test))
     suite.addTests(loader.loadTestsFromModule(retention_test))
     suite.addTests(loader.loadTestsFromModule(show_test))
+    suite.addTests(loader.loadTestsFromModule(snapfs))
     suite.addTests(loader.loadTestsFromModule(validate_test))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
