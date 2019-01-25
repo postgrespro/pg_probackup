@@ -83,7 +83,7 @@ static void kill_child(void)
 static void print_message(char const* buf)
 {
 	char const* const severity[] = {"VERBOSE", "LOG", "INFO", "NOTICE", "WARNING", "FATAL", "ERROR", ""};
-	size_t i;
+	int i;
 	for (i = 0; strncmp(buf, severity[i], strlen(severity[i])) != 0; i++);
 	if (i + VERBOSE > ERROR) {
 		elog(LOG, "%s", buf);
