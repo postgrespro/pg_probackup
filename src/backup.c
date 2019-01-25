@@ -618,9 +618,6 @@ do_backup_instance(void)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
 		}
 
-		if (remote_agent)
-			xlog_files_list = parray_new();
-
         /* By default there are some error */
 		stream_thread_arg.ret = 1;
 		stream_thread_arg.files_list = xlog_files_list;
@@ -999,19 +996,6 @@ do_backup(time_t start_time)
 	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 	//		current.data_bytes);
 
-	if (remote_agent)
-	{
-		fio_transfer(FIO_BACKUP_START_TIME);
-		fio_transfer(FIO_BACKUP_STOP_LSN);
-	}
-	else
-		complete_backup();
-
-	return 0;
-}
-
-void complete_backup(void)
-{
 	pgBackupValidate(&current);
 
 	elog(INFO, "Backup %s completed", base36enc(current.start_time));
@@ -1022,6 +1006,8 @@ void complete_backup(void)
 	 */
 	if (delete_expired || delete_wal)
 		do_retention_purge();
+
+	return 0;
 }
 
 /*

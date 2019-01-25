@@ -304,12 +304,17 @@ main(int argc, char *argv[])
 	/* Parse command line only arguments */
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
-	if (remote_agent != NULL && strcmp(remote_agent, PROGRAM_VERSION) != 0)
+	if (remote_agent != NULL)
 	{
-		uint32 agent_version = parse_program_version(remote_agent);
-		elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
-			 "Agent version %s doesn't match master pg_probackup version %s",
-			 remote_agent, PROGRAM_VERSION);
+		if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
+		{
+			uint32 agent_version = parse_program_version(remote_agent);
+			elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
+				 "Agent version %s doesn't match master pg_probackup version %s",
+				 remote_agent, PROGRAM_VERSION);
+		}
+		fio_communicate(STDIN_FILENO, STDOUT_FILENO);
+		return 0;
 	}
 	pgut_init();
 
@@ -329,13 +334,10 @@ main(int argc, char *argv[])
 	}
 	canonicalize_path(backup_path);
 
-	if (!remote_agent)
-	{
-		/* Ensure that backup_path is a path to a directory */
-		rc = stat(backup_path, &stat_buf);
-		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-			elog(ERROR, "-B, --backup-path must be a path to directory");
-	}
+	/* Ensure that backup_path is a path to a directory */
+	rc = stat(backup_path, &stat_buf);
+	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
+		elog(ERROR, "-B, --backup-path must be a path to directory");
 
 	/* Ensure that backup_path is an absolute path */
 	if (!is_absolute_path(backup_path))
@@ -365,7 +367,7 @@ main(int argc, char *argv[])
 		 * for all commands except init, which doesn't take this parameter
 		 * and add-instance which creates new instance.
 		 */
-		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD && !remote_agent)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
 		{
 			if (access(backup_instance_path, F_OK) != 0)
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -378,7 +380,7 @@ main(int argc, char *argv[])
 	 * configuration file since we got backup path and instance name.
 	 * For some commands an instance option isn't required, see above.
 	 */
-	if (instance_name && !remote_agent)
+	if (instance_name)
 	{
 		char		path[MAXPGPATH];
 
@@ -392,26 +394,6 @@ main(int argc, char *argv[])
 
 	/* Initialize logger */
 	init_logger(backup_path, &instance_config.logger);
-
-	if (IsSshProtocol()
-		&& (backup_subcmd == BACKUP_CMD || backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == RESTORE_CMD ||
-			backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD))
-	{
-		if (remote_agent) {
-			if (backup_subcmd != BACKUP_CMD && backup_subcmd != ARCHIVE_PUSH_CMD) {
-				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
-				return 0;
-			}
-			fio_redirect(STDIN_FILENO, STDOUT_FILENO);
-		} else {
-			/* Execute remote probackup */
-			int status = remote_execute(argc, argv, backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD);
-			if (status != 0 || backup_subcmd == ARCHIVE_PUSH_CMD)
-			{
-				return status;
-			}
-		}
-	}
 
 	/* command was initialized for a few commands */
 	if (command)
@@ -501,22 +483,13 @@ main(int argc, char *argv[])
 		case INIT_CMD:
 			return do_init();
 		case BACKUP_CMD:
-		    current.stream = stream_wal;
-		    if (IsSshProtocol() && !remote_agent)
-			{
-				current.status = BACKUP_STATUS_DONE;
-				StrNCpy(current.program_version, PROGRAM_VERSION,
-						sizeof(current.program_version));
-				complete_backup();
-				return 0;
-			}
-			else
 			{
 				const char *backup_mode;
 				time_t		start_time;
 
 				start_time = time(NULL);
 				backup_mode = deparse_backup_mode(current.backup_mode);
+				current.stream = stream_wal;
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
