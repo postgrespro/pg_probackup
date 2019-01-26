@@ -213,7 +213,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 					FILE *in, Page page, XLogRecPtr *page_lsn, XLogRecPtr horizon_lsn)
 {
 	off_t		offset = blknum * BLCKSZ;
-	size_t		read_len = 0;
+	ssize_t		read_len = 0;
 
 	/* read the block */
 	read_len = fio_pread(in, page, offset, horizon_lsn);
@@ -1060,22 +1060,22 @@ get_gz_error(gzFile gzf, int errnum)
  * Copy file attributes
  */
 static void
-copy_meta(const char *from_path, const char *to_path, bool unlink_on_error, fio_location location)
+copy_meta(const char *from_path, fio_location from_location, const char *to_path, fio_location to_location,  bool unlink_on_error)
 {
 	struct stat st;
 
-	if (stat(from_path, &st) == -1)
+	if (fio_stat(from_path, &st, true, from_location) == -1)
 	{
 		if (unlink_on_error)
-			fio_unlink(to_path, location);
+			fio_unlink(to_path, to_location);
 		elog(ERROR, "Cannot stat file \"%s\": %s",
 			 from_path, strerror(errno));
 	}
 
-	if (fio_chmod(to_path, st.st_mode, location) == -1)
+	if (fio_chmod(to_path, st.st_mode, to_location) == -1)
 	{
 		if (unlink_on_error)
-			fio_unlink(to_path, location);
+			fio_unlink(to_path, to_location);
 		elog(ERROR, "Cannot change mode of file \"%s\": %s",
 			 to_path, strerror(errno));
 	}
@@ -1227,7 +1227,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	}
 
 	/* update file permission. */
-	copy_meta(from_path, to_path_temp, true, FIO_BACKUP_HOST);
+	copy_meta(from_path, FIO_DB_HOST, to_path_temp, FIO_BACKUP_HOST, true);
 
 	if (fio_rename(to_path_temp, to_path_p, FIO_BACKUP_HOST) < 0)
 	{
@@ -1394,7 +1394,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	}
 
 	/* update file permission. */
-	copy_meta(from_path_p, to_path_temp, true, FIO_DB_HOST);
+	copy_meta(from_path_p, FIO_BACKUP_HOST, to_path_temp, FIO_DB_HOST, true);
 
 	if (fio_rename(to_path_temp, to_path, FIO_DB_HOST) < 0)
 	{

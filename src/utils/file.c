@@ -471,11 +471,13 @@ ssize_t fio_write(int fd, void const* buf, size_t size)
 }
 
 /* Read data from stdio file */
-size_t fio_fread(FILE* f, void* buf, size_t size)
+ssize_t fio_fread(FILE* f, void* buf, size_t size)
 {
-	return fio_is_remote_file(f)
-		? fio_read(fio_fileno(f), buf, size)
-		: fread(buf, 1, size, f);
+	size_t rc;
+	if (fio_is_remote_file(f))
+		return fio_read(fio_fileno(f), buf, size);
+	rc = fread(buf, 1, size, f);
+	return rc == 0 && !feof(f) ? -1 : rc;
 }
 
 /* Read data from file */

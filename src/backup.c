@@ -66,11 +66,10 @@ typedef struct
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-	parray	   *files_list;
 } StreamThreadArg;
 
 static pthread_t stream_thread;
-static StreamThreadArg stream_thread_arg = {"", NULL, 1, NULL};
+static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
 static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
@@ -482,7 +481,6 @@ do_backup_instance(void)
 
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
-	parray	   *xlog_files_list = NULL;
 	parray	   *backup_list = NULL;
 	pgFile	   *pg_control = NULL;
 
@@ -620,7 +618,6 @@ do_backup_instance(void)
 
         /* By default there are some error */
 		stream_thread_arg.ret = 1;
-		stream_thread_arg.files_list = xlog_files_list;
 
 		pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
 	}
@@ -804,15 +801,14 @@ do_backup_instance(void)
 	/* Add archived xlog files into the list of files of this backup */
 	if (stream_wal)
 	{
-		if (xlog_files_list == NULL)
-		{
-			char		pg_xlog_path[MAXPGPATH];
+		parray     *xlog_files_list;
+		char		pg_xlog_path[MAXPGPATH];
 
-			/* Scan backup PG_XLOG_DIR */
-			xlog_files_list = parray_new();
-			join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-			dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, FIO_BACKUP_HOST);
-		}
+		/* Scan backup PG_XLOG_DIR */
+		xlog_files_list = parray_new();
+		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, FIO_BACKUP_HOST);
+
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
@@ -2231,7 +2227,7 @@ backup_files(void *arg)
 				 i + 1, n_backup_files_list, file->path);
 
 		/* stat file to check its current state */
-		ret = fio_stat(file->path, &buf, false, FIO_DB_HOST);
+		ret = fio_stat(file->path, &buf, true, FIO_DB_HOST);
 		if (ret == -1)
 		{
 			if (errno == ENOENT)
@@ -2758,7 +2754,7 @@ StreamLog(void *arg)
 		ctl.sysidentifier = NULL;
 
 #if PG_VERSION_NUM >= 100000
-		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true, stream_arg->files_list);
+		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 #else
