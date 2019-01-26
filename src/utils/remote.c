@@ -90,10 +90,10 @@ bool launch_agent(void)
 		if (sep != NULL) {
 			pg_probackup = sep + 1;
 		}
-		snprintf(cmd, sizeof(cmd), "%s/%s --agent=%s",
+		snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
 					   instance_config.remote.path, pg_probackup, PROGRAM_VERSION);
 	} else {
-		snprintf(cmd, sizeof(cmd), "%s --agent=%s", pg_probackup, PROGRAM_VERSION);
+		snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
 	}
 
 	SYS_CHECK(pipe(infd));

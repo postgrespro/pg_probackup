@@ -169,8 +169,6 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
-	/* remote options */
-	{ 's', 155, "agent",			&remote_agent,      SOURCE_CMD_STRICT },
 	{ 0 }
 };
 
@@ -239,6 +237,19 @@ main(int argc, char *argv[])
 			backup_subcmd = SET_CONFIG_CMD;
 		else if (strcmp(argv[1], "show-config") == 0)
 			backup_subcmd = SHOW_CONFIG_CMD;
+		else if (strcmp(argv[1], "agent") == 0 && argc > 2)
+		{
+			remote_agent = argv[2];
+			if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
+			{
+				uint32 agent_version = parse_program_version(remote_agent);
+				elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
+					 "Agent version %s doesn't match master pg_probackup version %s",
+					 remote_agent, PROGRAM_VERSION);
+			}
+			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
+			return 0;
+		}
 		else if (strcmp(argv[1], "--help") == 0 ||
 				 strcmp(argv[1], "-?") == 0 ||
 				 strcmp(argv[1], "help") == 0)
@@ -309,18 +320,6 @@ main(int argc, char *argv[])
 	/* Parse command line only arguments */
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
-	if (remote_agent != NULL)
-	{
-		if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
-		{
-			uint32 agent_version = parse_program_version(remote_agent);
-			elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
-				 "Agent version %s doesn't match master pg_probackup version %s",
-				 remote_agent, PROGRAM_VERSION);
-		}
-		fio_communicate(STDIN_FILENO, STDOUT_FILENO);
-		return 0;
-	}
 	pgut_init();
 
 	if (help_opt)
