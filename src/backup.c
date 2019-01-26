@@ -634,7 +634,7 @@ do_backup_instance(void)
 		get_remote_pgdata_filelist(backup_files_list);
 	else
 		dir_list_file(backup_files_list, instance_config.pgdata,
-					  true, true, false, FIO_DB_HOST);
+					  true, true, false, FIO_BACKUP_HOST);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
