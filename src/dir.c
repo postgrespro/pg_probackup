@@ -791,7 +791,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 
 		join_path_components(child, path, dent->d_name);
 
-		if (fio_stat(child, &st, true, FIO_DB_HOST) == -1)
+		if (fio_stat(child, &st, false, FIO_DB_HOST) == -1)
 			elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
 
 		if (!S_ISDIR(st.st_mode))

@@ -1151,7 +1151,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	/* copy content */
 	for (;;)
 	{
-		size_t		read_len = 0;
+		ssize_t		read_len = 0;
 
 		read_len = fio_fread(in, buf, sizeof(buf));
 
