@@ -210,19 +210,15 @@ parse_page(Page page, XLogRecPtr *lsn)
  */
 static int
 read_page_from_file(pgFile *file, BlockNumber blknum,
-					FILE *in, Page page, XLogRecPtr *page_lsn)
+					FILE *in, Page page, XLogRecPtr *page_lsn, XLogRecPtr horizon_lsn)
 {
 	off_t		offset = blknum * BLCKSZ;
 	size_t		read_len = 0;
 
 	/* read the block */
-	if (fseek(in, offset, SEEK_SET) != 0)
-		elog(ERROR, "File: %s, could not seek to block %u: %s",
-				file->path, blknum, strerror(errno));
+	read_len = fio_pread(in, page, offset, horizon_lsn);
 
-	read_len = fio_fread(in, page, BLCKSZ);
-
-	if (read_len != BLCKSZ)
+	if (read_len != BLCKSZ && read_len != sizeof(PageHeaderData))
 	{
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
@@ -232,9 +228,12 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 			return 0;
 		}
 		else
+		{
 			elog(WARNING, "File: %s, block %u, expected block size %u,"
 					  "but read %zu, try again",
 					   file->path, blknum, BLCKSZ, read_len);
+			return -1;
+		}
 	}
 
 	/*
@@ -267,7 +266,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	}
 
 	/* Verify checksum */
-	if(current.checksum_version)
+	if (current.checksum_version && read_len == BLCKSZ)
 	{
 		/*
 		 * If checksum is wrong, sleep a bit and then try again
@@ -330,8 +329,11 @@ prepare_page(backup_files_arg *arguments,
 	{
 		while(!page_is_valid && try_again)
 		{
-			int result = read_page_from_file(file, blknum,
-											 in, page, &page_lsn);
+			bool check_lsn = (backup_mode == BACKUP_MODE_DIFF_DELTA
+							  && file->exists_in_prev
+							  && !page_is_truncated);
+			int result = read_page_from_file(file, blknum, in, page, &page_lsn,
+											 check_lsn ? prev_backup_start_lsn : InvalidXLogRecPtr);
 
 			try_again--;
 			if (result == 0)

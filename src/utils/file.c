@@ -14,6 +14,12 @@ static __thread void* fio_stdin_buffer;
 static __thread int fio_stdout = 0;
 static __thread int fio_stdin = 0;
 
+typedef struct
+{
+	fio_header hdr;
+	XLogRecPtr lsn;
+} fio_pread_request;
+
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
@@ -371,6 +377,36 @@ int fio_truncate(int fd, off_t size)
 	else
 	{
 		return ftruncate(fd, size);
+	}
+}
+
+int fio_pread(FILE* f, void* buf, off_t offs, XLogRecPtr horizon_lsn)
+{
+	if (fio_is_remote_file(f))
+	{
+		int fd = fio_fileno(f);
+		fio_pread_request req;
+		fio_header hdr;
+
+		req.hdr.cop = FIO_PREAD;
+		req.hdr.handle = fd & ~FIO_PIPE_MARKER;
+		req.hdr.size = sizeof(XLogRecPtr);
+		req.hdr.arg = offs;
+		req.lsn = horizon_lsn;
+
+		IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_SEND);
+		if (hdr.size != 0)
+			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+
+		return hdr.arg <= 0 ? hdr.arg : hdr.arg == BLCKSZ ? hdr.size : 1;
+	}
+	else
+	{
+		int rc = pread(fileno(f), buf, BLCKSZ, offs);
+		return rc <= 0 || rc == BLCKSZ ? rc : 1;
 	}
 }
 
@@ -761,6 +797,7 @@ void fio_communicate(int in, int out)
 	char* buf = (char*)malloc(buf_size);
 	fio_header hdr;
 	struct stat st;
+	XLogRecPtr horizon_lsn;
 	int rc;
 
 	while ((rc = fio_read_all(in, &hdr, sizeof hdr)) == sizeof(hdr)) {
@@ -811,7 +848,24 @@ void fio_communicate(int in, int out)
 			hdr.cop = FIO_SEND;
 			hdr.size = rc > 0 ? rc : 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)),  sizeof(hdr));
-			IO_CHECK(fio_write_all(out, buf, rc),  rc);
+			IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
+			break;
+		  case FIO_PREAD:
+			if ((size_t)hdr.arg > buf_size) {
+				buf_size = hdr.arg;
+				buf = (char*)realloc(buf, buf_size);
+			}
+			horizon_lsn = *(XLogRecPtr*)buf;
+			rc = pread(fd[hdr.handle], buf, hdr.arg, BLCKSZ);
+			hdr.cop = FIO_SEND;
+			hdr.arg = rc;
+			hdr.size = (rc == BLCKSZ)
+				? PageXLogRecPtrGet(((PageHeader)buf)->pd_lsn) < horizon_lsn
+				  ? sizeof(PageHeaderData) : BLCKSZ
+				: 0;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)),  sizeof(hdr));
+			if (hdr.size != 0)
+				IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
 		  case FIO_FSTAT:
 			hdr.size = sizeof(st);

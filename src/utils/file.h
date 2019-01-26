@@ -1,6 +1,7 @@
 #ifndef __FILE__H__
 #define __FILE__H__
 
+#include "storage/bufpage.h"
 #include <stdio.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -20,6 +21,7 @@ typedef enum
 	FIO_CHMOD,
 	FIO_SEEK,
 	FIO_TRUNCATE,
+	FIO_PREAD,
 	FIO_READ,
 	FIO_LOAD,
 	FIO_STAT,
@@ -54,18 +56,13 @@ typedef struct
 } fio_header;
 
 
-typedef struct
-{
-	void*  address;
-	size_t size;
-} fio_binding;
-
 extern void    fio_redirect(int in, int out);
 extern void    fio_communicate(int in, int out);
 
 extern FILE*   fio_fopen(char const* name, char const* mode, fio_location location);
 extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
 extern size_t  fio_fread(FILE* f, void* buf, size_t size);
+extern int     fio_pread(FILE* f, void* buf, off_t offs, XLogRecPtr horizon_lsn);
 extern int     fio_fprintf(FILE* f, char const* arg, ...) __attribute__((format(printf, 2, 3)));
 extern int     fio_fflush(FILE* f);
 extern int     fio_fseek(FILE* f, off_t offs);
