@@ -634,7 +634,7 @@ do_backup_instance(void)
 		get_remote_pgdata_filelist(backup_files_list);
 	else
 		dir_list_file(backup_files_list, instance_config.pgdata,
-					  true, true, false, FIO_BACKUP_HOST);
+					  true, true, false, FIO_DB_HOST);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -2231,7 +2231,7 @@ backup_files(void *arg)
 				 i + 1, n_backup_files_list, file->path);
 
 		/* stat file to check its current state */
-		ret = stat(file->path, &buf);
+		ret = fio_stat(file->path, &buf, false, FIO_DB_HOST);
 		if (ret == -1)
 		{
 			if (errno == ENOENT)

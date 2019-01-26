@@ -403,14 +403,14 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
 	if (root && instance_config.pgdata &&
-		strcmp(root, instance_config.pgdata) == 0 && fileExists(path, location))
+		strcmp(root, instance_config.pgdata) == 0 && fileExists(path, FIO_BACKUP_HOST))
 	{
 		FILE	   *black_list_file = NULL;
 		char		buf[MAXPGPATH * 2];
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fio_open_stream(path, location);
+		black_list_file = fio_open_stream(path, FIO_BACKUP_HOST);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));
@@ -433,7 +433,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, false, FIO_LOCAL_HOST);
+	file = pgFileNew(root, false, location);
 	if (file == NULL)
 		return;
 
@@ -773,12 +773,12 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	bool		has_child_dirs = false;
 
 	/* open directory and list contents */
-	dir = opendir(path);
+	dir = fio_opendir(path, FIO_DB_HOST);
 	if (dir == NULL)
 		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
 
 	errno = 0;
-	while ((dent = readdir(dir)))
+	while ((dent = fio_readdir(dir)))
 	{
 		char		child[MAXPGPATH];
 		bool		skip = false;
@@ -791,7 +791,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 
 		join_path_components(child, path, dent->d_name);
 
-		if (lstat(child, &st) == -1)
+		if (fio_stat(child, &st, true, FIO_DB_HOST) == -1)
 			elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
 
 		if (!S_ISDIR(st.st_mode))
@@ -828,7 +828,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	}
 
 	prev_errno = errno;
-	closedir(dir);
+	fio_closedir(dir);
 
 	if (prev_errno && prev_errno != ENOENT)
 		elog(ERROR, "cannot read directory \"%s\": %s",
@@ -1116,13 +1116,13 @@ read_tablespace_map(parray *files, const char *backup_dir)
 	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
 	/* Exit if database/tablespace_map doesn't exist */
-	if (!fileExists(map_path, FIO_LOCAL_HOST))
+	if (!fileExists(map_path, FIO_DB_HOST))
 	{
 		elog(LOG, "there is no file tablespace_map");
 		return;
 	}
 
-	fp = fopen(map_path, "rt");
+	fp = fio_open_stream(map_path, FIO_DB_HOST);
 	if (fp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", map_path, strerror(errno));
 
@@ -1147,7 +1147,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		parray_append(files, file);
 	}
 
-	fclose(fp);
+	fio_close_stream(fp);
 }
 
 /*

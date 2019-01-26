@@ -575,7 +575,7 @@ backup_data_file(backup_files_arg* arguments,
 
 	if (file->size % BLCKSZ != 0)
 	{
-		fclose(in);
+		fio_fclose(in);
 		elog(ERROR, "File: %s, invalid file size %zu", file->path, file->size);
 	}
 
@@ -1110,7 +1110,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		to_path_p = to_path;
 
 	/* open file for read */
-	in = fopen(from_path, PG_BINARY_R);
+	in = fio_fopen(from_path, PG_BINARY_R, FIO_DB_HOST);
 	if (in == NULL)
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
@@ -1153,9 +1153,9 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	{
 		size_t		read_len = 0;
 
-		read_len = fread(buf, 1, sizeof(buf), in);
+		read_len = fio_fread(in, buf, sizeof(buf));
 
-		if (ferror(in))
+		if (read_len < 0)
 		{
 			errno_temp = errno;
 			fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -1190,7 +1190,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			}
 		}
 
-		if (feof(in) || read_len == 0)
+		if (read_len == 0)
 			break;
 	}
 
@@ -1218,7 +1218,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		}
 	}
 
-	if (fclose(in))
+	if (fio_fclose(in))
 	{
 		errno_temp = errno;
 		fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -1728,7 +1728,7 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 	}
 
 	/* Get checksum of original file */
-	crc1 = pgFileGetCRC(path1, true, true, NULL, FIO_LOCAL_HOST);
+	crc1 = pgFileGetCRC(path1, true, true, NULL, FIO_DB_HOST);
 
 	return EQ_CRC32C(crc1, crc2);
 }
