@@ -108,7 +108,7 @@ option_has_arg(char type)
 	{
 		case 'b':
 		case 'B':
-			return optional_argument;
+		  return no_argument;//optional_argument;
 		default:
 			return required_argument;
 	}
