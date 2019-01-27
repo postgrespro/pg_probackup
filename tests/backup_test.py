@@ -2,7 +2,6 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.cfs_helpers import find_by_name
 
 
 module_name = 'backup'
@@ -508,6 +507,121 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_tablespace_handling(self):
+        """
+        make node, take full backup, check that restore with
+        tablespace mapping will end with error, take page backup,
+        check that restore with tablespace mapping will end with
+        success
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        tblspace1_old_path = self.get_tblspace_path(node, 'tblspace1_old')
+        tblspace2_old_path = self.get_tblspace_path(node, 'tblspace2_old')
+
+        self.create_tblspace_in_node(
+            node, 'some_lame_tablespace')
+
+        self.create_tblspace_in_node(
+            node, 'tblspace1',
+            tblspc_path=tblspace1_old_path)
+
+        self.create_tblspace_in_node(
+            node, 'tblspace2',
+            tblspc_path=tblspace2_old_path)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap_lame tablespace some_lame_tablespace "
+            "as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap2 tablespace tblspace2 as select 1 as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+
+        tblspace1_new_path = self.get_tblspace_path(node, 'tblspace1_new')
+        tblspace2_new_path = self.get_tblspace_path(node, 'tblspace2_new')
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace1_old_path, tblspace1_new_path),
+                    "-T", "{0}={1}".format(
+                        tblspace2_old_path, tblspace2_new_path)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: --tablespace-mapping option' in e.message and
+                'have an entry in tablespace_map file' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        node.safe_psql(
+            "postgres",
+            "drop table t_heap_lame")
+
+        node.safe_psql(
+            "postgres",
+            "drop tablespace some_lame_tablespace")
+
+        self.backup_node(
+                backup_dir, 'node', node, backup_type="delta",
+                options=["-j", "4", "--stream"])
+
+        self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace1_old_path, tblspace1_new_path),
+                    "-T", "{0}={1}".format(
+                        tblspace2_old_path, tblspace2_new_path)])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself

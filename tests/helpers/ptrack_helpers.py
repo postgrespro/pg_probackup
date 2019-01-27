@@ -615,16 +615,26 @@ class ProbackupTest(object):
             old_binary=old_binary
         )
 
-    def add_instance(self, backup_dir, instance, node, old_binary=False):
+    def add_instance(self, backup_dir, instance, node, old_binary=False, options=[]):
 
-        return self.run_pb([
+        cmd = [
             'add-instance',
             '--instance={0}'.format(instance),
             '-B', backup_dir,
             '-D', node.data_dir
-            ],
-            old_binary=old_binary
-        )
+            ]
+
+        return self.run_pb(cmd + options, old_binary=old_binary)
+
+    def set_config(self, backup_dir, instance, old_binary=False, options=[]):
+
+        cmd = [
+            'set-config',
+            '--instance={0}'.format(instance),
+            '-B', backup_dir,
+            ]
+
+        return self.run_pb(cmd + options, old_binary=old_binary)
 
     def del_instance(self, backup_dir, instance, old_binary=False):
 
@@ -1049,7 +1059,7 @@ class ProbackupTest(object):
         except:
             pass
 
-    def pgdata_content(self, pgdata, ignore_ptrack=True):
+    def pgdata_content(self, pgdata, ignore_ptrack=True, exclude_dirs=None):
         """ return dict with directory content. "
         " TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = [
@@ -1062,6 +1072,9 @@ class ProbackupTest(object):
             'backup_label', 'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control'
         ]
+
+        if exclude_dirs:
+            dirs_to_ignore = dirs_to_ignore + exclude_dirs
 #        suffixes_to_ignore = (
 #            '_ptrack'
 #        )
@@ -1084,6 +1097,7 @@ class ProbackupTest(object):
                 directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
                     open(file_fullpath, 'rb').read()).hexdigest()
 
+                # crappy algorithm
                 if file.isdigit():
                     directory_dict['files'][file_relpath]['is_datafile'] = True
                     size_in_pages = os.path.getsize(file_fullpath)/8192

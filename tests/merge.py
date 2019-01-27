@@ -1254,7 +1254,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
 
-        gdb.set_breakpoint('pgFileDelete')
+        gdb.set_breakpoint('fio_unlink')
         gdb.run_until_break()
 
         if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
