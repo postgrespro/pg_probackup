@@ -20,6 +20,9 @@ typedef struct
 	XLogRecPtr lsn;
 } fio_pread_request;
 
+fio_location MyLocation;
+
+
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
@@ -45,8 +48,9 @@ static bool fio_is_remote_fd(int fd)
 /* Check if specified location is local for current node */
 static bool fio_is_remote(fio_location location)
 {
-	bool is_remote = location == FIO_REMOTE_HOST
-		|| (location == FIO_DB_HOST && IsSshProtocol());
+	bool is_remote = MyLocation != FIO_LOCAL_HOST
+		&& location != FIO_LOCAL_HOST
+		&& location != MyLocation;
 	if (is_remote && !fio_stdin && !launch_agent())
 		elog(ERROR, "Failed to establish SSH connection: %s", strerror(errno));
 	return is_remote;

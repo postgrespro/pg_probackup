@@ -55,6 +55,7 @@ typedef struct
 	unsigned arg;
 } fio_header;
 
+extern fio_location MyLocation;
 
 extern void    fio_redirect(int in, int out);
 extern void    fio_communicate(int in, int out);

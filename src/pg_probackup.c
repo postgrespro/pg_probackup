@@ -356,6 +356,11 @@ main(int argc, char *argv[])
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 
+	MyLocation = IsSshProtocol()
+		? backup_subcmd == ARCHIVE_PUSH_CMD
+		   ? FIO_DB_HOST : FIO_BACKUP_HOST
+		: FIO_LOCAL_HOST;
+
 	/*
 	 * If --instance option was passed, construct paths for backup data and
 	 * xlog files of this backup instance.
