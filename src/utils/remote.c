@@ -70,21 +70,28 @@ bool launch_agent(void)
 	ssh_argc = 0;
 	ssh_argv[ssh_argc++] = instance_config.remote.proto;
 	if (instance_config.remote.port != NULL) {
-		ssh_argv[ssh_argc++] = (char*)"-p";
+		ssh_argv[ssh_argc++] = "-p";
 		ssh_argv[ssh_argc++] = instance_config.remote.port;
 	}
 	if (instance_config.remote.ssh_config != NULL) {
-		ssh_argv[ssh_argc++] = (char*)"-F";
+		ssh_argv[ssh_argc++] = "-F";
 		ssh_argv[ssh_argc++] = instance_config.remote.ssh_config;
 	}
 	if (instance_config.remote.ssh_options != NULL) {
 		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, pg_strdup(instance_config.remote.ssh_options));
 	}
-	if (num_threads + current.stream > 1)
+	if (num_threads > 1)
 	{
 		ssh_argv[ssh_argc++] = "-o";
 		ssh_argv[ssh_argc++] = "PasswordAuthentication=no";
 	}
+
+	ssh_argv[ssh_argc++] = "-o";
+	ssh_argv[ssh_argc++] = "Compression=no";
+
+	ssh_argv[ssh_argc++] = "-o";
+	ssh_argv[ssh_argc++] = "LogLevel=error";
+
 	ssh_argv[ssh_argc++] = instance_config.remote.host;
 	ssh_argv[ssh_argc++] = cmd;
 	ssh_argv[ssh_argc] = NULL;
