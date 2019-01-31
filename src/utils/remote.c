@@ -130,7 +130,7 @@ bool launch_agent(void)
 	} else {
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
 		SYS_CHECK(close(outfd[0]));
-		atexit(kill_child);
+		/*atexit(kill_child);*/
 
 		fio_redirect(infd[0], outfd[1]); /* write to stdout */
 	}
