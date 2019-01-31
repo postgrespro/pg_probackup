@@ -19,7 +19,7 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -30,7 +30,7 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
 
         # make erroneus archive_command
         node.append_conf("postgresql.auto.conf", "archive_command = 'exit 0'")
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=5)
         pgbench = node.pgbench(

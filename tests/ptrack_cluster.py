@@ -15,7 +15,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_btree(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -26,7 +26,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -96,7 +96,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_gist(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -107,7 +107,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # Create table and indexes
         node.safe_psql(
@@ -174,7 +174,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_btree_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -185,12 +185,12 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -198,7 +198,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # Create table and indexes
         master.safe_psql(
@@ -274,7 +274,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_cluster_on_gist_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
-            base_dir="{0}/{1}/master".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -285,12 +285,12 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
-        master.start()
+        master.slow_start()
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir="{0}/{1}/replica".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -298,7 +298,7 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, 'replica', synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.start()
+        replica.slow_start(replica=True)
 
         # Create table and indexes
         master.safe_psql(

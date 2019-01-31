@@ -7,7 +7,8 @@ from . import init_test, merge, option_test, show_test, compatibility, \
     ptrack_vacuum, ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
     ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
     false_positive, replica, compression, page, ptrack, archive, \
-    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test
+    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test, \
+    time_stamp, snapfs, logging, locking
 
 
 def load_tests(loader, tests, pattern):
@@ -26,6 +27,8 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(exclude))
     suite.addTests(loader.loadTestsFromModule(false_positive))
     suite.addTests(loader.loadTestsFromModule(init_test))
+    suite.addTests(loader.loadTestsFromModule(locking))
+    suite.addTests(loader.loadTestsFromModule(logging))
     suite.addTests(loader.loadTestsFromModule(merge))
     suite.addTests(loader.loadTestsFromModule(option_test))
     suite.addTests(loader.loadTestsFromModule(page))
@@ -45,9 +48,11 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(restore_test))
     suite.addTests(loader.loadTestsFromModule(retention_test))
     suite.addTests(loader.loadTestsFromModule(show_test))
+    suite.addTests(loader.loadTestsFromModule(snapfs))
     suite.addTests(loader.loadTestsFromModule(validate_test))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
+    suite.addTests(loader.loadTestsFromModule(time_stamp))
 
     return suite
 

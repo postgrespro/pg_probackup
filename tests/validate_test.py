@@ -21,7 +21,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -56,7 +56,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         with open(log_file_path) as f:
             self.assertTrue(
-                'LOG: File: {0} blknum 1, empty page'.format(file) in f.read(),
+                '{0} blknum 1, empty page'.format(file_path) in f.read(),
                 'Failed to detect nullified block')
 
         self.validate_pb(backup_dir)
@@ -73,7 +73,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -117,9 +117,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(
+            self.assertIn(
+                'ERROR: Backup satisfying target options is not found',
                 e.message,
-                'ERROR: Backup satisfying target options is not found.\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -213,7 +213,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -221,7 +221,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
@@ -249,7 +249,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file
         file = os.path.join(
-            backup_dir, 'backups/node', backup_id_2, 'database', file_path)
+            backup_dir, 'backups', 'node',
+            backup_id_2, 'database', file_path)
         with open(file, "r+b", 0) as f:
             f.seek(42)
             f.write(b"blah")
@@ -298,7 +299,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -306,7 +307,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -342,7 +343,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in FULL backup
         file_full = os.path.join(
-            backup_dir, 'backups/node',
+            backup_dir, 'backups', 'node',
             backup_id_1, 'database', file_path_t_heap)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
@@ -352,7 +353,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in PAGE1 backup
         file_page1 = os.path.join(
-            backup_dir, 'backups/node',
+            backup_dir, 'backups', 'node',
             backup_id_2, 'database', file_path_t_heap_1)
         with open(file_page1, "rb+", 0) as f:
             f.seek(42)
@@ -379,8 +380,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_1) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_full) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_1) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -421,7 +421,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -429,7 +429,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL1
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
@@ -499,7 +499,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in PAGE2 and PAGE5 backups
         file_page1 = os.path.join(
-            backup_dir, 'backups/node', backup_id_3, 'database', file_page_2)
+            backup_dir, 'backups', 'node', backup_id_3, 'database', file_page_2)
         with open(file_page1, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -507,7 +507,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.close
 
         file_page4 = os.path.join(
-            backup_dir, 'backups/node', backup_id_6, 'database', file_page_5)
+            backup_dir, 'backups', 'node', backup_id_6, 'database', file_page_5)
         with open(file_page4, "rb+", 0) as f:
             f.seek(42)
             f.write(b"blah")
@@ -547,8 +547,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_3) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_page1) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_3) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -620,7 +619,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -628,7 +627,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL1
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
@@ -698,7 +697,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in PAGE2 and PAGE5 backups
         file_page1 = os.path.join(
-            backup_dir, 'backups/node', backup_id_3, 'database', file_page_2)
+            backup_dir, 'backups', 'node',
+            backup_id_3, 'database', file_page_2)
         with open(file_page1, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -706,7 +706,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.close
 
         file_page4 = os.path.join(
-            backup_dir, 'backups/node', backup_id_6, 'database', file_page_5)
+            backup_dir, 'backups', 'node',
+            backup_id_6, 'database', file_page_5)
         with open(file_page4, "rb+", 0) as f:
             f.seek(42)
             f.write(b"blah")
@@ -747,8 +748,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_3) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_page1) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_3) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -804,7 +804,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -812,7 +812,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -851,7 +851,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Corrupt some file in FULL backup
         file_full = os.path.join(
-            backup_dir, 'backups/node', backup_id_2,
+            backup_dir, 'backups', 'node', backup_id_2,
             'database', file_path_t_heap1)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
@@ -906,8 +906,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(
                     backup_id_2) in e.message and
-                'WARNING: Invalid CRC of backup file "{0}"'.format(
-                    file_full) in e.message and
+                'WARNING: Invalid CRC of backup file' in e.message and
                 'WARNING: Backup {0} data files are corrupted'.format(
                     backup_id_2) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -952,7 +951,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         expect FULL to gain status CORRUPT, PAGE1 and PAGE2 to gain status ORPHAN,
         try to restore backup with --no-validation option"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -960,11 +959,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
         file_path_t_heap = node.safe_psql(
             "postgres",
             "select pg_relation_filepath('t_heap')").rstrip()
@@ -973,14 +974,18 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
         # PAGE1
         backup_id_2 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # PAGE2
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(20000,30000) i")
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(20000,30000) i")
         backup_id_3 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # FULL1
@@ -989,11 +994,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # PAGE3
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(30000,40000) i")
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(30000,40000) i")
         backup_id_5 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # Corrupt some file in FULL backup
-        file_full = os.path.join(backup_dir, 'backups/node', backup_id_1, 'database', file_path_t_heap)
+        file_full = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id_1, 'database', file_path_t_heap)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -1009,7 +1018,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(backup_id_1) in e.message
                 and "INFO: Validate backups of the instance 'node'" in e.message
-                and 'WARNING: Invalid CRC of backup file "{0}"'.format(file_full) in e.message
+                and 'WARNING: Invalid CRC of backup file' in e.message
                 and 'WARNING: Backup {0} data files are corrupted'.format(backup_id_1) in e.message,
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -1038,7 +1047,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         corrupt file in FULL backup and run validate on instance,
         expect FULL to gain status CORRUPT, PAGE1 and PAGE2 to gain status ORPHAN"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -1046,11 +1055,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
         file_path_t_heap = node.safe_psql(
             "postgres",
             "select pg_relation_filepath('t_heap')").rstrip()
@@ -1059,27 +1071,40 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(0,10000) i")
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
         # PAGE1
-        backup_id_2 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
         # PAGE2
         node.safe_psql(
             "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(20000,30000) i")
-        backup_id_3 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(20000,30000) i")
+
+        backup_id_3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
         # FULL1
-        backup_id_4 = self.backup_node(backup_dir, 'node', node)
+        backup_id_4 = self.backup_node(
+            backup_dir, 'node', node)
 
         # PAGE3
         node.safe_psql(
             "postgres",
-            "insert into t_heap     select i as id, md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector from generate_series(30000,40000) i")
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(30000,40000) i")
         backup_id_5 = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # Corrupt some file in FULL backup
-        file_full = os.path.join(backup_dir, 'backups/node', backup_id_1, 'database', file_path_t_heap)
+        file_full = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id_1, 'database', file_path_t_heap)
         with open(file_full, "rb+", 0) as f:
             f.seek(84)
             f.write(b"blah")
@@ -1089,13 +1114,16 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate Instance
         try:
             self.validate_pb(backup_dir, 'node')
-            self.assertEqual(1, 0, "Expecting Error because of data files corruption.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of data files corruption.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
                 'INFO: Validating backup {0}'.format(backup_id_1) in e.message
                 and "INFO: Validate backups of the instance 'node'" in e.message
-                and 'WARNING: Invalid CRC of backup file "{0}"'.format(file_full) in e.message
+                and 'WARNING: Invalid CRC of backup file' in e.message
                 and 'WARNING: Backup {0} data files are corrupted'.format(backup_id_1) in e.message,
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -1113,7 +1141,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """make archive node, take FULL1, PAGE1,PAGE2,FULL2,PAGE3,PAGE4 backups, corrupt all wal files, run validate, expect errors"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -1121,7 +1149,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
@@ -1175,7 +1203,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_corrupt_wal_2(self):
         """make archive node, make full backup, corrupt all wal files, run validate to real xid, expect errors"""
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
+        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -1183,7 +1211,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         with node.connect("postgres") as con:
             con.execute("CREATE TABLE tbl0005 (a text)")
@@ -1247,7 +1275,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -1255,7 +1283,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         node.pgbench_init(scale=3)
 
@@ -1281,8 +1309,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WAL segment \"{0}\" is absent".format(
-                    file) in e.message and
+                "is absent" in e.message and
                 "WARNING: There are not enough WAL records to consistenly "
                 "restore backup {0}".format(backup_id) in e.message and
                 "WARNING: Backup {0} WAL segments are corrupted".format(
@@ -1325,7 +1352,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -1333,7 +1360,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -1419,7 +1446,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1427,7 +1454,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(
             backup_dir, 'node', node, options=["--stream"])
@@ -1461,7 +1488,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1470,7 +1497,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         recovery_time = self.show_pb(
@@ -1491,7 +1518,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
-            base_dir="{0}/{1}/node1".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1500,13 +1527,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node1', node1)
         self.set_archiving(backup_dir, 'node1', node1)
-        node1.start()
+        node1.slow_start()
 
         backup_id = self.backup_node(
             backup_dir, 'node1', node1, options=["--stream"])
 
         node2 = self.make_simple_node(
-            base_dir="{0}/{1}/node2".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node2'))
         node2.cleanup()
 
         node1.psql(
@@ -1528,7 +1555,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         node2.append_conf(
             'postgresql.auto.conf', 'archive_mode = on')
-        node2.restart()
+        node2.stop()
+        node2.slow_start()
 
         timeline_node1 = node1.get_control_data()["Latest checkpoint's TimeLineID"]
         timeline_node2 = node2.get_control_data()["Latest checkpoint's TimeLineID"]
@@ -1582,7 +1610,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1594,7 +1622,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -1708,7 +1736,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1717,7 +1745,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -1820,7 +1848,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -1829,7 +1857,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -2170,7 +2198,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -2179,7 +2207,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -2394,7 +2422,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             # initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
         )
@@ -2405,7 +2433,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
-        node.start()
+        node.slow_start()
 
         node.safe_psql(
             "postgres",
@@ -2425,7 +2453,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="full",
-            options=["-j", "4"], async=False, gdb=False)
+            options=["-j", "4"], asynchronous=False, gdb=False)
 
         node.stop()
         node.cleanup()
@@ -2472,7 +2500,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -2481,7 +2509,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -2614,7 +2642,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -2623,7 +2651,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -2735,7 +2763,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -2744,7 +2772,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -2923,7 +2951,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -2932,7 +2960,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # CHAIN1
         self.backup_node(backup_dir, 'node', node)
@@ -3071,7 +3099,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """ PGPRO-2096 """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
@@ -3080,7 +3108,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -3105,11 +3133,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.run_binary(
             [
                 pg_resetxlog_path,
+                '-D',
                 os.path.join(backup_dir, 'backups', 'node', backup_id, 'database'),
                 '-o 42',
                 '-f'
             ],
-            async=False)
+            asynchronous=False)
 
         md5_after = hashlib.md5(
             open(pg_control_path, 'rb').read()).hexdigest()

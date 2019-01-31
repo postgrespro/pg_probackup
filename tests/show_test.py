@@ -15,15 +15,14 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.assertEqual(
             self.backup_node(
@@ -43,15 +42,14 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.assertEqual(
             self.backup_node(
@@ -71,15 +69,14 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -117,15 +114,14 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -135,7 +131,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             backup_id, "backup.control")
         os.remove(file)
 
-        self.assertIn('Control file "{0}" doesn\'t exist'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn(
+            'Control file "{0}" doesn\'t exist'.format(file),
+            self.show_pb(backup_dir, 'node', as_text=True, as_json=False))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -146,15 +144,14 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -165,7 +162,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fd = open(file, 'w')
         fd.close()
 
-        self.assertIn('Control file "{0}" is empty'.format(file), self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn(
+            'Control file "{0}" is empty'.format(file),
+            self.show_pb(backup_dir, 'node', as_text=True, as_json=False))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -177,15 +176,14 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -199,7 +197,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'WARNING: Invalid option "statuss" in file'.format(file),
-            self.show_pb(backup_dir, 'node', as_text=True))
+            self.show_pb(backup_dir, 'node', as_json=False, as_text=True))
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
