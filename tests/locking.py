@@ -38,6 +38,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         gdb._execute('signal SIGKILL')
 
+        self.validate_pb(backup_dir)
+
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'node')[0]['status'])
 
