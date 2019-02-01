@@ -384,6 +384,12 @@ int fio_truncate(int fd, off_t size)
 	}
 }
 
+
+/*
+ * Read file from specified location.
+ * This call is optimized for delat backup, to avoid trasfer of old pages to backup host.
+ * For delta backup horizon_lsn parameter is assigned value of last backup and for all pages with LSN smaller than horizon_lsn only page header is sent.
+ */
 int fio_pread(FILE* f, void* buf, off_t offs, XLogRecPtr horizon_lsn)
 {
 	if (fio_is_remote_file(f))
@@ -405,11 +411,16 @@ int fio_pread(FILE* f, void* buf, off_t offs, XLogRecPtr horizon_lsn)
 		if (hdr.size != 0)
 			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
 
+		/*
+		 * We either return <0 for error, either 0 for EOF, either received size (page or page header size)
+		 * for fully read page either 1 for partly read page. 1 is used just to distinguish it with page header size.
+		 */
 		return hdr.arg <= 0 ? hdr.arg : hdr.arg == BLCKSZ ? hdr.size : 1;
 	}
 	else
 	{
 		int rc = pread(fileno(f), buf, BLCKSZ, offs);
+		/* See comment above consernign returned value */
 		return rc <= 0 || rc == BLCKSZ ? rc : 1;
 	}
 }
@@ -796,6 +807,11 @@ static void fio_send_file(int out, char const* path)
 /* Execute commands at remote host */
 void fio_communicate(int in, int out)
 {
+	/*
+	 * Map of file and directory descriptors.
+	 * The same mapping is used in agent and master process, so we
+	 * can use the same index at both sides.
+	 */
 	int fd[FIO_FDMAX];
 	DIR* dir[FIO_FDMAX];
 	struct dirent* entry;
@@ -806,22 +822,24 @@ void fio_communicate(int in, int out)
 	XLogRecPtr horizon_lsn;
 	int rc;
 
+	/* Main loop until command of processing master command */
 	while ((rc = fio_read_all(in, &hdr, sizeof hdr)) == sizeof(hdr)) {
 		if (hdr.size != 0) {
 			if (hdr.size > buf_size) {
+				/* Extend buffer on demand */
 				buf_size = hdr.size;
 				buf = (char*)realloc(buf, buf_size);
 			}
 			IO_CHECK(fio_read_all(in, buf, hdr.size), hdr.size);
 		}
 		switch (hdr.cop) {
-		  case FIO_LOAD:
+		  case FIO_LOAD: /* Send file content */
 			fio_send_file(out, buf);
 			break;
-		  case FIO_OPENDIR:
+		  case FIO_OPENDIR: /* Open directory for traversal */
 			dir[hdr.handle] = opendir(buf);
 			break;
-		  case FIO_READDIR:
+		  case FIO_READDIR: /* Get next direcrtory entry */
 			entry = readdir(dir[hdr.handle]);
 			hdr.cop = FIO_SEND;
 			if (entry != NULL) {
@@ -833,20 +851,19 @@ void fio_communicate(int in, int out)
 				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			}
 			break;
-		  case FIO_CLOSEDIR:
+		  case FIO_CLOSEDIR: /* Finish directory traversal */
 			SYS_CHECK(closedir(dir[hdr.handle]));
 			break;
-		  case FIO_OPEN:
+		  case FIO_OPEN: /* Open file */
 			SYS_CHECK(fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSIONS));
-			fprintf(stderr, "Open file %s -> %d\n", buf, hdr.handle);
 			break;
-		  case FIO_CLOSE:
+		  case FIO_CLOSE: /* Close file */
 			SYS_CHECK(close(fd[hdr.handle]));
 			break;
-		  case FIO_WRITE:
+		  case FIO_WRITE: /* Write to the current position in file */
 			IO_CHECK(fio_write_all(fd[hdr.handle], buf, hdr.size), hdr.size);
 			break;
-		  case FIO_READ:
+		  case FIO_READ: /* Read from the current position in file */
 			if ((size_t)hdr.arg > buf_size) {
 				buf_size = hdr.arg;
 				buf = (char*)realloc(buf, buf_size);
@@ -857,53 +874,53 @@ void fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)),  sizeof(hdr));
 			IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
-		  case FIO_PREAD:
+		  case FIO_PREAD: /* Read from specified position in file, ignoring pages beyond horizon of delta backup */
 			horizon_lsn = *(XLogRecPtr*)buf;
 			rc = pread(fd[hdr.handle], buf, BLCKSZ, hdr.arg);
-			fprintf(stderr, "Read %d bytes from file %d offset %d\n", rc, hdr.handle, hdr.arg);
 			hdr.cop = FIO_SEND;
 			hdr.arg = rc;
+			/* For pages beyond horizon of delta backup transfer only page header */
 			hdr.size = (rc == BLCKSZ)
-				? PageXLogRecPtrGet(((PageHeader)buf)->pd_lsn) < horizon_lsn
+				? PageXLogRecPtrGet(((PageHeader)buf)->pd_lsn) < horizon_lsn /* For non-delta backup horizon_lsn == 0, so this condition is always false */
 				  ? sizeof(PageHeaderData) : BLCKSZ
 				: 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)),  sizeof(hdr));
 			if (hdr.size != 0)
 				IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
-		  case FIO_FSTAT:
+		  case FIO_FSTAT: /* Get information about opened file */
 			hdr.size = sizeof(st);
 			hdr.arg = fstat(fd[hdr.handle], &st);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
-		  case FIO_STAT:
+		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);
 			hdr.arg = hdr.arg ? stat(buf, &st) : lstat(buf, &st);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
-		  case FIO_ACCESS:
+		  case FIO_ACCESS: /* Check presence of file with specified name */
 			hdr.size = 0;
 			hdr.arg = access(buf, hdr.arg);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
-		  case FIO_RENAME:
+		  case FIO_RENAME: /* Rename file */
 			SYS_CHECK(rename(buf, buf + strlen(buf) + 1));
 			break;
-		  case FIO_UNLINK:
+		  case FIO_UNLINK: /* Remove file or directory (TODO: Win32) */
 			SYS_CHECK(remove(buf));
 			break;
-		  case FIO_MKDIR:
+		  case FIO_MKDIR:  /* Create direcory */
 			SYS_CHECK(dir_create_dir(buf, hdr.arg));
 			break;
-		  case FIO_CHMOD:
+		  case FIO_CHMOD:  /* Change file mode */
 			SYS_CHECK(chmod(buf, hdr.arg));
 			break;
-		  case FIO_SEEK:
+		  case FIO_SEEK:   /* Set current position in file */
 			SYS_CHECK(lseek(fd[hdr.handle], hdr.arg, SEEK_SET));
 			break;
-		  case FIO_TRUNCATE:
+		  case FIO_TRUNCATE: /* Truncate file */
 			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
 			break;
 		  default:
@@ -911,7 +928,7 @@ void fio_communicate(int in, int out)
 		}
 	}
 	free(buf);
-	if (rc != 0) {
+	if (rc != 0) { /* Not end of stream: normal pipe close */
 		perror("read");
 		exit(EXIT_FAILURE);
 	}
