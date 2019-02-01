@@ -338,8 +338,13 @@ main(int argc, char *argv[])
 	}
 	canonicalize_path(backup_path);
 
+	MyLocation = IsSshProtocol()
+		? backup_subcmd == ARCHIVE_PUSH_CMD
+		   ? FIO_DB_HOST : FIO_BACKUP_HOST
+		: FIO_LOCAL_HOST;
+
 	/* Ensure that backup_path is a path to a directory */
-	rc = stat(backup_path, &stat_buf);
+	rc = fio_stat(backup_path, &stat_buf, true, FIO_BACKUP_HOST);
 	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 		elog(ERROR, "-B, --backup-path must be a path to directory");
 
@@ -355,11 +360,6 @@ main(int argc, char *argv[])
 		if (instance_name == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
 	}
-
-	MyLocation = IsSshProtocol()
-		? backup_subcmd == ARCHIVE_PUSH_CMD
-		   ? FIO_DB_HOST : FIO_BACKUP_HOST
-		: FIO_LOCAL_HOST;
 
 	/*
 	 * If --instance option was passed, construct paths for backup data and
@@ -378,7 +378,7 @@ main(int argc, char *argv[])
 		 */
 		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
 		{
-			if (access(backup_instance_path, F_OK) != 0)
+			if (fio_access(backup_instance_path, F_OK, FIO_BACKUP_HOST) != 0)
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
 		}

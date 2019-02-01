@@ -266,14 +266,22 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	}
 
 	/* Verify checksum */
-	if (current.checksum_version && read_len == BLCKSZ)
+	if (current.checksum_version)
 	{
+		BlockNumber blkno = file->segno * RELSEG_SIZE + blknum;
+		uint16 page_crc = read_len == BLCKSZ
+			? pg_checksum_page(page, blkno)
+			/*
+			 * Recompute Cpage checksum calculated by agent with blkno=0
+			 * pg_checksum_page is calculating it in this way:
+			 * (((checksum ^ blkno) % 65535) + 1)
+			 */
+			: (uint16)(((*(uint16*)((PageHeader)page)->pd_linp - 1) ^ blkno) + 1);
 		/*
 		 * If checksum is wrong, sleep a bit and then try again
 		 * several times. If it didn't help, throw error
 		 */
-		if (pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
-			!= ((PageHeader) page)->pd_checksum)
+		if (page_crc != ((PageHeader) page)->pd_checksum)
 		{
 			elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
 						   file->path, blknum);
