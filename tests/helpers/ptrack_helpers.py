@@ -264,6 +264,34 @@ class ProbackupTest(object):
                 if self.verbose:
                     print('PGPROBACKUPBIN_OLD is not an executable file')
 
+        self.remote = False
+        self.remote_host = None
+        self.remote_port = None
+        self.remote_user = None
+
+        if 'PGPROBACKUP_SSH_REMOTE' in self.test_env:
+            self.remote = True
+
+#            if 'PGPROBACKUP_SSH_HOST' in self.test_env:
+#                self.remote_host = self.test_env['PGPROBACKUP_SSH_HOST']
+#            else
+#                print('PGPROBACKUP_SSH_HOST is not set')
+#                exit(1)
+#
+#            if 'PGPROBACKUP_SSH_PORT' in self.test_env:
+#                self.remote_port = self.test_env['PGPROBACKUP_SSH_PORT']
+#            else
+#                print('PGPROBACKUP_SSH_PORT is not set')
+#                exit(1)
+#
+#            if 'PGPROBACKUP_SSH_USER' in self.test_env:
+#                self.remote_user = self.test_env['PGPROBACKUP_SSH_USER']
+#            else
+#                print('PGPROBACKUP_SSH_USER is not set')
+#                exit(1)
+
+
+
     def make_simple_node(
             self,
             base_dir=None,
@@ -604,14 +632,19 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode('utf-8'), command)
 
-    def init_pb(self, backup_dir, old_binary=False):
+    def init_pb(self, backup_dir, options=[], old_binary=False):
 
         shutil.rmtree(backup_dir, ignore_errors=True)
+
+        if self.remote:
+            options = options + [
+                '--remote-proto=ssh',
+                '--remote-host=localhost']
 
         return self.run_pb([
             'init',
             '-B', backup_dir
-            ],
+            ] + options,
             old_binary=old_binary
         )
 
@@ -623,6 +656,11 @@ class ProbackupTest(object):
             '-B', backup_dir,
             '-D', node.data_dir
             ]
+
+        if self.remote:
+            options = options + [
+                '--remote-proto=ssh',
+                '--remote-host=localhost']
 
         return self.run_pb(cmd + options, old_binary=old_binary)
 
@@ -672,6 +710,11 @@ class ProbackupTest(object):
             '-d', 'postgres',
             '--instance={0}'.format(instance)
         ]
+        if self.remote:
+            options = options + [
+                '--remote-proto=ssh',
+                '--remote-host=localhost']
+
         if backup_type:
             cmd_list += ['-b', backup_type]
 
@@ -702,6 +745,11 @@ class ProbackupTest(object):
             '-D', data_dir,
             '--instance={0}'.format(instance)
         ]
+        if self.remote:
+            options = options + [
+                '--remote-proto=ssh',
+                '--remote-host=localhost']
+
         if backup_id:
             cmd_list += ['-i', backup_id]
 
@@ -894,6 +942,9 @@ class ProbackupTest(object):
                 self.probackup_path.replace("\\","\\\\"),
                 backup_dir.replace("\\","\\\\"),
                 instance)
+
+        if self.remote:
+            archive_command = archive_command + '--remote-proto=ssh --remote-host=localhost '
 
         if self.archive_compress or compress:
             archive_command = archive_command + '--compress '
