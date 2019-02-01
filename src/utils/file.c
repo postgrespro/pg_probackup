@@ -177,7 +177,7 @@ struct dirent* fio_readdir(DIR *dir)
 	if (fio_is_remote_file((FILE*)dir))
 	{
 		fio_header hdr;
-		static struct dirent entry;
+		static __thread struct dirent entry;
 
 		hdr.cop = FIO_READDIR;
 		hdr.handle = (size_t)dir - 1;
@@ -838,6 +838,7 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_OPEN:
 			SYS_CHECK(fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSIONS));
+			fprintf(stderr, "Open file %s -> %d\n", buf, hdr.handle);
 			break;
 		  case FIO_CLOSE:
 			SYS_CHECK(close(fd[hdr.handle]));
@@ -857,12 +858,9 @@ void fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
 		  case FIO_PREAD:
-			if ((size_t)hdr.arg > buf_size) {
-				buf_size = hdr.arg;
-				buf = (char*)realloc(buf, buf_size);
-			}
 			horizon_lsn = *(XLogRecPtr*)buf;
-			rc = pread(fd[hdr.handle], buf, hdr.arg, BLCKSZ);
+			rc = pread(fd[hdr.handle], buf, BLCKSZ, hdr.arg);
+			fprintf(stderr, "Read %d bytes from file %d offset %d\n", rc, hdr.handle, hdr.arg);
 			hdr.cop = FIO_SEND;
 			hdr.arg = rc;
 			hdr.size = (rc == BLCKSZ)
