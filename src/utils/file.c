@@ -887,7 +887,7 @@ void fio_communicate(int in, int out)
 				: 0;
 			if (hdr.size == sizeof(PageHeaderData))
 				/* calculate checksum without XOR-ing with block number to compare it with page CRC at master */
-				*(int16*)((PageHeader)buf)->pd_linp = pg_checksum_page(buf, 0);
+				*PAGE_CHECKSUM(buf) = pg_checksum_page(buf, 0);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			if (hdr.size != 0)
 				IO_CHECK(fio_write_all(out, buf, hdr.size), hdr.size);

@@ -276,7 +276,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 			 * pg_checksum_page is calculating it in this way:
 			 * (((checksum ^ blkno) % 65535) + 1)
 			 */
-			: (uint16)(((*(uint16*)((PageHeader)page)->pd_linp - 1) ^ blkno) + 1);
+			: (uint16)(((*PAGE_CHECKSUM(page) - 1) ^ blkno) + 1);
 		/*
 		 * If checksum is wrong, sleep a bit and then try again
 		 * several times. If it didn't help, throw error
