@@ -38,7 +38,7 @@
 /src/datapagemap.h
 /src/logging.h
 /src/receivelog.c
-/src/receivelog.hщщ
+/src/receivelog.h
 /src/streamutil.c
 /src/streamutil.h
 /src/xlogreader.c
