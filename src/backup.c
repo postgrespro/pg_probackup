@@ -574,6 +574,9 @@ do_backup_instance(void)
 			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
+	/* Update running backup meta with START LSN */
+	write_backup(&current);
+
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
 
