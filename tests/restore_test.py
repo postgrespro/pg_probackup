@@ -1464,12 +1464,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
+        # Take FULL
         self.backup_node(
             backup_dir, 'node', node)
 
+        # Take DELTA
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta')
 
+        # Take ERROR DELTA
         try:
             self.backup_node(
                 backup_dir, 'node', node,
@@ -1477,6 +1480,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             pass
 
+        # Take ERROR DELTA
         try:
             self.backup_node(
                 backup_dir, 'node', node,
@@ -1484,10 +1488,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             pass
 
-
+        # Take DELTA
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta')
 
+        # Take ERROR DELTA
         try:
             self.backup_node(
                 backup_dir, 'node', node,
@@ -1624,9 +1629,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE BACKUP
         node.cleanup()
-
-        print(restore_target_id)
-        exit(1)
 
         try:
             self.restore_node(
