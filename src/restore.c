@@ -57,6 +57,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	int			base_full_backup_index = 0;
 	int			corrupted_backup_index = 0;
 	char	   *action = is_restore ? "Restore":"Validate";
+	parray	   *parent_chain = NULL;
 
 	if (is_restore)
 	{
@@ -285,6 +286,27 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (is_restore)
 		check_tablespace_mapping(dest_backup);
 
+	/* At this point we are sure that parent chain is whole
+	 * so we can build separate array, containing all needed backups,
+	 * to simplify validation and restore
+	 */
+	parent_chain = parray_new();
+
+	/* Take every backup that is a child of base_backup AND parent of dest_backup
+	 * including base_backup and dest_backup
+	 */
+	for (i = base_full_backup_index; i >= dest_backup_index; i--)
+	{
+		tmp_backup = (pgBackup *) parray_get(backups, i);
+
+		if (is_parent(base_full_backup->start_time, tmp_backup, true) &&
+					is_parent(tmp_backup->start_time, dest_backup, true))
+		{
+			parray_append(parent_chain, tmp_backup);
+		}
+	}
+
+	/* for validation or restore with enabled validation */
 	if (!is_restore || !rt->restore_no_validate)
 	{
 		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
@@ -292,27 +314,25 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		/*
 		 * Validate backups from base_full_backup to dest_backup.
-		 * At this point we are sure that parent chain is intact.
 		 */
-		for (i = base_full_backup_index; i >= dest_backup_index; i--)
+		for (i = 0; i < parray_num(parent_chain); i++)
 		{
-			tmp_backup = (pgBackup *) parray_get(backups, i);
+			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
 
-			if (is_parent(base_full_backup->start_time, tmp_backup, true))
+			pgBackupValidate(tmp_backup);
+			/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
+			if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
 			{
-
-				pgBackupValidate(tmp_backup);
-				/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
-				if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
-				{
-					corrupted_backup = tmp_backup;
-					corrupted_backup_index = i;
-					break;
-				}
-				/* We do not validate WAL files of intermediate backups
-				 * It`s done to speed up restore
+				corrupted_backup = tmp_backup;
+				/* we need corrupted backup index from 'backups' not parent_chain
+				 * so we can properly orphanize all its descendants
 				 */
+				corrupted_backup_index = get_backup_index_number(backups, corrupted_backup);
+				break;
 			}
+			/* We do not validate WAL files of intermediate backups
+			 * It`s done to speed up restore
+			 */
 		}
 
 		/* There is no point in wal validation of corrupted backups */
@@ -355,7 +375,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		}
 	}
 
-	// TODO: rewrite restore to use parent_chain
 	/*
 	 * If dest backup is corrupted or was orphaned in previous check
 	 * produce corresponding error message
@@ -376,13 +395,12 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
 	/* We ensured that all backups are valid, now restore if required
-	 * TODO: use parent_link
 	 */
 	if (is_restore)
 	{
-		for (i = base_full_backup_index; i >= dest_backup_index; i--)
+		for (i = 0; i < parray_num(parent_chain); i++)
 		{
-			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
 			if (rt->lsn_specified && parse_server_version(backup->server_version) < 100000)
 				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
@@ -405,6 +423,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
+	parray_free(parent_chain);
 
 	elog(INFO, "%s of backup %s completed.",
 		 action, base36enc(dest_backup->start_time));
@@ -480,6 +499,7 @@ restore_backup(pgBackup *backup)
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
+		/* Useless message TODO: rewrite */
 		elog(LOG, "Start thread for num:%zu", parray_num(files));
 
 		pthread_create(&threads[i], NULL, restore_files, arg);
