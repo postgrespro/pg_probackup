@@ -42,7 +42,7 @@ class SnapFSTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             'postgres',
-            'select pg_remove_snashot(1)')
+            'select pg_remove_snapshot(1)')
 
         self.backup_node(
             backup_dir, 'node', node)
