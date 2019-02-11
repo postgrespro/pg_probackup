@@ -45,7 +45,7 @@ class SnapFSTest(ProbackupTest, unittest.TestCase):
             'select pg_remove_snapshot(1)')
 
         self.backup_node(
-            backup_dir, 'node', node)
+            backup_dir, 'node', node, backup_type='page')
 
         pgdata = self.pgdata_content(node.data_dir)
 
