@@ -630,6 +630,14 @@ dir_check_file(const char *root, pgFile *file)
 			}
 			else
 			{
+               /*
+                * snapfs files:
+                * RELFILENODE.BLOCKNO.snapmap.SNAPID
+                * RELFILENODE.BLOCKNO.snap.SNAPID
+                */
+               if (strstr(file->name, "snap") != NULL)
+                       return true;
+
 				len = strlen(file->name);
 				/* reloid.cfm */
 				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
