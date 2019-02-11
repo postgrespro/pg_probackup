@@ -4,7 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 from datetime import datetime
 import sys
-import time
+from time import sleep
 
 
 module_name = 'restore'
@@ -1441,3 +1441,281 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 True,
                 'Failed to start pg_wal_dump: {0}'.format(
                     pg_receivexlog.communicate()[1]))
+
+    # @unittest.skip("skip")
+    def test_restore_chain(self):
+        """
+        make node, take full backup, take several
+        ERROR delta backups, take valid delta backup,
+        restore must be successfull
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        # Take DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # Take ERROR DELTA
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='delta', options=['--archive-timeout=0s'])
+        except ProbackupException as e:
+            pass
+
+        # Take ERROR DELTA
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='delta', options=['--archive-timeout=0s'])
+        except ProbackupException as e:
+            pass
+
+        # Take DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # Take ERROR DELTA
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='delta', options=['--archive-timeout=0s'])
+        except ProbackupException as e:
+            pass
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[0]['status'],
+            'Backup STATUS should be "OK"')
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'Backup STATUS should be "OK"')
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[2]['status'],
+            'Backup STATUS should be "ERROR"')
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[3]['status'],
+            'Backup STATUS should be "ERROR"')
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[4]['status'],
+            'Backup STATUS should be "OK"')
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[5]['status'],
+            'Backup STATUS should be "ERROR"')
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_chain_with_corrupted_backup(self):
+        """more complex test_restore_chain()"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        # Take DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Take ERROR DELTA
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page', options=['--archive-timeout=0s'])
+        except ProbackupException as e:
+            pass
+
+        # Take 1 DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # Take ERROR DELTA
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='delta', options=['--archive-timeout=0s'])
+        except ProbackupException as e:
+            pass
+
+        # Take 2 DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # Take ERROR DELTA
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='delta', options=['--archive-timeout=0s'])
+        except ProbackupException as e:
+            pass
+
+        # Take 3 DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # Corrupted 4 DELTA
+        corrupt_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # ORPHAN 5 DELTA
+        restore_target_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # ORPHAN 6 DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # NEXT FULL BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='full')
+
+        # Next Delta
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # do corrupt 6 DELTA backup
+        file = os.path.join(
+            backup_dir, 'backups', 'node',
+            corrupt_id, 'database', 'global', 'pg_control')
+
+        file_new = os.path.join(backup_dir, 'pg_control')
+        os.rename(file, file_new)
+
+        # RESTORE BACKUP
+        node.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node, backup_id=restore_target_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because restore backup is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Backup {0} is orphan'.format(restore_target_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[0]['status'],
+            'Backup STATUS should be "OK"')
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'Backup STATUS should be "OK"')
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[2]['status'],
+            'Backup STATUS should be "ERROR"')
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[3]['status'],
+            'Backup STATUS should be "OK"')
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[4]['status'],
+            'Backup STATUS should be "ERROR"')
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[5]['status'],
+            'Backup STATUS should be "OK"')
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node')[6]['status'],
+            'Backup STATUS should be "ERROR"')
+
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[7]['status'],
+            'Backup STATUS should be "OK"')
+
+        # corruption victim
+        self.assertEqual(
+            'CORRUPT',
+            self.show_pb(backup_dir, 'node')[8]['status'],
+            'Backup STATUS should be "CORRUPT"')
+
+        # orphaned child
+        self.assertEqual(
+            'ORPHAN',
+            self.show_pb(backup_dir, 'node')[9]['status'],
+            'Backup STATUS should be "ORPHAN"')
+
+        # orphaned child
+        self.assertEqual(
+            'ORPHAN',
+            self.show_pb(backup_dir, 'node')[10]['status'],
+            'Backup STATUS should be "ORPHAN"')
+
+        # next FULL
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[11]['status'],
+            'Backup STATUS should be "OK"')
+
+        # next DELTA
+        self.assertEqual(
+            'OK',
+            self.show_pb(backup_dir, 'node')[12]['status'],
+            'Backup STATUS should be "OK"')
+
+        node.cleanup()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
