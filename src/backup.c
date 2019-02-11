@@ -642,7 +642,7 @@ do_backup_instance(void)
 		for (i = 0; i < parray_num(extra_dirs); i++)
 			/* Extra dirs numeration starts with 1. 0 value is not extra dir */
 			dir_list_file(backup_files_list, parray_get(extra_dirs, i),
-						  true, true, false, i+1);
+						  false, true, false, i+1);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -2335,7 +2335,8 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (strcmp(file->name, "pg_control") == 0)
+			else if (!file->extra_dir_num &&
+					 strcmp(file->name, "pg_control") == 0)
 				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
 									file);
 			else

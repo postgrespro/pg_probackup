@@ -239,7 +239,8 @@ pgBackupValidateFiles(void *arg)
 			 * Starting from 2.0.25 we calculate crc of pg_control differently.
 			 */
 			if (arguments->backup_version >= 20025 &&
-				strcmp(file->name, "pg_control") == 0)
+				strcmp(file->name, "pg_control") == 0 &&
+				!file->extra_dir_num)
 				crc = get_pgcontrol_checksum(arguments->base_path);
 			else
 				crc = pgFileGetCRC(file->path,
