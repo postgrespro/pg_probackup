@@ -509,7 +509,8 @@ extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void opt_extradir_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
-extern char* check_extra_dir_mapping(char *current_dir);
+extern void check_extra_dir_mapping(pgBackup *backup);
+extern char *get_extra_remap(char *current_dir);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *extra_prefix, parray *extra_list);

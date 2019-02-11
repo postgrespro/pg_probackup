@@ -127,8 +127,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'ERROR: --tablespace-mapping option' in e.message and
-                'have an entry in tablespace_map file' in e.message,
+                'ERROR: --extra-mapping option' in e.message and
+                'have an entry in list of extra directories' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

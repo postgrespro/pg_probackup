@@ -1263,8 +1263,47 @@ check_tablespace_mapping(pgBackup *backup)
 	parray_free(links);
 }
 
+void
+check_extra_dir_mapping(pgBackup *backup)
+{
+	TablespaceListCell *cell;
+	parray *extra_dirs_to_restore;
+	bool	found;
+	int		i;
+
+	if (!backup->extra_dir_str)
+	{
+	 	if (extra_remap_list.head)
+			elog(ERROR, "--extra-mapping option's old directory doesn't have "
+				 "an entry in list of extra directories of current "
+				 "backup: \"%s\"", extra_remap_list.head->old_dir);
+		return;
+	}
+	
+	extra_dirs_to_restore = make_extra_directory_list(backup->extra_dir_str);
+	for (cell = extra_remap_list.head; cell; cell = cell->next)
+	{
+		char *old_dir = cell->old_dir;
+
+		found = false;
+		for (i = 0; i < parray_num(extra_dirs_to_restore); i++)
+		{
+			char *external_dir = parray_get(extra_dirs_to_restore, i);
+			if (strcmp(old_dir, external_dir) == 0)
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+			elog(ERROR, "--extra-mapping option's old directory doesn't have "
+				 "an entry in list of extra directories of current "
+				 "backup: \"%s\"", cell->old_dir);
+	}
+}
+
 char *
-check_extra_dir_mapping(char *current_dir)
+get_extra_remap(char *current_dir)
 {
 	TablespaceListCell *cell;
 

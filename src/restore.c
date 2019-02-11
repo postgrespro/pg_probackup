@@ -285,7 +285,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 * i.e. empty or not exist.
 	 */
 	if (is_restore)
+	{
 		check_tablespace_mapping(dest_backup);
+		check_extra_dir_mapping(dest_backup);
+	}
 
 	if (!is_restore || !rt->restore_no_validate)
 	{
@@ -461,10 +464,10 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	if(extra_dir_str)
 	{
 		requested_extra_dirs = make_extra_directory_list(extra_dir_str);
-		for (int i = 0; i < parray_num(requested_extra_dirs); i++)
+		for (i = 0; i < parray_num(requested_extra_dirs); i++)
 		{
 			char *extra_path = parray_get(requested_extra_dirs, i);
-			extra_path = check_extra_dir_mapping(extra_path);
+			extra_path = get_extra_remap(extra_path);
 			dir_create_dir(extra_path, DIR_PERMISSION);
 		}
 	}
@@ -507,7 +510,7 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 			{
 				char		container_dir[MAXPGPATH];
 
-				extra_path = check_extra_dir_mapping(extra_path);
+				extra_path = get_extra_remap(extra_path);
 				makeExtraDirPathByNum(container_dir, extra_prefix,
 									  file->extra_dir_num);
 				dir_name = GetRelativePath(file->path, container_dir);
@@ -698,7 +701,7 @@ restore_files(void *arg)
 												file->extra_dir_num - 1);
 			if (backup_contains_extra(extra_path, arguments->req_extra_dirs))
 			{
-				extra_path = check_extra_dir_mapping(extra_path);
+				extra_path = get_extra_remap(extra_path);
 				copy_file(arguments->extra_prefix, extra_path, file);
 			}
 		}
