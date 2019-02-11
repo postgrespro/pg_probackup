@@ -93,6 +93,9 @@ typedef struct XLogPageReadPrivate
 	TimeLineID	tli;
 	uint32		xlog_seg_size;
 
+	char		page_buf[XLOG_BLCKSZ];
+	uint32		prev_page_off;
+
 	bool		manual_switch;
 	bool		need_switch;
 
@@ -104,9 +107,6 @@ typedef struct XLogPageReadPrivate
 #ifdef HAVE_LIBZ
 	gzFile		gz_xlogfile;
 	char		gz_xlogpath[MAXPGPATH];
-
-	char		gz_buf[XLOG_BLCKSZ];
-	uint32		gz_prev_off;
 #endif
 } XLogPageReadPrivate;
 
@@ -1040,6 +1040,17 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	 */
 	Assert(private_data->xlogexists);
 
+	/*
+	 * Do not read same page read earlier from the file, read it from the buffer
+	 */
+	if (private_data->prev_page_off != 0 &&
+		private_data->prev_page_off == targetPageOff)
+	{
+		memcpy(readBuf, private_data->page_buf, XLOG_BLCKSZ);
+		*pageTLI = private_data->tli;
+		return XLOG_BLCKSZ;
+	}
+
 	/* Read the requested page */
 	if (private_data->xlogfile != -1)
 	{
@@ -1060,34 +1071,28 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 #ifdef HAVE_LIBZ
 	else
 	{
-		if (private_data->gz_prev_off != 0 &&
-			private_data->gz_prev_off == targetPageOff)
-			memcpy(readBuf, private_data->gz_buf, XLOG_BLCKSZ);
-		else
+		if (gzseek(private_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
 		{
-			if (gzseek(private_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
-			{
-				elog(WARNING, "Thread [%d]: Could not seek in compressed WAL segment \"%s\": %s",
-					private_data->thread_num,
-					private_data->gz_xlogpath,
-					get_gz_error(private_data->gz_xlogfile));
-				return -1;
-			}
+			elog(WARNING, "Thread [%d]: Could not seek in compressed WAL segment \"%s\": %s",
+				private_data->thread_num,
+				private_data->gz_xlogpath,
+				get_gz_error(private_data->gz_xlogfile));
+			return -1;
+		}
 
-			if (gzread(private_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
-			{
-				elog(WARNING, "Thread [%d]: Could not read from compressed WAL segment \"%s\": %s",
-					private_data->thread_num,
-					private_data->gz_xlogpath,
-					get_gz_error(private_data->gz_xlogfile));
-				return -1;
-			}
-			private_data->gz_prev_off = targetPageOff;
-			memcpy(private_data->gz_buf, readBuf, XLOG_BLCKSZ);
+		if (gzread(private_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		{
+			elog(WARNING, "Thread [%d]: Could not read from compressed WAL segment \"%s\": %s",
+				private_data->thread_num,
+				private_data->gz_xlogpath,
+				get_gz_error(private_data->gz_xlogfile));
+			return -1;
 		}
 	}
 #endif
 
+	memcpy(private_data->page_buf, readBuf, XLOG_BLCKSZ);
+	private_data->prev_page_off = targetPageOff;
 	*pageTLI = private_data->tli;
 	return XLOG_BLCKSZ;
 }
@@ -1142,9 +1147,9 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 	{
 		gzclose(private_data->gz_xlogfile);
 		private_data->gz_xlogfile = NULL;
-		private_data->gz_prev_off = 0;
 	}
 #endif
+	private_data->prev_page_off = 0;
 	private_data->xlogexists = false;
 }
 
