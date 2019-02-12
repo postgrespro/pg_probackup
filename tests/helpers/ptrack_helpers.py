@@ -1321,12 +1321,16 @@ class GDBobj(ProbackupTest):
                 break
 
     def set_breakpoint(self, location):
+
         result = self._execute('break ' + location)
         for line in result:
             if line.startswith('~"Breakpoint'):
                 return
 
-            elif line.startswith('^error') or line.startswith('(gdb)'):
+            elif line.startswith('=breakpoint-created'):
+                return
+
+            elif line.startswith('^error'): #or line.startswith('(gdb)'):
                 break
 
             elif line.startswith('&"break'):
@@ -1430,7 +1434,7 @@ class GDBobj(ProbackupTest):
             output += [line]
             if self.verbose:
                 print(repr(line))
-            if line == '^done\n' or line.startswith('*stopped'):
+            if line.startswith('^done') or line.startswith('*stopped'):
                 break
             if running and line.startswith('*running'):
                 break
