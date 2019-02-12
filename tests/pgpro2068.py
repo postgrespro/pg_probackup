@@ -95,8 +95,8 @@ class BugTest(ProbackupTest, unittest.TestCase):
             'postgres',
             "select pid from pg_stat_activity where backend_type = 'background writer'").rstrip()
 
-        # wait for shared_buffer to be filled with dirty data
-        sleep(5)
+        # wait for shared buffer on replica to be filled with dirty data
+        sleep(10)
 
         # break checkpointer on UpdateLastRemovedPtr
         gdb_checkpointer = self.gdb_attach(checkpointer_pid)
