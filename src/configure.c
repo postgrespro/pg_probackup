@@ -62,8 +62,8 @@ ConfigOption instance_options[] =
 	},
 #endif
 	{
-		's', 'E', "extra-directory",
-		&instance_config.extra_dir_str, SOURCE_CMD, 0,
+		's', 'E', "external-dirs",
+		&instance_config.external_dir_str, SOURCE_CMD, 0,
 		OPTION_INSTANCE_GROUP, 0, option_get_value
 	},
 	/* Connection options */

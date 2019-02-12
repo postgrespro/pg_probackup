@@ -468,7 +468,7 @@ do_backup_instance(void)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
-	char		extra_prefix[MAXPGPATH]; /* Temp value. Used as template */
+	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -481,13 +481,13 @@ do_backup_instance(void)
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
 	parray	   *backup_list = NULL;
-	parray	   *extra_dirs = NULL;
+	parray	   *external_dirs = NULL;
 
 	pgFile	   *pg_control = NULL;
 
 	elog(LOG, "Database backup start");
-	if(current.extra_dir_str)
-		extra_dirs = make_extra_directory_list(current.extra_dir_str);
+	if(current.external_dir_str)
+		external_dirs = make_external_directory_list(current.external_dir_str);
 
 	/* Initialize size summary */
 	current.data_bytes = 0;
@@ -579,7 +579,8 @@ do_backup_instance(void)
 	pg_start_backup(label, smooth_checkpoint, &current);
 
 	pgBackupGetPath(&current, database_path, lengthof(database_path),DATABASE_DIR);
-	pgBackupGetPath(&current, extra_prefix, lengthof(extra_prefix), EXTRA_DIR);
+	pgBackupGetPath(&current, external_prefix, lengthof(external_prefix),
+					EXTERNAL_DIR);
 
 	/* start stream replication */
 	if (stream_wal)
@@ -636,12 +637,13 @@ do_backup_instance(void)
 
 	/*
 	 * Append to backup list all files and directories
-	 * from extra directory option
+	 * from external directory option
 	 */
-	if (extra_dirs)
-		for (i = 0; i < parray_num(extra_dirs); i++)
-			/* Extra dirs numeration starts with 1. 0 value is not extra dir */
-			dir_list_file(backup_files_list, parray_get(extra_dirs, i),
+	if (external_dirs)
+		for (i = 0; i < parray_num(external_dirs); i++)
+			/* External dirs numeration starts with 1.
+			 * 0 value is not external dir */
+			dir_list_file(backup_files_list, parray_get(external_dirs, i),
 						  false, true, false, i+1);
 
 	/*
@@ -705,9 +707,10 @@ do_backup_instance(void)
 			char	   *dir_name;
 
 			if (!is_remote_backup)
-				if (file->extra_dir_num)
+				if (file->external_dir_num)
 					dir_name = GetRelativePath(file->path,
-							   parray_get(extra_dirs, file->extra_dir_num - 1));
+									parray_get(external_dirs,
+											   file->external_dir_num - 1));
 				else
 					dir_name = GetRelativePath(file->path, instance_config.pgdata);
 			else
@@ -715,10 +718,11 @@ do_backup_instance(void)
 
 			elog(VERBOSE, "Create directory \"%s\"", dir_name);
 
-			if (file->extra_dir_num)
+			if (file->external_dir_num)
 			{
 				char		temp[MAXPGPATH];
-				snprintf(temp, MAXPGPATH, "%s%d", extra_prefix, file->extra_dir_num);
+				snprintf(temp, MAXPGPATH, "%s%d", external_prefix,
+						 file->external_dir_num);
 				join_path_components(dirpath, temp, dir_name);
 			}
 			else
@@ -734,7 +738,7 @@ do_backup_instance(void)
 	parray_qsort(backup_files_list, pgFileCompareSize);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
-		parray_qsort(prev_backup_filelist, pgFileComparePathWithExtra);
+		parray_qsort(prev_backup_filelist, pgFileComparePathWithExternal);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -746,8 +750,8 @@ do_backup_instance(void)
 
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
-		arg->extra_prefix = extra_prefix;
-		arg->extra_dirs = extra_dirs;
+		arg->external_prefix = external_prefix;
+		arg->external_dirs = external_dirs;
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
 		arg->prev_start_lsn = prev_backup_start_lsn;
@@ -853,11 +857,11 @@ do_backup_instance(void)
 
 	/* Print the list of files to backup catalog */
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
-						  NULL, extra_dirs);
+						  NULL, external_dirs);
 
-	/* clean extra directories list */
-	if (extra_dirs)
-		free_dir_list(extra_dirs);
+	/* clean external directories list */
+	if (external_dirs)
+		free_dir_list(external_dirs);
 
 	/* Compute summary of size of regular files in the backup */
 	for (i = 0; i < parray_num(backup_files_list); i++)
@@ -990,11 +994,11 @@ do_backup(time_t start_time)
 	StrNCpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));
 
-	/* Save list of extra directories */
-	if (instance_config.extra_dir_str &&
-		pg_strcasecmp(instance_config.extra_dir_str, "none") != 0)
+	/* Save list of external directories */
+	if (instance_config.external_dir_str &&
+		pg_strcasecmp(instance_config.external_dir_str, "none") != 0)
 	{
-		current.extra_dir_str = instance_config.extra_dir_str;
+		current.external_dir_str = instance_config.external_dir_str;
 	}
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
@@ -2292,11 +2296,11 @@ backup_files(void *arg)
 		if (S_ISREG(buf.st_mode))
 		{
 			pgFile	  **prev_file = NULL;
-			char	   *extra_path = NULL;
+			char	   *external_path = NULL;
 
-			if (file->extra_dir_num)
-				extra_path = parray_get(arguments->extra_dirs,
-										file->extra_dir_num - 1);
+			if (file->external_dir_num)
+				external_path = parray_get(arguments->external_dirs,
+										file->external_dir_num - 1);
 
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
@@ -2304,13 +2308,13 @@ backup_files(void *arg)
 				char	   *relative;
 				pgFile		key;
 
-				relative = GetRelativePath(file->path, file->extra_dir_num ?
-										   extra_path : arguments->from_root);
+				relative = GetRelativePath(file->path, file->external_dir_num ?
+										   external_path : arguments->from_root);
 				key.path = relative;
-				key.extra_dir_num = file->extra_dir_num;
+				key.external_dir_num = file->external_dir_num;
 
 				prev_file = (pgFile **) parray_bsearch(arguments->prev_filelist,
-											&key, pgFileComparePathWithExtra);
+											&key, pgFileComparePathWithExternal);
 				if (prev_file)
 					/* File exists in previous backup */
 					file->exists_in_prev = true;
@@ -2335,7 +2339,7 @@ backup_files(void *arg)
 					continue;
 				}
 			}
-			else if (!file->extra_dir_num &&
+			else if (!file->external_dir_num &&
 					 strcmp(file->name, "pg_control") == 0)
 				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
 									file);
@@ -2344,7 +2348,7 @@ backup_files(void *arg)
 				const char *src;
 				const char *dst;
 				bool		skip = false;
-				char		extra_dst[MAXPGPATH];
+				char		external_dst[MAXPGPATH];
 
 				/* If non-data file has not changed since last backup... */
 				if (prev_file && file->exists_in_prev &&
@@ -2356,12 +2360,13 @@ backup_files(void *arg)
 						skip = true; /* ...skip copying file. */
 				}
 				/* Set file paths */
-				if (file->extra_dir_num)
+				if (file->external_dir_num)
 				{
-					makeExtraDirPathByNum(extra_dst, arguments->extra_prefix,
-										  file->extra_dir_num);
-					src = extra_path;
-					dst = extra_dst;
+					makeExternalDirPathByNum(external_dst,
+											 arguments->external_prefix,
+											 file->external_dir_num);
+					src = external_path;
+					dst = external_dst;
 				}
 				else
 				{

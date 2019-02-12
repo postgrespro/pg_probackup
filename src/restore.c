@@ -21,9 +21,9 @@ typedef struct
 {
 	parray	   *files;
 	pgBackup   *backup;
-	parray	   *req_extra_dirs;
-	parray	   *cur_extra_dirs;
-	char	   *extra_prefix;
+	parray	   *req_external_dirs;
+	parray	   *cur_external_dirs;
+	char	   *external_prefix;
 
 	/*
 	 * Return value from the thread.
@@ -32,7 +32,7 @@ typedef struct
 	int			ret;
 } restore_files_arg;
 
-static void restore_backup(pgBackup *backup, const char *extra_dir_str);
+static void restore_backup(pgBackup *backup, const char *external_dir_str);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
@@ -287,7 +287,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (is_restore)
 	{
 		check_tablespace_mapping(dest_backup);
-		check_extra_dir_mapping(dest_backup);
+		check_external_dir_mapping(dest_backup);
 	}
 
 	if (!is_restore || !rt->restore_no_validate)
@@ -393,7 +393,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
 						base36enc(dest_backup->start_time), dest_backup->server_version);
 
-			restore_backup(backup, dest_backup->extra_dir_str);
+			restore_backup(backup, dest_backup->external_dir_str);
 		}
 
 		/*
@@ -420,16 +420,16 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
  * Restore one backup.
  */
 void
-restore_backup(pgBackup *backup, const char *extra_dir_str)
+restore_backup(pgBackup *backup, const char *external_dir_str)
 {
 	char		timestamp[100];
 	char		this_backup_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
-	char		extra_prefix[MAXPGPATH];
+	char		external_prefix[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
-	parray	   *requested_extra_dirs = NULL;
-	parray	   *current_extra_dirs = NULL;
+	parray	   *requested_external_dirs = NULL;
+	parray	   *current_external_dirs = NULL;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
@@ -461,61 +461,63 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	create_data_directories(instance_config.pgdata, this_backup_path, true);
 
-	if(extra_dir_str)
+	if(external_dir_str)
 	{
-		requested_extra_dirs = make_extra_directory_list(extra_dir_str);
-		for (i = 0; i < parray_num(requested_extra_dirs); i++)
+		requested_external_dirs = make_external_directory_list(external_dir_str);
+		for (i = 0; i < parray_num(requested_external_dirs); i++)
 		{
-			char *extra_path = parray_get(requested_extra_dirs, i);
-			extra_path = get_extra_remap(extra_path);
-			dir_create_dir(extra_path, DIR_PERMISSION);
+			char *external_path = parray_get(requested_external_dirs, i);
+			external_path = get_external_remap(external_path);
+			dir_create_dir(external_path, DIR_PERMISSION);
 		}
 	}
 
-	if(backup->extra_dir_str)
-		current_extra_dirs = make_extra_directory_list(backup->extra_dir_str);
+	if(backup->external_dir_str)
+		current_external_dirs = make_external_directory_list(backup->external_dir_str);
 
 	/*
 	 * Get list of files which need to be restored.
 	 */
 	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
-	pgBackupGetPath(backup, extra_prefix, lengthof(extra_prefix), EXTRA_DIR);
+	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix),
+					EXTERNAL_DIR);
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(database_path, extra_prefix, list_path);
+	files = dir_read_file_list(database_path, external_prefix, list_path);
 
 	/* Restore directories in do_backup_instance way */
 	parray_qsort(files, pgFileComparePath);
 
 	/*
-	 * Make extra directories before restore
+	 * Make external directories before restore
 	 * and setup threads at the same time
 	 */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
 
-		/* if the entry was an extra directory, create it in the backup */
-		if (file->extra_dir_num && S_ISDIR(file->mode))
+		/* if the entry was an external directory, create it in the backup */
+		if (file->external_dir_num && S_ISDIR(file->mode))
 		{
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
-			char	   *extra_path;
+			char	   *external_path;
 
-			if (!current_extra_dirs ||
-				parray_num(current_extra_dirs) < file->extra_dir_num - 1)
-				elog(ERROR, "Inconsistent extra directory backup metadata");
+			if (!current_external_dirs ||
+				parray_num(current_external_dirs) < file->external_dir_num - 1)
+				elog(ERROR, "Inconsistent external directory backup metadata");
 
-			extra_path = parray_get(current_extra_dirs, file->extra_dir_num - 1);
-			if (backup_contains_extra(extra_path, requested_extra_dirs))
+			external_path = parray_get(current_external_dirs,
+									   file->external_dir_num - 1);
+			if (backup_contains_external(external_path, requested_external_dirs))
 			{
 				char		container_dir[MAXPGPATH];
 
-				extra_path = get_extra_remap(extra_path);
-				makeExtraDirPathByNum(container_dir, extra_prefix,
-									  file->extra_dir_num);
+				external_path = get_external_remap(external_path);
+				makeExternalDirPathByNum(container_dir, external_prefix,
+										 file->external_dir_num);
 				dir_name = GetRelativePath(file->path, container_dir);
 				elog(VERBOSE, "Create directory \"%s\"", dir_name);
-				join_path_components(dirpath, extra_path, dir_name);
+				join_path_components(dirpath, external_path, dir_name);
 				dir_create_dir(dirpath, DIR_PERMISSION);
 			}
 		}
@@ -533,9 +535,9 @@ restore_backup(pgBackup *backup, const char *extra_dir_str)
 
 		arg->files = files;
 		arg->backup = backup;
-		arg->req_extra_dirs = requested_extra_dirs;
-		arg->cur_extra_dirs = current_extra_dirs;
-		arg->extra_prefix = extra_prefix;
+		arg->req_external_dirs = requested_external_dirs;
+		arg->cur_external_dirs = current_external_dirs;
+		arg->external_prefix = external_prefix;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -578,13 +580,13 @@ remove_deleted_files(pgBackup *backup)
 	parray	   *files;
 	parray	   *files_restored;
 	char		filelist_path[MAXPGPATH];
-	char		extra_prefix[MAXPGPATH];
+	char		external_prefix[MAXPGPATH];
 	int			i;
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
-	pgBackupGetPath(backup, extra_prefix, lengthof(extra_prefix), EXTRA_DIR);
+	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
 	/* Read backup's filelist using target database path as base path */
-	files = dir_read_file_list(instance_config.pgdata, extra_prefix, filelist_path);
+	files = dir_read_file_list(instance_config.pgdata, external_prefix, filelist_path);
 	parray_qsort(files, pgFileComparePathDesc);
 
 	/* Get list of files actually existing in target database */
@@ -693,14 +695,15 @@ restore_files(void *arg)
 							  false,
 							  parse_program_version(arguments->backup->program_version));
 		}
-		else if (file->extra_dir_num)
+		else if (file->external_dir_num)
 		{
-			char	   *extra_path = parray_get(arguments->cur_extra_dirs,
-												file->extra_dir_num - 1);
-			if (backup_contains_extra(extra_path, arguments->req_extra_dirs))
+			char	   *external_path = parray_get(arguments->cur_external_dirs,
+												   file->external_dir_num - 1);
+			if (backup_contains_external(external_path,
+										 arguments->req_external_dirs))
 			{
-				extra_path = get_extra_remap(extra_path);
-				copy_file(arguments->extra_prefix, extra_path, file);
+				external_path = get_external_remap(external_path);
+				copy_file(arguments->external_prefix, external_path, file);
 			}
 		}
 		else if (strcmp(file->name, "pg_control") == 0)

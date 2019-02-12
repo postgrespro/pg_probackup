@@ -54,8 +54,8 @@ char		backup_instance_path[MAXPGPATH];
  */
 char		arclog_path[MAXPGPATH] = "";
 
-/* colon separated extra directories list ("/path1:/path2") */
-char	   *extradir = NULL;
+/* colon separated external directories list ("/path1:/path2") */
+char	   *externaldir = NULL;
 /* common options */
 static char *backup_id_string = NULL;
 int			num_threads = 1;
@@ -145,7 +145,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
 	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
-	{ 'f', 155, "extra-mapping",	opt_extradir_map,	SOURCE_CMD_STRICT },
+	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
 	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },

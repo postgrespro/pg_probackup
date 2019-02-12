@@ -29,13 +29,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         external_dir = os.path.join(node.base_dir, 'somedirectory')
 
-        # copy postgresql.conf to extra_directory
+        # copy postgresql.conf to external_directory
         os.mkdir(external_dir)
         shutil.copyfile(
             os.path.join(node.data_dir, 'postgresql.conf'),
             os.path.join(external_dir, 'postgresql.conf'))
 
-        # create directory in extra_directory
+        # create directory in external_directory
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -44,7 +44,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'node', node,
             options=[
-                '--extra-directory={0}'.format(external_dir)])
+                '--external-dirs={0}'.format(external_dir)])
 
         if self.paranoia:
             pgdata = self.pgdata_content(
@@ -93,7 +93,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir1_old = self.get_tblspace_path(node, 'external_dir1')
         external_dir2_old = self.get_tblspace_path(node, 'external_dir2')
 
-        # copy postgresql.conf to extra_directory
+        # copy postgresql.conf to external_directory
         os.mkdir(external_dir1_old)
         os.mkdir(external_dir2_old)
         shutil.copyfile(
@@ -115,9 +115,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node', node_restored,
                 options=[
                     "-j", "4",
-                    "--extra-mapping={0}={1}".format(
+                    "--external-mapping={0}={1}".format(
                         external_dir1_old, external_dir1_new),
-                    "--extra-mapping={0}={1}".format(
+                    "--external-mapping={0}={1}".format(
                         external_dir2_old, external_dir2_new)])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
@@ -127,8 +127,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'ERROR: --extra-mapping option' in e.message and
-                'have an entry in list of extra directories' in e.message,
+                'ERROR: --external-mapping option' in e.message and
+                'have an entry in list of external directories' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -142,9 +142,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored,
             options=[
                 "-j", "4",
-                "--extra-mapping={0}={1}".format(
+                "--external-mapping={0}={1}".format(
                     external_dir1_old, external_dir1_new),
-                "--extra-mapping={0}={1}".format(
+                "--external-mapping={0}={1}".format(
                     external_dir2_old, external_dir2_new)])
 
         if self.paranoia:
@@ -223,14 +223,14 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-        # extra directory contain symlink to file
-        # extra directory contain symlink to directory
-        # latest page backup without extra_dir
+        # external directory contain symlink to file
+        # external directory contain symlink to directory
+        # latest page backup without external_dir
         # multiple external directories
-        # --extra-directory=none
-        # --extra-directory point to a file
-        # extra directory in config and in command line
-        # extra directory contain multuple directories, some of them my be empty
+        # --external-dirs=none
+        # --external-dirs point to a file
+        # external directory in config and in command line
+        # external directory contain multuple directories, some of them my be empty
         # forbid to external-dirs to point to tablespace directories
         # check that not changed files are not copied by next backup
         # merge
