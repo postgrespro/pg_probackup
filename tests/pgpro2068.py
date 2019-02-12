@@ -16,9 +16,6 @@ class BugTest(ProbackupTest, unittest.TestCase):
     def test_minrecpoint_on_replica(self):
         """
         https://jira.postgrespro.ru/browse/PGPRO-2068
-        make node without archive support, make backup which should fail
-        check that backup status equal to ERROR
-        check that no files where copied to backup catalogue
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -43,6 +40,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
 
+        # start replica
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
@@ -57,6 +55,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
         replica.append_conf(
             'postgresql.auto.conf', 'restart_after_crash = off')
 
+        # we need those later
         node.safe_psql(
             "postgres",
             "CREATE EXTENSION plpythonu")
@@ -65,29 +64,25 @@ class BugTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CREATE EXTENSION pageinspect")
 
-
-        # pg_last_wal_replay_lsn
         replica.slow_start(replica=True)
 
-
+        # generate some data
         node.pgbench_init(scale=10)
-
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            options=["-c", "4", "-T", "20"]
-        )
+            options=["-c", "4", "-T", "20"])
         pgbench.wait()
         pgbench.stdout.close()
 
 
+        # generate some more data and leave it in background
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            options=["-c", "4", "-T", "30"]
-        )
+            options=["-c", "4", "-T", "30"])
 
-        # select pid from pg_stat_activity where backend_type in ('walreceiver', 'checkpointer', 'background writer', 'startup') ;
+        # get pids of background workers
         startup_pid = replica.safe_psql(
             'postgres',
             "select pid from pg_stat_activity where backend_type = 'startup'").rstrip()
@@ -100,34 +95,31 @@ class BugTest(ProbackupTest, unittest.TestCase):
             'postgres',
             "select pid from pg_stat_activity where backend_type = 'background writer'").rstrip()
 
+        # wait for shared_buffer to be filled with dirty data
         sleep(5)
 
-        # startup process
-        # checkpointer
-        # writer process
-
-        # block checkpointer on UpdateLastRemovedPtr
+        # break checkpointer on UpdateLastRemovedPtr
         gdb_checkpointer = self.gdb_attach(checkpointer_pid)
         gdb_checkpointer.set_breakpoint('UpdateLastRemovedPtr')
         gdb_checkpointer.continue_execution_until_break()
 
-        # block recovery in on UpdateMinRecoveryPoint
+        # break recovery on UpdateControlFile
         gdb_recovery = self.gdb_attach(startup_pid)
         gdb_recovery.set_breakpoint('UpdateMinRecoveryPoint')
         gdb_recovery.continue_execution_until_break()
         gdb_recovery.set_breakpoint('UpdateControlFile')
         gdb_recovery.continue_execution_until_break()
 
-        # stop bgwriter
-        # gdb_bgwriter = self.gdb_attach(bgwriter_pid)
-
+        # stop data generation
         pgbench.wait()
         pgbench.stdout.close()
 
+        # kill someone, we need a crash
         os.kill(int(bgwriter_pid), 9)
         gdb_recovery._execute('detach')
         gdb_checkpointer._execute('detach')
 
+        # just to be sure
         try:
             replica.stop(['-m', 'immediate', '-D', replica.data_dir])
         except:
@@ -136,13 +128,8 @@ class BugTest(ProbackupTest, unittest.TestCase):
         # Promote replica with 'immediate' target action
         replica.append_conf(
             'recovery.conf', "recovery_target = 'immediate'")
-
         replica.append_conf(
             'recovery.conf', "recovery_target_action = 'promote'")
-
-        #os.remove(os.path.join(replica.data_dir, 'postmaster.pid'))
-
-        # sleep(5)
         replica.slow_start()
 
         script = '''
@@ -166,6 +153,7 @@ if found_corruption:
 $$ LANGUAGE plpythonu;
 '''
 
+        # Find blocks from future
         replica.safe_psql(
             'postgres',
             script)
