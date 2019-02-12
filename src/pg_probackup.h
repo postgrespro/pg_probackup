@@ -167,7 +167,8 @@ typedef enum ShowFormat
 
 /* special values of pgBackup fields */
 #define INVALID_BACKUP_ID	0    /* backup ID is not provided by user */
-#define BYTES_INVALID		(-1)
+#define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
+#define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
 
 /*

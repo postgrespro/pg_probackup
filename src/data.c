@@ -564,6 +564,7 @@ backup_data_file(backup_files_arg* arguments,
 		if (errno == ENOENT)
 		{
 			elog(LOG, "File \"%s\" is not found", file->path);
+			file->write_size = FILE_NOT_FOUND;
 			return false;
 		}
 
@@ -946,7 +947,11 @@ copy_file(const char *from_root, const char *to_root, pgFile *file)
 
 		/* maybe deleted, it's not error */
 		if (errno == ENOENT)
+		{
+			elog(LOG, "File \"%s\" is not found", file->path);
+			file->write_size = FILE_NOT_FOUND;
 			return false;
+		}
 
 		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
 			 strerror(errno));

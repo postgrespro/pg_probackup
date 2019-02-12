@@ -578,7 +578,11 @@ do_backup_instance(void)
 			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
-	pgBackupGetPath(&current, database_path, lengthof(database_path),DATABASE_DIR);
+	/* Update running backup meta with START LSN */
+	write_backup(&current);
+
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
 	pgBackupGetPath(&current, external_prefix, lengthof(external_prefix),
 					EXTERNAL_DIR);
 
@@ -786,6 +790,19 @@ do_backup_instance(void)
 		elog(INFO, "Data files are transfered");
 	else
 		elog(ERROR, "Data files transferring failed");
+
+	/* Remove disappeared during backup files from backup_list */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
+
+		if (tmp_file->write_size == FILE_NOT_FOUND)
+		{
+			pg_atomic_clear_flag(&tmp_file->lock);
+			pgFileFree(tmp_file);
+			parray_remove(backup_files_list, i);
+		}
+	}
 
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
@@ -2277,7 +2294,7 @@ backup_files(void *arg)
 				 * If file is not found, this is not en error.
 				 * It could have been deleted by concurrent postgres transaction.
 				 */
-				file->write_size = BYTES_INVALID;
+				file->write_size = FILE_NOT_FOUND;
 				elog(LOG, "File \"%s\" is not found", file->path);
 				continue;
 			}
@@ -2334,7 +2351,9 @@ backup_files(void *arg)
 									  instance_config.compress_alg,
 									  instance_config.compress_level))
 				{
-					file->write_size = BYTES_INVALID;
+					/* disappeared file not to be confused with 'not changed' */
+					if (file->write_size != FILE_NOT_FOUND)
+						file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
 					continue;
 				}
@@ -2375,7 +2394,9 @@ backup_files(void *arg)
 				}
 				if (skip || !copy_file(src, dst, file))
 				{
-					file->write_size = BYTES_INVALID;
+					/* disappeared file not to be confused with 'not changed' */
+					if (file->write_size != FILE_NOT_FOUND)
+						file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup",
 						 file->path);
 					continue;
