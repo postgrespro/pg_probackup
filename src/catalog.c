@@ -423,7 +423,7 @@ pgBackupCreateDir(pgBackup *backup)
 		for (int i = 0; i < parray_num(external_list); i++)
 		{
 			/* 20 chars is enough to hold the externaldir number in string. */
-			temp = palloc(strlen(EXTERNAL_DIR) + 20);
+			temp = palloc0(strlen(EXTERNAL_DIR) + 20);
 			/* Numeration of externaldirs starts with 1 */
 			makeExternalDirPathByNum(temp, EXTERNAL_DIR, i+1);
 			parray_append(subdirs, temp);

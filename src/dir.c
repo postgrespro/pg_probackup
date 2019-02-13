@@ -1674,13 +1674,13 @@ make_external_directory_list(const char *colon_separated_dirs)
 {
 	char	   *p;
 	parray	   *list = parray_new();
-	char	   *tmp = palloc(strlen(colon_separated_dirs) + 1);
+	char	   *tmp = palloc0(strlen(colon_separated_dirs) + 1);
 
 	strcpy(tmp, colon_separated_dirs);
 	p = strtok(tmp,":");
 	while(p!=NULL)
 	{
-		char * dir = (char *)palloc(strlen(p) + 1);
+		char * dir = (char *)palloc0(strlen(p) + 1);
 		strcpy(dir,p);
 		if (is_absolute_path(dir))
 			parray_append(list, dir);
