@@ -412,6 +412,7 @@ pgBackupCreateDir(pgBackup *backup)
 	char   *temp;
 
 	temp = palloc(strlen(DATABASE_DIR) + 1);
+	sprintf(temp, "%s", DATABASE_DIR);
 	parray_append(subdirs, temp);
 
 	/* Add external dirs containers */
