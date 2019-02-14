@@ -27,13 +27,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 'wal_level': 'replica'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        external_dir = os.path.join(node.base_dir, 'somedirectory')
-
-        # copy postgresql.conf to external_directory
-        os.mkdir(external_dir)
-        shutil.copyfile(
-            os.path.join(node.data_dir, 'postgresql.conf'),
-            os.path.join(external_dir, 'postgresql.conf'))
+        external_dir = self.get_tblspace_path(node, 'somedirectory')
 
         # create directory in external_directory
         self.init_pb(backup_dir)
@@ -41,7 +35,18 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        backup_id = self.backup_node(
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        # Fill external directories
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir, options=["-j", "4"])
+
+        # Full backup with external dir
+        self.backup_node(
             backup_dir, 'node', node,
             options=[
                 '--external-dirs={0}'.format(external_dir)])
@@ -51,6 +56,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 node.base_dir, exclude_dirs=['logs'])
 
         node.cleanup()
+        shutil.rmtree(external_dir, ignore_errors=True)
 
         self.restore_node(
             backup_dir, 'node', node, options=["-j", "4"])
@@ -62,6 +68,68 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_external_none(self):
+        """
+        make node, create external directory, take backup
+        with external directory, take delta backup with --external-dirs=none,
+        restore delta backup, check that
+        external directory was not copied
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        external_dir = self.get_tblspace_path(node, 'somedirectory')
+
+        # create directory in external_directory
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        # Fill external directories with data
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir, options=["-j", "4"])
+
+        # Full backup with external dir
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--external-dirs={0}'.format(external_dir)])
+
+        # Delta backup without external directory
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="delta",
+            options=['--external-dirs=none'])
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs', 'somedirectory'])
+
+        node.cleanup()
+        shutil.rmtree(external_dir, ignore_errors=True)
+
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4"])
+
+        pgdata_restored = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_external_dir_mapping(self):
@@ -299,12 +367,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # external directory contain symlink to file
         # external directory contain symlink to directory
         # latest page backup without external_dir
-        # multiple external directories
-        # --external-dirs=none
+        # multiple external directories +
+        # --external-dirs=none +
         # --external-dirs point to a file
         # external directory in config and in command line +
         # external directory contain multuple directories, some of them my be empty +
         # forbid to external-dirs to point to tablespace directories
-        # check that not changed files are not copied by next backup
+        # check that not changed files are not copied by next backup +
         # merge
         # complex merge
