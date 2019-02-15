@@ -155,7 +155,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica, options=[
                 '-j10', '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+                '--master-port={0}'.format(master.port),
+                '--stream'])
 
         for i in idx_ptrack:
             # get fork size and calculate it in pages

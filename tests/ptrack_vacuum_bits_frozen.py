@@ -148,7 +148,8 @@ class SimpleTest(ProbackupTest, unittest.TestCase):
                 '-j10',
                 '--master-host=localhost',
                 '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+                '--master-port={0}'.format(master.port),
+                '--stream'])
 
         for i in idx_ptrack:
             # get size of heap and indexes. size calculated in pages
