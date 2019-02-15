@@ -60,7 +60,7 @@ zlib_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
  * Compresses source into dest using algorithm. Returns the number of bytes
  * written in the destination buffer, or -1 if compression fails.
  */
-static int32
+int32
 do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			CompressAlg alg, int level, const char **errormsg)
 {
@@ -166,22 +166,8 @@ page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 	return false;
 }
 
-/*
- * When copying datafiles to backup we validate and compress them block
- * by block. Thus special header is required for each data block.
- */
-typedef struct BackupPageHeader
-{
-	BlockNumber	block;			/* block number */
-	int32		compressed_size;
-} BackupPageHeader;
-
-/* Special value for compressed_size field */
-#define PageIsTruncated -2
-#define SkipCurrentPage -3
-
 /* Verify page's header */
-static bool
+bool
 parse_page(Page page, XLogRecPtr *lsn)
 {
 	PageHeader	phdr = (PageHeader) page;
@@ -210,15 +196,15 @@ parse_page(Page page, XLogRecPtr *lsn)
  */
 static int
 read_page_from_file(pgFile *file, BlockNumber blknum,
-					FILE *in, Page page, XLogRecPtr *page_lsn, XLogRecPtr horizon_lsn)
+					FILE *in, Page page, XLogRecPtr *page_lsn)
 {
 	off_t		offset = blknum * BLCKSZ;
 	ssize_t		read_len = 0;
 
 	/* read the block */
-	read_len = fio_pread(in, page, offset, horizon_lsn);
+	read_len = fio_pread(in, page, offset);
 
-	if (read_len != BLCKSZ && read_len != sizeof(PageHeaderData))
+	if (read_len != BLCKSZ)
 	{
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
@@ -269,19 +255,11 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	if (current.checksum_version)
 	{
 		BlockNumber blkno = file->segno * RELSEG_SIZE + blknum;
-		uint16 page_crc = read_len == BLCKSZ
-			? pg_checksum_page(page, blkno)
-			/*
-			 * Recompute Cpage checksum calculated by agent with blkno=0
-			 * pg_checksum_page is calculating it in this way:
-			 * (((checksum ^ blkno) % 65535) + 1)
-			 */
-			: (uint16)(((*PAGE_CHECKSUM(page) - 1) ^ blkno) + 1);
 		/*
 		 * If checksum is wrong, sleep a bit and then try again
 		 * several times. If it didn't help, throw error
 		 */
-		if (page_crc != ((PageHeader) page)->pd_checksum)
+		if (pg_checksum_page(page, blkno) != ((PageHeader) page)->pd_checksum)
 		{
 			elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
 						   file->path, blknum);
@@ -314,7 +292,7 @@ static int32
 prepare_page(backup_files_arg *arguments,
 			 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			 BlockNumber blknum, BlockNumber nblocks,
-			 FILE *in, int *n_skipped,
+			 FILE *in, BlockNumber *n_skipped,
 			 BackupMode backup_mode,
 			 Page page)
 {
@@ -337,11 +315,7 @@ prepare_page(backup_files_arg *arguments,
 	{
 		while(!page_is_valid && try_again)
 		{
-			bool check_lsn = (backup_mode == BACKUP_MODE_DIFF_DELTA
-							  && file->exists_in_prev
-							  && !page_is_truncated);
-			int result = read_page_from_file(file, blknum, in, page, &page_lsn,
-											 check_lsn ? prev_backup_start_lsn : InvalidXLogRecPtr);
+			int result = read_page_from_file(file, blknum, in, page, &page_lsn);
 
 			try_again--;
 			if (result == 0)
@@ -533,8 +507,8 @@ backup_data_file(backup_files_arg* arguments,
 	FILE		*out;
 	BlockNumber	blknum = 0;
 	BlockNumber	nblocks = 0;
-	int			n_blocks_skipped = 0;
-	int			n_blocks_read = 0;
+	BlockNumber	n_blocks_skipped = 0;
+	BlockNumber	n_blocks_read = 0;
 	int			page_state;
 	char		curr_page[BLCKSZ];
 
@@ -614,16 +588,29 @@ backup_data_file(backup_files_arg* arguments,
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
 		file->pagemap_isabsent || !file->exists_in_prev)
 	{
-		for (blknum = 0; blknum < nblocks; blknum++)
+		if (backup_mode != BACKUP_MODE_DIFF_PTRACK && fio_is_remote_file(in))
 		{
-			page_state = prepare_page(arguments, file, prev_backup_start_lsn,
-									  blknum, nblocks, in, &n_blocks_skipped,
-									  backup_mode, curr_page);
-			compress_and_backup_page(file, blknum, in, out, &(file->crc),
-									  page_state, curr_page, calg, clevel);
-			n_blocks_read++;
-			if (page_state == PageIsTruncated)
-				break;
+			int rc = fio_send_pages(in, out, file,
+									backup_mode == BACKUP_MODE_DIFF_DELTA && file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
+									&n_blocks_skipped, calg, clevel);
+			if (rc < 0)
+				elog(ERROR, "Failed to read file %s: %s",
+					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
+			n_blocks_read = rc;
+		}
+		else
+		{
+			for (blknum = 0; blknum < nblocks; blknum++)
+			{
+				page_state = prepare_page(arguments, file, prev_backup_start_lsn,
+										  blknum, nblocks, in, &n_blocks_skipped,
+										  backup_mode, curr_page);
+				compress_and_backup_page(file, blknum, in, out, &(file->crc),
+										 page_state, curr_page, calg, clevel);
+				n_blocks_read++;
+				if (page_state == PageIsTruncated)
+					break;
+			}
 		}
 		if (backup_mode == BACKUP_MODE_DIFF_DELTA)
 			file->n_blocks = n_blocks_read;

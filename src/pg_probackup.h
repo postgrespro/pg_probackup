@@ -310,6 +310,21 @@ typedef struct
 } backup_files_arg;
 
 /*
+ * When copying datafiles to backup we validate and compress them block
+ * by block. Thus special header is required for each data block.
+ */
+typedef struct BackupPageHeader
+{
+	BlockNumber	block;			/* block number */
+	int32		compressed_size;
+} BackupPageHeader;
+
+/* Special value for compressed_size field */
+#define PageIsTruncated -2
+#define SkipCurrentPage -3
+
+
+/*
  * return pointer that exceeds the length of prefix from character string.
  * ex. str="/xxx/yyy/zzz", prefix="/xxx/yyy", return="zzz".
  */
@@ -603,6 +618,9 @@ extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
 extern uint32 parse_server_version(const char *server_version_str);
 extern uint32 parse_program_version(const char *program_version);
+extern bool   parse_page(Page page, XLogRecPtr *lsn);
+int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
+				   CompressAlg alg, int level, const char **errormsg);
 
 #ifdef WIN32
 #ifdef _DEBUG

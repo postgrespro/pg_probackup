@@ -4,24 +4,29 @@
 #include <sys/stat.h>
 
 #include "pg_probackup.h"
-#include "storage/checksum.h"
 #include "file.h"
+#include "storage/checksum.h"
 
 #define PRINTF_BUF_SIZE  1024
 #define FILE_PERMISSIONS 0600
+#define PAGE_READ_ATTEMPTS 100
 
 static __thread unsigned long fio_fdset = 0;
 static __thread void* fio_stdin_buffer;
 static __thread int fio_stdout = 0;
 static __thread int fio_stdin = 0;
 
+fio_location MyLocation;
+
 typedef struct
 {
-	fio_header hdr;
-	XLogRecPtr lsn;
-} fio_pread_request;
-
-fio_location MyLocation;
+	BlockNumber nblocks;
+	BlockNumber segBlockNum;
+	XLogRecPtr  horizonLsn;
+	uint32      checksumVersion;
+	int         calg;
+	int         clevel;
+} fio_send_request;
 
 
 /* Convert FIO pseudo handle to index in file descriptor array */
@@ -32,12 +37,6 @@ void fio_redirect(int in, int out)
 {
 	fio_stdin = in;
 	fio_stdout = out;
-}
-
-/* Check if FILE handle is local or remote (created by FIO) */
-static bool fio_is_remote_file(FILE* file)
-{
-	return (size_t)file <= FIO_FDMAX;
 }
 
 /* Check if file descriptor is local or remote (created by FIO) */
@@ -388,42 +387,30 @@ int fio_truncate(int fd, off_t size)
 
 /*
  * Read file from specified location.
- * This call is optimized for delat backup, to avoid trasfer of old pages to backup host.
- * For delta backup horizon_lsn parameter is assigned value of last backup and for all pages with LSN smaller than horizon_lsn only page header is sent.
  */
-int fio_pread(FILE* f, void* buf, off_t offs, XLogRecPtr horizon_lsn)
+int fio_pread(FILE* f, void* buf, off_t offs)
 {
 	if (fio_is_remote_file(f))
 	{
 		int fd = fio_fileno(f);
-		fio_pread_request req;
 		fio_header hdr;
 
-		req.hdr.cop = FIO_PREAD;
-		req.hdr.handle = fd & ~FIO_PIPE_MARKER;
-		req.hdr.size = sizeof(XLogRecPtr);
-		req.hdr.arg = offs;
-		req.lsn = horizon_lsn;
+		hdr.cop = FIO_PREAD;
+		hdr.handle = fd & ~FIO_PIPE_MARKER;
+		hdr.size = sizeof(XLogRecPtr);
+		hdr.arg = offs;
 
-		IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_SEND);
 		if (hdr.size != 0)
 			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
 
-		/*
-		 * We either return <0 for error, either 0 for EOF, either received size (page or page header size)
-		 * for fully read page either 1 for partly read page. 1 is used just to distinguish it with page header size.
-		 */
-		return hdr.arg <= 0 ? hdr.arg : hdr.arg == BLCKSZ ? hdr.size : 1;
+		return hdr.arg;
 	}
 	else
-	{
-		int rc = pread(fileno(f), buf, BLCKSZ, offs);
-		/* See comment above consernign returned value */
-		return rc <= 0 || rc == BLCKSZ ? rc : 1;
-	}
+		return pread(fileno(f), buf, BLCKSZ, offs);
 }
 
 /* Set position in stdio file */
@@ -804,6 +791,164 @@ static void fio_send_file(int out, char const* path)
 	}
 }
 
+int fio_send_pages(FILE* in, FILE* out, pgFile *file,
+				   XLogRecPtr horizonLsn, BlockNumber* nBlocksSkipped, int calg, int clevel)
+{
+	struct {
+		fio_header hdr;
+		fio_send_request arg;
+	} req;
+	BlockNumber	n_blocks_read = 0;
+	BlockNumber blknum = 0;
+
+	Assert(fio_is_remote_file(in));
+
+	req.hdr.cop = FIO_SEND_PAGES;
+	req.hdr.size = sizeof(fio_send_request);
+	req.hdr.handle = fio_fileno(in) & ~FIO_PIPE_MARKER;
+
+	req.arg.nblocks = file->size/BLCKSZ;
+	req.arg.segBlockNum = file->segno * RELSEG_SIZE;
+	req.arg.horizonLsn = horizonLsn;
+	req.arg.checksumVersion = current.checksum_version;
+	req.arg.calg = calg;
+	req.arg.clevel = clevel;
+
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+
+	while (true)
+	{
+		fio_header hdr;
+		char buf[BLCKSZ + sizeof(BackupPageHeader)];
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_PAGE);
+
+		if (hdr.arg < 0) /* read error */
+			return hdr.arg;
+
+		blknum = hdr.arg;
+		if (hdr.size == 0) /* end of segment */
+			break;
+
+		Assert(hdr.size <= sizeof(buf));
+		IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+
+		COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
+
+		if (fio_fwrite(out, buf, hdr.size) != hdr.size)
+		{
+			int	errno_tmp = errno;
+			fio_fclose(out);
+			elog(ERROR, "File: %s, cannot write backup at block %u: %s",
+				 file->path, blknum, strerror(errno_tmp));
+		}
+		file->compress_alg = calg;
+		file->read_size += BLCKSZ;
+		file->write_size += hdr.size;
+		n_blocks_read++;
+	}
+	*nBlocksSkipped = blknum - n_blocks_read;
+	return blknum;
+}
+
+static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
+{
+	BlockNumber blknum;
+	char read_buffer[BLCKSZ+1];
+	fio_header hdr;
+
+	hdr.cop = FIO_PAGE;
+	read_buffer[BLCKSZ] = 1; /* barrier */
+
+	for (blknum = 0; blknum < req->nblocks; blknum++)
+	{
+		int retry_attempts = PAGE_READ_ATTEMPTS;
+		XLogRecPtr page_lsn = InvalidXLogRecPtr;
+		bool is_empty_page = false;
+		do
+		{
+			ssize_t rc = pread(fd, read_buffer, BLCKSZ, blknum*BLCKSZ);
+
+			if (rc <= 0)
+			{
+				hdr.size = 0;
+				if (rc < 0)
+				{
+					hdr.arg = -errno;
+					Assert(hdr.arg < 0);
+				}
+				else
+				{
+					/* This is the last page */
+					hdr.arg = blknum;
+				}
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				return;
+			}
+			else if (rc == BLCKSZ)
+			{
+				if (!parse_page((Page)read_buffer, &page_lsn))
+				{
+					int i;
+					for (i = 0; read_buffer[i] == 0; i++);
+
+					/* Page is zeroed. No need to check header and checksum. */
+					if (i == BLCKSZ)
+					{
+						is_empty_page = true;
+						break;
+					}
+				}
+				else if (!req->checksumVersion
+						 || pg_checksum_page(read_buffer, req->segBlockNum + blknum) == ((PageHeader)read_buffer)->pd_checksum)
+				{
+					break;
+				}
+			}
+		} while (--retry_attempts != 0);
+
+		if (retry_attempts == 0)
+		{
+			hdr.size = 0;
+			hdr.arg = PAGE_CHECKSUM_MISMATCH;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			return;
+		}
+		/* horizonLsn is not 0 for delta backup. As far as unsigned number are always greater or equal than zero, there is no sense to add more checks */
+		if (page_lsn >= req->horizonLsn)
+		{
+			char write_buffer[BLCKSZ*2];
+			BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
+
+			hdr.arg = bph->block = blknum;
+			hdr.size = sizeof(BackupPageHeader);
+
+			if (is_empty_page)
+			{
+				bph->compressed_size = PageIsTruncated;
+			}
+			else
+			{
+				const char *errormsg = NULL;
+				bph->compressed_size = do_compress(write_buffer + sizeof(BackupPageHeader), sizeof(write_buffer) - sizeof(BackupPageHeader),
+												   read_buffer, BLCKSZ, req->calg, req->clevel,
+												   &errormsg);
+				if (bph->compressed_size <= 0 || bph->compressed_size >= BLCKSZ)
+				{
+					/* Do not compress page */
+					memcpy(write_buffer + sizeof(BackupPageHeader), read_buffer, BLCKSZ);
+					bph->compressed_size = BLCKSZ;
+				}
+				hdr.size += bph->compressed_size;
+			}
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			IO_CHECK(fio_write_all(out, write_buffer, hdr.size), hdr.size);
+		}
+	}
+	hdr.size = 0;
+	hdr.arg = blknum;
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+}
 
 /* Execute commands at remote host */
 void fio_communicate(int in, int out)
@@ -820,7 +965,6 @@ void fio_communicate(int in, int out)
 	char* buf = (char*)malloc(buf_size);
 	fio_header hdr;
 	struct stat st;
-	XLogRecPtr horizon_lsn;
 	int rc;
 
 	/* Main loop until command of processing master command */
@@ -872,25 +1016,18 @@ void fio_communicate(int in, int out)
 			rc = read(fd[hdr.handle], buf, hdr.arg);
 			hdr.cop = FIO_SEND;
 			hdr.size = rc > 0 ? rc : 0;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)),  sizeof(hdr));
-			IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
-			break;
-		  case FIO_PREAD: /* Read from specified position in file, ignoring pages beyond horizon of delta backup */
-			horizon_lsn = *(XLogRecPtr*)buf;
-			rc = pread(fd[hdr.handle], buf, BLCKSZ, hdr.arg);
-			hdr.cop = FIO_SEND;
-			hdr.arg = rc;
-			/* For pages beyond horizon of delta backup transfer only page header */
-			hdr.size = (rc == BLCKSZ)
-				? PageXLogRecPtrGet(((PageHeader)buf)->pd_lsn) < horizon_lsn /* For non-delta backup horizon_lsn == 0, so this condition is always false */
-				  ? sizeof(PageHeaderData) : BLCKSZ
-				: 0;
-			if (hdr.size == sizeof(PageHeaderData))
-				/* calculate checksum without XOR-ing with block number to compare it with page CRC at master */
-				*PAGE_CHECKSUM(buf) = pg_checksum_page(buf, 0);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			if (hdr.size != 0)
 				IO_CHECK(fio_write_all(out, buf, hdr.size), hdr.size);
+			break;
+		  case FIO_PREAD: /* Read from specified position in file, ignoring pages beyond horizon of delta backup */
+			rc = pread(fd[hdr.handle], buf, BLCKSZ, hdr.arg);
+			hdr.cop = FIO_SEND;
+			hdr.arg = rc;
+			hdr.size = rc >= 0 ? rc : 0;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			if (hdr.size != 0)
+				IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
 		  case FIO_FSTAT: /* Get information about opened file */
 			hdr.size = sizeof(st);
@@ -926,6 +1063,10 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_TRUNCATE: /* Truncate file */
 			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
+			break;
+		  case FIO_SEND_PAGES:
+			Assert(hdr.size == sizeof(fio_send_request));
+			fio_send_pages_impl(fd[hdr.handle], out, (fio_send_request*)buf);
 			break;
 		  default:
 			Assert(false);
