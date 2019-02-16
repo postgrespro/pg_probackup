@@ -1432,6 +1432,7 @@ class GDBobj(ProbackupTest):
                 print(repr(line))
             if line == '^done\n' or line.startswith('*stopped'):
                 break
-            if running and line.startswith('*running'):
+            if running and (line.startswith('*running') or line.startswith('^running')):
+#            if running and line.startswith('*running'):
                 break
         return output
