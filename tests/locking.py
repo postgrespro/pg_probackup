@@ -11,7 +11,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_locking_simple_1(self):
+    def test_locking_running_1(self):
         """ 
         make node, take full backup, stop it in the middle
         run validate, expect it to successfully executed,
@@ -57,7 +57,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    def test_locking_simple_2(self):
+    def test_locking_running_2(self):
         """ 
         make node, take full backup, stop it in the middle,
         kill process so no cleanup is done - pid file is in place,
@@ -111,7 +111,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    def test_locking_simple_3(self):
+    def test_locking_running_3(self):
         """ 
         make node, take full backup, stop it in the middle,
         terminate process, delete pid file,
