@@ -696,7 +696,8 @@ gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location 
 	gzFile file;
 	if (fio_is_remote(location))
 	{
-		int fd = mkstemp("gz.XXXXXX");
+		char pattern[] = "gz.XXXXXX";
+		int fd = mkstemp(pattern);
 		if (fd < 0)
 			return NULL;
 		if (strcmp(mode, PG_BINARY_W) == 0)
