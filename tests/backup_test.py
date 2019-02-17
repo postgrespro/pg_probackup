@@ -628,6 +628,122 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_tablespace_handling_1(self):
+        """
+        make node with tablespace A, take full backup, check that restore with
+        tablespace mapping of tablespace B will end with error
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        tblspace1_old_path = self.get_tblspace_path(node, 'tblspace1_old')
+        tblspace2_old_path = self.get_tblspace_path(node, 'tblspace2_old')
+
+        tblspace_new_path = self.get_tblspace_path(node, 'tblspace_new')
+
+        self.create_tblspace_in_node(
+            node, 'tblspace1',
+            tblspc_path=tblspace1_old_path)
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace2_old_path, tblspace_new_path)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: --tablespace-mapping option' in e.message and
+                'have an entry in tablespace_map file' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_tablespace_handling_2(self):
+        """
+        make node without tablespaces, take full backup, check that restore with
+        tablespace mapping will end with error
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        tblspace1_old_path = self.get_tblspace_path(node, 'tblspace1_old')
+        tblspace_new_path = self.get_tblspace_path(node, 'tblspace_new')
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace1_old_path, tblspace_new_path)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: --tablespace-mapping option' in e.message and
+                'have an entry in tablespace_map file' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_drop_rel_during_backup_delta(self):
         """"""
         fname = self.id().split('.')[3]
