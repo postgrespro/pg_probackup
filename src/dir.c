@@ -1116,13 +1116,13 @@ read_tablespace_map(parray *files, const char *backup_dir)
 	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
 	/* Exit if database/tablespace_map doesn't exist */
-	if (!fileExists(map_path, FIO_DB_HOST))
+	if (!fileExists(map_path, FIO_BACKUP_HOST))
 	{
 		elog(LOG, "there is no file tablespace_map");
 		return;
 	}
 
-	fp = fio_open_stream(map_path, FIO_DB_HOST);
+	fp = fio_open_stream(map_path, FIO_BACKUP_HOST);
 	if (fp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", map_path, strerror(errno));
 

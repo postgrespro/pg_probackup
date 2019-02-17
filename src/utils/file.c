@@ -208,6 +208,7 @@ int fio_closedir(DIR *dir)
 		hdr.cop = FIO_CLOSEDIR;
 		hdr.handle = (size_t)dir - 1;
 		hdr.size = 0;
+		fio_fdset &= ~(1 << hdr.handle);
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		return 0;
@@ -397,7 +398,7 @@ int fio_pread(FILE* f, void* buf, off_t offs)
 
 		hdr.cop = FIO_PREAD;
 		hdr.handle = fd & ~FIO_PIPE_MARKER;
-		hdr.size = sizeof(XLogRecPtr);
+		hdr.size = 0;
 		hdr.arg = offs;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
