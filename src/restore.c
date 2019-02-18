@@ -321,8 +321,12 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				continue;
 
 			pgBackupValidate(tmp_backup);
-			/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
-			if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
+			/* After pgBackupValidate() only following backup
+			 * states are possible: ERROR, RUNNING, CORRUPT and OK.
+			 * Validate WAL only for OK, because there is no point
+			 * in WAL validation for corrupted, errored or running backups.
+			 */
+			if (tmp_backup->status != BACKUP_STATUS_OK)
 			{
 				corrupted_backup = tmp_backup;
 				/* we need corrupted backup index from 'backups' not parent_chain
