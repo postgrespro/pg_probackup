@@ -1064,7 +1064,7 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 
 				/* Secondly, create link */
 				join_path_components(to_path, to_path, link_name);
-				if (symlink(linked_path, to_path) < 0)
+				if (fio_symlink(linked_path, to_path, location) < 0)
 					elog(ERROR, "could not create symbolic link \"%s\": %s",
 						 to_path, strerror(errno));
 

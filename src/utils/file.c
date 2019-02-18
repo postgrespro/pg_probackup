@@ -597,6 +597,30 @@ int fio_access(char const* path, int mode, fio_location location)
 	}
 }
 
+/* Create symbolink link */
+int fio_symlink(char const* target, char const* link_path, fio_location location)
+{
+	if (fio_is_remote(location))
+	{
+		fio_header hdr;
+		size_t target_len = strlen(target) + 1;
+		size_t link_path_len = strlen(link_path) + 1;
+		hdr.cop = FIO_SYMLINK;
+		hdr.handle = -1;
+		hdr.size = target_len + link_path_len;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, target, target_len), target_len);
+		IO_CHECK(fio_write_all(fio_stdout, link_path, link_path_len), link_path_len);
+
+		return 0;
+	}
+	else
+	{
+		return symlink(target, link_path);
+	}
+}
+
 /* Rename file */
 int fio_rename(char const* old_path, char const* new_path, fio_location location)
 {
@@ -1050,6 +1074,9 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_RENAME: /* Rename file */
 			SYS_CHECK(rename(buf, buf + strlen(buf) + 1));
+			break;
+		  case FIO_SYMLINK: /* Create symbolic link */
+			SYS_CHECK(symlink(buf, buf + strlen(buf) + 1));
 			break;
 		  case FIO_UNLINK: /* Remove file or directory (TODO: Win32) */
 			SYS_CHECK(remove(buf));

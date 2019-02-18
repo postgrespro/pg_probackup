@@ -16,6 +16,7 @@ typedef enum
 	FIO_CLOSE,
 	FIO_WRITE,
 	FIO_RENAME,
+	FIO_SYMLINK,
 	FIO_UNLINK,
 	FIO_MKDIR,
 	FIO_CHMOD,
@@ -91,6 +92,7 @@ extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
+extern int     fio_symlink(char const* target, char const* link_path, fio_location location);
 extern int     fio_unlink(char const* path, fio_location location);
 extern int     fio_mkdir(char const* path, int mode, fio_location location);
 extern int     fio_chmod(char const* path, int mode, fio_location location);
