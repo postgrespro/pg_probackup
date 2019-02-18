@@ -1383,13 +1383,25 @@ class GDBobj(ProbackupTest):
             if line.startswith('*stopped,reason="breakpoint-hit"'):
                 continue
             if (
-                line.startswith('*stopped,reason="exited-normally"') or
+                line.startswith('*stopped,reason="exited"') or
                 line == '*stopped\n'
             ):
                 return
         raise GdbException(
             'Failed to continue execution until exit.\n'
         )
+
+    def continue_execution_until_error(self):
+        result = self._execute('continue', False)
+
+        for line in result:
+            if line.startswith('^error'):
+                return
+            if line.startswith('*stopped,reason="exited'):
+                return
+
+        raise GdbException(
+            'Failed to continue execution until error.\n')
 
     def continue_execution_until_break(self, ignore_count=0):
         if ignore_count > 0:
@@ -1435,6 +1447,8 @@ class GDBobj(ProbackupTest):
             if self.verbose:
                 print(repr(line))
             if line.startswith('^done') or line.startswith('*stopped'):
+                break
+            if line.startswith('^error'):
                 break
             if running and (line.startswith('*running') or line.startswith('^running')):
 #            if running and line.startswith('*running'):
