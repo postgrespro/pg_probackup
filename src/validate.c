@@ -457,14 +457,14 @@ do_validate_instance(void)
 		/*
 		 * Mark every descendant of corrupted backup as orphan
 		 */
-		if (current_backup->status == BACKUP_STATUS_CORRUPT)
+		if (current_backup->status != BACKUP_STATUS_OK)
 		{
 			/* This is ridiculous but legal.
-			 * PAGE1_2b <- OK
-			 * PAGE1_2a <- OK
-			 * PAGE1_1b <- ORPHAN
-			 * PAGE1_1a <- CORRUPT
-			 * FULL1    <- OK
+			 * PAGE_b2 <- OK
+			 * PAGE_a2 <- OK
+			 * PAGE_b1 <- ORPHAN
+			 * PAGE_a1 <- CORRUPT
+			 * FULL    <- OK
 			 */
 
 			corrupted_backup_found = true;
@@ -503,14 +503,14 @@ do_validate_instance(void)
 				pgBackup   *tmp_backup = NULL;
 				int result;
 
-				//PAGE3b ORPHAN
-				//PAGE2b ORPHAN          -----
-				//PAGE6a ORPHAN 			 |
-				//PAGE5a CORRUPT 			 |
-				//PAGE4a missing			 |
-				//PAGE3a missing			 |
-				//PAGE2a ORPHAN 			 |
-				//PAGE1a OK <- we are here <-|
+				//PAGE_b2 ORPHAN
+				//PAGE_b1 ORPHAN          -----
+				//PAGE_a5 ORPHAN 			 |
+				//PAGE_a4 CORRUPT 			 |
+				//PAGE_a3 missing			 |
+				//PAGE_a2 missing			 |
+				//PAGE_a1 ORPHAN 			 |
+				//PAGE    OK <- we are here<-|
 				//FULL OK
 
 				if (is_parent(current_backup->start_time, backup, false))
