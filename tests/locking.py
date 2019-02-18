@@ -192,7 +192,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
                 "Backup {0} has status RUNNING, change it "
                 "to ERROR and skip validation".format(
                     backup_id) in e.message and
-                "WARNING: Some backups are not valid" in
+                "ERROR: Backup {0} has status: ERROR".format(backup_id) in
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -202,6 +202,35 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'ERROR', self.show_pb(backup_dir, 'node')[1]['status'])
+
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup has status ERROR.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} has status: ERROR".format(backup_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup has status ERROR.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "WARNING: Backup {0} has status ERROR. Skip validation".format(
+                    backup_id) in e.message and
+                "WARNING: Some backups are not valid" in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
