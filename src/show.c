@@ -325,6 +325,7 @@ show_instance_plain(parray *backup_list, bool show_name)
 	uint32		widths[SHOW_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowBackendRow *rows;
+	time_t current_time = time(NULL);
 
 	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
 		widths[i] = strlen(names[i]);
@@ -384,7 +385,11 @@ show_instance_plain(parray *backup_list, bool show_name)
 		cur++;
 
 		/* Time */
-		if (backup->end_time != (time_t) 0)
+		if (backup->status == BACKUP_STATUS_RUNNING)
+			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
+					 difftime(current_time, backup->start_time));
+
+		else if (backup->end_time != (time_t) 0)
 			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
 					 difftime(backup->end_time, backup->start_time));
 		else

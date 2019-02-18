@@ -1021,6 +1021,9 @@ is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
 	if (!child_backup)
 		elog(ERROR, "Target backup cannot be NULL");
 
+	if (inclusive && child_backup->start_time == parent_backup_time)
+		return true;
+
 	while (child_backup->parent_backup_link &&
 			child_backup->parent_backup != parent_backup_time)
 	{
@@ -1030,8 +1033,8 @@ is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
 	if (child_backup->parent_backup == parent_backup_time)
 		return true;
 
-	if (inclusive && child_backup->start_time == parent_backup_time)
-		return true;
+	//if (inclusive && child_backup->start_time == parent_backup_time)
+	//	return true;
 
 	return false;
 }

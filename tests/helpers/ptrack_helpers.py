@@ -285,7 +285,7 @@ class ProbackupTest(object):
         # Sane default parameters
         node.append_conf('postgresql.auto.conf', 'max_connections = 100')
         node.append_conf('postgresql.auto.conf', 'shared_buffers = 10MB')
-        node.append_conf('postgresql.auto.conf', 'fsync = on')
+        node.append_conf('postgresql.auto.conf', 'fsync = off')
         node.append_conf('postgresql.auto.conf', 'wal_level = logical')
         node.append_conf('postgresql.auto.conf', 'hot_standby = off')
 
@@ -1321,12 +1321,16 @@ class GDBobj(ProbackupTest):
                 break
 
     def set_breakpoint(self, location):
+
         result = self._execute('break ' + location)
         for line in result:
             if line.startswith('~"Breakpoint'):
                 return
 
-            elif line.startswith('^error') or line.startswith('(gdb)'):
+            elif line.startswith('=breakpoint-created'):
+                return
+
+            elif line.startswith('^error'): #or line.startswith('(gdb)'):
                 break
 
             elif line.startswith('&"break'):
@@ -1430,7 +1434,7 @@ class GDBobj(ProbackupTest):
             output += [line]
             if self.verbose:
                 print(repr(line))
-            if line == '^done\n' or line.startswith('*stopped'):
+            if line.startswith('^done') or line.startswith('*stopped'):
                 break
             if running and (line.startswith('*running') or line.startswith('^running')):
 #            if running and line.startswith('*running'):

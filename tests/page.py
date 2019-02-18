@@ -776,7 +776,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         # make some wals
-        node.pgbench_init(scale=3)
+        node.pgbench_init(scale=4)
 
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')

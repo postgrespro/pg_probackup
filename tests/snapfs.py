@@ -11,7 +11,7 @@ class SnapFSTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_backup_modes_archive(self):
+    def test_snapfs_simple(self):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -32,7 +32,7 @@ class SnapFSTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'select pg_make_snapshot()')
 
-        node.pgbench_init(scale=100)
+        node.pgbench_init(scale=10)
 
         pgbench = node.pgbench(options=['-T', '50', '-c', '2', '--no-vacuum'])
         pgbench.wait()
@@ -42,10 +42,10 @@ class SnapFSTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             'postgres',
-            'select pg_remove_snashot(1)')
+            'select pg_remove_snapshot(1)')
 
         self.backup_node(
-            backup_dir, 'node', node)
+            backup_dir, 'node', node, backup_type='page')
 
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -53,7 +53,7 @@ class SnapFSTest(ProbackupTest, unittest.TestCase):
 
         self.restore_node(
             backup_dir, 'node',
-            restored_node, options=["-j", "4"])
+            node, options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
