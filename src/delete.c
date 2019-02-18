@@ -202,7 +202,12 @@ do_retention_purge(void)
 				continue;
 			}
 
-			lock_backup(backup);
+			/*
+			 * If the backup still is used do not interrupt go to the next
+			 * backup.
+			 */
+			if (!lock_backup(backup))
+				continue;
 
 			/* Delete backup and update status to DELETED */
 			delete_backup_files(backup);
@@ -238,7 +243,7 @@ do_retention_purge(void)
 	if (backup_deleted)
 		elog(INFO, "Purging finished");
 	else
-		elog(INFO, "Nothing to delete by retention policy");
+		elog(INFO, "There are no backups to delete by retention policy");
 
 	return 0;
 }
@@ -275,8 +280,7 @@ delete_backup_files(pgBackup *backup)
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
-	backup->status = BACKUP_STATUS_DELETING;
-	write_backup_status(backup);
+	write_backup_status(backup, BACKUP_STATUS_DELETING);
 
 	/* list files to be deleted */
 	files = parray_new();

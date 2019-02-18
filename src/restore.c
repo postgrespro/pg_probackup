@@ -209,8 +209,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -242,8 +241,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING,
 							 "Backup %s is orphaned because his parent %s has status: %s",
@@ -317,7 +315,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		{
 			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
 
-			lock_backup(tmp_backup);
+			/* Do not interrupt, validate the next backup */
+			if (!lock_backup(tmp_backup))
+				continue;
+
 			pgBackupValidate(tmp_backup);
 			/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
 			if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
@@ -360,8 +361,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),
@@ -409,8 +409,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * Backup was locked during validation if no-validate wasn't
 			 * specified.
 			 */
-			if (rt->restore_no_validate)
-				lock_backup(backup);
+			if (rt->restore_no_validate && !lock_backup(backup))
+				elog(ERROR, "Cannot lock backup directory");
 
 			restore_backup(backup);
 		}

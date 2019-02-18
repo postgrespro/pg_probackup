@@ -976,8 +976,9 @@ do_backup(time_t start_time)
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
-		elog(ERROR, "cannot create backup directory");
-	lock_backup(&current);
+		elog(ERROR, "Cannot create backup directory");
+	if (!lock_backup(&current))
+		elog(ERROR, "Cannot lock backup directory");
 	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");

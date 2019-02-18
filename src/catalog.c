@@ -69,12 +69,13 @@ read_backup(time_t timestamp)
  * status.
  */
 void
-write_backup_status(pgBackup *backup)
+write_backup_status(pgBackup *backup, BackupStatus status)
 {
 	pgBackup   *tmp;
 
 	tmp = read_backup(backup->start_time);
 
+	backup->status = status;
 	tmp->status = backup->status;
 	write_backup(tmp);
 
@@ -84,7 +85,7 @@ write_backup_status(pgBackup *backup)
 /*
  * Create exclusive lockfile in the backup's directory.
  */
-void
+bool
 lock_backup(pgBackup *backup)
 {
 	char		lock_file[MAXPGPATH];
@@ -149,7 +150,7 @@ lock_backup(pgBackup *backup)
 		 * Couldn't create the pid file. Probably it already exists.
 		 */
 		if ((errno != EEXIST && errno != EACCES) || ntries > 100)
-			elog(ERROR, "could not create lock file \"%s\": %s",
+			elog(ERROR, "Could not create lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 
 		/*
@@ -161,22 +162,22 @@ lock_backup(pgBackup *backup)
 		{
 			if (errno == ENOENT)
 				continue;		/* race condition; try again */
-			elog(ERROR, "could not open lock file \"%s\": %s",
+			elog(ERROR, "Could not open lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 		}
 		if ((len = read(fd, buffer, sizeof(buffer) - 1)) < 0)
-			elog(ERROR, "could not read lock file \"%s\": %s",
+			elog(ERROR, "Could not read lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 		close(fd);
 
 		if (len == 0)
-			elog(ERROR, "lock file \"%s\" is empty", lock_file);
+			elog(ERROR, "Lock file \"%s\" is empty", lock_file);
 
 		buffer[len] = '\0';
 		encoded_pid = atoi(buffer);
 
 		if (encoded_pid <= 0)
-			elog(ERROR, "bogus data in lock file \"%s\": \"%s\"",
+			elog(ERROR, "Bogus data in lock file \"%s\": \"%s\"",
 				 lock_file, buffer);
 
 		/*
@@ -190,9 +191,21 @@ lock_backup(pgBackup *backup)
 		 */
 		if (encoded_pid != my_pid && encoded_pid != my_p_pid)
 		{
-			if (kill(encoded_pid, 0) == 0 ||
-				(errno != ESRCH && errno != EPERM))
-				elog(ERROR, "lock file \"%s\" already exists", lock_file);
+			if (kill(encoded_pid, 0) == 0)
+			{
+				elog(WARNING, "Process %d is using backup %s and still is running",
+					 encoded_pid, base36enc(backup->start_time));
+				return false;
+			}
+			else
+			{
+				if (errno == ESRCH)
+					elog(WARNING, "Process %d which used backup %s no longer exists",
+						 encoded_pid, base36enc(backup->start_time));
+				else
+					elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+						encoded_pid, strerror(errno));
+			}
 		}
 
 		/*
@@ -201,7 +214,7 @@ lock_backup(pgBackup *backup)
 		 * would-be creators.
 		 */
 		if (unlink(lock_file) < 0)
-			elog(ERROR, "could not remove old lock file \"%s\": %s",
+			elog(ERROR, "Could not remove old lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 	}
 
@@ -219,7 +232,7 @@ lock_backup(pgBackup *backup)
 		unlink(lock_file);
 		/* if write didn't set errno, assume problem is no disk space */
 		errno = save_errno ? save_errno : ENOSPC;
-		elog(ERROR, "could not write lock file \"%s\": %s",
+		elog(ERROR, "Could not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
 	if (fsync(fd) != 0)
@@ -229,7 +242,7 @@ lock_backup(pgBackup *backup)
 		close(fd);
 		unlink(lock_file);
 		errno = save_errno;
-		elog(ERROR, "could not write lock file \"%s\": %s",
+		elog(ERROR, "Could not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
 	if (close(fd) != 0)
@@ -238,7 +251,7 @@ lock_backup(pgBackup *backup)
 
 		unlink(lock_file);
 		errno = save_errno;
-		elog(ERROR, "could not write lock file \"%s\": %s",
+		elog(ERROR, "Culd not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
 
@@ -255,6 +268,8 @@ lock_backup(pgBackup *backup)
 	if (lock_files == NULL)
 		lock_files = parray_new();
 	parray_append(lock_files, pgut_strdup(lock_file));
+
+	return true;
 }
 
 /*
@@ -418,7 +433,8 @@ catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
 	end_idx = Min(from_idx, to_idx);
 
 	for (i = start_idx; i >= end_idx; i--)
-		lock_backup((pgBackup *) parray_get(backup_list, i));
+		if (!lock_backup((pgBackup *) parray_get(backup_list, i)))
+			elog(ERROR, "Cannot lock backup directory");
 }
 
 /*

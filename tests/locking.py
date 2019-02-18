@@ -12,7 +12,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_locking_running_1(self):
-        """ 
+        """
         make node, take full backup, stop it in the middle
         run validate, expect it to successfully executed,
         concurrect RUNNING backup with pid file and active process is legal
@@ -46,7 +46,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'RUNNING', self.show_pb(backup_dir, 'node')[1]['status'])
 
-        self.validate_pb(backup_dir)
+        self.validate_pb(backup_dir, options=['--log-level-file=VERBOSE'])
 
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'node')[0]['status'])
@@ -58,7 +58,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     def test_locking_running_2(self):
-        """ 
+        """
         make node, take full backup, stop it in the middle,
         kill process so no cleanup is done - pid file is in place,
         run validate, expect it to not successfully executed,
@@ -112,7 +112,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     def test_locking_running_3(self):
-        """ 
+        """
         make node, take full backup, stop it in the middle,
         terminate process, delete pid file,
         run validate, expect it to not successfully executed,

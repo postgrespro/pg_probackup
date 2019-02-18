@@ -59,6 +59,15 @@ pgBackupValidate(pgBackup *backup)
 			"Please upgrade pg_probackup binary.",
 				PROGRAM_VERSION, base36enc(backup->start_time), backup->program_version);
 
+	if (backup->status == BACKUP_STATUS_RUNNING)
+	{
+		elog(WARNING, "Backup %s has status %s, change it to ERROR and skip validation",
+			 base36enc(backup->start_time), status2str(backup->status));
+		write_backup_status(backup, BACKUP_STATUS_ERROR);
+		corrupted_backup_found = true;
+		return;
+	}
+
 	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE &&
@@ -143,8 +152,8 @@ pgBackupValidate(pgBackup *backup)
 	parray_free(files);
 
 	/* Update backup status */
-	backup->status = corrupted ? BACKUP_STATUS_CORRUPT : BACKUP_STATUS_OK;
-	write_backup_status(backup);
+	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
+											BACKUP_STATUS_OK);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -385,8 +394,7 @@ do_validate_instance(void)
 				/* orphanize current_backup */
 				if (current_backup->status == BACKUP_STATUS_OK)
 				{
-					current_backup->status = BACKUP_STATUS_ORPHAN;
-					write_backup_status(current_backup);
+					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 							base36enc(current_backup->start_time),
 							parent_backup_id);
@@ -410,8 +418,7 @@ do_validate_instance(void)
 					/* orphanize current_backup */
 					if (current_backup->status == BACKUP_STATUS_OK)
 					{
-						current_backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(current_backup);
+						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 								base36enc(current_backup->start_time), parent_backup_id,
 								status2str(tmp_backup->status));
@@ -435,7 +442,9 @@ do_validate_instance(void)
 		else
 			base_full_backup = current_backup;
 
-		lock_backup(current_backup);
+		/* Do not interrupt, validate the next backup */
+		if (!lock_backup(current_backup))
+			continue;
 		/* Valiate backup files*/
 		pgBackupValidate(current_backup);
 
@@ -469,8 +478,7 @@ do_validate_instance(void)
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),
@@ -522,7 +530,9 @@ do_validate_instance(void)
 
 						if (backup->status == BACKUP_STATUS_ORPHAN)
 						{
-							lock_backup(backup);
+							/* Do not interrupt, validate the next backup */
+							if (!lock_backup(backup))
+								continue;
 							/* Revaliate backup files*/
 							pgBackupValidate(backup);
 

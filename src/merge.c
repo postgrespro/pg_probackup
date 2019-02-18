@@ -227,11 +227,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	if (from_backup->status == BACKUP_STATUS_DELETING)
 		goto delete_source_backup;
 
-	to_backup->status = BACKUP_STATUS_MERGING;
-	write_backup_status(to_backup);
-
-	from_backup->status = BACKUP_STATUS_MERGING;
-	write_backup_status(from_backup);
+	write_backup_status(to_backup, BACKUP_STATUS_MERGING);
+	write_backup_status(from_backup, BACKUP_STATUS_MERGING);
 
 	create_data_directories(to_database_path, from_backup_path, false);
 
