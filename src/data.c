@@ -593,6 +593,8 @@ backup_data_file(backup_files_arg* arguments,
 			int rc = fio_send_pages(in, out, file,
 									backup_mode == BACKUP_MODE_DIFF_DELTA && file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 									&n_blocks_skipped, calg, clevel);
+			if (rc == PAGE_CHECKSUM_MISMATCH && is_ptrack_support)
+				goto RetryUsingPtrack;
 			if (rc < 0)
 				elog(ERROR, "Failed to read file %s: %s",
 					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
@@ -600,6 +602,7 @@ backup_data_file(backup_files_arg* arguments,
 		}
 		else
 		{
+		  RetryUsingPtrack:
 			for (blknum = 0; blknum < nblocks; blknum++)
 			{
 				page_state = prepare_page(arguments, file, prev_backup_start_lsn,
