@@ -124,7 +124,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			{
 				if ((current_backup->status == BACKUP_STATUS_DONE ||
 					current_backup->status == BACKUP_STATUS_ORPHAN ||
-					current_backup->status == BACKUP_STATUS_CORRUPT)
+					current_backup->status == BACKUP_STATUS_CORRUPT ||
+					current_backup->status == BACKUP_STATUS_RUNNING)
 					&& !rt->restore_no_validate)
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
