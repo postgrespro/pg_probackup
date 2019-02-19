@@ -806,7 +806,7 @@ class ProbackupTest(object):
 
     def validate_pb(
             self, backup_dir, instance=None,
-            backup_id=None, options=[], old_binary=False
+            backup_id=None, options=[], old_binary=False, gdb=False
             ):
 
         cmd_list = [
@@ -818,7 +818,7 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ['-i', backup_id]
 
-        return self.run_pb(cmd_list + options, old_binary=old_binary)
+        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb)
 
     def delete_pb(
             self, backup_dir, instance,

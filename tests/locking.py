@@ -305,3 +305,95 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_locking_restore_locked(self):
+        """
+        make node, take full backup, take two page backups,
+        launch validate on PAGE1 and stop it in the middle,
+        launch restore of PAGE2.
+        Expect restore to fail because validation of
+        intermediate backup is impossible
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        gdb = self.validate_pb(
+            backup_dir, 'node', backup_id=backup_id, gdb=True)
+
+        gdb.set_breakpoint('pgBackupValidate')
+        gdb.run_until_break()
+
+        node.cleanup()
+
+        try:
+            self.restore_node(backup_dir, 'node', node)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because restore without whole chain validation "
+                "is prohibited unless --no-validate provided.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "Insert expected error message".format(
+                    backup_id) in e.message,
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_locking_concurrent_vaidate_and_backup(self):
+        """
+        make node, take full backup, launch validate
+        and stop it in the middle, take page backup.
+        Expect PAGE backup to be successfully executed
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        # PAGE2
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        gdb = self.validate_pb(
+            backup_dir, 'node', backup_id=backup_id, gdb=True)
+
+        gdb.set_breakpoint('pgBackupValidate')
+        gdb.run_until_break()
+
+        # This PAGE backup is expected to be successfull
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
