@@ -721,11 +721,19 @@ gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location 
 	gzFile file;
 	if (fio_is_remote(location))
 	{
-		char pattern[] = "/tmp/gz.XXXXXX";
-		int fd = mkstemp(pattern);
+		char pattern1[] = "/tmp/gz.XXXXXX";
+		char pattern2[] = "gz.XXXXXX";
+		char* path = pattern1;
+		int fd = mkstemp(path); /* first try to create file in current directory */
 		if (fd < 0)
-			return NULL;
-		unlink(pattern); /* remove file on close */
+		{
+			path = pattern2;
+			fd = mkstemp(path); /* if it is not possible, try to create it in /tmp/ */
+			if (fd < 0)
+				return NULL;
+		}
+		unlink(path); /* delete file on close */
+
 		if (strcmp(mode, PG_BINARY_W) == 0)
 		{
 			*tmp_fd = fd;
