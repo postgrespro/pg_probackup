@@ -721,14 +721,11 @@ gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location 
 	gzFile file;
 	if (fio_is_remote(location))
 	{
-#ifdef P_tmpdir
-		char pattern[] = P_tmpdir "/gz.XXXXXX";
-#else
 		char pattern[] = "/tmp/gz.XXXXXX";
-#endif
 		int fd = mkstemp(pattern);
 		if (fd < 0)
 			return NULL;
+		unlink(pattern); /* remove file on close */
 		if (strcmp(mode, PG_BINARY_W) == 0)
 		{
 			*tmp_fd = fd;
