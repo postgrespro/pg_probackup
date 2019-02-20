@@ -327,7 +327,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # FULL
-        self.backup_node(backup_dir, 'node', node)
+        full_id = self.backup_node(backup_dir, 'node', node)
 
         # PAGE1
         backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
@@ -353,7 +353,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "Insert expected error message" in e.message,
+                "ERROR: Cannot lock backup {0} directory\n".format(full_id) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

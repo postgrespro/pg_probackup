@@ -433,8 +433,12 @@ catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
 	end_idx = Min(from_idx, to_idx);
 
 	for (i = start_idx; i >= end_idx; i--)
-		if (!lock_backup((pgBackup *) parray_get(backup_list, i)))
-			elog(ERROR, "Cannot lock backup directory");
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+		if (!lock_backup(backup))
+			elog(ERROR, "Cannot lock backup %s directory",
+				 base36enc(backup->start_time));
+	}
 }
 
 /*

@@ -318,7 +318,17 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 			/* Do not interrupt, validate the next backup */
 			if (!lock_backup(tmp_backup))
-				continue;
+			{
+				if (is_restore)
+					elog(ERROR, "Cannot lock backup %s directory",
+						 base36enc(tmp_backup->start_time));
+				else
+				{
+					elog(WARNING, "Cannot lock backup %s directory, skip validation",
+						 base36enc(tmp_backup->start_time));
+					continue;
+				}
+			}
 
 			pgBackupValidate(tmp_backup);
 			/* After pgBackupValidate() only following backup

@@ -207,7 +207,11 @@ do_retention_purge(void)
 			 * backup.
 			 */
 			if (!lock_backup(backup))
+			{
+				elog(WARNING, "Cannot lock backup %s directory, skip purging",
+					 base36enc(backup->start_time));
 				continue;
+			}
 
 			/* Delete backup and update status to DELETED */
 			delete_backup_files(backup);

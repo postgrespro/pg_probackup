@@ -444,7 +444,11 @@ do_validate_instance(void)
 
 		/* Do not interrupt, validate the next backup */
 		if (!lock_backup(current_backup))
+		{
+			elog(WARNING, "Cannot lock backup %s directory, skip validation",
+				 base36enc(current_backup->start_time));
 			continue;
+		}
 		/* Valiate backup files*/
 		pgBackupValidate(current_backup);
 
@@ -532,7 +536,11 @@ do_validate_instance(void)
 						{
 							/* Do not interrupt, validate the next backup */
 							if (!lock_backup(backup))
+							{
+								elog(WARNING, "Cannot lock backup %s directory, skip validation",
+									 base36enc(backup->start_time));
 								continue;
+							}
 							/* Revaliate backup files*/
 							pgBackupValidate(backup);
 
