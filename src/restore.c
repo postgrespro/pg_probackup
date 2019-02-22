@@ -75,8 +75,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 	elog(LOG, "%s begin.", action);
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
@@ -126,7 +124,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			{
 				if ((current_backup->status == BACKUP_STATUS_DONE ||
 					current_backup->status == BACKUP_STATUS_ORPHAN ||
-					current_backup->status == BACKUP_STATUS_CORRUPT)
+					current_backup->status == BACKUP_STATUS_CORRUPT ||
+					current_backup->status == BACKUP_STATUS_RUNNING)
 					&& !rt->restore_no_validate)
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
@@ -211,8 +210,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -244,8 +242,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING,
 							 "Backup %s is orphaned because his parent %s has status: %s",
@@ -319,9 +316,27 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		{
 			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
 
+			/* Do not interrupt, validate the next backup */
+			if (!lock_backup(tmp_backup))
+			{
+				if (is_restore)
+					elog(ERROR, "Cannot lock backup %s directory",
+						 base36enc(tmp_backup->start_time));
+				else
+				{
+					elog(WARNING, "Cannot lock backup %s directory, skip validation",
+						 base36enc(tmp_backup->start_time));
+					continue;
+				}
+			}
+
 			pgBackupValidate(tmp_backup);
-			/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
-			if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
+			/* After pgBackupValidate() only following backup
+			 * states are possible: ERROR, RUNNING, CORRUPT and OK.
+			 * Validate WAL only for OK, because there is no point
+			 * in WAL validation for corrupted, errored or running backups.
+			 */
+			if (tmp_backup->status != BACKUP_STATUS_OK)
 			{
 				corrupted_backup = tmp_backup;
 				/* we need corrupted backup index from 'backups' not parent_chain
@@ -361,8 +376,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),
@@ -405,6 +419,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			if (rt->lsn_specified && parse_server_version(backup->server_version) < 100000)
 				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
 						base36enc(dest_backup->start_time), dest_backup->server_version);
+
+			/*
+			 * Backup was locked during validation if no-validate wasn't
+			 * specified.
+			 */
+			if (rt->restore_no_validate && !lock_backup(backup))
+				elog(ERROR, "Cannot lock backup directory");
 
 			restore_backup(backup);
 		}

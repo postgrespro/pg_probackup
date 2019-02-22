@@ -43,7 +43,7 @@
 #define PG_GLOBAL_DIR			"global"
 #define BACKUP_CONTROL_FILE		"backup.control"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
-#define BACKUP_CATALOG_PID		"pg_probackup.pid"
+#define BACKUP_CATALOG_PID		"backup.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
@@ -459,14 +459,16 @@ extern int do_validate_all(void);
 /* in catalog.c */
 extern pgBackup *read_backup(time_t timestamp);
 extern void write_backup(pgBackup *backup);
-extern void write_backup_status(pgBackup *backup);
+extern void write_backup_status(pgBackup *backup, BackupStatus status);
+extern bool lock_backup(pgBackup *backup);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
 extern parray *catalog_get_backup_list(time_t requested_backup_id);
+extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
+									 int to_idx);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
-extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root);
