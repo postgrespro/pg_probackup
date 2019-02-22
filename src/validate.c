@@ -19,6 +19,7 @@ static void *pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);
 
 static bool corrupted_backup_found = false;
+static bool skipped_due_to_lock = false;
 
 typedef struct
 {
@@ -287,6 +288,9 @@ pgBackupValidateFiles(void *arg)
 int
 do_validate_all(void)
 {
+	corrupted_backup_found = false;
+	skipped_due_to_lock = false;
+
 	if (instance_name == NULL)
 	{
 		/* Show list of instances */
@@ -339,12 +343,16 @@ do_validate_all(void)
 		do_validate_instance();
 	}
 
+	if (skipped_due_to_lock)
+		elog(WARNING, "Some backups weren't locked and they were skipped");
+
 	if (corrupted_backup_found)
 	{
 		elog(WARNING, "Some backups are not valid");
 		return 1;
 	}
-	else
+
+	if (!skipped_due_to_lock && !corrupted_backup_found)
 		elog(INFO, "All backups are valid");
 
 	return 0;
@@ -447,6 +455,7 @@ do_validate_instance(void)
 		{
 			elog(WARNING, "Cannot lock backup %s directory, skip validation",
 				 base36enc(current_backup->start_time));
+			skipped_due_to_lock = true;
 			continue;
 		}
 		/* Valiate backup files*/
@@ -539,6 +548,7 @@ do_validate_instance(void)
 							{
 								elog(WARNING, "Cannot lock backup %s directory, skip validation",
 									 base36enc(backup->start_time));
+								skipped_due_to_lock = true;
 								continue;
 							}
 							/* Revaliate backup files*/
