@@ -343,6 +343,14 @@ do_validate_all(void)
 		do_validate_instance();
 	}
 
+	/* TODO: Probably we should have different exit code for every condition
+	 * and they combination:
+	 *  0 - all backups are valid
+	 *  1 - some backups are corrup
+	 *  2 - some backups where skipped due to concurrent locks
+	 *  3 - some backups are corrupt and some are skipped due to concurrent locks
+	 */
+
 	if (skipped_due_to_lock)
 		elog(WARNING, "Some backups weren't locked and they were skipped");
 
