@@ -634,6 +634,14 @@ do_backup_instance(void)
 		dir_list_file(backup_files_list, instance_config.pgdata,
 					  true, true, false);
 
+	/* Sanity check for backup_files_list, thank you, Windows:
+	 * https://github.com/postgrespro/pg_probackup/issues/48
+	 */
+
+	if (parray_num(backup_files_list) == 0)
+		elog(ERROR, "PGDATA is empty. Either it was concrurrently deleted or "
+			"pg_probackup do not possess sufficient permissions to list PGDATA content");
+
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
 	 * directories sequentially.
