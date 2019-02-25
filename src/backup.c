@@ -639,7 +639,7 @@ do_backup_instance(void)
 	 */
 
 	if (parray_num(backup_files_list) == 0)
-		elog(ERROR, "PGDATA is empty. Either it was concrurrently deleted or "
+		elog(ERROR, "PGDATA is empty. Either it was concurrently deleted or "
 			"pg_probackup do not possess sufficient permissions to list PGDATA content");
 
 	/*
