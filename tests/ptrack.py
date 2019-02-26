@@ -1,6 +1,6 @@
 import os
 import unittest
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
 import subprocess
 from testgres import QueryException
@@ -236,9 +236,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         gdb = self.gdb_attach(pid)
         gdb.set_breakpoint('reform_and_rewrite_tuple')
 
-        if not gdb.continue_execution_until_running():
-            print('Failed gdb continue')
-            exit(1)
+        gdb.continue_execution_until_running()
 
         acurs.execute("VACUUM FULL t_heap")
 

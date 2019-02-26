@@ -1174,8 +1174,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node', node_restored,
                 options=[
                     "-j", "4", '--time={0}'.format(recovery_time),
-                    "--recovery-target-action=promote"
-                    ]
+                    "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
@@ -1183,6 +1182,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
 
         node_restored.slow_start()
 

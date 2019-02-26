@@ -691,7 +691,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-            wals_dir, f)) and not f.endswith('.backup')]
+            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
         wals = map(str, wals)
         file = os.path.join(wals_dir, max(wals))
         os.remove(file)
@@ -701,8 +701,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # Single-thread PAGE backup
         try:
             self.backup_node(
-                backup_dir, 'node', node,
-                backup_type='page')
+                backup_dir, 'node', node, backup_type='page')
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segment disappearance.\n "
