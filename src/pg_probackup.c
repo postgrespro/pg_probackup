@@ -442,7 +442,7 @@ main(int argc, char *argv[])
 		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
 
 		/* Set 'pg_log' in first empty slot */
-		pgdata_exclude_dir[i] = "pg_log";
+		pgdata_exclude_dir[i] = PG_LOG_DIR;
 	}
 
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)

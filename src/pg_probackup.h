@@ -36,8 +36,10 @@
 #define BACKUPS_DIR				"backups"
 #if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
+#define PG_LOG_DIR 				"log"
 #else
 #define PG_XLOG_DIR				"pg_xlog"
+#define PG_LOG_DIR 				"pg_log"
 #endif
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define PG_GLOBAL_DIR			"global"
