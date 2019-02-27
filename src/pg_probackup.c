@@ -395,6 +395,8 @@ main(int argc, char *argv[])
 	 * We have read pgdata path from command line or from configuration file.
 	 * Ensure that pgdata is an absolute path.
 	 */
+	if (instance_config.pgdata != NULL)
+		canonicalize_path(instance_config.pgdata);
 	if (instance_config.pgdata != NULL &&
 		!is_absolute_path(instance_config.pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
