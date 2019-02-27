@@ -974,7 +974,7 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 					memcpy(write_buffer + sizeof(BackupPageHeader), read_buffer, BLCKSZ);
 					bph->compressed_size = BLCKSZ;
 				}
-				hdr.size += bph->compressed_size;
+				hdr.size += MAXALIGN(bph->compressed_size);
 			}
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, write_buffer, hdr.size), hdr.size);
