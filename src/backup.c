@@ -1291,7 +1291,7 @@ pg_ptrack_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -1308,7 +1308,7 @@ pg_checksum_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show data_checksums", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW data_checksums", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
