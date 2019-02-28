@@ -578,7 +578,7 @@ compress_init(void)
 	if (instance_config.compress_level < 0 || instance_config.compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
-	if (instance_config.compress_level == 0)
+	if (instance_config.compress_alg == ZLIB_COMPRESS && instance_config.compress_level == 0)
 		elog(WARNING, "Compression level 0 will lead to data bloat!");
 
 	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
