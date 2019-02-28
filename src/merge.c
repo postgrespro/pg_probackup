@@ -167,8 +167,10 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	pthread_t  *threads = NULL;
 	merge_files_arg *threads_args = NULL;
 	int			i;
+	time_t		merge_time;
 	bool		merge_isok = true;
 
+	merge_time = time(NULL);
 	elog(INFO, "Merging backup %s with backup %s", from_backup_id, to_backup_id);
 
 	/*
@@ -280,6 +282,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_backup->stop_lsn = from_backup->stop_lsn;
 	to_backup->recovery_time = from_backup->recovery_time;
 	to_backup->recovery_xid = from_backup->recovery_xid;
+	to_backup->merge_time = merge_time;
 	to_backup->end_time = time(NULL);
 
 	/*

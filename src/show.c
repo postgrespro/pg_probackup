@@ -388,7 +388,9 @@ show_instance_plain(parray *backup_list, bool show_name)
 		if (backup->status == BACKUP_STATUS_RUNNING)
 			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
 					 difftime(current_time, backup->start_time));
-
+		else if (backup->merge_time != (time_t) 0)
+			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
+					 difftime(backup->end_time, backup->merge_time));
 		else if (backup->end_time != (time_t) 0)
 			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
 					 difftime(backup->end_time, backup->start_time));

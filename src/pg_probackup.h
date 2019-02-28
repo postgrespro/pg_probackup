@@ -223,6 +223,7 @@ struct pgBackup
 	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
 	time_t			start_time;	/* since this moment backup has status
 								 * BACKUP_STATUS_RUNNING */
+	time_t			merge_time; /* the moment when merge was started or 0 */
 	time_t			end_time;	/* the moment when backup was finished, or the moment
 								 * when we realized that backup is broken */
 	time_t			recovery_time;	/* Earliest moment for which you can restore
