@@ -271,7 +271,7 @@ help_backup(void)
 	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
 	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
 	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n"));
 }
 
 static void
@@ -533,14 +533,15 @@ help_set_config(void)
 	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
 	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
 
+	printf(_("\n  Archive options:\n"));
+	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));
+
 	printf(_("\n  Replica options:\n"));
 	printf(_("      --master-user=user_name      user name to connect to master (deprecated)\n"));
 	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
 	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
 	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
-	printf(_("\n  Archive options:\n"));
-	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n"));
 }
 
 static void
