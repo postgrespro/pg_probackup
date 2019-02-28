@@ -267,10 +267,10 @@ help_backup(void)
 	printf(_("  -W, --password                   force password prompt\n"));
 
 	printf(_("\n  Replica options:\n"));
-	printf(_("      --master-user=user_name      user name to connect to master\n"));
-	printf(_("      --master-db=db_name          database to connect to master\n"));
-	printf(_("      --master-host=host_name      database server host of master\n"));
-	printf(_("      --master-port=port           database server port of master\n"));
+	printf(_("      --master-user=user_name      user name to connect to master (deprecated)\n"));
+	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
+	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
+	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
 }
 
@@ -534,10 +534,10 @@ help_set_config(void)
 	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
 
 	printf(_("\n  Replica options:\n"));
-	printf(_("      --master-user=user_name      user name to connect to master\n"));
-	printf(_("      --master-db=db_name          database to connect to master\n"));
-	printf(_("      --master-host=host_name      database server host of master\n"));
-	printf(_("      --master-port=port           database server port of master\n"));
+	printf(_("      --master-user=user_name      user name to connect to master (deprecated)\n"));
+	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
+	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
+	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
 	printf(_("\n  Archive options:\n"));
 	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));
