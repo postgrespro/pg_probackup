@@ -280,6 +280,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_backup->stop_lsn = from_backup->stop_lsn;
 	to_backup->recovery_time = from_backup->recovery_time;
 	to_backup->recovery_xid = from_backup->recovery_xid;
+	to_backup->end_time = time(NULL);
+
 	/*
 	 * If one of the backups isn't "stream" backup then the target backup become
 	 * non-stream backup too.
