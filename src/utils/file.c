@@ -759,7 +759,15 @@ gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location 
 	else
 	{
 		*tmp_fd = -1;
-		file = gzopen(path, mode);
+		if (strcmp(mode, PG_BINARY_W) == 0)
+		{
+			int fd = open(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FILE_PERMISSIONS);
+			if (fd < 0)
+				return NULL;
+			file = gzdopen(fd, mode);
+		}
+		else
+			file = gzopen(path, mode);
 	}
 	return file;
 }
@@ -783,7 +791,7 @@ int fio_gzclose(gzFile file, char const* path, int tmp_fd)
 
 		SYS_CHECK(gzclose(file)); /* should close tmp_fd */
 
-		fd = fio_open(path, O_RDWR|O_CREAT|O_TRUNC, FILE_PERMISSIONS);
+		fd = fio_open(path, O_RDWR|O_CREAT|O_EXCL|PG_BINARY, FILE_PERMISSIONS);
 		if (fd < 0) {
 			free(buf);
 			return -1;

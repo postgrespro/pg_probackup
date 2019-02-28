@@ -548,6 +548,7 @@ backup_data_file(backup_files_arg* arguments,
 		if (errno == ENOENT)
 		{
 			elog(LOG, "File \"%s\" is not found", file->path);
+			file->write_size = FILE_NOT_FOUND;
 			return false;
 		}
 
@@ -937,7 +938,11 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 
 		/* maybe deleted, it's not error */
 		if (errno == ENOENT)
+		{
+			elog(LOG, "File \"%s\" is not found", file->path);
+			file->write_size = FILE_NOT_FOUND;
 			return false;
+		}
 
 		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
 			 strerror(errno));
@@ -1087,7 +1092,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			  bool overwrite)
 {
 	FILE	   *in = NULL;
-	FILE	   *out=NULL;
+	int			out;
 	char		buf[XLOG_BLCKSZ];
 	const char *to_path_p;
 	char		to_path_temp[MAXPGPATH];
@@ -1130,6 +1135,9 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
 		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, &gz_tmp, FIO_BACKUP_HOST);
+		if (gz_out == NULL)
+			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+				 to_path_temp, strerror(errno));
 		if (gzsetparams(gz_out, instance_config.compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 instance_config.compress_level, to_path_temp,
@@ -1140,9 +1148,9 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	{
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fio_fopen(to_path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
-		if (out == NULL)
-			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
+		out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
+		if (out < 0)
+			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
 	}
 
@@ -1178,7 +1186,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			else
 #endif
 			{
-				if (fio_fwrite(out, buf, read_len) != read_len)
+				if (fio_write(out, buf, read_len) != read_len)
 				{
 					errno_temp = errno;
 					fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -1206,8 +1214,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
-		if (fio_fflush(out) != 0 ||
-			fio_fclose(out))
+		if (fio_flush(out) != 0 || fio_close(out) != 0)
 		{
 			errno_temp = errno;
 			fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -1248,7 +1255,7 @@ void
 get_wal_file(const char *from_path, const char *to_path)
 {
 	FILE	   *in = NULL;
-	FILE	   *out;
+	int			out;
 	char		buf[XLOG_BLCKSZ];
 	const char *from_path_p = from_path;
 	char		to_path_temp[MAXPGPATH];
@@ -1298,10 +1305,10 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-	out = fio_fopen(to_path_temp, PG_BINARY_W, FIO_DB_HOST);
-	if (out == NULL)
-		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
-			 to_path_temp, strerror(errno));
+	out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_DB_HOST);
+	if (out < 0)
+		elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+				to_path_temp, strerror(errno));
 
 	/* copy content */
 	for (;;)
@@ -1335,7 +1342,7 @@ get_wal_file(const char *from_path, const char *to_path)
 
 		if (read_len > 0)
 		{
-			if (fio_fwrite(out, buf, read_len) != read_len)
+			if (fio_write(out, buf, read_len) != read_len)
 			{
 				errno_temp = errno;
 				fio_unlink(to_path_temp, FIO_DB_HOST);
@@ -1359,8 +1366,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		}
 	}
 
-	if (fio_fflush(out) != 0 ||
-		fio_fclose(out))
+	if (fio_flush(out) != 0 || fio_close(out) != 0)
 	{
 		errno_temp = errno;
 		fio_unlink(to_path_temp, FIO_DB_HOST);

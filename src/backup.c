@@ -575,6 +575,9 @@ do_backup_instance(void)
 			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
+	/* Update running backup meta with START LSN */
+	write_backup(&current);
+
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
 
@@ -632,6 +635,14 @@ do_backup_instance(void)
 	else
 		dir_list_file(backup_files_list, instance_config.pgdata,
 					  true, true, false, FIO_DB_HOST);
+
+	/* Sanity check for backup_files_list, thank you, Windows:
+	 * https://github.com/postgrespro/pg_probackup/issues/48
+	 */
+
+	if (parray_num(backup_files_list) == 0)
+		elog(ERROR, "PGDATA is empty. Either it was concurrently deleted or "
+			"pg_probackup do not possess sufficient permissions to list PGDATA content");
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -761,6 +772,19 @@ do_backup_instance(void)
 		elog(INFO, "Data files are transfered");
 	else
 		elog(ERROR, "Data files transferring failed");
+
+	/* Remove disappeared during backup files from backup_list */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
+
+		if (tmp_file->write_size == FILE_NOT_FOUND)
+		{
+			pg_atomic_clear_flag(&tmp_file->lock);
+			pgFileFree(tmp_file);
+			parray_remove(backup_files_list, i);
+		}
+	}
 
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
@@ -943,9 +967,6 @@ do_backup(time_t start_time)
 								   instance_config.master_user);
 	}
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/*
 	 * Ensure that backup directory was initialized for the same PostgreSQL
 	 * instance we opened connection to. And that target backup database PGDATA
@@ -955,7 +976,6 @@ do_backup(time_t start_time)
 	if (!IsReplicationProtocol())
 		check_system_identifiers();
 
-
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
@@ -964,7 +984,10 @@ do_backup(time_t start_time)
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
-		elog(ERROR, "cannot create backup directory");
+		elog(ERROR, "Cannot create backup directory");
+	if (!lock_backup(&current))
+		elog(ERROR, "Cannot lock backup %s directory",
+			 base36enc(current.start_time));
 	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");
@@ -1268,7 +1291,7 @@ pg_ptrack_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -1285,7 +1308,7 @@ pg_checksum_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show data_checksums", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW data_checksums", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -2236,7 +2259,7 @@ backup_files(void *arg)
 				 * If file is not found, this is not en error.
 				 * It could have been deleted by concurrent postgres transaction.
 				 */
-				file->write_size = BYTES_INVALID;
+				file->write_size = FILE_NOT_FOUND;
 				elog(LOG, "File \"%s\" is not found", file->path);
 				continue;
 			}
@@ -2286,7 +2309,9 @@ backup_files(void *arg)
 									  instance_config.compress_alg,
 									  instance_config.compress_level))
 				{
-					file->write_size = BYTES_INVALID;
+					/* disappeared file not to be confused with 'not changed' */
+					if (file->write_size != FILE_NOT_FOUND)
+						file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
 					continue;
 				}
@@ -2310,7 +2335,9 @@ backup_files(void *arg)
 				if (skip ||
 					!copy_file(arguments->from_root, arguments->to_root, file, FIO_BACKUP_HOST))
 				{
-					file->write_size = BYTES_INVALID;
+					/* disappeared file not to be confused with 'not changed' */
+					if (file->write_size != FILE_NOT_FOUND)
+						file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup",
 						 file->path);
 					continue;

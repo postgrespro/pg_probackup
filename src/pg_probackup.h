@@ -37,14 +37,16 @@
 #define BACKUPS_DIR				"backups"
 #if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
+#define PG_LOG_DIR 				"log"
 #else
 #define PG_XLOG_DIR				"pg_xlog"
+#define PG_LOG_DIR 				"pg_log"
 #endif
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define PG_GLOBAL_DIR			"global"
 #define BACKUP_CONTROL_FILE		"backup.control"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
-#define BACKUP_CATALOG_PID		"pg_probackup.pid"
+#define BACKUP_CATALOG_PID		"backup.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
@@ -166,9 +168,10 @@ typedef enum ShowFormat
 
 /* special values of pgBackup fields */
 #define INVALID_BACKUP_ID	0    /* backup ID is not provided by user */
-#define BYTES_INVALID		(-1)
+#define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
+#define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.0.26"
+#define PROGRAM_VERSION	"2.0.27"
 #define AGENT_PROTOCOL_VERSION 20026
 
 /*
@@ -487,14 +490,16 @@ extern int do_validate_all(void);
 /* in catalog.c */
 extern pgBackup *read_backup(time_t timestamp);
 extern void write_backup(pgBackup *backup);
-extern void write_backup_status(pgBackup *backup);
+extern void write_backup_status(pgBackup *backup, BackupStatus status);
+extern bool lock_backup(pgBackup *backup);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
 extern parray *catalog_get_backup_list(time_t requested_backup_id);
+extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
+									 int to_idx);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
-extern void catalog_lock(void);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root);

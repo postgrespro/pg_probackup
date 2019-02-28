@@ -632,6 +632,14 @@ dir_check_file(const char *root, pgFile *file)
 			}
 			else
 			{
+               /*
+                * snapfs files:
+                * RELFILENODE.BLOCKNO.snapmap.SNAPID
+                * RELFILENODE.BLOCKNO.snap.SNAPID
+                */
+               if (strstr(file->name, "snap") != NULL)
+                       return true;
+
 				len = strlen(file->name);
 				/* reloid.cfm */
 				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
@@ -1048,11 +1056,11 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 				}
 
 				if (link_sep)
-					elog(LOG, "create directory \"%s\" and symbolic link \"%.*s\"",
+					elog(VERBOSE, "create directory \"%s\" and symbolic link \"%.*s\"",
 						 linked_path,
 						 (int) (link_sep -  relative_ptr), relative_ptr);
 				else
-					elog(LOG, "create directory \"%s\" and symbolic link \"%s\"",
+					elog(VERBOSE, "create directory \"%s\" and symbolic link \"%s\"",
 						 linked_path, relative_ptr);
 
 				/* Firstly, create linked directory */
@@ -1083,7 +1091,7 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 		}
 
 create_directory:
-		elog(LOG, "create directory \"%s\"", relative_ptr);
+		elog(VERBOSE, "create directory \"%s\"", relative_ptr);
 
 		/* This is not symlink, create directory */
 		join_path_components(to_path, data_dir, relative_ptr);

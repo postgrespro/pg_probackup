@@ -2,13 +2,10 @@ import unittest
 
 from . import init_test, merge, option_test, show_test, compatibility, \
     backup_test, delete_test, delta, restore_test, validate_test, \
-    retention_test, ptrack_clean, ptrack_empty, ptrack_cluster, \
-    ptrack_move_to_tablespace, ptrack_recovery, ptrack_truncate, \
-    ptrack_vacuum, ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
-    ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
-    false_positive, replica, compression, page, ptrack, archive, \
-    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test, \
-    time_stamp, snapfs, logging, locking, remote
+    retention_test, pgpro560, pgpro589, false_positive, replica, \
+    compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
+    cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
+    locking, remote
 
 
 def load_tests(loader, tests, pattern):

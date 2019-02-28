@@ -417,6 +417,8 @@ main(int argc, char *argv[])
 	 * We have read pgdata path from command line or from configuration file.
 	 * Ensure that pgdata is an absolute path.
 	 */
+	if (instance_config.pgdata != NULL)
+		canonicalize_path(instance_config.pgdata);
 	if (instance_config.pgdata != NULL &&
 		!is_absolute_path(instance_config.pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
@@ -462,7 +464,7 @@ main(int argc, char *argv[])
 		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
 
 		/* Set 'pg_log' in first empty slot */
-		pgdata_exclude_dir[i] = "pg_log";
+		pgdata_exclude_dir[i] = PG_LOG_DIR;
 	}
 
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)

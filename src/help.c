@@ -233,7 +233,7 @@ help_backup(void)
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
-	printf(_("      --backup-pg-log              backup of pg_log directory\n"));
+	printf(_("      --backup-pg-log              backup of '%s' directory\n"), PG_LOG_DIR);
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
