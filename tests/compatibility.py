@@ -485,7 +485,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
     def test_backward_compatibility_merge(self):
         """
         Create node, take FULL and PAGE backups with old binary,
-        merge them with
+        merge them with new binary
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -520,7 +520,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         self.merge_backup(backup_dir, "node", backup_id)
 
-        print(self.show_pb(backup_dir, as_text=True))
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
 
         # restore OLD FULL with new binary
         node_restored = self.make_simple_node(
