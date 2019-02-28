@@ -579,7 +579,7 @@ compress_init(void)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
 	if (instance_config.compress_level == 0)
-		instance_config.compress_alg = NOT_DEFINED_COMPRESS;
+		elog(WARNING, "Compression level 0 will lead to data bloat!");
 
 	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
 	{
