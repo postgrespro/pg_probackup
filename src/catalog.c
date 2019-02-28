@@ -37,7 +37,7 @@ unlink_lock_atexit(void)
 		int			res;
 
 		res = unlink(lock_file);
-		if (res != 0 && res != ENOENT)
+		if (res != 0 && errno != ENOENT)
 			elog(WARNING, "%s: %s", lock_file, strerror(errno));
 	}
 
