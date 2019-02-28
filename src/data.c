@@ -1569,7 +1569,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	pg_crc32	crc;
 	bool		use_crc32c = backup_version <= 20021 || backup_version >= 20025;
 
-	elog(VERBOSE, "validate relation blocks for file %s", file->name);
+	elog(VERBOSE, "validate relation blocks for file %s", file->path);
 
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
