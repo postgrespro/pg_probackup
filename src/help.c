@@ -97,9 +97,9 @@ help_pg_probackup(void)
 	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
-	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name] [--temp-slot]\n"));
+	printf(_("                 [--backup-pg-log] [-j num-threads]\n"));
+	printf(_("                 [--archive-timeout=archive-timeout] [--progress]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
@@ -186,9 +186,9 @@ static void
 help_backup(void)
 {
 	printf(_("%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
-	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name] [--temp-slot]\n"));
+	printf(_("                 [--backup-pg-log] [-j num-threads]\n"));
+	printf(_("                 [--archive-timeout=archive-timeout] [--progress]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
@@ -215,6 +215,7 @@ help_backup(void)
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
+	printf(_("      --temp-slot                  use temporary replication slot\n"));
 	printf(_("      --backup-pg-log              backup of '%s' directory\n"), PG_LOG_DIR);
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));

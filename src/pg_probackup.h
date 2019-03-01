@@ -359,6 +359,7 @@ extern bool		progress;
 /* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;
 #endif
+extern bool 	temp_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
