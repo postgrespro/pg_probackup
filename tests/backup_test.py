@@ -938,3 +938,74 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_persistent_slot_for_stream_backup(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_size': '40MB'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "SELECT pg_create_physical_replication_slot('slot_1')")
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--slot=slot_1'])
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--slot=slot_1'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_temp_slot_for_stream_backup(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_size': '40MB'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
+        else:
+            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--slot=slot_1', '--temp-slot'])
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--temp-slot'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

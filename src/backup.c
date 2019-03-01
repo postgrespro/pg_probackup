@@ -2764,6 +2764,12 @@ StreamLog(void *arg)
 	stream_stop_timeout = 0;
 	stream_stop_begin = 0;
 
+#if PG_VERSION_NUM >= 100000
+	/* if slot name was not provided for temp slot, use default slot name */
+	if (!replication_slot && temp_slot)
+		replication_slot = "pg_probackup_slot";
+#endif
+
 	/*
 	 * Start the replication
 	 */
@@ -2784,6 +2790,7 @@ StreamLog(void *arg)
 		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
+		ctl.temp_slot = temp_slot;
 #else
 		ctl.basedir = (char *) stream_arg->basedir;
 #endif

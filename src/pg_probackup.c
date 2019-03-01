@@ -65,6 +65,7 @@ bool		progress = false;
 #if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
 #endif
+bool		temp_slot = false;
 
 /* backup options */
 bool		backup_logs = false;
@@ -136,6 +137,7 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
+	{ 'b', 234, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	/* restore options */
@@ -603,8 +605,8 @@ compress_init(void)
 	if (instance_config.compress_level < 0 || instance_config.compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
-	if (instance_config.compress_level == 0)
-		instance_config.compress_alg = NOT_DEFINED_COMPRESS;
+	if (instance_config.compress_alg == ZLIB_COMPRESS && instance_config.compress_level == 0)
+		elog(WARNING, "Compression level 0 will lead to data bloat!");
 
 	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
 	{

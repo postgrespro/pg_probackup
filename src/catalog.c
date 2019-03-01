@@ -525,6 +525,11 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
 	fio_fprintf(out, "start-time = '%s'\n", timestamp);
+	if (backup->merge_time > 0)
+	{
+		time2iso(timestamp, lengthof(timestamp), backup->merge_time);
+		fio_fprintf(out, "merge-time = '%s'\n", timestamp);
+	}
 	if (backup->end_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->end_time);
@@ -628,6 +633,7 @@ readBackupControlFile(const char *path)
 		{'s', 0, "start-lsn",			&start_lsn, SOURCE_FILE_STRICT},
 		{'s', 0, "stop-lsn",			&stop_lsn, SOURCE_FILE_STRICT},
 		{'t', 0, "start-time",			&backup->start_time, SOURCE_FILE_STRICT},
+		{'t', 0, "merge-time",			&backup->merge_time, SOURCE_FILE_STRICT},
 		{'t', 0, "end-time",			&backup->end_time, SOURCE_FILE_STRICT},
 		{'U', 0, "recovery-xid",		&backup->recovery_xid, SOURCE_FILE_STRICT},
 		{'t', 0, "recovery-time",		&backup->recovery_time, SOURCE_FILE_STRICT},
@@ -853,6 +859,7 @@ pgBackupInit(pgBackup *backup)
 	backup->start_lsn = 0;
 	backup->stop_lsn = 0;
 	backup->start_time = (time_t) 0;
+	backup->merge_time = (time_t) 0;
 	backup->end_time = (time_t) 0;
 	backup->recovery_xid = 0;
 	backup->recovery_time = (time_t) 0;

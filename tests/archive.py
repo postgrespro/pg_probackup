@@ -728,8 +728,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'max_wal_senders': '2',
-                'checkpoint_timeout': '30s'}
-            )
+                'checkpoint_timeout': '30s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -808,7 +808,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
         if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL 10 for this test')
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
         else:
             pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
