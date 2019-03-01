@@ -29,7 +29,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(merge))
     suite.addTests(loader.loadTestsFromModule(option_test))
     suite.addTests(loader.loadTestsFromModule(page))
-    suite.addTests(loader.loadTestsFromModule(ptrack))
+#    suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(remote))
     suite.addTests(loader.loadTestsFromModule(replica))
     suite.addTests(loader.loadTestsFromModule(restore_test))

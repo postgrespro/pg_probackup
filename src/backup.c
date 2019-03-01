@@ -2770,6 +2770,14 @@ StreamLog(void *arg)
 		replication_slot = "pg_probackup_slot";
 #endif
 
+
+#if PG_VERSION_NUM >= 110000
+	/* Create temp repslot */
+	if (temp_slot)
+		CreateReplicationSlot(stream_arg->conn, replication_slot,
+			NULL, temp_slot, true, true, false);
+#endif
+
 	/*
 	 * Start the replication
 	 */
@@ -2790,7 +2798,9 @@ StreamLog(void *arg)
 		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
+#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
 		ctl.temp_slot = temp_slot;
+#endif
 #else
 		ctl.basedir = (char *) stream_arg->basedir;
 #endif
