@@ -448,7 +448,10 @@ main(int argc, char *argv[])
 			elog(ERROR, "Invalid backup-id \"%s\"", backup_id_string);
 	}
 
-	/* Setup stream options. They are used in streamutil.c. */
+	if (!instance_config.pghost && instance_config.remote.host)
+		instance_config.pghost = instance_config.remote.host;
+
+		/* Setup stream options. They are used in streamutil.c. */
 	if (instance_config.pghost != NULL)
 		dbhost = pstrdup(instance_config.pghost);
 	if (instance_config.pgport != NULL)
