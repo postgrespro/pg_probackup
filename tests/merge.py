@@ -1343,37 +1343,35 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        # FULL backup
+        # FULL stream backup
         self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
 
-
-        # DELTA BACKUP
+        # DELTA archive backup
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta')
 
-        self.merge(backup_dir, 'node', backup_id=backup_id)
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
 
         self.assertEqual(
-            'false', self.show_backup(backup_dir, 'node', backup_id)['stream'])
+            'ARCHIVE', self.show_pb(backup_dir, 'node', backup_id)['wal'])
 
-        # DELTA BACKUP
+        # DELTA stream backup
         backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='delta', options=['--stream'])
 
-        self.merge(backup_dir, 'node', backup_id=backup_id)
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
 
         self.assertEqual(
-            'true', self.show_pb(backup_dir, 'node', backup_id)['stream'])
+            'STREAM', self.show_pb(backup_dir, 'node', backup_id)['wal'])
 
         self.del_test_dir(module_name, fname)
 

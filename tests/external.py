@@ -310,7 +310,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        node.pgbench_init(scale=10)
+        node.pgbench_init(scale=5)
 
         # FULL backup with old binary without external dirs support
         self.backup_node(
@@ -405,7 +405,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=10)
+        node.pgbench_init(scale=5)
 
         # FULL backup with old binary without external dirs support
         self.backup_node(
@@ -499,7 +499,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=10)
+        node.pgbench_init(scale=5)
 
         # FULL backup with old data
         backup_id_1 = self.backup_node(
@@ -607,7 +607,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=10)
+        node.pgbench_init(scale=5)
 
         # FULL backup
         self.backup_node(
@@ -689,7 +689,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=10)
+        node.pgbench_init(scale=5)
 
         # FULL backup
         self.backup_node(
@@ -766,9 +766,85 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_restore_skip_external(self):
+        """
+        Check that --skip-external-dirs works correctly
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        external_dir1 = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2 = self.get_tblspace_path(node, 'external_dir2')
+
+        node.pgbench_init(scale=3)
+
+        # temp FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+
+        # fill external directories with data
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir1, options=["-j", "4"])
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir2, options=["-j", "4"])
+
+        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+
+        # FULL backup with external directories
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}:{1}".format(
+                    external_dir1,
+                    external_dir2)])
+
+        # delete first externals, so pgdata_compare
+        # will be capable of detecting redundant
+        # external files after restore
+        shutil.rmtree(external_dir1, ignore_errors=True)
+        shutil.rmtree(external_dir2, ignore_errors=True)
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        # RESTORE
+        node.cleanup()
+        shutil.rmtree(node.base_dir, ignore_errors=True)
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4", "--skip-external-dirs"])
+
+        pgdata_restored = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
         # external directory contain symlink to file
         # external directory contain symlink to directory
-        # latest page backup without external_dir
+        # latest page backup without external_dir +
         # multiple external directories +
         # --external-dirs=none +
         # --external-dirs point to a file
@@ -776,5 +852,5 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # external directory contain multuple directories, some of them my be empty +
         # forbid to external-dirs to point to tablespace directories
         # check that not changed files are not copied by next backup +
-        # merge
-        # complex merge
+        # merge +
+        # complex merge +
