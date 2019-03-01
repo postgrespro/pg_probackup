@@ -241,9 +241,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         acurs.execute("VACUUM FULL t_heap")
 
         if gdb.stopped_in_breakpoint():
-            if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
-                print('Failed to hit breakpoint')
-                exit(1)
+            gdb.continue_execution_until_break(20)
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack')

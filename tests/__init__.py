@@ -2,7 +2,7 @@ import unittest
 
 from . import init_test, merge, option_test, show_test, compatibility, \
     backup_test, delete_test, delta, restore_test, validate_test, \
-    retention_test, pgpro560, pgpro589, false_positive, replica, \
+    retention_test, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
     cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
     locking, remote
@@ -47,18 +47,8 @@ def load_tests(loader, tests, pattern):
 # ToDo:
 #  archive:
 #    discrepancy of instance`s SYSTEMID and node`s SYSTEMID should lead to archive-push refusal to work
-#  replica:
-#    backup should exit with correct error message if some master* option is missing
-#    --master* options shoukd not work when backuping master
 #  logging:
 #     https://jira.postgrespro.ru/browse/PGPRO-584
 #     https://jira.postgrespro.ru/secure/attachment/20420/20420_doc_logging.md
 # archive:
 #      immediate recovery and full recovery
-# backward compatibility:
-#      previous version catalog must be readable by newer version
-#      incremental chain from previous version can be continued
-#      backups from previous version can be restored
-# 10vanilla_1.3ptrack +
-# 10vanilla+
-# 9.6vanilla_1.3ptrack +
