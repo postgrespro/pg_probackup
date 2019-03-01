@@ -443,7 +443,7 @@ merge_files(void *arg)
 				 * Recalculate crc for backup prior to 2.0.25.
 				 */
 				if (parse_program_version(from_backup->program_version) < 20025)
-					file->crc = pgFileGetCRC(to_file_path, true, true, NULL);
+					file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST);
 				/* Otherwise just get it from the previous file */
 				else
 					file->crc = to_file->crc;
