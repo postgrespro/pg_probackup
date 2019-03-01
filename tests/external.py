@@ -580,6 +580,177 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_external_merge_single(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=10)
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+
+        external_dir1_old = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2_old = self.get_tblspace_path(node, 'external_dir2')
+
+        pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # FULL backup  with changed data
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=["-j", "4", "--stream"])
+
+        # fill external directories with changed data
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir1_old, options=["-j", "4"])
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir2_old, options=["-j", "4"])
+
+        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+
+        # delta backup with external directories using new binary
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="delta",
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}:{1}".format(
+                    external_dir1_old,
+                    external_dir2_old)])
+
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        # RESTORE
+        node.cleanup()
+        shutil.rmtree(node.base_dir, ignore_errors=True)
+
+        external_dir1_new = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2_new = self.get_tblspace_path(node, 'external_dir2')
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4",
+                "--external-mapping={0}={1}".format(external_dir1_old, external_dir1_new),
+                "--external-mapping={0}={1}".format(external_dir2_old, external_dir2_new)])
+
+        pgdata_restored = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_external_merge_double(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=10)
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+
+        external_dir1_old = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2_old = self.get_tblspace_path(node, 'external_dir2')
+
+        pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=["-j", "4", "--stream"])
+
+        # fill external directories with changed data
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir1_old, options=["-j", "4"])
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir2_old, options=["-j", "4"])
+
+        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+
+        # delta backup with external directories
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="delta",
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}:{1}".format(
+                    external_dir1_old,
+                    external_dir2_old)])
+
+        # delta backup with external directories
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="delta",
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}:{1}".format(
+                    external_dir1_old,
+                    external_dir2_old)])
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        shutil.rmtree(external_dir1_old, ignore_errors=True)
+        shutil.rmtree(external_dir2_old, ignore_errors=True)
+
+        # delta backup without external directories
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        # RESTORE
+        node.cleanup()
+        shutil.rmtree(node.base_dir, ignore_errors=True)
+
+        external_dir1_new = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2_new = self.get_tblspace_path(node, 'external_dir2')
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4",
+                "--external-mapping={0}={1}".format(external_dir1_old, external_dir1_new),
+                "--external-mapping={0}={1}".format(external_dir2_old, external_dir2_new)])
+
+        pgdata_restored = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
         # external directory contain symlink to file
         # external directory contain symlink to directory
         # latest page backup without external_dir

@@ -539,6 +539,7 @@ extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathWithExternal(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
+extern int pgFileComparePathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 

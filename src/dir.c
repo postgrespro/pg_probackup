@@ -383,6 +383,16 @@ pgFileComparePathDesc(const void *f1, const void *f2)
 	return -pgFileComparePath(f1, f2);
 }
 
+/*
+ * Compare two pgFile with their path and external_dir_num
+ * in descending order of ASCII code.
+ */
+int
+pgFileComparePathWithExternalDesc(const void *f1, const void *f2)
+{
+	return -pgFileComparePathWithExternal(f1, f2);
+}
+
 /* Compare two pgFile with their linked directory path. */
 int
 pgFileCompareLinked(const void *f1, const void *f2)

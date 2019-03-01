@@ -372,12 +372,14 @@ delete_source_backup:
 	for (i = 0; i < parray_num(to_files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
-		char	   *dir_name = parray_get(to_external, file->external_dir_num - 1);
 
-		if (file->external_dir_num &&
-			backup_contains_external(dir_name, from_external))
-			/* Dir already removed*/
-			continue;
+		if (file->external_dir_num && to_external)
+		{
+			char *dir_name = parray_get(to_external, file->external_dir_num - 1);
+			if (backup_contains_external(dir_name, from_external))
+				/* Dir already removed*/
+				continue;
+		}
 
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
@@ -463,7 +465,7 @@ merge_files(void *arg)
 				 i + 1, num_files, file->path);
 
 		res_file = parray_bsearch(argument->to_files, file,
-								  pgFileComparePathDesc);
+								  pgFileComparePathWithExternalDesc);
 		to_file = (res_file) ? *res_file : NULL;
 
 		/*
@@ -611,8 +613,6 @@ merge_files(void *arg)
 				file->crc = pgFileGetCRC(to_file_path, true, true, NULL);
 			}
 		}
-		else if (strcmp(file->name, "pg_control") == 0)
-			copy_pgcontrol_file(argument->from_root, argument->to_root, file);
 		else if (file->external_dir_num)
 		{
 			char	from_root[MAXPGPATH];
@@ -630,6 +630,8 @@ merge_files(void *arg)
 									 new_dir_num);
 			copy_file(from_root, to_root, file);
 		}
+		else if (strcmp(file->name, "pg_control") == 0)
+			copy_pgcontrol_file(argument->from_root, argument->to_root, file);
 		else
 			copy_file(argument->from_root, argument->to_root, file);
 
