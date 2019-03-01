@@ -480,7 +480,7 @@ restore_backup(pgBackup *backup, const char *external_dir_str)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	create_data_directories(instance_config.pgdata, this_backup_path, true);
 
-	if(external_dir_str)
+	if(external_dir_str && !skip_external_dirs)
 	{
 		requested_external_dirs = make_external_directory_list(external_dir_str);
 		for (i = 0; i < parray_num(requested_external_dirs); i++)
@@ -514,7 +514,7 @@ restore_backup(pgBackup *backup, const char *external_dir_str)
 	{
 		pgFile *file = (pgFile *) parray_get(files, i);
 
-		/* if the entry was an external directory, create it in the backup */
+		/* If the entry was an external directory, create it in the backup */
 		if (file->external_dir_num && S_ISDIR(file->mode))
 		{
 			char		dirpath[MAXPGPATH];

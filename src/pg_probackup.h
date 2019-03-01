@@ -375,6 +375,7 @@ extern bool exclusive_backup;
 /* restore options */
 extern bool restore_as_replica;
 extern bool skip_block_validation;
+extern bool skip_external_dirs;
 
 /* delete options */
 extern bool		delete_wal;

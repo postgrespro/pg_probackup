@@ -131,6 +131,7 @@ help_pg_probackup(void)
 	printf(_("                 [--restore-as-replica]\n"));
 	printf(_("                 [--no-validate]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--skip-external-dirs]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress]\n"));
@@ -290,7 +291,8 @@ help_restore(void)
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica] [--no-validate]\n"));
-	printf(_("                 [--skip-block-validation]\n\n"));
+	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--skip-external-dirs]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -320,6 +322,7 @@ help_restore(void)
 	printf(_("                                   to ease setting up a standby server\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
