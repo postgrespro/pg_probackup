@@ -943,8 +943,8 @@ class ProbackupTest(object):
                 backup_dir.replace("\\","\\\\"),
                 instance)
 
-        if self.remote:
-            archive_command = archive_command + '--remote-proto=ssh --remote-host=localhost '
+        # if self.remote:
+        #     archive_command = archive_command + '--remote-proto=ssh --remote-host=localhost '
 
         if self.archive_compress or compress:
             archive_command = archive_command + '--compress '
