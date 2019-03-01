@@ -277,6 +277,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 * Update to_backup metadata.
 	 */
 	to_backup->status = BACKUP_STATUS_OK;
+	StrNCpy(to_backup->program_version, PROGRAM_VERSION,
+			sizeof(to_backup->program_version));
 	to_backup->parent_backup = INVALID_BACKUP_ID;
 	to_backup->start_lsn = from_backup->start_lsn;
 	to_backup->stop_lsn = from_backup->stop_lsn;
@@ -393,6 +395,7 @@ merge_files(void *arg)
 		pgFile	   *file = (pgFile *) parray_get(argument->files, i);
 		pgFile	   *to_file;
 		pgFile	  **res_file;
+		char		to_file_path[MAXPGPATH];	/* Path of target file */
 		char		from_file_path[MAXPGPATH];
 		char	   *prev_file_path;
 
@@ -415,6 +418,8 @@ merge_files(void *arg)
 								  pgFileComparePathDesc);
 		to_file = (res_file) ? *res_file : NULL;
 
+		join_path_components(to_file_path, argument->to_root, file->path);
+
 		/*
 		 * Skip files which haven't changed since previous backup. But in case
 		 * of DELTA backup we should consider n_blocks to truncate the target
@@ -433,7 +438,15 @@ merge_files(void *arg)
 			{
 				file->compress_alg = to_file->compress_alg;
 				file->write_size = to_file->write_size;
-				file->crc = to_file->crc;
+
+				/*
+				 * Recalculate crc for backup prior to 2.0.25.
+				 */
+				if (parse_program_version(from_backup->program_version) < 20025)
+					file->crc = pgFileGetCRC(to_file_path, true, true, NULL);
+				/* Otherwise just get it from the previous file */
+				else
+					file->crc = to_file->crc;
 			}
 
 			continue;
@@ -453,10 +466,6 @@ merge_files(void *arg)
 
 		if (file->is_datafile && !file->is_cfs)
 		{
-			char		to_file_path[MAXPGPATH];	/* Path of target file */
-
-			join_path_components(to_file_path, argument->to_root, prev_file_path);
-
 			/*
 			 * We need more complicate algorithm if target file should be
 			 * compressed.
