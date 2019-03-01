@@ -37,8 +37,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
-        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
-            self.AssertTrue(False, 'Failed to hit breakpoint')
+        gdb.continue_execution_until_break(20)
 
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'node')[0]['status'])
@@ -93,8 +92,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
-        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
-            self.AssertTrue(False, 'Failed to hit breakpoint')
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
         gdb.continue_execution_until_error()
@@ -164,8 +162,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
-        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
-            self.AssertTrue(False, 'Failed to hit breakpoint')
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
         gdb.continue_execution_until_error()
@@ -263,8 +260,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
-        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
-            self.AssertTrue(False, 'Failed to hit breakpoint')
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
         gdb.continue_execution_until_error()

@@ -1071,9 +1071,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
-        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
-            print('Failed to hit breakpoint')
-            exit(1)
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
 
@@ -1154,9 +1152,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
-        if gdb.continue_execution_until_break(2) != 'breakpoint-hit':
-            print('Failed to hit breakpoint')
-            exit(1)
+        gdb.continue_execution_until_break(2)
 
         gdb._execute('signal SIGKILL')
 
@@ -1252,9 +1248,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('pgFileDelete')
         gdb.run_until_break()
 
-        if gdb.continue_execution_until_break(20) != 'breakpoint-hit':
-            print('Failed to hit breakpoint')
-            exit(1)
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
 
