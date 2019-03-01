@@ -557,9 +557,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         gdb = self.gdb_attach(pid)
         gdb.set_breakpoint('reform_and_rewrite_tuple')
 
-        if not gdb.continue_execution_until_running():
-            print('Failed gdb continue')
-            exit(1)
+        gdb.continue_execution_until_running()
 
         acurs.execute("VACUUM FULL t_heap")
 

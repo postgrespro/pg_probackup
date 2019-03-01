@@ -19,7 +19,7 @@
 #include "utils/thread.h"
 #include <time.h>
 
-const char *PROGRAM_VERSION	= "2.0.26";
+const char *PROGRAM_VERSION	= "2.0.27";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -64,6 +64,7 @@ bool		progress = false;
 #if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
 #endif
+bool		temp_slot = false;
 
 /* backup options */
 bool		backup_logs = false;
@@ -136,6 +137,7 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
+	{ 'b', 234, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	/* TODO not completed feature. Make it unavailiable from user level
@@ -400,6 +402,8 @@ main(int argc, char *argv[])
 	 * We have read pgdata path from command line or from configuration file.
 	 * Ensure that pgdata is an absolute path.
 	 */
+	if (instance_config.pgdata != NULL)
+		canonicalize_path(instance_config.pgdata);
 	if (instance_config.pgdata != NULL &&
 		!is_absolute_path(instance_config.pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
@@ -445,7 +449,7 @@ main(int argc, char *argv[])
 		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
 
 		/* Set 'pg_log' in first empty slot */
-		pgdata_exclude_dir[i] = "pg_log";
+		pgdata_exclude_dir[i] = PG_LOG_DIR;
 	}
 
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)
@@ -581,8 +585,8 @@ compress_init(void)
 	if (instance_config.compress_level < 0 || instance_config.compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
-	if (instance_config.compress_level == 0)
-		instance_config.compress_alg = NOT_DEFINED_COMPRESS;
+	if (instance_config.compress_alg == ZLIB_COMPRESS && instance_config.compress_level == 0)
+		elog(WARNING, "Compression level 0 will lead to data bloat!");
 
 	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
 	{

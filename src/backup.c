@@ -650,6 +650,14 @@ do_backup_instance(void)
 			dir_list_file(backup_files_list, parray_get(external_dirs, i),
 						  false, true, false, i+1);
 
+	/* Sanity check for backup_files_list, thank you, Windows:
+	 * https://github.com/postgrespro/pg_probackup/issues/48
+	 */
+
+	if (parray_num(backup_files_list) == 0)
+		elog(ERROR, "PGDATA is empty. Either it was concurrently deleted or "
+			"pg_probackup do not possess sufficient permissions to list PGDATA content");
+
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
 	 * directories sequentially.
@@ -992,9 +1000,6 @@ do_backup(time_t start_time)
 								   instance_config.master_user);
 	}
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/*
 	 * Ensure that backup directory was initialized for the same PostgreSQL
 	 * instance we opened connection to. And that target backup database PGDATA
@@ -1003,7 +1008,6 @@ do_backup(time_t start_time)
 	/* TODO fix it for remote backup */
 	if (!is_remote_backup)
 		check_system_identifiers();
-
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -1020,7 +1024,10 @@ do_backup(time_t start_time)
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
-		elog(ERROR, "cannot create backup directory");
+		elog(ERROR, "Cannot create backup directory");
+	if (!lock_backup(&current))
+		elog(ERROR, "Cannot lock backup %s directory",
+			 base36enc(current.start_time));
 	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");
@@ -1324,7 +1331,7 @@ pg_ptrack_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -1341,7 +1348,7 @@ pg_checksum_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show data_checksums", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW data_checksums", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -2823,6 +2830,20 @@ StreamLog(void *arg)
 	stream_stop_timeout = 0;
 	stream_stop_begin = 0;
 
+#if PG_VERSION_NUM >= 100000
+	/* if slot name was not provided for temp slot, use default slot name */
+	if (!replication_slot && temp_slot)
+		replication_slot = "pg_probackup_slot";
+#endif
+
+
+#if PG_VERSION_NUM >= 110000
+	/* Create temp repslot */
+	if (temp_slot)
+		CreateReplicationSlot(stream_arg->conn, replication_slot,
+			NULL, temp_slot, true, true, false);
+#endif
+
 	/*
 	 * Start the replication
 	 */
@@ -2843,6 +2864,9 @@ StreamLog(void *arg)
 		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
+#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+		ctl.temp_slot = temp_slot;
+#endif
 #else
 		ctl.basedir = (char *) stream_arg->basedir;
 #endif

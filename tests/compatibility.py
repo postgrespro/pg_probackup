@@ -109,6 +109,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_delta(self):
@@ -209,6 +212,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_ptrack(self):
@@ -308,6 +314,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -467,3 +476,64 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_backward_compatibility_merge(self):
+        """
+        Create node, take FULL and PAGE backups with old binary,
+        merge them with new binary
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+
+        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        node.slow_start()
+
+        # FULL backup with OLD binary
+        self.backup_node(
+            backup_dir, 'node', node,
+            old_binary=True)
+
+        node.pgbench_init(scale=1)
+
+        # PAGE backup with OLD binary
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', old_binary=True)
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        self.merge_backup(backup_dir, "node", backup_id)
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        # restore OLD FULL with new binary
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored, options=["-j", "4"])
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

@@ -22,9 +22,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -74,9 +73,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -214,9 +212,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -300,9 +297,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -412,6 +408,178 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_validate_specific_error_intermediate_backups(self):
+        """
+        make archive node, take FULL, PAGE1, PAGE2 backups,
+        change backup status of FULL and PAGE1 to ERROR,
+        run validate on PAGE1
+        purpose of this test is to be sure that not only
+        CORRUPT backup descendants can be orphanized
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        backup_id_1 = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        backup_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        backup_id_3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change FULL backup status to ERROR
+        control_path = os.path.join(
+            backup_dir, 'backups', 'node', backup_id_1, 'backup.control')
+
+        with open(control_path, 'r') as f:
+            actual_control = f.read()
+
+        new_control_file = ''
+        for line in actual_control.splitlines():
+            new_control_file += line.replace(
+                'status = OK', 'status = ERROR')
+            new_control_file += '\n'
+
+        with open(control_path, 'wt') as f:
+            f.write(new_control_file)
+            f.flush()
+            f.close()
+
+        # Validate PAGE1
+        try:
+            self.validate_pb(
+                backup_dir, 'node', backup_id=backup_id_2)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup has status ERROR.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'WARNING: Backup {0} is orphaned because '
+                'his parent {1} has status: ERROR'.format(
+                    backup_id_2, backup_id_1) in e.message and
+                'INFO: Validating parents for backup {0}'.format(
+                    backup_id_2) in e.message and
+                'WARNING: Backup {0} has status ERROR. Skip validation.'.format(
+                    backup_id_1) and
+                'ERROR: Backup {0} is orphan.'.format(backup_id_2) in e.message,
+                '\n Unexpected Error Message: {0}\n '
+                'CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node', backup_id_1)['status'],
+            'Backup STATUS should be "ERROR"')
+        self.assertEqual(
+            'ORPHAN',
+            self.show_pb(backup_dir, 'node', backup_id_2)['status'],
+            'Backup STATUS should be "ORPHAN"')
+        self.assertEqual(
+            'ORPHAN',
+            self.show_pb(backup_dir, 'node', backup_id_3)['status'],
+            'Backup STATUS should be "ORPHAN"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_validate_error_intermediate_backups(self):
+        """
+        make archive node, take FULL, PAGE1, PAGE2 backups,
+        change backup status of FULL and PAGE1 to ERROR,
+        run validate on instance
+        purpose of this test is to be sure that not only
+        CORRUPT backup descendants can be orphanized
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        backup_id_1 = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        backup_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        backup_id_3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change FULL backup status to ERROR
+        control_path = os.path.join(
+            backup_dir, 'backups', 'node', backup_id_1, 'backup.control')
+
+        with open(control_path, 'r') as f:
+            actual_control = f.read()
+
+        new_control_file = ''
+        for line in actual_control.splitlines():
+            new_control_file += line.replace(
+                'status = OK', 'status = ERROR')
+            new_control_file += '\n'
+
+        with open(control_path, 'wt') as f:
+            f.write(new_control_file)
+            f.flush()
+            f.close()
+
+        # Validate instance
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup has status ERROR.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "WARNING: Backup {0} is orphaned because "
+                "his parent {1} has status: ERROR".format(
+                    backup_id_2, backup_id_1) in e.message and
+                'WARNING: Backup {0} has status ERROR. Skip validation'.format(
+                    backup_id_1) in e.message and
+                "WARNING: Some backups are not valid" in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node', backup_id_1)['status'],
+            'Backup STATUS should be "ERROR"')
+        self.assertEqual(
+            'ORPHAN',
+            self.show_pb(backup_dir, 'node', backup_id_2)['status'],
+            'Backup STATUS should be "ORPHAN"')
+        self.assertEqual(
+            'ORPHAN',
+            self.show_pb(backup_dir, 'node', backup_id_3)['status'],
+            'Backup STATUS should be "ORPHAN"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups_1(self):
         """
         make archive node, FULL1, PAGE1, PAGE2, PAGE3, PAGE4, PAGE5, FULL2,
@@ -422,9 +590,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -620,9 +787,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -805,9 +971,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -952,9 +1117,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try to restore backup with --no-validation option"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1048,9 +1212,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         expect FULL to gain status CORRUPT, PAGE1 and PAGE2 to gain status ORPHAN"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1142,9 +1305,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1204,9 +1366,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """make archive node, make full backup, corrupt all wal files, run validate to real xid, expect errors"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1276,9 +1437,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1353,9 +1513,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1449,8 +1608,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1491,8 +1650,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1521,8 +1680,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node1', node1)
@@ -1614,10 +1773,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
-                'checkpoint_timeout': '30'}
-            )
+                'checkpoint_timeout': '30'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1739,8 +1897,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1851,8 +2009,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2201,8 +2359,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2424,7 +2582,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             # initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
         )
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2503,8 +2660,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2645,8 +2802,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2766,8 +2923,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2954,8 +3111,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -3102,8 +3259,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

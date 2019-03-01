@@ -1102,7 +1102,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			  bool overwrite)
 {
 	FILE	   *in = NULL;
-	FILE	   *out=NULL;
+	int			out;
 	char		buf[XLOG_BLCKSZ];
 	const char *to_path_p;
 	char		to_path_temp[MAXPGPATH];
@@ -1142,7 +1142,13 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	{
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
-		gz_out = gzopen(to_path_temp, PG_BINARY_W);
+		out = open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY,
+				   S_IRUSR | S_IWUSR);
+		if (out < 0)
+			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+				 to_path_temp, strerror(errno));
+
+		gz_out = gzdopen(out, PG_BINARY_W);
 		if (gzsetparams(gz_out, instance_config.compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
 			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
 				 instance_config.compress_level, to_path_temp,
@@ -1153,9 +1159,10 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	{
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fopen(to_path_temp, PG_BINARY_W);
-		if (out == NULL)
-			elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
+		out = open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY,
+				   S_IRUSR | S_IWUSR);
+		if (out < 0)
+			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
 	}
 
@@ -1191,7 +1198,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			else
 #endif
 			{
-				if (fwrite(buf, 1, read_len, out) != read_len)
+				if (write(out, buf, read_len) != read_len)
 				{
 					errno_temp = errno;
 					unlink(to_path_temp);
@@ -1219,9 +1226,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
-		if (fflush(out) != 0 ||
-			fsync(fileno(out)) != 0 ||
-			fclose(out))
+		if (fsync(out) != 0 || close(out) != 0)
 		{
 			errno_temp = errno;
 			unlink(to_path_temp);
@@ -1262,7 +1267,7 @@ void
 get_wal_file(const char *from_path, const char *to_path)
 {
 	FILE	   *in = NULL;
-	FILE	   *out;
+	int			out;
 	char		buf[XLOG_BLCKSZ];
 	const char *from_path_p = from_path;
 	char		to_path_temp[MAXPGPATH];
@@ -1312,10 +1317,11 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-	out = fopen(to_path_temp, PG_BINARY_W);
-	if (out == NULL)
-		elog(ERROR, "Cannot open destination WAL file \"%s\": %s",
-			 to_path_temp, strerror(errno));
+	out = open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY,
+				S_IRUSR | S_IWUSR);
+	if (out < 0)
+		elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+				to_path_temp, strerror(errno));
 
 	/* copy content */
 	for (;;)
@@ -1349,7 +1355,7 @@ get_wal_file(const char *from_path, const char *to_path)
 
 		if (read_len > 0)
 		{
-			if (fwrite(buf, 1, read_len, out) != read_len)
+			if (write(out, buf, read_len) != read_len)
 			{
 				errno_temp = errno;
 				unlink(to_path_temp);
@@ -1373,9 +1379,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		}
 	}
 
-	if (fflush(out) != 0 ||
-		fsync(fileno(out)) != 0 ||
-		fclose(out))
+	if (fsync(out) != 0 || close(out) != 0)
 	{
 		errno_temp = errno;
 		unlink(to_path_temp);
@@ -1565,7 +1569,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	pg_crc32	crc;
 	bool		use_crc32c = backup_version <= 20021 || backup_version >= 20025;
 
-	elog(VERBOSE, "validate relation blocks for file %s", file->name);
+	elog(VERBOSE, "validate relation blocks for file %s", file->path);
 
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)

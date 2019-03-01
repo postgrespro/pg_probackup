@@ -2,13 +2,10 @@ import unittest
 
 from . import init_test, merge, option_test, show_test, compatibility, \
     backup_test, delete_test, delta, restore_test, validate_test, \
-    retention_test, ptrack_clean, ptrack_empty, ptrack_cluster, \
-    ptrack_move_to_tablespace, ptrack_recovery, ptrack_truncate, \
-    ptrack_vacuum, ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
-    ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
-    false_positive, replica, compression, page, ptrack, archive, \
-    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test, \
-    time_stamp, snapfs, logging, locking, remote, external
+    retention_test, pgpro560, pgpro589, false_positive, replica, \
+    compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
+    cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
+    locking, remote, external
 
 
 def load_tests(loader, tests, pattern):
@@ -32,18 +29,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(merge))
     suite.addTests(loader.loadTestsFromModule(option_test))
     suite.addTests(loader.loadTestsFromModule(page))
-    suite.addTests(loader.loadTestsFromModule(ptrack))
-    suite.addTests(loader.loadTestsFromModule(ptrack_clean))
-    suite.addTests(loader.loadTestsFromModule(ptrack_empty))
-    suite.addTests(loader.loadTestsFromModule(ptrack_cluster))
-    suite.addTests(loader.loadTestsFromModule(ptrack_move_to_tablespace))
-    suite.addTests(loader.loadTestsFromModule(ptrack_recovery))
-    suite.addTests(loader.loadTestsFromModule(ptrack_truncate))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_bits_frozen))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_bits_visibility))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_full))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_truncate))
+#    suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(remote))
     suite.addTests(loader.loadTestsFromModule(replica))
     suite.addTests(loader.loadTestsFromModule(restore_test))

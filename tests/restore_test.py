@@ -1160,7 +1160,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql("postgres", "create table t_heap(a int)")
         node.stop()
-        node.cleanup()
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
 
         recovery_time = self.show_pb(
             backup_dir, 'node', backup_id)['recovery-time']
@@ -1168,22 +1171,24 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
+                backup_dir, 'node', node_restored,
                 options=[
                     "-j", "4", '--time={0}'.format(recovery_time),
-                    "--recovery-target-action=promote"
-                    ]
+                    "--recovery-target-action=promote"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
         if self.paranoia:
-            pgdata_restored = self.pgdata_content(node.data_dir)
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node.slow_start()
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
 
-        result = node.psql("postgres", 'select * from t_heap')
+        node_restored.slow_start()
+
+        result = node_restored.psql("postgres", 'select * from t_heap')
         self.assertTrue('does not exist' in result[2].decode("utf-8"))
 
         # Clean after yourself

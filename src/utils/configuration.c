@@ -267,12 +267,24 @@ assign_option(ConfigOption *opt, const char *optarg, OptionSource src)
 		}
 	}
 
-	if (isprint(opt->sname))
-		elog(ERROR, "Option -%c, --%s should be %s: '%s'",
-			opt->sname, opt->lname, message, optarg);
+	if (optarg)
+	{
+		if (isprint(opt->sname))
+			elog(ERROR, "Option -%c, --%s should be %s: '%s'",
+				 opt->sname, opt->lname, message, optarg);
+		else
+			elog(ERROR, "Option --%s should be %s: '%s'",
+				 opt->lname, message, optarg);
+	}
 	else
-		elog(ERROR, "Option --%s should be %s: '%s'",
-			opt->lname, message, optarg);
+	{
+		if (isprint(opt->sname))
+			elog(ERROR, "Option -%c, --%s should be %s",
+				 opt->sname, opt->lname, message);
+		else
+			elog(ERROR, "Option --%s should be %s",
+				 opt->lname, message);
+	}
 }
 
 static const char *

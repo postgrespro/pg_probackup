@@ -484,8 +484,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 		 * If we don't have WAL between start_lsn and stop_lsn,
 		 * the backup is definitely corrupted. Update its status.
 		 */
-		backup->status = BACKUP_STATUS_CORRUPT;
-		write_backup_status(backup);
+		write_backup_status(backup, BACKUP_STATUS_CORRUPT);
 
 		elog(WARNING, "There are not enough WAL records to consistenly restore "
 			"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",
