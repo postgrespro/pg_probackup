@@ -535,7 +535,12 @@ int fio_fstat(int fd, struct stat* st)
 		Assert(hdr.cop == FIO_FSTAT);
 		IO_CHECK(fio_read_all(fio_stdin, st, sizeof(*st)), sizeof(*st));
 
-		return hdr.arg;
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
+		return 0;
 	}
 	else
 	{
@@ -563,7 +568,12 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_locati
 		Assert(hdr.cop == FIO_STAT);
 		IO_CHECK(fio_read_all(fio_stdin, st, sizeof(*st)), sizeof(*st));
 
-		return hdr.arg;
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
+		return 0;
 	}
 	else
 	{
@@ -589,7 +599,12 @@ int fio_access(char const* path, int mode, fio_location location)
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_ACCESS);
 
-		return hdr.arg;
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
+		return 0;
 	}
 	else
 	{
@@ -1074,19 +1089,20 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_FSTAT: /* Get information about opened file */
 			hdr.size = sizeof(st);
-			hdr.arg = fstat(fd[hdr.handle], &st);
+			hdr.arg = fstat(fd[hdr.handle], &st) < 0 ? errno : 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
 		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);
-			hdr.arg = hdr.arg ? stat(buf, &st) : lstat(buf, &st);
+			rc = hdr.arg ? stat(buf, &st) : lstat(buf, &st);
+			hdr.arg = rc < 0 ? errno : 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
 		  case FIO_ACCESS: /* Check presence of file with specified name */
 			hdr.size = 0;
-			hdr.arg = access(buf, hdr.arg);
+			hdr.arg = access(buf, hdr.arg) < 0 ? errno  : 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_RENAME: /* Rename file */
