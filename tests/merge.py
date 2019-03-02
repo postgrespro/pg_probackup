@@ -1369,6 +1369,48 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    def test_merge_different_wal_modes(self):
+        """
+        Check that backups with different wal modes can be merged
+        correctly
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL stream backup
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # DELTA archive backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        self.assertEqual(
+            'ARCHIVE', self.show_pb(backup_dir, 'node', backup_id)['wal'])
+
+        # DELTA stream backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        self.assertEqual(
+            'STREAM', self.show_pb(backup_dir, 'node', backup_id)['wal'])
+
+        self.del_test_dir(module_name, fname)
+
 # 1. always use parent link when merging (intermediates may be from different chain)
 # 2. page backup we are merging with may disappear after failed merge,
 # it should not be possible to continue merge after that
