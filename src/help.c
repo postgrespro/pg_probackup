@@ -97,7 +97,7 @@ help_pg_probackup(void)
 	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [--stream [-S slot-name] [--temp-slot]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--temp-slot]\n"));
 	printf(_("                 [--backup-pg-log] [-j num-threads]\n"));
 	printf(_("                 [--archive-timeout=archive-timeout] [--progress]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
