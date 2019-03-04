@@ -284,6 +284,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		pg_atomic_init_flag(&file->lock);
 	}
 
+	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
 		merge_files_arg *arg = &(threads_args[i]);
@@ -456,7 +457,7 @@ merge_files(void *arg)
 			continue;
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during merging backups");
 
 		/* Directories were created before */

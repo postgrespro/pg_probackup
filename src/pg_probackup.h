@@ -573,14 +573,11 @@ extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 /* parsexlog.c */
 extern void extractPageMap(const char *archivedir,
 						   TimeLineID tli, uint32 seg_size,
-						   XLogRecPtr startpoint, XLogRecPtr endpoint,
-						   parray *files);
-extern void validate_wal(pgBackup *backup,
-						 const char *archivedir,
-						 time_t target_time,
-						 TransactionId target_xid,
-						 XLogRecPtr target_lsn,
-						 TimeLineID tli, uint32 seg_size);
+						   XLogRecPtr startpoint, XLogRecPtr endpoint);
+extern void validate_wal(pgBackup *backup, const char *archivedir,
+						 time_t target_time, TransactionId target_xid,
+						 XLogRecPtr target_lsn, TimeLineID tli,
+						 uint32 seg_size);
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
