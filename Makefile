@@ -47,7 +47,7 @@ endif
 
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc -I$(top_srcdir)/$(subdir)/src
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
-PG_LIBS = $(libpq_pgport) ${PTHREAD_CFLAGS}
+PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
 all: checksrcdir $(INCLUDES);
 

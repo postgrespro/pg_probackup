@@ -288,10 +288,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_backup->end_time = time(NULL);
 
 	/*
-	 * If one of the backups isn't "stream" backup then the target backup become
-	 * non-stream backup too.
+	 * Target backup must inherit wal mode too.
 	 */
-	to_backup->stream = to_backup->stream && from_backup->stream;
+	to_backup->stream = from_backup->stream;
 	/* Compute summary of size of regular files in the backup */
 	to_backup->data_bytes = 0;
 	for (i = 0; i < parray_num(files); i++)

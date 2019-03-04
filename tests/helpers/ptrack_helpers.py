@@ -1463,17 +1463,14 @@ class GDBobj(ProbackupTest):
         else:
             result = self._execute('continue', False)
 
-        running = False
         for line in result:
-            if line.startswith('*running'):
-                running = True
             if line.startswith('*stopped,reason="breakpoint-hit"'):
-                return 'breakpoint-hit'
+                return
             if line.startswith('*stopped,reason="exited-normally"'):
-                return 'exited-normally'
+                break
 
-        if running:
-            return 'running'
+        raise GdbException(
+            'Failed to continue execution until break.\n')
 
     def stopped_in_breakpoint(self):
         output = []
