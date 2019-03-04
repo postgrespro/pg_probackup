@@ -131,7 +131,7 @@ help_pg_probackup(void)
 	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
-	printf(_("                 [-i backup-id] [--progress]\n"));
+	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
@@ -350,6 +350,7 @@ help_validate(void)
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
 	printf(_("      --progress                   show progress\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));

@@ -511,6 +511,7 @@ restore_backup(pgBackup *backup)
 	}
 
 	/* Restore files into target directory */
+	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
 		restore_files_arg *arg = &(threads_args[i]);
@@ -617,7 +618,7 @@ restore_files(void *arg)
 						lengthof(from_root), DATABASE_DIR);
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during restore database");
 
 		rel_path = GetRelativePath(file->path,from_root);

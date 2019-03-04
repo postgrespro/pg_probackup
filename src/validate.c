@@ -115,6 +115,7 @@ pgBackupValidate(pgBackup *backup)
 		palloc(sizeof(validate_files_arg) * num_threads);
 
 	/* Validate files */
+	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
@@ -184,7 +185,7 @@ pgBackupValidateFiles(void *arg)
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during validate");
 
 		/* Validate only regular files */

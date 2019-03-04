@@ -405,7 +405,7 @@ remote_backup_files(void *arg)
 													instance_config.pguser);
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during backup");
 
 		query_str = psprintf("FILE_BACKUP FILEPATH '%s'",file->path);
@@ -621,6 +621,7 @@ do_backup_instance(void)
 		/* By default there are some error */
 		stream_thread_arg.ret = 1;
 
+		thread_interrupted = false;
 		pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
 	}
 
@@ -678,8 +679,7 @@ do_backup_instance(void)
 		 * where this backup has started.
 		 */
 		extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
-					   prev_backup->start_lsn, current.start_lsn,
-					   backup_files_list);
+					   prev_backup->start_lsn, current.start_lsn);
 	}
 	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -746,6 +746,7 @@ do_backup_instance(void)
 	}
 
 	/* Run threads */
+	thread_interrupted = false;
 	elog(INFO, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
@@ -2244,7 +2245,7 @@ backup_files(void *arg)
 		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during backup");
 
 		if (progress)
@@ -2689,7 +2690,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	static XLogRecPtr prevpos = InvalidXLogRecPtr;
 
 	/* check for interrupt */
-	if (interrupted)
+	if (interrupted || thread_interrupted)
 		elog(ERROR, "Interrupted during backup");
 
 	/* we assume that we get called once at the end of each segment */
