@@ -873,6 +873,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 	req.arg.clevel = clevel;
 
 	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+	file->compress_alg = calg;
 
 	while (true)
 	{
@@ -886,7 +887,24 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 
 		blknum = hdr.arg;
 		if (hdr.size == 0) /* end of segment */
+		{
+			if (n_blocks_read == 0)
+			{
+				BackupPageHeader ph;
+				ph.block = blknum;
+				ph.compressed_size = 0;
+				if (fio_fwrite(out, &ph, sizeof ph) != sizeof(ph))
+				{
+					int	errno_tmp = errno;
+					fio_fclose(out);
+					elog(ERROR, "File: %s, cannot write backup at block %u: %s",
+						 file->path, blknum, strerror(errno_tmp));
+				}
+				n_blocks_read++;
+				file->write_size = sizeof(ph);
+			}
 			break;
+		}
 
 		Assert(hdr.size <= sizeof(buf));
 		IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
@@ -900,7 +918,6 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 			elog(ERROR, "File: %s, cannot write backup at block %u: %s",
 				 file->path, blknum, strerror(errno_tmp));
 		}
-		file->compress_alg = calg;
 		file->read_size += BLCKSZ;
 		file->write_size += hdr.size;
 		n_blocks_read++;
