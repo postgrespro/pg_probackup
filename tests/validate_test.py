@@ -58,7 +58,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '{0} blknum 1, empty page'.format(file_path) in f.read(),
                 'Failed to detect nullified block')
 
-        self.validate_pb(backup_dir)
+        self.validate_pb(backup_dir, options=["-j", "4"])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -99,7 +99,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "INFO: backup validation completed successfully",
             self.validate_pb(
                 backup_dir, 'node',
-                options=["--time={0}".format(target_time)]),
+                options=["--time={0}".format(target_time), "-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -108,7 +108,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(
                 backup_dir, 'node', options=["--time={0}".format(
-                    unreal_time_1)])
+                    unreal_time_1), "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of validation to unreal time.\n "
@@ -126,7 +126,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(
                 backup_dir, 'node',
-                options=["--time={0}".format(unreal_time_2)])
+                options=["--time={0}".format(unreal_time_2), "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of validation to unreal time.\n "
@@ -150,7 +150,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: backup validation completed successfully",
             self.validate_pb(
-                backup_dir, 'node', options=["--xid={0}".format(target_xid)]),
+                backup_dir, 'node', options=["--xid={0}".format(target_xid),
+                                             "-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -158,7 +159,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         unreal_xid = int(target_xid) + 1000
         try:
             self.validate_pb(
-                backup_dir, 'node', options=["--xid={0}".format(unreal_xid)])
+                backup_dir, 'node', options=["--xid={0}".format(unreal_xid),
+                                             "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of validation to unreal xid.\n "
@@ -171,7 +173,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Validate with backup ID
-        output = self.validate_pb(backup_dir, 'node', backup_id)
+        output = self.validate_pb(backup_dir, 'node', backup_id,
+                                  options=["-j", "4"])
         self.assertIn(
             "INFO: Validating backup {0}".format(backup_id),
             output,

@@ -1233,14 +1233,14 @@ SwitchThreadToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 		if (wal_consistent_read && XLogWaitForConsistency(xlogreader))
 			return false;
 
-		elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X",
+		elog(WARNING, "Thread [%d]: Could not read WAL record at %X/%X",
 			 reader_data->thread_num,
 			 (uint32) (arg->startpoint >> 32), (uint32) (arg->startpoint));
 		PrintXLogCorruptionMsg(reader_data, ERROR);
 	}
 	arg->startpoint = found;
 
-	elog(VERBOSE, "Thread [%d]: switched to LSN %X/%X",
+	elog(VERBOSE, "Thread [%d]: Switched to LSN %X/%X",
 		 reader_data->thread_num,
 		 (uint32) (arg->startpoint >> 32), (uint32) (arg->startpoint));
 
@@ -1257,14 +1257,22 @@ SwitchThreadToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 static bool
 XLogWaitForConsistency(XLogReaderState *xlogreader)
 {
-	uint32		segnum_need = 0;
+	uint32		segnum_need;
 	XLogReaderData *reader_data =(XLogReaderData *) xlogreader->private_data;
+	bool		log_message = true;
 
 	segnum_need = reader_data->xlogsegno - segno_start;
 	while (true)
 	{
 		uint32		segnum_current_read;
 		XLogSegNo	segno;
+
+		if (log_message)
+		{
+			elog(VERBOSE, "Thread [%d]: Possible WAL corruption. Wait for other threads to decide is this a failure",
+				 reader_data->thread_num);
+			log_message = false;
+		}
 
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Thread [%d]: Interrupted during WAL reading",
@@ -1277,9 +1285,15 @@ XLogWaitForConsistency(XLogReaderState *xlogreader)
 
 		/* Other threads read all previous segments and didn't find target */
 		if (segnum_need <= segnum_current_read)
+		{
+			/* Mark current segment as read even if it wasn't read actually */
+			pthread_lock(&wal_segment_mutex);
+			segnum_read++;
+			pthread_mutex_unlock(&wal_segment_mutex);
 			return false;
+		}
 
-		if (segno < reader_data->xlogsegno)
+		if (segno != 0 && segno < reader_data->xlogsegno)
 			return true;
 
 		pg_usleep(1000000L);	/* 1000 ms */
