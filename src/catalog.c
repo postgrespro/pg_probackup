@@ -592,22 +592,38 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 void
 write_backup(pgBackup *backup)
 {
-	FILE   *fp = NULL;
-	char	conf_path[MAXPGPATH];
+	FILE	   *fp = NULL;
+	char		path[MAXPGPATH];
+	char		path_temp[MAXPGPATH];
+	int			errno_temp;
 
-	pgBackupGetPath(backup, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
-	fp = fopen(conf_path, "wt");
+	pgBackupGetPath(backup, path, lengthof(path), BACKUP_CONTROL_FILE);
+	snprintf(path_temp, sizeof(path_temp), "%s.partial", path);
+
+	fp = fopen(path_temp, "wt");
 	if (fp == NULL)
-		elog(ERROR, "Cannot open configuration file \"%s\": %s", conf_path,
-			 strerror(errno));
+		elog(ERROR, "Cannot open configuration file \"%s\": %s",
+			 path_temp, strerror(errno));
 
 	pgBackupWriteControl(fp, backup);
 
 	if (fflush(fp) != 0 ||
 		fsync(fileno(fp)) != 0 ||
 		fclose(fp))
+	{
+		errno_temp = errno;
+		unlink(path_temp);
 		elog(ERROR, "Cannot write configuration file \"%s\": %s",
-			 conf_path, strerror(errno));
+			 path_temp, strerror(errno_temp));
+	}
+
+	if (rename(path_temp, path) < 0)
+	{
+		errno_temp = errno;
+		unlink(path_temp);
+		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
+			 path_temp, path, strerror(errno_temp));
+	}
 }
 
 /*
@@ -619,20 +635,36 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 {
 	FILE	   *fp;
 	char		path[MAXPGPATH];
+	char		path_temp[MAXPGPATH];
+	int			errno_temp;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+	snprintf(path_temp, sizeof(path_temp), "%s.partial", path);
 
-	fp = fopen(path, "wt");
+	fp = fopen(path_temp, "wt");
 	if (fp == NULL)
-		elog(ERROR, "Cannot open file list \"%s\": %s", path,
-			strerror(errno));
+		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
+			 strerror(errno));
 
 	print_file_list(fp, files, root, external_prefix, external_list);
 
 	if (fflush(fp) != 0 ||
 		fsync(fileno(fp)) != 0 ||
 		fclose(fp))
-		elog(ERROR, "Cannot write file list \"%s\": %s", path, strerror(errno));
+	{
+		errno_temp = errno;
+		unlink(path_temp);
+		elog(ERROR, "Cannot write file list \"%s\": %s",
+			 path_temp, strerror(errno));
+	}
+
+	if (rename(path_temp, path) < 0)
+	{
+		errno_temp = errno;
+		unlink(path_temp);
+		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
+			 path_temp, path, strerror(errno_temp));
+	}
 }
 
 /*
