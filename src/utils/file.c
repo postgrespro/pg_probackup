@@ -872,8 +872,9 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 	req.arg.calg = calg;
 	req.arg.clevel = clevel;
 
-	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
 	file->compress_alg = calg;
+
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
 
 	while (true)
 	{
@@ -887,24 +888,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 
 		blknum = hdr.arg;
 		if (hdr.size == 0) /* end of segment */
-		{
-			if (n_blocks_read == 0)
-			{
-				BackupPageHeader ph;
-				ph.block = blknum;
-				ph.compressed_size = 0;
-				if (fio_fwrite(out, &ph, sizeof ph) != sizeof(ph))
-				{
-					int	errno_tmp = errno;
-					fio_fclose(out);
-					elog(ERROR, "File: %s, cannot write backup at block %u: %s",
-						 file->path, blknum, strerror(errno_tmp));
-				}
-				n_blocks_read++;
-				file->write_size = sizeof(ph);
-			}
 			break;
-		}
 
 		Assert(hdr.size <= sizeof(buf));
 		IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
@@ -918,9 +902,15 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 			elog(ERROR, "File: %s, cannot write backup at block %u: %s",
 				 file->path, blknum, strerror(errno_tmp));
 		}
-		file->read_size += BLCKSZ;
 		file->write_size += hdr.size;
 		n_blocks_read++;
+
+		if (((BackupPageHeader*)buf)->compressed_size == PageIsTruncated)
+		{
+			blknum += 1;
+			break;
+		}
+		file->read_size += BLCKSZ;
 	}
 	*nBlocksSkipped = blknum - n_blocks_read;
 	return blknum;
@@ -939,25 +929,30 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 	{
 		int retry_attempts = PAGE_READ_ATTEMPTS;
 		XLogRecPtr page_lsn = InvalidXLogRecPtr;
-		bool is_empty_page = false;
-		do
+
+		while (true)
 		{
 			ssize_t rc = pread(fd, read_buffer, BLCKSZ, blknum*BLCKSZ);
 
 			if (rc <= 0)
 			{
-				hdr.size = 0;
 				if (rc < 0)
 				{
 					hdr.arg = -errno;
+					hdr.size = 0;
 					Assert(hdr.arg < 0);
+					IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 				}
 				else
 				{
-					/* This is the last page */
+					BackupPageHeader bph;
+					bph.block = blknum;
+					bph.compressed_size = PageIsTruncated;
 					hdr.arg = blknum;
+					hdr.size = sizeof(bph);
+					IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+					IO_CHECK(fio_write_all(out, &bph, sizeof(bph)), sizeof(bph));
 				}
-				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 				return;
 			}
 			else if (rc == BLCKSZ)
@@ -969,10 +964,7 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 
 					/* Page is zeroed. No need to check header and checksum. */
 					if (i == BLCKSZ)
-					{
-						is_empty_page = true;
 						break;
-					}
 				}
 				else if (!req->checksumVersion
 						 || pg_checksum_page(read_buffer, req->segBlockNum + blknum) == ((PageHeader)read_buffer)->pd_checksum)
@@ -980,42 +972,36 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 					break;
 				}
 			}
-		} while (--retry_attempts != 0);
 
-		if (retry_attempts == 0)
-		{
-			hdr.size = 0;
-			hdr.arg = PAGE_CHECKSUM_MISMATCH;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			return;
+			if (--retry_attempts == 0)
+			{
+				hdr.size = 0;
+				hdr.arg = PAGE_CHECKSUM_MISMATCH;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				return;
+			}
 		}
 		/* horizonLsn is not 0 for delta backup. As far as unsigned number are always greater or equal than zero, there is no sense to add more checks */
 		if (page_lsn >= req->horizonLsn)
 		{
 			char write_buffer[BLCKSZ*2];
 			BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
+			const char *errormsg = NULL;
 
 			hdr.arg = bph->block = blknum;
 			hdr.size = sizeof(BackupPageHeader);
 
-			if (is_empty_page)
+			bph->compressed_size = do_compress(write_buffer + sizeof(BackupPageHeader), sizeof(write_buffer) - sizeof(BackupPageHeader),
+											   read_buffer, BLCKSZ, req->calg, req->clevel,
+											   &errormsg);
+			if (bph->compressed_size <= 0 || bph->compressed_size >= BLCKSZ)
 			{
-				bph->compressed_size = PageIsTruncated;
+				/* Do not compress page */
+				memcpy(write_buffer + sizeof(BackupPageHeader), read_buffer, BLCKSZ);
+				bph->compressed_size = BLCKSZ;
 			}
-			else
-			{
-				const char *errormsg = NULL;
-				bph->compressed_size = do_compress(write_buffer + sizeof(BackupPageHeader), sizeof(write_buffer) - sizeof(BackupPageHeader),
-												   read_buffer, BLCKSZ, req->calg, req->clevel,
-												   &errormsg);
-				if (bph->compressed_size <= 0 || bph->compressed_size >= BLCKSZ)
-				{
-					/* Do not compress page */
-					memcpy(write_buffer + sizeof(BackupPageHeader), read_buffer, BLCKSZ);
-					bph->compressed_size = BLCKSZ;
-				}
-				hdr.size += MAXALIGN(bph->compressed_size);
-			}
+			hdr.size += MAXALIGN(bph->compressed_size);
+
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, write_buffer, hdr.size), hdr.size);
 		}
