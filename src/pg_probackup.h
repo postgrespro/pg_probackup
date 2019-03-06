@@ -171,8 +171,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.0.27"
-#define AGENT_PROTOCOL_VERSION 20026
+#define PROGRAM_VERSION	"2.0.28"
+#define AGENT_PROTOCOL_VERSION 20028
 
 /*
  * An instance configuration. It can be stored in a configuration file or passed
