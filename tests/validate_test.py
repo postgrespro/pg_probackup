@@ -260,7 +260,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Simple validate
         try:
             self.validate_pb(
-                backup_dir, 'node', backup_id=backup_id_2)
+                backup_dir, 'node', backup_id=backup_id_2, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -363,7 +363,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate PAGE1
         try:
             self.validate_pb(
-                backup_dir, 'node', backup_id=backup_id_2)
+                backup_dir, 'node', backup_id=backup_id_2, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -462,7 +462,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Validate PAGE1
         try:
             self.validate_pb(
-                backup_dir, 'node', backup_id=backup_id_2)
+                backup_dir, 'node', backup_id=backup_id_2, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because backup has status ERROR.\n "
@@ -549,7 +549,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate instance
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because backup has status ERROR.\n "
@@ -688,7 +688,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(
                 backup_dir, 'node',
-                backup_id=backup_id_4)
+                backup_id=backup_id_4, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n"
@@ -888,7 +888,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.validate_pb(
                 backup_dir, 'node',
                 options=[
-                    '-i', backup_id_4, '--xid={0}'.format(target_xid)])
+                    '-i', backup_id_4, '--xid={0}'.format(target_xid),
+                    "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -1029,8 +1030,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate Instance
         try:
-            self.validate_pb(
-                backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -1178,7 +1178,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate Instance
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(1, 0, "Expecting Error because of data files corruption.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
@@ -1279,7 +1279,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate Instance
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -1337,7 +1337,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Simple validate
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segments corruption.\n"
@@ -1407,7 +1407,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 'node',
                 backup_id,
                 options=[
-                    "--xid={0}".format(target_xid)])
+                    "--xid={0}".format(target_xid), "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segments corruption.\n"
@@ -1464,7 +1464,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             file = file[:-3]
 
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segment disappearance.\n"
@@ -1488,7 +1488,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Run validate again
         try:
-            self.validate_pb(backup_dir, 'node', backup_id)
+            self.validate_pb(backup_dir, 'node', backup_id, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup corruption.\n"
@@ -1572,7 +1572,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 'node',
                 backup_id,
                 options=[
-                    "--xid={0}".format(target_xid)])
+                    "--xid={0}".format(target_xid), "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segments corruption.\n"
@@ -1626,7 +1626,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(
                 backup_dir, 'node',
-                options=["--time={0}".format(recovery_time)])
+                options=["--time={0}".format(recovery_time), "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segment disappearance.\n "
@@ -1666,7 +1666,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', backup_id)['recovery-time']
 
         self.validate_pb(
-            backup_dir, 'node', options=["--time={0}".format(recovery_time)])
+            backup_dir, 'node', options=["--time={0}".format(recovery_time),
+                                         "-j", "4"])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1823,7 +1824,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_new)
 
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data file dissapearance.\n "
@@ -1861,7 +1862,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         os.rename(file_new, file)
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
         except ProbackupException as e:
             self.assertIn(
                 'WARNING: Some backups are not valid'.format(
@@ -1926,7 +1927,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_new)
 
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data file dissapearance.\n "
@@ -1966,7 +1967,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_new)
 
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
         except ProbackupException as e:
             self.assertIn(
                 'WARNING: Some backups are not valid'.format(
@@ -2040,7 +2041,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_new)
 
         try:
-            self.validate_pb(backup_dir, 'node', validate_id)
+            self.validate_pb(backup_dir, 'node', validate_id,
+                             options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data file dissapearance.\n "
@@ -2087,7 +2089,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data file dissapearance.\n "
@@ -2155,7 +2157,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # revalidate again
 
         try:
-            self.validate_pb(backup_dir, 'node', validate_id)
+            self.validate_pb(backup_dir, 'node', validate_id,
+                             options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data file dissapearance.\n "
@@ -2228,7 +2231,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Fix CORRUPT
         os.rename(file_new, file)
 
-        output = self.validate_pb(backup_dir, 'node', validate_id)
+        output = self.validate_pb(backup_dir, 'node', validate_id,
+                                  options=["-j", "4"])
 
         self.assertIn(
             'WARNING: Backup {0} has status: ORPHAN'.format(validate_id),
@@ -2390,7 +2394,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(file, file_new)
 
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data file dissapearance.\n "
@@ -2432,7 +2436,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(old_directory, new_directory)
 
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
         except ProbackupException as e:
             self.assertIn(
                 'WARNING: Some backups are not valid', e.message,
@@ -2476,7 +2480,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # second time must be provided with ID of missing backup
 
         try:
-            self.validate_pb(backup_dir)
+            self.validate_pb(backup_dir, options=["-j", "4"])
         except ProbackupException as e:
             self.assertIn(
                 'WARNING: Some backups are not valid', e.message,
@@ -2521,7 +2525,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
-        output = self.validate_pb(backup_dir)
+        output = self.validate_pb(backup_dir, options=["-j", "4"])
 
         self.assertIn(
             'INFO: All backups are valid',
@@ -2697,7 +2701,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(old_directory, new_directory)
 
         try:
-            self.validate_pb(backup_dir, 'node', validate_id)
+            self.validate_pb(backup_dir, 'node', validate_id,
+                             options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup dissapearance.\n "
@@ -2737,7 +2742,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
         try:
-            self.validate_pb(backup_dir, 'node', validate_id)
+            self.validate_pb(backup_dir, 'node', validate_id,
+                             options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup dissapearance.\n "
@@ -2766,7 +2772,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(new_directory, old_directory)
 
         # Revalidate backup chain
-        self.validate_pb(backup_dir, 'node', validate_id)
+        self.validate_pb(backup_dir, 'node', validate_id, options=["-j", "4"])
 
         self.assertTrue(self.show_pb(backup_dir, 'node')[11]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[10]['status'] == 'OK')
@@ -2844,7 +2850,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(full_old_directory, full_new_directory)
 
         try:
-            self.validate_pb(backup_dir, 'node', validate_id)
+            self.validate_pb(backup_dir, 'node', validate_id,
+                             options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup dissapearance.\n "
@@ -2887,7 +2894,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(full_new_directory, full_old_directory)
 
         # Revalidate backup chain
-        self.validate_pb(backup_dir, 'node', validate_id)
+        self.validate_pb(backup_dir, 'node', validate_id, options=["-j", "4"])
 
         self.assertTrue(self.show_pb(backup_dir, 'node')[11]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[10]['status'] == 'OK')
@@ -2967,7 +2974,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(full_old_directory, full_new_directory)
 
         try:
-            self.validate_pb(backup_dir, 'node', validate_id)
+            self.validate_pb(backup_dir, 'node', validate_id,
+                             options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup dissapearance.\n "
@@ -3010,7 +3018,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Revalidate backup chain
         try:
-            self.validate_pb(backup_dir, 'node', validate_id)
+            self.validate_pb(backup_dir, 'node', validate_id,
+                             options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup dissapearance.\n "
@@ -3075,7 +3084,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(full_new_directory, full_old_directory)
 
         # Revalidate chain
-        self.validate_pb(backup_dir, 'node', validate_id)
+        self.validate_pb(backup_dir, 'node', validate_id, options=["-j", "4"])
 
         self.assertTrue(self.show_pb(backup_dir, 'node')[11]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[10]['status'] == 'OK')
@@ -3151,7 +3160,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.rename(full_old_directory, full_new_directory)
 
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup dissapearance.\n "
@@ -3200,7 +3209,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Revalidate backup chain
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup dissapearance.\n "
@@ -3309,7 +3318,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate backup
         try:
-            self.validate_pb(backup_dir, 'node')
+            self.validate_pb(backup_dir, 'node', options=["-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of pg_control change.\n "
