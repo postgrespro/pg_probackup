@@ -209,3 +209,41 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delete_backup_with_empty_control_file(self):
+        """
+        take backup, truncate its control file,
+        try to delete it via 'delete' command
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # full backup mode
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+        # page backup mode
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="delta", options=['--stream'])
+        # page backup mode
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="delta", options=['--stream'])
+
+        with open(
+            os.path.join(backup_dir, 'backups', 'node', backup_id, 'backup.control'),
+            'wt') as f:
+                f.flush()
+                f.close()
+
+        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
