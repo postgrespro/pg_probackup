@@ -128,7 +128,7 @@ bool launch_agent(void)
 		if (execvp(ssh_argv[0], ssh_argv) < 0)
 			return false;
 	} else {
-		elog(LOG, "Spawn agent %d", child_pid);
+		elog(LOG, "Spawn agent %d version %s", child_pid, PROGRAM_VERSION);
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
 		SYS_CHECK(close(outfd[0]));
 		/*atexit(kill_child);*/
