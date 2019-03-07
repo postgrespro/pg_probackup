@@ -912,7 +912,8 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
  * it is either small control file or already compressed cfs file.
  */
 bool
-copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location location)
+copy_file(const char *from_root, fio_location from_location,
+		  const char *to_root, fio_location to_location, pgFile *file)
 {
 	char		to_path[MAXPGPATH];
 	FILE	   *in;
@@ -930,7 +931,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fopen(file->path, PG_BINARY_R);
+	in = fio_fopen(file->path, PG_BINARY_R, from_location);
 	if (in == NULL)
 	{
 		FIN_FILE_CRC32(true, crc);
@@ -950,19 +951,19 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	out = fio_fopen(to_path, PG_BINARY_W, location);
+	out = fio_fopen(to_path, PG_BINARY_W, to_location);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
-		fclose(in);
+		fio_fclose(in);
 		elog(ERROR, "cannot open destination file \"%s\": %s",
 			 to_path, strerror(errno_tmp));
 	}
 
 	/* stat source file to change mode of destination file */
-	if (fstat(fileno(in), &st) == -1)
+	if (fio_ffstat(in, &st) == -1)
 	{
-		fclose(in);
+		fio_fclose(in);
 		fio_fclose(out);
 		elog(ERROR, "cannot stat \"%s\": %s", file->path,
 			 strerror(errno));
@@ -973,14 +974,14 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 	{
 		read_len = 0;
 
-		if ((read_len = fread(buf, 1, sizeof(buf), in)) != sizeof(buf))
+		if ((read_len = fio_fread(in, buf, sizeof(buf))) != sizeof(buf))
 			break;
 
 		if (fio_fwrite(out, buf, read_len) != read_len)
 		{
 			errno_tmp = errno;
 			/* oops */
-			fclose(in);
+			fio_fclose(in);
 			fio_fclose(out);
 			elog(ERROR, "cannot write to \"%s\": %s", to_path,
 				 strerror(errno_tmp));
@@ -992,9 +993,9 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 	}
 
 	errno_tmp = errno;
-	if (!feof(in))
+	if (read_len < 0)
 	{
-		fclose(in);
+		fio_fclose(in);
 		fio_fclose(out);
 		elog(ERROR, "cannot read backup mode file \"%s\": %s",
 			 file->path, strerror(errno_tmp));
@@ -1007,7 +1008,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 		{
 			errno_tmp = errno;
 			/* oops */
-			fclose(in);
+			fio_fclose(in);
 			fio_fclose(out);
 			elog(ERROR, "cannot write to \"%s\": %s", to_path,
 				 strerror(errno_tmp));
@@ -1024,10 +1025,10 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 	file->crc = crc;
 
 	/* update file permission */
-	if (fio_chmod(to_path, st.st_mode, location) == -1)
+	if (fio_chmod(to_path, st.st_mode, to_location) == -1)
 	{
 		errno_tmp = errno;
-		fclose(in);
+		fio_fclose(in);
 		fio_fclose(out);
 		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
@@ -1036,7 +1037,7 @@ copy_file(const char *from_root, const char *to_root, pgFile *file, fio_location
 	if (fio_fflush(out) != 0 ||
 		fio_fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
-	fclose(in);
+	fio_fclose(in);
 
 	return true;
 }

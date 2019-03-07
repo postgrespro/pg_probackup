@@ -2333,7 +2333,7 @@ backup_files(void *arg)
 						skip = true; /* ...skip copying file. */
 				}
 				if (skip ||
-					!copy_file(arguments->from_root, arguments->to_root, file, FIO_BACKUP_HOST))
+					!copy_file(arguments->from_root, FIO_DB_HOST, arguments->to_root, FIO_BACKUP_HOST, file))
 				{
 					/* disappeared file not to be confused with 'not changed' */
 					if (file->write_size != FILE_NOT_FOUND)
