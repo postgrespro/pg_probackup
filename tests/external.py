@@ -847,7 +847,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     def test_external_dir_is_symlink(self):
         """
         Check that backup works correctly if external dir is symlink,
-        symlink should be read correctly, but not restored 
+        symlink pointing to external dir should be followed,
+        but restored as directory
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -875,8 +876,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # fill some directory with data
         core_dir = os.path.join(self.tmp_path, module_name, fname)
-        simlinked_dir = os.path.join(core_dir, 'simlinked')
-
         self.restore_node(
             backup_dir, 'node', node,
             data_dir=simlinked_dir, options=["-j", "4"])
