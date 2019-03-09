@@ -1411,7 +1411,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
-    def test_crash_after_opening_backup_control(self):
+    def test_crash_after_opening_backup_control_1(self):
         """
         check that crashing after opening backup.control
         for writing will not result in losing backup metadata
@@ -1458,6 +1458,89 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
+
+        self.del_test_dir(module_name, fname)
+
+    def test_crash_after_opening_backup_control_2(self):
+        """
+        check that crashing after opening backup_content.control
+        for writing will not result in losing metadata about backup files
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Add data
+        node.pgbench_init(scale=3)
+
+        # FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        path = node.safe_psql(
+            'postgres',
+            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        vm_path = path + '_vm'
+
+        print(vm_path)
+
+        # DELTA backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+        gdb.set_breakpoint('write_backup_filelist')
+        gdb.run_until_break()
+
+        gdb.set_breakpoint('print_file_list')
+        gdb.continue_execution_until_break()
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
+
+        # In to_backup drop file that comes from from_backup
+        os.remove(
+            os.path.join(
+                backup_dir, 'backups', 'node',
+                full_id, 'database', vm_path))
+
+        # Continue failed merge
+        self.merge_backup(backup_dir, "node", backup_id)
+
+        node.cleanup()
+
+        # restore merge backup
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         self.del_test_dir(module_name, fname)
 
