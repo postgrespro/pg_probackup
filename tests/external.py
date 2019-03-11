@@ -867,6 +867,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
+        symlinked_dir = self.get_tblspace_path(node, 'symlinked_dir')
 
         node.pgbench_init(scale=3)
 
@@ -878,13 +879,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         core_dir = os.path.join(self.tmp_path, module_name, fname)
         self.restore_node(
             backup_dir, 'node', node,
-            data_dir=simlinked_dir, options=["-j", "4"])
+            data_dir=symlinked_dir, options=["-j", "4"])
 
         # drop temp FULL backup
         self.delete_pb(backup_dir, 'node', backup_id=backup_id)
 
         # create symlink to directory in external directory
-        os.symlink(simlinked_dir, external_dir)
+        os.symlink(symlinked_dir, external_dir)
 
         # FULL backup with external directories
         self.backup_node(
@@ -894,9 +895,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "-E", "{0}".format(
                     external_dir)])
 
-        pgdata = self.pgdata_content(
-            node.base_dir, exclude_dirs=['logs'])
-
+        symlink_data = self.pgdata_content(symlinked_dir)
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
 
@@ -912,10 +911,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "-j", "4", "--external-mapping={0}={1}".format(
                     external_dir, external_dir_new)])
 
-        pgdata_restored = self.pgdata_content(
-            node_restored.base_dir, exclude_dirs=['logs'])
+        restored_data = self.pgdata_content(external_dir_new)
 
-        self.compare_pgdata(pgdata, pgdata_restored)
+        self.compare_pgdata(symlink_data, restored_data)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
