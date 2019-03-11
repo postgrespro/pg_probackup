@@ -122,38 +122,31 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
 #    @unittest.skip("123")
-    def test_retention_wal(self):
-        """purge backups using window-based retention policy"""
+    def test_retention_window_3(self):
+        """purge all backups using window-based retention policy"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.safe_psql(
-            "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, "
-            "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,100500) i")
 
         # Take FULL BACKUP
-        self.backup_node(backup_dir, 'node', node)
-        node.safe_psql(
-            "postgres",
-            "insert into t_heap select i as id, md5(i::text) as text, "
-            "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,100500) i")
+        backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
-        self.backup_node(backup_dir, 'node', node)
+        # Take second FULL BACKUP
+        backup_id_2 = self.backup_node(backup_dir, 'node', node)
+
+        # Take third FULL BACKUP
+        backup_id_3 = self.backup_node(backup_dir, 'node', node)
+
 
         backups = os.path.join(backup_dir, 'backups', 'node')
-        days_delta = 5
         for backup in os.listdir(backups):
             if backup == 'pg_probackup.conf':
                 continue
@@ -161,18 +154,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                     os.path.join(
                         backups, backup, "backup.control"), "a") as conf:
                 conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
-                    datetime.now() - timedelta(days=days_delta)))
-                days_delta -= 1
-
-        # Make backup to be keeped
-        self.backup_node(backup_dir, 'node', node, backup_type="page")
-
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
+                    datetime.now() - timedelta(days=3)))
 
         # Purge backups
         self.delete_expired(
-            backup_dir, 'node', options=['--retention-window=2'])
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
+            backup_dir, 'node', options=['--retention-window=1'])
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
