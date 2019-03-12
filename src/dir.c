@@ -478,7 +478,11 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 	if (!S_ISDIR(file->mode))
 	{
-		elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
+		if (external_dir_num)
+			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
+				 file->path);
+		else
+			elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
 		return;
 	}
 	if (add_root)
