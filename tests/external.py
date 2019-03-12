@@ -20,6 +20,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external directory was successfully copied
         """
         fname = self.id().split('.')[3]
+        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
@@ -34,6 +36,27 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        # take FULL backup with external directory pointing to a file
+        file_path = os.path.join(core_dir, 'file')
+        open(file_path,"w+")
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type="full",
+                options=[
+                    '--external-dirs={0}'.format(file_path)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because external dir point to a file"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'Insert correct message' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # FULL backup
         self.backup_node(
@@ -918,7 +941,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node_restored.base_dir, exclude_dirs=['logs'])
 
         self.compare_pgdata(pgdata, pgdata_restored)
-
 
         self.assertEqual(
             external_dir,
