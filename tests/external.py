@@ -867,7 +867,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
-        symlinked_dir = self.get_tblspace_path(node, 'symlinked_dir')
 
         node.pgbench_init(scale=3)
 
@@ -877,6 +876,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # fill some directory with data
         core_dir = os.path.join(self.tmp_path, module_name, fname)
+        symlinked_dir = os.path.join(core_dir, 'symlinked')
+
         self.restore_node(
             backup_dir, 'node', node,
             data_dir=symlinked_dir, options=["-j", "4"])
@@ -888,14 +889,16 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         os.symlink(symlinked_dir, external_dir)
 
         # FULL backup with external directories
-        self.backup_node(
+        backup_id = self.backup_node(
             backup_dir, 'node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}".format(
                     external_dir)])
 
-        symlink_data = self.pgdata_content(symlinked_dir)
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
 
@@ -911,9 +914,17 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "-j", "4", "--external-mapping={0}={1}".format(
                     external_dir, external_dir_new)])
 
-        restored_data = self.pgdata_content(external_dir_new)
+        pgdata_restored = self.pgdata_content(
+            node_restored.base_dir, exclude_dirs=['logs'])
 
-        self.compare_pgdata(symlink_data, restored_data)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+
+        self.assertEqual(
+            external_dir,
+            self.show_pb(
+                backup_dir, 'node',
+                backup_id=backup_id)['external-dirs'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
