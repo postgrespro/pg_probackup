@@ -126,7 +126,6 @@ do_retention_purge(void)
 	size_t		i;
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
-	bool		keep_next_backup = true;	/* Do not delete first full backup */
 	bool		backup_deleted = false;		/* At least one backup was deleted */
 
 	if (delete_expired)
@@ -158,6 +157,7 @@ do_retention_purge(void)
 		(instance_config.retention_redundancy > 0 ||
 		 instance_config.retention_window > 0))
 	{
+		bool		keep_next_backup = false;	/* Do not delete first full backup */
 		time_t		days_threshold;
 		uint32		backup_num = 0;
 
@@ -216,6 +216,7 @@ do_retention_purge(void)
 			/* Delete backup and update status to DELETED */
 			delete_backup_files(backup);
 			backup_deleted = true;
+			keep_next_backup = false;	/* reset it */
 		}
 	}
 
