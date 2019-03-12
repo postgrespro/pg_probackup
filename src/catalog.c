@@ -74,6 +74,14 @@ write_backup_status(pgBackup *backup, BackupStatus status)
 	pgBackup   *tmp;
 
 	tmp = read_backup(backup->start_time);
+	if (!tmp)
+	{
+		/*
+		 * Silently exit the function, since read_backup already logged the
+		 * warning message.
+		 */
+		return;
+	}
 
 	backup->status = status;
 	tmp->status = backup->status;
@@ -301,11 +309,10 @@ IsDir(const char *dirpath, const char *entry)
 parray *
 catalog_get_backup_list(time_t requested_backup_id)
 {
-	DIR			   *data_dir = NULL;
-	struct dirent  *data_ent = NULL;
-	parray		   *backups = NULL;
-	pgBackup	   *backup = NULL;
-	int		i;
+	DIR		   *data_dir = NULL;
+	struct dirent *data_ent = NULL;
+	parray	   *backups = NULL;
+	int			i;
 
 	/* open backup instance backups directory */
 	data_dir = opendir(backup_instance_path);
@@ -320,8 +327,9 @@ catalog_get_backup_list(time_t requested_backup_id)
 	backups = parray_new();
 	for (; (data_ent = readdir(data_dir)) != NULL; errno = 0)
 	{
-		char backup_conf_path[MAXPGPATH];
-		char data_path[MAXPGPATH];
+		char		backup_conf_path[MAXPGPATH];
+		char		data_path[MAXPGPATH];
+		pgBackup   *backup = NULL;
 
 		/* skip not-directory entries and hidden entries */
 		if (!IsDir(backup_instance_path, data_ent->d_name)
@@ -355,7 +363,6 @@ catalog_get_backup_list(time_t requested_backup_id)
 			continue;
 		}
 		parray_append(backups, backup);
-		backup = NULL;
 
 		if (errno && errno != ENOENT)
 		{
@@ -405,8 +412,6 @@ catalog_get_backup_list(time_t requested_backup_id)
 err_proc:
 	if (data_dir)
 		closedir(data_dir);
-	if (backup)
-		pgBackupFree(backup);
 	if (backups)
 		parray_walk(backups, pgBackupFree);
 	parray_free(backups);
