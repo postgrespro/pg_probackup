@@ -951,6 +951,59 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_external_dir_is_tablespace(self):
+        """
+        Check that backup fails with error
+        if external directory points to tablespace
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        shutil.rmtree(core_dir, ignore_errors=True)
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        external_dir = self.get_tblspace_path(node, 'external_dir')
+
+        self.create_tblspace_in_node(
+            node, 'tblspace1', tblspc_path=external_dir)
+
+        node.pgbench_init(scale=3, tablespace='tblspace1')
+
+        # FULL backup with external directories
+        try:
+            backup_id = self.backup_node(
+                backup_dir, 'node', node,
+                options=[
+                    "-j", "4", "--stream",
+                    "-E", "{0}".format(
+                        external_dir)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because external dir points to the tablespace"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'Insert correct message' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
         # external directory contain symlink to file
         # external directory contain symlink to directory
         # external directory is symlink +
