@@ -243,6 +243,9 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
                 f.flush()
                 f.close()
 
+        show_backups = self.show_pb(backup_dir, 'node')
+        self.assertEqual(len(show_backups), 3)
+
         self.delete_pb(backup_dir, 'node', backup_id=backup_id)
 
         # Clean after yourself
