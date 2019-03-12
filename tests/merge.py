@@ -1274,6 +1274,102 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    def test_continue_failed_merge_3(self):
+        """
+        Check that failed MERGE can`t be continued after target backup deleting
+        Create FULL and 2 PAGE backups
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True, initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Create test data
+        node.safe_psql("postgres", "create sequence t_seq")
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, nextval('t_seq')"
+            " as t_seq, md5(i::text) as text, md5(i::text)::tsvector"
+            " as tsvector from generate_series(0,100000) i"
+        )
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # CREATE FEW PAGE BACKUP
+        i = 0
+
+        while i < 2:
+
+            node.safe_psql(
+                "postgres",
+                "delete from t_heap"
+            )
+
+            node.safe_psql(
+                "postgres",
+                "vacuum t_heap"
+            )
+            node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, nextval('t_seq') as t_seq,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(100,200000) i"
+            )
+
+            # PAGE BACKUP
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='page'
+            )
+            i = i + 1
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        backup_id_merge = self.show_pb(backup_dir, "node")[2]["id"]
+        backup_id_delete = self.show_pb(backup_dir, "node")[1]["id"]
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id_merge, gdb=True)
+
+        gdb.set_breakpoint('copy_file')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(2)
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+        print(os.path.join(backup_dir, "backups", "node", backup_id_delete))
+
+        # DELETE PAGE1
+        shutil.rmtree(
+            os.path.join(backup_dir, "backups", "node", backup_id_delete))
+
+        # Try to continue failed MERGE
+        try:
+            self.merge_backup(backup_dir, "node", backup_id_merge)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of backup corruption.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "ERROR: Parent full backup for the given backup {0} was not found".format(
+                    backup_id_merge) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     def test_merge_different_compression_algo(self):
         """
         Check that backups with different compression algorihtms can be merged
