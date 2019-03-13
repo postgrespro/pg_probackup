@@ -184,6 +184,8 @@ static XLogSegNo segno_target = 0;
 static XLogSegNo segno_next = 0;
 /* Number of segments already read by threads */
 static uint32 segnum_read = 0;
+/* Number of detected corrupted or absent segments */
+static uint32 segnum_corrupted = 0;
 static pthread_mutex_t wal_segment_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* copied from timestamp.c */
@@ -900,6 +902,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 	segno_target = 0;
 	GetXLogSegNo(startpoint, segno_next, segment_size);
 	segnum_read = 0;
+	segnum_corrupted = 0;
 
 	threads = (pthread_t *) pgut_malloc(sizeof(pthread_t) * num_threads);
 	thread_args = (xlog_thread_arg *) pgut_malloc(sizeof(xlog_thread_arg) * num_threads);
@@ -1103,6 +1106,20 @@ XLogThreadWorker(void *arg)
 			 */
 			if (wal_consistent_read && XLogWaitForConsistency(xlogreader))
 				break;
+			else if (wal_consistent_read)
+			{
+				XLogSegNo	segno_report;
+
+				pthread_lock(&wal_segment_mutex);
+				segno_report = segno_start + segnum_read;
+				pthread_mutex_unlock(&wal_segment_mutex);
+
+				/*
+				 * Report error message if this is the first corrupted WAL.
+				*/
+				if (reader_data->xlogsegno > segno_report)
+					return NULL;	/* otherwise just stop the thread */
+			}
 
 			errptr = thread_arg->startpoint ?
 				thread_arg->startpoint : xlogreader->EndRecPtr;
@@ -1232,6 +1249,20 @@ SwitchThreadToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 		 */
 		if (wal_consistent_read && XLogWaitForConsistency(xlogreader))
 			return false;
+		else if (wal_consistent_read)
+		{
+			XLogSegNo	segno_report;
+
+			pthread_lock(&wal_segment_mutex);
+			segno_report = segno_start + segnum_read;
+			pthread_mutex_unlock(&wal_segment_mutex);
+
+			/*
+			 * Report error message if this is the first corrupted WAL.
+			 */
+			if (reader_data->xlogsegno > segno_report)
+				return false;	/* otherwise just stop the thread */
+		}
 
 		elog(WARNING, "Thread [%d]: Could not read WAL record at %X/%X",
 			 reader_data->thread_num,
@@ -1279,16 +1310,16 @@ XLogWaitForConsistency(XLogReaderState *xlogreader)
 				 reader_data->thread_num);
 
 		pthread_lock(&wal_segment_mutex);
-		segnum_current_read = segnum_read;
+		segnum_current_read = segnum_read + segnum_corrupted;
 		segno = segno_target;
 		pthread_mutex_unlock(&wal_segment_mutex);
 
 		/* Other threads read all previous segments and didn't find target */
 		if (segnum_need <= segnum_current_read)
 		{
-			/* Mark current segment as read even if it wasn't read actually */
+			/* Mark current segment as corrupted */
 			pthread_lock(&wal_segment_mutex);
-			segnum_read++;
+			segnum_corrupted++;
 			pthread_mutex_unlock(&wal_segment_mutex);
 			return false;
 		}
@@ -1296,7 +1327,7 @@ XLogWaitForConsistency(XLogReaderState *xlogreader)
 		if (segno != 0 && segno < reader_data->xlogsegno)
 			return true;
 
-		pg_usleep(1000000L);	/* 1000 ms */
+		pg_usleep(500000L);	/* 500 ms */
 	}
 
 	/* We shouldn't reach it */
