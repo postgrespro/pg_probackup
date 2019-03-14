@@ -1300,8 +1300,13 @@ XLogWaitForConsistency(XLogReaderState *xlogreader)
 
 		if (log_message)
 		{
-			elog(VERBOSE, "Thread [%d]: Possible WAL corruption. Wait for other threads to decide is this a failure",
-				 reader_data->thread_num);
+			char		xlogfname[MAXFNAMELEN];
+
+			GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno,
+							wal_seg_size);
+
+			elog(VERBOSE, "Thread [%d]: Possible WAL corruption in %s. Wait for other threads to decide is this a failure",
+				 reader_data->thread_num, xlogfname);
 			log_message = false;
 		}
 
