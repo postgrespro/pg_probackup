@@ -96,7 +96,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         # Validate to real time
         self.assertIn(
-            "INFO: backup validation completed successfully",
+            "INFO: Backup validation completed successfully",
             self.validate_pb(
                 backup_dir, 'node',
                 options=["--time={0}".format(target_time), "-j", "4"]),
@@ -134,7 +134,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'ERROR: not enough WAL records to time' in e.message,
+                'ERROR: Not enough WAL records to time' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -148,7 +148,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(node)
 
         self.assertIn(
-            "INFO: backup validation completed successfully",
+            "INFO: Backup validation completed successfully",
             self.validate_pb(
                 backup_dir, 'node', options=["--xid={0}".format(target_xid),
                                              "-j", "4"]),
@@ -168,7 +168,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'ERROR: not enough WAL records to xid' in e.message,
+                'ERROR: Not enough WAL records to xid' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1580,9 +1580,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'ERROR: not enough WAL records to xid' in e.message and
-                'WARNING: recovery can be done up to time' in e.message and
-                "ERROR: not enough WAL records to xid {0}\n".format(
+                'ERROR: Not enough WAL records to xid' in e.message and
+                'WARNING: Recovery can be done up to time' in e.message and
+                "ERROR: Not enough WAL records to xid {0}\n".format(
                     target_xid),
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))

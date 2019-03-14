@@ -390,29 +390,29 @@ validate_wal(pgBackup *backup, const char *archivedir,
 
 	/* There are all needed WAL records */
 	if (all_wal)
-		elog(INFO, "backup validation completed successfully on time %s, xid " XID_FMT " and LSN %X/%X",
+		elog(INFO, "Backup validation completed successfully on time %s, xid " XID_FMT " and LSN %X/%X",
 			 last_timestamp, last_rec.rec_xid,
 			 (uint32) (last_rec.rec_lsn >> 32), (uint32) last_rec.rec_lsn);
 	/* Some needed WAL records are absent */
 	else
 	{
-		elog(WARNING, "recovery can be done up to time %s, xid " XID_FMT " and LSN %X/%X",
+		elog(WARNING, "Recovery can be done up to time %s, xid " XID_FMT " and LSN %X/%X",
 				last_timestamp, last_rec.rec_xid,
 			 (uint32) (last_rec.rec_lsn >> 32), (uint32) last_rec.rec_lsn);
 
 		if (target_time > 0)
 			time2iso(target_timestamp, lengthof(target_timestamp), target_time);
 		if (TransactionIdIsValid(target_xid) && target_time != 0)
-			elog(ERROR, "not enough WAL records to time %s and xid " XID_FMT,
+			elog(ERROR, "Not enough WAL records to time %s and xid " XID_FMT,
 					target_timestamp, target_xid);
 		else if (TransactionIdIsValid(target_xid))
-			elog(ERROR, "not enough WAL records to xid " XID_FMT,
+			elog(ERROR, "Not enough WAL records to xid " XID_FMT,
 					target_xid);
 		else if (target_time != 0)
-			elog(ERROR, "not enough WAL records to time %s",
+			elog(ERROR, "Not enough WAL records to time %s",
 					target_timestamp);
 		else if (XRecOffIsValid(target_lsn))
-			elog(ERROR, "not enough WAL records to lsn %X/%X",
+			elog(ERROR, "Not enough WAL records to lsn %X/%X",
 					(uint32) (target_lsn >> 32), (uint32) (target_lsn));
 	}
 }
@@ -458,11 +458,11 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
 
 			if (errormsg)
-				elog(ERROR, "could not read WAL record at %X/%X: %s",
+				elog(ERROR, "Could not read WAL record at %X/%X: %s",
 					 (uint32) (errptr >> 32), (uint32) (errptr),
 					 errormsg);
 			else
-				elog(ERROR, "could not read WAL record at %X/%X",
+				elog(ERROR, "Could not read WAL record at %X/%X",
 					 (uint32) (errptr >> 32), (uint32) (errptr));
 		}
 
@@ -1042,13 +1042,13 @@ XLogThreadWorker(void *arg)
 		else
 		{
 			if (xlogreader->errormsg_buf[0] != '\0')
-				elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X: %s",
+				elog(WARNING, "Thread [%d]: Could not read WAL record at %X/%X: %s",
 					reader_data->thread_num,
 					(uint32) (thread_arg->startpoint >> 32),
 					(uint32) (thread_arg->startpoint),
 					xlogreader->errormsg_buf);
 			else
-				elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X",
+				elog(WARNING, "Thread [%d]: Could not read WAL record at %X/%X",
 					reader_data->thread_num,
 					(uint32) (thread_arg->startpoint >> 32),
 					(uint32) (thread_arg->startpoint));
@@ -1125,12 +1125,12 @@ XLogThreadWorker(void *arg)
 				thread_arg->startpoint : xlogreader->EndRecPtr;
 
 			if (errormsg)
-				elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X: %s",
+				elog(WARNING, "Thread [%d]: Could not read WAL record at %X/%X: %s",
 					 reader_data->thread_num,
 					 (uint32) (errptr >> 32), (uint32) (errptr),
 					 errormsg);
 			else
-				elog(WARNING, "Thread [%d]: could not read WAL record at %X/%X",
+				elog(WARNING, "Thread [%d]: Could not read WAL record at %X/%X",
 					 reader_data->thread_num,
 					 (uint32) (errptr >> 32), (uint32) (errptr));
 
