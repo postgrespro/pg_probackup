@@ -853,7 +853,7 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 			{
 				gz->strm.next_in = gz->buf;
 			}
-			rc = read(gz->fd, gz->strm.next_in + gz->strm.avail_in, gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
+			rc = fio_read(gz->fd, gz->strm.next_in + gz->strm.avail_in, gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
 			if (rc > 0)
 			{
 				gz->strm.avail_in += rc;
@@ -902,7 +902,7 @@ fio_gzwrite(gzFile f, void const* buf, unsigned size)
 					break;
 				}
 			}
-			rc = write(gz->fd, gz->strm.next_out, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
+			rc = fio_write(gz->fd, gz->strm.next_out, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
 			if (rc >= 0)
 			{
 				gz->strm.next_out += rc;
@@ -935,7 +935,7 @@ fio_gzclose(gzFile f)
 			rc = deflate(&gz->strm, Z_FINISH);
 			Assert(rc == Z_STREAM_END && gz->strm.avail_out != ZLIB_BUFFER_SIZE);
 			deflateEnd(&gz->strm);
-			rc = write(gz->fd, gz->buf, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
+			rc = fio_write(gz->fd, gz->buf, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
 			if (rc != ZLIB_BUFFER_SIZE - gz->strm.avail_out)
 			{
 				return -1;
