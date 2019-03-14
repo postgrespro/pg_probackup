@@ -1102,7 +1102,6 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #ifdef HAVE_LIBZ
 	char		gz_to_path[MAXPGPATH];
 	gzFile		gz_out = NULL;
-	int         gz_tmp = -1;
 
 	if (is_compress)
 	{
@@ -1135,14 +1134,10 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	{
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
-		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, &gz_tmp, FIO_BACKUP_HOST);
+		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST);
 		if (gz_out == NULL)
 			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
-		if (gzsetparams(gz_out, instance_config.compress_level, Z_DEFAULT_STRATEGY) != Z_OK)
-			elog(ERROR, "Cannot set compression level %d to file \"%s\": %s",
-				 instance_config.compress_level, to_path_temp,
-				 get_gz_error(gz_out, errno));
 	}
 	else
 #endif
@@ -1176,7 +1171,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #ifdef HAVE_LIBZ
 			if (is_compress)
 			{
-				if (gzwrite(gz_out, buf, read_len) != read_len)
+				if (fio_gzwrite(gz_out, buf, read_len) != read_len)
 				{
 					errno_temp = errno;
 					fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -1204,7 +1199,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #ifdef HAVE_LIBZ
 	if (is_compress)
 	{
-		if (fio_gzclose(gz_out, to_path_temp, gz_tmp) != 0)
+		if (fio_gzclose(gz_out) != 0)
 		{
 			errno_temp = errno;
 			fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -1696,10 +1691,9 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 	{
 		char 		buf [1024];
 		gzFile		gz_in = NULL;
-		int         gz_tmp = -1;
 
 		INIT_FILE_CRC32(true, crc2);
-		gz_in = fio_gzopen(path2, PG_BINARY_R, &gz_tmp, FIO_BACKUP_HOST);
+		gz_in = fio_gzopen(path2, PG_BINARY_R, Z_DEFAULT_COMPRESSION, FIO_BACKUP_HOST);
 		if (gz_in == NULL)
 			/* File cannot be read */
 			elog(ERROR,
@@ -1709,20 +1703,20 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 		for (;;)
 		{
 			size_t read_len = 0;
-			read_len = gzread(gz_in, buf, sizeof(buf));
-			if (read_len != sizeof(buf) && !gzeof(gz_in))
+			read_len = fio_gzread(gz_in, buf, sizeof(buf));
+			if (read_len != sizeof(buf) && !fio_gzeof(gz_in))
 				/* An error occurred while reading the file */
 				elog(ERROR,
 					 "Cannot compare WAL file \"%s\" with compressed \"%s\"",
 					 path1, path2);
 
 			COMP_FILE_CRC32(true, crc2, buf, read_len);
-			if (gzeof(gz_in) || read_len == 0)
+			if (fio_gzeof(gz_in) || read_len == 0)
 				break;
 		}
 		FIN_FILE_CRC32(true, crc2);
 
-		if (fio_gzclose(gz_in, path2, gz_tmp) != 0)
+		if (fio_gzclose(gz_in) != 0)
 			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
 				 path2, get_gz_error(gz_in, errno));
 	}

@@ -108,7 +108,6 @@ typedef struct XLogPageReadPrivate
 #ifdef HAVE_LIBZ
 	gzFile		 gz_xlogfile;
 	char		 gz_xlogpath[MAXPGPATH];
-	int          gz_tmp;
 #endif
 } XLogPageReadPrivate;
 
@@ -1020,7 +1019,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 				private_data->xlogexists = true;
 				private_data->gz_xlogfile = fio_gzopen(private_data->gz_xlogpath,
-													   "rb", &private_data->gz_tmp, private_data->location);
+													   "rb", -1, private_data->location);
 				if (private_data->gz_xlogfile == NULL)
 				{
 					elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
@@ -1072,7 +1071,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 #ifdef HAVE_LIBZ
 	else
 	{
-		if (gzseek(private_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
+		if (fio_gzseek(private_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
 		{
 			elog(WARNING, "Thread [%d]: Could not seek in compressed WAL segment \"%s\": %s",
 				private_data->thread_num,
@@ -1081,7 +1080,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			return -1;
 		}
 
-		if (gzread(private_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (fio_gzread(private_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 		{
 			elog(WARNING, "Thread [%d]: Could not read from compressed WAL segment \"%s\": %s",
 				private_data->thread_num,
@@ -1147,7 +1146,7 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 #ifdef HAVE_LIBZ
 	else if (private_data->gz_xlogfile != NULL)
 	{
-		fio_gzclose(private_data->gz_xlogfile, private_data->gz_xlogpath, private_data->gz_tmp);
+		fio_gzclose(private_data->gz_xlogfile);
 		private_data->gz_xlogfile = NULL;
 	}
 #endif

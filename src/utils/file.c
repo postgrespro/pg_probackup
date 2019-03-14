@@ -729,51 +729,69 @@ int fio_chmod(char const* path, int mode, fio_location location)
 }
 
 #ifdef HAVE_LIBZ
-/* Open compressed file. In case of remove file, it is fetched to local temporary file in read-only mode or is written
- * to temoporary file and rtansfered to remote host by fio_gzclose. */
-gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location location)
+
+
+#define ZLIB_BUFFER_SIZE     (64*1024)
+#define MAX_WBITS            15 /* 32K LZ77 window */
+#define DEF_MEM_LEVEL        8
+#define FIO_GZ_REMOTE_MARKER 1
+
+typedef struct fioGZFile
 {
-	gzFile file;
+	z_stream strm;
+	int      fd;
+	bool     compress;
+	bool     eof;
+	Bytef    buf[ZLIB_BUFFER_SIZE];
+} fioGZFile;
+
+gzFile
+fio_gzopen(char const* path, char const* mode, int level, fio_location location)
+{
+	int rc;
 	if (fio_is_remote(location))
 	{
-		char pattern1[] = "/tmp/gz.XXXXXX";
-		char pattern2[] = "gz.XXXXXX";
-		char* path = pattern1;
-		int fd = mkstemp(path); /* first try to create file in current directory */
-		if (fd < 0)
-		{
-			path = pattern2;
-			fd = mkstemp(path); /* if it is not possible, try to create it in /tmp/ */
-			if (fd < 0)
-				return NULL;
-		}
-		unlink(path); /* delete file on close */
+		fioGZFile* gz = (fioGZFile*)malloc(sizeof(fioGZFile));
+		memset(&gz->strm, 0, sizeof(gz->strm));
+		gz->eof = 0;
 
-		if (strcmp(mode, PG_BINARY_W) == 0)
+		if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
 		{
-			*tmp_fd = fd;
+			gz->strm.next_out = gz->buf;
+			gz->strm.avail_out = ZLIB_BUFFER_SIZE;
+			rc = deflateInit2(&gz->strm,
+							  level,
+							  Z_DEFLATED,
+							  MAX_WBITS + 16, DEF_MEM_LEVEL,
+							  Z_DEFAULT_STRATEGY);
+			if (rc == Z_OK)
+			{
+				gz->compress = 1;
+				gz->fd = fio_open(path, O_WRONLY|O_CREAT|O_TRUNC, location);
+			}
 		}
 		else
 		{
-			int rd = fio_open(path, O_RDONLY|PG_BINARY, location);
-			struct stat st;
-			void* buf;
-			if (rd < 0) {
-				return NULL;
+			gz->strm.next_in = gz->buf;
+			gz->strm.avail_in = ZLIB_BUFFER_SIZE;
+			rc = inflateInit2(&gz->strm, 15 + 16);
+			gz->strm.avail_in = 0;
+			if (rc == Z_OK)
+			{
+				gz->compress = 0;
+				gz->fd = fio_open(path, O_RDONLY, location);
 			}
-			SYS_CHECK(fio_fstat(rd, &st));
-			buf = malloc(st.st_size);
-			IO_CHECK(fio_read(rd, buf, st.st_size), st.st_size);
-			IO_CHECK(write(fd, buf, st.st_size), st.st_size);
-			SYS_CHECK(fio_close(rd));
-			free(buf);
-			*tmp_fd = -1;
 		}
-		file = gzdopen(fd, mode);
+		if (rc != Z_OK)
+		{
+			free(gz);
+			return NULL;
+		}
+		return (gzFile)((size_t)gz + FIO_GZ_REMOTE_MARKER);
 	}
 	else
 	{
-		*tmp_fd = -1;
+		gzFile file;
 		if (strcmp(mode, PG_BINARY_W) == 0)
 		{
 			int fd = open(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FILE_PERMISSIONS);
@@ -783,43 +801,180 @@ gzFile fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location 
 		}
 		else
 			file = gzopen(path, mode);
+		if (file != NULL && level != Z_DEFAULT_COMPRESSION)
+		{
+			if (gzsetparams(file, level, Z_DEFAULT_STRATEGY) != Z_OK)
+				elog(ERROR, "Cannot set compression level %d: %s",
+					 level, strerror(errno));
+		}
+		return file;
 	}
-	return file;
 }
 
-/* Close compressed file. In case of writing remote file, content of temporary file is trasfered to remote host */
-int fio_gzclose(gzFile file, char const* path, int tmp_fd)
+int
+fio_gzread(gzFile f, void *buf, unsigned size)
 {
-	if (tmp_fd >= 0)
+	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
 	{
-		off_t size;
-		void* buf;
-		int fd;
+		int rc;
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
 
-		SYS_CHECK(gzflush(file, Z_FINISH));
-
-		size = lseek(tmp_fd, 0,  SEEK_END);
-		buf = malloc(size);
-
-		lseek(tmp_fd, 0, SEEK_SET);
-		IO_CHECK(read(tmp_fd, buf, size), size);
-
-		SYS_CHECK(gzclose(file)); /* should close tmp_fd */
-
-		fd = fio_open(path, O_RDWR|O_CREAT|O_EXCL|PG_BINARY, FILE_PERMISSIONS);
-		if (fd < 0) {
-			free(buf);
-			return -1;
+		if (gz->eof)
+		{
+			return 0;
 		}
-		IO_CHECK(fio_write(fd, buf, size), size);
-		free(buf);
-		return fio_close(fd);
+
+		gz->strm.next_out = (Bytef *)buf;
+		gz->strm.avail_out = size;
+
+		while (1)
+		{
+			if (gz->strm.avail_in != 0) /* If there is some data in receiver buffer, then decmpress it */
+			{
+				rc = inflate(&gz->strm, Z_NO_FLUSH);
+				if (rc == Z_STREAM_END)
+				{
+					gz->eof = 1;
+				}
+				else if (rc != Z_OK)
+				{
+					return -1;
+				}
+				if (gz->strm.avail_out != size)
+				{
+					return size - gz->strm.avail_out;
+				}
+				if (gz->strm.avail_in == 0)
+				{
+					gz->strm.next_in = gz->buf;
+				}
+			}
+			else
+			{
+				gz->strm.next_in = gz->buf;
+			}
+			rc = read(gz->fd, gz->strm.next_in + gz->strm.avail_in, gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
+			if (rc > 0)
+			{
+				gz->strm.avail_in += rc;
+			}
+			else
+			{
+				if (rc == 0)
+				{
+					gz->eof = 1;
+				}
+				return rc;
+			}
+		}
 	}
 	else
 	{
-		return gzclose(file);
+		return gzread(f, buf, size);
 	}
 }
+
+int
+fio_gzwrite(gzFile f, void const* buf, unsigned size)
+{
+	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	{
+		int rc;
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+
+		gz->strm.next_in = (Bytef *)buf;
+		gz->strm.avail_in = size;
+
+		do
+		{
+			if (gz->strm.avail_out == ZLIB_BUFFER_SIZE) /* Compress buffer is empty */
+			{
+				gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of buffer */
+
+				if (gz->strm.avail_in != 0) /* Has something in input buffer */
+				{
+					rc = deflate(&gz->strm, Z_NO_FLUSH);
+					Assert(rc == Z_OK);
+					gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of bufer */
+				}
+				else
+				{
+					break;
+				}
+			}
+			rc = write(gz->fd, gz->strm.next_out, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
+			if (rc >= 0)
+			{
+				gz->strm.next_out += rc;
+				gz->strm.avail_out += rc;
+			}
+			else
+			{
+				return rc;
+			}
+		} while (gz->strm.avail_out != ZLIB_BUFFER_SIZE || gz->strm.avail_in != 0);
+
+		return size;
+	}
+	else
+	{
+		return gzwrite(f, buf, size);
+	}
+}
+
+int
+fio_gzclose(gzFile f)
+{
+	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		int rc;
+		if (gz->compress)
+		{
+			gz->strm.next_out = gz->buf;
+			rc = deflate(&gz->strm, Z_FINISH);
+			Assert(rc == Z_STREAM_END && gz->strm.avail_out != ZLIB_BUFFER_SIZE);
+			deflateEnd(&gz->strm);
+			rc = write(gz->fd, gz->buf, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
+			if (rc != ZLIB_BUFFER_SIZE - gz->strm.avail_out)
+			{
+				return -1;
+			}
+		}
+		else
+		{
+			inflateEnd(&gz->strm);
+		}
+		rc = fio_close(gz->fd);
+		free(gz);
+		return rc;
+	}
+	else
+	{
+		return gzclose(f);
+	}
+}
+
+int fio_gzeof(gzFile f)
+{
+	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		return gz->eof;
+	}
+	else
+	{
+		return gzeof(f);
+	}
+}
+
+z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
+{
+	Assert(!((size_t)f & FIO_GZ_REMOTE_MARKER));
+	return gzseek(f, offset, whence);
+}
+
+
 #endif
 
 /* Send file content */

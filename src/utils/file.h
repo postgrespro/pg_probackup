@@ -105,8 +105,12 @@ extern FILE*   fio_open_stream(char const* name, fio_location location);
 extern int     fio_close_stream(FILE* f);
 
 #ifdef HAVE_LIBZ
-extern gzFile  fio_gzopen(char const* path, char const* mode, int* tmp_fd, fio_location location);
-extern int     fio_gzclose(gzFile file, char const* path, int tmp_fd);
+extern gzFile  fio_gzopen(char const* path, char const* mode, int level, fio_location location);
+extern int     fio_gzclose(gzFile file);
+extern int     fio_gzread(gzFile f, void *buf, unsigned size);
+extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);
+extern int     fio_gzeof(gzFile f);
+extern z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence);
 #endif
 
 #endif
