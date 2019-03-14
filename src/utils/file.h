@@ -49,7 +49,7 @@ typedef enum
 #define PAGE_CHECKSUM_MISMATCH (-256)
 
 #define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
-#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) { fprintf(stderr, "%s:%d: proceeds %d bytes instead of %d: %s\n", __FILE__, __LINE__, _rc, (int)(size), _rc < 0 ? "end of data" :  strerror(errno)); exit(EXIT_FAILURE); } } while (0)
+#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) if (remote_agent) { fprintf(stderr, "%s:%d: proceeds %d bytes instead of %d: %s\n", __FILE__, __LINE__, _rc, (int)(size), _rc >= 0 ? "end of data" :  strerror(errno)); exit(EXIT_FAILURE); } else elog(ERROR, "Communication error: %s", _rc >= 0 ? "end of data" :  strerror(errno)); } while (0)
 
 typedef struct
 {
@@ -111,6 +111,7 @@ extern int     fio_gzread(gzFile f, void *buf, unsigned size);
 extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);
 extern int     fio_gzeof(gzFile f);
 extern z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence);
+extern const char* fio_gzerror(gzFile file, int *errnum);
 #endif
 
 #endif

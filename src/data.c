@@ -1052,7 +1052,7 @@ get_gz_error(gzFile gzf, int errnum)
 	int			gz_errnum;
 	const char *errmsg;
 
-	errmsg = gzerror(gzf, &gz_errnum);
+	errmsg = fio_gzerror(gzf, &gz_errnum);
 	if (gz_errnum == Z_ERRNO)
 		return strerror(errnum);
 	else

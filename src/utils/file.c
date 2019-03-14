@@ -740,6 +740,7 @@ typedef struct fioGZFile
 {
 	z_stream strm;
 	int      fd;
+	int      errnum;
 	bool     compress;
 	bool     eof;
 	Bytef    buf[ZLIB_BUFFER_SIZE];
@@ -754,7 +755,7 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 		fioGZFile* gz = (fioGZFile*)malloc(sizeof(fioGZFile));
 		memset(&gz->strm, 0, sizeof(gz->strm));
 		gz->eof = 0;
-
+		gz->errnum = Z_OK;
 		if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
 		{
 			gz->strm.next_out = gz->buf;
@@ -838,6 +839,7 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 				}
 				else if (rc != Z_OK)
 				{
+					gz->errnum = rc;
 					return -1;
 				}
 				if (gz->strm.avail_out != size)
@@ -965,6 +967,21 @@ int fio_gzeof(gzFile f)
 	else
 	{
 		return gzeof(f);
+	}
+}
+
+const char* fio_gzerror(gzFile f, int *errnum)
+{
+	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		if (errnum)
+			*errnum = gz->errnum;
+		return gz->strm.msg;
+	}
+	else
+	{
+		return gzerror(f, errnum);
 	}
 }
 
