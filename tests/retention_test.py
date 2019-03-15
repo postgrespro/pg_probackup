@@ -159,10 +159,73 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Purge backups
         self.delete_expired(
             backup_dir, 'node', options=['--retention-window=1'])
+
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
 
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
+
+        # count wal files in ARCHIVE
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_retention_window_4(self):
+        """purge all backups using window-based retention policy"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+
+        # Take FULL BACKUPs
+        backup_id_1 = self.backup_node(backup_dir, 'node', node)
+
+        backup_id_2 = self.backup_node(backup_dir, 'node', node)
+
+        backup_id_3 = self.backup_node(backup_dir, 'node', node)
+
+        backups = os.path.join(backup_dir, 'backups', 'node')
+        for backup in os.listdir(backups):
+            if backup == 'pg_probackup.conf':
+                continue
+            with open(
+                    os.path.join(
+                        backups, backup, "backup.control"), "a") as conf:
+                conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                    datetime.now() - timedelta(days=3)))
+
+        self.delete_pb(backup_dir, 'node', backup_id_2)
+        self.delete_pb(backup_dir, 'node', backup_id_3)
+
+        # Purge backups
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-window=1'])
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # count wal files in ARCHIVE
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        n_wals = len(os.listdir(wals_dir))
+
+        self.assertTrue(n_wals > 0)
+
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-window=1'])
+
+        # count again
+        n_wals = len(os.listdir(wals_dir))
+        self.assertTrue(n_wals == 0)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
