@@ -22,6 +22,8 @@
 #include <zlib.h>
 #endif
 
+#include "utils/thread.h"
+
 /* Union to ease operations on relation pages */
 typedef union DataPage
 {
@@ -318,7 +320,7 @@ prepare_page(backup_files_arg *arguments,
 	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
 
 	/* check for interrupt */
-	if (interrupted)
+	if (interrupted || thread_interrupted)
 		elog(ERROR, "Interrupted during backup");
 
 	/*
