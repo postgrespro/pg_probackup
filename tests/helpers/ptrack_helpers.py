@@ -636,7 +636,8 @@ class ProbackupTest(object):
 
         shutil.rmtree(backup_dir, ignore_errors=True)
 
-        if self.remote:
+        # don`t forget to kill old_binary after remote ssh release
+        if self.remote and not old_binary:
             options = options + [
                 '--remote-proto=ssh',
                 '--remote-host=localhost']
@@ -657,7 +658,8 @@ class ProbackupTest(object):
             '-D', node.data_dir
             ]
 
-        if self.remote:
+        # don`t forget to kill old_binary after remote ssh release
+        if self.remote and not old_binary:
             options = options + [
                 '--remote-proto=ssh',
                 '--remote-host=localhost']
@@ -710,7 +712,9 @@ class ProbackupTest(object):
             '-d', 'postgres',
             '--instance={0}'.format(instance)
         ]
-        if self.remote:
+
+        # don`t forget to kill old_binary after remote ssh release
+        if self.remote and not old_binary:
             options = options + [
                 '--remote-proto=ssh',
                 '--remote-host=localhost']
@@ -736,6 +740,7 @@ class ProbackupTest(object):
             self, backup_dir, instance, node=False,
             data_dir=None, backup_id=None, old_binary=False, options=[]
             ):
+
         if data_dir is None:
             data_dir = node.data_dir
 
@@ -745,7 +750,9 @@ class ProbackupTest(object):
             '-D', data_dir,
             '--instance={0}'.format(instance)
         ]
-        if self.remote:
+
+        # don`t forget to kill old_binary after remote ssh release
+        if self.remote and not old_binary:
             options = options + [
                 '--remote-proto=ssh',
                 '--remote-host=localhost']
@@ -943,8 +950,9 @@ class ProbackupTest(object):
                 backup_dir.replace("\\","\\\\"),
                 instance)
 
-        # if self.remote:
-        #     archive_command = archive_command + '--remote-proto=ssh --remote-host=localhost '
+        # don`t forget to kill old_binary after remote ssh release
+        if self.remote and not old_binary:
+            archive_command = archive_command + '--remote-proto=ssh --remote-host=localhost '
 
         if self.archive_compress or compress:
             archive_command = archive_command + '--compress '
@@ -1061,6 +1069,8 @@ class ProbackupTest(object):
                 node.execute('select pg_switch_wal()')
             else:
                 node.execute('select pg_switch_xlog()')
+
+        sleep(1)
 
     def wait_until_replica_catch_with_master(self, master, replica):
 
