@@ -195,12 +195,17 @@ ConfigOption instance_options[] =
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 223, "ssh-options",
+		's', 223, "remote-user",
+		&instance_config.remote.user, SOURCE_CMD, 0,
+		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	{
+		's', 224, "ssh-options",
 		&instance_config.remote.ssh_options, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 224, "ssh-config",
+		's', 225, "ssh-config",
 		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},

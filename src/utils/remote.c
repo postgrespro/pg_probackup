@@ -73,6 +73,10 @@ bool launch_agent(void)
 		ssh_argv[ssh_argc++] = "-p";
 		ssh_argv[ssh_argc++] = instance_config.remote.port;
 	}
+	if (instance_config.remote.user != NULL) {
+		ssh_argv[ssh_argc++] = "-l";
+		ssh_argv[ssh_argc++] = instance_config.remote.user;
+	}
 	if (instance_config.remote.ssh_config != NULL) {
 		ssh_argv[ssh_argc++] = "-F";
 		ssh_argv[ssh_argc++] = instance_config.remote.ssh_config;

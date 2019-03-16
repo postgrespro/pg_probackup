@@ -16,6 +16,7 @@ typedef struct RemoteConfig
 	char* host;
 	char* port;
 	char* path;
+	char* user;
 	char *ssh_config;
 	char *ssh_options;
 } RemoteConfig;
