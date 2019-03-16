@@ -1154,7 +1154,7 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 			}
 		}
 		/* horizonLsn is not 0 for delta backup. As far as unsigned number are always greater or equal than zero, there is no sense to add more checks */
-		if (page_lsn >= req->horizonLsn)
+		if (page_lsn >= req->horizonLsn || page_lsn == InvalidXLogRecPtr)
 		{
 			char write_buffer[BLCKSZ*2];
 			BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
