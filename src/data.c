@@ -1702,13 +1702,12 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 
 		for (;;)
 		{
-			int read_len = 0;
-			read_len = fio_gzread(gz_in, buf, sizeof(buf));
+			int read_len = fio_gzread(gz_in, buf, sizeof(buf));
 			if (read_len <= 0 && !fio_gzeof(gz_in))
 				/* An error occurred while reading the file */
 				elog(ERROR,
-					 "Cannot compare WAL file \"%s\" with compressed \"%s\"",
-					 path1, path2);
+					 "Cannot compare WAL file \"%s\" with compressed \"%s\": %d",
+					 path1, path2, read_len);
 
 			COMP_FILE_CRC32(true, crc2, buf, read_len);
 			if (fio_gzeof(gz_in) || read_len == 0)

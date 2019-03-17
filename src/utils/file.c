@@ -768,7 +768,14 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 			if (rc == Z_OK)
 			{
 				gz->compress = 1;
-				gz->fd = fio_open(path, O_WRONLY|O_CREAT|O_TRUNC, location);
+				if (fio_access(path, F_OK, location) == 0)
+				{
+					elog(LOG, "File %s exists", path);
+					free(gz);
+					errno = EEXIST;
+					return NULL;
+				}
+				gz->fd = fio_open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, location);
 			}
 		}
 		else
@@ -780,7 +787,7 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 			if (rc == Z_OK)
 			{
 				gz->compress = 0;
-				gz->fd = fio_open(path, O_RDONLY, location);
+				gz->fd = fio_open(path, O_RDONLY | PG_BINARY, location);
 			}
 		}
 		if (rc != Z_OK)
