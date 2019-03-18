@@ -1254,9 +1254,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1292,22 +1291,21 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
-        with open(log_file_path) as f:
-            self.assertTrue("LOG: File: {0} blknum 1, empty page".format(
-                file) in f.read())
-            self.assertFalse("Skipping blknum: 1 in file: {0}".format(
-                file) in f.read())
+        if not self.remote:
+            log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
+            with open(log_file_path) as f:
+                self.assertTrue("LOG: File: {0} blknum 1, empty page".format(
+                    file) in f.read())
+                self.assertFalse("Skipping blknum: 1 in file: {0}".format(
+                    file) in f.read())
 
         # Restore DELTA backup
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'),
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
-            backup_dir, 'node', node_restored
-        )
+            backup_dir, 'node', node_restored)
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
