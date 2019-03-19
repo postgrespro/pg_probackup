@@ -1218,7 +1218,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'Insert correct message' in e.message,
+                'External directory path (-E option)' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

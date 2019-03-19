@@ -115,6 +115,7 @@ static void *StreamLog(void *arg);
 static void get_remote_pgdata_filelist(parray *files);
 static void ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum);
 static void	remote_copy_file(PGconn *conn, pgFile* file);
+static void check_external_for_tablespaces(parray *external_list);
 
 /* Ptrack functions */
 static void pg_ptrack_clear(void);
@@ -487,7 +488,10 @@ do_backup_instance(void)
 
 	elog(LOG, "Database backup start");
 	if(current.external_dir_str)
+	{
 		external_dirs = make_external_directory_list(current.external_dir_str);
+		check_external_for_tablespaces(external_dirs);
+	}
 
 	/* Initialize size summary */
 	current.data_bytes = 0;
@@ -2995,4 +2999,47 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 	pfree(params[3]);
 
 	return result;
+}
+
+static void
+check_external_for_tablespaces(parray *external_list)
+{
+	PGconn	   *conn;
+	PGresult   *res;
+	int			i = 0;
+	int			j = 0;
+	char	   *tablespace_path = NULL;
+	char	   *query = "SELECT pg_catalog.pg_tablespace_location(oid)\n"
+						"FROM pg_tablespace\n"
+						"WHERE pg_catalog.pg_tablespace_location(oid) <> '';";
+
+	if (current.from_replica && exclusive_backup)
+		conn = master_conn;
+	else
+		conn = backup_conn;
+
+	res = pgut_execute(conn, query, 0, NULL);
+
+	/* Check successfull execution of query */
+	if (!res)
+		elog(ERROR, "Failed to get list of tablespaces");
+
+	for (i = 0; i < res->ntups; i++)
+	{
+		tablespace_path = PQgetvalue(res, i, 0);
+		Assert (strlen(tablespace_path) > 0);
+		for (j = 0; j < parray_num(external_list); j++)
+		{
+			char *external_path = parray_get(external_list, j);
+			if (path_is_prefix_of_path(external_path, tablespace_path))
+				elog(ERROR, "External directory path (-E option) \"%s\" "
+							"contains tablespace \"%s\"",
+							external_path, tablespace_path);
+			if (path_is_prefix_of_path(tablespace_path, external_path))
+				elog(WARNING, "External directory path (-E option) \"%s\" "
+							  "is in tablespace directory \"%s\"",
+							  tablespace_path, external_path);
+		}
+	}
+	PQclear(res);
 }
