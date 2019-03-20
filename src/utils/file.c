@@ -112,7 +112,7 @@ FILE* fio_open_stream(char const* path, fio_location location)
 		if (hdr.size > 0)
 		{
 			Assert(fio_stdin_buffer == NULL);
-			fio_stdin_buffer = malloc(hdr.size);
+			fio_stdin_buffer = pgut_malloc(hdr.size);
 			IO_CHECK(fio_read_all(fio_stdin, fio_stdin_buffer, hdr.size), hdr.size);
 			f = fmemopen(fio_stdin_buffer, hdr.size, "r");
 		}
@@ -752,7 +752,7 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 	int rc;
 	if (fio_is_remote(location))
 	{
-		fioGZFile* gz = (fioGZFile*)malloc(sizeof(fioGZFile));
+		fioGZFile* gz = (fioGZFile*) pgut_malloc(sizeof(fioGZFile));
 		memset(&gz->strm, 0, sizeof(gz->strm));
 		gz->eof = 0;
 		gz->errnum = Z_OK;
@@ -1014,7 +1014,7 @@ static void fio_send_file(int out, char const* path)
 	if (fd >= 0)
 	{
 		off_t size = lseek(fd, 0, SEEK_END);
-		buf = malloc(size);
+		buf = pgut_malloc(size);
 		lseek(fd, 0, SEEK_SET);
 		IO_CHECK(fio_read_all(fd, buf, size), size);
 		hdr.size = size;
@@ -1202,7 +1202,7 @@ void fio_communicate(int in, int out)
 	DIR* dir[FIO_FDMAX];
 	struct dirent* entry;
 	size_t buf_size = 128*1024;
-	char* buf = (char*)malloc(buf_size);
+	char* buf = (char*)pgut_malloc(buf_size);
 	fio_header hdr;
 	struct stat st;
 	int rc;
