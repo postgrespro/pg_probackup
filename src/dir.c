@@ -126,7 +126,7 @@ static void dir_list_file_internal(parray *files, const char *root,
 								   bool omit_symlink, parray *black_list, fio_location location);
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
-								  bool exclude);
+								  bool exclude, fio_location location);
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
@@ -773,7 +773,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
  */
 static void
 list_data_directories(parray *files, const char *path, bool is_root,
-					  bool exclude)
+					  bool exclude, fio_location location)
 {
 	DIR		   *dir;
 	struct dirent *dent;
@@ -781,7 +781,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	bool		has_child_dirs = false;
 
 	/* open directory and list contents */
-	dir = fio_opendir(path, FIO_DB_HOST);
+	dir = fio_opendir(path, location);
 	if (dir == NULL)
 		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
 
@@ -799,7 +799,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 
 		join_path_components(child, path, dent->d_name);
 
-		if (fio_stat(child, &st, false, FIO_DB_HOST) == -1)
+		if (fio_stat(child, &st, false, location) == -1)
 			elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
 
 		if (!S_ISDIR(st.st_mode))
@@ -823,7 +823,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 			continue;
 
 		has_child_dirs = true;
-		list_data_directories(files, child, false, exclude);
+		list_data_directories(files, child, false, exclude, location);
 	}
 
 	/* List only full and last directories */
@@ -831,7 +831,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	{
 		pgFile	   *dir;
 
-		dir = pgFileNew(path, false, FIO_LOCAL_HOST);
+		dir = pgFileNew(path, false, location);
 		parray_append(files, dir);
 	}
 
@@ -982,7 +982,8 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 	}
 
 	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
-	list_data_directories(dirs, backup_database_dir, true, false);
+	list_data_directories(dirs, backup_database_dir, true, false,
+						  FIO_BACKUP_HOST);
 
 	elog(LOG, "restore directories and symlinks...");
 
