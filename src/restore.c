@@ -674,9 +674,13 @@ restore_files(void *arg)
 							  parse_program_version(arguments->backup->program_version));
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
-			copy_pgcontrol_file(from_root, instance_config.pgdata, file, FIO_DB_HOST);
+			copy_pgcontrol_file(from_root, FIO_BACKUP_HOST,
+								instance_config.pgdata, FIO_DB_HOST,
+								file);
 		else
-			copy_file(from_root, FIO_BACKUP_HOST, instance_config.pgdata, FIO_DB_HOST, file);
+			copy_file(from_root, FIO_BACKUP_HOST,
+					  instance_config.pgdata, FIO_DB_HOST,
+					  file);
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)

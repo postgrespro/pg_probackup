@@ -559,7 +559,7 @@ merge_files(void *arg)
 			}
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
-			copy_pgcontrol_file(argument->from_root, argument->to_root, file, FIO_LOCAL_HOST);
+			copy_pgcontrol_file(argument->from_root, FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
 		else
 			copy_file(argument->from_root, FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
 

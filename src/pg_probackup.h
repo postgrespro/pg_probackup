@@ -612,8 +612,8 @@ extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
-extern void copy_pgcontrol_file(const char *from_root, const char *to_root,
-								pgFile *file, fio_location location);
+extern void copy_pgcontrol_file(const char *from_root, fio_location location, const char *to_root, fio_location to_location,
+								pgFile *file);
 
 extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);

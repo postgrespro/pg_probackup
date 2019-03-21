@@ -2317,8 +2317,9 @@ backup_files(void *arg)
 				}
 			}
 			else if (strcmp(file->name, "pg_control") == 0)
-				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
-									file, FIO_BACKUP_HOST);
+				copy_pgcontrol_file(arguments->from_root, FIO_DB_HOST,
+									arguments->to_root, FIO_BACKUP_HOST,
+									file);
 			else
 			{
 				bool		skip = false;
