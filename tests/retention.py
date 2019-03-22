@@ -67,7 +67,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-#    @unittest.skip("123")
+    #@unittest.skip("skip")
     def test_retention_window_2(self):
         """purge backups using window-based retention policy"""
         fname = self.id().split('.')[3]
@@ -121,7 +121,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-#    @unittest.skip("123")
+    #@unittest.skip("skip")
     def test_retention_window_3(self):
         """purge all backups using window-based retention policy"""
         fname = self.id().split('.')[3]
@@ -226,6 +226,121 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # count again
         n_wals = len(os.listdir(wals_dir))
         self.assertTrue(n_wals == 0)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_retention_interleaved_incremental_chains(self):
+        """complicated case of interleaved backup chains"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+
+        # Take FULL BACKUPs
+
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+        backup_id_b = self.backup_node(backup_dir, 'node', node)
+
+        # Change FULL B backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # FULLb  ERROR
+        # FULLa  OK
+        # Take PAGEa1 backup
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa1 OK
+        # FULLb  ERROR
+        # FULLa  OK
+        # Change FULL B backup status to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        # Change PAGEa1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+        page_id_b1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb1 OK
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+        # Now we start to play with first generation of PAGE backups
+        # Change PAGEb1 status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # Change PAGEa1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa2 OK
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+        # Change PAGEa2 status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+
+        # Change PAGEb1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+        page_id_b2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change PAGEa2 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+
+        # PAGEb2 OK
+        # PAGEa2 OK
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Purge backups
+        backups = os.path.join(backup_dir, 'backups', 'node')
+        for backup in os.listdir(backups):
+            if backup in [page_id_a2, page_id_b2, 'pg_probackup.conf']:
+                continue
+
+            with open(
+                    os.path.join(
+                        backups, backup, "backup.control"), "a") as conf:
+                conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                    datetime.now() - timedelta(days=3)))
+
+
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-window=1'])
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 6)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

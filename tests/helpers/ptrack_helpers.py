@@ -938,6 +938,29 @@ class ProbackupTest(object):
             )
             master.reload()
 
+    def change_backup_status(self, backup_dir, instance, backup_id, status):
+
+        control_file_path = os.path.join(
+            backup_dir, 'backups', instance, backup_id, 'backup.control')
+
+        with open(control_file_path, 'r') as f:
+            actual_control = f.read()
+
+        new_control_file = ''
+        for line in actual_control.splitlines():
+            if line.startswith('status'):
+                line = 'status = {0}'.format(status)
+            new_control_file += line
+            new_control_file += '\n'
+
+        with open(control_file_path, 'wt') as f:
+            f.write(new_control_file)
+            f.flush()
+            f.close()
+
+        with open(control_file_path, 'r') as f:
+            actual_control = f.read()
+
     def wrong_wal_clean(self, node, wal_size):
         wals_dir = os.path.join(self.backup_dir(node), 'wal')
         wals = [
