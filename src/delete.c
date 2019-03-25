@@ -138,8 +138,7 @@ int do_retention(void)
 		if (instance_config.retention_redundancy == 0 &&
 			instance_config.retention_window == 0)
 		{
-			/* Retention is disabled but we still can cleanup
-			 * failed backups and wal
+			/* Retention is disabled but we still can cleanup wal
 			 */
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
@@ -335,17 +334,29 @@ do_retention_internal(void)
 	 *	PAGEb1 <- keep
 	 *	PAGEa2 <- keep
 	 *	PAGEa1 <- keep
-	 *  FULLb  <- in purge_list
-	 *  FULLa  <- in purge_list
+	 *	FULLb  <- in purge_list
+	 *	FULLa  <- in purge_list
 	 */
 
 	/* Go to purge */
 	if (delete_expired && !merge_expired)
 		goto purge;
 
-	/* IMPORTANT: we can merge to only those FULL backups, that are NOT
-	 * guarded by retention and only from those incremental backups that
-	 * are guarded by retention !!!
+	/* IMPORTANT: we can merge to only those FULL backup, that is NOT
+	 * guarded by retention and final targets of such merges must be
+	 * incremental backup that is guarded by retention !!!
+	 *
+	 *
+	 *  PAGE4 E
+	 *  PAGE3 D
+	 * --------retention window ---
+	 *  PAGE2 C
+	 *  PAGE1 B
+	 *  FULL  A
+	 *
+	 * after retention merge:
+	 * PAGE4 E
+	 * FULL  D
 	 */
 
 	/* Merging happens here */
