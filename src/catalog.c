@@ -469,11 +469,8 @@ pgBackupCreateDir(pgBackup *backup)
 	int		i;
 	char	path[MAXPGPATH];
 	parray *subdirs = parray_new();
-	char   *temp;
 
-	temp = palloc(strlen(DATABASE_DIR) + 1);
-	sprintf(temp, "%s", DATABASE_DIR);
-	parray_append(subdirs, temp);
+	parray_append(subdirs, pg_strdup(DATABASE_DIR));
 
 	/* Add external dirs containers */
 	if (backup->external_dir_str)
@@ -483,11 +480,10 @@ pgBackupCreateDir(pgBackup *backup)
 		external_list = make_external_directory_list(backup->external_dir_str);
 		for (int i = 0; i < parray_num(external_list); i++)
 		{
-			/* 20 chars is enough to hold the externaldir number in string. */
-			temp = palloc0(strlen(EXTERNAL_DIR) + 20);
+			char		temp[MAXPGPATH];
 			/* Numeration of externaldirs starts with 1 */
 			makeExternalDirPathByNum(temp, EXTERNAL_DIR, i+1);
-			parray_append(subdirs, temp);
+			parray_append(subdirs, pg_strdup(temp));
 		}
 		free_dir_list(external_list);
 	}

@@ -1302,7 +1302,7 @@ check_external_dir_mapping(pgBackup *backup)
 				 "backup: \"%s\"", external_remap_list.head->old_dir);
 		return;
 	}
-	
+
 	external_dirs_to_restore = make_external_directory_list(backup->external_dir_str);
 	for (cell = external_remap_list.head; cell; cell = cell->next)
 	{
@@ -1688,18 +1688,15 @@ make_external_directory_list(const char *colon_separated_dirs)
 {
 	char	   *p;
 	parray	   *list = parray_new();
-	char	   *tmp = palloc0(strlen(colon_separated_dirs) + 1);
+	char	   *tmp = pg_strdup(colon_separated_dirs);
 
-	strcpy(tmp, colon_separated_dirs);
 	p = strtok(tmp,":");
 	while(p!=NULL)
 	{
-		char * dir = (char *)palloc0(strlen(p) + 1);
-		strcpy(dir,p);
-		if (is_absolute_path(dir))
-			parray_append(list, dir);
+		if (is_absolute_path(p))
+			parray_append(list, pg_strdup(p));
 		else
-			elog(ERROR, "Extra directory \"%s\" is not an absolute path", dir);
+			elog(ERROR, "External directory \"%s\" is not an absolute path", p);
 		p=strtok(NULL,":");
 	}
 	pfree(tmp);
