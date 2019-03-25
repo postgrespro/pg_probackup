@@ -385,7 +385,9 @@ extern bool skip_external_dirs;
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
+extern bool		merge_expired;
 extern bool		force_delete;
+extern bool		dry_run;
 
 /* compression options */
 extern bool		compress_shortcut;
@@ -429,6 +431,7 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
+extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
 
 /* in init.c */
 extern int do_init(void);
@@ -451,6 +454,7 @@ extern int do_show(time_t requested_backup_id);
 /* in delete.c */
 extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
+extern int do_retention(void);
 extern int do_retention_purge(void);
 extern int do_delete_instance(void);
 
@@ -496,10 +500,14 @@ extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
+extern int pgBackupCompareIdEqual(const void *l, const void *r);
 
+extern pgBackup* find_direct_child(parray *backup_list, pgBackup *target_backup);
 extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
+extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
+extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS

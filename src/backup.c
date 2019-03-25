@@ -1068,8 +1068,8 @@ do_backup(time_t start_time)
 	 * After successfil backup completion remove backups
 	 * which are expired according to retention policies
 	 */
-	if (delete_expired || delete_wal)
-		do_retention_purge();
+	if (delete_expired || merge_expired || delete_wal)
+		do_retention();
 
 	return 0;
 }

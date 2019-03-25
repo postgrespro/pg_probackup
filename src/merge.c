@@ -34,7 +34,6 @@ typedef struct
 	int			ret;
 } merge_files_arg;
 
-static void merge_backups(pgBackup *backup, pgBackup *next_backup);
 static void *merge_files(void *arg);
 static void
 reorder_external_dirs(pgBackup *to_backup, parray *to_external,
@@ -159,7 +158,7 @@ do_merge(time_t backup_id)
  * - remove unnecessary directories and files from to_backup
  * - update metadata of from_backup, it becames FULL backup
  */
-static void
+void
 merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 {
 	char	   *to_backup_id = base36enc_dup(to_backup->start_time),
@@ -652,7 +651,7 @@ merge_files(void *arg)
 		file->compress_alg = to_backup->compress_alg;
 
 		if (file->write_size != BYTES_INVALID)
-			elog(LOG, "Merged file \"%s\": " INT64_FORMAT " bytes",
+			elog(VERBOSE, "Merged file \"%s\": " INT64_FORMAT " bytes",
 				 file->path, file->write_size);
 
 		/* Restore relative path */
