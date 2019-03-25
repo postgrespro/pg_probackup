@@ -226,7 +226,8 @@ help_backup(void)
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
-	printf(_("                                   backup some directory not from pgdata \n"));
+	printf(_("                                   backup some directories not from pgdata \n"));
+	printf(_("                                    (example: --external-dirs=/tmp/dirA:/tmp/dirB)\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -508,7 +509,8 @@ help_set_config(void)
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
-	printf(_("                                   backup some directory not from pgdata \n"));
+	printf(_("                                   backup some directories not from pgdata \n"));
+	printf(_("                                    (example: --external-dirs=/tmp/dirA:/tmp/dirB)\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -583,7 +585,8 @@ help_add_instance(void)
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
 	printf(_("      --instance=instance_name     name of the new instance\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
-	printf(_("                                   backup some directory not from pgdata \n"));
+	printf(_("                                   backup some directories not from pgdata \n"));
+	printf(_("                                    (example: --external-dirs=/tmp/dirA:/tmp/dirB)\n"));
 }
 
 static void
