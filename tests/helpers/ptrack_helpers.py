@@ -837,7 +837,7 @@ class ProbackupTest(object):
     def delete_expired(
             self, backup_dir, instance, options=[], old_binary=False):
         cmd_list = [
-            'delete', '--expired', '--wal',
+            'delete',
             '-B', backup_dir,
             '--instance={0}'.format(instance)
         ]
