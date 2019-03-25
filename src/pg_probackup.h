@@ -12,6 +12,7 @@
 
 #include "postgres_fe.h"
 #include "libpq-fe.h"
+#include "libpq-int.h"
 
 #include "access/xlog_internal.h"
 #include "utils/pg_crc.h"
@@ -32,7 +33,7 @@
 #include "datapagemap.h"
 
 /* Directory/File names */
-#define DATABASE_DIR			"database"
+#define DATABASE_DIR				"database"
 #define BACKUPS_DIR				"backups"
 #if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
@@ -50,6 +51,7 @@
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
+#define EXTERNAL_DIR			"external_directories/externaldir"
 
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
@@ -123,6 +125,7 @@ typedef struct pgFile
 	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
+	int		external_dir_num; /* Number of external directory. 0 if not external */
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
@@ -181,6 +184,7 @@ typedef struct InstanceConfig
 	uint32		xlog_seg_size;
 
 	char	   *pgdata;
+	char	   *external_dir_str;
 	const char *pgdatabase;
 	const char *pghost;
 	const char *pgport;
@@ -262,6 +266,8 @@ struct pgBackup
 	pgBackup		*parent_backup_link;
 	char			*primary_conninfo; /* Connection parameters of the backup
 										* in the format suitable for recovery.conf */
+	char			*external_dir_str;	/* List of external directories,
+										 * separated by ':' */
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -292,9 +298,11 @@ typedef struct
 {
 	const char *from_root;
 	const char *to_root;
+	const char *external_prefix;
 
 	parray	   *files_list;
 	parray	   *prev_filelist;
+	parray	   *external_dirs;
 	XLogRecPtr	prev_start_lsn;
 
 	PGconn	   *backup_conn;
@@ -372,6 +380,7 @@ extern bool exclusive_backup;
 /* restore options */
 extern bool restore_as_replica;
 extern bool skip_block_validation;
+extern bool skip_external_dirs;
 
 /* delete options */
 extern bool		delete_wal;
@@ -475,7 +484,8 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
-								  const char *root);
+								  const char *root, const char *external_prefix,
+								  parray *external_list);
 
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);
@@ -500,17 +510,27 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool omit_symlink, bool add_root);
+						  bool omit_symlink, bool add_root, int external_dir_num);
 extern void create_data_directories(const char *data_dir,
 									const char *backup_dir,
 									bool extract_tablespaces);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
+extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup);
+extern void check_external_dir_mapping(pgBackup *backup);
+extern char *get_external_remap(char *current_dir);
 
-extern void print_file_list(FILE *out, const parray *files, const char *root);
-extern parray *dir_read_file_list(const char *root, const char *file_txt);
+extern void print_file_list(FILE *out, const parray *files, const char *root,
+							const char *external_prefix, parray *external_list);
+extern parray *dir_read_file_list(const char *root, const char *external_prefix,
+								  const char *file_txt);
+extern parray *make_external_directory_list(const char *colon_separated_dirs);
+extern void free_dir_list(parray *list);
+extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
+									 const int dir_num);
+extern bool backup_contains_external(const char *dir, parray *dirs_list);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
@@ -518,14 +538,16 @@ extern bool dir_is_empty(const char *path);
 extern bool fileExists(const char *path);
 extern size_t pgFileSize(const char *path);
 
-extern pgFile *pgFileNew(const char *path, bool omit_symlink);
+extern pgFile *pgFileNew(const char *path, bool omit_symlink, int external_dir_num);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
 							 bool raise_on_deleted, size_t *bytes_read);
 extern int pgFileComparePath(const void *f1, const void *f2);
+extern int pgFileComparePathWithExternal(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
+extern int pgFileComparePathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 

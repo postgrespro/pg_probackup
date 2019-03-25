@@ -119,16 +119,19 @@ help_pg_probackup(void)
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--external-dirs=external-directory-path]\n"));
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
 	printf(_("                 [--no-validate]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--skip-external-dirs]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
@@ -207,7 +210,8 @@ help_backup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
-	printf(_("                 [--skip-block-validation]\n\n"));
+	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -221,6 +225,8 @@ help_backup(void)
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+	printf(_("  -E  --external-dirs=external-directory-path\n"));
+	printf(_("                                   backup some directory not from pgdata \n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -282,10 +288,12 @@ help_restore(void)
 	printf(_("                 [-D pgdata-path] [-i backup-id] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica] [--no-validate]\n\n"));
-	printf(_("                 [--skip-block-validation]\n\n"));
+	printf(_("                 [--restore-as-replica] [--no-validate]\n"));
+	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--skip-external-dirs]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -301,6 +309,8 @@ help_restore(void)
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 
 	printf(_("      --immediate                  end recovery as soon as a consistent state is reached\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
@@ -313,6 +323,7 @@ help_restore(void)
 	printf(_("                                   to ease setting up a standby server\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -490,11 +501,14 @@ help_set_config(void)
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
-	printf(_("                 [--replica-timeout=timeout]\n\n"));
-	printf(_("                 [--archive-timeout=timeout]\n\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--archive-timeout=timeout]\n"));
+	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
+	printf(_("  -E  --external-dirs=external-directory-path\n"));
+	printf(_("                                   backup some directory not from pgdata \n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -562,11 +576,14 @@ static void
 help_add_instance(void)
 {
 	printf(_("%s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
-	printf(_("                 --instance=instance_name\n\n"));
+	printf(_("                 --instance=instance_name\n"));
+	printf(_("                 -E external-dirs=external-directory-path\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
 	printf(_("      --instance=instance_name     name of the new instance\n"));
+	printf(_("  -E  --external-dirs=external-directory-path\n"));
+	printf(_("                                   backup some directory not from pgdata \n"));
 }
 
 static void

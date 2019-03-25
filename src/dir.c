@@ -121,14 +121,19 @@ static int BlackListCompare(const void *str1, const void *str2);
 static char dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list);
+								   bool omit_symlink, parray *black_list,
+								   int external_dir_num);
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
 								  bool exclude);
+static void opt_path_map(ConfigOption *opt, const char *arg,
+						 TablespaceList *list, const char *type);
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
 static TablespaceCreatedList tablespace_created_dirs = {NULL, NULL};
+/* Extra directories mapping */
+static TablespaceList external_remap_list = {NULL, NULL};
 
 /*
  * Create directory, also create parent directories if necessary.
@@ -157,7 +162,7 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, bool omit_symlink)
+pgFileNew(const char *path, bool omit_symlink, int external_dir_num)
 {
 	struct stat		st;
 	pgFile		   *file;
@@ -175,6 +180,7 @@ pgFileNew(const char *path, bool omit_symlink)
 	file = pgFileInit(path);
 	file->size = st.st_size;
 	file->mode = st.st_mode;
+	file->external_dir_num = external_dir_num;
 
 	return file;
 }
@@ -225,6 +231,7 @@ pgFileInit(const char *path)
 	/* Number of blocks readed during backup */
 	file->n_blocks = BLOCKNUM_INVALID;
 	file->compress_alg = NOT_DEFINED_COMPRESS;
+	file->external_dir_num = 0;
 	return file;
 }
 
@@ -345,11 +352,45 @@ pgFileComparePath(const void *f1, const void *f2)
 	return strcmp(f1p->path, f2p->path);
 }
 
+/*
+ * Compare two pgFile with their path and external_dir_num
+ * in ascending order of ASCII code.
+ */
+int
+pgFileComparePathWithExternal(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	pgFile *f2p = *(pgFile **)f2;
+	int 		res;
+
+	res = strcmp(f1p->path, f2p->path);
+	if (!res)
+	{
+		if (f1p->external_dir_num > f2p->external_dir_num)
+			return 1;
+		else if (f1p->external_dir_num < f2p->external_dir_num)
+			return -1;
+		else
+			return 0;
+	}
+	return res;
+}
+
 /* Compare two pgFile with their path in descending order of ASCII code. */
 int
 pgFileComparePathDesc(const void *f1, const void *f2)
 {
 	return -pgFileComparePath(f1, f2);
+}
+
+/*
+ * Compare two pgFile with their path and external_dir_num
+ * in descending order of ASCII code.
+ */
+int
+pgFileComparePathWithExternalDesc(const void *f1, const void *f2)
+{
+	return -pgFileComparePathWithExternal(f1, f2);
 }
 
 /* Compare two pgFile with their linked directory path. */
@@ -392,7 +433,7 @@ BlackListCompare(const void *str1, const void *str2)
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
-			  bool add_root)
+			  bool add_root, int external_dir_num)
 {
 	pgFile	   *file;
 	parray	   *black_list = NULL;
@@ -431,19 +472,24 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, false);
+	file = pgFileNew(root, external_dir_num ? omit_symlink : false, omit_symlink);
 	if (file == NULL)
 		return;
 
 	if (!S_ISDIR(file->mode))
 	{
-		elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
+		if (external_dir_num)
+			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
+				 file->path);
+		else
+			elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
 		return;
 	}
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list);
+	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list,
+						   external_dir_num);
 
 	if (!add_root)
 		pgFileFree(file);
@@ -662,7 +708,8 @@ dir_check_file(const char *root, pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, const char *root, pgFile *parent,
-					   bool exclude, bool omit_symlink, parray *black_list)
+					   bool exclude, bool omit_symlink, parray *black_list,
+					   int external_dir_num)
 {
 	DIR		    *dir;
 	struct dirent *dent;
@@ -692,7 +739,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		join_path_components(child, parent->path, dent->d_name);
 
-		file = pgFileNew(child, omit_symlink);
+		file = pgFileNew(child, omit_symlink, external_dir_num);
 		if (file == NULL)
 			continue;
 
@@ -749,7 +796,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, root, file, exclude, omit_symlink,
-								   black_list);
+								   black_list, external_dir_num);
 	}
 
 	if (errno && errno != ENOENT)
@@ -829,7 +876,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	{
 		pgFile	   *dir;
 
-		dir = pgFileNew(path, false);
+		dir = pgFileNew(path, false, 0);
 		parray_append(files, dir);
 	}
 
@@ -896,13 +943,14 @@ get_tablespace_created(const char *link)
 }
 
 /*
- * Split argument into old_dir and new_dir and append to tablespace mapping
+ * Split argument into old_dir and new_dir and append to mapping
  * list.
  *
  * Copy of function tablespace_list_append() from pg_basebackup.c.
  */
-void
-opt_tablespace_map(ConfigOption *opt, const char *arg)
+static void
+opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
+			 const char *type)
 {
 	TablespaceListCell *cell = pgut_new(TablespaceListCell);
 	char	   *dst;
@@ -921,7 +969,7 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
 		{
 			if (*cell->new_dir)
-				elog(ERROR, "multiple \"=\" signs in tablespace mapping\n");
+				elog(ERROR, "multiple \"=\" signs in %s mapping\n", type);
 			else
 				dst = dst_ptr = cell->new_dir;
 		}
@@ -930,8 +978,8 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 	}
 
 	if (!*cell->old_dir || !*cell->new_dir)
-		elog(ERROR, "invalid tablespace mapping format \"%s\", "
-			 "must be \"OLDDIR=NEWDIR\"", arg);
+		elog(ERROR, "invalid %s mapping format \"%s\", "
+			 "must be \"OLDDIR=NEWDIR\"", type, arg);
 
 	/*
 	 * This check isn't absolutely necessary.  But all tablespaces are created
@@ -940,18 +988,32 @@ opt_tablespace_map(ConfigOption *opt, const char *arg)
 	 * consistent with the new_dir check.
 	 */
 	if (!is_absolute_path(cell->old_dir))
-		elog(ERROR, "old directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->old_dir);
+		elog(ERROR, "old directory is not an absolute path in %s mapping: %s\n",
+			 type, cell->old_dir);
 
 	if (!is_absolute_path(cell->new_dir))
-		elog(ERROR, "new directory is not an absolute path in tablespace mapping: %s\n",
-			 cell->new_dir);
+		elog(ERROR, "new directory is not an absolute path in %s mapping: %s\n",
+			 type, cell->new_dir);
 
-	if (tablespace_dirs.tail)
-		tablespace_dirs.tail->next = cell;
+	if (list->tail)
+		list->tail->next = cell;
 	else
-		tablespace_dirs.head = cell;
-	tablespace_dirs.tail = cell;
+		list->head = cell;
+	list->tail = cell;
+}
+
+/* Parse tablespace mapping */
+void
+opt_tablespace_map(ConfigOption *opt, const char *arg)
+{
+	opt_path_map(opt, arg, &tablespace_dirs, "tablespace");
+}
+
+/* Parse external directories mapping */
+void
+opt_externaldir_map(ConfigOption *opt, const char *arg)
+{
+	opt_path_map(opt, arg, &external_remap_list, "external directory");
 }
 
 /*
@@ -1224,11 +1286,66 @@ check_tablespace_mapping(pgBackup *backup)
 	parray_free(links);
 }
 
+void
+check_external_dir_mapping(pgBackup *backup)
+{
+	TablespaceListCell *cell;
+	parray *external_dirs_to_restore;
+	bool	found;
+	int		i;
+
+	if (!backup->external_dir_str)
+	{
+	 	if (external_remap_list.head)
+			elog(ERROR, "--external-mapping option's old directory doesn't "
+				 "have an entry in list of external directories of current "
+				 "backup: \"%s\"", external_remap_list.head->old_dir);
+		return;
+	}
+
+	external_dirs_to_restore = make_external_directory_list(backup->external_dir_str);
+	for (cell = external_remap_list.head; cell; cell = cell->next)
+	{
+		char *old_dir = cell->old_dir;
+
+		found = false;
+		for (i = 0; i < parray_num(external_dirs_to_restore); i++)
+		{
+			char *external_dir = parray_get(external_dirs_to_restore, i);
+			if (strcmp(old_dir, external_dir) == 0)
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+			elog(ERROR, "--external-mapping option's old directory doesn't "
+				 "have an entry in list of external directories of current "
+				 "backup: \"%s\"", cell->old_dir);
+	}
+}
+
+char *
+get_external_remap(char *current_dir)
+{
+	TablespaceListCell *cell;
+
+	for (cell = external_remap_list.head; cell; cell = cell->next)
+	{
+		char *old_dir = cell->old_dir;
+
+		if (strcmp(old_dir, current_dir) == 0)
+			return cell->new_dir;
+	}
+	return current_dir;
+}
+
 /*
  * Print backup content list.
  */
 void
-print_file_list(FILE *out, const parray *files, const char *root)
+print_file_list(FILE *out, const parray *files, const char *root,
+				const char *external_prefix, parray *external_list)
 {
 	size_t		i;
 
@@ -1241,14 +1358,20 @@ print_file_list(FILE *out, const parray *files, const char *root)
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
+		else if (file->external_dir_num && !external_prefix)
+		{
+			Assert(external_list);
+			path = GetRelativePath(path, parray_get(external_list,
+													file->external_dir_num - 1));
+		}
 
 		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\"",
+					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
 				path, file->write_size, file->mode,
 				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
-				deparse_compress_alg(file->compress_alg));
+				deparse_compress_alg(file->compress_alg), file->external_dir_num);
 
 		if (file->is_datafile)
 			fprintf(out, ",\"segno\":\"%d\"", file->segno);
@@ -1411,7 +1534,8 @@ bad_format:
  * If root is not NULL, path will be absolute path.
  */
 parray *
-dir_read_file_list(const char *root, const char *file_txt)
+dir_read_file_list(const char *root, const char *external_prefix,
+				   const char *file_txt)
 {
 	FILE   *fp;
 	parray *files;
@@ -1433,6 +1557,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
 					is_cfs,
+					external_dir_num,
 					crc,
 					segno,
 					n_blocks;
@@ -1445,8 +1570,16 @@ dir_read_file_list(const char *root, const char *file_txt)
 		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
 		get_control_value(buf, "crc", NULL, &crc, true);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
+		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
 
-		if (root)
+		if (external_dir_num && external_prefix)
+		{
+			char temp[MAXPGPATH];
+
+			makeExternalDirPathByNum(temp, external_prefix, external_dir_num);
+			join_path_components(filepath, temp, path);
+		}
+		else if (root)
 			join_path_components(filepath, root, path);
 		else
 			strcpy(filepath, path);
@@ -1459,6 +1592,7 @@ dir_read_file_list(const char *root, const char *file_txt)
 		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
+		file->external_dir_num = external_dir_num;
 
 		/*
 		 * Optional fields
@@ -1543,4 +1677,57 @@ pgFileSize(const char *path)
 		elog(ERROR, "Cannot stat file \"%s\": %s", path, strerror(errno));
 
 	return buf.st_size;
+}
+
+/*
+ * Construct parray containing external directories paths
+ * from string like /path1:/path2
+ */
+parray *
+make_external_directory_list(const char *colon_separated_dirs)
+{
+	char	   *p;
+	parray	   *list = parray_new();
+	char	   *tmp = pg_strdup(colon_separated_dirs);
+
+	p = strtok(tmp,":");
+	while(p!=NULL)
+	{
+		if (is_absolute_path(p))
+			parray_append(list, pg_strdup(p));
+		else
+			elog(ERROR, "External directory \"%s\" is not an absolute path", p);
+		p=strtok(NULL,":");
+	}
+	pfree(tmp);
+	parray_qsort(list, BlackListCompare);
+	return list;
+}
+
+/* Free memory of parray containing strings */
+void
+free_dir_list(parray *list)
+{
+	parray_walk(list, pfree);
+	parray_free(list);
+}
+
+/* Append to string "path_prefix" int "dir_num" */
+void
+makeExternalDirPathByNum(char *ret_path, const char *path_prefix,
+						 const int dir_num)
+{
+	sprintf(ret_path, "%s%d", path_prefix, dir_num);
+}
+
+/* Check if "dir" presents in "dirs_list" */
+bool
+backup_contains_external(const char *dir, parray *dirs_list)
+{
+	void *search_result;
+
+	if (!dirs_list) /* There is no external dirs in backup */
+		return false;
+	search_result = parray_bsearch(dirs_list, dir, BlackListCompare);
+	return search_result != NULL;
 }

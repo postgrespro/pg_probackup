@@ -18,12 +18,14 @@ typedef struct
 {
 	parray	   *to_files;
 	parray	   *files;
+	parray	   *from_external;
 
 	pgBackup   *to_backup;
 	pgBackup   *from_backup;
-
 	const char *to_root;
 	const char *from_root;
+	const char *to_external_prefix;
+	const char *from_external_prefix;
 
 	/*
 	 * Return value from the thread.
@@ -34,6 +36,11 @@ typedef struct
 
 static void merge_backups(pgBackup *backup, pgBackup *next_backup);
 static void *merge_files(void *arg);
+static void
+reorder_external_dirs(pgBackup *to_backup, parray *to_external,
+					  parray *from_external);
+static int
+get_external_index(const char *key, const parray *list);
 
 /*
  * Implementation of MERGE command.
@@ -159,11 +166,15 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 			   *from_backup_id = base36enc_dup(from_backup->start_time);
 	char		to_backup_path[MAXPGPATH],
 				to_database_path[MAXPGPATH],
+				to_external_prefix[MAXPGPATH],
 				from_backup_path[MAXPGPATH],
 				from_database_path[MAXPGPATH],
+				from_external_prefix[MAXPGPATH],
 				control_file[MAXPGPATH];
 	parray	   *files,
 			   *to_files;
+	parray	   *to_external = NULL,
+			   *from_external = NULL;
 	pthread_t  *threads = NULL;
 	merge_files_arg *threads_args = NULL;
 	int			i;
@@ -201,16 +212,20 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	pgBackupGetPath(to_backup, to_backup_path, lengthof(to_backup_path), NULL);
 	pgBackupGetPath(to_backup, to_database_path, lengthof(to_database_path),
 					DATABASE_DIR);
+	pgBackupGetPath(to_backup, to_external_prefix, lengthof(to_database_path),
+					EXTERNAL_DIR);
 	pgBackupGetPath(from_backup, from_backup_path, lengthof(from_backup_path), NULL);
 	pgBackupGetPath(from_backup, from_database_path, lengthof(from_database_path),
 					DATABASE_DIR);
+	pgBackupGetPath(from_backup, from_external_prefix, lengthof(from_database_path),
+					EXTERNAL_DIR);
 
 	/*
 	 * Get list of files which will be modified or removed.
 	 */
 	pgBackupGetPath(to_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	to_files = dir_read_file_list(NULL, control_file);
+	to_files = dir_read_file_list(NULL, NULL, control_file);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(to_files, pgFileComparePathDesc);
 	/*
@@ -218,7 +233,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(from_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	files = dir_read_file_list(NULL, control_file);
+	files = dir_read_file_list(NULL, NULL, control_file);
 	/* sort by size for load balancing */
 	parray_qsort(files, pgFileCompareSize);
 
@@ -237,11 +252,35 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (merge_files_arg *) palloc(sizeof(merge_files_arg) * num_threads);
 
+	/* Create external directories lists */
+	if (to_backup->external_dir_str)
+		to_external = make_external_directory_list(to_backup->external_dir_str);
+	if (from_backup->external_dir_str)
+		from_external = make_external_directory_list(from_backup->external_dir_str);
+
+	/*
+	 * Rename external directoties in to_backup (if exists)
+	 * according to numeration of external dirs in from_backup.
+	 */
+	if (to_external)
+		reorder_external_dirs(to_backup, to_external, from_external);
+
 	/* Setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
+		/* if the entry was an external directory, create it in the backup */
+		if (file->external_dir_num && S_ISDIR(file->mode))
+		{
+			char		dirpath[MAXPGPATH];
+			char		new_container[MAXPGPATH];
+
+			makeExternalDirPathByNum(new_container, to_external_prefix,
+									 file->external_dir_num);
+			join_path_components(dirpath, new_container, file->path);
+			dir_create_dir(dirpath, DIR_PERMISSION);
+		}
 		pg_atomic_init_flag(&file->lock);
 	}
 
@@ -256,6 +295,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		arg->from_backup = from_backup;
 		arg->to_root = to_database_path;
 		arg->from_root = from_database_path;
+		arg->from_external = from_external;
+		arg->to_external_prefix = to_external_prefix;
+		arg->from_external_prefix = from_external_prefix;
 		/* By default there are some error */
 		arg->ret = 1;
 
@@ -285,6 +327,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_backup->stop_lsn = from_backup->stop_lsn;
 	to_backup->recovery_time = from_backup->recovery_time;
 	to_backup->recovery_xid = from_backup->recovery_xid;
+	pfree(to_backup->external_dir_str);
+	to_backup->external_dir_str = from_backup->external_dir_str;
+	from_backup->external_dir_str = NULL; /* For safe pgBackupFree() */
 	to_backup->merge_time = merge_time;
 	to_backup->end_time = time(NULL);
 
@@ -312,7 +357,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	else
 		to_backup->wal_bytes = BYTES_INVALID;
 
-	write_backup_filelist(to_backup, files, from_database_path);
+	write_backup_filelist(to_backup, files, from_database_path,
+						  from_external_prefix, NULL);
 	write_backup(to_backup);
 
 delete_source_backup:
@@ -329,6 +375,14 @@ delete_source_backup:
 	for (i = 0; i < parray_num(to_files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
+
+		if (file->external_dir_num && to_external)
+		{
+			char *dir_name = parray_get(to_external, file->external_dir_num - 1);
+			if (backup_contains_external(dir_name, from_external))
+				/* Dir already removed*/
+				continue;
+		}
 
 		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
 		{
@@ -415,7 +469,7 @@ merge_files(void *arg)
 				 i + 1, num_files, file->path);
 
 		res_file = parray_bsearch(argument->to_files, file,
-								  pgFileComparePathDesc);
+								  pgFileComparePathWithExternalDesc);
 		to_file = (res_file) ? *res_file : NULL;
 
 		join_path_components(to_file_path, argument->to_root, file->path);
@@ -453,7 +507,17 @@ merge_files(void *arg)
 		}
 
 		/* We need to make full path, file object has relative path */
-		join_path_components(from_file_path, argument->from_root, file->path);
+		if (file->external_dir_num)
+		{
+			char temp[MAXPGPATH];
+			makeExternalDirPathByNum(temp, argument->from_external_prefix,
+									 file->external_dir_num);
+
+			join_path_components(from_file_path, temp, file->path);
+		}
+		else
+			join_path_components(from_file_path, argument->from_root,
+								 file->path);
 		prev_file_path = file->path;
 		file->path = from_file_path;
 
@@ -559,6 +623,23 @@ merge_files(void *arg)
 				file->crc = pgFileGetCRC(to_file_path, true, true, NULL);
 			}
 		}
+		else if (file->external_dir_num)
+		{
+			char	from_root[MAXPGPATH];
+			char	to_root[MAXPGPATH];
+			int		new_dir_num;
+			char   *file_external_path = parray_get(argument->from_external,
+													file->external_dir_num - 1);
+
+			Assert(argument->from_external);
+			new_dir_num = get_external_index(file_external_path,
+											 argument->from_external);
+			makeExternalDirPathByNum(from_root, argument->from_external_prefix,
+									 file->external_dir_num);
+			makeExternalDirPathByNum(to_root, argument->to_external_prefix,
+									 new_dir_num);
+			copy_file(from_root, to_root, file);
+		}
 		else if (strcmp(file->name, "pg_control") == 0)
 			copy_pgcontrol_file(argument->from_root, argument->to_root, file);
 		else
@@ -582,4 +663,67 @@ merge_files(void *arg)
 	argument->ret = 0;
 
 	return NULL;
+}
+
+/* Recursively delete a directory and its contents */
+static void
+remove_dir_with_files(const char *path)
+{
+	parray *files = parray_new();
+	dir_list_file(files, path, true, true, true, 0);
+	parray_qsort(files, pgFileComparePathDesc);
+	for (int i = 0; i < parray_num(files); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+
+		pgFileDelete(file);
+		elog(VERBOSE, "Deleted \"%s\"", file->path);
+	}
+}
+
+/* Get index of external directory */
+static int
+get_external_index(const char *key, const parray *list)
+{
+	if (!list) /* Nowhere to search */
+		return -1;
+	for (int i = 0; i < parray_num(list); i++)
+	{
+		if (strcmp(key, parray_get(list, i)) == 0)
+			return i + 1;
+	}
+	return -1;
+}
+
+/* Rename directories in to_backup according to order in from_external */
+static void
+reorder_external_dirs(pgBackup *to_backup, parray *to_external,
+					  parray *from_external)
+{
+	char externaldir_template[MAXPGPATH];
+
+	pgBackupGetPath(to_backup, externaldir_template,
+					lengthof(externaldir_template), EXTERNAL_DIR);
+	for (int i = 0; i < parray_num(to_external); i++)
+	{
+		int from_num = get_external_index(parray_get(to_external, i),
+										  from_external);
+		if (from_num == -1)
+		{
+			char old_path[MAXPGPATH];
+			makeExternalDirPathByNum(old_path, externaldir_template, i + 1);
+			remove_dir_with_files(old_path);
+		}
+		else if (from_num != i + 1)
+		{
+			char old_path[MAXPGPATH];
+			char new_path[MAXPGPATH];
+			makeExternalDirPathByNum(old_path, externaldir_template, i + 1);
+			makeExternalDirPathByNum(new_path, externaldir_template, from_num);
+			elog(VERBOSE, "Rename %s to %s", old_path, new_path);
+			if (rename (old_path, new_path) == -1)
+				elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
+					 old_path, new_path, strerror(errno));
+		}
+	}
 }

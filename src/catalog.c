@@ -473,7 +473,25 @@ pgBackupCreateDir(pgBackup *backup)
 {
 	int		i;
 	char	path[MAXPGPATH];
-	char   *subdirs[] = { DATABASE_DIR, NULL };
+	parray *subdirs = parray_new();
+
+	parray_append(subdirs, pg_strdup(DATABASE_DIR));
+
+	/* Add external dirs containers */
+	if (backup->external_dir_str)
+	{
+		parray *external_list;
+
+		external_list = make_external_directory_list(backup->external_dir_str);
+		for (int i = 0; i < parray_num(external_list); i++)
+		{
+			char		temp[MAXPGPATH];
+			/* Numeration of externaldirs starts with 1 */
+			makeExternalDirPathByNum(temp, EXTERNAL_DIR, i+1);
+			parray_append(subdirs, pg_strdup(temp));
+		}
+		free_dir_list(external_list);
+	}
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 
@@ -483,12 +501,13 @@ pgBackupCreateDir(pgBackup *backup)
 	dir_create_dir(path, DIR_PERMISSION);
 
 	/* create directories for actual backup files */
-	for (i = 0; subdirs[i]; i++)
+	for (i = 0; i < parray_num(subdirs); i++)
 	{
-		pgBackupGetPath(backup, path, lengthof(path), subdirs[i]);
+		pgBackupGetPath(backup, path, lengthof(path), parray_get(subdirs, i));
 		dir_create_dir(path, DIR_PERMISSION);
 	}
 
+	free_dir_list(subdirs);
 	return 0;
 }
 
@@ -566,6 +585,10 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* print connection info except password */
 	if (backup->primary_conninfo)
 		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+
+	/* print external directories list */
+	if (backup->external_dir_str)
+		fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
 }
 
 /*
@@ -612,7 +635,8 @@ write_backup(pgBackup *backup)
  * Output the list of files to backup catalog DATABASE_FILE_LIST
  */
 void
-write_backup_filelist(pgBackup *backup, parray *files, const char *root)
+write_backup_filelist(pgBackup *backup, parray *files, const char *root,
+					  const char *external_prefix, parray *external_list)
 {
 	FILE	   *fp;
 	char		path[MAXPGPATH];
@@ -627,7 +651,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
 
-	print_file_list(fp, files, root);
+	print_file_list(fp, files, root, external_prefix, external_list);
 
 	if (fflush(fp) != 0 ||
 		fsync(fileno(fp)) != 0 ||
@@ -692,6 +716,7 @@ readBackupControlFile(const char *path)
 		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
+		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -922,6 +947,7 @@ pgBackupInit(pgBackup *backup)
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
+	backup->external_dir_str = NULL;
 }
 
 /* free pgBackup object */
@@ -931,6 +957,7 @@ pgBackupFree(void *backup)
 	pgBackup *b = (pgBackup *) backup;
 
 	pfree(b->primary_conninfo);
+	pfree(b->external_dir_str);
 	pfree(backup);
 }
 

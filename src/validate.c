@@ -44,6 +44,7 @@ void
 pgBackupValidate(pgBackup *backup)
 {
 	char		base_path[MAXPGPATH];
+	char		external_prefix[MAXPGPATH];
 	char		path[MAXPGPATH];
 	parray	   *files;
 	bool		corrupted = false;
@@ -99,8 +100,9 @@ pgBackupValidate(pgBackup *backup)
 		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
+	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, path);
+	files = dir_read_file_list(base_path, external_prefix, path);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -248,7 +250,8 @@ pgBackupValidateFiles(void *arg)
 			 * Starting from 2.0.25 we calculate crc of pg_control differently.
 			 */
 			if (arguments->backup_version >= 20025 &&
-				strcmp(file->name, "pg_control") == 0)
+				strcmp(file->name, "pg_control") == 0 &&
+				!file->external_dir_num)
 				crc = get_pgcontrol_checksum(arguments->base_path);
 			else
 				crc = pgFileGetCRC(file->path,

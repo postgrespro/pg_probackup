@@ -5,7 +5,7 @@ from . import init_test, merge, option_test, show_test, compatibility, \
     retention_test, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
     cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
-    locking, remote
+    locking, remote, external
 
 
 def load_tests(loader, tests, pattern):
@@ -40,6 +40,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
     suite.addTests(loader.loadTestsFromModule(time_stamp))
+    suite.addTests(loader.loadTestsFromModule(external))
 
     return suite
 
