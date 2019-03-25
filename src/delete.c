@@ -588,14 +588,6 @@ do_retention_wal(void)
 	if (!backup_list_is_empty && XLogRecPtrIsInvalid(oldest_lsn))
 		elog(ERROR, "Not going to purge WAL because LSN is invalid");
 
-	/* If no backups left after retention, do not drop all WAL files,
-	 * because of race conditions there is a risk of messing up
-	 * concurrent backup wals.
-	 * But it is sort of ok to drop all WAL files if backup_list is empty
-	 * from the very beginning, because a risk of concurrent backup
-	 * is much smaller.
-	 */
-
 	/* Purge WAL files */
 	delete_walfiles(oldest_lsn, oldest_tli, instance_config.xlog_seg_size);
 
