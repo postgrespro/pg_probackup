@@ -3013,11 +3013,7 @@ check_external_for_tablespaces(parray *external_list)
 						"FROM pg_tablespace\n"
 						"WHERE pg_catalog.pg_tablespace_location(oid) <> '';";
 
-	if (current.from_replica && exclusive_backup)
-		conn = master_conn;
-	else
-		conn = backup_conn;
-
+	conn = backup_conn;
 	res = pgut_execute(conn, query, 0, NULL);
 
 	/* Check successfull execution of query */
