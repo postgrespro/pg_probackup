@@ -414,6 +414,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
 	/* We ensured that all backups are valid, now restore if required
+	 * TODO: before restore - lock entire parent chain
 	 */
 	if (is_restore)
 	{

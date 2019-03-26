@@ -1,8 +1,8 @@
 import unittest
 
 from . import init_test, merge, option_test, show_test, compatibility, \
-    backup_test, delete_test, delta, restore_test, validate_test, \
-    retention_test, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
+    backup_test, delete_test, delta, restore, validate_test, \
+    retention, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
     cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
     locking, remote, external
@@ -32,13 +32,14 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(remote))
     suite.addTests(loader.loadTestsFromModule(replica))
-    suite.addTests(loader.loadTestsFromModule(restore_test))
-    suite.addTests(loader.loadTestsFromModule(retention_test))
+    suite.addTests(loader.loadTestsFromModule(restore))
+    suite.addTests(loader.loadTestsFromModule(retention))
     suite.addTests(loader.loadTestsFromModule(show_test))
     suite.addTests(loader.loadTestsFromModule(snapfs))
     suite.addTests(loader.loadTestsFromModule(validate_test))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
+    suite.addTests(loader.loadTestsFromModule(pgpro2068))
     suite.addTests(loader.loadTestsFromModule(time_stamp))
     suite.addTests(loader.loadTestsFromModule(external))
 
