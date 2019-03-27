@@ -451,9 +451,20 @@ do_retention_internal(void)
 		/* Lock merge chain */
 		catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0);
 
-		for (j = parray_num(merge_list) - 1; j > 0; j--)
+
+		/* Merge list example:
+		 * 0 PAGE3
+		 * 1 PAGE2
+		 * 2 PAGE1
+		 * 3 FULL
+		 *
+		 * Сonsequentially merge incremental backups from PAGE1 to PAGE3
+		 * into FULL.
+		 */
+
+		for (j = parray_num(merge_list) - 2; j >= 0; j--)
 		{
-			pgBackup   *from_backup = (pgBackup *) parray_get(merge_list, j - 1 );
+			pgBackup   *from_backup = (pgBackup *) parray_get(merge_list, j);
 
 
 			/* Consider this extreme case */
@@ -461,7 +472,9 @@ do_retention_internal(void)
 			//      \     /
 			//        FULL
 
-			/* Check that FULL backup do not has multiple descendants */
+			/* Check that FULL backup do not has multiple descendants
+			 * full_backup always point to current full_backup after merge
+			 */
 			if (is_prolific(backup_list, full_backup))
 			{
 				elog(WARNING, "Backup %s has multiple valid descendants. "
