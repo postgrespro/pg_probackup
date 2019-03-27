@@ -1263,9 +1263,8 @@ get_wal_file(const char *from_path, const char *to_path)
 	gzFile		gz_in = NULL;
 #endif
 
-	/* open file for read */
-	in = fopen(from_path, PG_BINARY_R);
-	if (in == NULL)
+	/* First check source file for existance */
+	if (fio_access(from_path, F_OK, FIO_BACKUP_HOST) != 0)
 	{
 #ifdef HAVE_LIBZ
 		/*
@@ -1273,19 +1272,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		 * extension.
 		 */
 		snprintf(gz_from_path, sizeof(gz_from_path), "%s.gz", from_path);
-		gz_in = gzopen(gz_from_path, PG_BINARY_R);
-		if (gz_in == NULL)
-		{
-			if (errno == ENOENT)
-			{
-				/* There is no compressed file too, raise an error below */
-			}
-			/* Cannot open compressed file for some reason */
-			else
-				elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
-					 gz_from_path, strerror(errno));
-		}
-		else
+		if (fio_access(gz_from_path, F_OK, FIO_BACKUP_HOST) == 0)
 		{
 			/* Found compressed file */
 			is_decompress = true;
@@ -1294,9 +1281,28 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 		/* Didn't find compressed file */
 		if (!is_decompress)
-			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
-				 from_path, strerror(errno));
+			elog(ERROR, "Source WAL file \"%s\" doesn't exist",
+				 from_path);
 	}
+
+	/* open file for read */
+	if (!is_decompress)
+	{
+		in = fio_fopen(from_path, PG_BINARY_R, FIO_BACKUP_HOST);
+		if (in == NULL)
+			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
+					from_path, strerror(errno));
+	}
+#ifdef HAVE_LIBZ
+	else
+	{
+		gz_in = fio_gzopen(gz_from_path, PG_BINARY_R, Z_DEFAULT_COMPRESSION,
+						   FIO_BACKUP_HOST);
+		if (gz_in == NULL)
+			elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
+					 gz_from_path, strerror(errno));
+	}
+#endif
 
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
@@ -1314,8 +1320,8 @@ get_wal_file(const char *from_path, const char *to_path)
 #ifdef HAVE_LIBZ
 		if (is_decompress)
 		{
-			read_len = gzread(gz_in, buf, sizeof(buf));
-			if (read_len != sizeof(buf) && !gzeof(gz_in))
+			read_len = fio_gzread(gz_in, buf, sizeof(buf));
+			if (read_len != sizeof(buf) && !fio_gzeof(gz_in))
 			{
 				errno_temp = errno;
 				fio_unlink(to_path_temp, FIO_DB_HOST);
@@ -1326,7 +1332,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		else
 #endif
 		{
-			read_len = fread(buf, 1, sizeof(buf), in);
+			read_len = fio_fread(in, buf, sizeof(buf));
 			if (ferror(in))
 			{
 				errno_temp = errno;
@@ -1351,13 +1357,13 @@ get_wal_file(const char *from_path, const char *to_path)
 #ifdef HAVE_LIBZ
 		if (is_decompress)
 		{
-			if (gzeof(gz_in) || read_len == 0)
+			if (fio_gzeof(gz_in) || read_len == 0)
 				break;
 		}
 		else
 #endif
 		{
-			if (feof(in) || read_len == 0)
+			if (/* feof(in) || */ read_len == 0)
 				break;
 		}
 	}
@@ -1373,7 +1379,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #ifdef HAVE_LIBZ
 	if (is_decompress)
 	{
-		if (gzclose(gz_in) != 0)
+		if (fio_gzclose(gz_in) != 0)
 		{
 			errno_temp = errno;
 			fio_unlink(to_path_temp, FIO_DB_HOST);
@@ -1384,7 +1390,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	else
 #endif
 	{
-		if (fclose(in))
+		if (fio_fclose(in))
 		{
 			errno_temp = errno;
 			fio_unlink(to_path_temp, FIO_DB_HOST);

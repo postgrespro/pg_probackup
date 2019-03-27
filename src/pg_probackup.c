@@ -341,7 +341,7 @@ main(int argc, char *argv[])
 	canonicalize_path(backup_path);
 
 	MyLocation = IsSshProtocol()
-		? backup_subcmd == ARCHIVE_PUSH_CMD
+		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
 		   ? FIO_DB_HOST : FIO_BACKUP_HOST
 		: FIO_LOCAL_HOST;
 

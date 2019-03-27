@@ -1617,13 +1617,13 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	{
 		if (!file_exists)
 		{
-			file_exists = fileExists(wal_segment_path, is_start_lsn ? FIO_DB_HOST : FIO_BACKUP_HOST);
+			file_exists = fileExists(wal_segment_path, FIO_BACKUP_HOST);
 
 			/* Try to find compressed WAL file */
 			if (!file_exists)
 			{
 #ifdef HAVE_LIBZ
-				file_exists = fileExists(gz_wal_segment_path, is_start_lsn ? FIO_DB_HOST : FIO_BACKUP_HOST);
+				file_exists = fileExists(gz_wal_segment_path, FIO_BACKUP_HOST);
 				if (file_exists)
 					elog(LOG, "Found compressed WAL segment: %s", wal_segment_path);
 #endif
