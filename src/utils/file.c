@@ -697,7 +697,10 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
 
-		return 0;
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_MKDIR);
+
+		return hdr.arg;
 	}
 	else
 	{
@@ -1297,7 +1300,9 @@ void fio_communicate(int in, int out)
 			SYS_CHECK(remove(buf));
 			break;
 		  case FIO_MKDIR:  /* Create direcory */
-			SYS_CHECK(dir_create_dir(buf, hdr.arg));
+			hdr.size = 0;
+			hdr.arg = dir_create_dir(buf, hdr.arg);
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_CHMOD:  /* Change file mode */
 			SYS_CHECK(chmod(buf, hdr.arg));
