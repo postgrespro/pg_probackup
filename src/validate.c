@@ -452,6 +452,11 @@ do_validate_instance(void)
 					continue;
 				}
 				base_full_backup = find_parent_full_backup(current_backup);
+
+				/* sanity */
+				if (!base_full_backup)
+					elog(ERROR, "Parent full backup for the given backup %s was not found",
+							base36enc(current_backup->start_time));
 			}
 			/* chain is whole, all parents are valid at first glance,
 			 * current backup validation can proceed
@@ -568,7 +573,7 @@ do_validate_instance(void)
 
 							if (backup->status == BACKUP_STATUS_OK)
 							{
-								//tmp_backup = find_parent_full_backup(dest_backup);
+
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
 											 0, 0, current_backup->tli,

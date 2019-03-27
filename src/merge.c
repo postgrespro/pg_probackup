@@ -53,12 +53,10 @@ void
 do_merge(time_t backup_id)
 {
 	parray	   *backups;
+	parray	   *merge_list = parray_new();
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *full_backup = NULL;
-	time_t		prev_parent = INVALID_BACKUP_ID;
 	int			i;
-	int			dest_backup_idx = 0;
-	int			full_backup_idx = 0;
 
 	if (backup_id == INVALID_BACKUP_ID)
 		elog(ERROR, "required parameter is not specified: --backup-id");
@@ -71,73 +69,79 @@ do_merge(time_t backup_id)
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
-	/* Find destination and parent backups */
+	/* Find destination backup first */
 	for (i = 0; i < parray_num(backups); i++)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backups, i);
 
-		if (backup->start_time > backup_id)
-			continue;
-		else if (backup->start_time == backup_id && !dest_backup)
+		/* found target */
+		if (backup->start_time == backup_id)
 		{
+			/* sanity */
 			if (backup->status != BACKUP_STATUS_OK &&
 				/* It is possible that previous merging was interrupted */
 				backup->status != BACKUP_STATUS_MERGING &&
 				backup->status != BACKUP_STATUS_DELETING)
-				elog(ERROR, "Backup %s has status: %s",
-					 base36enc(backup->start_time), status2str(backup->status));
+					elog(ERROR, "Backup %s has status: %s",
+						 base36enc(backup->start_time), status2str(backup->status));
 
 			if (backup->backup_mode == BACKUP_MODE_FULL)
 				elog(ERROR, "Backup %s is full backup",
 					 base36enc(backup->start_time));
 
 			dest_backup = backup;
-			dest_backup_idx = i;
+			break;
 		}
-		else
-		{
-			if (dest_backup == NULL)
-				elog(ERROR, "Target backup %s was not found", base36enc(backup_id));
-
-			if (backup->start_time != prev_parent)
-				continue;
-
-			if (backup->status != BACKUP_STATUS_OK &&
-				/* It is possible that previous merging was interrupted */
-				backup->status != BACKUP_STATUS_MERGING)
-				elog(ERROR, "Backup %s has status: %s",
-					 base36enc(backup->start_time), status2str(backup->status));
-
-			/* If we already found dest_backup, look for full backup */
-			if (dest_backup && backup->backup_mode == BACKUP_MODE_FULL)
-			{
-				full_backup = backup;
-				full_backup_idx = i;
-
-				/* Found target and full backups, so break the loop */
-				break;
-			}
-		}
-
-		prev_parent = backup->parent_backup;
 	}
 
+	/* sanity */
 	if (dest_backup == NULL)
 		elog(ERROR, "Target backup %s was not found", base36enc(backup_id));
+
+	/* get full backup */
+	full_backup = find_parent_full_backup(dest_backup);
+
+	/* sanity */
 	if (full_backup == NULL)
 		elog(ERROR, "Parent full backup for the given backup %s was not found",
 			 base36enc(backup_id));
 
-	Assert(full_backup_idx != dest_backup_idx);
+	/* sanity */
+	if (full_backup->status != BACKUP_STATUS_OK &&
+		/* It is possible that previous merging was interrupted */
+		full_backup->status != BACKUP_STATUS_MERGING)
+			elog(ERROR, "Backup %s has status: %s",
+					base36enc(full_backup->start_time), status2str(full_backup->status));
 
-	catalog_lock_backup_list(backups, full_backup_idx, dest_backup_idx);
+	//Assert(full_backup_idx != dest_backup_idx);
+
+	/* form merge list */
+	while(dest_backup->parent_backup_link)
+	{
+		/* sanity */
+		if (dest_backup->status != BACKUP_STATUS_OK &&
+			/* It is possible that previous merging was interrupted */
+			dest_backup->status != BACKUP_STATUS_MERGING &&
+			dest_backup->status != BACKUP_STATUS_DELETING)
+				elog(ERROR, "Backup %s has status: %s",
+						base36enc(dest_backup->start_time), status2str(dest_backup->status));
+
+		parray_append(merge_list, dest_backup);
+		dest_backup = dest_backup->parent_backup_link;
+	}
+
+	/* Add FULL backup for easy locking */
+	parray_append(merge_list, full_backup);
+
+	/* Lock merge chain */
+	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0);
 
 	/*
 	 * Found target and full backups, merge them and intermediate backups
 	 */
-	for (i = full_backup_idx; i > dest_backup_idx; i--)
+	for (i = parray_num(merge_list) - 2; i >= 0; i--)
 	{
-		pgBackup   *from_backup = (pgBackup *) parray_get(backups, i - 1);
+		pgBackup   *from_backup = (pgBackup *) parray_get(merge_list, i);
 
 		merge_backups(full_backup, from_backup);
 	}
@@ -149,6 +153,7 @@ do_merge(time_t backup_id)
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
+	parray_free(merge_list);
 
 	elog(INFO, "Merge of backup %s completed", base36enc(backup_id));
 }

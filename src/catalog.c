@@ -393,7 +393,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 		if (curr->backup_mode == BACKUP_MODE_FULL)
 			continue;
 
-		for (j = i+1; j < parray_num(backups); j++)
+		for (j = 0; j < parray_num(backups); j++)
 		{
 			pgBackup *ancestor = parray_get(backups, j);
 
@@ -1034,8 +1034,12 @@ find_parent_full_backup(pgBackup *current_backup)
 	}
 
 	if (base_full_backup->backup_mode != BACKUP_MODE_FULL)
-		elog(ERROR, "Failed to find FULL backup parent for %s",
-				base36enc(current_backup->start_time));
+	{
+
+		elog(WARNING, "Backup %s is missing",
+				base36enc(base_full_backup->parent_backup));
+		return NULL;
+	}
 
 	return base_full_backup;
 }
