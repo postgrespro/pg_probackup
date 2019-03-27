@@ -4,6 +4,7 @@ import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import shutil
+from datetime import datetime, timedelta
 
 module_name = "merge"
 
@@ -1695,7 +1696,68 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'CORRUPT', self.show_pb(backup_dir, 'node')[0]['status'])
 
-        # self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_merge_backup_from_future(self):
+        """
+        take FULL backup, table PAGE backup from future,
+        try to merge page with FULL
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        node.pgbench_init(scale=3)
+
+        # Take PAGE from future
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        with open(
+                os.path.join(
+                    backup_dir, 'backups', 'node',
+                    backup_id, "backup.control"), "a") as conf:
+            conf.write("start-time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                datetime.now() + timedelta(days=3)))
+
+        # rename directory
+        new_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        os.rename(
+            os.path.join(backup_dir, 'backups', 'node', backup_id),
+            os.path.join(backup_dir, 'backups', 'node', new_id))
+
+        pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
 # 1. always use parent link when merging (intermediates may be from different chain)
 # 2. page backup we are merging with may disappear after failed merge,
