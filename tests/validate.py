@@ -146,6 +146,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             con.commit()
             target_xid = res[0][0]
         self.switch_wal_segment(node)
+        time.sleep(5)
 
         self.assertIn(
             "INFO: Backup validation completed successfully",
