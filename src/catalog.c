@@ -386,25 +386,18 @@ catalog_get_backup_list(time_t requested_backup_id)
 	/* Link incremental backups with their ancestors.*/
 	for (i = 0; i < parray_num(backups); i++)
 	{
-		pgBackup *curr = parray_get(backups, i);
-
-		int j;
+		pgBackup   *curr = parray_get(backups, i);
+		pgBackup  **ancestor;
+		pgBackup	key;
 
 		if (curr->backup_mode == BACKUP_MODE_FULL)
 			continue;
 
-		for (j = 0; j < parray_num(backups); j++)
-		{
-			pgBackup *ancestor = parray_get(backups, j);
-
-			if (ancestor->start_time == curr->parent_backup)
-			{
-				curr->parent_backup_link = ancestor;
-				/* elog(INFO, "curr %s, ancestor %s j=%d", base36enc_dup(curr->start_time),
-						base36enc_dup(ancestor->start_time), j); */
-				break;
-			}
-		}
+		key.start_time = curr->parent_backup;
+		ancestor = (pgBackup **) parray_bsearch(backups, &key,
+												pgBackupCompareIdDesc);
+		if (ancestor)
+			curr->parent_backup_link = *ancestor;
 	}
 
 	return backups;
@@ -1035,9 +1028,12 @@ find_parent_full_backup(pgBackup *current_backup)
 
 	if (base_full_backup->backup_mode != BACKUP_MODE_FULL)
 	{
-
-		elog(WARNING, "Backup %s is missing",
-				base36enc(base_full_backup->parent_backup));
+		if (base_full_backup->parent_backup)
+			elog(WARNING, "Backup %s is missing",
+				 base36enc(base_full_backup->parent_backup));
+		else
+			elog(WARNING, "Failed to find parent FULL backup for %s",
+				 base36enc(current_backup->start_time));
 		return NULL;
 	}
 
