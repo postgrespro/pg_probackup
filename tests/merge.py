@@ -1609,15 +1609,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Add data
-        node.pgbench_init(scale=3)
+        node.pgbench_init(scale=1)
 
         # FULL backup
         full_id = self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
-        pgbench.wait()
+        node.safe_psql(
+            'postgres',
+            "update pgbench_accounts set aid = aid + 1005000")
 
         path = node.safe_psql(
             'postgres',
@@ -1665,6 +1666,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         os.remove(file_to_remove)
 
         # Try to continue failed MERGE
+        #print(backup_id)
+        #exit(1)
         self.merge_backup(backup_dir, "node", backup_id)
 
         self.assertEqual(
