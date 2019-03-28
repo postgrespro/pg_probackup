@@ -1315,13 +1315,13 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* copy content */
 	for (;;)
 	{
-		size_t		read_len = 0;
+		int read_len = 0;
 
 #ifdef HAVE_LIBZ
 		if (is_decompress)
 		{
 			read_len = fio_gzread(gz_in, buf, sizeof(buf));
-			if (read_len != sizeof(buf) && !fio_gzeof(gz_in))
+			if (read_len <= 0 && !fio_gzeof(gz_in))
 			{
 				errno_temp = errno;
 				fio_unlink(to_path_temp, FIO_DB_HOST);
