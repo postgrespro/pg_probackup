@@ -9,6 +9,8 @@
 
 #include "pg_probackup.h"
 
+#include <unistd.h>
+
 #include "utils/configuration.h"
 #include "utils/json.h"
 
@@ -213,16 +215,22 @@ do_show_config(void)
  * values into the file.
  */
 void
-do_set_config(void)
+do_set_config(bool missing_ok)
 {
 	char		path[MAXPGPATH];
+	char		path_temp[MAXPGPATH];
 	FILE	   *fp;
 	int			i;
 
 	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-	fp = fopen(path, "wt");
+	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
+
+	if (!missing_ok && !fileExists(path))
+		elog(ERROR, "Configuration file \"%s\" doesn't exist", path);
+
+	fp = fopen(path_temp, "wt");
 	if (fp == NULL)
-		elog(ERROR, "cannot create %s: %s",
+		elog(ERROR, "Cannot create configuration file \"%s\": %s",
 			 BACKUP_CATALOG_CONF_FILE, strerror(errno));
 
 	current_group = NULL;
@@ -253,6 +261,14 @@ do_set_config(void)
 	}
 
 	fclose(fp);
+
+	if (rename(path_temp, path) < 0)
+	{
+		int			errno_temp = errno;
+		unlink(path_temp);
+		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
+			 path_temp, path, strerror(errno_temp));
+	}
 }
 
 void

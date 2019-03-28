@@ -4,6 +4,7 @@ import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import shutil
+from datetime import datetime, timedelta
 
 module_name = "merge"
 
@@ -1202,11 +1203,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica'
-            }
-        )
+            set_replication=True, initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1257,20 +1254,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_id_deleted = self.show_pb(backup_dir, "node")[1]["id"]
 
         # Try to continue failed MERGE
-        try:
-            self.merge_backup(backup_dir, "node", backup_id)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of backup corruption.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                "ERROR: Backup {0} has status: DELETING".format(
-                    backup_id_deleted) in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
+        self.merge_backup(backup_dir, "node", backup_id)
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
@@ -1616,7 +1600,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1637,6 +1622,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         path = node.safe_psql(
             'postgres',
             "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        node.safe_psql(
+            'postgres',
+            "VACUUM pgbench_accounts")
 
         vm_path = path + '_vm'
 
@@ -1673,29 +1662,83 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'backups',
             'node', full_id, 'database', vm_path)
 
-        print(file_to_remove)
-
         os.remove(file_to_remove)
 
         # Try to continue failed MERGE
-        try:
-            self.merge_backup(backup_dir, "node", backup_id)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of backup corruption.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                "ERROR: Merging of backup {0} failed".format(
-                    backup_id) in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.merge_backup(backup_dir, "node", backup_id)
 
         self.assertEqual(
-            'CORRUPT', self.show_pb(backup_dir, 'node')[0]['status'])
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
 
-        # self.del_test_dir(module_name, fname)
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_merge_backup_from_future(self):
+        """
+        take FULL backup, table PAGE backup from future,
+        try to merge page with FULL
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        node.pgbench_init(scale=3)
+
+        # Take PAGE from future
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        with open(
+                os.path.join(
+                    backup_dir, 'backups', 'node',
+                    backup_id, "backup.control"), "a") as conf:
+            conf.write("start-time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                datetime.now() + timedelta(days=3)))
+
+        # rename directory
+        new_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        os.rename(
+            os.path.join(backup_dir, 'backups', 'node', backup_id),
+            os.path.join(backup_dir, 'backups', 'node', new_id))
+
+        pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
 # 1. always use parent link when merging (intermediates may be from different chain)
 # 2. page backup we are merging with may disappear after failed merge,

@@ -337,7 +337,13 @@ do_validate_all(void)
 			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
 			join_path_components(conf_path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
-			config_read_opt(conf_path, instance_options, ERROR, false);
+			if (config_read_opt(conf_path, instance_options, ERROR, false,
+								true) == 0)
+			{
+				elog(WARNING, "Configuration file \"%s\" is empty", conf_path);
+				corrupted_backup_found = true;
+				continue;
+			}
 
 			do_validate_instance();
 		}
@@ -452,6 +458,11 @@ do_validate_instance(void)
 					continue;
 				}
 				base_full_backup = find_parent_full_backup(current_backup);
+
+				/* sanity */
+				if (!base_full_backup)
+					elog(ERROR, "Parent full backup for the given backup %s was not found",
+							base36enc(current_backup->start_time));
 			}
 			/* chain is whole, all parents are valid at first glance,
 			 * current backup validation can proceed
@@ -568,7 +579,7 @@ do_validate_instance(void)
 
 							if (backup->status == BACKUP_STATUS_OK)
 							{
-								//tmp_backup = find_parent_full_backup(dest_backup);
+
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
 											 0, 0, current_backup->tli,

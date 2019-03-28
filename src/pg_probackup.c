@@ -386,8 +386,12 @@ main(int argc, char *argv[])
 		config_get_opt_env(instance_options);
 
 		/* Read options from configuration file */
-		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-		config_read_opt(path, instance_options, ERROR, true);
+		if (backup_subcmd != ADD_INSTANCE_CMD)
+		{
+			join_path_components(path, backup_instance_path,
+								 BACKUP_CATALOG_CONF_FILE);
+			config_read_opt(path, instance_options, ERROR, true, false);
+		}
 	}
 
 	/* Initialize logger */
@@ -530,7 +534,7 @@ main(int argc, char *argv[])
 			do_show_config();
 			break;
 		case SET_CONFIG_CMD:
-			do_set_config();
+			do_set_config(false);
 			break;
 		case NO_CMD:
 			/* Should not happen */

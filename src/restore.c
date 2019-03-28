@@ -55,9 +55,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
 	pgBackup   *corrupted_backup = NULL;
-	int			dest_backup_index = 0;
-	int			base_full_backup_index = 0;
-	int			corrupted_backup_index = 0;
 	char	   *action = is_restore ? "Restore":"Validate";
 	parray	   *parent_chain = NULL;
 
@@ -179,8 +176,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (dest_backup == NULL)
 		elog(ERROR, "Backup satisfying target options is not found.");
 
-	dest_backup_index = get_backup_index_number(backups, dest_backup);
-
 	/* If we already found dest_backup, look for full backup. */
 	if (dest_backup->backup_mode == BACKUP_MODE_FULL)
 			base_full_backup = dest_backup;
@@ -201,7 +196,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			missing_backup_start_time = tmp_backup->parent_backup;
 			missing_backup_id = base36enc_dup(tmp_backup->parent_backup);
 
-			for (j = get_backup_index_number(backups, tmp_backup); j >= 0; j--)
+			for (j = 0; j < parray_num(backups); j++)
 			{
 				pgBackup *backup = (pgBackup *) parray_get(backups, j);
 
@@ -235,7 +230,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			/* parent_backup_id contain human-readable backup ID of oldest invalid backup */
 			parent_backup_id = base36enc_dup(tmp_backup->start_time);
 
-			for (j = get_backup_index_number(backups, tmp_backup) - 1; j >= 0; j--)
+			for (j = 0; j < parray_num(backups); j++)
 			{
 
 				pgBackup *backup = (pgBackup *) parray_get(backups, j);
@@ -261,6 +256,11 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				}
 			}
 			tmp_backup = find_parent_full_backup(dest_backup);
+
+			/* sanity */
+			if (!tmp_backup)
+				elog(ERROR, "Parent full backup for the given backup %s was not found",
+						base36enc(dest_backup->start_time));
 		}
 
 		/*
@@ -275,8 +275,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 	if (base_full_backup == NULL)
 		elog(ERROR, "Full backup satisfying target options is not found.");
-
-	base_full_backup_index = get_backup_index_number(backups, base_full_backup);
 
 	/*
 	 * Ensure that directories provided in tablespace mapping are valid
@@ -297,16 +295,15 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	/* Take every backup that is a child of base_backup AND parent of dest_backup
 	 * including base_backup and dest_backup
 	 */
-	for (i = base_full_backup_index; i >= dest_backup_index; i--)
-	{
-		tmp_backup = (pgBackup *) parray_get(backups, i);
 
-		if (is_parent(base_full_backup->start_time, tmp_backup, true) &&
-					is_parent(tmp_backup->start_time, dest_backup, true))
-		{
-			parray_append(parent_chain, tmp_backup);
-		}
+	tmp_backup = dest_backup;
+	while(tmp_backup->parent_backup_link)
+	{
+		parray_append(parent_chain, tmp_backup);
+		tmp_backup = tmp_backup->parent_backup_link;
 	}
+
+	parray_append(parent_chain, base_full_backup);
 
 	/* for validation or restore with enabled validation */
 	if (!is_restore || !rt->restore_no_validate)
@@ -317,7 +314,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		/*
 		 * Validate backups from base_full_backup to dest_backup.
 		 */
-		for (i = 0; i < parray_num(parent_chain); i++)
+		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
 			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
 
@@ -344,10 +341,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			if (tmp_backup->status != BACKUP_STATUS_OK)
 			{
 				corrupted_backup = tmp_backup;
-				/* we need corrupted backup index from 'backups' not parent_chain
-				 * so we can properly orphanize all its descendants
-				 */
-				corrupted_backup_index = get_backup_index_number(backups, corrupted_backup);
 				break;
 			}
 			/* We do not validate WAL files of intermediate backups
@@ -373,7 +366,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			char	   *corrupted_backup_id;
 			corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
 
-			for (j = corrupted_backup_index - 1; j >= 0; j--)
+			for (j = 0; j < parray_num(backups); j++)
 			{
 				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
 
@@ -418,7 +411,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 */
 	if (is_restore)
 	{
-		for (i = 0; i < parray_num(parent_chain); i++)
+		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 

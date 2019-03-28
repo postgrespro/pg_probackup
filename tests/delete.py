@@ -250,3 +250,282 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delete_interleaved_incremental_chains(self):
+        """complicated case of interleaved backup chains"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL BACKUPs
+
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+        backup_id_b = self.backup_node(backup_dir, 'node', node)
+
+        # Change FULL B backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # FULLb  ERROR
+        # FULLa  OK
+        # Take PAGEa1 backup
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa1 OK
+        # FULLb  ERROR
+        # FULLa  OK
+        # Change FULL B backup status to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        # Change PAGEa1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+        page_id_b1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb1 OK
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+        # Now we start to play with first generation of PAGE backups
+        # Change PAGEb1 status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # Change PAGEa1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa2 OK
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+        # Change PAGEa2 status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+
+        # Change PAGEb1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+        page_id_b2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change PAGEa2 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+
+        # PAGEb2 OK
+        # PAGEa2 OK
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # PAGEc1 OK
+        # FULLc  OK
+        # PAGEb2 OK
+        # PAGEa2 OK
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Delete FULLb
+        self.delete_pb(
+            backup_dir, 'node', backup_id_b)
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 5)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delete_multiple_descendants(self):
+        """
+        PAGEb3
+          |                 PAGEa3
+        PAGEb2               /
+          |       PAGEa2    /
+        PAGEb1       \     /
+          |           PAGEa1
+        FULLb           |
+                      FULLa  should be deleted
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL BACKUPs
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+
+        backup_id_b = self.backup_node(backup_dir, 'node', node)
+
+        # Change FULLb backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change FULLb backup status to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        # Change PAGEa1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_b1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb1 OK
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa1 backup status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+
+        # Change PAGEb1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa2 OK
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEb1 backup status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # Change PAGEa2 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_b2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEb2 and PAGEb1  status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_a3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa3 OK
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa3 status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
+
+        # Change PAGEb2 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+
+        page_id_b3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb3 OK
+        # PAGEa3 ERROR
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa3, PAGEa2 and PAGEb1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # PAGEb3 OK
+        # PAGEa3 OK
+        # PAGEb2 OK
+        # PAGEa2 OK
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Check that page_id_a3 and page_id_a2 are both direct descendants of page_id_a1
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', backup_id=page_id_a3)['parent-backup-id'],
+            page_id_a1)
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', backup_id=page_id_a2)['parent-backup-id'],
+            page_id_a1)
+
+        # Delete FULLa
+        self.delete_pb(backup_dir, 'node', backup_id_a)
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
