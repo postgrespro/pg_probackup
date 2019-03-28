@@ -442,7 +442,7 @@ extern int do_archive_get(char *wal_file_path, char *wal_file_name);
 
 /* in configure.c */
 extern void do_show_config(void);
-extern void do_set_config(void);
+extern void do_set_config(bool missing_ok);
 extern void init_config(InstanceConfig *config);
 
 /* in show.c */

@@ -78,7 +78,7 @@ struct ConfigOption
 extern int config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 						  ConfigOption options[]);
 extern int config_read_opt(const char *path, ConfigOption options[], int elevel,
-						   bool strict);
+						   bool strict, bool missing_ok);
 extern void config_get_opt_env(ConfigOption options[]);
 extern void config_set_opt(ConfigOption options[], void *var,
 						   OptionSource source);

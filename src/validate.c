@@ -337,7 +337,13 @@ do_validate_all(void)
 			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
 			join_path_components(conf_path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
-			config_read_opt(conf_path, instance_options, ERROR, false);
+			if (config_read_opt(conf_path, instance_options, ERROR, false,
+								true) == 0)
+			{
+				elog(WARNING, "Configuration file \"%s\" is empty", conf_path);
+				corrupted_backup_found = true;
+				continue;
+			}
 
 			do_validate_instance();
 		}
