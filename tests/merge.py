@@ -1203,11 +1203,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica'
-            }
-        )
+            set_replication=True, initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1258,20 +1254,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_id_deleted = self.show_pb(backup_dir, "node")[1]["id"]
 
         # Try to continue failed MERGE
-        try:
-            self.merge_backup(backup_dir, "node", backup_id)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of backup corruption.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                "ERROR: Backup {0} has status: DELETING".format(
-                    backup_id_deleted) in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
+        self.merge_backup(backup_dir, "node", backup_id)
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
@@ -1617,7 +1600,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1638,6 +1622,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         path = node.safe_psql(
             'postgres',
             "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        node.safe_psql(
+            'postgres',
+            "VACUUM pgbench_accounts")
 
         vm_path = path + '_vm'
 
@@ -1674,27 +1662,20 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'backups',
             'node', full_id, 'database', vm_path)
 
-        print(file_to_remove)
-
         os.remove(file_to_remove)
 
         # Try to continue failed MERGE
-        try:
-            self.merge_backup(backup_dir, "node", backup_id)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of backup corruption.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                "ERROR: Merging of backup {0} failed".format(
-                    backup_id) in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.merge_backup(backup_dir, "node", backup_id)
 
         self.assertEqual(
-            'CORRUPT', self.show_pb(backup_dir, 'node')[0]['status'])
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         self.del_test_dir(module_name, fname)
 
