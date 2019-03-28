@@ -282,11 +282,11 @@ do_retention_internal(void)
 
 		pgBackup	*backup = (pgBackup *) parray_get(backup_list, i);
 
-		if (in_backup_list(to_keep_list, backup))
+		if (parray_bsearch(to_keep_list, backup, pgBackupCompareIdDesc))
 			action = "Keep";
 
-		if (in_backup_list(to_purge_list, backup))
-			action = "Purge";
+		if (parray_bsearch(to_purge_list, backup, pgBackupCompareIdDesc))
+			action = "Keep";
 
 		if (backup->recovery_time == 0)
 			actual_window = 0;
@@ -365,7 +365,9 @@ do_retention_internal(void)
 			continue;
 
 		/* If parent of current backup is also in keep list, go to the next */
-		if (in_backup_list(to_keep_list, keep_backup->parent_backup_link))
+		if (parray_bsearch(to_keep_list,
+							keep_backup->parent_backup_link,
+							pgBackupCompareIdDesc))
 		{
 			/* make keep list a bit sparse */
 			elog(INFO, "Sparsing keep list, remove %s", base36enc(keep_backup->start_time));
@@ -388,7 +390,9 @@ do_retention_internal(void)
 		}
 
 		/* Check that ancestor is in purge_list */
-		if (!in_backup_list(to_purge_list, full_backup))
+		if (!parray_bsearch(to_purge_list,
+							full_backup,
+							pgBackupCompareIdDesc))
 		{
 			elog(WARNING, "Skip backup %s for merging, "
 				"because his FULL parent is not marked for purge", base36enc(keep_backup->start_time));

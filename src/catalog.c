@@ -1036,27 +1036,6 @@ is_prolific(parray *backup_list, pgBackup *target_backup)
 }
 
 /*
- * Check if target_backup in backup_list. Use if bsearch cannot be trusted.
- */
-bool
-in_backup_list(parray *backup_list, pgBackup *target_backup)
-{
-	int i;
-
-	if (!target_backup)
-		elog(ERROR, "Target backup cannot be NULL");
-
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
-
-		if (tmp_backup->start_time == target_backup->start_time)
-			return true;
-	}
-    return false;
-}
-
-/*
  * Find parent base FULL backup for current backup using parent_backup_link
  */
 pgBackup*
