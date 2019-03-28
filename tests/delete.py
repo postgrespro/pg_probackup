@@ -388,25 +388,16 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=3)
-
         # Take FULL BACKUPs
         backup_id_a = self.backup_node(backup_dir, 'node', node)
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
 
         backup_id_b = self.backup_node(backup_dir, 'node', node)
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
 
         # Change FULLb backup status to ERROR
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         page_id_a1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
-
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
 
         # Change FULLb backup status to OK
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
@@ -426,9 +417,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # FULLb  OK
         # FULLa  OK
 
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
-
         # Change PAGEa1 backup status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
@@ -442,9 +430,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         page_id_a2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
-
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
 
         # PAGEa2 OK
         # PAGEb1 ERROR
@@ -467,9 +452,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
-
         # PAGEb2 OK
         # PAGEa2 ERROR
         # PAGEb1 OK
@@ -490,8 +472,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         page_id_a3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
 
         # PAGEa3 OK
         # PAGEb2 ERROR
