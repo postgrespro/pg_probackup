@@ -1743,6 +1743,188 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_merge_multiple_descendants(self):
+        """
+        PAGEb3
+          |                 PAGEa3
+        PAGEb2               /
+          |       PAGEa2    /
+        PAGEb1       \     /
+          |           PAGEa1
+        FULLb           |
+                      FULLa
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL BACKUPs
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+
+        backup_id_b = self.backup_node(backup_dir, 'node', node)
+
+        # Change FULLb backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change FULLb backup status to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        # Change PAGEa1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_b1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb1 OK
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa1 backup status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+
+        # Change PAGEb1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa2 OK
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEb1 backup status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # Change PAGEa2 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_b2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEb2 and PAGEb1  status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_a3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa3 OK
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa3 status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
+
+        # Change PAGEb2 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+
+        page_id_b3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb3 OK
+        # PAGEa3 ERROR
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa3, PAGEa2 and PAGEb1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # PAGEb3 OK
+        # PAGEa3 OK
+        # PAGEb2 OK
+        # PAGEa2 OK
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Check that page_id_a3 and page_id_a2 are both direct descendants of page_id_a1
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', backup_id=page_id_a3)['parent-backup-id'],
+            page_id_a1)
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', backup_id=page_id_a2)['parent-backup-id'],
+            page_id_a1)
+
+        self.merge_backup(
+            backup_dir, 'node', page_id_a2,
+            options=['--merge-expired', '--log-level-console=log'])
+
+        try:
+            self.merge_backup(
+                backup_dir, 'node', page_id_a3,
+                options=['--merge-expired', '--log-level-console=log'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of parent FULL backup is missing.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "ERROR: Parent full backup for the given "
+                    "backup {0} was not found".format(
+                    page_id_a3) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+
 # 1. always use parent link when merging (intermediates may be from different chain)
 # 2. page backup we are merging with may disappear after failed merge,
 # it should not be possible to continue merge after that
