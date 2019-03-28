@@ -104,7 +104,7 @@ do_add_instance(void)
 	config_set_opt(instance_options, &instance_config.xlog_seg_size,
 				   SOURCE_FILE);
 	/* pgdata was set through command line */
-	do_set_config();
+	do_set_config(true);
 
 	elog(INFO, "Instance '%s' successfully inited", instance_name);
 	return 0;

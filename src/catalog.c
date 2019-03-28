@@ -596,7 +596,7 @@ write_backup(pgBackup *backup)
 	int			errno_temp;
 
 	pgBackupGetPath(backup, path, lengthof(path), BACKUP_CONTROL_FILE);
-	snprintf(path_temp, sizeof(path_temp), "%s.partial", path);
+	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
 	fp = fopen(path_temp, "wt");
 	if (fp == NULL)
@@ -637,7 +637,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	int			errno_temp;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	snprintf(path_temp, sizeof(path_temp), "%s.partial", path);
+	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
 	fp = fopen(path_temp, "wt");
 	if (fp == NULL)
@@ -721,7 +721,7 @@ readBackupControlFile(const char *path)
 		return NULL;
 	}
 
-	parsed_options = config_read_opt(path, options, WARNING, true);
+	parsed_options = config_read_opt(path, options, WARNING, true, true);
 
 	if (parsed_options == 0)
 	{
