@@ -122,9 +122,9 @@ help_pg_probackup(void)
 	printf(_("                 [--external-dirs=external-directory-path]\n"));
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-path] [-i backup-id] [--progress]\n"));
+	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
@@ -146,8 +146,9 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
+
 	printf(_("\n  %s merge -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 -i backup-id\n"));
+	printf(_("                 -i backup-id [--progress] [-j num-threads]\n"));
 
 	printf(_("\n  %s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
@@ -227,7 +228,7 @@ help_backup(void)
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
 	printf(_("                                   backup some directories not from pgdata \n"));
-	printf(_("                                    (example: --external-dirs=/tmp/dirA:/tmp/dirB)\n"));
+	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -286,7 +287,7 @@ static void
 help_restore(void)
 {
 	printf(_("%s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-path] [-i backup-id] [--progress]\n"));
+	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
@@ -301,6 +302,7 @@ help_restore(void)
 
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to restore\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
@@ -510,7 +512,7 @@ help_set_config(void)
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
 	printf(_("                                   backup some directories not from pgdata \n"));
-	printf(_("                                    (example: --external-dirs=/tmp/dirA:/tmp/dirB)\n"));
+	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -586,7 +588,7 @@ help_add_instance(void)
 	printf(_("      --instance=instance_name     name of the new instance\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
 	printf(_("                                   backup some directories not from pgdata \n"));
-	printf(_("                                    (example: --external-dirs=/tmp/dirA:/tmp/dirB)\n"));
+	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 }
 
 static void
