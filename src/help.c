@@ -146,6 +146,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired | --merge-expired]\n"));
+	printf(_("                 [--dry-run]\n"));
 	printf(_("\n  %s merge -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 -i backup-id\n"));
 
@@ -260,6 +261,7 @@ help_backup(void)
 	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
 	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
+	printf(_("      --dry-run                    perform a trial run without any changes\n"));
 
 	printf(_("\n  Compression options:\n"));
 	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
@@ -414,7 +416,7 @@ help_delete(void)
 {
 	printf(_("%s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id | --expired | --merge-expired] [--wal]\n"));
-	printf(_("                 [-j num-threads]\n\n"));
+	printf(_("                 [-j num-threads] [--dry-run]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -425,6 +427,7 @@ help_delete(void)
 	printf(_("                                   retention policy\n"));
 	printf(_("      --wal                        remove unnecessary wal files in WAL ARCHIVE\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --dry-run                    perform a trial run without any changes\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
