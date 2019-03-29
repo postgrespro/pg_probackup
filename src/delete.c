@@ -370,7 +370,7 @@ do_retention_internal(void)
 							pgBackupCompareIdDesc))
 		{
 			/* make keep list a bit sparse */
-			elog(INFO, "Sparsing keep list, remove %s", base36enc(keep_backup->start_time));
+			elog(LOG, "Sparsing keep list, remove %s", base36enc(keep_backup->start_time));
 			parray_remove(to_keep_list, i);
 			i--;
 			continue;
