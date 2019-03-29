@@ -9,8 +9,8 @@ module_name = 'snapfs'
 
 class SnapFSTest(ProbackupTest, unittest.TestCase):
 
-    # @unittest.skip("skip")
     # @unittest.expectedFailure
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_snapfs_simple(self):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]
