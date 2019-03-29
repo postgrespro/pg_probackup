@@ -10,7 +10,8 @@ As compared to other backup solutions, `pg_probackup` offers the following benef
 * Implementing a single backup strategy for multi-server PostgreSQL clusters
 * Automatic data consistency checks and on-demand backup validation without actual data recovery
 * Managing backups in accordance with retention policy
-* Running backup, restore, and validation processes on multiple parallel threads
+* Merging incremental into full backups without actual data recovery
+* Running backup, restore, merge and validation processes on multiple parallel threads
 * Storing backup data in a compressed state to save disk space
 * Taking backups from a standby server to avoid extra load on the master server
 * Extended logging settings
