@@ -15,6 +15,7 @@ As compared to other backup solutions, `pg_probackup` offers the following benef
 * Taking backups from a standby server to avoid extra load on the master server
 * Extended logging settings
 * Custom commands to simplify WAL log archiving
+* External to PGDATA directories, such as directories with config files and scripts, can be included in backup
 
 To manage backup data, `pg_probackup` creates a backup catalog. This directory stores all backup files with additional meta information, as well as WAL archives required for [point-in-time recovery](https://postgrespro.com/docs/postgresql/current/continuous-archiving.html). You can store backups for different instances in separate subdirectories of a single backup catalog.
 
@@ -40,7 +41,6 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 * Creating backups from a remote server is currently not supported.
 * The server from which the backup was taken and the restored server must be compatible by the [block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-BLOCK-SIZE) and [wal_block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number.
 * Microsoft Windows operating system support is in beta stage.
-* Configuration files outside of PostgreSQL data directory are not included into the backup and should be backed up separately.
 
 ## Installation and Setup
 ### Linux Installation
