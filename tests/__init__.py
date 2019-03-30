@@ -5,7 +5,7 @@ from . import init_test, merge, option_test, show_test, compatibility, \
     retention, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
     cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
-    locking, remote, external
+    locking, remote, external, config
 
 
 def load_tests(loader, tests, pattern):
@@ -14,6 +14,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup_test))
     suite.addTests(loader.loadTestsFromModule(compatibility))
+    suite.addTests(loader.loadTestsFromModule(config))
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))
 #    suite.addTests(loader.loadTestsFromModule(cfs_restore))
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
