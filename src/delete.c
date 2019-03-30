@@ -24,71 +24,56 @@ do_delete(time_t backup_id)
 	parray	   *backup_list,
 			   *delete_list;
 	pgBackup   *target_backup = NULL;
-	time_t		parent_id = 0;
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
-
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 
-	if (backup_id != 0)
+	delete_list = parray_new();
+
+	/* Find backup to be deleted and make increment backups array to be deleted */
+	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		delete_list = parray_new();
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-		/* Find backup to be deleted and make increment backups array to be deleted */
-		for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
+		if (backup->start_time == backup_id)
 		{
-			pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
-
-			if (backup->start_time == backup_id)
-			{
-				parray_append(delete_list, backup);
-
-				/*
-				* Do not remove next backups, if target backup was finished
-				* incorrectly.
-				*/
-				if (backup->status == BACKUP_STATUS_ERROR)
-					break;
-
-				/* Save backup id to retreive increment backups */
-				parent_id = backup->start_time;
-				target_backup = backup;
-			}
-			else if (target_backup)
-			{
-				if (backup->backup_mode != BACKUP_MODE_FULL &&
-					backup->parent_backup == parent_id)
-				{
-					/* Append to delete list increment backup */
-					parray_append(delete_list, backup);
-					/* Save backup id to retreive increment backups */
-					parent_id = backup->start_time;
-				}
-				else
-					break;
-			}
+			target_backup = backup;
+			break;
 		}
-
-		if (parray_num(delete_list) == 0)
-			elog(ERROR, "no backup found, cannot delete");
-
-		/* Delete backups from the end of list */
-		for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
-		{
-			pgBackup   *backup = (pgBackup *) parray_get(delete_list, (size_t) i);
-
-			if (interrupted)
-				elog(ERROR, "interrupted during delete backup");
-
-			delete_backup_files(backup);
-		}
-
-		parray_free(delete_list);
 	}
+
+	/* sanity */
+	if (!target_backup)
+		elog(ERROR, "Failed to find backup %s, cannot delete", base36enc(backup_id));
+
+	/* form delete list */
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* check if backup is descendant of delete target */
+		if (is_parent(target_backup->start_time, backup, false))
+			parray_append(delete_list, backup);
+	}
+	parray_append(delete_list, target_backup);
+
+	/* Lock marked for delete backups */
+	catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0);
+
+	/* Delete backups from the end of list */
+	for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(delete_list, (size_t) i);
+
+		if (interrupted)
+			elog(ERROR, "interrupted during delete backup");
+
+		delete_backup_files(backup);
+	}
+
+	parray_free(delete_list);
 
 	/* Clean WAL segments */
 	if (delete_wal)
@@ -127,7 +112,6 @@ do_retention_purge(void)
 	size_t		i;
 	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID	oldest_tli = 0;
-	bool		keep_next_backup = true;	/* Do not delete first full backup */
 	bool		backup_deleted = false;		/* At least one backup was deleted */
 
 	if (delete_expired)
@@ -146,9 +130,6 @@ do_retention_purge(void)
 		}
 	}
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 	if (parray_num(backup_list) == 0)
@@ -162,6 +143,7 @@ do_retention_purge(void)
 		(instance_config.retention_redundancy > 0 ||
 		 instance_config.retention_window > 0))
 	{
+		bool		keep_next_backup = false;	/* Do not delete first full backup */
 		time_t		days_threshold;
 		uint32		backup_num = 0;
 
@@ -206,9 +188,21 @@ do_retention_purge(void)
 				continue;
 			}
 
+			/*
+			 * If the backup still is used do not interrupt go to the next
+			 * backup.
+			 */
+			if (!lock_backup(backup))
+			{
+				elog(WARNING, "Cannot lock backup %s directory, skip purging",
+					 base36enc(backup->start_time));
+				continue;
+			}
+
 			/* Delete backup and update status to DELETED */
 			delete_backup_files(backup);
 			backup_deleted = true;
+			keep_next_backup = false;	/* reset it */
 		}
 	}
 
@@ -240,7 +234,7 @@ do_retention_purge(void)
 	if (backup_deleted)
 		elog(INFO, "Purging finished");
 	else
-		elog(INFO, "Nothing to delete by retention policy");
+		elog(INFO, "There are no backups to delete by retention policy");
 
 	return 0;
 }
@@ -277,13 +271,12 @@ delete_backup_files(pgBackup *backup)
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
-	backup->status = BACKUP_STATUS_DELETING;
-	write_backup_status(backup);
+	write_backup_status(backup, BACKUP_STATUS_DELETING);
 
 	/* list files to be deleted */
 	files = parray_new();
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
-	dir_list_file(files, path, false, true, true);
+	dir_list_file(files, path, false, true, true, 0);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);
@@ -296,15 +289,10 @@ delete_backup_files(pgBackup *backup)
 			elog(INFO, "Progress: (%zd/%zd). Process file \"%s\"",
 				 i + 1, num_files, file->path);
 
-		if (remove(file->path))
-		{
-			if (errno == ENOENT)
-				elog(VERBOSE, "File \"%s\" is absent", file->path);
-			else
-				elog(ERROR, "Cannot remove \"%s\": %s", file->path,
-					 strerror(errno));
-			return;
-		}
+		if (interrupted)
+			elog(ERROR, "interrupted during delete backup");
+
+		pgFileDelete(file);
 	}
 
 	parray_walk(files, pgFileFree);
@@ -437,6 +425,8 @@ do_delete_instance(void)
 
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+
+	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{

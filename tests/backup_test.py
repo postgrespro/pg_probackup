@@ -2,7 +2,6 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.cfs_helpers import find_by_name
 
 
 module_name = 'backup'
@@ -17,17 +16,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """standart backup modes with ARCHIVE WAL method"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'ptrack_enable': 'on'}
-            )
+                'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         show_backup = self.show_pb(backup_dir, 'node')[0]
@@ -89,15 +87,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """full backup with smooth checkpoint"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-        )
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -113,15 +110,15 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """page-level backup without validated full backup"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
-            )
+            pg_options={'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         try:
             self.backup_node(backup_dir, 'node', node, backup_type="page")
@@ -169,15 +166,15 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """page-level backup with corrupted full backup"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
-            )
+            pg_options={'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
         file = os.path.join(
@@ -195,12 +192,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "INFO: Validate backups of the instance 'node'\n" in e.message and
-                "WARNING: Backup file \"{0}\" is not found\n".format(
+                "INFO: Validate backups of the instance 'node'" in e.message and
+                "WARNING: Backup file".format(
                     file) in e.message and
-                "WARNING: Backup {0} data files are corrupted\n".format(
+                "is not found".format(file) in e.message and
+                "WARNING: Backup {0} data files are corrupted".format(
                     backup_id) in e.message and
-                "WARNING: Some backups are not valid\n" in e.message,
+                "WARNING: Some backups are not valid" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -233,15 +231,15 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """ptrack multi thread backup mode"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
-            )
+            pg_options={'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -261,18 +259,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """ptrack multi thread backup mode and stream"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'ptrack_enable': 'on',
-                'max_wal_senders': '2'}
-            )
+                'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -292,16 +289,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -349,16 +346,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """make node, corrupt some page, check that backup failed"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-        )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -383,7 +380,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 f.write(b"bla")
                 f.flush()
                 f.close
-        node.start()
+        node.slow_start()
 
         try:
             self.backup_node(
@@ -422,16 +419,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """PGPRO-1376 """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-        )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(
             node, 'tblspace1',
@@ -459,22 +456,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1000) i")
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', node, backup_type="full",
-                options=["-j", "4", "--stream"])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of too many levels "
-                "of symbolic linking\n"
-                " Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'Too many levels of symbolic links' in e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        backup_id_1 = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
 
         node.safe_psql(
             "postgres",
@@ -495,7 +479,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             ).rstrip()
 
         list = []
-        for root, dirs, files in os.walk(backup_dir):
+        for root, dirs, files in os.walk(os.path.join(
+                backup_dir, 'backups', 'node', backup_id_1)):
             for file in files:
                 if file == relfilenode:
                     path = os.path.join(root, file)
@@ -520,6 +505,494 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_tablespace_handling(self):
+        """
+        make node, take full backup, check that restore with
+        tablespace mapping will end with error, take page backup,
+        check that restore with tablespace mapping will end with
+        success
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        tblspace1_old_path = self.get_tblspace_path(node, 'tblspace1_old')
+        tblspace2_old_path = self.get_tblspace_path(node, 'tblspace2_old')
+
+        self.create_tblspace_in_node(
+            node, 'some_lame_tablespace')
+
+        self.create_tblspace_in_node(
+            node, 'tblspace1',
+            tblspc_path=tblspace1_old_path)
+
+        self.create_tblspace_in_node(
+            node, 'tblspace2',
+            tblspc_path=tblspace2_old_path)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap_lame tablespace some_lame_tablespace "
+            "as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap2 tablespace tblspace2 as select 1 as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+
+        tblspace1_new_path = self.get_tblspace_path(node, 'tblspace1_new')
+        tblspace2_new_path = self.get_tblspace_path(node, 'tblspace2_new')
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace1_old_path, tblspace1_new_path),
+                    "-T", "{0}={1}".format(
+                        tblspace2_old_path, tblspace2_new_path)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: --tablespace-mapping option' in e.message and
+                'have an entry in tablespace_map file' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        node.safe_psql(
+            "postgres",
+            "drop table t_heap_lame")
+
+        node.safe_psql(
+            "postgres",
+            "drop tablespace some_lame_tablespace")
+
+        self.backup_node(
+                backup_dir, 'node', node, backup_type="delta",
+                options=["-j", "4", "--stream"])
+
+        self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace1_old_path, tblspace1_new_path),
+                    "-T", "{0}={1}".format(
+                        tblspace2_old_path, tblspace2_new_path)])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_tablespace_handling_1(self):
+        """
+        make node with tablespace A, take full backup, check that restore with
+        tablespace mapping of tablespace B will end with error
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        tblspace1_old_path = self.get_tblspace_path(node, 'tblspace1_old')
+        tblspace2_old_path = self.get_tblspace_path(node, 'tblspace2_old')
+
+        tblspace_new_path = self.get_tblspace_path(node, 'tblspace_new')
+
+        self.create_tblspace_in_node(
+            node, 'tblspace1',
+            tblspc_path=tblspace1_old_path)
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace2_old_path, tblspace_new_path)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: --tablespace-mapping option' in e.message and
+                'have an entry in tablespace_map file' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_tablespace_handling_2(self):
+        """
+        make node without tablespaces, take full backup, check that restore with
+        tablespace mapping will end with error
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        tblspace1_old_path = self.get_tblspace_path(node, 'tblspace1_old')
+        tblspace_new_path = self.get_tblspace_path(node, 'tblspace_new')
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"])
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=[
+                    "-j", "4",
+                    "-T", "{0}={1}".format(
+                        tblspace1_old_path, tblspace_new_path)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: --tablespace-mapping option' in e.message and
+                'have an entry in tablespace_map file' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_drop_rel_during_backup_delta(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,100) i")
+
+        relative_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        absolute_path = os.path.join(node.data_dir, relative_path)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # DELTA backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            gdb=True, options=['--log-level-file=verbose'])
+
+        gdb.set_breakpoint('backup_files')
+        gdb.run_until_break()
+
+        # REMOVE file
+        node.safe_psql(
+            "postgres",
+            "DROP TABLE t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        # File removed, we can proceed with backup
+        gdb.continue_execution_until_exit()
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            self.assertTrue(
+                'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+                'File "{0}" should be deleted but it`s not'.format(absolute_path))
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_drop_rel_during_backup_page(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,100) i")
+
+        relative_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        absolute_path = os.path.join(node.data_dir, relative_path)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # PAGE backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            gdb=True, options=['--log-level-file=verbose'])
+
+        gdb.set_breakpoint('backup_files')
+        gdb.run_until_break()
+
+        # REMOVE file
+        os.remove(absolute_path)
+
+        # File removed, we can proceed with backup
+        gdb.continue_execution_until_exit()
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            self.assertTrue(
+                'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+                'File "{0}" should be deleted but it`s not'.format(absolute_path))
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_drop_rel_during_backup_ptrack(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'ptrack_enable': 'on'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,100) i")
+
+        relative_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        absolute_path = os.path.join(node.data_dir, relative_path)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # PTRACK backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            gdb=True, options=['--log-level-file=verbose'])
+
+        gdb.set_breakpoint('backup_files')
+        gdb.run_until_break()
+
+        # REMOVE file
+        os.remove(absolute_path)
+
+        # File removed, we can proceed with backup
+        gdb.continue_execution_until_exit()
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            self.assertTrue(
+                'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+                'File "{0}" should be deleted but it`s not'.format(absolute_path))
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_persistent_slot_for_stream_backup(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_size': '40MB'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "SELECT pg_create_physical_replication_slot('slot_1')")
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--slot=slot_1'])
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--slot=slot_1'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_temp_slot_for_stream_backup(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_size': '40MB'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--temp-slot'])
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
+        else:
+            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--slot=slot_1', '--temp-slot'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

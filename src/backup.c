@@ -129,6 +129,7 @@ static void *StreamLog(void *arg);
 static void get_remote_pgdata_filelist(parray *files);
 static void ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum);
 static void	remote_copy_file(PGconn *conn, pgFile* file);
+static void check_external_for_tablespaces(parray *external_list);
 
 /* Ptrack functions */
 static void pg_ptrack_clear(void);
@@ -419,7 +420,7 @@ remote_backup_files(void *arg)
 													instance_config.pguser);
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during backup");
 
 		query_str = psprintf("FILE_BACKUP FILEPATH '%s'",file->path);
@@ -482,6 +483,7 @@ do_backup_instance(void)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
+	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -494,10 +496,16 @@ do_backup_instance(void)
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
 	parray	   *backup_list = NULL;
+	parray	   *external_dirs = NULL;
 
 	pgFile	   *pg_control = NULL;
 
 	elog(LOG, "Database backup start");
+	if(current.external_dir_str)
+	{
+		external_dirs = make_external_directory_list(current.external_dir_str);
+		check_external_for_tablespaces(external_dirs);
+	}
 
 	/* Initialize size summary */
 	current.data_bytes = 0;
@@ -551,7 +559,7 @@ do_backup_instance(void)
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
 						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
-		prev_backup_filelist = dir_read_file_list(NULL, prev_backup_filelist_path);
+		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;
@@ -588,8 +596,13 @@ do_backup_instance(void)
 			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
+	/* Update running backup meta with START LSN */
+	write_backup(&current);
+
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
+	pgBackupGetPath(&current, external_prefix, lengthof(external_prefix),
+					EXTERNAL_DIR);
 
 	/* start stream replication */
 	if (stream_wal)
@@ -632,6 +645,7 @@ do_backup_instance(void)
 		/* By default there are some error */
 		stream_thread_arg.ret = 1;
 
+		thread_interrupted = false;
 		pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
 	}
 
@@ -642,8 +656,26 @@ do_backup_instance(void)
 	if (is_remote_backup)
 		get_remote_pgdata_filelist(backup_files_list);
 	else
-		dir_list_file(backup_files_list, instance_config.pgdata,
-					  true, true, false);
+		dir_list_file(backup_files_list, instance_config.pgdata, true, true, false, 0);
+
+	/*
+	 * Append to backup list all files and directories
+	 * from external directory option
+	 */
+	if (external_dirs)
+		for (i = 0; i < parray_num(external_dirs); i++)
+			/* External dirs numeration starts with 1.
+			 * 0 value is not external dir */
+			dir_list_file(backup_files_list, parray_get(external_dirs, i),
+						  false, true, false, i+1);
+
+	/* Sanity check for backup_files_list, thank you, Windows:
+	 * https://github.com/postgrespro/pg_probackup/issues/48
+	 */
+
+	if (parray_num(backup_files_list) == 0)
+		elog(ERROR, "PGDATA is empty. Either it was concurrently deleted or "
+			"pg_probackup do not possess sufficient permissions to list PGDATA content");
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -681,8 +713,7 @@ do_backup_instance(void)
 		 * where this backup has started.
 		 */
 		extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
-					   prev_backup->start_lsn, current.start_lsn,
-					   backup_files_list);
+					   prev_backup->start_lsn, current.start_lsn);
 	}
 	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -704,18 +735,28 @@ do_backup_instance(void)
 		{
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
-			char		database_path[MAXPGPATH];
 
 			if (!is_remote_backup)
-				dir_name = GetRelativePath(file->path, instance_config.pgdata);
+				if (file->external_dir_num)
+					dir_name = GetRelativePath(file->path,
+									parray_get(external_dirs,
+											   file->external_dir_num - 1));
+				else
+					dir_name = GetRelativePath(file->path, instance_config.pgdata);
 			else
 				dir_name = file->path;
 
 			elog(VERBOSE, "Create directory \"%s\"", dir_name);
-			pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
 
-			join_path_components(dirpath, database_path, dir_name);
+			if (file->external_dir_num)
+			{
+				char		temp[MAXPGPATH];
+				snprintf(temp, MAXPGPATH, "%s%d", external_prefix,
+						 file->external_dir_num);
+				join_path_components(dirpath, temp, dir_name);
+			}
+			else
+				join_path_components(dirpath, database_path, dir_name);
 			dir_create_dir(dirpath, DIR_PERMISSION);
 		}
 
@@ -727,7 +768,7 @@ do_backup_instance(void)
 	parray_qsort(backup_files_list, pgFileCompareSize);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
-		parray_qsort(prev_backup_filelist, pgFileComparePath);
+		parray_qsort(prev_backup_filelist, pgFileComparePathWithExternal);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -739,6 +780,8 @@ do_backup_instance(void)
 
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
+		arg->external_prefix = external_prefix;
+		arg->external_dirs = external_dirs;
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
 		arg->prev_start_lsn = prev_backup_start_lsn;
@@ -749,6 +792,7 @@ do_backup_instance(void)
 	}
 
 	/* Run threads */
+	thread_interrupted = false;
 	elog(INFO, "Start transfering data files");
 	for (i = 0; i < num_threads; i++)
 	{
@@ -773,6 +817,19 @@ do_backup_instance(void)
 		elog(INFO, "Data files are transfered");
 	else
 		elog(ERROR, "Data files transferring failed");
+
+	/* Remove disappeared during backup files from backup_list */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
+
+		if (tmp_file->write_size == FILE_NOT_FOUND)
+		{
+			pg_atomic_clear_flag(&tmp_file->lock);
+			pgFileFree(tmp_file);
+			parray_remove(backup_files_list, i);
+		}
+	}
 
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
@@ -819,7 +876,7 @@ do_backup_instance(void)
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false);
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0);
 
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
@@ -843,7 +900,12 @@ do_backup_instance(void)
 	}
 
 	/* Print the list of files to backup catalog */
-	write_backup_filelist(&current, backup_files_list, instance_config.pgdata);
+	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
+						  NULL, external_dirs);
+
+	/* clean external directories list */
+	if (external_dirs)
+		free_dir_list(external_dirs);
 
 	/* Compute summary of size of regular files in the backup */
 	for (i = 0; i < parray_num(backup_files_list); i++)
@@ -887,7 +949,7 @@ do_block_validation(void)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(backup_files_list, instance_config.pgdata, true, true, false);
+	dir_list_file(backup_files_list, instance_config.pgdata, true, true, false, 0);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -954,7 +1016,7 @@ do_block_validation(void)
 	for (i = 0; i < num_threads; i++)
 	{
 		pthread_join(threads[i], NULL);
-		if (threads_args[i].ret == 1)
+		if (threads_args[i].ret > 0)
 			backup_isok = false;
 	}
 
@@ -1085,8 +1147,8 @@ do_checkdb(bool need_block_validation, bool need_amcheck)
 
 	if (need_block_validation)
 		do_block_validation();
-	if (need_amcheck)
-		do_amcheck();
+	//if (need_amcheck)
+	//	do_amcheck();
 
 	return 0;
 }
@@ -1199,9 +1261,6 @@ do_backup(time_t start_time)
 								   instance_config.master_user);
 	}
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
-
 	/*
 	 * Ensure that backup directory was initialized for the same PostgreSQL
 	 * instance we opened connection to. And that target backup database PGDATA
@@ -1211,16 +1270,25 @@ do_backup(time_t start_time)
 	if (!is_remote_backup)
 		check_system_identifiers();
 
-
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
 	StrNCpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));
 
+	/* Save list of external directories */
+	if (instance_config.external_dir_str &&
+		pg_strcasecmp(instance_config.external_dir_str, "none") != 0)
+	{
+		current.external_dir_str = instance_config.external_dir_str;
+	}
+
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
-		elog(ERROR, "cannot create backup directory");
+		elog(ERROR, "Cannot create backup directory");
+	if (!lock_backup(&current))
+		elog(ERROR, "Cannot lock backup %s directory",
+			 base36enc(current.start_time));
 	write_backup(&current);
 
 	elog(LOG, "Backup destination is initialized");
@@ -1524,7 +1592,7 @@ pg_ptrack_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show ptrack_enable", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -1541,7 +1609,7 @@ pg_checksum_enable(void)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "show data_checksums", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW data_checksums", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -2268,7 +2336,7 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true);
+				file = pgFileNew(backup_label, true, 0);
 				calc_file_checksum(file);
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
@@ -2312,7 +2380,7 @@ pg_stop_backup(pgBackup *backup)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true);
+				file = pgFileNew(tablespace_map, true, 0);
 				if (S_ISREG(file->mode))
 					calc_file_checksum(file);
 				free(file->path);
@@ -2488,9 +2556,10 @@ check_files(void *arg)
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
 
-		elog(VERBOSE, "Checking file:  \"%s\" ", file->path);
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
+
+		elog(VERBOSE, "Checking file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
 		if (interrupted)
@@ -2537,20 +2606,16 @@ check_files(void *arg)
 									 file->path + strlen(arguments->from_root) + 1);
 
 				if (!check_data_file(arguments, file))
-					arguments->ret = 1;
+					arguments->ret = 2;
 			}
 		}
 		else
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
 
-	/* Close connection */
-	if (arguments->backup_conn)
-		pgut_disconnect(arguments->backup_conn);
-
-	/* Data files transferring is successful */
-	/* TODO  where should we set arguments->ret to 1? */
-	arguments->ret = 0;
+	/* Data files check is successful */
+	if (arguments->ret == 1)
+		arguments->ret = 0;
 
 	return NULL;
 }
@@ -2643,12 +2708,12 @@ backup_files(void *arg)
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
 
-		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
+		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during backup");
 
 		if (progress)
@@ -2665,7 +2730,7 @@ backup_files(void *arg)
 				 * If file is not found, this is not en error.
 				 * It could have been deleted by concurrent postgres transaction.
 				 */
-				file->write_size = BYTES_INVALID;
+				file->write_size = FILE_NOT_FOUND;
 				elog(LOG, "File \"%s\" is not found", file->path);
 				continue;
 			}
@@ -2684,6 +2749,11 @@ backup_files(void *arg)
 		if (S_ISREG(buf.st_mode))
 		{
 			pgFile	  **prev_file = NULL;
+			char	   *external_path = NULL;
+
+			if (file->external_dir_num)
+				external_path = parray_get(arguments->external_dirs,
+										file->external_dir_num - 1);
 
 			/* Check that file exist in previous backup */
 			if (current.backup_mode != BACKUP_MODE_FULL)
@@ -2691,11 +2761,13 @@ backup_files(void *arg)
 				char	   *relative;
 				pgFile		key;
 
-				relative = GetRelativePath(file->path, arguments->from_root);
+				relative = GetRelativePath(file->path, file->external_dir_num ?
+										   external_path : arguments->from_root);
 				key.path = relative;
+				key.external_dir_num = file->external_dir_num;
 
 				prev_file = (pgFile **) parray_bsearch(arguments->prev_filelist,
-													   &key, pgFileComparePath);
+											&key, pgFileComparePathWithExternal);
 				if (prev_file)
 					/* File exists in previous backup */
 					file->exists_in_prev = true;
@@ -2716,17 +2788,23 @@ backup_files(void *arg)
 									  instance_config.compress_alg,
 									  instance_config.compress_level))
 				{
-					file->write_size = BYTES_INVALID;
+					/* disappeared file not to be confused with 'not changed' */
+					if (file->write_size != FILE_NOT_FOUND)
+						file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
 					continue;
 				}
 			}
-			else if (strcmp(file->name, "pg_control") == 0)
+			else if (!file->external_dir_num &&
+					 strcmp(file->name, "pg_control") == 0)
 				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
 									file);
 			else
 			{
+				const char *src;
+				const char *dst;
 				bool		skip = false;
+				char		external_dst[MAXPGPATH];
 
 				/* If non-data file has not changed since last backup... */
 				if (prev_file && file->exists_in_prev &&
@@ -2737,10 +2815,25 @@ backup_files(void *arg)
 					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
 						skip = true; /* ...skip copying file. */
 				}
-				if (skip ||
-					!copy_file(arguments->from_root, arguments->to_root, file))
+				/* Set file paths */
+				if (file->external_dir_num)
 				{
-					file->write_size = BYTES_INVALID;
+					makeExternalDirPathByNum(external_dst,
+											 arguments->external_prefix,
+											 file->external_dir_num);
+					src = external_path;
+					dst = external_dst;
+				}
+				else
+				{
+					src = arguments->from_root;
+					dst = arguments->to_root;
+				}
+				if (skip || !copy_file(src, dst, file))
+				{
+					/* disappeared file not to be confused with 'not changed' */
+					if (file->write_size != FILE_NOT_FOUND)
+						file->write_size = BYTES_INVALID;
 					elog(VERBOSE, "File \"%s\" was not copied to backup",
 						 file->path);
 					continue;
@@ -3090,7 +3183,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	static XLogRecPtr prevpos = InvalidXLogRecPtr;
 
 	/* check for interrupt */
-	if (interrupted)
+	if (interrupted || thread_interrupted)
 		elog(ERROR, "Interrupted during backup");
 
 	/* we assume that we get called once at the end of each segment */
@@ -3167,6 +3260,20 @@ StreamLog(void *arg)
 	stream_stop_timeout = 0;
 	stream_stop_begin = 0;
 
+#if PG_VERSION_NUM >= 100000
+	/* if slot name was not provided for temp slot, use default slot name */
+	if (!replication_slot && temp_slot)
+		replication_slot = "pg_probackup_slot";
+#endif
+
+
+#if PG_VERSION_NUM >= 110000
+	/* Create temp repslot */
+	if (temp_slot)
+		CreateReplicationSlot(stream_arg->conn, replication_slot,
+			NULL, temp_slot, true, true, false);
+#endif
+
 	/*
 	 * Start the replication
 	 */
@@ -3187,6 +3294,9 @@ StreamLog(void *arg)
 		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
+#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+		ctl.temp_slot = temp_slot;
+#endif
 #else
 		ctl.basedir = (char *) stream_arg->basedir;
 #endif
@@ -3315,6 +3425,45 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 	pfree(params[3]);
 
 	return result;
+}
+
+static void
+check_external_for_tablespaces(parray *external_list)
+{
+	PGconn	   *conn;
+	PGresult   *res;
+	int			i = 0;
+	int			j = 0;
+	char	   *tablespace_path = NULL;
+	char	   *query = "SELECT pg_catalog.pg_tablespace_location(oid)\n"
+						"FROM pg_tablespace\n"
+						"WHERE pg_catalog.pg_tablespace_location(oid) <> '';";
+
+	conn = backup_conn;
+	res = pgut_execute(conn, query, 0, NULL);
+
+	/* Check successfull execution of query */
+	if (!res)
+		elog(ERROR, "Failed to get list of tablespaces");
+
+	for (i = 0; i < res->ntups; i++)
+	{
+		tablespace_path = PQgetvalue(res, i, 0);
+		Assert (strlen(tablespace_path) > 0);
+		for (j = 0; j < parray_num(external_list); j++)
+		{
+			char *external_path = parray_get(external_list, j);
+			if (path_is_prefix_of_path(external_path, tablespace_path))
+				elog(ERROR, "External directory path (-E option) \"%s\" "
+							"contains tablespace \"%s\"",
+							external_path, tablespace_path);
+			if (path_is_prefix_of_path(tablespace_path, external_path))
+				elog(WARNING, "External directory path (-E option) \"%s\" "
+							  "is in tablespace directory \"%s\"",
+							  tablespace_path, external_path);
+		}
+	}
+	PQclear(res);
 }
 
 /* Clear ptrack files in all databases of the instance we connected to */

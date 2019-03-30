@@ -1,14 +1,11 @@
 import unittest
 
 from . import init_test, merge, option_test, show_test, compatibility, \
-    backup_test, delete_test, delta, restore_test, validate_test, \
-    retention_test, ptrack_clean, ptrack_empty, ptrack_cluster, \
-    ptrack_move_to_tablespace, ptrack_recovery, ptrack_truncate, \
-    ptrack_vacuum, ptrack_vacuum_bits_frozen, ptrack_vacuum_bits_visibility, \
-    ptrack_vacuum_full, ptrack_vacuum_truncate, pgpro560, pgpro589, \
-    false_positive, replica, compression, page, ptrack, archive, \
-    exclude, cfs_backup, cfs_restore, cfs_validate_backup, auth_test, \
-    checkdb
+    backup_test, delete, delta, restore, validate, \
+    retention, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
+    compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
+    cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
+    locking, remote, external, config, checkdb
 
 
 def load_tests(loader, tests, pattern):
@@ -18,38 +15,35 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(backup_test))
     suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(checkdb))
+    suite.addTests(loader.loadTestsFromModule(config))
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))
 #    suite.addTests(loader.loadTestsFromModule(cfs_restore))
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
 #    suite.addTests(loader.loadTestsFromModule(logging))
     suite.addTests(loader.loadTestsFromModule(compression))
-    suite.addTests(loader.loadTestsFromModule(delete_test))
+    suite.addTests(loader.loadTestsFromModule(delete))
     suite.addTests(loader.loadTestsFromModule(delta))
     suite.addTests(loader.loadTestsFromModule(exclude))
     suite.addTests(loader.loadTestsFromModule(false_positive))
     suite.addTests(loader.loadTestsFromModule(init_test))
+    suite.addTests(loader.loadTestsFromModule(locking))
+    suite.addTests(loader.loadTestsFromModule(logging))
     suite.addTests(loader.loadTestsFromModule(merge))
     suite.addTests(loader.loadTestsFromModule(option_test))
     suite.addTests(loader.loadTestsFromModule(page))
-    suite.addTests(loader.loadTestsFromModule(ptrack))
-    suite.addTests(loader.loadTestsFromModule(ptrack_clean))
-    suite.addTests(loader.loadTestsFromModule(ptrack_empty))
-    suite.addTests(loader.loadTestsFromModule(ptrack_cluster))
-    suite.addTests(loader.loadTestsFromModule(ptrack_move_to_tablespace))
-    suite.addTests(loader.loadTestsFromModule(ptrack_recovery))
-    suite.addTests(loader.loadTestsFromModule(ptrack_truncate))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_bits_frozen))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_bits_visibility))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_full))
-    suite.addTests(loader.loadTestsFromModule(ptrack_vacuum_truncate))
+#    suite.addTests(loader.loadTestsFromModule(ptrack))
+    suite.addTests(loader.loadTestsFromModule(remote))
     suite.addTests(loader.loadTestsFromModule(replica))
-    suite.addTests(loader.loadTestsFromModule(restore_test))
-    suite.addTests(loader.loadTestsFromModule(retention_test))
+    suite.addTests(loader.loadTestsFromModule(restore))
+    suite.addTests(loader.loadTestsFromModule(retention))
     suite.addTests(loader.loadTestsFromModule(show_test))
-    suite.addTests(loader.loadTestsFromModule(validate_test))
+    suite.addTests(loader.loadTestsFromModule(snapfs))
+    suite.addTests(loader.loadTestsFromModule(validate))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
+    suite.addTests(loader.loadTestsFromModule(pgpro2068))
+    suite.addTests(loader.loadTestsFromModule(time_stamp))
+    suite.addTests(loader.loadTestsFromModule(external))
 
     return suite
 
@@ -57,18 +51,8 @@ def load_tests(loader, tests, pattern):
 # ToDo:
 #  archive:
 #    discrepancy of instance`s SYSTEMID and node`s SYSTEMID should lead to archive-push refusal to work
-#  replica:
-#    backup should exit with correct error message if some master* option is missing
-#    --master* options shoukd not work when backuping master
 #  logging:
 #     https://jira.postgrespro.ru/browse/PGPRO-584
 #     https://jira.postgrespro.ru/secure/attachment/20420/20420_doc_logging.md
 # archive:
 #      immediate recovery and full recovery
-# backward compatibility:
-#      previous version catalog must be readable by newer version
-#      incremental chain from previous version can be continued
-#      backups from previous version can be restored
-# 10vanilla_1.3ptrack +
-# 10vanilla+
-# 9.6vanilla_1.3ptrack +

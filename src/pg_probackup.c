@@ -19,7 +19,7 @@
 #include "utils/thread.h"
 #include <time.h>
 
-const char *PROGRAM_VERSION	= "2.0.25";
+const char *PROGRAM_VERSION	= "2.0.27";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 
@@ -55,6 +55,8 @@ char		backup_instance_path[MAXPGPATH];
  */
 char		arclog_path[MAXPGPATH] = "";
 
+/* colon separated external directories list ("/path1:/path2") */
+char	   *externaldir = NULL;
 /* common options */
 static char *backup_id_string = NULL;
 int			num_threads = 1;
@@ -63,6 +65,7 @@ bool		progress = false;
 #if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
 #endif
+bool		temp_slot = false;
 
 /* backup options */
 bool		backup_logs = false;
@@ -70,10 +73,10 @@ bool		smooth_checkpoint;
 bool		is_remote_backup = false;
 
 /* restore options */
-static char		   *target_time;
-static char		   *target_xid;
-static char		   *target_lsn;
-static char		   *target_inclusive;
+static char		   *target_time = NULL;
+static char		   *target_xid = NULL;
+static char		   *target_lsn = NULL;
+static char		   *target_inclusive = NULL;
 static TimeLineID	target_tli;
 static bool			target_immediate;
 static char		   *target_name = NULL;
@@ -85,6 +88,7 @@ bool restore_as_replica = false;
 bool restore_no_validate = false;
 
 bool skip_block_validation = false;
+bool skip_external_dirs = false;
 
 bool do_block_validation = false;
 bool do_amcheck = false;
@@ -137,6 +141,7 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
+	{ 'b', 234, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	/* TODO not completed feature. Make it unavailiable from user level
@@ -147,6 +152,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
 	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
+	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
 	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },
@@ -154,9 +160,10 @@ static ConfigOption cmd_options[] =
 	{ 'b', 143, "no-validate",		&restore_no_validate,	SOURCE_CMD_STRICT },
 	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
+	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	/* checkdb options */
-	{ 'b', 155, "amcheck", &do_amcheck,	SOURCE_CMD_STRICT },
-	{ 'b', 156, "block-validation", &do_block_validation,	SOURCE_CMD_STRICT },
+	{ 'b', 157, "amcheck", &do_amcheck,	SOURCE_CMD_STRICT },
+	{ 'b', 158, "block-validation", &do_block_validation,	SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
@@ -377,16 +384,23 @@ main(int argc, char *argv[])
 	}
 
 	/*
-	 * Read options from env variables or from config file */
-	if ((backup_path != NULL) && instance_name)
+	 * We read options from command line, now we need to read them from
+	 * configuration file since we got backup path and instance name.
+	 * For some commands an instance option isn't required, see above.
+	 */
+	if (instance_name)
 	{
-		char		config_path[MAXPGPATH];
+		char		path[MAXPGPATH];
 		/* Read environment variables */
 		config_get_opt_env(instance_options);
 
 		/* Read options from configuration file */
-		join_path_components(config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-		config_read_opt(config_path, instance_options, ERROR, true);
+		if (backup_subcmd != ADD_INSTANCE_CMD)
+		{
+			join_path_components(path, backup_instance_path,
+								 BACKUP_CATALOG_CONF_FILE);
+			config_read_opt(path, instance_options, ERROR, true, false);
+		}
 	}
 
 	/* Just read environment variables */
@@ -416,6 +430,8 @@ main(int argc, char *argv[])
 	 * We have read pgdata path from command line or from configuration file.
 	 * Ensure that pgdata is an absolute path.
 	 */
+	if (instance_config.pgdata != NULL)
+		canonicalize_path(instance_config.pgdata);
 	if (instance_config.pgdata != NULL &&
 		!is_absolute_path(instance_config.pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
@@ -461,7 +477,7 @@ main(int argc, char *argv[])
 		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
 
 		/* Set 'pg_log' in first empty slot */
-		pgdata_exclude_dir[i] = "pg_log";
+		pgdata_exclude_dir[i] = PG_LOG_DIR;
 	}
 
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)
@@ -537,7 +553,7 @@ main(int argc, char *argv[])
 			do_show_config();
 			break;
 		case SET_CONFIG_CMD:
-			do_set_config();
+			do_set_config(false);
 			break;
 		case CHECKDB_CMD:
 			do_checkdb(do_block_validation, do_amcheck);
@@ -600,13 +616,13 @@ compress_init(void)
 	if (instance_config.compress_level < 0 || instance_config.compress_level > 9)
 		elog(ERROR, "--compress-level value must be in the range from 0 to 9");
 
-	if (instance_config.compress_level == 0)
-		instance_config.compress_alg = NOT_DEFINED_COMPRESS;
+	if (instance_config.compress_alg == ZLIB_COMPRESS && instance_config.compress_level == 0)
+		elog(WARNING, "Compression level 0 will lead to data bloat!");
 
 	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
 	{
 #ifndef HAVE_LIBZ
-		if (compress_alg == ZLIB_COMPRESS)
+		if (instance_config.compress_alg == ZLIB_COMPRESS)
 			elog(ERROR, "This build does not support zlib compression");
 		else
 #endif

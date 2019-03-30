@@ -10,11 +10,13 @@ As compared to other backup solutions, `pg_probackup` offers the following benef
 * Implementing a single backup strategy for multi-server PostgreSQL clusters
 * Automatic data consistency checks and on-demand backup validation without actual data recovery
 * Managing backups in accordance with retention policy
-* Running backup, restore, and validation processes on multiple parallel threads
+* Merging incremental into full backups without actual data recovery
+* Running backup, restore, merge and validation processes on multiple parallel threads
 * Storing backup data in a compressed state to save disk space
 * Taking backups from a standby server to avoid extra load on the master server
 * Extended logging settings
 * Custom commands to simplify WAL log archiving
+* External to PGDATA directories, such as directories with config files and scripts, can be included in backup
 
 To manage backup data, `pg_probackup` creates a backup catalog. This directory stores all backup files with additional meta information, as well as WAL archives required for [point-in-time recovery](https://postgrespro.com/docs/postgresql/current/continuous-archiving.html). You can store backups for different instances in separate subdirectories of a single backup catalog.
 
@@ -39,8 +41,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 `pg_probackup` currently has the following limitations:
 * Creating backups from a remote server is currently not supported.
 * The server from which the backup was taken and the restored server must be compatible by the [block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-BLOCK-SIZE) and [wal_block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number.
-* Microsoft Windows operating system is not supported.
-* Configuration files outside of PostgreSQL data directory are not included into the backup and should be backed up separately.
+* Microsoft Windows operating system support is in beta stage.
 
 ## Installation and Setup
 ### Linux Installation
@@ -71,13 +72,28 @@ yum install pg_probackup-{11,10,9.6,9.5}
 yumdownloader --source pg_probackup-{11,10,9.6,9.5}
 ```
 
+Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup.html#pg-probackup-install-and-setup).
+
+## Building from source
+### Linux
+
 To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. To install `pg_probackup`, execute this in the module's directory:
 
 ```shell
 make USE_PGXS=1 PG_CONFIG=<path_to_pg_config> top_srcdir=<path_to_PostgreSQL_source_tree>
 ```
+### Windows
 
-Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup.html#pg-probackup-install-and-setup).
+Currently pg_probackup can be build using only MSVC 2013.
+Build PostgreSQL using [pgwininstall](https://github.com/postgrespro/pgwininstall) or [PostgreSQL instruction](https://www.postgresql.org/docs/10/install-windows-full.html) with MSVC 2013.
+If zlib support is needed, src/tools/msvc/config.pl must contain path to directory with compiled zlib. [Example](https://gist.githubusercontent.com/gsmol/80989f976ce9584824ae3b1bfb00bd87/raw/240032950d4ac4801a79625dd00c8f5d4ed1180c/gistfile1.txt)
+
+```shell
+CALL "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall" amd64
+SET PATH=%PATH%;C:\Perl64\bin
+SET PATH=%PATH%;C:\msys64\usr\bin
+gen_probackup_project.pl C:\path_to_postgresql_source_tree
+```
 
 ## Documentation
 

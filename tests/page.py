@@ -23,7 +23,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -34,13 +34,13 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node_restored.cleanup()
-        node.start()
+        node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
         node.safe_psql(
@@ -116,7 +116,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -128,7 +128,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL BACKUP
         node.safe_psql(
@@ -205,7 +205,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -217,7 +217,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # FULL BACKUP
         node.safe_psql(
@@ -300,7 +300,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -317,7 +317,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -341,7 +341,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE NODE
         restored_node = self.make_simple_node(
-            base_dir="{0}/{1}/restored_node".format(module_name, fname))
+            base_dir=os.path.join(module_name, fname, 'restored_node'))
         restored_node.cleanup()
         tblspc_path = self.get_tblspace_path(node, 'somedata')
         tblspc_path_new = self.get_tblspace_path(
@@ -384,7 +384,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -397,7 +397,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
         # FULL backup
@@ -427,7 +427,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+            base_dir=os.path.join(module_name, fname, 'node_restored')
         )
         node_restored.cleanup()
 
@@ -449,7 +449,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -464,7 +464,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'wal_level': 'replica',
@@ -477,7 +477,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -508,7 +508,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+            base_dir=os.path.join(module_name, fname, 'node_restored')
         )
         node_restored.cleanup()
 
@@ -530,7 +530,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # START RESTORED NODE
         node_restored.append_conf(
             'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -544,21 +544,21 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
                 "hot_standby": "on"
             }
         )
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node_restored'),
         )
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node_restored.cleanup()
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # Do full backup
         self.backup_node(backup_dir, 'node', node)
@@ -598,7 +598,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         node_restored.append_conf(
             "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-        node_restored.start()
+        node_restored.slow_start()
 
         # Check restored node
         count2 = node_restored.execute("postgres", "select count(*) from test")
@@ -619,7 +619,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={}
         )
@@ -627,7 +627,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # Do full backup
         self.backup_node(backup_dir, 'node', node)
@@ -656,7 +656,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # Drop node and restore it
         node.cleanup()
         self.restore_node(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         # Clean after yourself
         node.cleanup()
@@ -673,7 +673,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -681,7 +681,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
 
@@ -691,7 +691,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-            wals_dir, f)) and not f.endswith('.backup')]
+            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
         wals = map(str, wals)
         file = os.path.join(wals_dir, max(wals))
         os.remove(file)
@@ -701,8 +701,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # Single-thread PAGE backup
         try:
             self.backup_node(
-                backup_dir, 'node', node,
-                backup_type='page')
+                backup_dir, 'node', node, backup_type='page')
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segment disappearance.\n "
@@ -712,7 +711,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'could not read WAL record at' in e.message and
+                'Could not read WAL record at' in e.message and
                 'WAL segment "{0}" is absent\n'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -738,7 +737,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'could not read WAL record at' in e.message and
+                'Could not read WAL record at' in e.message and
                 'WAL segment "{0}" is absent\n'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -763,7 +762,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -771,12 +770,12 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
 
         # make some wals
-        node.pgbench_init(scale=3)
+        node.pgbench_init(scale=4)
 
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
@@ -830,7 +829,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'could not read WAL record at' in e.message and
+                'Could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
@@ -856,7 +855,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'could not read WAL record at' in e.message and
+                'Could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
@@ -884,23 +883,22 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
         alien_node = self.make_simple_node(
-            base_dir="{0}/{1}/alien_node".format(module_name, fname)
-            )
+            base_dir=os.path.join(module_name, fname, 'alien_node'))
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.add_instance(backup_dir, 'alien_node', alien_node)
         self.set_archiving(backup_dir, 'alien_node', alien_node)
-        alien_node.start()
+        alien_node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
         self.backup_node(backup_dir, 'alien_node', alien_node)
@@ -954,7 +952,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'could not read WAL record at' in e.message and
+                'Could not read WAL record at' in e.message and
                 'WAL file is from different database system: WAL file database system identifier is' in e.message and
                 'pg_control database system identifier is' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
@@ -981,7 +979,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
-                'could not read WAL record at' in e.message and
+                'Could not read WAL record at' in e.message and
                 'WAL file is from different database system: WAL file database system identifier is' in e.message and
                 'pg_control database system identifier is' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
@@ -1004,7 +1002,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_level': 'replica'}
             )
@@ -1013,7 +1011,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.start()
+        node.slow_start()
 
         self.backup_node(backup_dir, 'node', node)
 
@@ -1042,7 +1040,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1082,7 +1080,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir="{0}/{1}/node_restored".format(module_name, fname)
+            base_dir=os.path.join(module_name, fname, 'node_restored')
         )
 
         node_restored.cleanup()

@@ -19,6 +19,7 @@ static void *pgBackupValidateFiles(void *arg);
 static void do_validate_instance(void);
 
 static bool corrupted_backup_found = false;
+static bool skipped_due_to_lock = false;
 
 typedef struct
 {
@@ -43,6 +44,7 @@ void
 pgBackupValidate(pgBackup *backup)
 {
 	char		base_path[MAXPGPATH];
+	char		external_prefix[MAXPGPATH];
 	char		path[MAXPGPATH];
 	parray	   *files;
 	bool		corrupted = false;
@@ -53,12 +55,20 @@ pgBackupValidate(pgBackup *backup)
 	int			i;
 
 	/* Check backup version */
-	if (backup->program_version &&
-		parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
+	if (parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
 		elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
 			"pg_probackup do not guarantee to be forward compatible. "
 			"Please upgrade pg_probackup binary.",
 				PROGRAM_VERSION, base36enc(backup->start_time), backup->program_version);
+
+	if (backup->status == BACKUP_STATUS_RUNNING)
+	{
+		elog(WARNING, "Backup %s has status %s, change it to ERROR and skip validation",
+			 base36enc(backup->start_time), status2str(backup->status));
+		write_backup_status(backup, BACKUP_STATUS_ERROR);
+		corrupted_backup_found = true;
+		return;
+	}
 
 	/* Revalidation is attempted for DONE, ORPHAN and CORRUPT backups */
 	if (backup->status != BACKUP_STATUS_OK &&
@@ -90,8 +100,9 @@ pgBackupValidate(pgBackup *backup)
 		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
+	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, path);
+	files = dir_read_file_list(base_path, external_prefix, path);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -106,6 +117,7 @@ pgBackupValidate(pgBackup *backup)
 		palloc(sizeof(validate_files_arg) * num_threads);
 
 	/* Validate files */
+	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
@@ -144,8 +156,8 @@ pgBackupValidate(pgBackup *backup)
 	parray_free(files);
 
 	/* Update backup status */
-	backup->status = corrupted ? BACKUP_STATUS_CORRUPT : BACKUP_STATUS_OK;
-	write_backup_status(backup);
+	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
+											BACKUP_STATUS_OK);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -175,7 +187,7 @@ pgBackupValidateFiles(void *arg)
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during validate");
 
 		/* Validate only regular files */
@@ -238,7 +250,8 @@ pgBackupValidateFiles(void *arg)
 			 * Starting from 2.0.25 we calculate crc of pg_control differently.
 			 */
 			if (arguments->backup_version >= 20025 &&
-				strcmp(file->name, "pg_control") == 0)
+				strcmp(file->name, "pg_control") == 0 &&
+				!file->external_dir_num)
 				crc = get_pgcontrol_checksum(arguments->base_path);
 			else
 				crc = pgFileGetCRC(file->path,
@@ -279,6 +292,9 @@ pgBackupValidateFiles(void *arg)
 int
 do_validate_all(void)
 {
+	corrupted_backup_found = false;
+	skipped_due_to_lock = false;
+
 	if (instance_name == NULL)
 	{
 		/* Show list of instances */
@@ -321,7 +337,13 @@ do_validate_all(void)
 			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
 			join_path_components(conf_path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
-			config_read_opt(conf_path, instance_options, ERROR, false);
+			if (config_read_opt(conf_path, instance_options, ERROR, false,
+								true) == 0)
+			{
+				elog(WARNING, "Configuration file \"%s\" is empty", conf_path);
+				corrupted_backup_found = true;
+				continue;
+			}
 
 			do_validate_instance();
 		}
@@ -331,12 +353,24 @@ do_validate_all(void)
 		do_validate_instance();
 	}
 
+	/* TODO: Probably we should have different exit code for every condition
+	 * and they combination:
+	 *  0 - all backups are valid
+	 *  1 - some backups are corrup
+	 *  2 - some backups where skipped due to concurrent locks
+	 *  3 - some backups are corrupt and some are skipped due to concurrent locks
+	 */
+
+	if (skipped_due_to_lock)
+		elog(WARNING, "Some backups weren't locked and they were skipped");
+
 	if (corrupted_backup_found)
 	{
 		elog(WARNING, "Some backups are not valid");
 		return 1;
 	}
-	else
+
+	if (!skipped_due_to_lock && !corrupted_backup_found)
 		elog(INFO, "All backups are valid");
 
 	return 0;
@@ -355,9 +389,6 @@ do_validate_instance(void)
 	pgBackup   *current_backup = NULL;
 
 	elog(INFO, "Validate backups of the instance '%s'", instance_name);
-
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
 
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
@@ -389,8 +420,7 @@ do_validate_instance(void)
 				/* orphanize current_backup */
 				if (current_backup->status == BACKUP_STATUS_OK)
 				{
-					current_backup->status = BACKUP_STATUS_ORPHAN;
-					write_backup_status(current_backup);
+					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 							base36enc(current_backup->start_time),
 							parent_backup_id);
@@ -414,8 +444,7 @@ do_validate_instance(void)
 					/* orphanize current_backup */
 					if (current_backup->status == BACKUP_STATUS_OK)
 					{
-						current_backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(current_backup);
+						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 								base36enc(current_backup->start_time), parent_backup_id,
 								status2str(tmp_backup->status));
@@ -429,6 +458,11 @@ do_validate_instance(void)
 					continue;
 				}
 				base_full_backup = find_parent_full_backup(current_backup);
+
+				/* sanity */
+				if (!base_full_backup)
+					elog(ERROR, "Parent full backup for the given backup %s was not found",
+							base36enc(current_backup->start_time));
 			}
 			/* chain is whole, all parents are valid at first glance,
 			 * current backup validation can proceed
@@ -439,6 +473,14 @@ do_validate_instance(void)
 		else
 			base_full_backup = current_backup;
 
+		/* Do not interrupt, validate the next backup */
+		if (!lock_backup(current_backup))
+		{
+			elog(WARNING, "Cannot lock backup %s directory, skip validation",
+				 base36enc(current_backup->start_time));
+			skipped_due_to_lock = true;
+			continue;
+		}
 		/* Valiate backup files*/
 		pgBackupValidate(current_backup);
 
@@ -451,14 +493,14 @@ do_validate_instance(void)
 		/*
 		 * Mark every descendant of corrupted backup as orphan
 		 */
-		if (current_backup->status == BACKUP_STATUS_CORRUPT)
+		if (current_backup->status != BACKUP_STATUS_OK)
 		{
 			/* This is ridiculous but legal.
-			 * PAGE1_2b <- OK
-			 * PAGE1_2a <- OK
-			 * PAGE1_1b <- ORPHAN
-			 * PAGE1_1a <- CORRUPT
-			 * FULL1    <- OK
+			 * PAGE_b2 <- OK
+			 * PAGE_a2 <- OK
+			 * PAGE_b1 <- ORPHAN
+			 * PAGE_a1 <- CORRUPT
+			 * FULL    <- OK
 			 */
 
 			corrupted_backup_found = true;
@@ -472,8 +514,7 @@ do_validate_instance(void)
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),
@@ -498,14 +539,14 @@ do_validate_instance(void)
 				pgBackup   *tmp_backup = NULL;
 				int result;
 
-				//PAGE3b ORPHAN
-				//PAGE2b ORPHAN          -----
-				//PAGE6a ORPHAN 			 |
-				//PAGE5a CORRUPT 			 |
-				//PAGE4a missing			 |
-				//PAGE3a missing			 |
-				//PAGE2a ORPHAN 			 |
-				//PAGE1a OK <- we are here <-|
+				//PAGE_b2 ORPHAN
+				//PAGE_b1 ORPHAN          -----
+				//PAGE_a5 ORPHAN 			 |
+				//PAGE_a4 CORRUPT 			 |
+				//PAGE_a3 missing			 |
+				//PAGE_a2 missing			 |
+				//PAGE_a1 ORPHAN 			 |
+				//PAGE    OK <- we are here<-|
 				//FULL OK
 
 				if (is_parent(current_backup->start_time, backup, false))
@@ -525,12 +566,20 @@ do_validate_instance(void)
 
 						if (backup->status == BACKUP_STATUS_ORPHAN)
 						{
+							/* Do not interrupt, validate the next backup */
+							if (!lock_backup(backup))
+							{
+								elog(WARNING, "Cannot lock backup %s directory, skip validation",
+									 base36enc(backup->start_time));
+								skipped_due_to_lock = true;
+								continue;
+							}
 							/* Revaliate backup files*/
 							pgBackupValidate(backup);
 
 							if (backup->status == BACKUP_STATUS_OK)
 							{
-								//tmp_backup = find_parent_full_backup(dest_backup);
+
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
 											 0, 0, current_backup->tli,

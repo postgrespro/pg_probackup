@@ -21,6 +21,9 @@ typedef struct
 {
 	parray	   *files;
 	pgBackup   *backup;
+	parray	   *req_external_dirs;
+	parray	   *cur_external_dirs;
+	char	   *external_prefix;
 
 	/*
 	 * Return value from the thread.
@@ -29,14 +32,13 @@ typedef struct
 	int			ret;
 } restore_files_arg;
 
-static void restore_backup(pgBackup *backup);
+static void restore_backup(pgBackup *backup, const char *external_dir_str);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 static void remove_deleted_files(pgBackup *backup);
-
 
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
@@ -53,10 +55,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
 	pgBackup   *corrupted_backup = NULL;
-	int			dest_backup_index = 0;
-	int			base_full_backup_index = 0;
-	int			corrupted_backup_index = 0;
 	char	   *action = is_restore ? "Restore":"Validate";
+	parray	   *parent_chain = NULL;
 
 	if (is_restore)
 	{
@@ -74,8 +74,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 	elog(LOG, "%s begin.", action);
 
-	/* Get exclusive lock of backup catalog */
-	catalog_lock();
 	/* Get list of all backups sorted in order of descending start time */
 	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
 
@@ -125,7 +123,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			{
 				if ((current_backup->status == BACKUP_STATUS_DONE ||
 					current_backup->status == BACKUP_STATUS_ORPHAN ||
-					current_backup->status == BACKUP_STATUS_CORRUPT)
+					current_backup->status == BACKUP_STATUS_CORRUPT ||
+					current_backup->status == BACKUP_STATUS_RUNNING)
 					&& !rt->restore_no_validate)
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
@@ -177,8 +176,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (dest_backup == NULL)
 		elog(ERROR, "Backup satisfying target options is not found.");
 
-	dest_backup_index = get_backup_index_number(backups, dest_backup);
-
 	/* If we already found dest_backup, look for full backup. */
 	if (dest_backup->backup_mode == BACKUP_MODE_FULL)
 			base_full_backup = dest_backup;
@@ -199,7 +196,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			missing_backup_start_time = tmp_backup->parent_backup;
 			missing_backup_id = base36enc_dup(tmp_backup->parent_backup);
 
-			for (j = get_backup_index_number(backups, tmp_backup); j >= 0; j--)
+			for (j = 0; j < parray_num(backups); j++)
 			{
 				pgBackup *backup = (pgBackup *) parray_get(backups, j);
 
@@ -210,8 +207,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -234,7 +230,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			/* parent_backup_id contain human-readable backup ID of oldest invalid backup */
 			parent_backup_id = base36enc_dup(tmp_backup->start_time);
 
-			for (j = get_backup_index_number(backups, tmp_backup) - 1; j >= 0; j--)
+			for (j = 0; j < parray_num(backups); j++)
 			{
 
 				pgBackup *backup = (pgBackup *) parray_get(backups, j);
@@ -243,8 +239,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING,
 							 "Backup %s is orphaned because his parent %s has status: %s",
@@ -261,6 +256,11 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				}
 			}
 			tmp_backup = find_parent_full_backup(dest_backup);
+
+			/* sanity */
+			if (!tmp_backup)
+				elog(ERROR, "Parent full backup for the given backup %s was not found",
+						base36enc(dest_backup->start_time));
 		}
 
 		/*
@@ -276,15 +276,36 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (base_full_backup == NULL)
 		elog(ERROR, "Full backup satisfying target options is not found.");
 
-	base_full_backup_index = get_backup_index_number(backups, base_full_backup);
-
 	/*
 	 * Ensure that directories provided in tablespace mapping are valid
 	 * i.e. empty or not exist.
 	 */
 	if (is_restore)
+	{
 		check_tablespace_mapping(dest_backup);
+		check_external_dir_mapping(dest_backup);
+	}
 
+	/* At this point we are sure that parent chain is whole
+	 * so we can build separate array, containing all needed backups,
+	 * to simplify validation and restore
+	 */
+	parent_chain = parray_new();
+
+	/* Take every backup that is a child of base_backup AND parent of dest_backup
+	 * including base_backup and dest_backup
+	 */
+
+	tmp_backup = dest_backup;
+	while(tmp_backup->parent_backup_link)
+	{
+		parray_append(parent_chain, tmp_backup);
+		tmp_backup = tmp_backup->parent_backup_link;
+	}
+
+	parray_append(parent_chain, base_full_backup);
+
+	/* for validation or restore with enabled validation */
 	if (!is_restore || !rt->restore_no_validate)
 	{
 		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
@@ -292,27 +313,39 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		/*
 		 * Validate backups from base_full_backup to dest_backup.
-		 * At this point we are sure that parent chain is intact.
 		 */
-		for (i = base_full_backup_index; i >= dest_backup_index; i--)
+		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
-			tmp_backup = (pgBackup *) parray_get(backups, i);
+			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
 
-			if (is_parent(base_full_backup->start_time, tmp_backup, true))
+			/* Do not interrupt, validate the next backup */
+			if (!lock_backup(tmp_backup))
 			{
-
-				pgBackupValidate(tmp_backup);
-				/* Maybe we should be more paranoid and check for !BACKUP_STATUS_OK? */
-				if (tmp_backup->status == BACKUP_STATUS_CORRUPT)
+				if (is_restore)
+					elog(ERROR, "Cannot lock backup %s directory",
+						 base36enc(tmp_backup->start_time));
+				else
 				{
-					corrupted_backup = tmp_backup;
-					corrupted_backup_index = i;
-					break;
+					elog(WARNING, "Cannot lock backup %s directory, skip validation",
+						 base36enc(tmp_backup->start_time));
+					continue;
 				}
-				/* We do not validate WAL files of intermediate backups
-				 * It`s done to speed up restore
-				 */
 			}
+
+			pgBackupValidate(tmp_backup);
+			/* After pgBackupValidate() only following backup
+			 * states are possible: ERROR, RUNNING, CORRUPT and OK.
+			 * Validate WAL only for OK, because there is no point
+			 * in WAL validation for corrupted, errored or running backups.
+			 */
+			if (tmp_backup->status != BACKUP_STATUS_OK)
+			{
+				corrupted_backup = tmp_backup;
+				break;
+			}
+			/* We do not validate WAL files of intermediate backups
+			 * It`s done to speed up restore
+			 */
 		}
 
 		/* There is no point in wal validation of corrupted backups */
@@ -333,7 +366,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			char	   *corrupted_backup_id;
 			corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
 
-			for (j = corrupted_backup_index - 1; j >= 0; j--)
+			for (j = 0; j < parray_num(backups); j++)
 			{
 				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
 
@@ -341,8 +374,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				{
 					if (backup->status == BACKUP_STATUS_OK)
 					{
-						backup->status = BACKUP_STATUS_ORPHAN;
-						write_backup_status(backup);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),
@@ -355,7 +387,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		}
 	}
 
-	// TODO: rewrite restore to use parent_chain
 	/*
 	 * If dest backup is corrupted or was orphaned in previous check
 	 * produce corresponding error message
@@ -376,19 +407,26 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
 	/* We ensured that all backups are valid, now restore if required
-	 * TODO: use parent_link
+	 * TODO: before restore - lock entire parent chain
 	 */
 	if (is_restore)
 	{
-		for (i = base_full_backup_index; i >= dest_backup_index; i--)
+		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
-			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+			pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
 			if (rt->lsn_specified && parse_server_version(backup->server_version) < 100000)
 				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
 						base36enc(dest_backup->start_time), dest_backup->server_version);
 
-			restore_backup(backup);
+			/*
+			 * Backup was locked during validation if no-validate wasn't
+			 * specified.
+			 */
+			if (rt->restore_no_validate && !lock_backup(backup))
+				elog(ERROR, "Cannot lock backup directory");
+
+			restore_backup(backup, dest_backup->external_dir_str);
 		}
 
 		/*
@@ -405,6 +443,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
+	parray_free(parent_chain);
 
 	elog(INFO, "%s of backup %s completed.",
 		 action, base36enc(dest_backup->start_time));
@@ -415,18 +454,22 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
  * Restore one backup.
  */
 void
-restore_backup(pgBackup *backup)
+restore_backup(pgBackup *backup, const char *external_dir_str)
 {
 	char		timestamp[100];
 	char		this_backup_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
+	char		external_prefix[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
+	parray	   *requested_external_dirs = NULL;
+	parray	   *current_external_dirs = NULL;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
 	restore_files_arg *threads_args;
 	bool		restore_isok = true;
+
 
 	if (backup->status != BACKUP_STATUS_OK)
 		elog(ERROR, "Backup %s cannot be restored because it is not valid",
@@ -452,34 +495,88 @@ restore_backup(pgBackup *backup)
 	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	create_data_directories(instance_config.pgdata, this_backup_path, true);
 
+	if(external_dir_str && !skip_external_dirs)
+	{
+		requested_external_dirs = make_external_directory_list(external_dir_str);
+		for (i = 0; i < parray_num(requested_external_dirs); i++)
+		{
+			char *external_path = parray_get(requested_external_dirs, i);
+			external_path = get_external_remap(external_path);
+			dir_create_dir(external_path, DIR_PERMISSION);
+		}
+	}
+
+	if(backup->external_dir_str)
+		current_external_dirs = make_external_directory_list(backup->external_dir_str);
+
 	/*
 	 * Get list of files which need to be restored.
 	 */
 	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
+	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix),
+					EXTERNAL_DIR);
 	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(database_path, list_path);
+	files = dir_read_file_list(database_path, external_prefix, list_path);
 
+	/* Restore directories in do_backup_instance way */
+	parray_qsort(files, pgFileComparePath);
+
+	/*
+	 * Make external directories before restore
+	 * and setup threads at the same time
+	 */
+	for (i = 0; i < parray_num(files); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(files, i);
+
+		/* If the entry was an external directory, create it in the backup */
+		if (file->external_dir_num && S_ISDIR(file->mode))
+		{
+			char		dirpath[MAXPGPATH];
+			char	   *dir_name;
+			char	   *external_path;
+
+			if (!current_external_dirs ||
+				parray_num(current_external_dirs) < file->external_dir_num - 1)
+				elog(ERROR, "Inconsistent external directory backup metadata");
+
+			external_path = parray_get(current_external_dirs,
+									   file->external_dir_num - 1);
+			if (backup_contains_external(external_path, requested_external_dirs))
+			{
+				char		container_dir[MAXPGPATH];
+
+				external_path = get_external_remap(external_path);
+				makeExternalDirPathByNum(container_dir, external_prefix,
+										 file->external_dir_num);
+				dir_name = GetRelativePath(file->path, container_dir);
+				elog(VERBOSE, "Create directory \"%s\"", dir_name);
+				join_path_components(dirpath, external_path, dir_name);
+				dir_create_dir(dirpath, DIR_PERMISSION);
+			}
+		}
+
+		/* setup threads */
+		pg_atomic_clear_flag(&file->lock);
+	}
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (restore_files_arg *) palloc(sizeof(restore_files_arg)*num_threads);
 
-	/* setup threads */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-
-		pg_atomic_clear_flag(&file->lock);
-	}
-
 	/* Restore files into target directory */
+	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
 		restore_files_arg *arg = &(threads_args[i]);
 
 		arg->files = files;
 		arg->backup = backup;
+		arg->req_external_dirs = requested_external_dirs;
+		arg->cur_external_dirs = current_external_dirs;
+		arg->external_prefix = external_prefix;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
+		/* Useless message TODO: rewrite */
 		elog(LOG, "Start thread for num:%zu", parray_num(files));
 
 		pthread_create(&threads[i], NULL, restore_files, arg);
@@ -519,16 +616,18 @@ remove_deleted_files(pgBackup *backup)
 	parray	   *files;
 	parray	   *files_restored;
 	char		filelist_path[MAXPGPATH];
+	char		external_prefix[MAXPGPATH];
 	int			i;
 
 	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path), DATABASE_FILE_LIST);
+	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
 	/* Read backup's filelist using target database path as base path */
-	files = dir_read_file_list(instance_config.pgdata, filelist_path);
+	files = dir_read_file_list(instance_config.pgdata, external_prefix, filelist_path);
 	parray_qsort(files, pgFileComparePathDesc);
 
 	/* Get list of files actually existing in target database */
 	files_restored = parray_new();
-	dir_list_file(files_restored, instance_config.pgdata, true, true, false);
+	dir_list_file(files_restored, instance_config.pgdata, true, true, false, 0);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(files_restored, pgFileComparePathDesc);
 
@@ -576,7 +675,7 @@ restore_files(void *arg)
 						lengthof(from_root), DATABASE_DIR);
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during restore database");
 
 		rel_path = GetRelativePath(file->path,from_root);
@@ -631,6 +730,17 @@ restore_files(void *arg)
 							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
 							  false,
 							  parse_program_version(arguments->backup->program_version));
+		}
+		else if (file->external_dir_num)
+		{
+			char	   *external_path = parray_get(arguments->cur_external_dirs,
+												   file->external_dir_num - 1);
+			if (backup_contains_external(external_path,
+										 arguments->req_external_dirs))
+			{
+				external_path = get_external_remap(external_path);
+				copy_file(arguments->external_prefix, external_path, file);
+			}
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
 			copy_pgcontrol_file(from_root, instance_config.pgdata, file);

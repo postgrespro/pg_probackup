@@ -7,7 +7,11 @@
  *-------------------------------------------------------------------------
  */
 
+#include "postgres_fe.h"
+
 #include "thread.h"
+
+bool thread_interrupted = false;
 
 #ifdef WIN32
 DWORD main_tid = 0;

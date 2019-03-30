@@ -265,12 +265,24 @@ assign_option(ConfigOption *opt, const char *optarg, OptionSource src)
 		}
 	}
 
-	if (isprint(opt->sname))
-		elog(ERROR, "Option -%c, --%s should be %s: '%s'",
-			opt->sname, opt->lname, message, optarg);
+	if (optarg)
+	{
+		if (isprint(opt->sname))
+			elog(ERROR, "Option -%c, --%s should be %s: '%s'",
+				 opt->sname, opt->lname, message, optarg);
+		else
+			elog(ERROR, "Option --%s should be %s: '%s'",
+				 opt->lname, message, optarg);
+	}
 	else
-		elog(ERROR, "Option --%s should be %s: '%s'",
-			opt->lname, message, optarg);
+	{
+		if (isprint(opt->sname))
+			elog(ERROR, "Option -%c, --%s should be %s",
+				 opt->sname, opt->lname, message);
+		else
+			elog(ERROR, "Option --%s should be %s",
+				 opt->lname, message);
+	}
 }
 
 static const char *
@@ -507,7 +519,7 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
  */
 int
 config_read_opt(const char *path, ConfigOption options[], int elevel,
-				bool strict)
+				bool strict, bool missing_ok)
 {
 	FILE   *fp;
 	char	buf[1024];
@@ -518,7 +530,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 	if (!options)
 		return parsed_options;
 
-	if ((fp = pgut_fopen(path, "rt", true)) == NULL)
+	if ((fp = pgut_fopen(path, "rt", missing_ok)) == NULL)
 		return parsed_options;
 
 	while (fgets(buf, lengthof(buf), fp))

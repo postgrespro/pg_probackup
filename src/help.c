@@ -97,9 +97,9 @@ help_pg_probackup(void)
 	printf(_("                 [--format=format]\n"));
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
-	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [--backup-pg-log] [-j num-threads]\n"));
+	printf(_("                 [--archive-timeout=archive-timeout] [--progress]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
@@ -119,19 +119,22 @@ help_pg_probackup(void)
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--external-dirs=external-directory-path]\n"));
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-path] [-i backup-id] [--progress]\n"));
+	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR] [--progress]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
 	printf(_("                 [--no-validate]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--skip-external-dirs]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
-	printf(_("                 [-i backup-id] [--progress]\n"));
+	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--timeline=timeline]\n"));
@@ -143,8 +146,9 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired]\n"));
+
 	printf(_("\n  %s merge -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 -i backup-id\n"));
+	printf(_("                 -i backup-id [--progress] [-j num-threads]\n"));
 
 	printf(_("\n  %s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
@@ -186,9 +190,9 @@ static void
 help_backup(void)
 {
 	printf(_("%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-C] [--stream [-S slot-name]] [--backup-pg-log]\n"));
-	printf(_("                 [-j num-threads] [--archive-timeout=archive-timeout]\n"));
-	printf(_("                 [--progress]\n"));
+	printf(_("                 [-C] [--stream [-S slot-name] [--temp-slot]\n"));
+	printf(_("                 [--backup-pg-log] [-j num-threads]\n"));
+	printf(_("                 [--archive-timeout=archive-timeout] [--progress]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
@@ -207,7 +211,8 @@ help_backup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
-	printf(_("                 [--skip-block-validation]\n\n"));
+	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -215,11 +220,15 @@ help_backup(void)
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
-	printf(_("      --backup-pg-log              backup of pg_log directory\n"));
+	printf(_("      --temp-slot                  use temporary replication slot\n"));
+	printf(_("      --backup-pg-log              backup of '%s' directory\n"), PG_LOG_DIR);
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+	printf(_("  -E  --external-dirs=external-directory-path\n"));
+	printf(_("                                   backup some directories not from pgdata \n"));
+	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -252,9 +261,9 @@ help_backup(void)
 	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
 
 	printf(_("\n  Compression options:\n"));
-	printf(_("      --compress                   compress data files\n"));
+	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
-	printf(_("                                   available options: 'zlib', 'pglz', 'none' (default: zlib)\n"));
+	printf(_("                                   available options: 'zlib', 'pglz', 'none' (default: none)\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
@@ -267,30 +276,33 @@ help_backup(void)
 	printf(_("  -W, --password                   force password prompt\n"));
 
 	printf(_("\n  Replica options:\n"));
-	printf(_("      --master-user=user_name      user name to connect to master\n"));
-	printf(_("      --master-db=db_name          database to connect to master\n"));
-	printf(_("      --master-host=host_name      database server host of master\n"));
-	printf(_("      --master-port=port           database server port of master\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
+	printf(_("      --master-user=user_name      user name to connect to master (deprecated)\n"));
+	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
+	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
+	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n"));
 }
 
 static void
 help_restore(void)
 {
 	printf(_("%s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-path] [-i backup-id] [--progress]\n"));
+	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica] [--no-validate]\n\n"));
-	printf(_("                 [--skip-block-validation]\n\n"));
+	printf(_("                 [--restore-as-replica] [--no-validate]\n"));
+	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--skip-external-dirs]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to restore\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 
 	printf(_("      --progress                   show progress\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
@@ -300,6 +312,8 @@ help_restore(void)
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 
 	printf(_("      --immediate                  end recovery as soon as a consistent state is reached\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
@@ -312,6 +326,7 @@ help_restore(void)
 	printf(_("                                   to ease setting up a standby server\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -349,6 +364,7 @@ help_validate(void)
 	printf(_("  -i, --backup-id=backup-id        backup to validate\n"));
 
 	printf(_("      --progress                   show progress\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
@@ -488,11 +504,15 @@ help_set_config(void)
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
-	printf(_("                 [--replica-timeout=timeout]\n\n"));
-	printf(_("                 [--archive-timeout=timeout]\n\n"));
+	printf(_("                 [--replica-timeout=timeout]\n"));
+	printf(_("                 [--archive-timeout=timeout]\n"));
+	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
+	printf(_("  -E  --external-dirs=external-directory-path\n"));
+	printf(_("                                   backup some directories not from pgdata \n"));
+	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -522,8 +542,9 @@ help_set_config(void)
 	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
 
 	printf(_("\n  Compression options:\n"));
+	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
-	printf(_("                                   available options: 'zlib','pglz','none'\n"));
+	printf(_("                                   available options: 'zlib','pglz','none' (default: 'none')\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
@@ -533,14 +554,15 @@ help_set_config(void)
 	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
 	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
 
-	printf(_("\n  Replica options:\n"));
-	printf(_("      --master-user=user_name      user name to connect to master\n"));
-	printf(_("      --master-db=db_name          database to connect to master\n"));
-	printf(_("      --master-host=host_name      database server host of master\n"));
-	printf(_("      --master-port=port           database server port of master\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (default: 5min)\n"));
 	printf(_("\n  Archive options:\n"));
 	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));
+
+	printf(_("\n  Replica options:\n"));
+	printf(_("      --master-user=user_name      user name to connect to master (deprecated)\n"));
+	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
+	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
+	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
+	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n"));
 }
 
 static void
@@ -558,11 +580,15 @@ static void
 help_add_instance(void)
 {
 	printf(_("%s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
-	printf(_("                 --instance=instance_name\n\n"));
+	printf(_("                 --instance=instance_name\n"));
+	printf(_("                 -E external-dirs=external-directory-path\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
 	printf(_("      --instance=instance_name     name of the new instance\n"));
+	printf(_("  -E  --external-dirs=external-directory-path\n"));
+	printf(_("                                   backup some directories not from pgdata \n"));
+	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 }
 
 static void
@@ -591,9 +617,9 @@ help_archive_push(void)
 	printf(_("                                   relative path name of the WAL file on the server\n"));
 	printf(_("      --wal-file-name=wal-file-name\n"));
 	printf(_("                                   name of the WAL file to retrieve from the server\n"));
-	printf(_("      --compress                   compress WAL file during archiving\n"));
+	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
-	printf(_("                                   available options: 'zlib','none'\n"));
+	printf(_("                                   available options: 'zlib', 'none' (default: 'none')\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 	printf(_("      --overwrite                  overwrite archived WAL file\n"));

@@ -34,7 +34,7 @@ extern DWORD main_tid;
 extern pthread_t main_tid;
 #endif
 
-
+extern bool			thread_interrupted;
 
 extern int pthread_lock(pthread_mutex_t *mp);
 
