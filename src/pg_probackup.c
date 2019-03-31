@@ -90,7 +90,7 @@ bool restore_no_validate = false;
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
 
-bool do_block_validation = false;
+/* checkdb options */
 bool do_amcheck = false;
 
 /* delete options */
@@ -162,8 +162,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	/* checkdb options */
-	{ 'b', 157, "amcheck", &do_amcheck,	SOURCE_CMD_STRICT },
-	{ 'b', 158, "block-validation", &do_block_validation,	SOURCE_CMD_STRICT },
+	{ 'b', 157, "amcheck",			&do_amcheck,		SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
@@ -411,12 +410,19 @@ main(int argc, char *argv[])
 	if (backup_path == NULL && backup_subcmd == CHECKDB_CMD)
 		config_get_opt_env(instance_options);
 
+	/* Sanity for checkdb, if backup_dir is provided but pgdata and instance are not */
+	if (backup_subcmd == CHECKDB_CMD &&
+		backup_path != NULL &&
+		instance_name == NULL &&
+		instance_config.pgdata == NULL)
+			elog(ERROR, "required parameter not specified: --instance");
+
 	if (backup_subcmd == CHECKDB_CMD
 	&& (instance_config.logger.log_level_file != LOG_OFF)
-	&& (&instance_config.logger.log_directory == NULL))
+	&& (instance_config.logger.log_directory == NULL))
 		elog(ERROR, "Cannot save checkdb logs to a file. "
-		"You must specify --log-directory option when running checkdb with "
-		"--log-level-file option enabled.");
+			"You must specify --log-directory option when running checkdb with "
+			"--log-level-file option enabled.");
 
 	/* Initialize logger */
 	init_logger(backup_path, &instance_config.logger);
@@ -560,7 +566,7 @@ main(int argc, char *argv[])
 			do_set_config(false);
 			break;
 		case CHECKDB_CMD:
-			do_checkdb(do_block_validation, do_amcheck);
+			do_checkdb(do_amcheck);
 			break;
 		case NO_CMD:
 			/* Should not happen */

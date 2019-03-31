@@ -997,8 +997,6 @@ do_block_validation(void)
 		arg->ret = 1;
 	}
 
-	pgut_atexit_push(threads_conn_disconnect, NULL);
-
 	/* TODO write better info message */
 	elog(INFO, "Start checking data files");
 
@@ -1141,12 +1139,17 @@ do_amcheck(void)
 /* TODO consider moving some code common with do_backup_instance
  * to separate function ot to pgdata_basic_setup */
 int
-do_checkdb(bool need_block_validation, bool need_amcheck)
+do_checkdb(bool need_amcheck)
 {
+
+	if (skip_block_validation && !need_amcheck)
+		elog(ERROR, "--skip-block-validation must be used with --amcheck option");
+
 	pgdata_basic_setup();
 
-	if (need_block_validation)
+	if (!skip_block_validation)
 		do_block_validation();
+
 	//if (need_amcheck)
 	//	do_amcheck();
 
@@ -1424,7 +1427,6 @@ check_system_identifiers(void)
 		}
 		return;
 	}
-
 
 	if (system_id_conn != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
@@ -2536,7 +2538,7 @@ backup_disconnect(bool fatal, void *userdata)
 static void
 threads_conn_disconnect(bool fatal, void *userdata)
 {
-	int i;
+//	int i;
 
 	elog(VERBOSE, "threads_conn_disconnect, num_threads %d", num_threads);
 // 	for (i = 0; i < num_threads; i++)
@@ -2624,7 +2626,6 @@ check_files(void *arg)
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
 
-	/* Data files check is successful */
 	if (arguments->ret == 1)
 		arguments->ret = 0;
 

@@ -369,14 +369,17 @@ prepare_page(backup_files_arg *arguments,
 		 * throw an error.
 		 */
 
-		if (!page_is_valid)
+		if (!page_is_valid &&
+			((strict && !is_ptrack_support) || !strict))
 		{
+			/* show this message for checkdb or backup without ptrack support */
 			elog(WARNING, "CORRUPTION in file %s, block %u",
 						file->path, blknum);
-
-			if (!is_ptrack_support && strict)
-				elog(ERROR, "Data file corruption. Canceling backup");
 		}
+
+		/* Backup with invalid block and without ptrack support must throw error */
+		if (!page_is_valid && strict && !is_ptrack_support)
+				elog(ERROR, "Data file corruption. Canceling backup");
 
 		/* Checkdb not going futher */
 		if (!strict)
@@ -1488,6 +1491,7 @@ validate_one_page(Page page, pgFile *file,
 	XLogRecPtr	lsn;
 	bool		page_header_is_sane = false;
 	bool		checksum_is_ok = false;
+	bool		lsn_from_future = false;
 
 	/* new level of paranoia */
 	if (page == NULL)
@@ -1518,10 +1522,11 @@ validate_one_page(Page page, pgFile *file,
 		}
 
 		/* Page is zeroed. No sense to check header and checksum. */
-		page_header_is_sane = false;
+		return PAGE_IS_FOUND_AND_VALID;
 	}
 	else
 	{
+		/* We should give more information about what exactly is looking fishy */
 		if (PageGetPageSize(phdr) == BLCKSZ &&
 			PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 			(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
@@ -1530,7 +1535,14 @@ validate_one_page(Page page, pgFile *file,
 			phdr->pd_upper <= phdr->pd_special &&
 			phdr->pd_special <= BLCKSZ &&
 			phdr->pd_special == MAXALIGN(phdr->pd_special))
-			page_header_is_sane = true;
+				page_header_is_sane = true;
+		else
+		{
+			/* Page does not looking good */
+			page_header_is_sane = false;
+			elog(WARNING, "Page is not looking healthy: %s, block %i",
+				file->path, blknum);
+		}
 	}
 
 	if (page_header_is_sane)
@@ -1548,10 +1560,12 @@ validate_one_page(Page page, pgFile *file,
 			{
 				elog(WARNING, "File: %s blknum %u have wrong checksum",
 					 file->path, blknum);
+				return PAGE_IS_FOUND_AND_NOT_VALID;
 			}
 		}
 		else
 		{
+			/* Checksums are disabled, so check lsn. */
 			if (stop_lsn > 0)
 			{
 				/* Get lsn from page header. Ensure that page is from our time.
@@ -1561,31 +1575,41 @@ validate_one_page(Page page, pgFile *file,
 				lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 				if (lsn > stop_lsn)
+				{
 					elog(WARNING, "File: %s, block %u, checksum is not enabled. "
 								  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
 						file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
 						 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-				else
-					return PAGE_IS_FOUND_AND_VALID;
+					lsn_from_future = true;
+				}
 			}
+
 		}
 
+		/* If checksum is ok, check that page is not from future */
 		if (checksum_is_ok && stop_lsn > 0)
 		{
 			/* Get lsn from page header. Ensure that page is from our time */
 			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 			if (lsn > stop_lsn)
+			{
 				elog(WARNING, "File: %s, block %u, checksum is correct. "
 							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
 					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
 					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-			else
-				return PAGE_IS_FOUND_AND_VALID;
+				lsn_from_future = true;
+			}
 		}
-	}
 
-	return PAGE_IS_FOUND_AND_NOT_VALID;
+		if (lsn_from_future)
+			return PAGE_IS_FOUND_AND_NOT_VALID;
+		else
+			return PAGE_IS_FOUND_AND_VALID;
+	}
+	else
+		return PAGE_IS_FOUND_AND_NOT_VALID;
+
 }
 
 bool
