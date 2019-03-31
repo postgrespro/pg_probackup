@@ -130,13 +130,13 @@ exit_if_necessary(int elevel)
 		/* If this is not the main thread then don't call exit() */
 		if (main_tid != pthread_self())
 		{
+			/* Interrupt other possible routines */
+			thread_interrupted = true;
 #ifdef WIN32
 			ExitThread(elevel);
 #else
 			pthread_exit(NULL);
 #endif
-			/* Interrupt other possible routines */
-			thread_interrupted = true;
 		}
 		else
 			exit(elevel);
