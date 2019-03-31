@@ -327,14 +327,14 @@ main(int argc, char *argv[])
 		help_command(command_name);
 
 	/* backup_path is required for all pg_probackup commands except help and checkdb */
-	if (backup_path == NULL && backup_subcmd != CHECKDB_CMD)
+	if (backup_path == NULL)
 	{
 		/*
 		 * If command line argument is not set, try to read BACKUP_PATH
 		 * from environment variable
 		 */
 		backup_path = getenv("BACKUP_PATH");
-		if (backup_path == NULL)
+		if (backup_path == NULL && backup_subcmd != CHECKDB_CMD)
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
 
@@ -353,10 +353,10 @@ main(int argc, char *argv[])
 	}
 
 	/* Option --instance is required for all commands except init and show */
-	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
-		backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
+	if (instance_name == NULL)
 	{
-		if (instance_name == NULL)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
+			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 
@@ -399,7 +399,11 @@ main(int argc, char *argv[])
 		{
 			join_path_components(path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
-			config_read_opt(path, instance_options, ERROR, true, false);
+
+			if (backup_subcmd == CHECKDB_CMD)
+				config_read_opt(path, instance_options, ERROR, true, true);
+			else
+				config_read_opt(path, instance_options, ERROR, true, false);
 		}
 	}
 

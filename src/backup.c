@@ -940,7 +940,7 @@ do_block_validation(void)
 	/* arrays with meta info for multi threaded backup */
 	pthread_t	*threads;
 	backup_files_arg *threads_args;
-	bool		backup_isok = true;
+	bool		check_isok = true;
 
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
@@ -1017,14 +1017,14 @@ do_block_validation(void)
 	{
 		pthread_join(threads[i], NULL);
 		if (threads_args[i].ret > 0)
-			backup_isok = false;
+			check_isok = false;
 	}
 
 	/* TODO write better info message */
-	if (backup_isok)
-		elog(INFO, "Data files are checked");
+	if (check_isok)
+		elog(INFO, "Data files are valid");
 	else
-		elog(ERROR, "Data files checking failed");
+		elog(ERROR, "Data files are corrupted");
 
 	if (backup_files_list)
 	{
@@ -1042,7 +1042,7 @@ do_amcheck(void)
 	/* arrays with meta info for multi threaded backup */
 	pthread_t	*threads;
 	backup_files_arg *threads_args;
-	bool		backup_isok = true;
+	bool		check_isok = true;
 	PGresult   *res_db;
 	int n_databases = 0;
 	bool first_db_with_amcheck = true;
@@ -1118,13 +1118,13 @@ do_amcheck(void)
 		{
 			pthread_join(threads[j], NULL);
 			if (threads_args[j].ret == 1)
-				backup_isok = false;
+				check_isok = false;
 		}
 		pgut_disconnect(db_conn);
 	}
 
 	/* TODO write better info message */
-	if (backup_isok)
+	if (check_isok)
 		elog(INFO, "Indexes are checked");
 	else
 		elog(ERROR, "Indexs checking failed");
@@ -1188,6 +1188,17 @@ pgdata_basic_setup(void)
 
 	is_checksum_enabled = pg_checksum_enable();
 
+
+	/*
+	 * Ensure that backup directory was initialized for the same PostgreSQL
+	 * instance we opened connection to. And that target backup database PGDATA
+	 * belogns to the same instance.
+	 */
+	/* TODO fix it for remote backup */
+
+	if (!is_remote_backup)
+		check_system_identifiers();
+
 	if (is_checksum_enabled)
 		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
 					"Data block corruption will be detected");
@@ -1225,10 +1236,6 @@ do_backup(time_t start_time)
 	current.compress_alg = instance_config.compress_alg;
 	current.compress_level = instance_config.compress_level;
 
-	/* TODO fix it for remote backup*/
-	if (!is_remote_backup)
-		current.checksum_version = get_data_checksum_version(true);
-
 	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support();
@@ -1260,15 +1267,6 @@ do_backup(time_t start_time)
 								   instance_config.master_db,
 								   instance_config.master_user);
 	}
-
-	/*
-	 * Ensure that backup directory was initialized for the same PostgreSQL
-	 * instance we opened connection to. And that target backup database PGDATA
-	 * belogns to the same instance.
-	 */
-	/* TODO fix it for remote backup */
-	if (!is_remote_backup)
-		check_system_identifiers();
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -1415,10 +1413,24 @@ check_system_identifiers(void)
 	system_id_pgdata = get_system_identifier(instance_config.pgdata);
 	system_id_conn = get_remote_system_identifier(backup_conn);
 
+	/* for checkdb check only system_id_pgdata and system_id_conn */
+	if (current.backup_mode == BACKUP_MODE_INVALID)
+	{
+		if (system_id_conn != system_id_pgdata)
+		{
+			elog(ERROR, "Data directory initialized with system id " UINT64_FORMAT ", "
+						"but connected instance system id is " UINT64_FORMAT,
+				 system_id_pgdata, system_id_conn);
+		}
+		return;
+	}
+
+
 	if (system_id_conn != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but connected instance system id is " UINT64_FORMAT,
 			 instance_config.system_identifier, system_id_conn);
+
 	if (system_id_pgdata != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but target backup directory system id is " UINT64_FORMAT,
@@ -2562,7 +2574,7 @@ check_files(void *arg)
 		elog(VERBOSE, "Checking file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during checkdb");
 
 		if (progress)
@@ -2579,7 +2591,6 @@ check_files(void *arg)
 				 * If file is not found, this is not en error.
 				 * It could have been deleted by concurrent postgres transaction.
 				 */
-				file->write_size = BYTES_INVALID;
 				elog(LOG, "File \"%s\" is not found", file->path);
 				continue;
 			}
@@ -2597,7 +2608,7 @@ check_files(void *arg)
 
 		if (S_ISREG(buf.st_mode))
 		{
-			/* check only uncompressed datafiles */
+			/* check only uncompressed by cfs datafiles */
 			if (file->is_datafile && !file->is_cfs)
 			{
 				char		to_path[MAXPGPATH];
@@ -2639,7 +2650,7 @@ check_indexes(void *arg)
 			continue;
 
 		/* check for interrupt */
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during checkdb --amcheck");
 
 		elog(VERBOSE, "Checking index number %d of %d :  \"%s\" ", i,n_indexes, ind->name);
