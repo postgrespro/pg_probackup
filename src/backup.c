@@ -1056,11 +1056,7 @@ do_amcheck(void)
 
 	n_databases =  PQntuples(res_db);
 
-	/* TODO Warn user that one connection is used for snaphot */
-	//if (num_threads > 1)
-	//	num_threads--;
-
-	elog(INFO, "Start checking instance with amcheck");
+	elog(INFO, "Start checking PostgreSQL instance with amcheck");
 
 	/* For each database check indexes. In parallel. */
 	for(i = 0; i < n_databases; i++)
@@ -3522,12 +3518,13 @@ get_index_list(PGresult *res_db, int db_number,
 	{
 
 		/* select only valid btree and persistent indexes */
-		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname"
-									" FROM pg_index idx "
-									" JOIN pg_class cls ON cls.oid=idx.indexrelid "
-									" JOIN pg_am am ON am.oid=cls.relam "
-									" WHERE am.amname='btree' AND cls.relpersistence != 't'"
-									" AND idx.indisready AND idx.indisvalid; ", 0, NULL);
+		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
+									"FROM pg_index idx "
+									"JOIN pg_class cls ON cls.oid=idx.indexrelid "
+									"JOIN pg_am am ON am.oid=cls.relam "
+									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
+									//"AND idx.indisready AND idx.indisvalid",
+									0, NULL);
 	}
 	else
 	{
@@ -3538,8 +3535,8 @@ get_index_list(PGresult *res_db, int db_number,
 									"JOIN pg_am am ON am.oid=cls.relam "
 									"JOIN pg_tablespace tbl ON tbl.oid=cls.reltablespace "
 									"WHERE am.amname='btree' AND cls.relpersistence != 't' "
-									"AND idx.indisready AND idx.indisvalid "
-									"AND tbl.spcname !='pg_global'", 0, NULL);
+									//"AND idx.indisready AND idx.indisvalid "
+									"AND tbl.spcname !='pg_global'",0, NULL);
 	}
 
 	/* add info needed to check indexes into index_list */
