@@ -49,7 +49,6 @@ const char *progname = "pg_probackup";
 static parray *backup_files_list = NULL;
 static parray *index_list = NULL;
 
-
 /* We need critical section for datapagemap_add() in case of using threads */
 static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -1102,6 +1101,7 @@ do_amcheck(void)
 			arg->prev_start_lsn = InvalidXLogRecPtr;
 			arg->backup_conn = NULL;
 			arg->cancel_conn = NULL;
+			arg->thread_num = j + 1;
 			/* By default there are some error */
 			arg->ret = 1;
 		}
@@ -2659,11 +2659,13 @@ check_indexes(void *arg)
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "interrupted during checkdb --amcheck");
+			elog(ERROR, "Thread [%d]: interrupted during checkdb --amcheck",
+				arguments->thread_num);
 
 		if (progress)
-			elog(INFO, "Progress: (%d/%d). Processing index '%s.%s'",
-				 i + 1, n_indexes, ind->amcheck_nspname, ind->name);
+			elog(INFO, "Thread [%d]. Progress: (%d/%d). Processing index '%s.%s'",
+				 arguments->thread_num, i + 1, n_indexes,
+				 ind->amcheck_nspname, ind->name);
 
 		if (arguments->backup_conn == NULL)
 		{
@@ -3593,8 +3595,8 @@ amcheck_one_index(backup_files_arg *arguments,
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		elog(WARNING, "Amcheck failed for index: '%s.%s': %s",
-					   ind->amcheck_nspname,
+		elog(WARNING, "Thread [%d]. Amcheck failed for index: '%s.%s': %s",
+					   arguments->thread_num, ind->amcheck_nspname,
 					   ind->name, PQresultErrorMessage(res));
 
 		pfree(params[0]);
@@ -3602,8 +3604,8 @@ amcheck_one_index(backup_files_arg *arguments,
 		return false;
 	}
 	else
-		elog(LOG, "Amcheck succeeded for index: '%s.%s'",
-				ind->amcheck_nspname, ind->name);
+		elog(LOG, "Thread [%d]. Amcheck succeeded for index: '%s.%s'",
+				arguments->thread_num, ind->amcheck_nspname, ind->name);
 
 	pfree(params[0]);
 	PQclear(res);

@@ -318,6 +318,7 @@ typedef struct
 	PGconn	   *backup_conn;
 	PGcancel   *cancel_conn;
 	parray	   *index_list;
+	int			thread_num;
 
 	/*
 	 * Return value from the thread.
