@@ -359,7 +359,7 @@ PGresult *
 pgut_execute_parallel(PGconn* conn,
 					  PGcancel* thread_cancel_conn, const char *query,
 					  int nParams, const char **params,
-					  bool text_result)
+					  bool text_result, bool ok_error)
 {
 	PGresult   *res;
 
@@ -405,6 +405,9 @@ pgut_execute_parallel(PGconn* conn,
 		case PGRES_COPY_IN:
 			break;
 		default:
+			if (ok_error && PQresultStatus(res) == PGRES_FATAL_ERROR)
+				break;
+
 			elog(ERROR, "query failed: %squery was: %s",
 				 PQerrorMessage(conn), query);
 			break;
