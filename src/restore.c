@@ -219,6 +219,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					}
 				}
 			}
+			pg_free(missing_backup_id);
 			/* No point in doing futher */
 			elog(ERROR, "%s of backup %s failed.", action, base36enc(dest_backup->start_time));
 		}
@@ -255,6 +256,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					}
 				}
 			}
+			pg_free(parent_backup_id);
 			tmp_backup = find_parent_full_backup(dest_backup);
 
 			/* sanity */
