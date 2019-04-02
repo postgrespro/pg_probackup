@@ -2666,8 +2666,6 @@ check_indexes(void *arg)
 
 		if (arguments->backup_conn == NULL)
 		{
-			PGresult   *res;
-			char		*query;
 
 			arguments->backup_conn = pgut_connect(instance_config.pghost,
 												instance_config.pgport,
@@ -3479,7 +3477,6 @@ get_index_list(PGresult *res_db, int db_number,
 {
 	PGresult   *res;
 	char *nspname = NULL;
-	char *snapshot = NULL;
 	int i;
 
 	dbname = PQgetvalue(res_db, db_number, 0);

@@ -22,6 +22,7 @@ static void help_add_instance(void);
 static void help_del_instance(void);
 static void help_archive_push(void);
 static void help_archive_get(void);
+static void help_checkdb(void);
 
 void
 help_command(char *command)
@@ -52,6 +53,8 @@ help_command(char *command)
 		help_archive_push();
 	else if (strcmp(command, "archive-get") == 0)
 		help_archive_get();
+	else if (strcmp(command, "checkdb") == 0)
+		help_checkdb();
 	else if (strcmp(command, "--help") == 0
 			 || strcmp(command, "help") == 0
 			 || strcmp(command, "-?") == 0
@@ -416,11 +419,11 @@ help_checkdb(void)
 	printf(_("      --progress                   show progress\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --skip-block-validation      skip file-level block checking\n"));
-	printf(_("                                   can be used only with --amcheck option\n"));
+	printf(_("                                   can be used only with '--amcheck' option\n"));
 	printf(_("      --amcheck                    in addition to file-level block checking\n"));
-	printf(_("                                   check btree indexes using 'amcheck' or 'amcheck_next' extension"));
+	printf(_("                                   check btree indexes using 'amcheck' or 'amcheck_next' extension\n"));
 	printf(_("      --heapallindexed             also check that heap is indexed\n"));
-	printf(_("                                   can be used only with --amcheck option\n"));
+	printf(_("                                   can be used only with '--amcheck' option\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
