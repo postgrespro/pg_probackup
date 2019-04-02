@@ -359,9 +359,10 @@ PGresult *
 pgut_execute_parallel(PGconn* conn,
 					  PGcancel* thread_cancel_conn, const char *query,
 					  int nParams, const char **params,
-					  bool text_result, bool ok_error)
+					  bool text_result, bool ok_error, bool async)
 {
 	PGresult   *res;
+	int			ret = 0;
 
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
@@ -387,15 +388,50 @@ pgut_execute_parallel(PGconn* conn,
 	}
 
 	//on_before_exec(conn, thread_cancel_conn);
-	if (nParams == 0)
-		res = PQexec(conn, query);
+	if (async)
+	{
+		if (nParams == 0)
+			ret = PQsendQuery(conn, query);
+		else
+			ret = PQsendQueryParams(conn, query, nParams, NULL, params, NULL, NULL,
+								/*
+								* Specify zero to obtain results in text format,
+								* or one to obtain results in binary format.
+								*/
+								(text_result) ? 0 : 1);
+
+		/* wait for processing */
+		while (true)
+		{
+
+			if (interrupted)
+				elog(ERROR, "interrupted");
+
+			if (!PQconsumeInput(conn))
+				elog(ERROR, "query failed: %squery was: %s",
+					PQerrorMessage(conn), query);
+
+			/* query is no done */
+			if (!PQisBusy(conn))
+				break;
+
+			usleep(1000);
+		}
+
+		res = PQgetResult(conn);
+	}
 	else
-		res = PQexecParams(conn, query, nParams, NULL, params, NULL, NULL,
-						   /*
-							* Specify zero to obtain results in text format,
-							* or one to obtain results in binary format.
-							*/
-						   (text_result) ? 0 : 1);
+	{
+		if (nParams == 0)
+			res = PQexec(conn, query);
+		else
+			res = PQexecParams(conn, query, nParams, NULL, params, NULL, NULL,
+								/*
+								* Specify zero to obtain results in text format,
+								* or one to obtain results in binary format.
+								*/
+								(text_result) ? 0 : 1);
+	}
 	//on_after_exec(thread_cancel_conn);
 
 	switch (PQresultStatus(res))

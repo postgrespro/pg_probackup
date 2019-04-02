@@ -1021,8 +1021,15 @@ do_block_validation(void)
 	/* TODO write better info message */
 	if (check_isok)
 		elog(INFO, "Data files are valid");
-	else
-		elog(ERROR, "Data files are corrupted");
+
+	if (!check_isok)
+	{
+		if (thread_interrupted || interrupted)
+			elog(ERROR, "Checkdb failed");
+		else
+			elog(ERROR, "Data files are corrupted");
+	}
+
 
 	if (backup_files_list)
 	{
@@ -1131,7 +1138,7 @@ do_amcheck(void)
 	if (check_isok && !db_skipped)
 		elog(INFO, "Indexes are valid");
 
-	if (!check_isok)
+	if (!check_isok && !interrupted)
 		elog(ERROR, "Some indexes are corrupted");
 
 	if (db_skipped)
@@ -3398,7 +3405,7 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 	res = pgut_execute_parallel(arguments->backup_conn,
 								arguments->cancel_conn,
 					"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
-					4, (const char **)params, true, false);
+					4, (const char **)params, true, false, false);
 
 	if (PQnfields(res) != 1)
 	{
@@ -3598,7 +3605,7 @@ amcheck_one_index(backup_files_arg *arguments,
 
 		res = pgut_execute_parallel(arguments->backup_conn,
 								arguments->cancel_conn,
-								query, 2, (const char **)params, true, true);
+								query, 2, (const char **)params, true, true, true);
 	}
 	else
 	{
@@ -3607,7 +3614,7 @@ amcheck_one_index(backup_files_arg *arguments,
 
 		res = pgut_execute_parallel(arguments->backup_conn,
 								arguments->cancel_conn,
-								query, 1, (const char **)params, true, true);
+								query, 1, (const char **)params, true, true, true);
 	}
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
