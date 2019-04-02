@@ -1231,10 +1231,6 @@ do_backup(time_t start_time)
 	pgdata_basic_setup();
 
 	/* below perform checks specific for backup command */
-	if (current.backup_mode == BACKUP_MODE_INVALID)
-		elog(ERROR, "required parameter not specified: BACKUP_MODE "
-						 "(-b, --backup-mode)");
-
 #if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(backup_conn))
 		elog(ERROR, "Failed to retreive wal_segment_size");

@@ -531,6 +531,11 @@ main(int argc, char *argv[])
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
 						  stream_wal ? "true" : "false", is_remote_backup ? "true" : "false");
 
+				/* sanity */
+				if (current.backup_mode == BACKUP_MODE_INVALID)
+					elog(ERROR, "required parameter not specified: BACKUP_MODE "
+						 "(-b, --backup-mode)");
+
 				return do_backup(start_time);
 			}
 		case RESTORE_CMD:
