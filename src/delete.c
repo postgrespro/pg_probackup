@@ -110,6 +110,16 @@ do_delete(time_t backup_id)
 	parray_free(backup_list);
 }
 
+/*
+ * Merge and purge backups by retention policy. Retention policy is configured by
+ * retention_redundancy and retention_window variables.
+ *
+ * Invalid backups handled in Oracle style, so invalid backups are ignored
+ * for the purpose of retention fulfillment,
+ * i.e. CORRUPT full backup do not taken in account when deteremine
+ * which FULL backup should be keeped for redundancy obligation(only valid do),
+ * but if invalid backup is not guarded by retention - it is removed
+ */
 int do_retention(void)
 {
 	parray	   *backup_list = NULL;
@@ -122,7 +132,6 @@ int do_retention(void)
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 
-	/* sanity */
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
 
@@ -136,14 +145,13 @@ int do_retention(void)
 		if (instance_config.retention_redundancy == 0 &&
 			instance_config.retention_window == 0)
 		{
-			/* Retention is disabled but we still can cleanup wal
-			 */
+			/* Retention is disabled but we still can cleanup wal */
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
 				return 0;
 		}
 		else
-		/* At least one retention policy is active */
+			/* At least one retention policy is active */
 			retention_is_set = true;
 	}
 
@@ -182,15 +190,9 @@ int do_retention(void)
 
 }
 
-/*
- * Merge and purge backups by retention policy. Retention policy is configured by
- * retention_redundancy and retention_window variables.
- *
- * Invalid backups handled in Oracle style, so invalid backups are ignored
- * for the purpose of retention fulfillment,
- * i.e. CORRUPT full backup do not taken in account when deteremine
- * which FULL backup should be keeped for redundancy obligation(only valid do),
- * but if invalid backup is not guarded by retention - it is removed
+/* Evaluate every backup by retention policies and populate purge and keep lists.
+ * Also for every backup print proposed action('Active' or 'Expired') according
+ * to active retention policies.
  */
 static void
 do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purge_list)
@@ -326,12 +328,12 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	cur_full_backup_num = 1;
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		char		*action = "Keep";
+		char		*action = "Active";
 
 		pgBackup	*backup = (pgBackup *) parray_get(backup_list, i);
 
 		if (parray_bsearch(to_purge_list, backup, pgBackupCompareIdDesc))
-			action = "Purge";
+			action = "Expired";
 
 		if (backup->recovery_time == 0)
 			actual_window = 0;
@@ -352,6 +354,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	}
 }
 
+/* Merge partially expired incremental chains */
 static void
 do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_list)
 {
@@ -494,6 +497,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 
 }
 
+/* Purge expired backups */
 static void
 do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 {
