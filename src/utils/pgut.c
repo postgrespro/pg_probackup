@@ -405,7 +405,10 @@ pgut_execute_parallel(PGconn* conn,
 		{
 
 			if (interrupted)
+			{
+				pgut_cancel(conn);
 				elog(ERROR, "interrupted");
+			}
 
 			if (!PQconsumeInput(conn))
 				elog(ERROR, "query failed: %squery was: %s",
