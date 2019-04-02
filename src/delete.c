@@ -150,7 +150,7 @@ int do_retention(void)
 	if (retention_is_set && backup_list_is_empty)
 		elog(WARNING, "Backup list is empty, retention purge and merge are problematic");
 
-	/* show fancy message */
+	/* Populate purge and keep lists, and show retention state messages */
 	if (retention_is_set && !backup_list_is_empty)
 		do_retention_internal(backup_list, to_keep_list, to_purge_list);
 
@@ -197,7 +197,6 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 {
 	int			i;
 	time_t 		current_time;
-	bool 		backup_list_is_empty = false;
 
 	/* For retention calculation */
 	uint32		n_full_backups = 0;
@@ -206,10 +205,6 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 	/* For fancy reporting */
 	float		actual_window = 0;
-
-	/* sanity */
-	if (parray_num(backup_list) == 0)
-		backup_list_is_empty = true;
 
 	/* Get current time */
 	current_time = time(NULL);
@@ -294,7 +289,6 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* Do not keep invalid backups by retention */
@@ -302,6 +296,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				backup->status != BACKUP_STATUS_DONE)
 			continue;
 
+		/* only incremental backups should be in keep list */
 		if (backup->backup_mode == BACKUP_MODE_FULL)
 			continue;
 
@@ -309,6 +304,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		if (!backup->parent_backup_link)
 			continue;
 
+		/* skip if backup already in purge list  */
 		if (parray_bsearch(to_purge_list, backup, pgBackupCompareIdDesc))
 			continue;
 
