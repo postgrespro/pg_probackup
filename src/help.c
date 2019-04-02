@@ -140,6 +140,11 @@ help_pg_probackup(void)
 	printf(_("                 [--timeline=timeline]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
 
+	printf(_("\n  %s checkdb   [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
+	printf(_("                 [-D pgdata-path] [--progress] [-j num-threads]\n"));
+	printf(_("                 [--amcheck] [--skip-block-validation]\n"));
+	printf(_("                 [--heapallindexed] [--work-mem]\n"));
+
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
 	printf(_("                 [--format=format]\n"));
@@ -394,6 +399,57 @@ help_validate(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+}
+
+static void
+help_checkdb(void)
+{
+	printf(_("%s checkdb [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
+	printf(_("                 [-D pgdata-path] [-j num-threads] [--progress]\n"));
+	printf(_("                 [--amcheck] [--skip-block-validation]\n"));
+	printf(_("                 [--heapallindexed] [--work-mem=work_mem_size]\n"));
+
+	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
+	printf(_("      --instance=instance_name     name of the instance\n"));
+	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
+
+	printf(_("      --progress                   show progress\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --skip-block-validation      skip file-level block checking\n"));
+	printf(_("                                   can be used only with --amcheck option\n"));
+	printf(_("      --amcheck                    in addition to file-level block checking\n"));
+	printf(_("                                   check btree indexes using 'amcheck' or 'amcheck_next' extension"));
+	printf(_("      --heapallindexed             also check that heap is indexed\n"));
+	printf(_("                                   can be used only with --amcheck option\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+
+	printf(_("\n  Connection options:\n"));
+	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --dbname=DBNAME              database to connect (default: username)\n"));
+	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
+	printf(_("  -w, --no-password                never prompt for password\n"));
+	printf(_("  -W, --password                   force password prompt\n"));
 }
 
 static void

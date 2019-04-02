@@ -408,6 +408,9 @@ extern char *instance_name;
 /* show options */
 extern ShowFormat show_format;
 
+/* checkdb options */
+extern bool heapallindexed;
+
 /* current settings */
 extern pgBackup current;
 

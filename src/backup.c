@@ -74,6 +74,7 @@ static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
 bool is_checksum_enabled = false;
 bool exclusive_backup = false;
+bool heapallindexed_is_supported = false;
 
 /* Backup connections */
 static PGconn *backup_conn = NULL;
@@ -1044,6 +1045,7 @@ do_amcheck(void)
 	int n_databases = 0;
 	bool first_db_with_amcheck = true;
 	PGconn *db_conn = NULL;
+	bool db_skipped = false;
 	
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
@@ -1076,6 +1078,7 @@ do_amcheck(void)
 		{
 			if (db_conn)
 				pgut_disconnect(db_conn);
+			db_skipped = true;
 			continue;
 		}
 
@@ -1125,17 +1128,14 @@ do_amcheck(void)
 	}
 
 	/* TODO write better info message */
-	if (check_isok)
+	if (check_isok && !db_skipped)
 		elog(INFO, "Indexes are valid");
-	else
+
+	if (!check_isok)
 		elog(ERROR, "Some indexes are corrupted");
 
-	//if (backup_files_list)
-	//{
-	//	parray_walk(backup_files_list, pgFileFree);
-	//	parray_free(backup_files_list);
-	//	backup_files_list = NULL;
-	//}
+	if (db_skipped)
+		elog(ERROR, "Some databases were not checked");
 }
 
 /* Entry point of pg_probackup CHECKDB subcommand. */
@@ -1156,6 +1156,7 @@ do_checkdb(bool need_amcheck)
 	if (need_amcheck)
 		do_amcheck();
 
+	/* need to exit with 1 if some corruption is found */
 	return 0;
 }
 
@@ -3487,12 +3488,16 @@ get_index_list(PGresult *res_db, int db_number,
 							dbname,
 							instance_config.pguser);
 
-	res = pgut_execute(db_conn, "SELECT extname, nspname, extversion "
+	res = pgut_execute(db_conn, "SELECT "
+								"extname, nspname, extversion, "
+								"extversion::numeric in (1.1, 1) as old_version "
 								"FROM pg_namespace n "
 								"JOIN pg_extension e "
 								"ON n.oid=e.extnamespace "
-								"WHERE e.extname='amcheck'",
-									0, NULL);
+								"WHERE e.extname IN ('amcheck', 'amcheck_next') "
+								"ORDER BY extversion DESC "
+								"LIMIT 1",
+								0, NULL);
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
@@ -3503,12 +3508,20 @@ get_index_list(PGresult *res_db, int db_number,
 
 	if (PQntuples(res) < 1)
 	{
-		elog(WARNING, "Extension amcheck is not installed in database %s", dbname);
+		elog(WARNING, "Extension 'amcheck' or 'amcheck_next' are not installed in database %s", dbname);
 		return NULL;
 	}
 
 	nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
 	strcpy(nspname, PQgetvalue(res, 0, 1));
+
+	/* heapallindexed_is_supported is database specific */
+	if (strcmp(PQgetvalue(res, 0, 2), "1.0") != 0 &&
+		strcmp(PQgetvalue(res, 0, 2), "1") != 0)
+			heapallindexed_is_supported = true;
+
+	elog(INFO, "Checking database %s using module '%s' version %s from schema '%s'",
+					dbname, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
 
 	/*
 	 * In order to avoid duplicates, select global indexes
@@ -3566,8 +3579,6 @@ get_index_list(PGresult *res_db, int db_number,
 
 	PQclear(res);
 
-	elog(INFO, "Amcheck database '%s'", dbname);
-
 	return index_list;
 }
 
@@ -3577,18 +3588,34 @@ amcheck_one_index(backup_files_arg *arguments,
 				 pg_indexEntry *ind)
 {
 	PGresult   *res;
-	char	   *params[1];
-	char		*query;
+	char		*params[2];
+	char		*query = NULL;
+
 	params[0] = palloc(64);
 
+	/* first argument is index oid */
 	sprintf(params[0], "%i", ind->indexrelid);
+	/* second argument is heapallindexed */
+	params[1] = heapallindexed ? "true" : "false";
 
-	query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1)")+1);
-	sprintf(query, "SELECT %s.bt_index_check($1)", ind->amcheck_nspname);
+	if (heapallindexed_is_supported)
+	{
+		query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1, $2)")+1);
+		sprintf(query, "SELECT %s.bt_index_check($1, $2)", ind->amcheck_nspname);
 
-	res = pgut_execute_parallel(arguments->backup_conn,
+		res = pgut_execute_parallel(arguments->backup_conn,
+								arguments->cancel_conn,
+								query, 2, (const char **)params, true, true);
+	}
+	else
+	{
+		query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1)")+1);
+		sprintf(query, "SELECT %s.bt_index_check($1)", ind->amcheck_nspname);
+
+		res = pgut_execute_parallel(arguments->backup_conn,
 								arguments->cancel_conn,
 								query, 1, (const char **)params, true, true);
+	}
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
