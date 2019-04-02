@@ -455,7 +455,6 @@ extern int do_show(time_t requested_backup_id);
 extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
 extern int do_retention(void);
-extern int do_retention_purge(void);
 extern int do_delete_instance(void);
 
 /* in fetch.c */

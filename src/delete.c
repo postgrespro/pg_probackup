@@ -16,7 +16,11 @@
 
 static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
 							uint32 xlog_seg_size);
-static void do_retention_internal(void);
+static void do_retention_internal(parray *backup_list, parray *to_keep_list,
+									parray *to_purge_list);
+static void do_retention_merge(parray *backup_list, parray *to_keep_list,
+									parray *to_purge_list);
+static void do_retention_purge(parray *to_keep_list, parray *to_purge_list);
 static void do_retention_wal(void);
 
 static bool backup_deleted = false;   /* At least one backup was deleted */
@@ -108,7 +112,14 @@ do_delete(time_t backup_id)
 
 int do_retention(void)
 {
+	parray	   *backup_list = NULL;
+	parray	   *to_keep_list = parray_new();
+	parray	   *to_purge_list = parray_new();
+
 	bool	retention_is_set = false; /* At least one retention policy is set */
+
+	/* Get a complete list of backups. */
+	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 
 	if (delete_expired || merge_expired)
 	{
@@ -131,9 +142,17 @@ int do_retention(void)
 			retention_is_set = true;
 	}
 
-	if (retention_is_set && ((delete_expired || merge_expired) || dry_run))
-		do_retention_internal();
+	/* show fancy message */
+	if (retention_is_set)
+		do_retention_internal(backup_list, to_keep_list, to_purge_list);
 
+	if (merge_expired && !dry_run)
+		do_retention_merge(backup_list, to_keep_list, to_purge_list);
+
+	if (delete_expired && !dry_run)
+		do_retention_purge(to_keep_list, to_purge_list);
+
+	/* TODO: some sort of dry run for delete_wal */
 	if (delete_wal && !dry_run)
 		do_retention_wal();
 
@@ -144,6 +163,12 @@ int do_retention(void)
 		elog(INFO, "Purging finished");
 	else
 		elog(INFO, "There are no backups to delete by retention policy");
+
+	/* Cleanup */
+	parray_walk(backup_list, pgBackupFree);
+	parray_free(backup_list);
+	parray_free(to_keep_list);
+	parray_free(to_purge_list);
 
 	return 0;
 
@@ -160,13 +185,9 @@ int do_retention(void)
  * but if invalid backup is not guarded by retention - it is removed
  */
 static void
-do_retention_internal(void)
+do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purge_list)
 {
-	parray	   *backup_list = NULL;
-	parray	   *to_purge_list = parray_new();
-	parray	   *to_keep_list = parray_new();
 	int			i;
-	int			j;
 	time_t 		current_time;
 	bool 		backup_list_is_empty = false;
 
@@ -178,8 +199,7 @@ do_retention_internal(void)
 	/* For fancy reporting */
 	float		actual_window = 0;
 
-	/* Get a complete list of backups. */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	/* sanity */
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
 
@@ -257,36 +277,66 @@ do_retention_internal(void)
 			parray_append(to_purge_list, backup);
 			continue;
 		}
+	}
+
+	/* sort keep_list and purge list */
+	parray_qsort(to_keep_list, pgBackupCompareIdDesc);
+	parray_qsort(to_purge_list, pgBackupCompareIdDesc);
+
+	/* FULL
+	 * PAGE
+	 * PAGE <- Only such backups must go into keep list
+	 ---------retention window ----
+	 * PAGE
+	 * FULL
+	 * PAGE
+	 * FULL
+	 */
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* Do not keep invalid backups by retention */
 		if (backup->status != BACKUP_STATUS_OK &&
 				backup->status != BACKUP_STATUS_DONE)
 			continue;
 
-		elog(VERBOSE, "Mark backup %s for retention.", base36enc(backup->start_time));
-		parray_append(to_keep_list, backup);
+		if (backup->backup_mode == BACKUP_MODE_FULL)
+			continue;
+
+		/* orphan backup cannot be in keep list */
+		if (!backup->parent_backup_link)
+			continue;
+
+		if (parray_bsearch(to_purge_list, backup, pgBackupCompareIdDesc))
+			continue;
+
+		/* if parent in purge_list, add backup to keep list */
+		if (parray_bsearch(to_purge_list,
+							backup->parent_backup_link,
+							pgBackupCompareIdDesc))
+		{
+			/* make keep list a bit sparse */
+			parray_append(to_keep_list, backup);
+			continue;
+		}
 	}
 
 	/* Message about retention state of backups
 	 * TODO: Float is ugly, rewrite somehow.
 	 */
 
-	/* sort keep_list and purge list */
-	parray_qsort(to_keep_list, pgBackupCompareIdDesc);
-	parray_qsort(to_purge_list, pgBackupCompareIdDesc);
-
 	cur_full_backup_num = 1;
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		char		*action = "Ignore";
+		char		*action = "Keep";
 
 		pgBackup	*backup = (pgBackup *) parray_get(backup_list, i);
 
-		if (parray_bsearch(to_keep_list, backup, pgBackupCompareIdDesc))
-			action = "Keep";
-
 		if (parray_bsearch(to_purge_list, backup, pgBackupCompareIdDesc))
-			action = "Keep";
+			action = "Purge";
 
 		if (backup->recovery_time == 0)
 			actual_window = 0;
@@ -305,33 +355,21 @@ do_retention_internal(void)
 		if (backup->backup_mode == BACKUP_MODE_FULL)
 				cur_full_backup_num++;
 	}
+}
 
-	if (dry_run)
-		goto finish;
-
-	/*  Extreme example of keep_list
-	 *
-	 *	FULLc  <- keep
-	 *	PAGEb2 <- keep
-	 *	PAGEb1 <- keep
-	 *	PAGEa2 <- keep
-	 *	PAGEa1 <- keep
-	 *	FULLb  <- in purge_list
-	 *	FULLa  <- in purge_list
-	 */
-
-	/* Go to purge */
-	if (delete_expired && !merge_expired)
-		goto purge;
+static void
+do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_list)
+{
+	int i;
+	int j;
 
 	/* IMPORTANT: we can merge to only those FULL backup, that is NOT
 	 * guarded by retention and final targets of such merges must be
 	 * incremental backup that is guarded by retention !!!
 	 *
-	 *
 	 *  PAGE4 E
 	 *  PAGE3 D
-	 * --------retention window ---
+	 --------retention window ---
 	 *  PAGE2 C
 	 *  PAGE1 B
 	 *  FULL  A
@@ -352,32 +390,9 @@ do_retention_internal(void)
 
 		/* keep list may shrink during merge */
 		if (!keep_backup)
-			break;
+			continue;
 
 		elog(INFO, "Consider backup %s for merge", base36enc(keep_backup->start_time));
-
-		/* In keep list we are looking for incremental backups */
-		if (keep_backup->backup_mode == BACKUP_MODE_FULL)
-			continue;
-
-		/* Retain orphan backups in keep_list */
-		if (!keep_backup->parent_backup_link)
-			continue;
-
-		/* If parent of current backup is also in keep list, go to the next */
-		if (parray_bsearch(to_keep_list,
-							keep_backup->parent_backup_link,
-							pgBackupCompareIdDesc))
-		{
-			/* make keep list a bit sparse */
-			elog(LOG, "Sparsing keep list, remove %s", base36enc(keep_backup->start_time));
-			parray_remove(to_keep_list, i);
-			i--;
-			continue;
-		}
-
-		elog(INFO, "Lookup parents for backup %s",
-				base36enc(keep_backup->start_time));
 
 		/* Got valid incremental backup, find its FULL ancestor */
 		full_backup = find_parent_full_backup(keep_backup);
@@ -473,9 +488,7 @@ do_retention_internal(void)
 
 			/* Try to remove merged incremental backup from both keep and purge lists */
 			parray_rm(to_purge_list, from_backup, pgBackupCompareId);
-
-			if (parray_rm(to_keep_list, from_backup, pgBackupCompareId) && (i >= 0))
-				i--;
+			parray_set(to_keep_list, i, NULL);
 		}
 
 		/* Cleanup */
@@ -484,11 +497,13 @@ do_retention_internal(void)
 
 	elog(INFO, "Retention merging finished");
 
-	if (!delete_expired)
-		goto finish;
+}
 
-/* Do purging here */
-purge:
+static void
+do_retention_purge(parray *to_keep_list, parray *to_purge_list)
+{
+	int i;
+	int j;
 
 	/* Remove backups by retention policy. Retention policy is configured by
 	 * retention_redundancy and retention_window
@@ -516,6 +531,10 @@ purge:
 			char		*keeped_backup_id;
 
 			pgBackup   *keep_backup = (pgBackup *) parray_get(to_keep_list, i);
+
+			/* item could have been nullified in merge */
+			if (!keep_backup)
+				continue;
 
 			/* Full backup cannot be a descendant */
 			if (keep_backup->backup_mode == BACKUP_MODE_FULL)
@@ -557,14 +576,6 @@ purge:
 		backup_deleted = true;
 
 	}
-
-finish:
-	/* Cleanup */
-	parray_walk(backup_list, pgBackupFree);
-	parray_free(backup_list);
-	parray_free(to_keep_list);
-	parray_free(to_purge_list);
-
 }
 
 /* Purge WAL */
