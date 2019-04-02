@@ -162,7 +162,7 @@ int do_retention(void)
 	if (retention_is_set && !backup_list_is_empty)
 		do_retention_internal(backup_list, to_keep_list, to_purge_list);
 
-	if (merge_expired && !dry_run)
+	if (merge_expired && !dry_run && !backup_list_is_empty)
 		do_retention_merge(backup_list, to_keep_list, to_purge_list);
 
 	if (delete_expired && !dry_run && !backup_list_is_empty)
@@ -191,7 +191,7 @@ int do_retention(void)
 }
 
 /* Evaluate every backup by retention policies and populate purge and keep lists.
- * Also for every backup print proposed action('Active' or 'Expired') according
+ * Also for every backup print its status ('Active' or 'Expired') according
  * to active retention policies.
  */
 static void
@@ -259,9 +259,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			 * FULL CORRUPT in retention (not count toward redundancy limit)
 			 * FULL  in retention
 			 * ------retention redundancy -------
-			 * PAGE4 in retention
-			 * ------retention window -----------
 			 * PAGE3 in retention
+			 * ------retention window -----------
 			 * PAGE2 out of retention
 			 * PAGE1 out of retention
 			 * FULL  out of retention  	<- We are here
@@ -362,8 +361,8 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 	int j;
 
 	/* IMPORTANT: we can merge to only those FULL backup, that is NOT
-	 * guarded by retention and final targets of such merges must be
-	 * incremental backup that is guarded by retention !!!
+	 * guarded by retention and final target of such merge must be
+	 * an incremental backup that is guarded by retention !!!
 	 *
 	 *  PAGE4 E
 	 *  PAGE3 D
@@ -420,6 +419,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		keep_backup_id = base36enc_dup(keep_backup->start_time);
 		elog(INFO, "Merge incremental chain between FULL backup %s and backup %s",
 					base36enc(full_backup->start_time), keep_backup_id);
+		pg_free(keep_backup_id);
 
 		merge_list = parray_new();
 
@@ -553,8 +553,10 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 						base36enc(delete_backup->start_time), keeped_backup_id);
 
 				purge = false;
+				pg_free(keeped_backup_id);
 				break;
 			}
+			pg_free(keeped_backup_id);
 		}
 
 		/* Retain backup */
