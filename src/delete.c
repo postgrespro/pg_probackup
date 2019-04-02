@@ -117,9 +117,14 @@ int do_retention(void)
 	parray	   *to_purge_list = parray_new();
 
 	bool	retention_is_set = false; /* At least one retention policy is set */
+	bool 	backup_list_is_empty = false;
 
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+
+	/* sanity */
+	if (parray_num(backup_list) == 0)
+		backup_list_is_empty = true;
 
 	if (delete_expired || merge_expired)
 	{
@@ -142,14 +147,17 @@ int do_retention(void)
 			retention_is_set = true;
 	}
 
+	if (retention_is_set && backup_list_is_empty)
+		elog(WARNING, "Backup list is empty, retention purge and merge are problematic");
+
 	/* show fancy message */
-	if (retention_is_set)
+	if (retention_is_set && !backup_list_is_empty)
 		do_retention_internal(backup_list, to_keep_list, to_purge_list);
 
 	if (merge_expired && !dry_run)
 		do_retention_merge(backup_list, to_keep_list, to_purge_list);
 
-	if (delete_expired && !dry_run)
+	if (delete_expired && !dry_run && !backup_list_is_empty)
 		do_retention_purge(to_keep_list, to_purge_list);
 
 	/* TODO: some sort of dry run for delete_wal */
@@ -203,40 +211,31 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
 
-	if (backup_list_is_empty)
-	{
-		elog(WARNING, "Backup list is empty, purging won't be executed");
-		return;
-	}
-
 	/* Get current time */
 	current_time = time(NULL);
 
 	/* Calculate n_full_backups and days_threshold */
-	if (!backup_list_is_empty)
+	if (instance_config.retention_redundancy > 0)
 	{
-		if (instance_config.retention_redundancy > 0)
+		for (i = 0; i < parray_num(backup_list); i++)
 		{
-			for (i = 0; i < parray_num(backup_list); i++)
-			{
-				pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-				/* Consider only valid backups for Redundancy */
-				if (instance_config.retention_redundancy > 0 &&
-					backup->backup_mode == BACKUP_MODE_FULL &&
-					(backup->status == BACKUP_STATUS_OK ||
-						backup->status == BACKUP_STATUS_DONE))
-				{
-					n_full_backups++;
-				}
+			/* Consider only valid backups for Redundancy */
+			if (instance_config.retention_redundancy > 0 &&
+				backup->backup_mode == BACKUP_MODE_FULL &&
+				(backup->status == BACKUP_STATUS_OK ||
+					backup->status == BACKUP_STATUS_DONE))
+			{
+				n_full_backups++;
 			}
 		}
+	}
 
-		if (instance_config.retention_window > 0)
-		{
-			days_threshold = current_time -
-			(instance_config.retention_window * 60 * 60 * 24);
-		}
+	if (instance_config.retention_window > 0)
+	{
+		days_threshold = current_time -
+		(instance_config.retention_window * 60 * 60 * 24);
 	}
 
 	elog(INFO, "Evaluate backups by retention");
@@ -588,7 +587,7 @@ do_retention_wal(void)
 	TimeLineID oldest_tli = 0;
 	bool backup_list_is_empty = false;
 
-	/* Get new backup_list. Should we */
+	/* Get list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
