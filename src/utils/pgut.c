@@ -365,13 +365,6 @@ pgut_execute_parallel(PGconn* conn,
 					  bool text_result, bool ok_error, bool async)
 {
 	PGresult   *res;
-	int			ret = 0;
-	PGconn *connections[1];
-
-	struct timeval timeout;
-
-	timeout.tv_sec = 100;
-	timeout.tv_usec = 200;
 
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");

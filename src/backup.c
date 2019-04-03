@@ -95,7 +95,7 @@ static bool pg_stop_backup_is_sent = false;
  */
 static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
-static void threads_conn_disconnect(bool fatal, void *userdata);
+//static void threads_conn_disconnect(bool fatal, void *userdata);
 
 static void pgdata_basic_setup(void);
 
@@ -2535,21 +2535,20 @@ backup_disconnect(bool fatal, void *userdata)
 /*
  * Disconnect checkdb connections created in threads during quit pg_probackup.
  */
-static void
-threads_conn_disconnect(bool fatal, void *userdata)
-{
-	int i;
-
-	backup_files_arg *arguments = (backup_files_arg *) userdata;
-
-	elog(VERBOSE, "threads_conn_disconnect, num_threads %d", arguments->thread_num);
-
-	if (arguments->backup_conn)
-	{
-		pgut_cancel(arguments->backup_conn);
-		pgut_disconnect(arguments->backup_conn);
-	}
-}
+//static void
+//threads_conn_disconnect(bool fatal, void *userdata)
+//{
+//
+//	backup_files_arg *arguments = (backup_files_arg *) userdata;
+//
+//	elog(VERBOSE, "threads_conn_disconnect, num_threads %d", arguments->thread_num);
+//
+//	if (arguments->backup_conn)
+//	{
+//		pgut_cancel(arguments->backup_conn);
+//		pgut_disconnect(arguments->backup_conn);
+//	}
+//}
 
 static void *
 check_files(void *arg)
