@@ -324,7 +324,7 @@ prepare_page(backup_files_arg *arguments,
 
 	/* check for interrupt */
 	if (interrupted || thread_interrupted)
-		elog(ERROR, "Interrupted during backup");
+		elog(ERROR, "Interrupted during page reading");
 
 	/*
 	 * Read the page and verify its header and checksum.

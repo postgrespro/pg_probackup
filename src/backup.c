@@ -945,22 +945,18 @@ do_block_validation(void)
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
 
-	/* initialize backup list */
+	/* initialize file list */
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
 	dir_list_file(backup_files_list, instance_config.pgdata, true, true, false, 0);
 
 	/*
-	 * Sort pathname ascending. It is necessary to create intermediate
-	 * directories sequentially.
+	 * Sort pathname ascending.
 	 *
 	 * For example:
 	 * 1 - create 'base'
 	 * 2 - create 'base/1'
-	 *
-	 * Sorted array is used at least in parse_backup_filelist_filenames(),
-	 * extractPageMap(), make_pagemap_from_ptrack().
 	 */
 	parray_qsort(backup_files_list, pgFileComparePath);
 	/* Extract information about files in backup_list parsing their names:*/
@@ -975,7 +971,6 @@ do_block_validation(void)
 
 	/* Sort by size for load balancing */
 	parray_qsort(backup_files_list, pgFileCompareSize);
-
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -1021,15 +1016,8 @@ do_block_validation(void)
 	/* TODO write better info message */
 	if (check_isok)
 		elog(INFO, "Data files are valid");
-
-	if (!check_isok)
-	{
-		if (thread_interrupted || interrupted)
-			elog(ERROR, "Checkdb failed");
-		else
-			elog(ERROR, "Data files are corrupted");
-	}
-
+	else
+		elog(ERROR, "Checkdb failed");
 
 	if (backup_files_list)
 	{
@@ -1053,7 +1041,7 @@ do_amcheck(void)
 	bool first_db_with_amcheck = true;
 	PGconn *db_conn = NULL;
 	bool db_skipped = false;
-	
+
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
 
@@ -1065,7 +1053,7 @@ do_amcheck(void)
 
 	n_databases =  PQntuples(res_db);
 
-	elog(INFO, "Start checking PostgreSQL instance with amcheck");
+	elog(INFO, "Start amchecking PostgreSQL instance");
 
 	/* For each database check indexes. In parallel. */
 	for(i = 0; i < n_databases; i++)
@@ -1112,8 +1100,6 @@ do_amcheck(void)
 			arg->ret = 1;
 		}
 
-		pgut_atexit_push(threads_conn_disconnect, NULL);
-
 		/* Run threads */
 		for (j = 0; j < num_threads; j++)
 		{
@@ -1131,18 +1117,25 @@ do_amcheck(void)
 			if (threads_args[j].ret > 0)
 				check_isok = false;
 		}
+
+		/* cleanup */
 		pgut_disconnect(db_conn);
+
+		if (interrupted)
+			break;
 	}
 
 	/* TODO write better info message */
-	if (check_isok && !db_skipped)
-		elog(INFO, "Indexes are valid");
-
-	if (!check_isok && !interrupted)
-		elog(ERROR, "Some indexes are corrupted");
-
 	if (db_skipped)
-		elog(ERROR, "Some databases were not checked");
+		elog(WARNING, "Some databases were not checked");
+
+	if (!check_isok)
+		elog(ERROR, "Checkdb --amcheck failed");
+	else
+		elog(INFO, "Checkdb --amcheck executed");
+
+	if (check_isok && !interrupted && !db_skipped)
+		elog(INFO, "Indexes are valid");
 }
 
 /* Entry point of pg_probackup CHECKDB subcommand. */
@@ -1153,7 +1146,7 @@ do_checkdb(bool need_amcheck)
 {
 
 	if (skip_block_validation && !need_amcheck)
-		elog(ERROR, "--skip-block-validation must be used with --amcheck option");
+		elog(ERROR, "Option '--skip-block-validation' must be used with '--amcheck' option");
 
 	pgdata_basic_setup();
 
@@ -2545,19 +2538,17 @@ backup_disconnect(bool fatal, void *userdata)
 static void
 threads_conn_disconnect(bool fatal, void *userdata)
 {
-//	int i;
+	int i;
 
-//	elog(VERBOSE, "threads_conn_disconnect, num_threads %d", num_threads);
-// 	for (i = 0; i < num_threads; i++)
-// 	{
-// 		backup_files_arg *arg = &(threads_args[i]);
-// 
-// 		if (arg->backup_conn)
-// 		{
-// 			pgut_cancel(arg->backup_conn);
-// 			pgut_disconnect(arg->backup_conn);
-// 		}
-// 	}
+	backup_files_arg *arguments = (backup_files_arg *) userdata;
+
+	elog(VERBOSE, "threads_conn_disconnect, num_threads %d", arguments->thread_num);
+
+	if (arguments->backup_conn)
+	{
+		pgut_cancel(arguments->backup_conn);
+		pgut_disconnect(arguments->backup_conn);
+	}
 }
 
 static void *
@@ -2663,7 +2654,7 @@ check_indexes(void *arg)
 				arguments->thread_num);
 
 		if (progress)
-			elog(INFO, "Thread [%d]. Progress: (%d/%d). Processing index '%s.%s'",
+			elog(INFO, "Thread [%d]. Progress: (%d/%d). Amchecking index '%s.%s'",
 				 arguments->thread_num, i + 1, n_indexes,
 				 ind->amcheck_nspname, ind->name);
 
@@ -3489,8 +3480,7 @@ get_index_list(PGresult *res_db, int db_number,
 							instance_config.pguser);
 
 	res = pgut_execute(db_conn, "SELECT "
-								"extname, nspname, extversion, "
-								"extversion::numeric in (1.1, 1) as old_version "
+								"extname, nspname, extversion "
 								"FROM pg_namespace n "
 								"JOIN pg_extension e "
 								"ON n.oid=e.extnamespace "
@@ -3520,8 +3510,12 @@ get_index_list(PGresult *res_db, int db_number,
 		strcmp(PQgetvalue(res, 0, 2), "1") != 0)
 			heapallindexed_is_supported = true;
 
-	elog(INFO, "Checking database %s using module '%s' version %s from schema '%s'",
+	elog(INFO, "Amchecking database %s using module '%s' version %s from schema '%s'",
 					dbname, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
+
+	if (!heapallindexed_is_supported && heapallindexed)
+		elog(WARNING, "Module '%s' verion %s in schema '%s' do not support 'heapallindexed' option",
+						PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
 
 	/*
 	 * In order to avoid duplicates, select global indexes
@@ -3549,7 +3543,7 @@ get_index_list(PGresult *res_db, int db_number,
 									"JOIN pg_tablespace tbl ON tbl.oid=cls.reltablespace "
 									"WHERE am.amname='btree' AND cls.relpersistence != 't' "
 									//"AND idx.indisready AND idx.indisvalid "
-									"AND tbl.spcname !='pg_global'",0, NULL);
+									"AND tbl.spcname != 'pg_global'",0, NULL);
 	}
 
 	/* add info needed to check indexes into index_list */
@@ -3597,6 +3591,9 @@ amcheck_one_index(backup_files_arg *arguments,
 	sprintf(params[0], "%i", ind->indexrelid);
 	/* second argument is heapallindexed */
 	params[1] = heapallindexed ? "true" : "false";
+
+	if (interrupted)
+		elog(ERROR, "Interrupted");
 
 	if (heapallindexed_is_supported)
 	{

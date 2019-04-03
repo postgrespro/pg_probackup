@@ -21,7 +21,7 @@
 #include "logger.h"
 
 
-const char *PROGRAM_NAME = NULL;
+const char *PROGRAM_NAME = "pg_probackup";
 
 static char	   *password = NULL;
 bool			prompt_password = true;
@@ -42,6 +42,9 @@ static void on_after_exec(PGcancel *thread_cancel_conn);
 static void on_interrupt(void);
 static void on_cleanup(void);
 static pqsigfunc oldhandler = NULL;
+
+//bool is_result_ready(PGconn *conn);
+void discard_response(PGconn *conn);
 
 void
 pgut_init(void)
@@ -363,6 +366,12 @@ pgut_execute_parallel(PGconn* conn,
 {
 	PGresult   *res;
 	int			ret = 0;
+	PGconn *connections[1];
+
+	struct timeval timeout;
+
+	timeout.tv_sec = 100;
+	timeout.tv_usec = 200;
 
 	if (interrupted && !in_cleanup)
 		elog(ERROR, "interrupted");
@@ -390,10 +399,13 @@ pgut_execute_parallel(PGconn* conn,
 	//on_before_exec(conn, thread_cancel_conn);
 	if (async)
 	{
+		/* clean any old data */
+		discard_response(conn);
+
 		if (nParams == 0)
-			ret = PQsendQuery(conn, query);
+			PQsendQuery(conn, query);
 		else
-			ret = PQsendQueryParams(conn, query, nParams, NULL, params, NULL, NULL,
+			PQsendQueryParams(conn, query, nParams, NULL, params, NULL, NULL,
 								/*
 								* Specify zero to obtain results in text format,
 								* or one to obtain results in binary format.
@@ -401,24 +413,35 @@ pgut_execute_parallel(PGconn* conn,
 								(text_result) ? 0 : 1);
 
 		/* wait for processing */
-		while (true)
-		{
+//		while(!is_result_ready(conn))
+//		{
+//			if (interrupted)
+//			{
+//				pgut_cancel(conn);
+//				pgut_disconnect(conn);
+//				elog(ERROR, "Interrupted");
+//			}
+//		}
 
+		/* wait for processing, TODO: timeout */
+		for (;;)
+		{
 			if (interrupted)
 			{
 				pgut_cancel(conn);
+				pgut_disconnect(conn);
 				elog(ERROR, "interrupted");
 			}
 
 			if (!PQconsumeInput(conn))
 				elog(ERROR, "query failed: %squery was: %s",
-					PQerrorMessage(conn), query);
+						PQerrorMessage(conn), query);
 
 			/* query is no done */
 			if (!PQisBusy(conn))
 				break;
 
-			usleep(1000);
+			usleep(10000);
 		}
 
 		res = PQgetResult(conn);
@@ -1023,3 +1046,51 @@ select_win32(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, con
 }
 
 #endif   /* WIN32 */
+
+void
+discard_response(PGconn *conn)
+{
+	PGresult   *res;
+
+	do
+	{
+		res = PQgetResult(conn);
+		if (res)
+			PQclear(res);
+	} while (res);
+}
+
+//bool is_result_ready(PGconn * conn)
+//{
+//   int                 sock;
+//   struct timeval      timeout;
+//   fd_set              read_mask;
+//
+//   if (!PQisBusy(conn))
+//       return true;
+//
+//   sock = PQsocket(conn);
+//
+//   timeout.tv_sec  = (time_t)1;
+//   timeout.tv_usec = 0;
+//
+//   FD_ZERO(&read_mask);
+//   FD_SET(sock, &read_mask);
+//
+//   if (select(sock + 1, &read_mask, NULL, NULL, &timeout) == 0)
+//       return false;
+//   else if (FD_ISSET(sock, &read_mask))
+//   {
+//       if (PQconsumeInput(conn))
+//       {
+//           if (PQisBusy(conn))
+//               return false;
+//           else
+//               return true;
+//       }
+//       else
+//           return false;
+//   }
+//   else
+//       return false;
+//}

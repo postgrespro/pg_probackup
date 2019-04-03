@@ -93,6 +93,7 @@ bool skip_external_dirs = false;
 /* checkdb options */
 bool do_amcheck = false;
 bool heapallindexed = false;
+bool amcheck_parent = false;
 
 /* delete options */
 bool		delete_wal = false;
@@ -165,6 +166,7 @@ static ConfigOption cmd_options[] =
 	/* checkdb options */
 	{ 'b', 157, "amcheck",			&do_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 158, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
+	{ 'b', 159, "parent",			&amcheck_parent,	SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
