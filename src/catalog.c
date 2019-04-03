@@ -1010,6 +1010,32 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 }
 
 /*
+ * Check if multiple backups consider target backup to be their direct parent
+ */
+bool
+is_prolific(parray *backup_list, pgBackup *target_backup)
+{
+	int i;
+	int child_counter = 0;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* consider only OK and DONE backups */
+		if (tmp_backup->parent_backup == target_backup->start_time &&
+			(tmp_backup->status == BACKUP_STATUS_OK ||
+			 tmp_backup->status == BACKUP_STATUS_DONE))
+			child_counter++;
+	}
+
+	if (child_counter > 1)
+		return true;
+	else
+		return false;
+}
+
+/*
  * Find parent base FULL backup for current backup using parent_backup_link
  */
 pgBackup*
@@ -1018,6 +1044,7 @@ find_parent_full_backup(pgBackup *current_backup)
 	pgBackup   *base_full_backup = NULL;
 	base_full_backup = current_backup;
 
+	/* sanity */
 	if (!current_backup)
 		elog(ERROR, "Target backup cannot be NULL");
 
@@ -1038,6 +1065,35 @@ find_parent_full_backup(pgBackup *current_backup)
 	}
 
 	return base_full_backup;
+}
+
+/*
+ * Find closest child of target_backup. If there are several direct
+ * offsprings in backup_list, then first win.
+ */
+pgBackup*
+find_direct_child(parray *backup_list, pgBackup *target_backup)
+{
+	int i;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
+
+		if (tmp_backup->backup_mode == BACKUP_MODE_FULL)
+			continue;
+
+		/* Consider only OK and DONE children */
+		if (tmp_backup->parent_backup == target_backup->start_time &&
+			(tmp_backup->status == BACKUP_STATUS_OK ||
+			 tmp_backup->status == BACKUP_STATUS_DONE))
+		{
+			return tmp_backup;
+		}
+	}
+	elog(WARNING, "Failed to find a direct child for backup %s",
+				base36enc(target_backup->start_time));
+	return NULL;
 }
 
 /*
@@ -1146,6 +1202,6 @@ get_backup_index_number(parray *backup_list, pgBackup *backup)
 		if (tmp_backup->start_time == backup->start_time)
 			return i;
 	}
-	elog(ERROR, "Failed to find backup %s", base36enc(backup->start_time));
-	return 0;
+	elog(WARNING, "Failed to find backup %s", base36enc(backup->start_time));
+	return -1;
 }

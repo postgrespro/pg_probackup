@@ -98,7 +98,9 @@ bool amcheck_parent = false;
 /* delete options */
 bool		delete_wal = false;
 bool		delete_expired = false;
+bool		merge_expired = false;
 bool		force_delete = false;
+bool		dry_run = false;
 
 /* compression options */
 bool 		compress_shortcut = false;
@@ -146,6 +148,8 @@ static ConfigOption cmd_options[] =
 	{ 'b', 234, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
+	{ 'b', 235, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
+	{ 'b', 237, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, }, */
 	/* restore options */
@@ -556,12 +560,13 @@ main(int argc, char *argv[])
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
-			if (!delete_expired && !delete_wal && !backup_id_string)
-				elog(ERROR, "You must specify at least one of the delete options: --expired |--wal |--backup_id");
-			if (delete_wal && !delete_expired && !backup_id_string)
-				return do_retention_purge();
-			if (delete_expired)
-				return do_retention_purge();
+			if (merge_expired && backup_id_string)
+				elog(ERROR, "You cannot specify --merge-expired and --backup-id options together");
+			if (!delete_expired && !merge_expired && !delete_wal && !backup_id_string)
+				elog(ERROR, "You must specify at least one of the delete options: "
+								"--expired |--wal |--merge-expired |--delete-invalid |--backup_id");
+			if (!backup_id_string)
+				return do_retention();
 			else
 				do_delete(current.backup_id);
 			break;

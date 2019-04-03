@@ -218,13 +218,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # count wal files in ARCHIVE
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
-        n_wals = len(os.listdir(wals_dir))
+        # n_wals = len(os.listdir(wals_dir))
 
-        self.assertTrue(n_wals > 0)
+        # self.assertTrue(n_wals > 0)
 
-        self.delete_expired(
-            backup_dir, 'node',
-            options=['--retention-window=1', '--expired', '--wal'])
+        # self.delete_expired(
+        #     backup_dir, 'node',
+        #     options=['--retention-window=1', '--expired', '--wal'])
 
         # count again
         n_wals = len(os.listdir(wals_dir))
