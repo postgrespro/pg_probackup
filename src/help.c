@@ -426,7 +426,7 @@ help_checkdb(void)
 	printf(_("                                   can be used only with '--amcheck' option\n"));
 	printf(_("      --amcheck                    in addition to file-level block checking\n"));
 	printf(_("                                   check btree indexes via function 'bt_index_check()'\n"));
-	printf(_("                                   using amcheck' or 'amcheck_next' extension\n"));
+	printf(_("                                   using 'amcheck' or 'amcheck_next' extensions\n"));
 	printf(_("      --parent                     use 'bt_index_parent_check()' instead of 'bt_index_check()'\n"));
 	printf(_("      --heapallindexed             also check that heap is indexed\n"));
 	printf(_("                                   can be used only with '--amcheck' option\n"));

@@ -1156,7 +1156,7 @@ do_checkdb(bool need_amcheck)
 	if (need_amcheck)
 		do_amcheck();
 
-	/* need to exit with 1 if some corruption is found */
+	/* TODO: need to exit with 1 if some corruption is found */
 	return 0;
 }
 
