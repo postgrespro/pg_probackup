@@ -22,6 +22,8 @@
 #include <zlib.h>
 #endif
 
+#include "utils/thread.h"
+
 /* Union to ease operations on relation pages */
 typedef union DataPage
 {
@@ -303,7 +305,7 @@ prepare_page(backup_files_arg *arguments,
 	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
 
 	/* check for interrupt */
-	if (interrupted)
+	if (interrupted || thread_interrupted)
 		elog(ERROR, "Interrupted during backup");
 
 	/*
@@ -702,7 +704,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		in = fopen(file->path, PG_BINARY_R);
 		if (in == NULL)
 		{
-			elog(ERROR, "cannot open backup file \"%s\": %s", file->path,
+			elog(ERROR, "Cannot open backup file \"%s\": %s", file->path,
 				 strerror(errno));
 		}
 	}
@@ -717,7 +719,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	{
 		int errno_tmp = errno;
 		fclose(in);
-		elog(ERROR, "cannot open restore target file \"%s\": %s",
+		elog(ERROR, "Cannot open restore target file \"%s\": %s",
 			 to_path, strerror(errno_tmp));
 	}
 
@@ -757,16 +759,22 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 				break;		/* EOF found */
 			else if (read_len != 0 && feof(in))
 				elog(ERROR,
-					 "odd size page found at block %u of \"%s\"",
+					 "Odd size page found at block %u of \"%s\"",
 					 blknum, file->path);
 			else
-				elog(ERROR, "cannot read header of block %u of \"%s\": %s",
+				elog(ERROR, "Cannot read header of block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno_tmp));
 		}
 
+		if (header.block == 0 && header.compressed_size == 0)
+		{
+			elog(VERBOSE, "Skip empty block of \"%s\"", file->path);
+			continue;
+		}
+
 		if (header.block < blknum)
-			elog(ERROR, "backup is broken at file->path %s block %u",
-				 file->path, blknum);
+			elog(ERROR, "Backup is broken at block %u of \"%s\"",
+				 blknum, file->path);
 
 		blknum = header.block;
 
@@ -787,7 +795,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		read_len = fread(compressed_page.data, 1,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
-			elog(ERROR, "cannot read block %u of \"%s\" read %zu of %d",
+			elog(ERROR, "Cannot read block %u of \"%s\" read %zu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 
 		/*
@@ -811,7 +819,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 					 blknum, file->path, errormsg);
 
 			if (uncompressed_size != BLCKSZ)
-				elog(ERROR, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
+				elog(ERROR, "Page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
 					 file->path, uncompressed_size);
 		}
 
@@ -822,7 +830,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		 * Seek and write the restored page.
 		 */
 		if (fio_fseek(out, write_pos) < 0)
-			elog(ERROR, "cannot seek block %u of \"%s\": %s",
+			elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 				 blknum, to_path, strerror(errno));
 
 		if (write_header)
@@ -830,7 +838,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 			/* We uncompressed the page, so its size is BLCKSZ */
 			header.compressed_size = BLCKSZ;
 			if (fio_fwrite(out, &header, sizeof(header)) != sizeof(header))
-				elog(ERROR, "cannot write header of block %u of \"%s\": %s",
+				elog(ERROR, "Cannot write header of block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
 		}
 
@@ -841,14 +849,13 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		if (uncompressed_size == BLCKSZ)
 		{
 			if (fio_fwrite(out, page.data, BLCKSZ) != BLCKSZ)
-				elog(ERROR, "cannot write block %u of \"%s\": %s",
+				elog(ERROR, "Cannot write block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
 		}
 		else
 		{
-			/* if page wasn't compressed, we've read full block */
 			if (fio_fwrite(out, compressed_page.data, BLCKSZ) != BLCKSZ)
-				elog(ERROR, "cannot write block %u of \"%s\": %s",
+				elog(ERROR, "Cannot write block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno));
 		}
 	}
@@ -881,7 +888,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		 * Truncate file to this length.
 		 */
 		if (fio_ftruncate(out, write_pos) != 0)
-			elog(ERROR, "cannot truncate \"%s\": %s",
+			elog(ERROR, "Cannot truncate \"%s\": %s",
 				 file->path, strerror(errno));
 		elog(VERBOSE, "Delta truncate file %s to block %u",
 			 file->path, truncate_from);
@@ -895,13 +902,14 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		if (in)
 			fclose(in);
 		fio_fclose(out);
-		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
+		elog(ERROR, "Cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
 	}
 
 	if (fio_fflush(out) != 0 ||
 		fio_fclose(out))
-		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
+		elog(ERROR, "Cannot write \"%s\": %s", to_path, strerror(errno));
+
 	if (in)
 		fclose(in);
 }
@@ -1093,7 +1101,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			  bool overwrite)
 {
 	FILE	   *in = NULL;
-	int			out;
+	int			out = -1;
 	char		buf[XLOG_BLCKSZ];
 	const char *to_path_p;
 	char		to_path_temp[MAXPGPATH];
@@ -1558,7 +1566,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	pg_crc32	crc;
 	bool		use_crc32c = backup_version <= 20021 || backup_version >= 20025;
 
-	elog(VERBOSE, "validate relation blocks for file %s", file->path);
+	elog(VERBOSE, "Validate relation blocks for file %s", file->path);
 
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
@@ -1569,7 +1577,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 			return false;
 		}
 
-		elog(ERROR, "cannot open file \"%s\": %s",
+		elog(ERROR, "Cannot open file \"%s\": %s",
 			 file->path, strerror(errno));
 	}
 
@@ -1593,20 +1601,26 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 				break;		/* EOF found */
 			else if (read_len != 0 && feof(in))
 				elog(WARNING,
-					 "odd size page found at block %u of \"%s\"",
+					 "Odd size page found at block %u of \"%s\"",
 					 blknum, file->path);
 			else
-				elog(WARNING, "cannot read header of block %u of \"%s\": %s",
+				elog(WARNING, "Cannot read header of block %u of \"%s\": %s",
 					 blknum, file->path, strerror(errno_tmp));
 			return false;
 		}
 
 		COMP_FILE_CRC32(use_crc32c, crc, &header, read_len);
 
+		if (header.block == 0 && header.compressed_size == 0)
+		{
+			elog(VERBOSE, "Skip empty block of \"%s\"", file->path);
+			continue;
+		}
+
 		if (header.block < blknum)
 		{
-			elog(WARNING, "backup is broken at file->path %s block %u",
-				 file->path, blknum);
+			elog(WARNING, "Backup is broken at block %u of \"%s\"",
+				 blknum, file->path);
 			return false;
 		}
 
@@ -1614,8 +1628,8 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 		if (header.compressed_size == PageIsTruncated)
 		{
-			elog(LOG, "File %s, block %u is truncated",
-				 file->path, blknum);
+			elog(LOG, "Block %u of \"%s\" is truncated",
+				 blknum, file->path);
 			continue;
 		}
 
@@ -1625,7 +1639,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 			MAXALIGN(header.compressed_size), in);
 		if (read_len != MAXALIGN(header.compressed_size))
 		{
-			elog(WARNING, "cannot read block %u of \"%s\" read %zu of %d",
+			elog(WARNING, "Cannot read block %u of \"%s\" read %zu of %d",
 				blknum, file->path, read_len, header.compressed_size);
 			return false;
 		}
@@ -1655,7 +1669,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 					is_valid = false;
 					continue;
 				}
-				elog(WARNING, "page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
+				elog(WARNING, "Page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
 					 file->path, uncompressed_size);
 				return false;
 			}
@@ -1677,7 +1691,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 	if (crc != file->crc)
 	{
-		elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+		elog(WARNING, "Invalid CRC of backup file \"%s\": %X. Expected %X",
 				file->path, file->crc, crc);
 		is_valid = false;
 	}

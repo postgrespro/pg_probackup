@@ -5,6 +5,7 @@ import subprocess
 from datetime import datetime
 import sys
 from time import sleep
+from datetime import datetime, timedelta
 
 
 module_name = 'restore'
@@ -1721,6 +1722,63 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "OK"')
 
         node.cleanup()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_backup_from_future(self):
+        """more complex test_restore_chain()"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        node.pgbench_init(scale=3)
+        #pgbench = node.pgbench(options=['-T', '20', '-c', '2'])
+        #pgbench.wait()
+
+        # Take PAGE from future
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        with open(
+                os.path.join(
+                    backup_dir, 'backups', 'node',
+                    backup_id, "backup.control"), "a") as conf:
+            conf.write("start-time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                datetime.now() + timedelta(days=3)))
+
+        # rename directory
+        new_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        os.rename(
+            os.path.join(backup_dir, 'backups', 'node', backup_id),
+            os.path.join(backup_dir, 'backups', 'node', new_id))
+
+        pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

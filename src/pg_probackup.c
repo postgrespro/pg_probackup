@@ -57,6 +57,8 @@ char		backup_instance_path[MAXPGPATH];
  */
 char		arclog_path[MAXPGPATH] = "";
 
+/* colon separated external directories list ("/path1:/path2") */
+char	   *externaldir = NULL;
 /* common options */
 static char *backup_id_string = NULL;
 int			num_threads = 1;
@@ -88,11 +90,14 @@ bool restore_as_replica = false;
 bool restore_no_validate = false;
 
 bool skip_block_validation = false;
+bool skip_external_dirs = false;
 
 /* delete options */
 bool		delete_wal = false;
 bool		delete_expired = false;
+bool		merge_expired = false;
 bool		force_delete = false;
+bool		dry_run = false;
 
 /* compression options */
 bool 		compress_shortcut = false;
@@ -140,12 +145,15 @@ static ConfigOption cmd_options[] =
 	{ 'b', 234, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
+	{ 'b', 235, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
+	{ 'b', 237, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
 	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
 	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
+	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
 	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },
@@ -153,6 +161,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 143, "no-validate",		&restore_no_validate,	SOURCE_CMD_STRICT },
 	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
+	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
@@ -399,8 +408,12 @@ main(int argc, char *argv[])
 		config_get_opt_env(instance_options);
 
 		/* Read options from configuration file */
-		join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-		config_read_opt(path, instance_options, ERROR, true);
+		if (backup_subcmd != ADD_INSTANCE_CMD)
+		{
+			join_path_components(path, backup_instance_path,
+								 BACKUP_CATALOG_CONF_FILE);
+			config_read_opt(path, instance_options, ERROR, true, false);
+		}
 	}
 
 	/* Initialize logger */
@@ -529,12 +542,13 @@ main(int argc, char *argv[])
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
-			if (!delete_expired && !delete_wal && !backup_id_string)
-				elog(ERROR, "You must specify at least one of the delete options: --expired |--wal |--backup_id");
-			if (delete_wal && !delete_expired && !backup_id_string)
-				return do_retention_purge();
-			if (delete_expired)
-				return do_retention_purge();
+			if (merge_expired && backup_id_string)
+				elog(ERROR, "You cannot specify --merge-expired and --backup-id options together");
+			if (!delete_expired && !merge_expired && !delete_wal && !backup_id_string)
+				elog(ERROR, "You must specify at least one of the delete options: "
+								"--expired |--wal |--merge-expired |--delete-invalid |--backup_id");
+			if (!backup_id_string)
+				return do_retention();
 			else
 				do_delete(current.backup_id);
 			break;
@@ -545,7 +559,7 @@ main(int argc, char *argv[])
 			do_show_config();
 			break;
 		case SET_CONFIG_CMD:
-			do_set_config();
+			do_set_config(false);
 			break;
 		case NO_CMD:
 			/* Should not happen */

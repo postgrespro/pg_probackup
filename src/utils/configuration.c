@@ -524,7 +524,7 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
  */
 int
 config_read_opt(const char *path, ConfigOption options[], int elevel,
-				bool strict)
+				bool strict, bool missing_ok)
 {
 	FILE   *fp;
 	char	buf[1024];
@@ -535,7 +535,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 	if (!options)
 		return parsed_options;
 
-	if ((fp = pgut_fopen(path, "rt", true)) == NULL)
+	if ((fp = pgut_fopen(path, "rt", missing_ok)) == NULL)
 		return parsed_options;
 
 	while (fgets(buf, lengthof(buf), fp))

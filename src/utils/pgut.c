@@ -701,7 +701,7 @@ on_interrupt(void)
 	int			save_errno = errno;
 	char		errbuf[256];
 
-	/* Set interruped flag */
+	/* Set interrupted flag */
 	interrupted = true;
 
 	/*

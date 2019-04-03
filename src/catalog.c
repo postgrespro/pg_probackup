@@ -74,6 +74,14 @@ write_backup_status(pgBackup *backup, BackupStatus status)
 	pgBackup   *tmp;
 
 	tmp = read_backup(backup->start_time);
+	if (!tmp)
+	{
+		/*
+		 * Silently exit the function, since read_backup already logged the
+		 * warning message.
+		 */
+		return;
+	}
 
 	backup->status = status;
 	tmp->status = backup->status;
@@ -301,11 +309,10 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
 parray *
 catalog_get_backup_list(time_t requested_backup_id)
 {
-	DIR			   *data_dir = NULL;
-	struct dirent  *data_ent = NULL;
-	parray		   *backups = NULL;
-	pgBackup	   *backup = NULL;
-	int		i;
+	DIR		   *data_dir = NULL;
+	struct dirent *data_ent = NULL;
+	parray	   *backups = NULL;
+	int			i;
 
 	/* open backup instance backups directory */
 	data_dir = fio_opendir(backup_instance_path, FIO_BACKUP_HOST);
@@ -320,8 +327,9 @@ catalog_get_backup_list(time_t requested_backup_id)
 	backups = parray_new();
 	for (; (data_ent = fio_readdir(data_dir)) != NULL; errno = 0)
 	{
-		char backup_conf_path[MAXPGPATH];
-		char data_path[MAXPGPATH];
+		char		backup_conf_path[MAXPGPATH];
+		char		data_path[MAXPGPATH];
+		pgBackup   *backup = NULL;
 
 		/* skip not-directory entries and hidden entries */
 		if (!IsDir(backup_instance_path, data_ent->d_name, FIO_BACKUP_HOST)
@@ -355,7 +363,6 @@ catalog_get_backup_list(time_t requested_backup_id)
 			continue;
 		}
 		parray_append(backups, backup);
-		backup = NULL;
 
 		if (errno && errno != ENOENT)
 		{
@@ -379,25 +386,18 @@ catalog_get_backup_list(time_t requested_backup_id)
 	/* Link incremental backups with their ancestors.*/
 	for (i = 0; i < parray_num(backups); i++)
 	{
-		pgBackup *curr = parray_get(backups, i);
-
-		int j;
+		pgBackup   *curr = parray_get(backups, i);
+		pgBackup  **ancestor;
+		pgBackup	key;
 
 		if (curr->backup_mode == BACKUP_MODE_FULL)
 			continue;
 
-		for (j = i+1; j < parray_num(backups); j++)
-		{
-			pgBackup *ancestor = parray_get(backups, j);
-
-			if (ancestor->start_time == curr->parent_backup)
-			{
-				curr->parent_backup_link = ancestor;
-				/* elog(INFO, "curr %s, ancestor %s j=%d", base36enc_dup(curr->start_time),
-						base36enc_dup(ancestor->start_time), j); */
-				break;
-			}
-		}
+		key.start_time = curr->parent_backup;
+		ancestor = (pgBackup **) parray_bsearch(backups, &key,
+												pgBackupCompareIdDesc);
+		if (ancestor)
+			curr->parent_backup_link = *ancestor;
 	}
 
 	return backups;
@@ -405,8 +405,6 @@ catalog_get_backup_list(time_t requested_backup_id)
 err_proc:
 	if (data_dir)
 		fio_closedir(data_dir);
-	if (backup)
-		pgBackupFree(backup);
 	if (backups)
 		parray_walk(backups, pgBackupFree);
 	parray_free(backups);
@@ -468,7 +466,25 @@ pgBackupCreateDir(pgBackup *backup)
 {
 	int		i;
 	char	path[MAXPGPATH];
-	char   *subdirs[] = { DATABASE_DIR, NULL };
+	parray *subdirs = parray_new();
+
+	parray_append(subdirs, pg_strdup(DATABASE_DIR));
+
+	/* Add external dirs containers */
+	if (backup->external_dir_str)
+	{
+		parray *external_list;
+
+		external_list = make_external_directory_list(backup->external_dir_str);
+		for (int i = 0; i < parray_num(external_list); i++)
+		{
+			char		temp[MAXPGPATH];
+			/* Numeration of externaldirs starts with 1 */
+			makeExternalDirPathByNum(temp, EXTERNAL_DIR, i+1);
+			parray_append(subdirs, pg_strdup(temp));
+		}
+		free_dir_list(external_list);
+	}
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 
@@ -478,12 +494,13 @@ pgBackupCreateDir(pgBackup *backup)
 	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 	/* create directories for actual backup files */
-	for (i = 0; subdirs[i]; i++)
+	for (i = 0; i < parray_num(subdirs); i++)
 	{
-		pgBackupGetPath(backup, path, lengthof(path), subdirs[i]);
+		pgBackupGetPath(backup, path, lengthof(path), parray_get(subdirs, i));
 		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 	}
 
+	free_dir_list(subdirs);
 	return 0;
 }
 
@@ -561,6 +578,10 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* print connection info except password */
 	if (backup->primary_conninfo)
 		fio_fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+
+	/* print external directories list */
+	if (backup->external_dir_str)
+		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
 }
 
 /*
@@ -569,42 +590,75 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 void
 write_backup(pgBackup *backup)
 {
-	FILE   *fp = NULL;
-	char	conf_path[MAXPGPATH];
+	FILE	   *fp = NULL;
+	char		path[MAXPGPATH];
+	char		path_temp[MAXPGPATH];
+	int			errno_temp;
 
-	pgBackupGetPath(backup, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
-	fp = fio_fopen(conf_path, PG_BINARY_W, FIO_BACKUP_HOST);
+	pgBackupGetPath(backup, path, lengthof(path), BACKUP_CONTROL_FILE);
+	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
+
+	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
-		elog(ERROR, "Cannot open configuration file \"%s\": %s", conf_path,
-			 strerror(errno));
+		elog(ERROR, "Cannot open configuration file \"%s\": %s",
+			 path_temp, strerror(errno));
 
 	pgBackupWriteControl(fp, backup);
 
 	if (fio_fflush(fp) || fio_fclose(fp))
+	{
+		errno_temp = errno;
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot write configuration file \"%s\": %s",
-			 conf_path, strerror(errno));
+			 path_temp, strerror(errno_temp));
+	}
+
+	if (fio_rename(path_temp, path, FIO_BACKUP_HOST) < 0)
+	{
+		errno_temp = errno;
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
+		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
+			 path_temp, path, strerror(errno_temp));
+	}
 }
 
 /*
  * Output the list of files to backup catalog DATABASE_FILE_LIST
  */
 void
-write_backup_filelist(pgBackup *backup, parray *files, const char *root)
+write_backup_filelist(pgBackup *backup, parray *files, const char *root,
+					  const char *external_prefix, parray *external_list)
 {
 	FILE	   *fp;
 	char		path[MAXPGPATH];
+	char		path_temp[MAXPGPATH];
+	int			errno_temp;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fio_fopen(path, PG_BINARY_W, FIO_BACKUP_HOST);
+	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
-		elog(ERROR, "Cannot open file list \"%s\": %s", path,
-			strerror(errno));
+		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
+			 strerror(errno));
 
-	print_file_list(fp, files, root);
+	print_file_list(fp, files, root, external_prefix, external_list);
 
 	if (fio_fflush(fp) || fio_fclose(fp))
-		elog(ERROR, "cannot write file list \"%s\": %s", path, strerror(errno));
+	{
+		errno_temp = errno;
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
+		elog(ERROR, "Cannot write file list \"%s\": %s",
+			 path_temp, strerror(errno));
+	}
+
+	if (fio_rename(path_temp, path, FIO_BACKUP_HOST) < 0)
+	{
+		errno_temp = errno;
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
+		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
+			 path_temp, path, strerror(errno_temp));
+	}
 }
 
 /*
@@ -651,6 +705,7 @@ readBackupControlFile(const char *path)
 		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
+		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -662,7 +717,7 @@ readBackupControlFile(const char *path)
 		return NULL;
 	}
 
-	parsed_options = config_read_opt(path, options, WARNING, true);
+	parsed_options = config_read_opt(path, options, WARNING, true, true);
 
 	if (parsed_options == 0)
 	{
@@ -881,6 +936,7 @@ pgBackupInit(pgBackup *backup)
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
+	backup->external_dir_str = NULL;
 }
 
 /* free pgBackup object */
@@ -890,6 +946,7 @@ pgBackupFree(void *backup)
 	pgBackup *b = (pgBackup *) backup;
 
 	pfree(b->primary_conninfo);
+	pfree(b->external_dir_str);
 	pfree(backup);
 }
 
@@ -949,6 +1006,32 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 }
 
 /*
+ * Check if multiple backups consider target backup to be their direct parent
+ */
+bool
+is_prolific(parray *backup_list, pgBackup *target_backup)
+{
+	int i;
+	int child_counter = 0;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* consider only OK and DONE backups */
+		if (tmp_backup->parent_backup == target_backup->start_time &&
+			(tmp_backup->status == BACKUP_STATUS_OK ||
+			 tmp_backup->status == BACKUP_STATUS_DONE))
+			child_counter++;
+	}
+
+	if (child_counter > 1)
+		return true;
+	else
+		return false;
+}
+
+/*
  * Find parent base FULL backup for current backup using parent_backup_link
  */
 pgBackup*
@@ -957,6 +1040,7 @@ find_parent_full_backup(pgBackup *current_backup)
 	pgBackup   *base_full_backup = NULL;
 	base_full_backup = current_backup;
 
+	/* sanity */
 	if (!current_backup)
 		elog(ERROR, "Target backup cannot be NULL");
 
@@ -966,10 +1050,46 @@ find_parent_full_backup(pgBackup *current_backup)
 	}
 
 	if (base_full_backup->backup_mode != BACKUP_MODE_FULL)
-		elog(ERROR, "Failed to find FULL backup parent for %s",
-				base36enc(current_backup->start_time));
+	{
+		if (base_full_backup->parent_backup)
+			elog(WARNING, "Backup %s is missing",
+				 base36enc(base_full_backup->parent_backup));
+		else
+			elog(WARNING, "Failed to find parent FULL backup for %s",
+				 base36enc(current_backup->start_time));
+		return NULL;
+	}
 
 	return base_full_backup;
+}
+
+/*
+ * Find closest child of target_backup. If there are several direct
+ * offsprings in backup_list, then first win.
+ */
+pgBackup*
+find_direct_child(parray *backup_list, pgBackup *target_backup)
+{
+	int i;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
+
+		if (tmp_backup->backup_mode == BACKUP_MODE_FULL)
+			continue;
+
+		/* Consider only OK and DONE children */
+		if (tmp_backup->parent_backup == target_backup->start_time &&
+			(tmp_backup->status == BACKUP_STATUS_OK ||
+			 tmp_backup->status == BACKUP_STATUS_DONE))
+		{
+			return tmp_backup;
+		}
+	}
+	elog(WARNING, "Failed to find a direct child for backup %s",
+				base36enc(target_backup->start_time));
+	return NULL;
 }
 
 /*
@@ -1078,6 +1198,6 @@ get_backup_index_number(parray *backup_list, pgBackup *backup)
 		if (tmp_backup->start_time == backup->start_time)
 			return i;
 	}
-	elog(ERROR, "Failed to find backup %s", base36enc(backup->start_time));
-	return 0;
+	elog(WARNING, "Failed to find backup %s", base36enc(backup->start_time));
+	return -1;
 }

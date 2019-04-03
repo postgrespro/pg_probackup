@@ -44,6 +44,7 @@ void
 pgBackupValidate(pgBackup *backup)
 {
 	char		base_path[MAXPGPATH];
+	char		external_prefix[MAXPGPATH];
 	char		path[MAXPGPATH];
 	parray	   *files;
 	bool		corrupted = false;
@@ -99,8 +100,9 @@ pgBackupValidate(pgBackup *backup)
 		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
+	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, path, FIO_BACKUP_HOST);
+	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -115,6 +117,7 @@ pgBackupValidate(pgBackup *backup)
 		palloc(sizeof(validate_files_arg) * num_threads);
 
 	/* Validate files */
+	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
@@ -184,7 +187,7 @@ pgBackupValidateFiles(void *arg)
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during validate");
 
 		/* Validate only regular files */
@@ -247,7 +250,8 @@ pgBackupValidateFiles(void *arg)
 			 * Starting from 2.0.25 we calculate crc of pg_control differently.
 			 */
 			if (arguments->backup_version >= 20025 &&
-				strcmp(file->name, "pg_control") == 0)
+				strcmp(file->name, "pg_control") == 0 &&
+				!file->external_dir_num)
 				crc = get_pgcontrol_checksum(arguments->base_path);
 			else
 				crc = pgFileGetCRC(file->path,
@@ -333,7 +337,13 @@ do_validate_all(void)
 			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
 			join_path_components(conf_path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
-			config_read_opt(conf_path, instance_options, ERROR, false);
+			if (config_read_opt(conf_path, instance_options, ERROR, false,
+								true) == 0)
+			{
+				elog(WARNING, "Configuration file \"%s\" is empty", conf_path);
+				corrupted_backup_found = true;
+				continue;
+			}
 
 			do_validate_instance();
 		}
@@ -372,7 +382,6 @@ do_validate_all(void)
 static void
 do_validate_instance(void)
 {
-	char	   *current_backup_id;
 	int			i;
 	int			j;
 	parray	   *backups;
@@ -387,7 +396,6 @@ do_validate_instance(void)
 	for (i = 0; i < parray_num(backups); i++)
 	{
 		pgBackup   *base_full_backup;
-		char	   *parent_backup_id;
 
 		current_backup = (pgBackup *) parray_get(backups, i);
 
@@ -402,6 +410,7 @@ do_validate_instance(void)
 			/* chain is broken */
 			if (result == 0)
 			{
+				char	   *parent_backup_id;
 				/* determine missing backup ID */
 
 				parent_backup_id = base36enc_dup(tmp_backup->parent_backup);
@@ -420,34 +429,39 @@ do_validate_instance(void)
 					elog(WARNING, "Backup %s has missing parent %s",
 						base36enc(current_backup->start_time), parent_backup_id);
 				}
+				pg_free(parent_backup_id);
 				continue;
 			}
 			/* chain is whole, but at least one parent is invalid */
 			else if (result == 1)
 			{
-				/* determine corrupt backup ID */
-				parent_backup_id = base36enc_dup(tmp_backup->start_time);
-
 				/* Oldest corrupt backup has a chance for revalidation */
 				if (current_backup->start_time != tmp_backup->start_time)
 				{
+					char	   *backup_id = base36enc_dup(tmp_backup->start_time);
 					/* orphanize current_backup */
 					if (current_backup->status == BACKUP_STATUS_OK)
 					{
 						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
-								base36enc(current_backup->start_time), parent_backup_id,
+								base36enc(current_backup->start_time), backup_id,
 								status2str(tmp_backup->status));
 					}
 					else
 					{
 						elog(WARNING, "Backup %s has parent %s with status: %s",
-								base36enc(current_backup->start_time),parent_backup_id,
+								base36enc(current_backup->start_time), backup_id,
 								status2str(tmp_backup->status));
 					}
+					pg_free(backup_id);
 					continue;
 				}
 				base_full_backup = find_parent_full_backup(current_backup);
+
+				/* sanity */
+				if (!base_full_backup)
+					elog(ERROR, "Parent full backup for the given backup %s was not found",
+							base36enc(current_backup->start_time));
 			}
 			/* chain is whole, all parents are valid at first glance,
 			 * current backup validation can proceed
@@ -480,6 +494,7 @@ do_validate_instance(void)
 		 */
 		if (current_backup->status != BACKUP_STATUS_OK)
 		{
+			char	   *current_backup_id;
 			/* This is ridiculous but legal.
 			 * PAGE_b2 <- OK
 			 * PAGE_a2 <- OK
@@ -564,7 +579,7 @@ do_validate_instance(void)
 
 							if (backup->status == BACKUP_STATUS_OK)
 							{
-								//tmp_backup = find_parent_full_backup(dest_backup);
+
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
 											 0, 0, current_backup->tli,

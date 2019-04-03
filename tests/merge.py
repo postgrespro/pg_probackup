@@ -4,6 +4,7 @@ import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import shutil
+from datetime import datetime, timedelta
 
 module_name = "merge"
 
@@ -1202,11 +1203,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica'
-            }
-        )
+            set_replication=True, initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1257,8 +1254,91 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_id_deleted = self.show_pb(backup_dir, "node")[1]["id"]
 
         # Try to continue failed MERGE
+        self.merge_backup(backup_dir, "node", backup_id)
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_continue_failed_merge_3(self):
+        """
+        Check that failed MERGE can`t be continued after target backup deleting
+        Create FULL and 2 PAGE backups
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True, initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Create test data
+        node.safe_psql("postgres", "create sequence t_seq")
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, nextval('t_seq')"
+            " as t_seq, md5(i::text) as text, md5(i::text)::tsvector"
+            " as tsvector from generate_series(0,100000) i"
+        )
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # CREATE FEW PAGE BACKUP
+        i = 0
+
+        while i < 2:
+
+            node.safe_psql(
+                "postgres",
+                "delete from t_heap"
+            )
+
+            node.safe_psql(
+                "postgres",
+                "vacuum t_heap"
+            )
+            node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, nextval('t_seq') as t_seq,"
+            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+            " from generate_series(100,200000) i"
+            )
+
+            # PAGE BACKUP
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='page'
+            )
+            i = i + 1
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        backup_id_merge = self.show_pb(backup_dir, "node")[2]["id"]
+        backup_id_delete = self.show_pb(backup_dir, "node")[1]["id"]
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id_merge, gdb=True)
+
+        gdb.set_breakpoint('copy_file')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(2)
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+        print(os.path.join(backup_dir, "backups", "node", backup_id_delete))
+
+        # DELETE PAGE1
+        shutil.rmtree(
+            os.path.join(backup_dir, "backups", "node", backup_id_delete))
+
+        # Try to continue failed MERGE
         try:
-            self.merge_backup(backup_dir, "node", backup_id)
+            self.merge_backup(backup_dir, "node", backup_id_merge)
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of backup corruption.\n "
@@ -1266,8 +1346,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "ERROR: Backup {0} has status: DELETING".format(
-                    backup_id_deleted) in e.message,
+                "ERROR: Parent full backup for the given backup {0} was not found".format(
+                    backup_id_merge) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1368,6 +1448,482 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'STREAM', self.show_pb(backup_dir, 'node', backup_id)['wal'])
 
         self.del_test_dir(module_name, fname)
+
+    def test_crash_after_opening_backup_control_1(self):
+        """
+        check that crashing after opening backup.control
+        for writing will not result in losing backup metadata
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL stream backup
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # DELTA archive backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+        gdb.set_breakpoint('write_backup_filelist')
+        gdb.run_until_break()
+
+        gdb.set_breakpoint('write_backup')
+        gdb.continue_execution_until_break()
+        gdb.set_breakpoint('pgBackupWriteControl')
+        gdb.continue_execution_until_break()
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
+
+        self.del_test_dir(module_name, fname)
+
+    def test_crash_after_opening_backup_control_2(self):
+        """
+        check that crashing after opening backup_content.control
+        for writing will not result in losing metadata about backup files
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Add data
+        node.pgbench_init(scale=3)
+
+        # FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # Change data
+        pgbench = node.pgbench(options=['-T', '20', '-c', '2'])
+        pgbench.wait()
+
+        path = node.safe_psql(
+            'postgres',
+            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        fsm_path = path + '_fsm'
+
+        node.safe_psql(
+            'postgres',
+            'vacuum pgbench_accounts')
+
+        # DELTA backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+        gdb.set_breakpoint('write_backup_filelist')
+        gdb.run_until_break()
+
+        gdb.set_breakpoint('print_file_list')
+        gdb.continue_execution_until_break()
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
+
+        # In to_backup drop file that comes from from_backup
+        # emulate crash during previous merge
+        file_to_remove = os.path.join(
+            backup_dir, 'backups',
+            'node', full_id, 'database', fsm_path)
+
+        print(file_to_remove)
+
+        os.remove(file_to_remove)
+
+        # Continue failed merge
+        self.merge_backup(backup_dir, "node", backup_id)
+
+        node.cleanup()
+
+        # restore merge backup
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.del_test_dir(module_name, fname)
+
+    def test_losing_file_after_failed_merge(self):
+        """
+        check that crashing after opening backup_content.control
+        for writing will not result in losing metadata about backup files
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Add data
+        node.pgbench_init(scale=1)
+
+        # FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # Change data
+        node.safe_psql(
+            'postgres',
+            "update pgbench_accounts set aid = aid + 1005000")
+
+        path = node.safe_psql(
+            'postgres',
+            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+
+        node.safe_psql(
+            'postgres',
+            "VACUUM pgbench_accounts")
+
+        vm_path = path + '_vm'
+
+        # DELTA backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
+        gdb.set_breakpoint('write_backup_filelist')
+        gdb.run_until_break()
+
+        gdb.set_breakpoint('print_file_list')
+        gdb.continue_execution_until_break()
+
+        gdb._execute('signal SIGKILL')
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
+
+        # In to_backup drop file that comes from from_backup
+        # emulate crash during previous merge
+        file_to_remove = os.path.join(
+            backup_dir, 'backups',
+            'node', full_id, 'database', vm_path)
+
+        os.remove(file_to_remove)
+
+        # Try to continue failed MERGE
+        #print(backup_id)
+        #exit(1)
+        self.merge_backup(backup_dir, "node", backup_id)
+
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_merge_backup_from_future(self):
+        """
+        take FULL backup, table PAGE backup from future,
+        try to merge page with FULL
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'wal_level': 'replica',
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        node.pgbench_init(scale=3)
+
+        # Take PAGE from future
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        with open(
+                os.path.join(
+                    backup_dir, 'backups', 'node',
+                    backup_id, "backup.control"), "a") as conf:
+            conf.write("start-time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                datetime.now() + timedelta(days=3)))
+
+        # rename directory
+        new_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        os.rename(
+            os.path.join(backup_dir, 'backups', 'node', backup_id),
+            os.path.join(backup_dir, 'backups', 'node', new_id))
+
+        pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_merge_multiple_descendants(self):
+        """
+        PAGEb3
+          |                 PAGEa3
+        PAGEb2               /
+          |       PAGEa2    /
+        PAGEb1       \     /
+          |           PAGEa1
+        FULLb           |
+                      FULLa
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL BACKUPs
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+
+        backup_id_b = self.backup_node(backup_dir, 'node', node)
+
+        # Change FULLb backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change FULLb backup status to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        # Change PAGEa1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_b1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb1 OK
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa1 backup status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+
+        # Change PAGEb1 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa2 OK
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEb1 backup status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # Change PAGEa2 backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_b2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEb2 and PAGEb1  status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_a3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEa3 OK
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa3 status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
+
+        # Change PAGEb2 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+
+        page_id_b3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb3 OK
+        # PAGEa3 ERROR
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa3, PAGEa2 and PAGEb1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # PAGEb3 OK
+        # PAGEa3 OK
+        # PAGEb2 OK
+        # PAGEa2 OK
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Check that page_id_a3 and page_id_a2 are both direct descendants of page_id_a1
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', backup_id=page_id_a3)['parent-backup-id'],
+            page_id_a1)
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', backup_id=page_id_a2)['parent-backup-id'],
+            page_id_a1)
+
+        self.merge_backup(
+            backup_dir, 'node', page_id_a2,
+            options=['--merge-expired', '--log-level-console=log'])
+
+        try:
+            self.merge_backup(
+                backup_dir, 'node', page_id_a3,
+                options=['--merge-expired', '--log-level-console=log'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of parent FULL backup is missing.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "ERROR: Parent full backup for the given "
+                    "backup {0} was not found".format(
+                    page_id_a3) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 
 # 1. always use parent link when merging (intermediates may be from different chain)
 # 2. page backup we are merging with may disappear after failed merge,
