@@ -673,10 +673,12 @@ merge_files(void *arg)
 static void
 remove_dir_with_files(const char *path)
 {
-	parray *files = parray_new();
+	parray	   *files = parray_new();
+	int			i;
+
 	dir_list_file(files, path, true, true, true, 0);
 	parray_qsort(files, pgFileComparePathDesc);
-	for (int i = 0; i < parray_num(files); i++)
+	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
@@ -689,9 +691,11 @@ remove_dir_with_files(const char *path)
 static int
 get_external_index(const char *key, const parray *list)
 {
+	int			i;
+
 	if (!list) /* Nowhere to search */
 		return -1;
-	for (int i = 0; i < parray_num(list); i++)
+	for (i = 0; i < parray_num(list); i++)
 	{
 		if (strcmp(key, parray_get(list, i)) == 0)
 			return i + 1;
@@ -704,11 +708,12 @@ static void
 reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 					  parray *from_external)
 {
-	char externaldir_template[MAXPGPATH];
+	char		externaldir_template[MAXPGPATH];
+	int			i;
 
 	pgBackupGetPath(to_backup, externaldir_template,
 					lengthof(externaldir_template), EXTERNAL_DIR);
-	for (int i = 0; i < parray_num(to_external); i++)
+	for (i = 0; i < parray_num(to_external); i++)
 	{
 		int from_num = get_external_index(parray_get(to_external, i),
 										  from_external);

@@ -476,7 +476,7 @@ pgBackupCreateDir(pgBackup *backup)
 		parray *external_list;
 
 		external_list = make_external_directory_list(backup->external_dir_str);
-		for (int i = 0; i < parray_num(external_list); i++)
+		for (i = 0; i < parray_num(external_list); i++)
 		{
 			char		temp[MAXPGPATH];
 			/* Numeration of externaldirs starts with 1 */
