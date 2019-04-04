@@ -835,8 +835,9 @@ do_delete_instance(void)
 	if (rmdir(backup_instance_path) != 0)
 		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
 			strerror(errno));
+
 	if (rmdir(arclog_path) != 0)
-		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+		elog(ERROR, "can't remove \"%s\": %s", arclog_path,
 			strerror(errno));
 
 	elog(INFO, "Instance '%s' successfully deleted", instance_name);
