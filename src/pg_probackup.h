@@ -531,7 +531,6 @@ extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
 extern int pgBackupCompareIdEqual(const void *l, const void *r);
 
-extern pgBackup* find_direct_child(parray *backup_list, pgBackup *target_backup);
 extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);

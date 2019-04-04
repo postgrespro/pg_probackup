@@ -352,17 +352,11 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'checkpoint_timeout': '30s'
-                }
-            )
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        # self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
         # FULL BACKUP
@@ -372,8 +366,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector from generate_series(0,1) i")
         full_result = node.execute("postgres", "SELECT * FROM t_heap")
         full_backup_id = self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='full', options=['--stream'])
+            backup_dir, 'node', node, backup_type='full')
 
         # delta BACKUP
         node.safe_psql(
@@ -382,8 +375,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector from generate_series(0,2) i")
         delta_result = node.execute("postgres", "SELECT * FROM t_heap")
         delta_backup_id = self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='delta', options=['--stream'])
+            backup_dir, 'node', node, backup_type='delta')
 
         # Drop Node
         node.cleanup()
