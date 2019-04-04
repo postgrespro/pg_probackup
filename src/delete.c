@@ -129,6 +129,9 @@ int do_retention(void)
 	bool	retention_is_set = false; /* At least one retention policy is set */
 	bool 	backup_list_is_empty = false;
 
+	backup_deleted = false;
+	backup_merged = false;
+
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 
@@ -411,7 +414,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 			continue;
 		}
 
-		/* FULL backup in purge list, thanks to sparsing of keep_list current backup is 
+		/* FULL backup in purge list, thanks to sparsing of keep_list current backup is
 		 * final target for merge, but there could be intermediate incremental
 		 * backups from purge_list.
 		 */
