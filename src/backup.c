@@ -659,8 +659,8 @@ do_backup_instance(void)
 	 * https://github.com/postgrespro/pg_probackup/issues/48
 	 */
 
-	if (parray_num(backup_files_list) == 0)
-		elog(ERROR, "PGDATA is empty. Either it was concurrently deleted or "
+	if (parray_num(backup_files_list) < 100)
+		elog(ERROR, "PGDATA is almost empty. Either it was concurrently deleted or "
 			"pg_probackup do not possess sufficient permissions to list PGDATA content");
 
 	/*
