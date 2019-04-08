@@ -76,19 +76,16 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # full backup
         self.backup_node(backup_dir, 'node', node)
 
-        node.cleanup()
-
-
         # restore
-        self.restore_node(
-                backup_dir, 'node', node)
-
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
         node.slow_start()
 
+        # Delete instance
         self.del_instance(backup_dir, 'node')
 
         # Clean after yourself
-        #self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
