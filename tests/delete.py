@@ -76,9 +76,14 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # full backup
         self.backup_node(backup_dir, 'node', node)
 
+        node.cleanup()
+
+
         # restore
         self.restore_node(
                 backup_dir, 'node', node)
+
+        node.slow_start()
 
         self.del_instance(backup_dir, 'node')
 
