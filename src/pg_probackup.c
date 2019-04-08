@@ -85,7 +85,7 @@ static char		   *target_action = NULL;
 static pgRecoveryTarget *recovery_target_options = NULL;
 
 bool restore_as_replica = false;
-bool restore_no_validate = false;
+bool no_validate = false;
 
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
@@ -158,7 +158,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },
 	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
-	{ 'b', 143, "no-validate",		&restore_no_validate,	SOURCE_CMD_STRICT },
+	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
@@ -474,7 +474,7 @@ main(int argc, char *argv[])
 		/* parse all recovery target options into recovery_target_options structure */
 		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
 								   target_inclusive, target_tli, target_lsn, target_immediate,
-								   target_name, target_action, restore_no_validate);
+								   target_name, target_action, no_validate);
 	}
 
 	if (num_threads < 1)
@@ -508,7 +508,7 @@ main(int argc, char *argv[])
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
 						  stream_wal ? "true" : "false", is_remote_backup ? "true" : "false");
 
-				return do_backup(start_time);
+				return do_backup(start_time, no_validate);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,

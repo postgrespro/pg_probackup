@@ -453,7 +453,8 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 	{
 		backup = (pgBackup *) parray_get(backup_list, (size_t) i);
 
-		if (backup->status == BACKUP_STATUS_OK && backup->tli == tli)
+		if ((backup->status == BACKUP_STATUS_OK ||
+			backup->status == BACKUP_STATUS_DONE) && backup->tli == tli)
 			return backup;
 	}
 
