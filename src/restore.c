@@ -796,7 +796,7 @@ create_recovery_conf(time_t backup_id,
 
 		fprintf(fp, "restore_command = '%s archive-get -B %s --instance %s "
 					"--wal-file-path %%p --wal-file-name %%f'\n",
-					PROGRAM_NAME, backup_path, instance_name);
+					PROGRAM_FULL_PATH, backup_path, instance_name);
 
 		/*
 		 * We've already checked that only one of the four following mutually
