@@ -561,7 +561,7 @@ backup_data_file(backup_files_arg* arguments,
 	if (file->size % BLCKSZ != 0)
 	{
 		fio_fclose(in);
-		elog(ERROR, "File: %s, invalid file size %zu", file->path, file->size);
+		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
 	}
 
 	/*

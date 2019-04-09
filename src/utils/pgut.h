@@ -20,6 +20,7 @@ typedef void (*pgut_atexit_callback)(bool fatal, void *userdata);
  * pgut client variables and functions
  */
 extern const char  *PROGRAM_NAME;
+extern const char  *PROGRAM_FULL_PATH;
 extern const char  *PROGRAM_VERSION;
 extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;

@@ -182,6 +182,7 @@ sub build_pgprobackup
 	$probackup->AddFile("$pgsrc/src/bin/pg_rewind/datapagemap.c");
 
 	$probackup->AddFile("$pgsrc/src/interfaces/libpq/pthread-win32.c");
+	$probackup->AddFile("$pgsrc/src/timezone/strftime.c");
 
         $probackup->AddIncludeDir("$pgsrc/src/bin/pg_basebackup");
         $probackup->AddIncludeDir("$pgsrc/src/bin/pg_rewind");

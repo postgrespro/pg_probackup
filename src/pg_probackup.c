@@ -22,6 +22,7 @@
 
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
+const char *PROGRAM_FULL_PATH = NULL;
 
 typedef enum ProbackupSubcmd
 {
@@ -204,6 +205,14 @@ main(int argc, char *argv[])
 	init_config(&instance_config);
 
 	PROGRAM_NAME = get_progname(argv[0]);
+	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
+
+	if (find_my_exec(argv[0],(char *) PROGRAM_FULL_PATH) < 0)
+	{
+		fprintf(stderr, _("%s: could not find own program executable\n"), PROGRAM_NAME);
+		exit(1);
+	}
+
 	set_pglocale_pgservice(argv[0], "pgscripts");
 
 #if PG_VERSION_NUM >= 110000

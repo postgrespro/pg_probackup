@@ -57,6 +57,38 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    def test_del_instance_archive(self):
+        """delete full backups"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # full backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # full backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # restore
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Delete instance
+        self.del_instance(backup_dir, 'node')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_delete_archive_mix_compress_and_non_compressed_segments(self):
         """stub"""
 
