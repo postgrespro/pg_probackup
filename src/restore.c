@@ -769,11 +769,11 @@ create_recovery_conf(time_t backup_id,
 {
 	char		path[MAXPGPATH];
 	FILE	   *fp;
-	bool		need_restore_conf = false;
+	bool		need_restore_conf;
 
-	if (!backup->stream
-		|| (rt->time_specified || rt->xid_specified))
-			need_restore_conf = true;
+	need_restore_conf = !backup->stream ||
+		(rt->time_specified || rt->xid_specified || rt->lsn_specified) ||
+		rt->latest;
 
 	/* No need to generate recovery.conf at all. */
 	if (!(need_restore_conf || restore_as_replica))
@@ -993,7 +993,7 @@ parseRecoveryTargetOptions(const char *target_time,
 					bool target_immediate,
 					const char *target_name,
 					const char *target_action,
-					bool		restore_no_validate)
+					bool		restore_no_validate, bool latest)
 {
 	time_t		dummy_time;
 	TransactionId dummy_xid;
@@ -1084,6 +1084,8 @@ parseRecoveryTargetOptions(const char *target_time,
 	{
 		rt->restore_no_validate = restore_no_validate;
 	}
+
+	rt->latest = latest;
 
 	if (target_name)
 	{

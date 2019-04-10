@@ -292,6 +292,7 @@ typedef struct pgRecoveryTarget
 	const char		*recovery_target_name;
 	const char		*recovery_target_action;
 	bool			restore_no_validate;
+	bool			latest;
 } pgRecoveryTarget;
 
 typedef struct
@@ -427,7 +428,7 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
 	bool target_immediate, const char *target_name,
-	const char *target_action, bool restore_no_validate);
+	const char *target_action, bool restore_no_validate, bool latest);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);

@@ -123,7 +123,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
+	printf(_("                 [--time=time|--xid=xid|--lsn=lsn|--latest [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
@@ -292,7 +292,7 @@ help_restore(void)
 {
 	printf(_("%s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
+	printf(_("                 [--time=time|--xid=xid|--lsn=lsn|--latest [--inclusive=boolean]]\n"));
 	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
@@ -312,7 +312,8 @@ help_restore(void)
 	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
 	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
-	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
+	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
+	printf(_("      --latest                     recovery into a latest possible state\n"));
 	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));

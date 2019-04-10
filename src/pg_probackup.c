@@ -81,6 +81,7 @@ static TimeLineID	target_tli;
 static bool			target_immediate;
 static char		   *target_name = NULL;
 static char		   *target_action = NULL;
+static bool			target_latest = false;
 
 static pgRecoveryTarget *recovery_target_options = NULL;
 
@@ -152,6 +153,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
 	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
+	{ 'b', 157, "latest",			&target_latest,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
 	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
 	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
@@ -474,7 +476,8 @@ main(int argc, char *argv[])
 		/* parse all recovery target options into recovery_target_options structure */
 		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
 								   target_inclusive, target_tli, target_lsn, target_immediate,
-								   target_name, target_action, restore_no_validate);
+								   target_name, target_action, restore_no_validate,
+								   target_latest);
 	}
 
 	if (num_threads < 1)
