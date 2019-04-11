@@ -417,7 +417,8 @@ do_validate_instance(void)
 				corrupted_backup_found = true;
 
 				/* orphanize current_backup */
-				if (current_backup->status == BACKUP_STATUS_OK)
+				if (current_backup->status == BACKUP_STATUS_OK ||
+					current_backup->status == BACKUP_STATUS_DONE)
 				{
 					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
@@ -440,7 +441,8 @@ do_validate_instance(void)
 				{
 					char	   *backup_id = base36enc_dup(tmp_backup->start_time);
 					/* orphanize current_backup */
-					if (current_backup->status == BACKUP_STATUS_OK)
+					if (current_backup->status == BACKUP_STATUS_OK ||
+						current_backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
@@ -512,7 +514,8 @@ do_validate_instance(void)
 
 				if (is_parent(current_backup->start_time, backup, false))
 				{
-					if (backup->status == BACKUP_STATUS_OK)
+					if (backup->status == BACKUP_STATUS_OK ||
+						backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 

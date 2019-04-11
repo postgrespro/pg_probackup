@@ -94,7 +94,7 @@ do_delete(time_t backup_id)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
 
-			if (backup->status == BACKUP_STATUS_OK)
+			if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE)
 			{
 				oldest_lsn = backup->start_lsn;
 				oldest_tli = backup->tli;
