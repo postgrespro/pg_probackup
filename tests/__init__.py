@@ -18,7 +18,7 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))
 #    suite.addTests(loader.loadTestsFromModule(cfs_restore))
 #    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
-#    suite.addTests(loader.loadTestsFromModule(logging))
+    suite.addTests(loader.loadTestsFromModule(logging))
     suite.addTests(loader.loadTestsFromModule(compression))
     suite.addTests(loader.loadTestsFromModule(delete))
     suite.addTests(loader.loadTestsFromModule(delta))

@@ -39,7 +39,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--log-directory=log-directory]
                  [--log-rotation-size=log-rotation-size]
                  [--log-rotation-age=log-rotation-age]
-                 [--delete-expired] [--delete-wal]
+                 [--delete-expired] [--delete-wal] [--merge-expired]
                  [--retention-redundancy=retention-redundancy]
                  [--retention-window=retention-window]
                  [--compress]
@@ -51,16 +51,19 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--master-port=port] [--master-user=user_name]
                  [--replica-timeout=timeout]
                  [--skip-block-validation]
+                 [--external-dirs=external-directory-path]
 
   pg_probackup restore -B backup-path --instance=instance_name
-                 [-D pgdata-path] [-i backup-id] [--progress]
+                 [-D pgdata-path] [-i backup-id] [-j num-threads]
                  [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]
-                 [--timeline=timeline] [-T OLDDIR=NEWDIR]
+                 [--timeline=timeline] [-T OLDDIR=NEWDIR] [--progress]
+                 [--external-mapping=OLDDIR=NEWDIR]
                  [--immediate] [--recovery-target-name=target-name]
                  [--recovery-target-action=pause|promote|shutdown]
                  [--restore-as-replica]
                  [--no-validate]
                  [--skip-block-validation]
+                 [--skip-external-dirs]
 
   pg_probackup validate -B backup-path [--instance=instance_name]
                  [-i backup-id] [--progress] [-j num-threads]
@@ -74,10 +77,11 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--format=format]
 
   pg_probackup delete -B backup-path --instance=instance_name
-                 [--wal] [-i backup-id | --expired]
+                 [--wal] [-i backup-id | --expired | --merge-expired]
+                 [--dry-run]
 
   pg_probackup merge -B backup-path --instance=instance_name
-                 -i backup-id
+                 -i backup-id [--progress] [-j num-threads]
 
   pg_probackup add-instance -B backup-path -D pgdata-path
                  --instance=instance_name
