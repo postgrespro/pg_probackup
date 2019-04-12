@@ -472,7 +472,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, external_dir_num ? omit_symlink : false, omit_symlink);
+	file = pgFileNew(root, omit_symlink, external_dir_num);
 	if (file == NULL)
 		return;
 

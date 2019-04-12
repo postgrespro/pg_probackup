@@ -352,17 +352,11 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'checkpoint_timeout': '30s'
-                }
-            )
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        # self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
         # FULL BACKUP
@@ -372,8 +366,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector from generate_series(0,1) i")
         full_result = node.execute("postgres", "SELECT * FROM t_heap")
         full_backup_id = self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='full', options=['--stream'])
+            backup_dir, 'node', node, backup_type='full')
 
         # delta BACKUP
         node.safe_psql(
@@ -382,8 +375,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector from generate_series(0,2) i")
         delta_result = node.execute("postgres", "SELECT * FROM t_heap")
         delta_backup_id = self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='delta', options=['--stream'])
+            backup_dir, 'node', node, backup_type='delta')
 
         # Drop Node
         node.cleanup()
@@ -719,14 +711,12 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 1, 0,
                 "Expecting Error because we are connecting to deleted database"
                 "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd)
-            )
+                    repr(self.output), self.cmd))
         except QueryException as e:
             self.assertTrue(
                 'FATAL:  database "db1" does not exist' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd)
-            )
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1312,6 +1302,56 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_delta_backup_from_past(self):
+        """
+        make node, take FULL stream backup, take DELTA stream backup,
+        restore FULL backup, try to take second DELTA stream backup
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=3)
+
+        # First DELTA
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        # Restore FULL backup
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
+        node.slow_start()
+
+        # Second DELTA backup
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='delta', options=['--stream'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because we are backing up an instance from the past"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except QueryException as e:
+            self.assertTrue(
+                'Insert error message' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

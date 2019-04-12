@@ -81,8 +81,8 @@ do_merge(time_t backup_id)
 				/* It is possible that previous merging was interrupted */
 				backup->status != BACKUP_STATUS_MERGING &&
 				backup->status != BACKUP_STATUS_DELETING)
-					elog(ERROR, "Backup %s has status: %s",
-						 base36enc(backup->start_time), status2str(backup->status));
+				elog(ERROR, "Backup %s has status: %s",
+						base36enc(backup->start_time), status2str(backup->status));
 
 			if (backup->backup_mode == BACKUP_MODE_FULL)
 				elog(ERROR, "Backup %s is full backup",
@@ -109,10 +109,8 @@ do_merge(time_t backup_id)
 	if (full_backup->status != BACKUP_STATUS_OK &&
 		/* It is possible that previous merging was interrupted */
 		full_backup->status != BACKUP_STATUS_MERGING)
-			elog(ERROR, "Backup %s has status: %s",
-					base36enc(full_backup->start_time), status2str(full_backup->status));
-
-	//Assert(full_backup_idx != dest_backup_idx);
+		elog(ERROR, "Backup %s has status: %s",
+				base36enc(full_backup->start_time), status2str(full_backup->status));
 
 	/* form merge list */
 	while(dest_backup->parent_backup_link)
@@ -122,8 +120,8 @@ do_merge(time_t backup_id)
 			/* It is possible that previous merging was interrupted */
 			dest_backup->status != BACKUP_STATUS_MERGING &&
 			dest_backup->status != BACKUP_STATUS_DELETING)
-				elog(ERROR, "Backup %s has status: %s",
-						base36enc(dest_backup->start_time), status2str(dest_backup->status));
+			elog(ERROR, "Backup %s has status: %s",
+					base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
 		parray_append(merge_list, dest_backup);
 		dest_backup = dest_backup->parent_backup_link;
@@ -205,7 +203,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 * BACKUP_STATUS_MERGING status.
 	 */
 	Assert(from_backup->status == BACKUP_STATUS_OK ||
-		   from_backup->status == BACKUP_STATUS_MERGING);
+		   from_backup->status == BACKUP_STATUS_MERGING ||
+		   from_backup->status == BACKUP_STATUS_DELETING);
 	pgBackupValidate(from_backup);
 	if (from_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Interrupt merging");
@@ -673,10 +672,12 @@ merge_files(void *arg)
 static void
 remove_dir_with_files(const char *path)
 {
-	parray *files = parray_new();
+	parray	   *files = parray_new();
+	int			i;
+
 	dir_list_file(files, path, true, true, true, 0);
 	parray_qsort(files, pgFileComparePathDesc);
-	for (int i = 0; i < parray_num(files); i++)
+	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
@@ -689,9 +690,11 @@ remove_dir_with_files(const char *path)
 static int
 get_external_index(const char *key, const parray *list)
 {
+	int			i;
+
 	if (!list) /* Nowhere to search */
 		return -1;
-	for (int i = 0; i < parray_num(list); i++)
+	for (i = 0; i < parray_num(list); i++)
 	{
 		if (strcmp(key, parray_get(list, i)) == 0)
 			return i + 1;
@@ -704,11 +707,12 @@ static void
 reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 					  parray *from_external)
 {
-	char externaldir_template[MAXPGPATH];
+	char		externaldir_template[MAXPGPATH];
+	int			i;
 
 	pgBackupGetPath(to_backup, externaldir_template,
 					lengthof(externaldir_template), EXTERNAL_DIR);
-	for (int i = 0; i < parray_num(to_external); i++)
+	for (i = 0; i < parray_num(to_external); i++)
 	{
 		int from_num = get_external_index(parray_get(to_external, i),
 										  from_external);

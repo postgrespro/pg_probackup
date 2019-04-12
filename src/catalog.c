@@ -476,7 +476,7 @@ pgBackupCreateDir(pgBackup *backup)
 		parray *external_list;
 
 		external_list = make_external_directory_list(backup->external_dir_str);
-		for (int i = 0; i < parray_num(external_list); i++)
+		for (i = 0; i < parray_num(external_list); i++)
 		{
 			char		temp[MAXPGPATH];
 			/* Numeration of externaldirs starts with 1 */
@@ -1026,13 +1026,14 @@ is_prolific(parray *backup_list, pgBackup *target_backup)
 		if (tmp_backup->parent_backup == target_backup->start_time &&
 			(tmp_backup->status == BACKUP_STATUS_OK ||
 			 tmp_backup->status == BACKUP_STATUS_DONE))
+		{
 			child_counter++;
+			if (child_counter > 1)
+				return true;
+		}
 	}
 
-	if (child_counter > 1)
-		return true;
-	else
-		return false;
+	return false;
 }
 
 /*
@@ -1065,35 +1066,6 @@ find_parent_full_backup(pgBackup *current_backup)
 	}
 
 	return base_full_backup;
-}
-
-/*
- * Find closest child of target_backup. If there are several direct
- * offsprings in backup_list, then first win.
- */
-pgBackup*
-find_direct_child(parray *backup_list, pgBackup *target_backup)
-{
-	int i;
-
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
-
-		if (tmp_backup->backup_mode == BACKUP_MODE_FULL)
-			continue;
-
-		/* Consider only OK and DONE children */
-		if (tmp_backup->parent_backup == target_backup->start_time &&
-			(tmp_backup->status == BACKUP_STATUS_OK ||
-			 tmp_backup->status == BACKUP_STATUS_DONE))
-		{
-			return tmp_backup;
-		}
-	}
-	elog(WARNING, "Failed to find a direct child for backup %s",
-				base36enc(target_backup->start_time));
-	return NULL;
 }
 
 /*

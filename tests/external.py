@@ -1174,6 +1174,179 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    def test_external_dir_contain_symlink_on_dir(self):
+        """
+        Check that backup works correctly if external dir is symlink,
+        symlink pointing to external dir should be followed,
+        but restored as directory
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        shutil.rmtree(core_dir, ignore_errors=True)
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        external_dir = self.get_tblspace_path(node, 'external_dir')
+        dir_in_external_dir = os.path.join(external_dir, 'dir')
+
+        node.pgbench_init(scale=3)
+
+        # temp FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+
+        # fill some directory with data
+        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        symlinked_dir = os.path.join(core_dir, 'symlinked')
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=symlinked_dir, options=["-j", "4"])
+
+        # drop temp FULL backup
+        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+
+        # create symlink to directory in external directory
+        print(symlinked_dir)
+        print(dir_in_external_dir)
+        os.mkdir(external_dir)
+        os.symlink(symlinked_dir, dir_in_external_dir)
+
+        # FULL backup with external directories
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}".format(
+                    external_dir)])
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        # RESTORE
+        node_restored.cleanup()
+
+        external_dir_new = self.get_tblspace_path(
+            node_restored, 'external_dir')
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4", "--external-mapping={0}={1}".format(
+                    external_dir, external_dir_new)])
+
+        pgdata_restored = self.pgdata_content(
+            node_restored.base_dir, exclude_dirs=['logs'])
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.assertEqual(
+            external_dir,
+            self.show_pb(
+                backup_dir, 'node',
+                backup_id=backup_id)['external-dirs'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_external_dir_contain_symlink_on_file(self):
+        """
+        Check that backup works correctly if external dir is symlink,
+        symlink pointing to external dir should be followed,
+        but restored as directory
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        shutil.rmtree(core_dir, ignore_errors=True)
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        external_dir = self.get_tblspace_path(node, 'external_dir')
+        file_in_external_dir = os.path.join(external_dir, 'file')
+
+        node.pgbench_init(scale=3)
+
+        # temp FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+
+        # fill some directory with data
+        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        symlinked_dir = os.path.join(core_dir, 'symlinked')
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=symlinked_dir, options=["-j", "4"])
+
+        # drop temp FULL backup
+        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+
+        # create symlink to directory in external directory
+        src_file = os.path.join(symlinked_dir, 'postgresql.conf')
+        os.mkdir(external_dir)
+        os.symlink(src_file, file_in_external_dir)
+
+        # FULL backup with external directories
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}".format(
+                    external_dir)])
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        # RESTORE
+        node_restored.cleanup()
+
+        external_dir_new = self.get_tblspace_path(
+            node_restored, 'external_dir')
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4", "--external-mapping={0}={1}".format(
+                    external_dir, external_dir_new)])
+
+        pgdata_restored = self.pgdata_content(
+            node_restored.base_dir, exclude_dirs=['logs'])
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.assertEqual(
+            external_dir,
+            self.show_pb(
+                backup_dir, 'node',
+                backup_id=backup_id)['external-dirs'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
     def test_external_dir_is_tablespace(self):
         """
         Check that backup fails with error
