@@ -184,6 +184,15 @@ static ConfigOption cmd_options[] =
 	{ 0 }
 };
 
+static void
+setMyLocation(void)
+{
+	MyLocation = IsSshProtocol()
+		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
+		   ? FIO_DB_HOST : FIO_BACKUP_HOST
+		: FIO_LOCAL_HOST;
+}
+
 /*
  * Entry point of pg_probackup command.
  */
@@ -358,10 +367,7 @@ main(int argc, char *argv[])
 	}
 	canonicalize_path(backup_path);
 
-	MyLocation = IsSshProtocol()
-		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
-		   ? FIO_DB_HOST : FIO_BACKUP_HOST
-		: FIO_LOCAL_HOST;
+	setMyLocation();
 
 	/* Ensure that backup_path is a path to a directory */
 	rc = fio_stat(backup_path, &stat_buf, true, FIO_BACKUP_HOST);
@@ -423,6 +429,7 @@ main(int argc, char *argv[])
 								 BACKUP_CATALOG_CONF_FILE);
 			config_read_opt(path, instance_options, ERROR, true, false);
 		}
+		setMyLocation();
 	}
 
 	/* Initialize logger */
