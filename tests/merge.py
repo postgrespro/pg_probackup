@@ -1197,7 +1197,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
     def test_continue_failed_merge_2(self):
         """
-        Check that failed MERGE on delete can`t be continued
+        Check that failed MERGE on delete can be continued
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1252,6 +1252,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         print(self.show_pb(backup_dir, as_text=True, as_json=False))
 
         backup_id_deleted = self.show_pb(backup_dir, "node")[1]["id"]
+
+        # TODO check that full backup has meta info is equal to DELETTING
 
         # Try to continue failed MERGE
         self.merge_backup(backup_dir, "node", backup_id)

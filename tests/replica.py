@@ -141,10 +141,10 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'archive_timeout': '10s'}
-            )
+                'archive_timeout': '10s',
+                'checkpoint_timeout': '30s',
+                'max_wal_size': '16MB'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)

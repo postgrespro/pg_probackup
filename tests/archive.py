@@ -422,10 +422,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'archive_timeout': '10s',
-                'max_wal_size': '1GB'}
-            )
+                'checkpoint_timeout': '30s',
+                'max_wal_size': '16MB'})
+
         self.init_pb(backup_dir)
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
