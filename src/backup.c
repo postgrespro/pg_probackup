@@ -47,6 +47,7 @@ const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
+/* list of indexes for use in checkdb --amcheck */
 static parray *index_list = NULL;
 
 /* We need critical section for datapagemap_add() in case of using threads */
@@ -95,7 +96,6 @@ static bool pg_stop_backup_is_sent = false;
  */
 static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
-//static void threads_conn_disconnect(bool fatal, void *userdata);
 
 static void pgdata_basic_setup(void);
 
@@ -941,6 +941,7 @@ do_backup_instance(void)
 	backup_files_list = NULL;
 }
 
+/* collect list of files and run threads to check files in the instance */
 static void
 do_block_validation(void)
 {
@@ -1022,18 +1023,19 @@ do_block_validation(void)
 			check_isok = false;
 	}
 
-	/* TODO write better info message */
-	if (check_isok)
-		elog(INFO, "Data files are valid");
-	else
-		elog(ERROR, "Checkdb failed");
-
+	/* cleanup */
 	if (backup_files_list)
 	{
 		parray_walk(backup_files_list, pgFileFree);
 		parray_free(backup_files_list);
 		backup_files_list = NULL;
 	}
+
+	/* TODO write better info message */
+	if (check_isok)
+		elog(INFO, "Data files are valid");
+	else
+		elog(ERROR, "Checkdb failed");
 }
 
 static void
@@ -1113,9 +1115,7 @@ do_amcheck(void)
 		for (j = 0; j < num_threads; j++)
 		{
 			backup_files_arg *arg = &(threads_args[j]);
-
 			elog(VERBOSE, "Start thread num: %i", j);
-
 			pthread_create(&threads[j], NULL, check_indexes, arg);
 		}
 
@@ -1143,13 +1143,14 @@ do_amcheck(void)
 	else
 		elog(INFO, "Checkdb --amcheck executed");
 
+	/* FIXME We already wrote message about skipped databases.
+	 * Maybe we shouldn't check db_skipped here ?
+	 */
 	if (check_isok && !interrupted && !db_skipped)
 		elog(INFO, "Indexes are valid");
 }
 
 /* Entry point of pg_probackup CHECKDB subcommand. */
-/* TODO consider moving some code common with do_backup_instance
- * to separate function ot to pgdata_basic_setup */
 int
 do_checkdb(bool need_amcheck)
 {
@@ -1173,7 +1174,6 @@ do_checkdb(bool need_amcheck)
  * Common code for CHECKDB and BACKUP commands.
  * Ensure that we're able to connect to the instance
  * check compatibility and fill basic info.
- * TODO maybe move it to pg_probackup.c
  */
 static void
 pgdata_basic_setup(void)
@@ -1441,7 +1441,6 @@ check_system_identifiers(void)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but connected instance system id is " UINT64_FORMAT,
 			 instance_config.system_identifier, system_id_conn);
-
 	if (system_id_pgdata != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but target backup directory system id is " UINT64_FORMAT,
@@ -2542,23 +2541,11 @@ backup_disconnect(bool fatal, void *userdata)
 }
 
 /*
- * Disconnect checkdb connections created in threads during quit pg_probackup.
+ * Check files in PGDATA.
+ * Read all files listed in backup_files_list.
+ * If the file is 'datafile' (regular relation's main fork), read it page by page,
+ * verify checksum and copy.
  */
-//static void
-//threads_conn_disconnect(bool fatal, void *userdata)
-//{
-//
-//	backup_files_arg *arguments = (backup_files_arg *) userdata;
-//
-//	elog(VERBOSE, "threads_conn_disconnect, num_threads %d", arguments->thread_num);
-//
-//	if (arguments->backup_conn)
-//	{
-//		pgut_cancel(arguments->backup_conn);
-//		pgut_disconnect(arguments->backup_conn);
-//	}
-//}
-
 static void *
 check_files(void *arg)
 {
@@ -2605,7 +2592,7 @@ check_files(void *arg)
 			else
 			{
 				elog(ERROR,
-					"can't stat file to backup \"%s\": %s",
+					"can't stat file to check \"%s\": %s",
 					file->path, strerror(errno));
 			}
 		}
@@ -2625,19 +2612,21 @@ check_files(void *arg)
 									 file->path + strlen(arguments->from_root) + 1);
 
 				if (!check_data_file(arguments, file))
-					arguments->ret = 2;
+					arguments->ret = 2; /* FIXME what does 2 mean? */
 			}
 		}
 		else
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
 
+	/* FIXME why do we reset return code here? */
 	if (arguments->ret == 1)
 		arguments->ret = 0;
 
 	return NULL;
 }
 
+/* Check indexes with amcheck */
 static void *
 check_indexes(void *arg)
 {
@@ -2645,7 +2634,6 @@ check_indexes(void *arg)
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int			n_indexes = 0;
 
-	/* Check indexes with amcheck */
 	if (arguments->index_list)
 		n_indexes = parray_num(arguments->index_list);
 

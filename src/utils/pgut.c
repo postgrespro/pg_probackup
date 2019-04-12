@@ -43,7 +43,6 @@ static void on_interrupt(void);
 static void on_cleanup(void);
 static pqsigfunc oldhandler = NULL;
 
-//bool is_result_ready(PGconn *conn);
 void discard_response(PGconn *conn);
 
 void
@@ -404,17 +403,6 @@ pgut_execute_parallel(PGconn* conn,
 								* or one to obtain results in binary format.
 								*/
 								(text_result) ? 0 : 1);
-
-		/* wait for processing */
-//		while(!is_result_ready(conn))
-//		{
-//			if (interrupted)
-//			{
-//				pgut_cancel(conn);
-//				pgut_disconnect(conn);
-//				elog(ERROR, "Interrupted");
-//			}
-//		}
 
 		/* wait for processing, TODO: timeout */
 		for (;;)
@@ -1052,38 +1040,3 @@ discard_response(PGconn *conn)
 			PQclear(res);
 	} while (res);
 }
-
-//bool is_result_ready(PGconn * conn)
-//{
-//   int                 sock;
-//   struct timeval      timeout;
-//   fd_set              read_mask;
-//
-//   if (!PQisBusy(conn))
-//       return true;
-//
-//   sock = PQsocket(conn);
-//
-//   timeout.tv_sec  = (time_t)1;
-//   timeout.tv_usec = 0;
-//
-//   FD_ZERO(&read_mask);
-//   FD_SET(sock, &read_mask);
-//
-//   if (select(sock + 1, &read_mask, NULL, NULL, &timeout) == 0)
-//       return false;
-//   else if (FD_ISSET(sock, &read_mask))
-//   {
-//       if (PQconsumeInput(conn))
-//       {
-//           if (PQisBusy(conn))
-//               return false;
-//           else
-//               return true;
-//       }
-//       else
-//           return false;
-//   }
-//   else
-//       return false;
-//}

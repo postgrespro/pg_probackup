@@ -1612,6 +1612,12 @@ validate_one_page(Page page, pgFile *file,
 
 }
 
+/*
+ * Valiate pages of datafile in PGDATA one by one.
+ *
+ * returns true if the file is valid
+ * also returns true if the file was not found
+ */
 bool
 check_data_file(backup_files_arg* arguments,
 				pgFile *file)
@@ -1622,14 +1628,8 @@ check_data_file(backup_files_arg* arguments,
 	int			n_blocks_skipped = 0;
 	int			page_state;
 	char		curr_page[BLCKSZ];
+	bool 		is_valid = true;
 
-	bool is_valid = true;
-
-	/* reset size summary */
-	file->read_size = 0;
-	file->write_size = 0;
-
-	/* open backup mode file for read */
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
 	{
@@ -1662,7 +1662,7 @@ check_data_file(backup_files_arg* arguments,
 
 	for (blknum = 0; blknum < nblocks; blknum++)
 	{
-		page_state = prepare_page(arguments, file, InvalidXLogRecPtr, //0 = InvalidXLogRecPtr
+		page_state = prepare_page(arguments, file, InvalidXLogRecPtr,
 									blknum, nblocks, in, &n_blocks_skipped,
 									BACKUP_MODE_FULL, curr_page, false);
 
@@ -1672,6 +1672,7 @@ check_data_file(backup_files_arg* arguments,
 		if (page_state == PageIsCorrupted)
 		{
 			/* Page is corrupted */
+			// TODO why this message is commented?
 			//elog(WARNING, "File %s, block %u is CORRUPTED.",
 			//		file->path, blknum);
 			is_valid = false;
@@ -1686,7 +1687,6 @@ check_data_file(backup_files_arg* arguments,
 			/* Page is corrupted */
 			is_valid = false;
 		}
-
 	}
 
 	fclose(in);
