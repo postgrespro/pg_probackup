@@ -55,10 +55,12 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup restore -B backup-path --instance=instance_name
                  [-D pgdata-path] [-i backup-id] [-j num-threads]
-                 [--time=time|--xid=xid|--lsn=lsn|--latest [--inclusive=boolean]]
-                 [--timeline=timeline] [-T OLDDIR=NEWDIR] [--progress]
+                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
+                 [--recovery-target-timeline=timeline]
+                 [-T OLDDIR=NEWDIR] [--progress]
                  [--external-mapping=OLDDIR=NEWDIR]
-                 [--immediate] [--recovery-target-name=target-name]
+                 [--recovery-target=immediate|latest]
+                 [--recovery-target-name=target-name]
                  [--recovery-target-action=pause|promote|shutdown]
                  [--restore-as-replica]
                  [--no-validate]
@@ -67,9 +69,9 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup validate -B backup-path [--instance=instance_name]
                  [-i backup-id] [--progress] [-j num-threads]
-                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]
+                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
                  [--recovery-target-name=target-name]
-                 [--timeline=timeline]
+                 [--recovery-target-timeline=timeline]
                  [--skip-block-validation]
 
   pg_probackup show -B backup-path

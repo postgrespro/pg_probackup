@@ -273,26 +273,22 @@ struct pgBackup
 /* Recovery target for restore and validate subcommands */
 typedef struct pgRecoveryTarget
 {
-	bool			time_specified;
-	time_t			recovery_target_time;
-	/* add one more field in order to avoid deparsing recovery_target_time back */
-	const char		*target_time_string;
-	bool			xid_specified;
-	TransactionId	recovery_target_xid;
-	/* add one more field in order to avoid deparsing recovery_target_xid back */
-	const char		*target_xid_string;
-	bool			lsn_specified;
-	XLogRecPtr		recovery_target_lsn;
-	/* add one more field in order to avoid deparsing recovery_target_lsn back */
-	const char		*target_lsn_string;
-	TimeLineID		recovery_target_tli;
-	bool			recovery_target_inclusive;
+	time_t			target_time;
+	/* add one more field in order to avoid deparsing target_time back */
+	const char	   *time_string;
+	TransactionId	target_xid;
+	/* add one more field in order to avoid deparsing target_xid back */
+	const char	   *xid_string;
+	XLogRecPtr		target_lsn;
+	/* add one more field in order to avoid deparsing target_lsn back */
+	const char	   *lsn_string;
+	TimeLineID		target_tli;
+	bool			target_inclusive;
 	bool			inclusive_specified;
-	bool			recovery_target_immediate;
-	const char		*recovery_target_name;
-	const char		*recovery_target_action;
+	const char	   *target_stop;
+	const char	   *target_name;
+	const char	   *target_action;
 	bool			restore_no_validate;
-	bool			latest;
 } pgRecoveryTarget;
 
 typedef struct
@@ -427,8 +423,8 @@ extern bool satisfy_recovery_target(const pgBackup *backup,
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
-	bool target_immediate, const char *target_name,
-	const char *target_action, bool restore_no_validate, bool latest);
+	const char *target_stop, const char *target_name,
+	const char *target_action, bool restore_no_validate);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
