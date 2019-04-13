@@ -1143,8 +1143,8 @@ do_amcheck(void)
 	else
 		elog(INFO, "Checkdb --amcheck executed");
 
-	/* FIXME We already wrote message about skipped databases.
-	 * Maybe we shouldn't check db_skipped here ?
+	/* We cannot state that all indexes are ok
+	 * without checking indexes in all databases
 	 */
 	if (check_isok && !interrupted && !db_skipped)
 		elog(INFO, "Indexes are valid");
@@ -2612,14 +2612,18 @@ check_files(void *arg)
 									 file->path + strlen(arguments->from_root) + 1);
 
 				if (!check_data_file(arguments, file))
-					arguments->ret = 2; /* FIXME what does 2 mean? */
+					arguments->ret = 2; /* corruption found */
 			}
 		}
 		else
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
 
-	/* FIXME why do we reset return code here? */
+	/* Ret values:
+	 * 0 everything is ok
+	 * 1 thread errored during execution, e.g. interruption (default value)
+	 * 2 corruption is definitely(!) found
+	 */
 	if (arguments->ret == 1)
 		arguments->ret = 0;
 

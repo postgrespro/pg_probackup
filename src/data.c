@@ -1643,14 +1643,15 @@ check_data_file(backup_files_arg* arguments,
 			return true;
 		}
 
-		elog(ERROR, "cannot open file \"%s\": %s",
+		elog(WARNING, "cannot open file \"%s\": %s",
 			 file->path, strerror(errno));
+		return false;
 	}
 
 	if (file->size % BLCKSZ != 0)
 	{
 		fclose(in);
-		elog(ERROR, "File: %s, invalid file size %zu", file->path, file->size);
+		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
 	}
 
 	/*
@@ -1671,15 +1672,18 @@ check_data_file(backup_files_arg* arguments,
 
 		if (page_state == PageIsCorrupted)
 		{
-			/* Page is corrupted */
-			// TODO why this message is commented?
-			//elog(WARNING, "File %s, block %u is CORRUPTED.",
-			//		file->path, blknum);
+			/* Page is corrupted, no need to elog about it,
+			 * prepare_page() already done that
+			 */
 			is_valid = false;
 			continue;
 		}
 
-		/* Page is found and this point, but it may not be 'sane' */
+		/* At this point page is found and its checksum is ok, if any
+		 * but could be 'insane'
+		 * TODO: between prepare_page and validate_one_page we
+		 * compute and compare checksum twice, it`s ineffective
+		 */
 		if (validate_one_page(curr_page, file, blknum,
 								  InvalidXLogRecPtr,
 								  0) == PAGE_IS_FOUND_AND_NOT_VALID)
