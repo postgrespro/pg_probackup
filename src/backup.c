@@ -96,7 +96,7 @@ static bool pg_stop_backup_is_sent = false;
 static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
 
-static void pgdata_basic_setup(void);
+static void pgdata_basic_setup(bool amcheck_only);
 
 static void *backup_files(void *arg);
 static void *remote_backup_files(void *arg);
@@ -1147,17 +1147,24 @@ do_amcheck(void)
 	 */
 	if (check_isok && !interrupted && !db_skipped)
 		elog(INFO, "Indexes are valid");
+
+	/* close initial connection to pgdatabase */
+	pgut_disconnect(backup_conn);
 }
 
 /* Entry point of pg_probackup CHECKDB subcommand. */
 void
 do_checkdb(bool need_amcheck)
 {
+	bool amcheck_only = false;
 
 	if (skip_block_validation && !need_amcheck)
 		elog(ERROR, "Option '--skip-block-validation' must be used with '--amcheck' option");
 
-	pgdata_basic_setup();
+	if (skip_block_validation && need_amcheck)
+		amcheck_only = true;
+
+	pgdata_basic_setup(amcheck_only);
 
 	if (!skip_block_validation)
 		do_block_validation();
@@ -1170,12 +1177,17 @@ do_checkdb(bool need_amcheck)
  * Common code for CHECKDB and BACKUP commands.
  * Ensure that we're able to connect to the instance
  * check compatibility and fill basic info.
+ * For checkdb launched in amcheck mode with pgdata validation
+ * do not check system ID, it gives user an opportunity to
+ * check remote PostgreSQL instance.
+ * Also checking system ID in this case serves no purpose, because
+ * all work is done by server.
  */
 static void
-pgdata_basic_setup(void)
+pgdata_basic_setup(bool amcheck_only)
 {
-	/* PGDATA is always required */
-	if (instance_config.pgdata == NULL)
+	/* PGDATA is always required unless running checkdb in amcheck only mode */
+	if (instance_config.pgdata == NULL && !amcheck_only)
 		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
@@ -1209,7 +1221,7 @@ pgdata_basic_setup(void)
 	 */
 	/* TODO fix it for remote backup */
 
-	if (!is_remote_backup)
+	if (!is_remote_backup && !amcheck_only)
 		check_system_identifiers();
 
 	if (current.checksum_version)
@@ -1234,7 +1246,7 @@ do_backup(time_t start_time)
 	 * setup backup_conn, do some compatibility checks and
 	 * fill basic info about instance
 	 */
-	pgdata_basic_setup();
+	pgdata_basic_setup(false);
 
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
