@@ -73,7 +73,6 @@ static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
 static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
-bool is_checksum_enabled = false;
 bool exclusive_backup = false;
 bool heapallindexed_is_supported = false;
 
@@ -1201,9 +1200,10 @@ pgdata_basic_setup(void)
 	/* Confirm that this server version is supported */
 	check_server_version();
 
-	current.checksum_version = get_data_checksum_version(true);
-
-	is_checksum_enabled = pg_checksum_enable();
+	if (pg_checksum_enable())
+		current.checksum_version = 1;
+	else
+		current.checksum_version = 0;
 
 
 	/*
@@ -1216,7 +1216,7 @@ pgdata_basic_setup(void)
 	if (!is_remote_backup)
 		check_system_identifiers();
 
-	if (is_checksum_enabled)
+	if (current.checksum_version)
 		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
 					"Data block corruption will be detected");
 	else

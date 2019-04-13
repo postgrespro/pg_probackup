@@ -419,7 +419,7 @@ prepare_page(backup_files_arg *arguments,
 			 */
 			memcpy(page, ptrack_page, BLCKSZ);
 			free(ptrack_page);
-			if (is_checksum_enabled)
+			if (current.checksum_version)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
 		/* get lsn from page, provided by pg_ptrack_get_block() */

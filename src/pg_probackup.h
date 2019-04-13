@@ -385,7 +385,6 @@ extern bool		smooth_checkpoint;
 extern bool		is_remote_backup;
 
 extern bool is_ptrack_support;
-extern bool is_checksum_enabled;
 extern bool exclusive_backup;
 
 /* restore options */
