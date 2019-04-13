@@ -1062,7 +1062,6 @@ do_amcheck(void)
 						  0, NULL);
 
 	n_databases =  PQntuples(res_db);
-	PQclear(res_db);
 
 	elog(INFO, "Start amchecking PostgreSQL instance");
 
@@ -1134,14 +1133,11 @@ do_amcheck(void)
 			break;
 	}
 
-	/* close initial connection to pgdatabase */
-	pgut_disconnect(backup_conn);
-
 	/* TODO write better info message */
 	if (db_skipped)
 		elog(WARNING, "Some databases were not checked");
 
-	if (!check_isok || db_skipped)
+	if (!check_isok || db_skipped || interrupted)
 		elog(ERROR, "Checkdb --amcheck failed");
 
 	elog(INFO, "Checkdb --amcheck executed successfully");
@@ -3511,7 +3507,7 @@ get_index_list(PGresult *res_db, int db_number,
 		strcmp(PQgetvalue(res, 0, 2), "1") != 0)
 			heapallindexed_is_supported = true;
 
-	elog(INFO, "Amchecking database %s using module '%s' version %s from schema '%s'",
+	elog(INFO, "Amchecking database '%s' using module '%s' version %s from schema '%s'",
 					dbname, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
 
 	if (!heapallindexed_is_supported && heapallindexed)
