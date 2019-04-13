@@ -6,6 +6,7 @@ from datetime import datetime
 import sys
 from time import sleep
 from datetime import datetime, timedelta
+import hashlib
 
 
 module_name = 'restore'
@@ -1779,6 +1780,155 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_target_immediate_stream(self):
+        """more complex test_restore_chain()"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # Take delta
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--immediate'])
+
+        # For stream backup with immediate recovery target there is no need to
+        # create recovery.conf. Is it wise?
+        self.assertFalse(
+            os.path.isfile(recovery_conf))
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--recovery-target=immediate'])
+
+        # For stream backup with immediate recovery target there is no need to
+        # create recovery.conf. Is it wise?
+        self.assertFalse(
+            os.path.isfile(recovery_conf))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_target_immediate_archive(self):
+        """more complex test_restore_chain()"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        # Take delta
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--immediate'])
+
+        # For archive backup with immediate recovery target
+        # recovery.conf is mandatory
+        with open(recovery_conf, 'r') as f:
+            self.assertIn("recovery_target = 'immediate'", f.read())
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--recovery-target=immediate'])
+
+        # For archive backup with immediate recovery target
+        # recovery.conf is mandatory
+        with open(recovery_conf, 'r') as f:
+            self.assertIn("recovery_target = 'immediate'", f.read())
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_target_latest_archive(self):
+        """more complex test_restore_chain()"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        # restore
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node)
+
+        with open(recovery_conf, 'r') as f:
+            print(f.read())
+
+        hash_1 = hashlib.md5(
+            open(recovery_conf, 'rb').read()).hexdigest()
+
+        # restore
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--recovery-target=latest'])
+
+        with open(recovery_conf, 'r') as f:
+            print(f.read())
+
+        hash_2 = hashlib.md5(
+            open(recovery_conf, 'rb').read()).hexdigest()
+
+        self.assertEqual(hash_1, hash_2)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
