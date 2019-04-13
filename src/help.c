@@ -242,7 +242,7 @@ help_backup(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -350,7 +350,7 @@ help_restore(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -399,7 +399,7 @@ help_validate(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -452,7 +452,7 @@ help_delete(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -494,7 +494,7 @@ help_merge(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -544,7 +544,7 @@ help_set_config(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
