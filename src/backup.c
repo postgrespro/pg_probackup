@@ -1063,6 +1063,7 @@ do_amcheck(void)
 						  0, NULL);
 
 	n_databases =  PQntuples(res_db);
+	PQclear(res_db);
 
 	elog(INFO, "Start amchecking PostgreSQL instance");
 
@@ -1134,14 +1135,17 @@ do_amcheck(void)
 			break;
 	}
 
+	/* close initial connection to pgdatabase */
+	pgut_disconnect(backup_conn);
+
 	/* TODO write better info message */
 	if (db_skipped)
 		elog(WARNING, "Some databases were not checked");
 
-	if (!check_isok)
+	if (!check_isok || db_skipped)
 		elog(ERROR, "Checkdb --amcheck failed");
-	else
-		elog(INFO, "Checkdb --amcheck executed");
+
+	elog(INFO, "Checkdb --amcheck executed successfully");
 
 	/* We cannot state that all indexes are ok
 	 * without checking indexes in all databases
@@ -1151,7 +1155,7 @@ do_amcheck(void)
 }
 
 /* Entry point of pg_probackup CHECKDB subcommand. */
-int
+void
 do_checkdb(bool need_amcheck)
 {
 
@@ -1165,9 +1169,6 @@ do_checkdb(bool need_amcheck)
 
 	if (need_amcheck)
 		do_amcheck();
-
-	/* TODO: need to exit with 1 if some corruption is found */
-	return 0;
 }
 
 /*
