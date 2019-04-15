@@ -582,6 +582,15 @@ do_backup_instance(void)
 			strlen(" with pg_probackup"));
 	pg_start_backup(label, smooth_checkpoint, &current);
 
+	/* For incremental backup check that start_lsn is not from the past */
+	if (current.backup_mode != BACKUP_MODE_FULL &&
+		prev_backup->start_lsn > current.start_lsn)
+			elog(ERROR, "Current START LSN %X/%X is lower than START LSN %X/%X of previous backup %s. "
+				"It may indicate that we are trying to backup PostgreSQL instance from the past.",
+				(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
+				(uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn),
+				base36enc(prev_backup->start_time));
+
 	/* Update running backup meta with START LSN */
 	write_backup(&current);
 

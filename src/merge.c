@@ -82,8 +82,8 @@ do_merge(time_t backup_id)
 				/* It is possible that previous merging was interrupted */
 				backup->status != BACKUP_STATUS_MERGING &&
 				backup->status != BACKUP_STATUS_DELETING)
-					elog(ERROR, "Backup %s has status: %s",
-						 base36enc(backup->start_time), status2str(backup->status));
+				elog(ERROR, "Backup %s has status: %s",
+						base36enc(backup->start_time), status2str(backup->status));
 
 			if (backup->backup_mode == BACKUP_MODE_FULL)
 				elog(ERROR, "Backup %s is full backup",
@@ -111,10 +111,8 @@ do_merge(time_t backup_id)
 		full_backup->status != BACKUP_STATUS_DONE &&
 		/* It is possible that previous merging was interrupted */
 		full_backup->status != BACKUP_STATUS_MERGING)
-			elog(ERROR, "Backup %s has status: %s",
-					base36enc(full_backup->start_time), status2str(full_backup->status));
-
-	//Assert(full_backup_idx != dest_backup_idx);
+		elog(ERROR, "Backup %s has status: %s",
+				base36enc(full_backup->start_time), status2str(full_backup->status));
 
 	/* form merge list */
 	while(dest_backup->parent_backup_link)
@@ -125,8 +123,8 @@ do_merge(time_t backup_id)
 			/* It is possible that previous merging was interrupted */
 			dest_backup->status != BACKUP_STATUS_MERGING &&
 			dest_backup->status != BACKUP_STATUS_DELETING)
-				elog(ERROR, "Backup %s has status: %s",
-						base36enc(dest_backup->start_time), status2str(dest_backup->status));
+			elog(ERROR, "Backup %s has status: %s",
+					base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
 		parray_append(merge_list, dest_backup);
 		dest_backup = dest_backup->parent_backup_link;
@@ -210,7 +208,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	Assert(from_backup->status == BACKUP_STATUS_OK ||
 		   from_backup->status == BACKUP_STATUS_DONE ||
-		   from_backup->status == BACKUP_STATUS_MERGING);
+		   from_backup->status == BACKUP_STATUS_MERGING ||
+		   from_backup->status == BACKUP_STATUS_DELETING);
 	pgBackupValidate(from_backup);
 	if (from_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Interrupt merging");

@@ -1191,8 +1191,8 @@ XLogThreadWorker(void *arg)
 			 * Consider thread_arg->endSegNo and thread_arg->endpoint only if
 			 * they are valid.
 			 */
-			xlogreader->ReadRecPtr == thread_arg->endpoint &&
-			nextSegNo > thread_arg->endSegNo)
+			xlogreader->ReadRecPtr >= thread_arg->endpoint &&
+			nextSegNo >= thread_arg->endSegNo)
 			break;
 	}
 

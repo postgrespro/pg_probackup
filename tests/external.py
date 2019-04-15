@@ -253,9 +253,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -326,9 +324,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2',
-                'autovacuum': 'off'})
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)
@@ -429,9 +425,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2',
-                'autovacuum': 'off'})
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)
@@ -523,9 +517,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2',
-                'autovacuum': 'off'})
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)
@@ -641,12 +633,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2',
-                'autovacuum': 'off'})
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=5)

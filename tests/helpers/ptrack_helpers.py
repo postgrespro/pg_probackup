@@ -395,7 +395,10 @@ class ProbackupTest(object):
     def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
 
         if self.get_pgpro_edition(node) == 'enterprise':
-            header_size = 48
+            if self.get_version(node) < self.version_to_num('10.0'):
+                header_size = 48
+            else
+                header_size = 24
         else:
             header_size = 24
         ptrack_bits_for_fork = []
