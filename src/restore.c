@@ -772,10 +772,12 @@ create_recovery_conf(time_t backup_id,
 	char		path[MAXPGPATH];
 	FILE	   *fp;
 	bool		need_restore_conf;
+	bool		target_latest;
 
+	target_latest = rt->target_stop != NULL &&
+		strcmp(rt->target_stop, "latest") == 0;
 	need_restore_conf = !backup->stream ||
-		(rt->time_string || rt->xid_string || rt->lsn_string) ||
-		(rt->target_stop != NULL && strcmp(rt->target_stop, "latest") == 0);
+		(rt->time_string || rt->xid_string || rt->lsn_string) || target_latest;
 
 	/* No need to generate recovery.conf at all. */
 	if (!(need_restore_conf || restore_as_replica))
@@ -816,7 +818,7 @@ create_recovery_conf(time_t backup_id,
 		if (rt->lsn_string)
 			fprintf(fp, "recovery_target_lsn = '%s'\n", rt->lsn_string);
 
-		if (rt->target_stop)
+		if (rt->target_stop && !target_latest)
 			fprintf(fp, "recovery_target = '%s'\n", rt->target_stop);
 
 		if (rt->inclusive_specified)

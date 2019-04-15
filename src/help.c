@@ -328,7 +328,6 @@ help_restore(void)
 
 	printf(_("      --recovery-target=immediate|latest\n"));
 	printf(_("                                   end recovery as soon as a consistent state is reached or as late as possible\n"));
-	printf(_("                                   (default: immediate)\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
