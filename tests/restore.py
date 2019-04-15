@@ -1786,7 +1786,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_restore_target_immediate_stream(self):
-        """more complex test_restore_chain()"""
+        """
+        correct handling of immediate recovery target
+        for STREAM backups
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1836,7 +1839,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_restore_target_immediate_archive(self):
-        """more complex test_restore_chain()"""
+        """
+        correct handling of immediate recovery target
+        for ARCHIVE backups
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1887,7 +1893,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_restore_target_latest_archive(self):
-        """more complex test_restore_chain()"""
+        """
+        make sure that recovery_target 'latest'
+        is default recovery target
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1935,7 +1944,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_restore_target_new_options(self):
-        """more complex test_restore_chain()"""
+        """
+        check that new --recovery-target-*
+        options are working correctly
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
