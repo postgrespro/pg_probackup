@@ -1133,12 +1133,12 @@ do_amcheck(void)
 			break;
 	}
 
-	/* TODO write better info message */
-	if (db_skipped)
-		elog(WARNING, "Some databases were not checked");
-
-	if (!check_isok || db_skipped || interrupted)
+	/* Inform user about amcheck results */
+	if (!check_isok || interrupted)
 		elog(ERROR, "Checkdb --amcheck failed");
+
+	if (db_skipped)
+		elog(ERROR, "Some databases were not amchecked");
 
 	elog(INFO, "Checkdb --amcheck executed successfully");
 
@@ -1148,7 +1148,8 @@ do_amcheck(void)
 	if (check_isok && !interrupted && !db_skipped)
 		elog(INFO, "Indexes are valid");
 
-	/* close initial connection to pgdatabase */
+	/* cleanup */
+	PQclear(res_db);
 	pgut_disconnect(backup_conn);
 }
 
@@ -3519,11 +3520,11 @@ get_index_list(PGresult *res_db, int db_number,
 		strcmp(PQgetvalue(res, 0, 2), "1") != 0)
 			heapallindexed_is_supported = true;
 
-	elog(INFO, "Amchecking database '%s' using module '%s' version %s from schema '%s'",
+	elog(INFO, "Amchecking database '%s' using extension '%s' version %s from schema '%s'",
 					dbname, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
 
 	if (!heapallindexed_is_supported && heapallindexed)
-		elog(WARNING, "Module '%s' verion %s in schema '%s' do not support 'heapallindexed' option",
+		elog(WARNING, "Extension '%s' verion %s in schema '%s' do not support 'heapallindexed' option",
 						PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
 
 	/*
