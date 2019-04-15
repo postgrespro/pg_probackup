@@ -1491,7 +1491,6 @@ validate_one_page(Page page, pgFile *file,
 	XLogRecPtr	lsn;
 	bool		page_header_is_sane = false;
 	bool		checksum_is_ok = false;
-	bool		lsn_from_future = false;
 
 	/* new level of paranoia */
 	if (page == NULL)
@@ -1522,11 +1521,10 @@ validate_one_page(Page page, pgFile *file,
 		}
 
 		/* Page is zeroed. No sense to check header and checksum. */
-		return PAGE_IS_FOUND_AND_VALID;
+		page_header_is_sane = false;
 	}
 	else
 	{
-		/* We should give more information about what exactly is looking fishy */
 		if (PageGetPageSize(phdr) == BLCKSZ &&
 			PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 			(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
@@ -1535,14 +1533,7 @@ validate_one_page(Page page, pgFile *file,
 			phdr->pd_upper <= phdr->pd_special &&
 			phdr->pd_special <= BLCKSZ &&
 			phdr->pd_special == MAXALIGN(phdr->pd_special))
-				page_header_is_sane = true;
-		else
-		{
-			/* Page does not looking good */
-			page_header_is_sane = false;
-			elog(WARNING, "Page is not looking healthy: %s, block %i",
-				file->path, blknum);
-		}
+			page_header_is_sane = true;
 	}
 
 	if (page_header_is_sane)
@@ -1550,7 +1541,10 @@ validate_one_page(Page page, pgFile *file,
 		/* Verify checksum */
 		if (checksum_version)
 		{
-			/* Checksums are enabled, so check it. */
+			/*
+			* If checksum is wrong, sleep a bit and then try again
+			* several times. If it didn't help, throw error
+			*/
 			if (pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
 				== ((PageHeader) page)->pd_checksum)
 			{
@@ -1560,56 +1554,38 @@ validate_one_page(Page page, pgFile *file,
 			{
 				elog(WARNING, "File: %s blknum %u have wrong checksum",
 					 file->path, blknum);
-				return PAGE_IS_FOUND_AND_NOT_VALID;
 			}
 		}
 		else
-		{
-			/* Checksums are disabled, so check lsn. */
-			if (stop_lsn > 0)
-			{
-				/* Get lsn from page header. Ensure that page is from our time.
-				 * This is dangerous move, because we cannot be sure that
-				 * lsn from page header is not a garbage.
-				 */
-				lsn = PageXLogRecPtrGet(phdr->pd_lsn);
-
-				if (lsn > stop_lsn)
-				{
-					elog(WARNING, "File: %s, block %u, checksum is not enabled. "
-								  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
-						file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
-						 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-					lsn_from_future = true;
-				}
-			}
-
-		}
-
-		/* If checksum is ok, check that page is not from future */
-		if (checksum_is_ok && stop_lsn > 0)
 		{
 			/* Get lsn from page header. Ensure that page is from our time */
 			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 			if (lsn > stop_lsn)
-			{
+				elog(WARNING, "File: %s, block %u, checksum is not enabled. "
+							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
+					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
+					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
+			else
+				return PAGE_IS_FOUND_AND_VALID;
+		}
+
+		if (checksum_is_ok)
+		{
+			/* Get lsn from page header. Ensure that page is from our time */
+			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
+
+			if (lsn > stop_lsn)
 				elog(WARNING, "File: %s, block %u, checksum is correct. "
 							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
 					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
 					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-				lsn_from_future = true;
-			}
+			else
+				return PAGE_IS_FOUND_AND_VALID;
 		}
-
-		if (lsn_from_future)
-			return PAGE_IS_FOUND_AND_NOT_VALID;
-		else
-			return PAGE_IS_FOUND_AND_VALID;
 	}
-	else
-		return PAGE_IS_FOUND_AND_NOT_VALID;
 
+	return PAGE_IS_FOUND_AND_NOT_VALID;
 }
 
 /*
