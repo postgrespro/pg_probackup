@@ -1490,7 +1490,6 @@ validate_one_page(Page page, pgFile *file,
 	PageHeader	phdr;
 	XLogRecPtr	lsn;
 	bool		page_header_is_sane = false;
-	bool		checksum_is_ok = false;
 
 	/* new level of paranoia */
 	if (page == NULL)
@@ -1520,72 +1519,71 @@ validate_one_page(Page page, pgFile *file,
 				 file->path, blknum);
 		}
 
-		/* Page is zeroed. No sense to check header and checksum. */
-		page_header_is_sane = false;
+		/* Page is zeroed. No sense in checking header and checksum. */
+		return PAGE_IS_FOUND_AND_VALID;
 	}
+
+	/* Verify checksum */
+	if (checksum_version)
+	{
+		/* Checksums are enabled, so check them. */
+		if (!(pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
+			== ((PageHeader) page)->pd_checksum))
+		{
+			elog(WARNING, "File: %s blknum %u have wrong checksum",
+				 file->path, blknum);
+			return PAGE_IS_FOUND_AND_NOT_VALID;
+		}
+	}
+
+	/* Check page for the sights of insanity.
+	 * TODO: We should give more information about what exactly is looking "wrong"
+	 */
+	if (PageGetPageSize(phdr) == BLCKSZ &&
+		PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
+		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
+		phdr->pd_lower >= SizeOfPageHeaderData &&
+		phdr->pd_lower <= phdr->pd_upper &&
+		phdr->pd_upper <= phdr->pd_special &&
+		phdr->pd_special <= BLCKSZ &&
+		phdr->pd_special == MAXALIGN(phdr->pd_special))
+			/* Page header is sane */
+			page_header_is_sane = true;
 	else
 	{
-		if (PageGetPageSize(phdr) == BLCKSZ &&
-			PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
-			(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
-			phdr->pd_lower >= SizeOfPageHeaderData &&
-			phdr->pd_lower <= phdr->pd_upper &&
-			phdr->pd_upper <= phdr->pd_special &&
-			phdr->pd_special <= BLCKSZ &&
-			phdr->pd_special == MAXALIGN(phdr->pd_special))
-			page_header_is_sane = true;
+		/* Page does not looking good */
+		page_header_is_sane = false;
+		elog(WARNING, "Page is looking insane: %s, block %i",
+			file->path, blknum);
 	}
 
-	if (page_header_is_sane)
+	/* Page is insane, no need going further */
+	if (!page_header_is_sane)
+		return PAGE_IS_FOUND_AND_NOT_VALID;
+
+	/* At this point page header is sane, if checksums are enabled - the`re ok.
+	 * Check that page is not from future.
+	 */
+	if (stop_lsn > 0)
 	{
-		/* Verify checksum */
-		if (checksum_version)
-		{
-			/*
-			* If checksum is wrong, sleep a bit and then try again
-			* several times. If it didn't help, throw error
-			*/
-			if (pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
-				== ((PageHeader) page)->pd_checksum)
-			{
-				checksum_is_ok = true;
-			}
-			else
-			{
-				elog(WARNING, "File: %s blknum %u have wrong checksum",
-					 file->path, blknum);
-			}
-		}
-		else
-		{
-			/* Get lsn from page header. Ensure that page is from our time */
-			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
+		/* Get lsn from page header. Ensure that page is from our time.
+		 * This could be a dangerous move, because in case of disabled checksum we
+		 * cannot be sure that lsn from page header is not a garbage.
+		 */
+		lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
-			if (lsn > stop_lsn)
-				elog(WARNING, "File: %s, block %u, checksum is not enabled. "
-							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
-					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
-					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-			else
-				return PAGE_IS_FOUND_AND_VALID;
-		}
-
-		if (checksum_is_ok)
+		if (lsn > stop_lsn)
 		{
-			/* Get lsn from page header. Ensure that page is from our time */
-			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
-
-			if (lsn > stop_lsn)
-				elog(WARNING, "File: %s, block %u, checksum is correct. "
-							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
-					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
-					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-			else
-				return PAGE_IS_FOUND_AND_VALID;
+			elog(WARNING, "File: %s, block %u, checksum is %s. "
+						  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
+				file->path, blknum, checksum_version ? "correct" : "not enabled",
+				(uint32) (lsn >> 32), (uint32) lsn,
+				(uint32) (stop_lsn >> 32), (uint32) stop_lsn);
+			return PAGE_IS_FOUND_AND_NOT_VALID;
 		}
 	}
 
-	return PAGE_IS_FOUND_AND_NOT_VALID;
+	return PAGE_IS_FOUND_AND_VALID;
 }
 
 /*
