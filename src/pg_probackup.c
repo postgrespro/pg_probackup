@@ -189,7 +189,10 @@ setMyLocation(void)
 {
 	MyLocation = IsSshProtocol()
 		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
-		   ? FIO_DB_HOST : FIO_BACKUP_HOST
+		   ? FIO_DB_HOST
+		   : (backup_subcmd == BACKUP_CMD || backup_subcmd == RESTORE_CMD)
+		      ? FIO_BACKUP_HOST
+		      : FIO_LOCAL_HOST
 		: FIO_LOCAL_HOST;
 }
 
