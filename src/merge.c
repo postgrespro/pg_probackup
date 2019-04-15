@@ -78,6 +78,7 @@ do_merge(time_t backup_id)
 		{
 			/* sanity */
 			if (backup->status != BACKUP_STATUS_OK &&
+				backup->status != BACKUP_STATUS_DONE &&
 				/* It is possible that previous merging was interrupted */
 				backup->status != BACKUP_STATUS_MERGING &&
 				backup->status != BACKUP_STATUS_DELETING)
@@ -107,6 +108,7 @@ do_merge(time_t backup_id)
 
 	/* sanity */
 	if (full_backup->status != BACKUP_STATUS_OK &&
+		full_backup->status != BACKUP_STATUS_DONE &&
 		/* It is possible that previous merging was interrupted */
 		full_backup->status != BACKUP_STATUS_MERGING)
 		elog(ERROR, "Backup %s has status: %s",
@@ -117,6 +119,7 @@ do_merge(time_t backup_id)
 	{
 		/* sanity */
 		if (dest_backup->status != BACKUP_STATUS_OK &&
+			dest_backup->status != BACKUP_STATUS_DONE &&
 			/* It is possible that previous merging was interrupted */
 			dest_backup->status != BACKUP_STATUS_MERGING &&
 			dest_backup->status != BACKUP_STATUS_DELETING)
@@ -191,7 +194,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 * BACKUP_STATUS_MERGING status then it isn't valid backup until merging
 	 * finished.
 	 */
-	if (to_backup->status == BACKUP_STATUS_OK)
+	if (to_backup->status == BACKUP_STATUS_OK ||
+		to_backup->status == BACKUP_STATUS_DONE)
 	{
 		pgBackupValidate(to_backup);
 		if (to_backup->status == BACKUP_STATUS_CORRUPT)
@@ -203,6 +207,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 * BACKUP_STATUS_MERGING status.
 	 */
 	Assert(from_backup->status == BACKUP_STATUS_OK ||
+		   from_backup->status == BACKUP_STATUS_DONE ||
 		   from_backup->status == BACKUP_STATUS_MERGING ||
 		   from_backup->status == BACKUP_STATUS_DELETING);
 	pgBackupValidate(from_backup);

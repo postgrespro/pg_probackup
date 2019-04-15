@@ -291,7 +291,7 @@ typedef struct pgRecoveryTarget
 	bool			recovery_target_immediate;
 	const char		*recovery_target_name;
 	const char		*recovery_target_action;
-	bool			restore_no_validate;
+	bool			no_validate;
 } pgRecoveryTarget;
 
 typedef struct
@@ -406,7 +406,7 @@ extern pgBackup current;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(time_t start_time);
+extern int do_backup(time_t start_time, bool no_validate);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
@@ -427,7 +427,7 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
 	bool target_immediate, const char *target_name,
-	const char *target_action, bool restore_no_validate);
+	const char *target_action, bool no_validate);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);

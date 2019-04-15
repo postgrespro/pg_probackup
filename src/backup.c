@@ -931,7 +931,7 @@ do_backup_instance(void)
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int
-do_backup(time_t start_time)
+do_backup(time_t start_time, bool no_validate)
 {
 	/* PGDATA and BACKUP_MODE are always required */
 	if (instance_config.pgdata == NULL)
@@ -1069,7 +1069,8 @@ do_backup(time_t start_time)
 	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
 	//		current.data_bytes);
 
-	pgBackupValidate(&current);
+	if (!no_validate)
+		pgBackupValidate(&current);
 
 	elog(INFO, "Backup %s completed", base36enc(current.start_time));
 

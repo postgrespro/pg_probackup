@@ -118,7 +118,7 @@ help_pg_probackup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [--external-dirs=external-directory-path]\n"));
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
@@ -212,7 +212,7 @@ help_backup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
@@ -226,6 +226,7 @@ help_backup(void)
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
+	printf(_("      --no-validate                disable validation after backup\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
 	printf(_("                                   backup some directories not from pgdata \n"));

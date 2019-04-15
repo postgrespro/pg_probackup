@@ -94,7 +94,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		if (is_restore &&
 			target_backup_id == INVALID_BACKUP_ID &&
-			current_backup->status != BACKUP_STATUS_OK)
+			(current_backup->status != BACKUP_STATUS_OK &&
+			 current_backup->status != BACKUP_STATUS_DONE))
 		{
 			elog(WARNING, "Skipping backup %s, because it has non-valid status: %s",
 				base36enc(current_backup->start_time), status2str(current_backup->status));
@@ -110,7 +111,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		{
 
 			/* backup is not ok,
-			 * but in case of CORRUPT, ORPHAN or DONE revalidation is possible
+			 * but in case of CORRUPT or ORPHAN revalidation is possible
 			 * unless --no-validate is used,
 			 * in other cases throw an error.
 			 */
@@ -119,13 +120,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 // 3. restore -i INVALID_ID <- allowed revalidate and restore
 			 // 4. restore <- impossible
 			 // 5. restore --no-validate <- forbidden
-			if (current_backup->status != BACKUP_STATUS_OK)
+			if (current_backup->status != BACKUP_STATUS_OK &&
+				current_backup->status != BACKUP_STATUS_DONE)
 			{
-				if ((current_backup->status == BACKUP_STATUS_DONE ||
-					current_backup->status == BACKUP_STATUS_ORPHAN ||
+				if ((current_backup->status == BACKUP_STATUS_ORPHAN ||
 					current_backup->status == BACKUP_STATUS_CORRUPT ||
 					current_backup->status == BACKUP_STATUS_RUNNING)
-					&& !rt->restore_no_validate)
+					&& !rt->no_validate)
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
 				else
@@ -205,7 +206,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				 */
 				if (is_parent(missing_backup_start_time, backup, false))
 				{
-					if (backup->status == BACKUP_STATUS_OK)
+					if (backup->status == BACKUP_STATUS_OK ||
+						backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
@@ -238,7 +240,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 				if (is_parent(tmp_backup->start_time, backup, false))
 				{
-					if (backup->status == BACKUP_STATUS_OK)
+					if (backup->status == BACKUP_STATUS_OK ||
+						backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
@@ -308,7 +311,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	parray_append(parent_chain, base_full_backup);
 
 	/* for validation or restore with enabled validation */
-	if (!is_restore || !rt->restore_no_validate)
+	if (!is_restore || !rt->no_validate)
 	{
 		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
 			elog(INFO, "Validating parents for backup %s", base36enc(dest_backup->start_time));
@@ -374,7 +377,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 				if (is_parent(corrupted_backup->start_time, backup, false))
 				{
-					if (backup->status == BACKUP_STATUS_OK)
+					if (backup->status == BACKUP_STATUS_OK ||
+						backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
@@ -393,9 +397,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 * If dest backup is corrupted or was orphaned in previous check
 	 * produce corresponding error message
 	 */
-	if (dest_backup->status == BACKUP_STATUS_OK)
+	if (dest_backup->status == BACKUP_STATUS_OK ||
+		dest_backup->status == BACKUP_STATUS_DONE)
 	{
-		if (rt->restore_no_validate)
+		if (rt->no_validate)
 			elog(INFO, "Backup %s is used without validation.", base36enc(dest_backup->start_time));
 		else
 			elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
@@ -425,7 +430,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * Backup was locked during validation if no-validate wasn't
 			 * specified.
 			 */
-			if (rt->restore_no_validate && !lock_backup(backup))
+			if (rt->no_validate && !lock_backup(backup))
 				elog(ERROR, "Cannot lock backup directory");
 
 			restore_backup(backup, dest_backup->external_dir_str);
@@ -473,7 +478,8 @@ restore_backup(pgBackup *backup, const char *external_dir_str)
 	bool		restore_isok = true;
 
 
-	if (backup->status != BACKUP_STATUS_OK)
+	if (backup->status != BACKUP_STATUS_OK &&
+		backup->status != BACKUP_STATUS_DONE)
 		elog(ERROR, "Backup %s cannot be restored because it is not valid",
 			 base36enc(backup->start_time));
 
@@ -993,7 +999,7 @@ parseRecoveryTargetOptions(const char *target_time,
 					bool target_immediate,
 					const char *target_name,
 					const char *target_action,
-					bool		restore_no_validate)
+					bool		no_validate)
 {
 	time_t		dummy_time;
 	TransactionId dummy_xid;
@@ -1022,7 +1028,7 @@ parseRecoveryTargetOptions(const char *target_time,
 	rt->recovery_target_immediate = false;
 	rt->recovery_target_name = NULL;
 	rt->recovery_target_action = NULL;
-	rt->restore_no_validate = false;
+	rt->no_validate = false;
 
 	/* parse given options */
 	if (target_time)
@@ -1080,9 +1086,9 @@ parseRecoveryTargetOptions(const char *target_time,
 		rt->recovery_target_immediate = target_immediate;
 	}
 
-	if (restore_no_validate)
+	if (no_validate)
 	{
-		rt->restore_no_validate = restore_no_validate;
+		rt->no_validate = no_validate;
 	}
 
 	if (target_name)
