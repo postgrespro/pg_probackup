@@ -123,21 +123,22 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR] [--progress]\n"));
-	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target=immediate|latest]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
-	printf(_("                 [--no-validate]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
-	printf(_("                 [--timeline=timeline]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
@@ -241,7 +242,7 @@ help_backup(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -292,15 +293,17 @@ static void
 help_restore(void)
 {
 	printf(_("%s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
+	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target=immediate|latest]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica] [--no-validate]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
-	printf(_("                 [--skip-external-dirs]\n\n"));
+	printf(_("                 [--restore-as-replica]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--skip-external-dirs]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -310,17 +313,15 @@ help_restore(void)
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 
 	printf(_("      --progress                   show progress\n"));
-	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
-	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
-	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
-	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
-	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
-	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
-	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
-
-	printf(_("      --immediate                  end recovery as soon as a consistent state is reached\n"));
+	printf(_("      --recovery-target-time=time  time stamp up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-xid=xid    transaction ID up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-lsn=lsn    LSN of the write-ahead log location up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-inclusive=boolean\n"));
+	printf(_("                                   whether we stop just after the recovery target\n"));
+	printf(_("      --recovery-target-timeline=timeline\n"));
+	printf(_("                                   recovering into a particular timeline\n"));
+	printf(_("      --recovery-target=immediate|latest\n"));
+	printf(_("                                   end recovery as soon as a consistent state is reached or as late as possible\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
@@ -331,6 +332,11 @@ help_restore(void)
 	printf(_("                                   to ease setting up a standby server\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+
+	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
 
 	printf(_("\n  Logging options:\n"));
@@ -342,7 +348,7 @@ help_restore(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -359,10 +365,11 @@ static void
 help_validate(void)
 {
 	printf(_("%s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
-	printf(_("                 [-i backup-id] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline]\n\n"));
-	printf(_("                 [--skip-block-validation]\n\n"));
+	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
+	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -370,11 +377,13 @@ help_validate(void)
 
 	printf(_("      --progress                   show progress\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
-	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
-	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
-	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
-	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
-	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
+	printf(_("      --recovery-target-time=time  time stamp up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-xid=xid    transaction ID up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-lsn=lsn    LSN of the write-ahead log location up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-inclusive=boolean\n"));
+	printf(_("                                   whether we stop just after the recovery target\n"));
+	printf(_("      --recovery-target-timeline=timeline\n"));
+	printf(_("                                   recovering into a particular timeline\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
@@ -388,7 +397,7 @@ help_validate(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -441,7 +450,7 @@ help_delete(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -483,7 +492,7 @@ help_merge(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -533,7 +542,7 @@ help_set_config(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));

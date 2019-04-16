@@ -134,13 +134,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
 			}
 
-			if (rt->recovery_target_tli)
+			if (rt->target_tli)
 			{
 				parray	   *timelines;
 
-				elog(LOG, "target timeline ID = %u", rt->recovery_target_tli);
+				elog(LOG, "target timeline ID = %u", rt->target_tli);
 				/* Read timeline history files from archives */
-				timelines = read_timeline_history(rt->recovery_target_tli);
+				timelines = read_timeline_history(rt->target_tli);
 
 				if (!satisfy_timeline(timelines, current_backup))
 				{
@@ -361,8 +361,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * We pass base_full_backup timeline as last argument to this function,
 			 * because it's needed to form the name of xlog file.
 			 */
-			validate_wal(dest_backup, arclog_path, rt->recovery_target_time,
-						 rt->recovery_target_xid, rt->recovery_target_lsn,
+			validate_wal(dest_backup, arclog_path, rt->target_time,
+						 rt->target_xid, rt->target_lsn,
 						 base_full_backup->tli, instance_config.xlog_seg_size);
 		}
 		/* Orphinize every OK descendant of corrupted backup */
@@ -422,9 +422,11 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
-			if (rt->lsn_specified && parse_server_version(backup->server_version) < 100000)
+			if (rt->lsn_string &&
+				parse_server_version(backup->server_version) < 100000)
 				elog(ERROR, "Backup %s was created for version %s which doesn't support recovery_target_lsn",
-						base36enc(dest_backup->start_time), dest_backup->server_version);
+					 base36enc(dest_backup->start_time),
+					 dest_backup->server_version);
 
 			/*
 			 * Backup was locked during validation if no-validate wasn't
@@ -775,11 +777,13 @@ create_recovery_conf(time_t backup_id,
 {
 	char		path[MAXPGPATH];
 	FILE	   *fp;
-	bool		need_restore_conf = false;
+	bool		need_restore_conf;
+	bool		target_latest;
 
-	if (!backup->stream
-		|| (rt->time_specified || rt->xid_specified))
-			need_restore_conf = true;
+	target_latest = rt->target_stop != NULL &&
+		strcmp(rt->target_stop, "latest") == 0;
+	need_restore_conf = !backup->stream ||
+		(rt->time_string || rt->xid_string || rt->lsn_string) || target_latest;
 
 	/* No need to generate recovery.conf at all. */
 	if (!(need_restore_conf || restore_as_replica))
@@ -808,30 +812,30 @@ create_recovery_conf(time_t backup_id,
 		 * We've already checked that only one of the four following mutually
 		 * exclusive options is specified, so the order of calls is insignificant.
 		 */
-		if (rt->recovery_target_name)
-			fprintf(fp, "recovery_target_name = '%s'\n", rt->recovery_target_name);
+		if (rt->target_name)
+			fprintf(fp, "recovery_target_name = '%s'\n", rt->target_name);
 
-		if (rt->time_specified)
-			fprintf(fp, "recovery_target_time = '%s'\n", rt->target_time_string);
+		if (rt->time_string)
+			fprintf(fp, "recovery_target_time = '%s'\n", rt->time_string);
 
-		if (rt->xid_specified)
-			fprintf(fp, "recovery_target_xid = '%s'\n", rt->target_xid_string);
+		if (rt->xid_string)
+			fprintf(fp, "recovery_target_xid = '%s'\n", rt->xid_string);
 
-		if (rt->recovery_target_lsn)
-			fprintf(fp, "recovery_target_lsn = '%s'\n", rt->target_lsn_string);
+		if (rt->lsn_string)
+			fprintf(fp, "recovery_target_lsn = '%s'\n", rt->lsn_string);
 
-		if (rt->recovery_target_immediate)
-			fprintf(fp, "recovery_target = 'immediate'\n");
+		if (rt->target_stop && !target_latest)
+			fprintf(fp, "recovery_target = '%s'\n", rt->target_stop);
 
 		if (rt->inclusive_specified)
 			fprintf(fp, "recovery_target_inclusive = '%s'\n",
-					rt->recovery_target_inclusive?"true":"false");
+					rt->target_inclusive ? "true" : "false");
 
-		if (rt->recovery_target_tli)
-			fprintf(fp, "recovery_target_timeline = '%u'\n", rt->recovery_target_tli);
+		if (rt->target_tli)
+			fprintf(fp, "recovery_target_timeline = '%u'\n", rt->target_tli);
 
-		if (rt->recovery_target_action)
-			fprintf(fp, "recovery_target_action = '%s'\n", rt->recovery_target_action);
+		if (rt->target_action)
+			fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);
 	}
 
 	if (restore_as_replica)
@@ -957,14 +961,14 @@ read_timeline_history(TimeLineID targetTLI)
 bool
 satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 {
-	if (rt->xid_specified)
-		return backup->recovery_xid <= rt->recovery_target_xid;
+	if (rt->xid_string)
+		return backup->recovery_xid <= rt->target_xid;
 
-	if (rt->time_specified)
-		return backup->recovery_time <= rt->recovery_target_time;
+	if (rt->time_string)
+		return backup->recovery_time <= rt->target_time;
 
-	if (rt->lsn_specified)
-		return backup->stop_lsn <= rt->recovery_target_lsn;
+	if (rt->lsn_string)
+		return backup->stop_lsn <= rt->target_lsn;
 
 	return true;
 }
@@ -996,15 +1000,12 @@ parseRecoveryTargetOptions(const char *target_time,
 					const char *target_inclusive,
 					TimeLineID	target_tli,
 					const char *target_lsn,
-					bool target_immediate,
+					const char *target_stop,
 					const char *target_name,
 					const char *target_action,
 					bool		no_validate)
 {
-	time_t		dummy_time;
-	TransactionId dummy_xid;
 	bool		dummy_bool;
-	XLogRecPtr	dummy_lsn;
 	/*
 	 * count the number of the mutually exclusive options which may specify
 	 * recovery target. If final value > 1, throw an error.
@@ -1013,112 +1014,111 @@ parseRecoveryTargetOptions(const char *target_time,
 	pgRecoveryTarget *rt = pgut_new(pgRecoveryTarget);
 
 	/* fill all options with default values */
-	rt->time_specified = false;
-	rt->xid_specified = false;
-	rt->inclusive_specified = false;
-	rt->lsn_specified = false;
-	rt->recovery_target_time = 0;
-	rt->recovery_target_xid  = 0;
-	rt->recovery_target_lsn = InvalidXLogRecPtr;
-	rt->target_time_string = NULL;
-	rt->target_xid_string = NULL;
-	rt->target_lsn_string = NULL;
-	rt->recovery_target_inclusive = false;
-	rt->recovery_target_tli  = 0;
-	rt->recovery_target_immediate = false;
-	rt->recovery_target_name = NULL;
-	rt->recovery_target_action = NULL;
-	rt->no_validate = false;
+	MemSet(rt, 0, sizeof(pgRecoveryTarget));
 
 	/* parse given options */
 	if (target_time)
 	{
+		time_t		dummy_time;
+
 		recovery_target_specified++;
-		rt->time_specified = true;
-		rt->target_time_string = target_time;
+		rt->time_string = target_time;
 
 		if (parse_time(target_time, &dummy_time, false))
-			rt->recovery_target_time = dummy_time;
+			rt->target_time = dummy_time;
 		else
-			elog(ERROR, "Invalid value of --time option %s", target_time);
+			elog(ERROR, "Invalid value for --recovery-target-time option %s",
+				 target_time);
 	}
 
 	if (target_xid)
 	{
+		TransactionId dummy_xid;
+
 		recovery_target_specified++;
-		rt->xid_specified = true;
-		rt->target_xid_string = target_xid;
+		rt->xid_string = target_xid;
 
 #ifdef PGPRO_EE
 		if (parse_uint64(target_xid, &dummy_xid, 0))
 #else
 		if (parse_uint32(target_xid, &dummy_xid, 0))
 #endif
-			rt->recovery_target_xid = dummy_xid;
+			rt->target_xid = dummy_xid;
 		else
-			elog(ERROR, "Invalid value of --xid option %s", target_xid);
+			elog(ERROR, "Invalid value for --recovery-target-xid option %s",
+				 target_xid);
 	}
 
 	if (target_lsn)
 	{
+		XLogRecPtr	dummy_lsn;
+
 		recovery_target_specified++;
-		rt->lsn_specified = true;
-		rt->target_lsn_string = target_lsn;
+		rt->lsn_string = target_lsn;
 		if (parse_lsn(target_lsn, &dummy_lsn))
-			rt->recovery_target_lsn = dummy_lsn;
+			rt->target_lsn = dummy_lsn;
 		else
-			elog(ERROR, "Invalid value of --lsn option %s", target_lsn);
+			elog(ERROR, "Invalid value of --ecovery-target-lsn option %s",
+				 target_lsn);
 	}
 
 	if (target_inclusive)
 	{
 		rt->inclusive_specified = true;
 		if (parse_bool(target_inclusive, &dummy_bool))
-			rt->recovery_target_inclusive = dummy_bool;
+			rt->target_inclusive = dummy_bool;
 		else
-			elog(ERROR, "Invalid value of --inclusive option %s", target_inclusive);
+			elog(ERROR, "Invalid value for --recovery-target-inclusive option %s",
+				 target_inclusive);
 	}
 
-	rt->recovery_target_tli  = target_tli;
-	if (target_immediate)
+	rt->target_tli = target_tli;
+	if (target_stop)
 	{
+		if ((strcmp(target_stop, "immediate") != 0)
+			&& (strcmp(target_stop, "latest") != 0))
+			elog(ERROR, "Invalid value for --recovery-target option %s",
+				 target_stop);
+
 		recovery_target_specified++;
-		rt->recovery_target_immediate = target_immediate;
+		rt->target_stop = target_stop;
 	}
 
-	if (no_validate)
-	{
-		rt->no_validate = no_validate;
-	}
+	rt->no_validate = no_validate;
 
 	if (target_name)
 	{
 		recovery_target_specified++;
-		rt->recovery_target_name = target_name;
+		rt->target_name = target_name;
 	}
 
 	if (target_action)
 	{
-		rt->recovery_target_action = target_action;
-
 		if ((strcmp(target_action, "pause") != 0)
 			&& (strcmp(target_action, "promote") != 0)
 			&& (strcmp(target_action, "shutdown") != 0))
-				elog(ERROR, "Invalid value of --recovery-target-action option %s", target_action);
+			elog(ERROR, "Invalid value for --recovery-target-action option %s",
+				 target_action);
+
+		rt->target_action = target_action;
 	}
 	else
 	{
 		/* Default recovery target action is pause */
-		rt->recovery_target_action = "pause";
+		rt->target_action = "pause";
 	}
 
 	/* More than one mutually exclusive option was defined. */
 	if (recovery_target_specified > 1)
-		elog(ERROR, "At most one of --immediate, --target-name, --time, --xid, or --lsn can be used");
+		elog(ERROR, "At most one of --recovery-target, --recovery-target-name, --recovery-target-time, --recovery-target-xid, or --recovery-target-lsn can be specified");
 
-	/* If none of the options is defined, '--inclusive' option is meaningless */
-	if (!(rt->xid_specified || rt->time_specified || rt->lsn_specified) && rt->recovery_target_inclusive)
-		elog(ERROR, "--inclusive option applies when either --time or --xid is specified");
+	/*
+	 * If none of the options is defined, '--recovery-target-inclusive' option
+	 * is meaningless.
+	 */
+	if (!(rt->xid_string || rt->time_string || rt->lsn_string) &&
+		rt->target_inclusive)
+		elog(ERROR, "--recovery-target-inclusive option applies when either --recovery-target-time, --recovery-target-xid or --recovery-target-lsn is specified");
 
 	return rt;
 }

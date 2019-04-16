@@ -6,6 +6,7 @@ from datetime import datetime
 import sys
 from time import sleep
 from datetime import datetime, timedelta
+import hashlib
 
 
 module_name = 'restore'
@@ -1011,7 +1012,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'node', node, options=["--stream"])
         node.safe_psql("postgres", "create table t_heap(a int)")
-        node.safe_psql("postgres", "select pg_switch_xlog()")
+
         node.stop()
         node.cleanup()
 
@@ -1779,6 +1780,341 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_target_immediate_stream(self):
+        """
+        correct handling of immediate recovery target
+        for STREAM backups
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # Take delta
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--immediate'])
+
+        # For stream backup with immediate recovery target there is no need to
+        # create recovery.conf. Is it wise?
+        self.assertFalse(
+            os.path.isfile(recovery_conf))
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--recovery-target=immediate'])
+
+        # For stream backup with immediate recovery target there is no need to
+        # create recovery.conf. Is it wise?
+        self.assertFalse(
+            os.path.isfile(recovery_conf))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_target_immediate_archive(self):
+        """
+        correct handling of immediate recovery target
+        for ARCHIVE backups
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        # Take delta
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--immediate'])
+
+        # For archive backup with immediate recovery target
+        # recovery.conf is mandatory
+        with open(recovery_conf, 'r') as f:
+            self.assertIn("recovery_target = 'immediate'", f.read())
+
+        # restore page backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--recovery-target=immediate'])
+
+        # For archive backup with immediate recovery target
+        # recovery.conf is mandatory
+        with open(recovery_conf, 'r') as f:
+            self.assertIn("recovery_target = 'immediate'", f.read())
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_target_latest_archive(self):
+        """
+        make sure that recovery_target 'latest'
+        is default recovery target
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        # restore
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node)
+
+        with open(recovery_conf, 'r') as f:
+            print(f.read())
+
+        hash_1 = hashlib.md5(
+            open(recovery_conf, 'rb').read()).hexdigest()
+
+        # restore
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, options=['--recovery-target=latest'])
+
+        with open(recovery_conf, 'r') as f:
+            print(f.read())
+
+        hash_2 = hashlib.md5(
+            open(recovery_conf, 'rb').read()).hexdigest()
+
+        self.assertEqual(hash_1, hash_2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_target_new_options(self):
+        """
+        check that new --recovery-target-*
+        options are working correctly
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        node.pgbench_init(scale=2)
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        node.safe_psql(
+            "postgres",
+            "CREATE TABLE tbl0005 (a text)")
+
+        node.safe_psql(
+            "postgres", "select pg_create_restore_point('savepoint')")
+
+        target_name = 'savepoint'
+
+        target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with node.connect("postgres") as con:
+            res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
+            con.commit()
+            target_xid = res[0][0]
+
+        with node.connect("postgres") as con:
+            con.execute("INSERT INTO tbl0005 VALUES (1)")
+            con.commit()
+            if self.get_version(node) > self.version_to_num('10.0'):
+                res = con.execute("SELECT pg_current_wal_lsn()")
+            else:
+                res = con.execute("SELECT pg_current_xlog_location()")
+
+            con.commit()
+            con.execute("INSERT INTO tbl0005 VALUES (2)")
+            con.commit()
+            xlogid, xrecoff = res[0][0].split('/')
+            xrecoff = hex(int(xrecoff, 16) + 1)[2:]
+            target_lsn = "{0}/{1}".format(xlogid, xrecoff)
+
+        # Restore with recovery target time
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--recovery-target-time={0}'.format(target_time),
+                "--recovery-target-action=promote",
+                '--recovery-target-timeline=1',
+                ])
+
+        with open(recovery_conf, 'r') as f:
+            recovery_conf_content = f.read()
+
+        print(recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_time = '{0}'".format(target_time),
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_action = 'promote'",
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_timeline = '1'",
+            recovery_conf_content)
+
+        node.slow_start()
+
+        # Restore with recovery target xid
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                "--recovery-target-action=promote",
+                '--recovery-target-timeline=1',
+                ])
+
+        with open(recovery_conf, 'r') as f:
+            recovery_conf_content = f.read()
+
+        print(recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_xid = '{0}'".format(target_xid),
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_action = 'promote'",
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_timeline = '1'",
+            recovery_conf_content)
+
+        node.slow_start()
+
+        # Restore with recovery target lsn
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--recovery-target-lsn={0}'.format(target_lsn),
+                "--recovery-target-action=promote",
+                '--recovery-target-timeline=1',
+                ])
+
+        with open(recovery_conf, 'r') as f:
+            recovery_conf_content = f.read()
+
+        print(recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_lsn = '{0}'".format(target_lsn),
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_action = 'promote'",
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_timeline = '1'",
+            recovery_conf_content)
+
+        node.slow_start()
+
+        # Restore with recovery target name
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--recovery-target-name={0}'.format(target_name),
+                "--recovery-target-action=promote",
+                '--recovery-target-timeline=1',
+                ])
+
+        with open(recovery_conf, 'r') as f:
+            recovery_conf_content = f.read()
+
+        print(recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_name = '{0}'".format(target_name),
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_action = 'promote'",
+            recovery_conf_content)
+
+        self.assertIn(
+            "recovery_target_timeline = '1'",
+            recovery_conf_content)
+
+        node.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

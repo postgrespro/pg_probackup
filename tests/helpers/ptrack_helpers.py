@@ -397,7 +397,7 @@ class ProbackupTest(object):
         if self.get_pgpro_edition(node) == 'enterprise':
             if self.get_version(node) < self.version_to_num('10.0'):
                 header_size = 48
-            else
+            else:
                 header_size = 24
         else:
             header_size = 24

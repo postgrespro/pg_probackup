@@ -78,6 +78,7 @@ static char		   *target_xid = NULL;
 static char		   *target_lsn = NULL;
 static char		   *target_inclusive = NULL;
 static TimeLineID	target_tli;
+static char		   *target_stop;
 static bool			target_immediate;
 static char		   *target_name = NULL;
 static char		   *target_action = NULL;
@@ -148,18 +149,18 @@ static ConfigOption cmd_options[] =
 	/* TODO not completed feature. Make it unavailiable from user level
 	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, }, */
 	/* restore options */
-	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
-	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
-	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
-	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
+	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
+	{ 's', 144, "recovery-target-lsn",	&target_lsn,	SOURCE_CMD_STRICT },
+	{ 's', 138, "recovery-target-inclusive",	&target_inclusive,	SOURCE_CMD_STRICT },
+	{ 'u', 139, "recovery-target-timeline",		&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 157, "recovery-target",	&target_stop,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
 	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
-	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },
 	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
 	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
-	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	/* delete options */
@@ -180,6 +181,15 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+
+	/* options for backward compatibility */
+	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
+	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
+	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
+	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
+	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
+
 	{ 0 }
 };
 
@@ -471,10 +481,16 @@ main(int argc, char *argv[])
 
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)
 	{
-		/* parse all recovery target options into recovery_target_options structure */
-		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
-								   target_inclusive, target_tli, target_lsn, target_immediate,
-								   target_name, target_action, no_validate);
+		/*
+		 * Parse all recovery target options into recovery_target_options
+		 * structure.
+		 */
+		recovery_target_options =
+			parseRecoveryTargetOptions(target_time, target_xid,
+				target_inclusive, target_tli, target_lsn,
+				(target_stop != NULL) ? target_stop :
+					(target_immediate) ? "immediate" : NULL,
+				target_name, target_action, no_validate);
 	}
 
 	if (num_threads < 1)
