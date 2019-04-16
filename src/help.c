@@ -160,6 +160,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
+	printf(_("                 [--external-dirs=external-directory-path]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
@@ -229,10 +230,10 @@ help_backup(void)
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
-	printf(_("                 [--external-dirs=external-directory-path]\n\n"));
+	printf(_("                 [-E external-directory-path]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
-	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--ssh-options]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -408,7 +409,7 @@ help_validate(void)
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--skip-block-validation]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -564,7 +565,7 @@ help_set_config(void)
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
 	printf(_("                 [--archive-timeout=timeout]\n"));
-	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
+	printf(_("                 [-E external-directory-path]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -639,10 +640,10 @@ help_add_instance(void)
 {
 	printf(_("%s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
-	printf(_("                 --remote-proto --remote-host\n"));
-	printf(_("                 --remote-port --remote-path --remote-user\n"));
-	printf(_("                 --ssh-options\n"));
-	printf(_("                 -E external-dirs=external-directory-path\n\n"));
+	printf(_("                 [-E external-directory-path]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
