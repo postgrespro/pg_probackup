@@ -109,7 +109,7 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
  * Write ControlFile to pg_control
  */
 static void
-writeControlFile(ControlFileData *ControlFile, char *path)
+writeControlFile(ControlFileData *ControlFile, char *path, fio_location location)
 {
 	int			fd;
 	char       *buffer = NULL;
@@ -125,21 +125,19 @@ writeControlFile(ControlFileData *ControlFile, char *path)
 	memcpy(buffer, ControlFile, sizeof(ControlFileData));
 
 	/* Write pg_control */
-	unlink(path);
-	fd = open(path,
-			  O_RDWR | O_CREAT | O_EXCL | PG_BINARY,
-			  S_IRUSR | S_IWUSR);
+	fd = fio_open(path,
+				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY, location);
 
 	if (fd < 0)
 		elog(ERROR, "Failed to open file: %s", path);
 
-	if (write(fd, buffer, ControlFileSize) != ControlFileSize)
+	if (fio_write(fd, buffer, ControlFileSize) != ControlFileSize)
 		elog(ERROR, "Failed to overwrite file: %s", path);
 
-	if (fsync(fd) != 0)
+	if (fio_flush(fd) != 0)
 		elog(ERROR, "Failed to fsync file: %s", path);
 
-	close(fd);
+	fio_close(fd);
 	pg_free(buffer);
 }
 
@@ -156,7 +154,7 @@ get_current_timeline(bool safe)
 
 	/* First fetch file... */
 	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
-					   safe);
+					   safe, FIO_DB_HOST);
 	if (safe && buffer == NULL)
 		return 0;
 
@@ -214,7 +212,7 @@ get_system_identifier(const char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -265,7 +263,7 @@ get_xlog_seg_size(char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -286,7 +284,7 @@ get_data_checksum_version(bool safe)
 
 	/* First fetch file... */
 	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
-					   safe);
+					   safe, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -303,7 +301,7 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false);
+	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_BACKUP_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -326,7 +324,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	char		fullpath[MAXPGPATH];
 
 	/* First fetch file content */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
+	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 	if (buffer == NULL)
 		elog(ERROR, "ERROR");
 
@@ -350,7 +348,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 
 	/* overwrite pg_control */
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
-	writeControlFile(&ControlFile, fullpath);
+	writeControlFile(&ControlFile, fullpath, FIO_LOCAL_HOST);
 
 	/* Update pg_control checksum in backup_list */
 	file->crc = ControlFile.crc;
@@ -362,14 +360,14 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
  * Copy pg_control file to backup. We do not apply compression to this file.
  */
 void
-copy_pgcontrol_file(const char *from_root, const char *to_root, pgFile *file)
+copy_pgcontrol_file(const char *from_root, fio_location from_location, const char *to_root, fio_location to_location, pgFile *file)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 	char		to_path[MAXPGPATH];
 
-	buffer = slurpFile(from_root, XLOG_CONTROL_FILE, &size, false);
+	buffer = slurpFile(from_root, XLOG_CONTROL_FILE, &size, false, from_location);
 
 	digestControlFile(&ControlFile, buffer, size);
 
@@ -378,7 +376,7 @@ copy_pgcontrol_file(const char *from_root, const char *to_root, pgFile *file)
 	file->write_size = size;
 
 	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
-	writeControlFile(&ControlFile, to_path);
+	writeControlFile(&ControlFile, to_path, to_location);
 
 	pg_free(buffer);
 }

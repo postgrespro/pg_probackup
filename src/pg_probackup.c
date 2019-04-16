@@ -12,6 +12,7 @@
 
 #include "pg_getopt.h"
 #include "streamutil.h"
+#include "utils/file.h"
 
 #include <sys/stat.h>
 
@@ -19,7 +20,6 @@
 #include "utils/thread.h"
 #include <time.h>
 
-const char *PROGRAM_VERSION	= "2.0.27";
 const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
 const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
 const char *PROGRAM_FULL_PATH = NULL;
@@ -42,6 +42,9 @@ typedef enum ProbackupSubcmd
 	SHOW_CONFIG_CMD,
 	CHECKDB_CMD
 } ProbackupSubcmd;
+
+
+char       *pg_probackup; /* Program name (argv[0]) */
 
 /* directory options */
 char	   *backup_path = NULL;
@@ -71,7 +74,7 @@ bool		temp_slot = false;
 /* backup options */
 bool		backup_logs = false;
 bool		smooth_checkpoint;
-bool		is_remote_backup = false;
+char       *remote_agent;
 
 /* restore options */
 static char		   *target_time = NULL;
@@ -79,6 +82,7 @@ static char		   *target_xid = NULL;
 static char		   *target_lsn = NULL;
 static char		   *target_inclusive = NULL;
 static TimeLineID	target_tli;
+static char		   *target_stop;
 static bool			target_immediate;
 static char		   *target_name = NULL;
 static char		   *target_action = NULL;
@@ -86,7 +90,7 @@ static char		   *target_action = NULL;
 static pgRecoveryTarget *recovery_target_options = NULL;
 
 bool restore_as_replica = false;
-bool restore_no_validate = false;
+bool no_validate = false;
 
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
@@ -151,21 +155,19 @@ static ConfigOption cmd_options[] =
 	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	{ 'b', 235, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
 	{ 'b', 237, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
-	/* TODO not completed feature. Make it unavailiable from user level
-	 { 'b', 18, "remote",				&is_remote_backup,	SOURCE_CMD_STRICT, }, */
 	/* restore options */
-	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
-	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
-	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
-	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
+	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
+	{ 's', 144, "recovery-target-lsn",	&target_lsn,	SOURCE_CMD_STRICT },
+	{ 's', 138, "recovery-target-inclusive",	&target_inclusive,	SOURCE_CMD_STRICT },
+	{ 'u', 139, "recovery-target-timeline",		&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 157, "recovery-target",	&target_stop,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
 	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
-	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },
 	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
-	{ 'b', 143, "no-validate",		&restore_no_validate,	SOURCE_CMD_STRICT },
-	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
+	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	/* checkdb options */
@@ -190,8 +192,29 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+
+	/* options for backward compatibility */
+	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
+	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
+	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
+	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
+	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
+
 	{ 0 }
 };
+
+static void
+setMyLocation(void)
+{
+	MyLocation = IsSshProtocol()
+		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
+		   ? FIO_DB_HOST
+		   : (backup_subcmd == BACKUP_CMD || backup_subcmd == RESTORE_CMD)
+		      ? FIO_BACKUP_HOST
+		      : FIO_LOCAL_HOST
+		: FIO_LOCAL_HOST;
+}
 
 /*
  * Entry point of pg_probackup command.
@@ -204,6 +227,8 @@ main(int argc, char *argv[])
 	/* Check if backup_path is directory. */
 	struct stat stat_buf;
 	int			rc;
+
+	pg_probackup = argv[0];
 
 	/* Initialize current backup */
 	pgBackupInit(&current);
@@ -266,6 +291,19 @@ main(int argc, char *argv[])
 			backup_subcmd = SHOW_CONFIG_CMD;
 		else if (strcmp(argv[1], "checkdb") == 0)
 			backup_subcmd = CHECKDB_CMD;
+		else if (strcmp(argv[1], "agent") == 0 && argc > 2)
+		{
+			remote_agent = argv[2];
+			if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
+			{
+				uint32 agent_version = parse_program_version(remote_agent);
+				elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
+					 "Agent version %s doesn't match master pg_probackup version %s",
+					 remote_agent, PROGRAM_VERSION);
+			}
+			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
+			return 0;
+		}
 		else if (strcmp(argv[1], "--help") == 0 ||
 				 strcmp(argv[1], "-?") == 0 ||
 				 strcmp(argv[1], "help") == 0)
@@ -354,6 +392,8 @@ main(int argc, char *argv[])
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
 
+	setMyLocation();
+
 	if (backup_path != NULL)
 	{
 		canonicalize_path(backup_path);
@@ -367,6 +407,11 @@ main(int argc, char *argv[])
 		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
 			elog(ERROR, "-B, --backup-path must be a path to directory");
 	}
+
+	/* Ensure that backup_path is an absolute path */
+	if (!is_absolute_path(backup_path))
+		elog(ERROR, "-B, --backup-path must be an absolute path");
+
 
 	/* Option --instance is required for all commands except init and show */
 	if (instance_name == NULL)
@@ -393,7 +438,7 @@ main(int argc, char *argv[])
 		 */
 		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
 		{
-			if (access(backup_instance_path, F_OK) != 0)
+			if (fio_access(backup_instance_path, F_OK, FIO_BACKUP_HOST) != 0)
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
 		}
@@ -421,6 +466,7 @@ main(int argc, char *argv[])
 			else
 				config_read_opt(path, instance_options, ERROR, true, false);
 		}
+		setMyLocation();
 	}
 
 	/* Just read environment variables */
@@ -488,7 +534,10 @@ main(int argc, char *argv[])
 			elog(ERROR, "Invalid backup-id \"%s\"", backup_id_string);
 	}
 
-	/* Setup stream options. They are used in streamutil.c. */
+	if (!instance_config.pghost && instance_config.remote.host)
+		instance_config.pghost = instance_config.remote.host;
+
+		/* Setup stream options. They are used in streamutil.c. */
 	if (instance_config.pghost != NULL)
 		dbhost = pstrdup(instance_config.pghost);
 	if (instance_config.pgport != NULL)
@@ -509,10 +558,16 @@ main(int argc, char *argv[])
 
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)
 	{
-		/* parse all recovery target options into recovery_target_options structure */
-		recovery_target_options = parseRecoveryTargetOptions(target_time, target_xid,
-								   target_inclusive, target_tli, target_lsn, target_immediate,
-								   target_name, target_action, restore_no_validate);
+		/*
+		 * Parse all recovery target options into recovery_target_options
+		 * structure.
+		 */
+		recovery_target_options =
+			parseRecoveryTargetOptions(target_time, target_xid,
+				target_inclusive, target_tli, target_lsn,
+				(target_stop != NULL) ? target_stop :
+					(target_immediate) ? "immediate" : NULL,
+				target_name, target_action, no_validate);
 	}
 
 	if (num_threads < 1)
@@ -542,16 +597,16 @@ main(int argc, char *argv[])
 				backup_mode = deparse_backup_mode(current.backup_mode);
 				current.stream = stream_wal;
 
-				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote: %s",
+				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", is_remote_backup ? "true" : "false");
+						  stream_wal ? "true" : "false", instance_config.remote.host ? "true" : "false");
 
 				/* sanity */
 				if (current.backup_mode == BACKUP_MODE_INVALID)
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time);
+				return do_backup(start_time, no_validate);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,

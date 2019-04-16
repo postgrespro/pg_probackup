@@ -103,8 +103,8 @@ typedef struct XLogReaderData
 	XLogSegNo	xlogsegno;
 	bool		xlogexists;
 
-	char		page_buf[XLOG_BLCKSZ];
-	uint32		prev_page_off;
+	char		 page_buf[XLOG_BLCKSZ];
+	uint32		 prev_page_off;
 
 	bool		need_switch;
 
@@ -112,8 +112,8 @@ typedef struct XLogReaderData
 	char		xlogpath[MAXPGPATH];
 
 #ifdef HAVE_LIBZ
-	gzFile		gz_xlogfile;
-	char		gz_xlogpath[MAXPGPATH];
+	gzFile		 gz_xlogfile;
+	char		 gz_xlogpath[MAXPGPATH];
 #endif
 } XLogReaderData;
 
@@ -640,7 +640,7 @@ get_gz_error(gzFile gzf)
 	int			errnum;
 	const char *errmsg;
 
-	errmsg = gzerror(gzf, &errnum);
+	errmsg = fio_gzerror(gzf, &errnum);
 	if (errnum == Z_ERRNO)
 		return strerror(errno);
 	else
@@ -718,14 +718,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir,
 				 xlogfname);
 
-		if (fileExists(reader_data->xlogpath))
+		if (fileExists(reader_data->xlogpath, FIO_BACKUP_HOST))
 		{
 			elog(LOG, "Thread [%d]: Opening WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->xlogfile = open(reader_data->xlogpath,
-										 O_RDONLY | PG_BINARY, 0);
+			reader_data->xlogfile = fio_open(reader_data->xlogpath,
+											 O_RDONLY | PG_BINARY, FIO_BACKUP_HOST);
 
 			if (reader_data->xlogfile < 0)
 			{
@@ -741,14 +741,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		{
 			snprintf(reader_data->gz_xlogpath, sizeof(reader_data->gz_xlogpath),
 					 "%s.gz", reader_data->xlogpath);
-			if (fileExists(reader_data->gz_xlogpath))
+			if (fileExists(reader_data->gz_xlogpath, FIO_BACKUP_HOST))
 			{
 				elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
 					 reader_data->thread_num, reader_data->gz_xlogpath);
 
 				reader_data->xlogexists = true;
-				reader_data->gz_xlogfile = gzopen(reader_data->gz_xlogpath,
-												  "rb");
+				reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
+													  "rb", -1, FIO_BACKUP_HOST);
 				if (reader_data->gz_xlogfile == NULL)
 				{
 					elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
@@ -784,14 +784,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	/* Read the requested page */
 	if (reader_data->xlogfile != -1)
 	{
-		if (lseek(reader_data->xlogfile, (off_t) targetPageOff, SEEK_SET) < 0)
+		if (fio_seek(reader_data->xlogfile, (off_t) targetPageOff) < 0)
 		{
 			elog(WARNING, "Thread [%d]: Could not seek in WAL segment \"%s\": %s",
 				 reader_data->thread_num, reader_data->xlogpath, strerror(errno));
 			return -1;
 		}
 
-		if (read(reader_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (fio_read(reader_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 		{
 			elog(WARNING, "Thread [%d]: Could not read from WAL segment \"%s\": %s",
 				 reader_data->thread_num, reader_data->xlogpath, strerror(errno));
@@ -801,7 +801,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 #ifdef HAVE_LIBZ
 	else
 	{
-		if (gzseek(reader_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
+		if (fio_gzseek(reader_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
 		{
 			elog(WARNING, "Thread [%d]: Could not seek in compressed WAL segment \"%s\": %s",
 				reader_data->thread_num, reader_data->gz_xlogpath,
@@ -809,7 +809,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			return -1;
 		}
 
-		if (gzread(reader_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (fio_gzread(reader_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 		{
 			elog(WARNING, "Thread [%d]: Could not read from compressed WAL segment \"%s\": %s",
 				reader_data->thread_num, reader_data->gz_xlogpath,
@@ -1350,13 +1350,13 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 	reader_data = (XLogReaderData *) xlogreader->private_data;
 	if (reader_data->xlogfile >= 0)
 	{
-		close(reader_data->xlogfile);
+		fio_close(reader_data->xlogfile);
 		reader_data->xlogfile = -1;
 	}
 #ifdef HAVE_LIBZ
 	else if (reader_data->gz_xlogfile != NULL)
 	{
-		gzclose(reader_data->gz_xlogfile);
+		fio_gzclose(reader_data->gz_xlogfile);
 		reader_data->gz_xlogfile = NULL;
 	}
 #endif

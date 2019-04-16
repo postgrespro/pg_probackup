@@ -121,26 +121,33 @@ help_pg_probackup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [--external-dirs=external-directory-path]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR] [--progress]\n"));
-	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target=immediate|latest]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
-	printf(_("                 [--no-validate]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
-	printf(_("                 [--timeline=timeline]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("\n  %s checkdb   [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
@@ -161,6 +168,10 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
+	printf(_("                 [--external-dirs=external-directory-path]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
 
 	printf(_("\n  %s del-instance -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
@@ -172,10 +183,16 @@ help_pg_probackup(void)
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--overwrite]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
 
 	printf(_("\n  %s archive-get -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
@@ -220,8 +237,11 @@ help_backup(void)
 	printf(_("                 [--master-db=db_name] [--master-host=host_name]\n"));
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
-	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
+	printf(_("                 [-E external-directory-path]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -234,6 +254,7 @@ help_backup(void)
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 	printf(_("      --progress                   show progress\n"));
+	printf(_("      --no-validate                disable validation after backup\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
 	printf(_("                                   backup some directories not from pgdata \n"));
@@ -248,7 +269,7 @@ help_backup(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -293,21 +314,35 @@ help_backup(void)
 	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
 	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
 	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n"));
+
+	printf(_("\n  Remote options:\n"));
+	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
+	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
+	printf(_("      --remote-path=path           path to pg_probackup binary on remote host (default: current binary path)\n"));
+	printf(_("      --remote-user=username       user name for ssh connection (default current user)\n"));
+	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 }
 
 static void
 help_restore(void)
 {
 	printf(_("%s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline] [-T OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--immediate] [--recovery-target-name=target-name]\n"));
+	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target=immediate|latest]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica] [--no-validate]\n"));
-	printf(_("                 [--skip-block-validation]\n"));
-	printf(_("                 [--skip-external-dirs]\n\n"));
+	printf(_("                 [--restore-as-replica]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -317,17 +352,15 @@ help_restore(void)
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 
 	printf(_("      --progress                   show progress\n"));
-	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
-	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
-	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
-	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
-	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
-	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
-	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
-
-	printf(_("      --immediate                  end recovery as soon as a consistent state is reached\n"));
+	printf(_("      --recovery-target-time=time  time stamp up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-xid=xid    transaction ID up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-lsn=lsn    LSN of the write-ahead log location up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-inclusive=boolean\n"));
+	printf(_("                                   whether we stop just after the recovery target\n"));
+	printf(_("      --recovery-target-timeline=timeline\n"));
+	printf(_("                                   recovering into a particular timeline\n"));
+	printf(_("      --recovery-target=immediate|latest\n"));
+	printf(_("                                   end recovery as soon as a consistent state is reached or as late as possible\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
@@ -338,6 +371,11 @@ help_restore(void)
 	printf(_("                                   to ease setting up a standby server\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+
+	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
 
 	printf(_("\n  Logging options:\n"));
@@ -349,7 +387,7 @@ help_restore(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -360,15 +398,25 @@ help_restore(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+
+	printf(_("\n  Remote options:\n"));
+	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
+	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
+	printf(_("      --remote-path=path           path to pg_probackup binary on remote host (default: current binary path)\n"));
+	printf(_("      --remote-user=username       user name for ssh connection (default current user)\n"));
+	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 }
 
 static void
 help_validate(void)
 {
 	printf(_("%s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
-	printf(_("                 [-i backup-id] [--progress]\n"));
-	printf(_("                 [--time=time|--xid=xid|--lsn=lsn [--inclusive=boolean]]\n"));
-	printf(_("                 [--timeline=timeline]\n\n"));
+	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
+	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
+	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
@@ -377,11 +425,13 @@ help_validate(void)
 
 	printf(_("      --progress                   show progress\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
-	printf(_("      --time=time                  time stamp up to which recovery will proceed\n"));
-	printf(_("      --xid=xid                    transaction ID up to which recovery will proceed\n"));
-	printf(_("      --lsn=lsn                    LSN of the write-ahead log location up to which recovery will proceed\n"));
-	printf(_("      --inclusive=boolean          whether we stop just after the recovery target\n"));
-	printf(_("      --timeline=timeline          recovering into a particular timeline\n"));
+	printf(_("      --recovery-target-time=time  time stamp up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-xid=xid    transaction ID up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-lsn=lsn    LSN of the write-ahead log location up to which recovery will proceed\n"));
+	printf(_("      --recovery-target-inclusive=boolean\n"));
+	printf(_("                                   whether we stop just after the recovery target\n"));
+	printf(_("      --recovery-target-timeline=timeline\n"));
+	printf(_("                                   recovering into a particular timeline\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
@@ -395,7 +445,7 @@ help_validate(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -501,7 +551,7 @@ help_delete(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -543,7 +593,7 @@ help_merge(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -576,7 +626,7 @@ help_set_config(void)
 	printf(_("                 [--master-port=port] [--master-user=user_name]\n"));
 	printf(_("                 [--replica-timeout=timeout]\n"));
 	printf(_("                 [--archive-timeout=timeout]\n"));
-	printf(_("                 [-E external-dirs=external-directory-path]\n\n"));
+	printf(_("                 [-E external-directory-path]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -593,7 +643,7 @@ help_set_config(void)
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
-	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
@@ -651,14 +701,26 @@ help_add_instance(void)
 {
 	printf(_("%s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
-	printf(_("                 -E external-dirs=external-directory-path\n\n"));
+	printf(_("                 [-E external-directory-path]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
 	printf(_("      --instance=instance_name     name of the new instance\n"));
+
 	printf(_("  -E  --external-dirs=external-directory-path\n"));
 	printf(_("                                   backup some directories not from pgdata \n"));
 	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
+	printf(_("\n  Remote options:\n"));
+	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
+	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
+	printf(_("      --remote-path=path           path to pg_probackup binary on remote host (default: current binary path)\n"));
+	printf(_("      --remote-user=username       user name for ssh connection (default current user)\n"));
+	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 }
 
 static void
@@ -679,7 +741,10 @@ help_archive_push(void)
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
-	printf(_("                 [--overwrite]\n\n"));
+	printf(_("                 [--overwrite]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
@@ -700,7 +765,10 @@ help_archive_get(void)
 {
 	printf(_("\n  %s archive-get -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
-	printf(_("                 --wal-file-name=wal-file-name\n\n"));
+	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
@@ -708,4 +776,13 @@ help_archive_get(void)
 	printf(_("                                   relative destination path name of the WAL file on the server\n"));
 	printf(_("      --wal-file-name=wal-file-name\n"));
 	printf(_("                                   name of the WAL file to retrieve from the archive\n"));
+
+	printf(_("\n  Remote options:\n"));
+	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
+	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
+	printf(_("      --remote-path=path           path to pg_probackup binary on remote host (default: current binary path)\n"));
+	printf(_("      --remote-user=username       user name for ssh connection (default current user)\n"));
+	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 }

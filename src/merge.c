@@ -78,6 +78,7 @@ do_merge(time_t backup_id)
 		{
 			/* sanity */
 			if (backup->status != BACKUP_STATUS_OK &&
+				backup->status != BACKUP_STATUS_DONE &&
 				/* It is possible that previous merging was interrupted */
 				backup->status != BACKUP_STATUS_MERGING &&
 				backup->status != BACKUP_STATUS_DELETING)
@@ -107,6 +108,7 @@ do_merge(time_t backup_id)
 
 	/* sanity */
 	if (full_backup->status != BACKUP_STATUS_OK &&
+		full_backup->status != BACKUP_STATUS_DONE &&
 		/* It is possible that previous merging was interrupted */
 		full_backup->status != BACKUP_STATUS_MERGING)
 		elog(ERROR, "Backup %s has status: %s",
@@ -117,6 +119,7 @@ do_merge(time_t backup_id)
 	{
 		/* sanity */
 		if (dest_backup->status != BACKUP_STATUS_OK &&
+			dest_backup->status != BACKUP_STATUS_DONE &&
 			/* It is possible that previous merging was interrupted */
 			dest_backup->status != BACKUP_STATUS_MERGING &&
 			dest_backup->status != BACKUP_STATUS_DELETING)
@@ -191,7 +194,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 * BACKUP_STATUS_MERGING status then it isn't valid backup until merging
 	 * finished.
 	 */
-	if (to_backup->status == BACKUP_STATUS_OK)
+	if (to_backup->status == BACKUP_STATUS_OK ||
+		to_backup->status == BACKUP_STATUS_DONE)
 	{
 		pgBackupValidate(to_backup);
 		if (to_backup->status == BACKUP_STATUS_CORRUPT)
@@ -203,6 +207,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 * BACKUP_STATUS_MERGING status.
 	 */
 	Assert(from_backup->status == BACKUP_STATUS_OK ||
+		   from_backup->status == BACKUP_STATUS_DONE ||
 		   from_backup->status == BACKUP_STATUS_MERGING ||
 		   from_backup->status == BACKUP_STATUS_DELETING);
 	pgBackupValidate(from_backup);
@@ -228,7 +233,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(to_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	to_files = dir_read_file_list(NULL, NULL, control_file);
+	to_files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(to_files, pgFileComparePathDesc);
 	/*
@@ -236,7 +241,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	 */
 	pgBackupGetPath(from_backup, control_file, lengthof(control_file),
 					DATABASE_FILE_LIST);
-	files = dir_read_file_list(NULL, NULL, control_file);
+	files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
 	/* sort by size for load balancing */
 	parray_qsort(files, pgFileCompareSize);
 
@@ -250,7 +255,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	write_backup_status(to_backup, BACKUP_STATUS_MERGING);
 	write_backup_status(from_backup, BACKUP_STATUS_MERGING);
 
-	create_data_directories(to_database_path, from_backup_path, false);
+	create_data_directories(to_database_path, from_backup_path, false, FIO_BACKUP_HOST);
 
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (merge_files_arg *) palloc(sizeof(merge_files_arg) * num_threads);
@@ -500,7 +505,7 @@ merge_files(void *arg)
 				 * Recalculate crc for backup prior to 2.0.25.
 				 */
 				if (parse_program_version(from_backup->program_version) < 20025)
-					file->crc = pgFileGetCRC(to_file_path, true, true, NULL);
+					file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST);
 				/* Otherwise just get it from the previous file */
 				else
 					file->crc = to_file->crc;
@@ -623,7 +628,7 @@ merge_files(void *arg)
 				 * do that.
 				 */
 				file->write_size = pgFileSize(to_file_path);
-				file->crc = pgFileGetCRC(to_file_path, true, true, NULL);
+				file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST);
 			}
 		}
 		else if (file->external_dir_num)
@@ -641,12 +646,12 @@ merge_files(void *arg)
 									 file->external_dir_num);
 			makeExternalDirPathByNum(to_root, argument->to_external_prefix,
 									 new_dir_num);
-			copy_file(from_root, to_root, file);
+			copy_file(from_root, FIO_LOCAL_HOST, to_root, FIO_LOCAL_HOST, file);
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
-			copy_pgcontrol_file(argument->from_root, argument->to_root, file);
+			copy_pgcontrol_file(argument->from_root, FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
 		else
-			copy_file(argument->from_root, argument->to_root, file);
+			copy_file(argument->from_root, FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
 
 		/*
 		 * We need to save compression algorithm type of the target backup to be
@@ -675,7 +680,7 @@ remove_dir_with_files(const char *path)
 	parray	   *files = parray_new();
 	int			i;
 
-	dir_list_file(files, path, true, true, true, 0);
+	dir_list_file(files, path, true, true, true, 0, FIO_LOCAL_HOST);
 	parray_qsort(files, pgFileComparePathDesc);
 	for (i = 0; i < parray_num(files); i++)
 	{

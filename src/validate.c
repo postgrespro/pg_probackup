@@ -102,7 +102,7 @@ pgBackupValidate(pgBackup *backup)
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
 	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, external_prefix, path);
+	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -257,7 +257,7 @@ pgBackupValidateFiles(void *arg)
 				crc = pgFileGetCRC(file->path,
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
-								   true, NULL);
+								   true, NULL, FIO_LOCAL_HOST);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
@@ -417,7 +417,8 @@ do_validate_instance(void)
 				corrupted_backup_found = true;
 
 				/* orphanize current_backup */
-				if (current_backup->status == BACKUP_STATUS_OK)
+				if (current_backup->status == BACKUP_STATUS_OK ||
+					current_backup->status == BACKUP_STATUS_DONE)
 				{
 					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
@@ -440,7 +441,8 @@ do_validate_instance(void)
 				{
 					char	   *backup_id = base36enc_dup(tmp_backup->start_time);
 					/* orphanize current_backup */
-					if (current_backup->status == BACKUP_STATUS_OK)
+					if (current_backup->status == BACKUP_STATUS_OK ||
+						current_backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
@@ -512,7 +514,8 @@ do_validate_instance(void)
 
 				if (is_parent(current_backup->start_time, backup, false))
 				{
-					if (backup->status == BACKUP_STATUS_OK)
+					if (backup->status == BACKUP_STATUS_OK ||
+						backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
 
