@@ -431,7 +431,12 @@ class ProbackupTest(object):
             header_size = 24
         ptrack_bits_for_fork = []
 
+        # TODO: use macro instead of hard coded 8KB
         page_body_size = 8192-header_size
+        # Check that if main fork file size is 0, it`s ok
+        # to not having a _ptrack fork
+        if os.path.getsize(file) == 0:
+            return ptrack_bits_for_fork
         byte_size = os.path.getsize(file + '_ptrack')
         npages = byte_size/8192
         if byte_size % 8192 != 0:
