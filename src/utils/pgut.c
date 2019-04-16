@@ -19,6 +19,7 @@
 
 #include "pgut.h"
 #include "logger.h"
+#include "file.h"
 
 
 const char *PROGRAM_NAME = NULL;
@@ -843,7 +844,7 @@ pgut_fopen(const char *path, const char *mode, bool missing_ok)
 {
 	FILE *fp;
 
-	if ((fp = fopen(path, mode)) == NULL)
+	if ((fp = fio_open_stream(path, FIO_BACKUP_HOST)) == NULL)
 	{
 		if (missing_ok && errno == ENOENT)
 			return NULL;

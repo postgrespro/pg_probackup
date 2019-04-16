@@ -17,16 +17,31 @@ class RemoteTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica'})
+            pg_options={'wal_level': 'replica'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+#        self.set_archiving(backup_dir, 'node', node, remote=True)
         node.slow_start()
 
-        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--remote-proto=ssh', '--remote-host=localhost', '--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--remote-proto=ssh',
+                '--remote-host=localhost'])
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

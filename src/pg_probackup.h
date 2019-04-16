@@ -19,16 +19,18 @@
 
 #ifdef FRONTEND
 #undef FRONTEND
-#include "port/atomics.h"
+#include <port/atomics.h>
 #define FRONTEND
 #else
-#include "port/atomics.h"
+#include <port/atomics.h>
 #endif
 
 #include "utils/configuration.h"
 #include "utils/logger.h"
+#include "utils/remote.h"
 #include "utils/parray.h"
 #include "utils/pgut.h"
+#include "utils/file.h"
 
 #include "datapagemap.h"
 
@@ -173,6 +175,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
+#define PROGRAM_VERSION	"2.0.28"
+#define AGENT_PROTOCOL_VERSION 20028
 
 /*
  * An instance configuration. It can be stored in a configuration file or passed
@@ -201,6 +205,9 @@ typedef struct InstanceConfig
 
 	/* Logger parameters */
 	LoggerConfig logger;
+
+	/* Remote access parameters */
+	RemoteConfig remote;
 
 	/* Retention options. 0 disables the option. */
 	uint32		retention_redundancy;
@@ -313,6 +320,21 @@ typedef struct
 } backup_files_arg;
 
 /*
+ * When copying datafiles to backup we validate and compress them block
+ * by block. Thus special header is required for each data block.
+ */
+typedef struct BackupPageHeader
+{
+	BlockNumber	block;			/* block number */
+	int32		compressed_size;
+} BackupPageHeader;
+
+/* Special value for compressed_size field */
+#define PageIsTruncated -2
+#define SkipCurrentPage -3
+
+
+/*
  * return pointer that exceeds the length of prefix from character string.
  * ex. str="/xxx/yyy/zzz", prefix="/xxx/yyy", return="zzz".
  */
@@ -351,7 +373,11 @@ typedef struct
 	XLByteInSeg(xlrp, logSegNo)
 #endif
 
+#define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
+#define IsReplicationProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "replication") == 0)
+
 /* directory options */
+extern char    *pg_probackup;
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
@@ -368,7 +394,9 @@ extern bool 	temp_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
-extern bool		is_remote_backup;
+
+/* remote probackup options */
+extern char* remote_agent;
 
 extern bool is_ptrack_support;
 extern bool is_checksum_enabled;
@@ -458,7 +486,8 @@ extern int do_delete_instance(void);
 extern char *slurpFile(const char *datadir,
 					   const char *path,
 					   size_t *filesize,
-					   bool safe);
+					   bool safe,
+					   fio_location location);
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
@@ -504,6 +533,7 @@ extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool in
 extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
 extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
+extern bool launch_agent(void);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
 #define COMPRESS_LEVEL_DEFAULT 1
@@ -513,10 +543,12 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool omit_symlink, bool add_root, int external_dir_num);
+						  bool omit_symlink, bool add_root, int external_dir_num, fio_location location);
+
 extern void create_data_directories(const char *data_dir,
 									const char *backup_dir,
-									bool extract_tablespaces);
+									bool extract_tablespaces,
+									fio_location location);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
@@ -528,7 +560,7 @@ extern char *get_external_remap(char *current_dir);
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
 extern parray *dir_read_file_list(const char *root, const char *external_prefix,
-								  const char *file_txt);
+								  const char *file_txt, fio_location location);
 extern parray *make_external_directory_list(const char *colon_separated_dirs);
 extern void free_dir_list(parray *list);
 extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
@@ -538,15 +570,15 @@ extern bool backup_contains_external(const char *dir, parray *dirs_list);
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path);
 
-extern bool fileExists(const char *path);
+extern bool fileExists(const char *path, fio_location location);
 extern size_t pgFileSize(const char *path);
 
-extern pgFile *pgFileNew(const char *path, bool omit_symlink, int external_dir_num);
+extern pgFile *pgFileNew(const char *path, bool omit_symlink, int external_dir_num, fio_location location);
 extern pgFile *pgFileInit(const char *path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
-							 bool raise_on_deleted, size_t *bytes_read);
+							 bool raise_on_deleted, size_t *bytes_read, fio_location location);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathWithExternal(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
@@ -564,12 +596,13 @@ extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
 							  bool write_header,
 							  uint32 backup_version);
-extern bool copy_file(const char *from_root, const char *to_root, pgFile *file);
+extern bool copy_file(const char *from_root, fio_location from_location, const char *to_root, fio_location to_location, pgFile *file);
+extern void move_file(const char *from_root, const char *to_root, pgFile *file);
 extern void push_wal_file(const char *from_path, const char *to_path,
 						  bool is_compress, bool overwrite);
 extern void get_wal_file(const char *from_path, const char *to_path);
 
-extern void calc_file_checksum(pgFile *file);
+extern void calc_file_checksum(pgFile *file, fio_location location);
 
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
@@ -602,7 +635,7 @@ extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
-extern void copy_pgcontrol_file(const char *from_root, const char *to_root,
+extern void copy_pgcontrol_file(const char *from_root, fio_location location, const char *to_root, fio_location to_location,
 								pgFile *file);
 
 extern void sanityChecks(void);
@@ -615,6 +648,9 @@ extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
 extern uint32 parse_server_version(const char *server_version_str);
 extern uint32 parse_program_version(const char *program_version);
+extern bool   parse_page(Page page, XLogRecPtr *lsn);
+int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
+				   CompressAlg alg, int level, const char **errormsg);
 
 #ifdef WIN32
 #ifdef _DEBUG

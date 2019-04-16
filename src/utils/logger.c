@@ -11,6 +11,7 @@
 
 #include <sys/stat.h>
 
+#include "pg_probackup.h"
 #include "logger.h"
 #include "pgut.h"
 #include "thread.h"
@@ -127,6 +128,9 @@ exit_if_necessary(int elevel)
 			pthread_mutex_unlock(&log_file_mutex);
 		}
 
+		if (remote_agent)
+			sleep(1); /* Let parent receive sent messages */
+		
 		/* If this is not the main thread then don't call exit() */
 		if (main_tid != pthread_self())
 		{
@@ -157,12 +161,18 @@ elog_internal(int elevel, bool file_only, const char *message)
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 
-	write_to_file = elevel >= logger_config.log_level_file &&
-		logger_config.log_directory && logger_config.log_directory[0] != '\0';
+	write_to_file = elevel >= logger_config.log_level_file
+		&& logger_config.log_directory
+		&& logger_config.log_directory[0] != '\0';
 	write_to_error_log = elevel >= ERROR && logger_config.error_log_filename &&
 		logger_config.log_directory && logger_config.log_directory[0] != '\0';
 	write_to_stderr = elevel >= logger_config.log_level_console && !file_only;
 
+	if (remote_agent)
+	{
+		write_to_stderr |= write_to_error_log | write_to_file;
+		write_to_error_log = write_to_file = false;
+	}
 	pthread_lock(&log_file_mutex);
 	loggin_in_progress = true;
 

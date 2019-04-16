@@ -658,7 +658,7 @@ delete_backup_files(pgBackup *backup)
 	/* list files to be deleted */
 	files = parray_new();
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
-	dir_list_file(files, path, false, true, true, 0);
+	dir_list_file(files, path, false, true, true, 0, FIO_BACKUP_HOST);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);
@@ -674,7 +674,7 @@ delete_backup_files(pgBackup *backup)
 		if (interrupted)
 			elog(ERROR, "interrupted during delete backup");
 
-		pgFileDelete(file);
+		fio_unlink(file->path, FIO_BACKUP_HOST);
 	}
 
 	parray_walk(files, pgFileFree);

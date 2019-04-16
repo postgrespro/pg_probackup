@@ -8,13 +8,13 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pg_probackup.h"
-
 #include <dirent.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "pg_probackup.h"
+#include "utils/file.h"
 #include "utils/configuration.h"
 
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
@@ -36,7 +36,7 @@ unlink_lock_atexit(void)
 		char	   *lock_file = (char *) parray_get(lock_files, i);
 		int			res;
 
-		res = unlink(lock_file);
+		res = fio_unlink(lock_file, FIO_BACKUP_HOST);
 		if (res != 0 && errno != ENOENT)
 			elog(WARNING, "%s: %s", lock_file, strerror(errno));
 	}
@@ -150,7 +150,7 @@ lock_backup(pgBackup *backup)
 		 * Think not to make the file protection weaker than 0600.  See
 		 * comments below.
 		 */
-		fd = open(lock_file, O_RDWR | O_CREAT | O_EXCL, 0600);
+		fd = fio_open(lock_file, O_RDWR | O_CREAT | O_EXCL, FIO_BACKUP_HOST);
 		if (fd >= 0)
 			break;				/* Success; exit the retry loop */
 
@@ -165,7 +165,7 @@ lock_backup(pgBackup *backup)
 		 * Read the file to get the old owner's PID.  Note race condition
 		 * here: file might have been deleted since we tried to create it.
 		 */
-		fd = open(lock_file, O_RDONLY, 0600);
+		fd = fio_open(lock_file, O_RDONLY, FIO_BACKUP_HOST);
 		if (fd < 0)
 		{
 			if (errno == ENOENT)
@@ -173,10 +173,10 @@ lock_backup(pgBackup *backup)
 			elog(ERROR, "Could not open lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 		}
-		if ((len = read(fd, buffer, sizeof(buffer) - 1)) < 0)
+		if ((len = fio_read(fd, buffer, sizeof(buffer) - 1)) < 0)
 			elog(ERROR, "Could not read lock file \"%s\": %s",
 				 lock_file, strerror(errno));
-		close(fd);
+		fio_close(fd);
 
 		if (len == 0)
 			elog(ERROR, "Lock file \"%s\" is empty", lock_file);
@@ -221,7 +221,7 @@ lock_backup(pgBackup *backup)
 		 * it.  Need a loop because of possible race condition against other
 		 * would-be creators.
 		 */
-		if (unlink(lock_file) < 0)
+		if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
 			elog(ERROR, "Could not remove old lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 	}
@@ -232,32 +232,32 @@ lock_backup(pgBackup *backup)
 	snprintf(buffer, sizeof(buffer), "%d\n", my_pid);
 
 	errno = 0;
-	if (write(fd, buffer, strlen(buffer)) != strlen(buffer))
+	if (fio_write(fd, buffer, strlen(buffer)) != strlen(buffer))
 	{
 		int			save_errno = errno;
 
-		close(fd);
-		unlink(lock_file);
+		fio_close(fd);
+		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		/* if write didn't set errno, assume problem is no disk space */
 		errno = save_errno ? save_errno : ENOSPC;
 		elog(ERROR, "Could not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
-	if (fsync(fd) != 0)
+	if (fio_flush(fd) != 0)
 	{
 		int			save_errno = errno;
 
-		close(fd);
-		unlink(lock_file);
+		fio_close(fd);
+		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		errno = save_errno;
 		elog(ERROR, "Could not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
-	if (close(fd) != 0)
+	if (fio_close(fd) != 0)
 	{
 		int			save_errno = errno;
 
-		unlink(lock_file);
+		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		errno = save_errno;
 		elog(ERROR, "Culd not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
@@ -290,14 +290,14 @@ pgBackupGetBackupMode(pgBackup *backup)
 }
 
 static bool
-IsDir(const char *dirpath, const char *entry)
+IsDir(const char *dirpath, const char *entry, fio_location location)
 {
 	char		path[MAXPGPATH];
 	struct stat	st;
 
 	snprintf(path, MAXPGPATH, "%s/%s", dirpath, entry);
 
-	return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+	return fio_stat(path, &st, false, location) == 0 && S_ISDIR(st.st_mode);
 }
 
 /*
@@ -315,7 +315,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 	int			i;
 
 	/* open backup instance backups directory */
-	data_dir = opendir(backup_instance_path);
+	data_dir = fio_opendir(backup_instance_path, FIO_BACKUP_HOST);
 	if (data_dir == NULL)
 	{
 		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
@@ -325,14 +325,14 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 	/* scan the directory and list backups */
 	backups = parray_new();
-	for (; (data_ent = readdir(data_dir)) != NULL; errno = 0)
+	for (; (data_ent = fio_readdir(data_dir)) != NULL; errno = 0)
 	{
 		char		backup_conf_path[MAXPGPATH];
 		char		data_path[MAXPGPATH];
 		pgBackup   *backup = NULL;
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_instance_path, data_ent->d_name)
+		if (!IsDir(backup_instance_path, data_ent->d_name, FIO_BACKUP_HOST)
 			|| data_ent->d_name[0] == '.')
 			continue;
 
@@ -378,7 +378,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 		goto err_proc;
 	}
 
-	closedir(data_dir);
+	fio_closedir(data_dir);
 	data_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
@@ -404,7 +404,7 @@ catalog_get_backup_list(time_t requested_backup_id)
 
 err_proc:
 	if (data_dir)
-		closedir(data_dir);
+		fio_closedir(data_dir);
 	if (backups)
 		parray_walk(backups, pgBackupFree);
 	parray_free(backups);
@@ -492,13 +492,13 @@ pgBackupCreateDir(pgBackup *backup)
 	if (!dir_is_empty(path))
 		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
-	dir_create_dir(path, DIR_PERMISSION);
+	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
 	{
 		pgBackupGetPath(backup, path, lengthof(path), parray_get(subdirs, i));
-		dir_create_dir(path, DIR_PERMISSION);
+		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 	}
 
 	free_dir_list(subdirs);
@@ -513,51 +513,51 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 {
 	char		timestamp[100];
 
-	fprintf(out, "#Configuration\n");
-	fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
-	fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
-	fprintf(out, "compress-alg = %s\n",
+	fio_fprintf(out, "#Configuration\n");
+	fio_fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
+	fio_fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
+	fio_fprintf(out, "compress-alg = %s\n",
 			deparse_compress_alg(backup->compress_alg));
-	fprintf(out, "compress-level = %d\n", backup->compress_level);
-	fprintf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
+	fio_fprintf(out, "compress-level = %d\n", backup->compress_level);
+	fio_fprintf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
 
-	fprintf(out, "\n#Compatibility\n");
-	fprintf(out, "block-size = %u\n", backup->block_size);
-	fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
-	fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	fio_fprintf(out, "\n#Compatibility\n");
+	fio_fprintf(out, "block-size = %u\n", backup->block_size);
+	fio_fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
+	fio_fprintf(out, "checksum-version = %u\n", backup->checksum_version);
 	if (backup->program_version[0] != '\0')
-		fprintf(out, "program-version = %s\n", backup->program_version);
+		fio_fprintf(out, "program-version = %s\n", backup->program_version);
 	if (backup->server_version[0] != '\0')
-		fprintf(out, "server-version = %s\n", backup->server_version);
+		fio_fprintf(out, "server-version = %s\n", backup->server_version);
 
-	fprintf(out, "\n#Result backup info\n");
-	fprintf(out, "timelineid = %d\n", backup->tli);
+	fio_fprintf(out, "\n#Result backup info\n");
+	fio_fprintf(out, "timelineid = %d\n", backup->tli);
 	/* LSN returned by pg_start_backup */
-	fprintf(out, "start-lsn = %X/%X\n",
+	fio_fprintf(out, "start-lsn = %X/%X\n",
 			(uint32) (backup->start_lsn >> 32),
 			(uint32) backup->start_lsn);
 	/* LSN returned by pg_stop_backup */
-	fprintf(out, "stop-lsn = %X/%X\n",
+	fio_fprintf(out, "stop-lsn = %X/%X\n",
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	fprintf(out, "start-time = '%s'\n", timestamp);
+	fio_fprintf(out, "start-time = '%s'\n", timestamp);
 	if (backup->merge_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->merge_time);
-		fprintf(out, "merge-time = '%s'\n", timestamp);
+		fio_fprintf(out, "merge-time = '%s'\n", timestamp);
 	}
 	if (backup->end_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->end_time);
-		fprintf(out, "end-time = '%s'\n", timestamp);
+		fio_fprintf(out, "end-time = '%s'\n", timestamp);
 	}
-	fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
+	fio_fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
-		fprintf(out, "recovery-time = '%s'\n", timestamp);
+		fio_fprintf(out, "recovery-time = '%s'\n", timestamp);
 	}
 
 	/*
@@ -565,24 +565,24 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	 * WAL segments in archive 'wal' directory.
 	 */
 	if (backup->data_bytes != BYTES_INVALID)
-		fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
+		fio_fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
 	if (backup->wal_bytes != BYTES_INVALID)
-		fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
+		fio_fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
-	fprintf(out, "status = %s\n", status2str(backup->status));
+	fio_fprintf(out, "status = %s\n", status2str(backup->status));
 
 	/* 'parent_backup' is set if it is incremental backup */
 	if (backup->parent_backup != 0)
-		fprintf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
+		fio_fprintf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
 
 	/* print connection info except password */
 	if (backup->primary_conninfo)
-		fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+		fio_fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 
 	/* print external directories list */
 	if (backup->external_dir_str)
-		fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
+		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
 }
 
 /*
@@ -599,27 +599,25 @@ write_backup(pgBackup *backup)
 	pgBackupGetPath(backup, path, lengthof(path), BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fopen(path_temp, "wt");
+	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open configuration file \"%s\": %s",
 			 path_temp, strerror(errno));
 
 	pgBackupWriteControl(fp, backup);
 
-	if (fflush(fp) != 0 ||
-		fsync(fileno(fp)) != 0 ||
-		fclose(fp))
+	if (fio_fflush(fp) || fio_fclose(fp))
 	{
 		errno_temp = errno;
-		unlink(path_temp);
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot write configuration file \"%s\": %s",
 			 path_temp, strerror(errno_temp));
 	}
 
-	if (rename(path_temp, path) < 0)
+	if (fio_rename(path_temp, path, FIO_BACKUP_HOST) < 0)
 	{
 		errno_temp = errno;
-		unlink(path_temp);
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
 			 path_temp, path, strerror(errno_temp));
 	}
@@ -640,27 +638,25 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fopen(path_temp, "wt");
+	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
 
 	print_file_list(fp, files, root, external_prefix, external_list);
 
-	if (fflush(fp) != 0 ||
-		fsync(fileno(fp)) != 0 ||
-		fclose(fp))
+	if (fio_fflush(fp) || fio_fclose(fp))
 	{
 		errno_temp = errno;
-		unlink(path_temp);
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot write file list \"%s\": %s",
 			 path_temp, strerror(errno));
 	}
 
-	if (rename(path_temp, path) < 0)
+	if (fio_rename(path_temp, path, FIO_BACKUP_HOST) < 0)
 	{
 		errno_temp = errno;
-		unlink(path_temp);
+		fio_unlink(path_temp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
 			 path_temp, path, strerror(errno_temp));
 	}
@@ -715,7 +711,7 @@ readBackupControlFile(const char *path)
 	};
 
 	pgBackupInit(backup);
-	if (access(path, F_OK) != 0)
+	if (fio_access(path, F_OK, FIO_BACKUP_HOST) != 0)
 	{
 		elog(WARNING, "Control file \"%s\" doesn't exist", path);
 		pgBackupFree(backup);

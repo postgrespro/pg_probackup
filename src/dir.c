@@ -9,6 +9,8 @@
  */
 
 #include "pg_probackup.h"
+#include "utils/file.h"
+
 
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
@@ -121,11 +123,10 @@ static int BlackListCompare(const void *str1, const void *str2);
 static char dir_check_file(const char *root, pgFile *file);
 static void dir_list_file_internal(parray *files, const char *root,
 								   pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list,
-								   int external_dir_num);
+								   bool omit_symlink, parray *black_list, int external_dir_num, fio_location location);
 
 static void list_data_directories(parray *files, const char *path, bool is_root,
-								  bool exclude);
+								  bool exclude, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
 
@@ -162,13 +163,13 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, bool omit_symlink, int external_dir_num)
+pgFileNew(const char *path, bool omit_symlink, int external_dir_num, fio_location location)
 {
 	struct stat		st;
 	pgFile		   *file;
 
-	/* stat the file */
-	if ((omit_symlink ? stat(path, &st) : lstat(path, &st)) == -1)
+    /* stat the file */
+    if (fio_stat(path, &st, omit_symlink, location) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno == ENOENT)
@@ -269,19 +270,19 @@ delete_file:
 
 pg_crc32
 pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
-			 size_t *bytes_read)
+			 size_t *bytes_read, fio_location location)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
 	char		buf[1024];
-	size_t		len;
+	size_t		len = 0;
 	size_t		total = 0;
 	int			errno_tmp;
 
 	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* open file in binary read mode */
-	fp = fopen(file_path, PG_BINARY_R);
+	fp = fio_fopen(file_path, PG_BINARY_R, location);
 	if (fp == NULL)
 	{
 		if (!raise_on_deleted && errno == ENOENT)
@@ -300,7 +301,7 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
 
-		len = fread(buf, 1, sizeof(buf), fp);
+		len = fio_fread(fp, buf, sizeof(buf));
 		if(len == 0)
 			break;
 		/* update CRC */
@@ -312,12 +313,12 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
 		*bytes_read = total;
 
 	errno_tmp = errno;
-	if (!feof(fp))
+	if (len < 0)
 		elog(WARNING, "cannot read \"%s\": %s", file_path,
 			strerror(errno_tmp));
 
 	FIN_FILE_CRC32(use_crc32c, crc);
-	fclose(fp);
+	fio_fclose(fp);
 
 	return crc;
 }
@@ -433,7 +434,7 @@ BlackListCompare(const void *str1, const void *str2)
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
-			  bool add_root, int external_dir_num)
+			  bool add_root, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
 	parray	   *black_list = NULL;
@@ -442,14 +443,14 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
 	if (root && instance_config.pgdata &&
-		strcmp(root, instance_config.pgdata) == 0 && fileExists(path))
+		strcmp(root, instance_config.pgdata) == 0 && fileExists(path, FIO_BACKUP_HOST))
 	{
 		FILE	   *black_list_file = NULL;
 		char		buf[MAXPGPATH * 2];
 		char		black_item[MAXPGPATH * 2];
 
 		black_list = parray_new();
-		black_list_file = fopen(path, PG_BINARY_R);
+		black_list_file = fio_open_stream(path, FIO_BACKUP_HOST);
 
 		if (black_list_file == NULL)
 			elog(ERROR, "cannot open black_list: %s", strerror(errno));
@@ -468,11 +469,11 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 			parray_append(black_list, pgut_strdup(black_item));
 		}
 
-		fclose(black_list_file);
+		fio_close_stream(black_list_file);
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, omit_symlink, external_dir_num);
+	file = pgFileNew(root, omit_symlink, external_dir_num, location);
 	if (file == NULL)
 		return;
 
@@ -489,7 +490,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_append(files, file);
 
 	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list,
-						   external_dir_num);
+						   external_dir_num, location);
 
 	if (!add_root)
 		pgFileFree(file);
@@ -709,7 +710,7 @@ dir_check_file(const char *root, pgFile *file)
 static void
 dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 					   bool exclude, bool omit_symlink, parray *black_list,
-					   int external_dir_num)
+					   int external_dir_num, fio_location location)
 {
 	DIR		    *dir;
 	struct dirent *dent;
@@ -718,7 +719,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		elog(ERROR, "\"%s\" is not a directory", parent->path);
 
 	/* Open directory and list contents */
-	dir = opendir(parent->path);
+	dir = fio_opendir(parent->path, location);
 	if (dir == NULL)
 	{
 		if (errno == ENOENT)
@@ -731,7 +732,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 	}
 
 	errno = 0;
-	while ((dent = readdir(dir)))
+	while ((dent = fio_readdir(dir)))
 	{
 		pgFile	   *file;
 		char		child[MAXPGPATH];
@@ -739,7 +740,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		join_path_components(child, parent->path, dent->d_name);
 
-		file = pgFileNew(child, omit_symlink, external_dir_num);
+		file = pgFileNew(child, omit_symlink, external_dir_num, location);
 		if (file == NULL)
 			continue;
 
@@ -796,17 +797,17 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, root, file, exclude, omit_symlink,
-								   black_list, external_dir_num);
+								   black_list, external_dir_num, location);
 	}
 
 	if (errno && errno != ENOENT)
 	{
 		int			errno_tmp = errno;
-		closedir(dir);
+		fio_closedir(dir);
 		elog(ERROR, "cannot read directory \"%s\": %s",
 			 parent->path, strerror(errno_tmp));
 	}
-	closedir(dir);
+	fio_closedir(dir);
 }
 
 /*
@@ -818,7 +819,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
  */
 static void
 list_data_directories(parray *files, const char *path, bool is_root,
-					  bool exclude)
+					  bool exclude, fio_location location)
 {
 	DIR		   *dir;
 	struct dirent *dent;
@@ -826,12 +827,12 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	bool		has_child_dirs = false;
 
 	/* open directory and list contents */
-	dir = opendir(path);
+	dir = fio_opendir(path, location);
 	if (dir == NULL)
 		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
 
 	errno = 0;
-	while ((dent = readdir(dir)))
+	while ((dent = fio_readdir(dir)))
 	{
 		char		child[MAXPGPATH];
 		bool		skip = false;
@@ -844,7 +845,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 
 		join_path_components(child, path, dent->d_name);
 
-		if (lstat(child, &st) == -1)
+		if (fio_stat(child, &st, false, location) == -1)
 			elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
 
 		if (!S_ISDIR(st.st_mode))
@@ -868,7 +869,7 @@ list_data_directories(parray *files, const char *path, bool is_root,
 			continue;
 
 		has_child_dirs = true;
-		list_data_directories(files, child, false, exclude);
+		list_data_directories(files, child, false, exclude, location);
 	}
 
 	/* List only full and last directories */
@@ -876,12 +877,12 @@ list_data_directories(parray *files, const char *path, bool is_root,
 	{
 		pgFile	   *dir;
 
-		dir = pgFileNew(path, false, 0);
+		dir = pgFileNew(path, false, 0, location);
 		parray_append(files, dir);
 	}
 
 	prev_errno = errno;
-	closedir(dir);
+	fio_closedir(dir);
 
 	if (prev_errno && prev_errno != ENOENT)
 		elog(ERROR, "cannot read directory \"%s\": %s",
@@ -1025,14 +1026,13 @@ opt_externaldir_map(ConfigOption *opt, const char *arg)
  */
 void
 create_data_directories(const char *data_dir, const char *backup_dir,
-						bool extract_tablespaces)
+						bool extract_tablespaces, fio_location location)
 {
 	parray	   *dirs,
 			   *links = NULL;
 	size_t		i;
 	char		backup_database_dir[MAXPGPATH],
 				to_path[MAXPGPATH];
-
 	dirs = parray_new();
 	if (extract_tablespaces)
 	{
@@ -1043,7 +1043,8 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 	}
 
 	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
-	list_data_directories(dirs, backup_database_dir, true, false);
+	list_data_directories(dirs, backup_database_dir, true, false,
+						  FIO_BACKUP_HOST);
 
 	elog(LOG, "restore directories and symlinks...");
 
@@ -1125,15 +1126,15 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 						 linked_path, relative_ptr);
 
 				/* Firstly, create linked directory */
-				dir_create_dir(linked_path, DIR_PERMISSION);
+				fio_mkdir(linked_path, DIR_PERMISSION, location);
 
 				join_path_components(to_path, data_dir, PG_TBLSPC_DIR);
 				/* Create pg_tblspc directory just in case */
-				dir_create_dir(to_path, DIR_PERMISSION);
+				fio_mkdir(to_path, DIR_PERMISSION, location);
 
 				/* Secondly, create link */
 				join_path_components(to_path, to_path, link_name);
-				if (symlink(linked_path, to_path) < 0)
+				if (fio_symlink(linked_path, to_path, location) < 0)
 					elog(ERROR, "could not create symbolic link \"%s\": %s",
 						 to_path, strerror(errno));
 
@@ -1156,7 +1157,7 @@ create_directory:
 
 		/* This is not symlink, create directory */
 		join_path_components(to_path, data_dir, relative_ptr);
-		dir_create_dir(to_path, DIR_PERMISSION);
+		fio_mkdir(to_path, DIR_PERMISSION, location);
 	}
 
 	if (extract_tablespaces)
@@ -1185,13 +1186,13 @@ read_tablespace_map(parray *files, const char *backup_dir)
 	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
 	/* Exit if database/tablespace_map doesn't exist */
-	if (!fileExists(map_path))
+	if (!fileExists(map_path, FIO_BACKUP_HOST))
 	{
 		elog(LOG, "there is no file tablespace_map");
 		return;
 	}
 
-	fp = fopen(map_path, "rt");
+	fp = fio_open_stream(map_path, FIO_BACKUP_HOST);
 	if (fp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", map_path, strerror(errno));
 
@@ -1216,7 +1217,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		parray_append(files, file);
 	}
 
-	fclose(fp);
+	fio_close_stream(fp);
 }
 
 /*
@@ -1365,7 +1366,7 @@ print_file_list(FILE *out, const parray *files, const char *root,
 													file->external_dir_num - 1));
 		}
 
-		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+		fio_fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
@@ -1374,15 +1375,15 @@ print_file_list(FILE *out, const parray *files, const char *root,
 				deparse_compress_alg(file->compress_alg), file->external_dir_num);
 
 		if (file->is_datafile)
-			fprintf(out, ",\"segno\":\"%d\"", file->segno);
+			fio_fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
 		if (file->linked)
 			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != BLOCKNUM_INVALID)
-			fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
+			fio_fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
-		fprintf(out, "}\n");
+		fio_fprintf(out, "}\n");
 	}
 }
 
@@ -1535,13 +1536,13 @@ bad_format:
  */
 parray *
 dir_read_file_list(const char *root, const char *external_prefix,
-				   const char *file_txt)
+				   const char *file_txt, fio_location location)
 {
 	FILE   *fp;
 	parray *files;
 	char	buf[MAXPGPATH * 2];
 
-	fp = fopen(file_txt, "rt");
+	fp = fio_open_stream(file_txt, location);
 	if (fp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
 
@@ -1610,7 +1611,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		parray_append(files, file);
 	}
 
-	fclose(fp);
+	fio_close_stream(fp);
 	return files;
 }
 
@@ -1656,11 +1657,11 @@ dir_is_empty(const char *path)
  * Return true if the path is a existing regular file.
  */
 bool
-fileExists(const char *path)
+fileExists(const char *path, fio_location location)
 {
 	struct stat buf;
 
-	if (stat(path, &buf) == -1 && errno == ENOENT)
+	if (fio_stat(path, &buf, true, location) == -1 && errno == ENOENT)
 		return false;
 	else if (!S_ISREG(buf.st_mode))
 		return false;

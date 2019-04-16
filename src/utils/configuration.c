@@ -8,9 +8,11 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
 #include "configuration.h"
 #include "logger.h"
 #include "pgut.h"
+#include "file.h"
 
 #include "datatype/timestamp.h"
 
@@ -106,7 +108,7 @@ option_has_arg(char type)
 	{
 		case 'b':
 		case 'B':
-			return no_argument;
+		  return no_argument;//optional_argument;
 		default:
 			return required_argument;
 	}
@@ -504,8 +506,9 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 		if (opt == NULL)
 			opt = option_find(c, options);
 
-		if (opt &&
-			opt->allowed < SOURCE_CMD && opt->allowed != SOURCE_CMD_STRICT)
+		if (opt
+			&& !remote_agent
+			&& opt->allowed < SOURCE_CMD && opt->allowed != SOURCE_CMD_STRICT)
 			elog(ERROR, "Option %s cannot be specified in command line",
 				 opt->lname);
 		/* Check 'opt == NULL' is performed in assign_option() */
@@ -567,7 +570,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 		}
 	}
 
-	fclose(fp);
+	fio_close_stream(fp);
 
 	return parsed_options;
 }

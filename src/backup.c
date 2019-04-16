@@ -19,10 +19,12 @@
 #include "streamutil.h"
 
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "utils/thread.h"
-#include <time.h>
+#include "utils/file.h"
+
 
 /*
  * Macro needed to parse ptrack.
@@ -497,7 +499,7 @@ do_backup_instance(void)
 	current.data_bytes = 0;
 
 	/* Obtain current timeline */
-	if (is_remote_backup)
+	if (IsReplicationProtocol())
 	{
 		char	   *sysidentifier;
 		TimeLineID	starttli;
@@ -545,7 +547,7 @@ do_backup_instance(void)
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
 						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
-		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path);
+		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path, FIO_BACKUP_HOST);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;
@@ -603,7 +605,7 @@ do_backup_instance(void)
 	if (stream_wal)
 	{
 		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
-		dir_create_dir(dst_backup_path, DIR_PERMISSION);
+		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 		stream_thread_arg.basedir = dst_backup_path;
 
@@ -637,7 +639,7 @@ do_backup_instance(void)
 			elog(ERROR, "Cannot continue backup because stream connect has failed.");
 		}
 
-		/* By default there are some error */
+        /* By default there are some error */
 		stream_thread_arg.ret = 1;
 
 		thread_interrupted = false;
@@ -648,10 +650,12 @@ do_backup_instance(void)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	if (is_remote_backup)
+
+	if (IsReplicationProtocol())
 		get_remote_pgdata_filelist(backup_files_list);
 	else
-		dir_list_file(backup_files_list, instance_config.pgdata, true, true, false, 0);
+		dir_list_file(backup_files_list, instance_config.pgdata,
+					  true, true, false, 0, FIO_DB_HOST);
 
 	/*
 	 * Append to backup list all files and directories
@@ -662,7 +666,7 @@ do_backup_instance(void)
 			/* External dirs numeration starts with 1.
 			 * 0 value is not external dir */
 			dir_list_file(backup_files_list, parray_get(external_dirs, i),
-						  false, true, false, i+1);
+						  false, true, false, i+1, FIO_DB_HOST);
 
 	/* Sanity check for backup_files_list, thank you, Windows:
 	 * https://github.com/postgrespro/pg_probackup/issues/48
@@ -731,7 +735,7 @@ do_backup_instance(void)
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
 
-			if (!is_remote_backup)
+			if (!IsReplicationProtocol())
 				if (file->external_dir_num)
 					dir_name = GetRelativePath(file->path,
 									parray_get(external_dirs,
@@ -752,7 +756,7 @@ do_backup_instance(void)
 			}
 			else
 				join_path_components(dirpath, database_path, dir_name);
-			dir_create_dir(dirpath, DIR_PERMISSION);
+			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
 
 		/* setup threads */
@@ -795,7 +799,7 @@ do_backup_instance(void)
 
 		elog(VERBOSE, "Start thread num: %i", i);
 
-		if (!is_remote_backup)
+		if (!IsReplicationProtocol())
 			pthread_create(&threads[i], NULL, backup_files, arg);
 		else
 			pthread_create(&threads[i], NULL, remote_backup_files, arg);
@@ -865,20 +869,19 @@ do_backup_instance(void)
 	/* Add archived xlog files into the list of files of this backup */
 	if (stream_wal)
 	{
-		parray	   *xlog_files_list;
+		parray     *xlog_files_list;
 		char		pg_xlog_path[MAXPGPATH];
 
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0);
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0, FIO_BACKUP_HOST);
 
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
-
 			if (S_ISREG(file->mode))
-				calc_file_checksum(file);
+				calc_file_checksum(file, FIO_BACKUP_HOST);
 			/* Remove file path root prefix*/
 			if (strstr(file->path, database_path) == file->path)
 			{
@@ -888,7 +891,6 @@ do_backup_instance(void)
 				free(ptr);
 			}
 		}
-
 		/* Add xlog files into the list of backed up files */
 		parray_concat(backup_files_list, xlog_files_list);
 		parray_free(xlog_files_list);
@@ -967,7 +969,7 @@ do_backup(time_t start_time, bool no_validate)
 	check_server_version();
 
 	/* TODO fix it for remote backup*/
-	if (!is_remote_backup)
+	if (!IsReplicationProtocol())
 		current.checksum_version = get_data_checksum_version(true);
 
 	is_checksum_enabled = pg_checksum_enable();
@@ -1020,7 +1022,7 @@ do_backup(time_t start_time, bool no_validate)
 	 * belogns to the same instance.
 	 */
 	/* TODO fix it for remote backup */
-	if (!is_remote_backup)
+	if (!IsReplicationProtocol())
 		check_system_identifiers();
 
 	/* Start backup. Update backup status. */
@@ -1672,13 +1674,13 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 	{
 		if (!file_exists)
 		{
-			file_exists = fileExists(wal_segment_path);
+			file_exists = fileExists(wal_segment_path, FIO_BACKUP_HOST);
 
 			/* Try to find compressed WAL file */
 			if (!file_exists)
 			{
 #ifdef HAVE_LIBZ
-				file_exists = fileExists(gz_wal_segment_path);
+				file_exists = fileExists(gz_wal_segment_path, FIO_BACKUP_HOST);
 				if (file_exists)
 					elog(LOG, "Found compressed WAL segment: %s", wal_segment_path);
 #endif
@@ -2071,16 +2073,15 @@ pg_stop_backup(pgBackup *backup)
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-			fp = fopen(backup_label, PG_BINARY_W);
+			fp = fio_fopen(backup_label, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
 
 			len = strlen(PQgetvalue(res, 0, 3));
-			if (fwrite(PQgetvalue(res, 0, 3), 1, len, fp) != len ||
-				fflush(fp) != 0 ||
-				fsync(fileno(fp)) != 0 ||
-				fclose(fp))
+			if (fio_fwrite(fp, PQgetvalue(res, 0, 3), len) != len ||
+				fio_fflush(fp) != 0 ||
+				fio_fclose(fp))
 				elog(ERROR, "can't write backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
 
@@ -2090,8 +2091,8 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true, 0);
-				calc_file_checksum(file);
+				file = pgFileNew(backup_label, true, 0, FIO_BACKUP_HOST);
+				calc_file_checksum(file, FIO_BACKUP_HOST);
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -2119,24 +2120,23 @@ pg_stop_backup(pgBackup *backup)
 			char		tablespace_map[MAXPGPATH];
 
 			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fopen(tablespace_map, PG_BINARY_W);
+			fp = fio_fopen(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 
 			len = strlen(val);
-			if (fwrite(val, 1, len, fp) != len ||
-				fflush(fp) != 0 ||
-				fsync(fileno(fp)) != 0 ||
-				fclose(fp))
+			if (fio_fwrite(fp, val, len) != len ||
+				fio_fflush(fp) != 0 ||
+				fio_fclose(fp))
 				elog(ERROR, "can't write tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true, 0);
+				file = pgFileNew(tablespace_map, true, 0, FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
-					calc_file_checksum(file);
+					calc_file_checksum(file, FIO_BACKUP_HOST);
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
 				parray_append(backup_files_list, file);
@@ -2307,7 +2307,7 @@ backup_files(void *arg)
 				 i + 1, n_backup_files_list, file->path);
 
 		/* stat file to check its current state */
-		ret = stat(file->path, &buf);
+		ret = fio_stat(file->path, &buf, true, FIO_DB_HOST);
 		if (ret == -1)
 		{
 			if (errno == ENOENT)
@@ -2382,7 +2382,8 @@ backup_files(void *arg)
 			}
 			else if (!file->external_dir_num &&
 					 strcmp(file->name, "pg_control") == 0)
-				copy_pgcontrol_file(arguments->from_root, arguments->to_root,
+				copy_pgcontrol_file(arguments->from_root, FIO_DB_HOST,
+									arguments->to_root, FIO_BACKUP_HOST,
 									file);
 			else
 			{
@@ -2395,7 +2396,7 @@ backup_files(void *arg)
 				if (prev_file && file->exists_in_prev &&
 					buf.st_mtime < current.parent_backup)
 				{
-					calc_file_checksum(file);
+					calc_file_checksum(file, FIO_DB_HOST);
 					/* ...and checksum is the same... */
 					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
 						skip = true; /* ...skip copying file. */
@@ -2414,7 +2415,8 @@ backup_files(void *arg)
 					src = arguments->from_root;
 					dst = arguments->to_root;
 				}
-				if (skip || !copy_file(src, dst, file))
+				if (skip ||
+					!copy_file(src, FIO_DB_HOST, dst, FIO_BACKUP_HOST, file))
 				{
 					/* disappeared file not to be confused with 'not changed' */
 					if (file->write_size != FILE_NOT_FOUND)

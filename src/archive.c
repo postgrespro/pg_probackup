@@ -55,7 +55,7 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 			 system_id);
 
 	/* Create 'archlog_path' directory. Do nothing if it already exists. */
-	dir_create_dir(arclog_path, DIR_PERMISSION);
+	fio_mkdir(arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
 	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);

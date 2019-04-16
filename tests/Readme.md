@@ -19,6 +19,9 @@ Enable compatibility tests:
 Specify path to pg_probackup binary file. By default tests use <Path to Git repository>/pg_probackup/
  export PGPROBACKUPBIN=<path to pg_probackup>
 
+Remote backup depends on key authentithication to local machine via ssh as current user.
+ PGPROBACKUP_SSH_REMOTE=ON
+
 Usage:
  pip install testgres
  pip install psycopg2

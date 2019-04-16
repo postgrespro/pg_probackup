@@ -51,14 +51,24 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--log-level-file=verbose'])
 
-        log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
 
-        with open(log_file_path) as f:
-            self.assertTrue(
-                '{0} blknum 1, empty page'.format(file_path) in f.read(),
-                'Failed to detect nullified block')
+        if not self.remote:
+            log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
+            with open(log_file_path) as f:
+                self.assertTrue(
+                    '{0} blknum 1, empty page'.format(file_path) in f.read(),
+                    'Failed to detect nullified block')
 
         self.validate_pb(backup_dir, options=["-j", "4"])
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -102,7 +102,7 @@ pgBackupValidate(pgBackup *backup)
 	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
 	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, external_prefix, path);
+	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -257,7 +257,7 @@ pgBackupValidateFiles(void *arg)
 				crc = pgFileGetCRC(file->path,
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
-								   true, NULL);
+								   true, NULL, FIO_LOCAL_HOST);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
