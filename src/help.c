@@ -125,21 +125,21 @@ help_pg_probackup(void)
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
-	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
-	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--recovery-target=immediate|latest]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
 	printf(_("                 [--no-validate]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
-	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
@@ -296,14 +296,14 @@ help_restore(void)
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
-	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
-	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--recovery-target=immediate|latest]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica]\n"));
 	printf(_("                 [--no-validate]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
@@ -321,11 +321,6 @@ help_restore(void)
 	printf(_("                                   whether we stop just after the recovery target\n"));
 	printf(_("      --recovery-target-timeline=timeline\n"));
 	printf(_("                                   recovering into a particular timeline\n"));
-	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
-	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
-
 	printf(_("      --recovery-target=immediate|latest\n"));
 	printf(_("                                   end recovery as soon as a consistent state is reached or as late as possible\n"));
 	printf(_("      --recovery-target-name=target-name\n"));
@@ -338,6 +333,11 @@ help_restore(void)
 	printf(_("                                   to ease setting up a standby server\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+
+	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
 
 	printf(_("\n  Logging options:\n"));
@@ -368,8 +368,8 @@ help_validate(void)
 	printf(_("%s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
-	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
+	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
