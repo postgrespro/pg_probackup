@@ -2554,7 +2554,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_ptrack_truncate_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
@@ -2563,9 +2563,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'checkpoint_timeout': '30'})
+                'max_wal_size': '16MB',
+                'archive_timeout': '10s',
+                'checkpoint_timeout': '30s'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -2620,6 +2620,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             options=[
                 '-j10',
+                '--stream',
                 '--master-host=localhost',
                 '--master-db=postgres',
                 '--master-port={0}'.format(master.port)])
@@ -2656,8 +2657,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 success = False
 
         self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+            success, 'Ptrack has failed to register changes in data files')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3493,8 +3493,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 success = False
 
         self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+            success, 'Ptrack has failed to register changes in data files')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
