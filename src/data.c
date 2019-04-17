@@ -1592,6 +1592,9 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 		BackupPageHeader header;
 		BlockNumber blknum = 0;
 
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Interrupted during data file validation");
+
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
 		if (read_len != sizeof(header))
