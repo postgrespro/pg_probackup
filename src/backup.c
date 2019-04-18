@@ -3554,8 +3554,8 @@ get_index_list(PGresult *res_db, int db_number,
 
 		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
 									"FROM pg_index idx "
-									"JOIN pg_class cls ON cls.oid=idx.indexrelid "
-									"JOIN pg_am am ON am.oid=cls.relam "
+									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
+									"JOIN pg_am am ON cls.relam=am.oid "
 									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
 									0, NULL);
 	}
@@ -3564,11 +3564,13 @@ get_index_list(PGresult *res_db, int db_number,
 
 		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
 									"FROM pg_index idx "
-									"JOIN pg_class cls ON cls.oid=idx.indexrelid "
-									"JOIN pg_am am ON am.oid=cls.relam "
-									"JOIN pg_tablespace tbl ON tbl.oid=cls.reltablespace "
-									"WHERE am.amname='btree' AND cls.relpersistence != 't' "
-									"AND tbl.spcname != 'pg_global'",0, NULL);
+									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
+									"JOIN pg_am am ON cls.relam=am.oid "
+									"LEFT JOIN pg_tablespace tbl "
+									"ON cls.reltablespace=tbl.oid "
+									"AND tbl.spcname <> 'pg_global' "
+									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
+									0, NULL);
 	}
 
 	/* add info needed to check indexes into index_list */

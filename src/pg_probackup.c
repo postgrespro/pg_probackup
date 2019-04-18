@@ -480,9 +480,14 @@ main(int argc, char *argv[])
 		instance_config.pgdata == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
 
-	if (backup_subcmd == CHECKDB_CMD
-	&& (instance_config.logger.log_level_file != LOG_OFF)
-	&& (instance_config.logger.log_directory == NULL))
+	/* Usually checkdb for file logging requires log_directory
+	 * to be specified explicitly, but if backup_dir and instance name are provided,
+	 * checkdb can use the tusual default values or values from config
+	 */
+	if (backup_subcmd == CHECKDB_CMD &&
+		(instance_config.logger.log_level_file != LOG_OFF &&
+		 instance_config.logger.log_directory == NULL) &&
+		(!instance_config.pgdata || !instance_name))
 		elog(ERROR, "Cannot save checkdb logs to a file. "
 			"You must specify --log-directory option when running checkdb with "
 			"--log-level-file option enabled.");
