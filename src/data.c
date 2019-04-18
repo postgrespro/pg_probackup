@@ -1477,7 +1477,6 @@ validate_one_page(Page page, pgFile *file,
 {
 	PageHeader	phdr;
 	XLogRecPtr	lsn;
-	bool		page_header_is_sane = false;
 
 	/* new level of paranoia */
 	if (page == NULL)
@@ -1527,37 +1526,27 @@ validate_one_page(Page page, pgFile *file,
 	/* Check page for the sights of insanity.
 	 * TODO: We should give more information about what exactly is looking "wrong"
 	 */
-	if (PageGetPageSize(phdr) == BLCKSZ &&
+	if (!(PageGetPageSize(phdr) == BLCKSZ &&
 		PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
 		phdr->pd_lower >= SizeOfPageHeaderData &&
 		phdr->pd_lower <= phdr->pd_upper &&
 		phdr->pd_upper <= phdr->pd_special &&
 		phdr->pd_special <= BLCKSZ &&
-		phdr->pd_special == MAXALIGN(phdr->pd_special))
-			/* Page header is sane */
-			page_header_is_sane = true;
-	else
+		phdr->pd_special == MAXALIGN(phdr->pd_special)))
 	{
 		/* Page does not looking good */
-		page_header_is_sane = false;
-		elog(WARNING, "Page is looking insane: %s, block %i",
+		elog(WARNING, "Page header is looking insane: %s, block %i",
 			file->path, blknum);
-	}
-
-	/* Page is insane, no need going further */
-	if (!page_header_is_sane)
 		return PAGE_IS_FOUND_AND_NOT_VALID;
+	}
 
 	/* At this point page header is sane, if checksums are enabled - the`re ok.
 	 * Check that page is not from future.
 	 */
 	if (stop_lsn > 0)
 	{
-		/* Get lsn from page header. Ensure that page is from our time.
-		 * This could be a dangerous move, because in case of disabled checksum we
-		 * cannot be sure that lsn from page header is not a garbage.
-		 */
+		/* Get lsn from page header. Ensure that page is from our time. */
 		lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 		if (lsn > stop_lsn)

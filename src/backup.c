@@ -1040,6 +1040,17 @@ do_block_validation(void)
 		elog(ERROR, "Checkdb failed");
 }
 
+/*
+ * Entry point of checkdb --amcheck.
+ *
+ * Connect to all databases in the cluster
+ * and get list of persistent indexes,
+ * then run parallel threads to perform bt_index_check()
+ * for all indexes from the list.
+ *
+ * If amcheck extension is not installed in the database,
+ * skip this database and report it via warning message.
+ */
 static void
 do_amcheck(void)
 {
@@ -2680,14 +2691,18 @@ check_indexes(void *arg)
 
 		/* remember that we have a failed check */
 		if (!amcheck_one_index(arguments, ind))
-			arguments->ret = 2;
+			arguments->ret = 2; /* corruption found */
 	}
 
 	/* Close connection */
 	if (arguments->backup_conn)
 		pgut_disconnect(arguments->backup_conn);
 
-	/* TODO  where should we set arguments->ret to 1? */
+	/* Ret values:
+	 * 0 everything is ok
+	 * 1 thread errored during execution, e.g. interruption (default value)
+	 * 2 corruption is definitely(!) found
+	 */
 	if (arguments->ret == 1)
 		arguments->ret = 0;
 
@@ -3531,18 +3546,18 @@ get_index_list(PGresult *res_db, int db_number,
 
 	/*
 	 * In order to avoid duplicates, select global indexes
-	 * (tablespace pg_global with oid 1664) only once
+	 * (tablespace pg_global with oid 1664) only once.
+	 *
+	 * select only persistent btree indexes.
 	 */
 	if (first_db_with_amcheck)
 	{
 
-		/* select only valid btree and persistent indexes */
 		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
 									"FROM pg_index idx "
 									"JOIN pg_class cls ON cls.oid=idx.indexrelid "
 									"JOIN pg_am am ON am.oid=cls.relam "
 									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
-									//"AND idx.indisready AND idx.indisvalid",
 									0, NULL);
 	}
 	else
@@ -3554,7 +3569,6 @@ get_index_list(PGresult *res_db, int db_number,
 									"JOIN pg_am am ON am.oid=cls.relam "
 									"JOIN pg_tablespace tbl ON tbl.oid=cls.reltablespace "
 									"WHERE am.amname='btree' AND cls.relpersistence != 't' "
-									//"AND idx.indisready AND idx.indisvalid "
 									"AND tbl.spcname != 'pg_global'",0, NULL);
 	}
 
@@ -3579,7 +3593,6 @@ get_index_list(PGresult *res_db, int db_number,
 		if (index_list == NULL)
 			index_list = parray_new();
 
-// 		elog(WARNING, "add to index_list index '%s' dbname '%s'",ind->name, ind->dbname);
 		parray_append(index_list, ind);
 	}
 

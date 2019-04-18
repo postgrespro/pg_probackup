@@ -153,7 +153,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s checkdb   [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--amcheck] [--skip-block-validation]\n"));
-	printf(_("                 [--heapallindexed] [--work-mem]\n"));
+	printf(_("                 [--heapallindexed]\n"));
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
@@ -477,7 +477,6 @@ help_checkdb(void)
 	printf(_("      --amcheck                    in addition to file-level block checking\n"));
 	printf(_("                                   check btree indexes via function 'bt_index_check()'\n"));
 	printf(_("                                   using 'amcheck' or 'amcheck_next' extensions\n"));
-	printf(_("      --parent                     use 'bt_index_parent_check()' instead of 'bt_index_check()'\n"));
 	printf(_("      --heapallindexed             also check that heap is indexed\n"));
 	printf(_("                                   can be used only with '--amcheck' option\n"));
 
