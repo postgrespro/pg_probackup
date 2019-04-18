@@ -96,7 +96,7 @@ bool skip_block_validation = false;
 bool skip_external_dirs = false;
 
 /* checkdb options */
-bool do_amcheck = false;
+bool need_amcheck = false;
 bool heapallindexed = false;
 bool amcheck_parent = false;
 
@@ -171,9 +171,9 @@ static ConfigOption cmd_options[] =
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	/* checkdb options */
-	{ 'b', 157, "amcheck",			&do_amcheck,		SOURCE_CMD_STRICT },
-	{ 'b', 158, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
-	{ 'b', 159, "parent",			&amcheck_parent,	SOURCE_CMD_STRICT },
+	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
+	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
+	{ 'b', 197, "parent",			&amcheck_parent,	SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
@@ -409,7 +409,7 @@ main(int argc, char *argv[])
 	}
 
 	/* Ensure that backup_path is an absolute path */
-	if (!is_absolute_path(backup_path))
+	if (backup_path && !is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
 
@@ -644,7 +644,7 @@ main(int argc, char *argv[])
 			do_set_config(false);
 			break;
 		case CHECKDB_CMD:
-			do_checkdb(do_amcheck);
+			do_checkdb(need_amcheck);
 			break;
 		case NO_CMD:
 			/* Should not happen */

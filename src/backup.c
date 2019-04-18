@@ -1202,7 +1202,7 @@ static void
 pgdata_basic_setup(bool amcheck_only)
 {
 	/* PGDATA is always required unless running checkdb in amcheck only mode */
-	if (instance_config.pgdata == NULL && !amcheck_only)
+	if (!instance_config.pgdata && !amcheck_only)
 		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
@@ -1234,7 +1234,7 @@ pgdata_basic_setup(bool amcheck_only)
 	 * belogns to the same instance.
 	 */
 	/* TODO fix it for remote backup */
-	if (!IsReplicationProtocol())
+	if (!IsReplicationProtocol() && !amcheck_only)
 		check_system_identifiers();
 
 	if (current.checksum_version)
