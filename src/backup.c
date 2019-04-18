@@ -1164,7 +1164,6 @@ do_amcheck(void)
 
 	/* cleanup */
 	PQclear(res_db);
-	pgut_disconnect(backup_conn);
 }
 
 /* Entry point of pg_probackup CHECKDB subcommand. */
