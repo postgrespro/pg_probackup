@@ -1576,7 +1576,7 @@ check_data_file(backup_files_arg* arguments,
 	FILE		*in;
 	BlockNumber	blknum = 0;
 	BlockNumber	nblocks = 0;
-	int			n_blocks_skipped = 0;
+	BlockNumber n_blocks_skipped = 0;
 	int			page_state;
 	char		curr_page[BLCKSZ];
 	bool 		is_valid = true;
