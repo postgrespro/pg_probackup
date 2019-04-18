@@ -733,7 +733,7 @@ class ProbackupTest(object):
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary)
 
     def checkdb_node(
-            self, instance, backup_dir=False, data_dir=False,
+            self, backup_dir=False, instance=False, data_dir=False,
             options=[], async=False, gdb=False, old_binary=False
             ):
 
@@ -742,10 +742,11 @@ class ProbackupTest(object):
         if backup_dir:
             cmd_list += ["-B", backup_dir]
 
+        if instance:
+            cmd_list += ["--instance={0}".format(instance)]
+
         if data_dir:
             cmd_list += ["-D", data_dir]
-
-        cmd_list += ["--instance={0}".format(instance)]
 
         return self.run_pb(cmd_list + options, async, gdb, old_binary)
 
@@ -1453,6 +1454,18 @@ class GDBobj(ProbackupTest):
 
             elif line.startswith('~"Make breakpoint pending on future shared'):
                 raise GdbException(line)
+
+        raise GdbException(
+            'Failed to set breakpoint.\n Output:\n {0}'.format(result)
+        )
+
+    def remove_all_breakpoints(self):
+
+        result = self._execute('delete')
+        for line in result:
+
+            if line.startswith('^done'):
+                return
 
         raise GdbException(
             'Failed to set breakpoint.\n Output:\n {0}'.format(result)
