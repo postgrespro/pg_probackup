@@ -817,29 +817,29 @@ create_recovery_conf(time_t backup_id,
 		 * exclusive options is specified, so the order of calls is insignificant.
 		 */
 		if (rt->target_name)
-			fprintf(fp, "recovery_target_name = '%s'\n", rt->target_name);
+			fio_fprintf(fp, "recovery_target_name = '%s'\n", rt->target_name);
 
 		if (rt->time_string)
-			fprintf(fp, "recovery_target_time = '%s'\n", rt->time_string);
+			fio_fprintf(fp, "recovery_target_time = '%s'\n", rt->time_string);
 
 		if (rt->xid_string)
-			fprintf(fp, "recovery_target_xid = '%s'\n", rt->xid_string);
+			fio_fprintf(fp, "recovery_target_xid = '%s'\n", rt->xid_string);
 
 		if (rt->lsn_string)
-			fprintf(fp, "recovery_target_lsn = '%s'\n", rt->lsn_string);
+			fio_fprintf(fp, "recovery_target_lsn = '%s'\n", rt->lsn_string);
 
 		if (rt->target_stop && !target_latest)
-			fprintf(fp, "recovery_target = '%s'\n", rt->target_stop);
+			fio_fprintf(fp, "recovery_target = '%s'\n", rt->target_stop);
 
 		if (rt->inclusive_specified)
-			fprintf(fp, "recovery_target_inclusive = '%s'\n",
+			fio_fprintf(fp, "recovery_target_inclusive = '%s'\n",
 					rt->target_inclusive ? "true" : "false");
 
 		if (rt->target_tli)
-			fprintf(fp, "recovery_target_timeline = '%u'\n", rt->target_tli);
+			fio_fprintf(fp, "recovery_target_timeline = '%u'\n", rt->target_tli);
 
 		if (rt->target_action)
-			fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);
+			fio_fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);
 	}
 
 	if (restore_as_replica)

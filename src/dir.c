@@ -1378,7 +1378,7 @@ print_file_list(FILE *out, const parray *files, const char *root,
 			fio_fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
 		if (file->linked)
-			fprintf(out, ",\"linked\":\"%s\"", file->linked);
+			fio_fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != BLOCKNUM_INVALID)
 			fio_fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
