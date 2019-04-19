@@ -88,16 +88,19 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--log-rotation-age=1d'])
 
-        rotation_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log.rotation')
-
-        # self.assertTrue(os.path.isfile(rotation_file_path))
-
         self.backup_node(
             backup_dir, 'node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE'])
+
+        rotation_file_path = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log.rotation')
+
+        log_file_path = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log')
+
+        log_file_size = os.stat(log_file_path).st_size
 
         self.assertTrue(os.path.isfile(rotation_file_path))
 
@@ -111,8 +114,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             options=[
                 '--stream',
-                '--log-level-file=VERBOSE'],
+                '--log-level-file=LOG'],
             return_id=False)
+
+        # check that log file wasn`t rotated
+        self.assertGreater(
+            os.stat(log_file_path).st_size,
+            log_file_size)
 
         self.assertIn(
             'WARNING: cannot read creation timestamp from rotation file',
@@ -122,8 +130,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             options=[
                 '--stream',
-                '--log-level-file=VERBOSE'],
+                '--log-level-file=LOG'],
             return_id=False)
+
+        # check that log file wasn`t rotated
+        self.assertGreater(
+            os.stat(log_file_path).st_size,
+            log_file_size)
 
         self.assertNotIn(
             'WARNING:',
@@ -149,15 +162,20 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--log-rotation-age=1d'])
 
-        rotation_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log.rotation')
-
 
         self.backup_node(
             backup_dir, 'node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE'])
+
+        rotation_file_path = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log.rotation')
+
+        log_file_path = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log')
+
+        log_file_size = os.stat(log_file_path).st_size
 
         self.assertTrue(os.path.isfile(rotation_file_path))
 
@@ -168,8 +186,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             options=[
                 '--stream',
-                '--log-level-file=VERBOSE'],
+                '--log-level-file=LOG'],
             return_id=False)
+
+        # check that log file wasn`t rotated
+        self.assertGreater(
+            os.stat(log_file_path).st_size,
+            log_file_size)
 
         self.assertIn(
             'WARNING: missing rotation file:',
@@ -187,6 +210,11 @@ class LogTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn(
             'WARNING:',
             output)
+
+        # check that log file wasn`t rotated
+        self.assertGreater(
+            os.stat(log_file_path).st_size,
+            log_file_size)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -206,14 +234,19 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--log-rotation-age=1d'])
 
-        rotation_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log.rotation')
-
         self.backup_node(
             backup_dir, 'node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE'])
+
+        rotation_file_path = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log.rotation')
+
+        log_file_path = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log')
+
+        log_file_size = os.stat(log_file_path).st_size
 
         self.assertTrue(os.path.isfile(rotation_file_path))
 
@@ -227,8 +260,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             options=[
                 '--stream',
-                '--log-level-file=VERBOSE'],
+                '--log-level-file=LOG'],
             return_id=False)
+
+        # check that log file wasn`t rotated
+        self.assertGreater(
+            os.stat(log_file_path).st_size,
+            log_file_size)
 
         self.assertIn(
             'WARNING: rotation file "{0}" has wrong '
@@ -241,12 +279,17 @@ class LogTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             options=[
                 '--stream',
-                '--log-level-file=VERBOSE'],
+                '--log-level-file=LOG'],
             return_id=False)
 
         self.assertNotIn(
             'WARNING:',
             output)
+
+        # check that log file wasn`t rotated
+        self.assertGreater(
+            os.stat(log_file_path).st_size,
+            log_file_size)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
