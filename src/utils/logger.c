@@ -134,7 +134,7 @@ exit_if_necessary(int elevel)
 
 		if (remote_agent)
 			sleep(1); /* Let parent receive sent messages */
-		
+
 		/* If this is not the main thread then don't call exit() */
 		if (main_tid != pthread_self())
 		{
