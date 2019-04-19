@@ -220,27 +220,15 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # init pgbench in two databases and corrupt both indexes
-        node.safe_psql(
-            "postgres",
-            "create database db1")
+        node.safe_psql("postgres", "create database db1")
 
-        node.safe_psql(
-            "db1",
-            "create extension amcheck")
+        node.safe_psql("db1", "create extension amcheck")
 
-        node.safe_psql(
-            "postgres",
-            "create database db2")
+        node.safe_psql("postgres", "create database db2")
+        node.safe_psql("db2", "create extension amcheck")
 
-        node.safe_psql(
-            "db2",
-            "create extension amcheck")
-
-        node.pgbench_init(
-            scale=5, dbname='db1')
-
-        node.pgbench_init(
-            scale=5, dbname='db2')
+        node.pgbench_init(scale=5, dbname='db1')
+        node.pgbench_init(scale=5, dbname='db2')
 
         node.safe_psql(
             "db2",
@@ -281,20 +269,12 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Let`s do index corruption
         with open(index_path_1, "rb+", 0) as f:
-            #f.truncate(os.path.getsize(index_path_1) - 4096)
-            #f.flush()
-            #f.close
-
             f.seek(42000)
             f.write(b"blablahblahs")
             f.flush()
             f.close
 
         with open(index_path_2, "rb+", 0) as f:
-            #f.truncate(os.path.getsize(index_path_2) - 4096)
-            #f.flush()
-            #f.close
-
             f.seek(42000)
             f.write(b"blablahblahs")
             f.flush()
