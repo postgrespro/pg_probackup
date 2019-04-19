@@ -1087,3 +1087,79 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_sigint_hadnling(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, gdb=True,
+            options=['--stream', '--log-level-file=verbose'])
+
+        gdb.set_breakpoint('copy_file')
+        gdb.run_until_break()
+
+        gdb.continue_execution_until_break(20)
+        gdb.remove_all_breakpoints()
+
+        gdb._execute('signal SIGINT')
+        gdb.continue_execution_until_exit()
+
+        backup_id = self.show_pb(backup_dir, 'node')[0]['id']
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup STATUS should be "ERROR"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_sigterm_hadnling(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, gdb=True,
+            options=['--stream', '--log-level-file=verbose'])
+
+        gdb.set_breakpoint('copy_file')
+        gdb.run_until_break()
+
+        gdb.continue_execution_until_break(20)
+        gdb.remove_all_breakpoints()
+
+        gdb._execute('signal SIGTERM')
+        gdb.continue_execution_until_exit()
+
+        backup_id = self.show_pb(backup_dir, 'node')[0]['id']
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup STATUS should be "ERROR"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
