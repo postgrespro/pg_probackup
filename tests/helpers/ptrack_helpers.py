@@ -579,7 +579,7 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False):
+    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True):
         if not self.probackup_old_path and old_binary:
             print('PGPROBACKUPBIN_OLD is not set')
             exit(1)
@@ -608,7 +608,7 @@ class ProbackupTest(object):
                     stderr=subprocess.STDOUT,
                     env=self.test_env
                     ).decode('utf-8')
-                if command[0] == 'backup':
+                if command[0] == 'backup' and return_id:
                     # return backup ID
                     for line in self.output.splitlines():
                         if 'INFO: Backup' and 'completed' in line:
@@ -700,7 +700,7 @@ class ProbackupTest(object):
     def backup_node(
             self, backup_dir, instance, node, data_dir=False,
             backup_type='full', options=[], asynchronous=False, gdb=False,
-            old_binary=False
+            old_binary=False, return_id=True
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -730,7 +730,7 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ['-b', backup_type]
 
-        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary)
+        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id)
 
     def checkdb_node(
             self, backup_dir=False, instance=False, data_dir=False,
