@@ -219,14 +219,14 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        # init pgbench in two databases and corrupt both indexes
+        # create two databases
         node.safe_psql("postgres", "create database db1")
-
         node.safe_psql("db1", "create extension amcheck")
 
         node.safe_psql("postgres", "create database db2")
         node.safe_psql("db2", "create extension amcheck")
 
+        # init pgbench in two databases and corrupt both indexes
         node.pgbench_init(scale=5, dbname='db1')
         node.pgbench_init(scale=5, dbname='db2')
 
