@@ -139,7 +139,7 @@ page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 
 	/* First check if page header is valid (it seems to be fast enough check) */
 	if (!(PageGetPageSize(phdr) == BLCKSZ &&
-		  PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
+	//	  PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 		  (phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
 		  phdr->pd_lower >= SizeOfPageHeaderData &&
 		  phdr->pd_lower <= phdr->pd_upper &&
@@ -178,7 +178,7 @@ parse_page(Page page, XLogRecPtr *lsn)
 	*lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 	if (PageGetPageSize(phdr) == BLCKSZ &&
-		PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
+	//	PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
 		phdr->pd_lower >= SizeOfPageHeaderData &&
 		phdr->pd_lower <= phdr->pd_upper &&
@@ -1527,7 +1527,7 @@ validate_one_page(Page page, pgFile *file,
 	 * TODO: We should give more information about what exactly is looking "wrong"
 	 */
 	if (!(PageGetPageSize(phdr) == BLCKSZ &&
-		PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
+	//	PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
 		phdr->pd_lower >= SizeOfPageHeaderData &&
 		phdr->pd_lower <= phdr->pd_upper &&
