@@ -565,11 +565,18 @@ open_logfile(FILE **file, const char *filename_format)
 		{
 			struct stat	control_st;
 
-			if (stat(control, &control_st) == -1)
+			if (stat(control, &control_st) < 0)
 			{
 				if (errno != ENOENT)
 					elog_stderr(ERROR, "cannot stat rotation file \"%s\": %s",
 								control, strerror(errno));
+				else
+				{
+					/* file not found, force rotation */
+					elog_stderr(WARNING, "missing rotation file: \"%s\"",
+								control);
+					rotation_requested = true;
+				}
 			}
 			else
 			{
@@ -585,18 +592,28 @@ open_logfile(FILE **file, const char *filename_format)
 					time_t		creation_time;
 
 					if (!parse_int64(buf, (int64 *) &creation_time, 0))
-						elog_stderr(ERROR, "rotation file \"%s\" has wrong "
+					{
+						/* Inability to parse value from .rotation file is
+						 * concerning but not a critical error
+						 */
+						elog_stderr(WARNING, "rotation file \"%s\" has wrong "
 									"creation timestamp \"%s\"",
 									control, buf);
-					/* Parsed creation time */
-
-					rotation_requested = (cur_time - creation_time) >
-						/* convert to seconds from milliseconds */
-						logger_config.log_rotation_age / 1000;
+						rotation_requested = true;
+					}
+					else
+						/* Parsed creation time */
+						rotation_requested = (cur_time - creation_time) >
+							/* convert to seconds from milliseconds */
+							logger_config.log_rotation_age / 1000;
 				}
 				else
-					elog_stderr(ERROR, "cannot read creation timestamp from "
+				{
+					/* truncated .rotation file is not a critical error */
+					elog_stderr(WARNING, "cannot read creation timestamp from "
 								"rotation file \"%s\"", control);
+					rotation_requested = true;
+				}
 
 				fclose(control_file);
 			}
