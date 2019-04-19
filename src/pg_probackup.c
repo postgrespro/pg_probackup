@@ -39,7 +39,8 @@ typedef enum ProbackupSubcmd
 	MERGE_CMD,
 	SHOW_CMD,
 	SET_CONFIG_CMD,
-	SHOW_CONFIG_CMD
+	SHOW_CONFIG_CMD,
+	CHECKDB_CMD
 } ProbackupSubcmd;
 
 
@@ -93,6 +94,11 @@ bool no_validate = false;
 
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
+
+/* checkdb options */
+bool need_amcheck = false;
+bool heapallindexed = false;
+bool amcheck_parent = false;
 
 /* delete options */
 bool		delete_wal = false;
@@ -164,6 +170,10 @@ static ConfigOption cmd_options[] =
 	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
+	/* checkdb options */
+	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
+	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
+	{ 'b', 197, "parent",			&amcheck_parent,	SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
@@ -279,6 +289,8 @@ main(int argc, char *argv[])
 			backup_subcmd = SET_CONFIG_CMD;
 		else if (strcmp(argv[1], "show-config") == 0)
 			backup_subcmd = SHOW_CONFIG_CMD;
+		else if (strcmp(argv[1], "checkdb") == 0)
+			backup_subcmd = CHECKDB_CMD;
 		else if (strcmp(argv[1], "agent") == 0 && argc > 2)
 		{
 			remote_agent = argv[2];
@@ -326,6 +338,7 @@ main(int argc, char *argv[])
 	 * Make command string before getopt_long() will call. It permutes the
 	 * content of argv.
 	 */
+	/* TODO why do we do that only for some commands? */
 	command_name = pstrdup(argv[1]);
 	if (backup_subcmd == BACKUP_CMD ||
 		backup_subcmd == RESTORE_CMD ||
@@ -367,7 +380,7 @@ main(int argc, char *argv[])
 	if (help_opt)
 		help_command(command_name);
 
-	/* backup_path is required for all pg_probackup commands except help */
+	/* backup_path is required for all pg_probackup commands except help and checkdb */
 	if (backup_path == NULL)
 	{
 		/*
@@ -375,28 +388,36 @@ main(int argc, char *argv[])
 		 * from environment variable
 		 */
 		backup_path = getenv("BACKUP_PATH");
-		if (backup_path == NULL)
+		if (backup_path == NULL && backup_subcmd != CHECKDB_CMD)
 			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
-	canonicalize_path(backup_path);
 
 	setMyLocation();
 
-	/* Ensure that backup_path is a path to a directory */
-	rc = fio_stat(backup_path, &stat_buf, true, FIO_BACKUP_HOST);
-	if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-		elog(ERROR, "-B, --backup-path must be a path to directory");
+	if (backup_path != NULL)
+	{
+		canonicalize_path(backup_path);
+
+		/* Ensure that backup_path is an absolute path */
+		if (!is_absolute_path(backup_path))
+			elog(ERROR, "-B, --backup-path must be an absolute path");
+
+		/* Ensure that backup_path is a path to a directory */
+		rc = stat(backup_path, &stat_buf);
+		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
+			elog(ERROR, "-B, --backup-path must be a path to directory");
+	}
 
 	/* Ensure that backup_path is an absolute path */
-	if (!is_absolute_path(backup_path))
+	if (backup_path && !is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
 
 	/* Option --instance is required for all commands except init and show */
-	if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
-		backup_subcmd != VALIDATE_CMD)
+	if (instance_name == NULL)
 	{
-		if (instance_name == NULL)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
+			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 
@@ -404,7 +425,7 @@ main(int argc, char *argv[])
 	 * If --instance option was passed, construct paths for backup data and
 	 * xlog files of this backup instance.
 	 */
-	if (instance_name)
+	if ((backup_path != NULL) && instance_name)
 	{
 		sprintf(backup_instance_path, "%s/%s/%s",
 				backup_path, BACKUPS_DIR, instance_name);
@@ -431,7 +452,6 @@ main(int argc, char *argv[])
 	if (instance_name)
 	{
 		char		path[MAXPGPATH];
-
 		/* Read environment variables */
 		config_get_opt_env(instance_options);
 
@@ -440,10 +460,37 @@ main(int argc, char *argv[])
 		{
 			join_path_components(path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
-			config_read_opt(path, instance_options, ERROR, true, false);
+
+			if (backup_subcmd == CHECKDB_CMD)
+				config_read_opt(path, instance_options, ERROR, true, true);
+			else
+				config_read_opt(path, instance_options, ERROR, true, false);
 		}
 		setMyLocation();
 	}
+
+	/* Just read environment variables */
+	if (backup_path == NULL && backup_subcmd == CHECKDB_CMD)
+		config_get_opt_env(instance_options);
+
+	/* Sanity for checkdb, if backup_dir is provided but pgdata and instance are not */
+	if (backup_subcmd == CHECKDB_CMD &&
+		backup_path != NULL &&
+		instance_name == NULL &&
+		instance_config.pgdata == NULL)
+			elog(ERROR, "required parameter not specified: --instance");
+
+	/* Usually checkdb for file logging requires log_directory
+	 * to be specified explicitly, but if backup_dir and instance name are provided,
+	 * checkdb can use the tusual default values or values from config
+	 */
+	if (backup_subcmd == CHECKDB_CMD &&
+		(instance_config.logger.log_level_file != LOG_OFF &&
+		 instance_config.logger.log_directory == NULL) &&
+		(!instance_config.pgdata || !instance_name))
+		elog(ERROR, "Cannot save checkdb logs to a file. "
+			"You must specify --log-directory option when running checkdb with "
+			"--log-level-file option enabled.");
 
 	/* Initialize logger */
 	init_logger(backup_path, &instance_config.logger);
@@ -559,6 +606,11 @@ main(int argc, char *argv[])
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
 						  stream_wal ? "true" : "false", instance_config.remote.host ? "true" : "false");
 
+				/* sanity */
+				if (current.backup_mode == BACKUP_MODE_INVALID)
+					elog(ERROR, "required parameter not specified: BACKUP_MODE "
+						 "(-b, --backup-mode)");
+
 				return do_backup(start_time, no_validate);
 			}
 		case RESTORE_CMD:
@@ -595,6 +647,9 @@ main(int argc, char *argv[])
 			break;
 		case SET_CONFIG_CMD:
 			do_set_config(false);
+			break;
+		case CHECKDB_CMD:
+			do_checkdb(need_amcheck);
 			break;
 		case NO_CMD:
 			/* Should not happen */

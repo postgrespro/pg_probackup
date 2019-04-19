@@ -22,7 +22,7 @@
 #include "file.h"
 
 
-const char *PROGRAM_NAME = NULL;
+const char *PROGRAM_NAME = "pg_probackup";
 
 static char	   *password = NULL;
 bool			prompt_password = true;
@@ -43,6 +43,8 @@ static void on_after_exec(PGcancel *thread_cancel_conn);
 static void on_interrupt(void);
 static void on_cleanup(void);
 static pqsigfunc oldhandler = NULL;
+
+void discard_response(PGconn *conn);
 
 void
 pgut_init(void)
@@ -360,7 +362,7 @@ PGresult *
 pgut_execute_parallel(PGconn* conn,
 					  PGcancel* thread_cancel_conn, const char *query,
 					  int nParams, const char **params,
-					  bool text_result)
+					  bool text_result, bool ok_error, bool async)
 {
 	PGresult   *res;
 
@@ -388,15 +390,56 @@ pgut_execute_parallel(PGconn* conn,
 	}
 
 	//on_before_exec(conn, thread_cancel_conn);
-	if (nParams == 0)
-		res = PQexec(conn, query);
+	if (async)
+	{
+		/* clean any old data */
+		discard_response(conn);
+
+		if (nParams == 0)
+			PQsendQuery(conn, query);
+		else
+			PQsendQueryParams(conn, query, nParams, NULL, params, NULL, NULL,
+								/*
+								* Specify zero to obtain results in text format,
+								* or one to obtain results in binary format.
+								*/
+								(text_result) ? 0 : 1);
+
+		/* wait for processing, TODO: timeout */
+		for (;;)
+		{
+			if (interrupted)
+			{
+				pgut_cancel(conn);
+				pgut_disconnect(conn);
+				elog(ERROR, "interrupted");
+			}
+
+			if (!PQconsumeInput(conn))
+				elog(ERROR, "query failed: %squery was: %s",
+						PQerrorMessage(conn), query);
+
+			/* query is no done */
+			if (!PQisBusy(conn))
+				break;
+
+			usleep(10000);
+		}
+
+		res = PQgetResult(conn);
+	}
 	else
-		res = PQexecParams(conn, query, nParams, NULL, params, NULL, NULL,
-						   /*
-							* Specify zero to obtain results in text format,
-							* or one to obtain results in binary format.
-							*/
-						   (text_result) ? 0 : 1);
+	{
+		if (nParams == 0)
+			res = PQexec(conn, query);
+		else
+			res = PQexecParams(conn, query, nParams, NULL, params, NULL, NULL,
+								/*
+								* Specify zero to obtain results in text format,
+								* or one to obtain results in binary format.
+								*/
+								(text_result) ? 0 : 1);
+	}
 	//on_after_exec(thread_cancel_conn);
 
 	switch (PQresultStatus(res))
@@ -406,6 +449,9 @@ pgut_execute_parallel(PGconn* conn,
 		case PGRES_COPY_IN:
 			break;
 		default:
+			if (ok_error && PQresultStatus(res) == PGRES_FATAL_ERROR)
+				break;
+
 			elog(ERROR, "query failed: %squery was: %s",
 				 PQerrorMessage(conn), query);
 			break;
@@ -787,22 +833,6 @@ on_cleanup(void)
 	call_atexit_callbacks(false);
 }
 
-void
-exit_or_abort(int exitcode)
-{
-	if (in_cleanup)
-	{
-		/* oops, error in cleanup*/
-		call_atexit_callbacks(true);
-		abort();
-	}
-	else
-	{
-		/* normal exit */
-		exit(exitcode);
-	}
-}
-
 void *
 pgut_malloc(size_t size)
 {
@@ -998,3 +1028,16 @@ select_win32(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, con
 }
 
 #endif   /* WIN32 */
+
+void
+discard_response(PGconn *conn)
+{
+	PGresult   *res;
+
+	do
+	{
+		res = PQgetResult(conn);
+		if (res)
+			PQclear(res);
+	} while (res);
+}

@@ -49,6 +49,8 @@ const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
+/* list of indexes for use in checkdb --amcheck */
+static parray *index_list = NULL;
 
 /* We need critical section for datapagemap_add() in case of using threads */
 static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -73,8 +75,8 @@ static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
 static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
-bool is_checksum_enabled = false;
 bool exclusive_backup = false;
+bool heapallindexed_is_supported = false;
 
 /* Backup connections */
 static PGconn *backup_conn = NULL;
@@ -96,10 +98,21 @@ static bool pg_stop_backup_is_sent = false;
 static void backup_cleanup(bool fatal, void *userdata);
 static void backup_disconnect(bool fatal, void *userdata);
 
+static void pgdata_basic_setup(bool amcheck_only);
+
 static void *backup_files(void *arg);
 static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
+
+static void do_block_validation(void);
+static void do_amcheck(void);
+static void *check_files(void *arg);
+static void *check_indexes(void *arg);
+static parray* get_index_list(PGresult* res_db, int db_number,
+							  bool first_db_with_amcheck, PGconn* db_conn);
+static bool amcheck_one_index(backup_files_arg *arguments,
+				 pg_indexEntry *ind);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
 static void pg_switch_wal(PGconn *conn);
@@ -929,19 +942,268 @@ do_backup_instance(void)
 	backup_files_list = NULL;
 }
 
-/*
- * Entry point of pg_probackup BACKUP subcommand.
- */
-int
-do_backup(time_t start_time, bool no_validate)
+/* collect list of files and run threads to check files in the instance */
+static void
+do_block_validation(void)
 {
-	/* PGDATA and BACKUP_MODE are always required */
-	if (instance_config.pgdata == NULL)
+	int			i;
+	char		database_path[MAXPGPATH];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t	*threads;
+	backup_files_arg *threads_args;
+	bool		check_isok = true;
+
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
+
+	/* initialize file list */
+	backup_files_list = parray_new();
+
+	/* list files with the logical path. omit $PGDATA */
+	dir_list_file(backup_files_list, instance_config.pgdata,
+				  true, true, false, 0, FIO_DB_HOST);
+
+	/*
+	 * Sort pathname ascending.
+	 *
+	 * For example:
+	 * 1 - create 'base'
+	 * 2 - create 'base/1'
+	 */
+	parray_qsort(backup_files_list, pgFileComparePath);
+	/* Extract information about files in backup_list parsing their names:*/
+	parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
+
+	/* setup threads */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+		pg_atomic_clear_flag(&file->lock);
+	}
+
+	/* Sort by size for load balancing */
+	parray_qsort(backup_files_list, pgFileCompareSize);
+
+	/* init thread args with own file lists */
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
+
+	for (i = 0; i < num_threads; i++)
+	{
+		backup_files_arg *arg = &(threads_args[i]);
+
+		arg->from_root = instance_config.pgdata;
+		arg->to_root = database_path;
+		arg->files_list = backup_files_list;
+		arg->index_list = NULL;
+		arg->prev_filelist = NULL;
+		arg->prev_start_lsn = InvalidXLogRecPtr;
+		arg->backup_conn = NULL;
+		arg->cancel_conn = NULL;
+		/* By default there are some error */
+		arg->ret = 1;
+	}
+
+	/* TODO write better info message */
+	elog(INFO, "Start checking data files");
+
+	/* Run threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		backup_files_arg *arg = &(threads_args[i]);
+
+		elog(VERBOSE, "Start thread num: %i", i);
+
+		pthread_create(&threads[i], NULL, check_files, arg);
+	}
+
+	/* Wait threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret > 0)
+			check_isok = false;
+	}
+
+	/* cleanup */
+	if (backup_files_list)
+	{
+		parray_walk(backup_files_list, pgFileFree);
+		parray_free(backup_files_list);
+		backup_files_list = NULL;
+	}
+
+	/* TODO write better info message */
+	if (check_isok)
+		elog(INFO, "Data files are valid");
+	else
+		elog(ERROR, "Checkdb failed");
+}
+
+/*
+ * Entry point of checkdb --amcheck.
+ *
+ * Connect to all databases in the cluster
+ * and get list of persistent indexes,
+ * then run parallel threads to perform bt_index_check()
+ * for all indexes from the list.
+ *
+ * If amcheck extension is not installed in the database,
+ * skip this database and report it via warning message.
+ */
+static void
+do_amcheck(void)
+{
+	int			i;
+	char		database_path[MAXPGPATH];
+	/* arrays with meta info for multi threaded backup */
+	pthread_t	*threads;
+	backup_files_arg *threads_args;
+	bool		check_isok = true;
+	PGresult   *res_db;
+	int n_databases = 0;
+	bool first_db_with_amcheck = true;
+	PGconn *db_conn = NULL;
+	bool db_skipped = false;
+
+	pgBackupGetPath(&current, database_path, lengthof(database_path),
+					DATABASE_DIR);
+
+	res_db = pgut_execute(backup_conn,
+						"SELECT datname, oid, dattablespace "
+						"FROM pg_database "
+						"WHERE datname NOT IN ('template0', 'template1')",
+						  0, NULL);
+
+	n_databases =  PQntuples(res_db);
+
+	elog(INFO, "Start amchecking PostgreSQL instance");
+
+	/* For each database check indexes. In parallel. */
+	for(i = 0; i < n_databases; i++)
+	{
+		int j;
+
+		if (index_list != NULL)
+		{
+			free(index_list);
+			index_list = NULL;
+		}
+
+		index_list = get_index_list(res_db, i,
+									first_db_with_amcheck, db_conn);
+
+		if (index_list == NULL)
+		{
+			if (db_conn)
+				pgut_disconnect(db_conn);
+			db_skipped = true;
+			continue;
+		}
+
+		first_db_with_amcheck = false;
+
+		/* init thread args with own file lists */
+		threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+		threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
+
+		for (j = 0; j < num_threads; j++)
+		{
+			backup_files_arg *arg = &(threads_args[j]);
+
+			arg->from_root = instance_config.pgdata;
+			arg->to_root = database_path;
+			arg->files_list = NULL;
+			arg->index_list = index_list;
+			arg->prev_filelist = NULL;
+			arg->prev_start_lsn = InvalidXLogRecPtr;
+			arg->backup_conn = NULL;
+			arg->cancel_conn = NULL;
+			arg->thread_num = j + 1;
+			/* By default there are some error */
+			arg->ret = 1;
+		}
+
+		/* Run threads */
+		for (j = 0; j < num_threads; j++)
+		{
+			backup_files_arg *arg = &(threads_args[j]);
+			elog(VERBOSE, "Start thread num: %i", j);
+			pthread_create(&threads[j], NULL, check_indexes, arg);
+		}
+
+		/* Wait threads */
+		for (j = 0; j < num_threads; j++)
+		{
+			pthread_join(threads[j], NULL);
+			if (threads_args[j].ret > 0)
+				check_isok = false;
+		}
+
+		/* cleanup */
+		pgut_disconnect(db_conn);
+
+		if (interrupted)
+			break;
+	}
+
+	/* Inform user about amcheck results */
+	if (!check_isok || interrupted)
+		elog(ERROR, "Checkdb --amcheck failed");
+
+	if (db_skipped)
+		elog(ERROR, "Some databases were not amchecked");
+
+	elog(INFO, "Checkdb --amcheck executed successfully");
+
+	/* We cannot state that all indexes are ok
+	 * without checking indexes in all databases
+	 */
+	if (check_isok && !interrupted && !db_skipped)
+		elog(INFO, "Indexes are valid");
+
+	/* cleanup */
+	PQclear(res_db);
+}
+
+/* Entry point of pg_probackup CHECKDB subcommand. */
+void
+do_checkdb(bool need_amcheck)
+{
+	bool amcheck_only = false;
+
+	if (skip_block_validation && !need_amcheck)
+		elog(ERROR, "Option '--skip-block-validation' must be used with '--amcheck' option");
+
+	if (skip_block_validation && need_amcheck)
+		amcheck_only = true;
+
+	pgdata_basic_setup(amcheck_only);
+
+	if (!skip_block_validation)
+		do_block_validation();
+
+	if (need_amcheck)
+		do_amcheck();
+}
+
+/*
+ * Common code for CHECKDB and BACKUP commands.
+ * Ensure that we're able to connect to the instance
+ * check compatibility and fill basic info.
+ * For checkdb launched in amcheck mode with pgdata validation
+ * do not check system ID, it gives user an opportunity to
+ * check remote PostgreSQL instance.
+ * Also checking system ID in this case serves no purpose, because
+ * all work is done by server.
+ */
+static void
+pgdata_basic_setup(bool amcheck_only)
+{
+	/* PGDATA is always required unless running checkdb in amcheck only mode */
+	if (!instance_config.pgdata && !amcheck_only)
 		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
-	if (current.backup_mode == BACKUP_MODE_INVALID)
-		elog(ERROR, "required parameter not specified: BACKUP_MODE "
-						 "(-b, --backup-mode)");
 
 	/* Create connection for PostgreSQL */
 	backup_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
@@ -950,14 +1212,6 @@ do_backup(time_t start_time, bool no_validate)
 	pgut_atexit_push(backup_disconnect, NULL);
 
 	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
-
-#if PG_VERSION_NUM >= 110000
-	if (!RetrieveWalSegSize(backup_conn))
-		elog(ERROR, "Failed to retreive wal_segment_size");
-#endif
-
-	current.compress_alg = instance_config.compress_alg;
-	current.compress_level = instance_config.compress_level;
 
 	/* Confirm data block size and xlog block size are compatible */
 	confirm_block_size("block_size", BLCKSZ);
@@ -968,13 +1222,21 @@ do_backup(time_t start_time, bool no_validate)
 	/* Confirm that this server version is supported */
 	check_server_version();
 
-	/* TODO fix it for remote backup*/
-	if (!IsReplicationProtocol())
-		current.checksum_version = get_data_checksum_version(true);
+	if (pg_checksum_enable())
+		current.checksum_version = 1;
+	else
+		current.checksum_version = 0;
 
-	is_checksum_enabled = pg_checksum_enable();
+	/*
+	 * Ensure that backup directory was initialized for the same PostgreSQL
+	 * instance we opened connection to. And that target backup database PGDATA
+	 * belogns to the same instance.
+	 */
+	/* TODO fix it for remote backup */
+	if (!IsReplicationProtocol() && !amcheck_only)
+		check_system_identifiers();
 
-	if (is_checksum_enabled)
+	if (current.checksum_version)
 		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
 					"Data block corruption will be detected");
 	else
@@ -984,6 +1246,29 @@ do_backup(time_t start_time, bool no_validate)
 
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
+}
+
+/*
+ * Entry point of pg_probackup BACKUP subcommand.
+ */
+int
+do_backup(time_t start_time, bool no_validate)
+{
+	/*
+	 * setup backup_conn, do some compatibility checks and
+	 * fill basic info about instance
+	 */
+	pgdata_basic_setup(false);
+
+	/* below perform checks specific for backup command */
+#if PG_VERSION_NUM >= 110000
+	if (!RetrieveWalSegSize(backup_conn))
+		elog(ERROR, "Failed to retreive wal_segment_size");
+#endif
+
+	current.compress_alg = instance_config.compress_alg;
+	current.compress_level = instance_config.compress_level;
+
 	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support();
@@ -1015,15 +1300,6 @@ do_backup(time_t start_time, bool no_validate)
 								   instance_config.master_db,
 								   instance_config.master_user);
 	}
-
-	/*
-	 * Ensure that backup directory was initialized for the same PostgreSQL
-	 * instance we opened connection to. And that target backup database PGDATA
-	 * belogns to the same instance.
-	 */
-	/* TODO fix it for remote backup */
-	if (!IsReplicationProtocol())
-		check_system_identifiers();
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -1170,6 +1446,18 @@ check_system_identifiers(void)
 
 	system_id_pgdata = get_system_identifier(instance_config.pgdata);
 	system_id_conn = get_remote_system_identifier(backup_conn);
+
+	/* for checkdb check only system_id_pgdata and system_id_conn */
+	if (current.backup_mode == BACKUP_MODE_INVALID)
+	{
+		if (system_id_conn != system_id_pgdata)
+		{
+			elog(ERROR, "Data directory initialized with system id " UINT64_FORMAT ", "
+						"but connected instance system id is " UINT64_FORMAT,
+				 system_id_pgdata, system_id_conn);
+		}
+		return;
+	}
 
 	if (system_id_conn != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
@@ -2273,6 +2561,154 @@ backup_disconnect(bool fatal, void *userdata)
 }
 
 /*
+ * Check files in PGDATA.
+ * Read all files listed in backup_files_list.
+ * If the file is 'datafile' (regular relation's main fork), read it page by page,
+ * verify checksum and copy.
+ */
+static void *
+check_files(void *arg)
+{
+	int			i;
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int			n_backup_files_list = 0;
+
+	if (arguments->files_list)
+		n_backup_files_list = parray_num(arguments->files_list);
+
+	/* check a file */
+	for (i = 0; i < n_backup_files_list; i++)
+	{
+		int			ret;
+		struct stat	buf;
+		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
+
+		if (!pg_atomic_test_set_flag(&file->lock))
+			continue;
+
+		elog(VERBOSE, "Checking file:  \"%s\" ", file->path);
+
+		/* check for interrupt */
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "interrupted during checkdb");
+
+		if (progress)
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, n_backup_files_list, file->path);
+
+		/* stat file to check its current state */
+		ret = stat(file->path, &buf);
+		if (ret == -1)
+		{
+			if (errno == ENOENT)
+			{
+				/*
+				 * If file is not found, this is not en error.
+				 * It could have been deleted by concurrent postgres transaction.
+				 */
+				elog(LOG, "File \"%s\" is not found", file->path);
+				continue;
+			}
+			else
+			{
+				elog(ERROR,
+					"can't stat file to check \"%s\": %s",
+					file->path, strerror(errno));
+			}
+		}
+
+		/* No need to check directories */
+		if (S_ISDIR(buf.st_mode))
+			continue;
+
+		if (S_ISREG(buf.st_mode))
+		{
+			/* check only uncompressed by cfs datafiles */
+			if (file->is_datafile && !file->is_cfs)
+			{
+				char		to_path[MAXPGPATH];
+
+				join_path_components(to_path, arguments->to_root,
+									 file->path + strlen(arguments->from_root) + 1);
+
+				if (!check_data_file(arguments, file))
+					arguments->ret = 2; /* corruption found */
+			}
+		}
+		else
+			elog(WARNING, "unexpected file type %d", buf.st_mode);
+	}
+
+	/* Ret values:
+	 * 0 everything is ok
+	 * 1 thread errored during execution, e.g. interruption (default value)
+	 * 2 corruption is definitely(!) found
+	 */
+	if (arguments->ret == 1)
+		arguments->ret = 0;
+
+	return NULL;
+}
+
+/* Check indexes with amcheck */
+static void *
+check_indexes(void *arg)
+{
+	int			i;
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int			n_indexes = 0;
+
+	if (arguments->index_list)
+		n_indexes = parray_num(arguments->index_list);
+
+	for (i = 0; i < n_indexes; i++)
+	{
+		pg_indexEntry *ind = (pg_indexEntry *) parray_get(arguments->index_list, i);
+
+		if (!pg_atomic_test_set_flag(&ind->lock))
+			continue;
+
+		/* check for interrupt */
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Thread [%d]: interrupted during checkdb --amcheck",
+				arguments->thread_num);
+
+		if (progress)
+			elog(INFO, "Thread [%d]. Progress: (%d/%d). Amchecking index '%s.%s'",
+				 arguments->thread_num, i + 1, n_indexes,
+				 ind->amcheck_nspname, ind->name);
+
+		if (arguments->backup_conn == NULL)
+		{
+
+			arguments->backup_conn = pgut_connect(instance_config.pghost,
+												instance_config.pgport,
+												ind->dbname,
+												instance_config.pguser);
+			arguments->cancel_conn = PQgetCancel(arguments->backup_conn);
+		}
+
+		/* remember that we have a failed check */
+		if (!amcheck_one_index(arguments, ind))
+			arguments->ret = 2; /* corruption found */
+	}
+
+	/* Close connection */
+	if (arguments->backup_conn)
+		pgut_disconnect(arguments->backup_conn);
+
+	/* Ret values:
+	 * 0 everything is ok
+	 * 1 thread errored during execution, e.g. interruption (default value)
+	 * 2 corruption is definitely(!) found
+	 */
+	if (arguments->ret == 1)
+		arguments->ret = 0;
+
+	return NULL;
+}
+
+/*
  * Take a backup of the PGDATA at a file level.
  * Copy all directories and files listed in backup_files_list.
  * If the file is 'datafile' (regular relation's main fork), read it page by page,
@@ -2358,6 +2794,7 @@ backup_files(void *arg)
 					/* File exists in previous backup */
 					file->exists_in_prev = true;
 			}
+
 			/* copy the file into backup */
 			if (file->is_datafile && !file->is_cfs)
 			{
@@ -2985,7 +3422,7 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 	res = pgut_execute_parallel(arguments->backup_conn,
 								arguments->cancel_conn,
 					"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
-					4, (const char **)params, true);
+					4, (const char **)params, true, false, false);
 
 	if (PQnfields(res) != 1)
 	{
@@ -3051,4 +3488,173 @@ check_external_for_tablespaces(parray *external_list)
 		}
 	}
 	PQclear(res);
+}
+
+/* Get index list for given database */
+static parray*
+get_index_list(PGresult *res_db, int db_number,
+			   bool first_db_with_amcheck, PGconn *db_conn)
+{
+	PGresult   *res;
+	char *nspname = NULL;
+	int i;
+
+	dbname = PQgetvalue(res_db, db_number, 0);
+
+	db_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+							dbname,
+							instance_config.pguser);
+
+	res = pgut_execute(db_conn, "SELECT "
+								"extname, nspname, extversion "
+								"FROM pg_namespace n "
+								"JOIN pg_extension e "
+								"ON n.oid=e.extnamespace "
+								"WHERE e.extname IN ('amcheck', 'amcheck_next') "
+								"ORDER BY extversion DESC "
+								"LIMIT 1",
+								0, NULL);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		PQclear(res);
+		elog(ERROR, "Cannot check if amcheck is installed in database %s: %s",
+			dbname, PQerrorMessage(db_conn));
+	}
+
+	if (PQntuples(res) < 1)
+	{
+		elog(WARNING, "Extension 'amcheck' or 'amcheck_next' are not installed in database %s", dbname);
+		return NULL;
+	}
+
+	nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
+	strcpy(nspname, PQgetvalue(res, 0, 1));
+
+	/* heapallindexed_is_supported is database specific */
+	if (strcmp(PQgetvalue(res, 0, 2), "1.0") != 0 &&
+		strcmp(PQgetvalue(res, 0, 2), "1") != 0)
+			heapallindexed_is_supported = true;
+
+	elog(INFO, "Amchecking database '%s' using extension '%s' version %s from schema '%s'",
+					dbname, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
+
+	if (!heapallindexed_is_supported && heapallindexed)
+		elog(WARNING, "Extension '%s' verion %s in schema '%s' do not support 'heapallindexed' option",
+						PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
+
+	/*
+	 * In order to avoid duplicates, select global indexes
+	 * (tablespace pg_global with oid 1664) only once.
+	 *
+	 * select only persistent btree indexes.
+	 */
+	if (first_db_with_amcheck)
+	{
+
+		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
+									"FROM pg_index idx "
+									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
+									"JOIN pg_am am ON cls.relam=am.oid "
+									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
+									0, NULL);
+	}
+	else
+	{
+
+		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
+									"FROM pg_index idx "
+									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
+									"JOIN pg_am am ON cls.relam=am.oid "
+									"LEFT JOIN pg_tablespace tbl "
+									"ON cls.reltablespace=tbl.oid "
+									"AND tbl.spcname <> 'pg_global' "
+									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
+									0, NULL);
+	}
+
+	/* add info needed to check indexes into index_list */
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		pg_indexEntry *ind = (pg_indexEntry *) pgut_malloc(sizeof(pg_indexEntry));
+		char *name = NULL;
+
+		ind->indexrelid = atoi(PQgetvalue(res, i, 0));
+		name = PQgetvalue(res, i, 1);
+		ind->name = pgut_malloc(strlen(name) + 1);
+		strcpy(ind->name, name);	/* enough buffer size guaranteed */
+
+		ind->dbname = pgut_malloc(strlen(dbname) + 1);
+		strcpy(ind->dbname, dbname);
+
+		ind->amcheck_nspname = pgut_malloc(strlen(nspname) + 1);
+		strcpy(ind->amcheck_nspname, nspname);
+		pg_atomic_clear_flag(&ind->lock);
+
+		if (index_list == NULL)
+			index_list = parray_new();
+
+		parray_append(index_list, ind);
+	}
+
+	PQclear(res);
+
+	return index_list;
+}
+
+/* check one index. Return true if everything is ok, false otherwise. */
+static bool
+amcheck_one_index(backup_files_arg *arguments,
+				 pg_indexEntry *ind)
+{
+	PGresult   *res;
+	char		*params[2];
+	char		*query = NULL;
+
+	params[0] = palloc(64);
+
+	/* first argument is index oid */
+	sprintf(params[0], "%i", ind->indexrelid);
+	/* second argument is heapallindexed */
+	params[1] = heapallindexed ? "true" : "false";
+
+	if (interrupted)
+		elog(ERROR, "Interrupted");
+
+	if (heapallindexed_is_supported)
+	{
+		query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1, $2)")+1);
+		sprintf(query, "SELECT %s.bt_index_check($1, $2)", ind->amcheck_nspname);
+
+		res = pgut_execute_parallel(arguments->backup_conn,
+								arguments->cancel_conn,
+								query, 2, (const char **)params, true, true, true);
+	}
+	else
+	{
+		query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1)")+1);
+		sprintf(query, "SELECT %s.bt_index_check($1)", ind->amcheck_nspname);
+
+		res = pgut_execute_parallel(arguments->backup_conn,
+								arguments->cancel_conn,
+								query, 1, (const char **)params, true, true, true);
+	}
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		elog(WARNING, "Thread [%d]. Amcheck failed for index: '%s.%s': %s",
+					   arguments->thread_num, ind->amcheck_nspname,
+					   ind->name, PQresultErrorMessage(res));
+
+		pfree(params[0]);
+		PQclear(res);
+		return false;
+	}
+	else
+		elog(LOG, "Thread [%d]. Amcheck succeeded for index: '%s.%s'",
+				arguments->thread_num, ind->amcheck_nspname, ind->name);
+
+	pfree(params[0]);
+	PQclear(res);
+	return true;
 }

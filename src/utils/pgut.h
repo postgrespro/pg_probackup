@@ -41,7 +41,6 @@ extern void pgut_atexit_push(pgut_atexit_callback callback, void *userdata);
 extern void pgut_atexit_pop(pgut_atexit_callback callback, void *userdata);
 
 extern void pgut_init(void);
-extern void exit_or_abort(int exitcode);
 
 /*
  * Database connections
@@ -59,7 +58,7 @@ extern PGresult *pgut_execute_extended(PGconn* conn, const char *query, int nPar
 							  const char **params, bool text_result, bool ok_error);
 extern PGresult *pgut_execute_parallel(PGconn* conn, PGcancel* thread_cancel_conn,
 							  const char *query, int nParams,
-							  const char **params, bool text_result);
+							  const char **params, bool text_result, bool ok_error, bool async);
 extern bool pgut_send(PGconn* conn, const char *query, int nParams, const char **params, int elevel);
 extern void pgut_cancel(PGconn* conn);
 extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);

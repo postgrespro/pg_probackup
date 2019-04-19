@@ -136,6 +136,15 @@ typedef struct pgFile
 							   * i.e. datafiles without _ptrack */
 } pgFile;
 
+typedef struct pg_indexEntry
+{
+	Oid indexrelid;
+	char *name;
+	char *dbname;
+	char *amcheck_nspname; /* schema where amcheck extention is located */
+	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
+} pg_indexEntry;
+
 /* Special values of datapagemap_t bitmapsize */
 #define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
 
@@ -311,6 +320,8 @@ typedef struct
 
 	PGconn	   *backup_conn;
 	PGcancel   *cancel_conn;
+	parray	   *index_list;
+	int			thread_num;
 
 	/*
 	 * Return value from the thread.
@@ -332,6 +343,7 @@ typedef struct BackupPageHeader
 /* Special value for compressed_size field */
 #define PageIsTruncated -2
 #define SkipCurrentPage -3
+#define PageIsCorrupted -4 /* used by checkdb */
 
 
 /*
@@ -399,7 +411,6 @@ extern bool		smooth_checkpoint;
 extern char* remote_agent;
 
 extern bool is_ptrack_support;
-extern bool is_checksum_enabled;
 extern bool exclusive_backup;
 
 /* restore options */
@@ -423,6 +434,9 @@ extern char *instance_name;
 /* show options */
 extern ShowFormat show_format;
 
+/* checkdb options */
+extern bool heapallindexed;
+
 /* current settings */
 extern pgBackup current;
 
@@ -432,6 +446,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time, bool no_validate);
+extern void do_checkdb(bool need_amcheck);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
@@ -587,6 +602,8 @@ extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
+extern bool check_data_file(backup_files_arg* arguments,
+							pgFile *file);
 extern bool backup_data_file(backup_files_arg* arguments,
 							 const char *to_path, pgFile *file,
 							 XLogRecPtr prev_backup_start_lsn,

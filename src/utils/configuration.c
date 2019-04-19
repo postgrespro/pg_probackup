@@ -189,10 +189,8 @@ assign_option(ConfigOption *opt, const char *optarg, OptionSource src)
 	const char *message;
 
 	if (opt == NULL)
-	{
-		fprintf(stderr, "Try \"%s --help\" for more information.\n", PROGRAM_NAME);
-		exit_or_abort(ERROR);
-	}
+		elog(ERROR, "Option is not found. Try \"%s --help\" for more information.\n",
+					PROGRAM_NAME);
 
 	if (opt->source > src)
 	{

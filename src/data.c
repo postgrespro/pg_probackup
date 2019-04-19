@@ -263,7 +263,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		 */
 		if (pg_checksum_page(page, blkno) != ((PageHeader) page)->pd_checksum)
 		{
-			elog(WARNING, "File: %s blknum %u have wrong checksum, try again",
+			elog(LOG, "File: %s blknum %u have wrong checksum, try again",
 						   file->path, blknum);
 			return -1;
 		}
@@ -289,6 +289,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
  * Returns 0 if page was successfully retrieved
  *         SkipCurrentPage(-3) if we need to skip this page
  *         PageIsTruncated(-2) if the page was truncated
+ *         PageIsCorrupted(-4) if the page check mismatch
  */
 static int32
 prepare_page(backup_files_arg *arguments,
@@ -296,7 +297,8 @@ prepare_page(backup_files_arg *arguments,
 			 BlockNumber blknum, BlockNumber nblocks,
 			 FILE *in, BlockNumber *n_skipped,
 			 BackupMode backup_mode,
-			 Page page)
+			 Page page,
+			 bool strict)
 {
 	XLogRecPtr	page_lsn = 0;
 	int			try_again = 100;
@@ -306,7 +308,7 @@ prepare_page(backup_files_arg *arguments,
 
 	/* check for interrupt */
 	if (interrupted || thread_interrupted)
-		elog(ERROR, "Interrupted during backup");
+		elog(ERROR, "Interrupted during page reading");
 
 	/*
 	 * Read the page and verify its header and checksum.
@@ -338,7 +340,7 @@ prepare_page(backup_files_arg *arguments,
 			 */
 			//elog(WARNING, "Checksum_Version: %i", current.checksum_version ? 1 : 0);
 
-			if (result == -1 && is_ptrack_support)
+			if (result == -1 && is_ptrack_support && strict)
 			{
 				elog(WARNING, "File %s, block %u, try to fetch via SQL",
 					file->path, blknum);
@@ -349,8 +351,27 @@ prepare_page(backup_files_arg *arguments,
 		 * If page is not valid after 100 attempts to read it
 		 * throw an error.
 		 */
-		if(!page_is_valid && !is_ptrack_support)
-			elog(ERROR, "Data file checksum mismatch. Canceling backup");
+
+		if (!page_is_valid &&
+			((strict && !is_ptrack_support) || !strict))
+		{
+			/* show this message for checkdb or backup without ptrack support */
+			elog(WARNING, "CORRUPTION in file %s, block %u",
+						file->path, blknum);
+		}
+
+		/* Backup with invalid block and without ptrack support must throw error */
+		if (!page_is_valid && strict && !is_ptrack_support)
+				elog(ERROR, "Data file corruption. Canceling backup");
+
+		/* Checkdb not going futher */
+		if (!strict)
+		{
+			if (page_is_valid)
+				return 0;
+			else
+				return PageIsCorrupted;
+		}
 	}
 
 	if (backup_mode == BACKUP_MODE_DIFF_PTRACK || (!page_is_valid && is_ptrack_support))
@@ -381,7 +402,7 @@ prepare_page(backup_files_arg *arguments,
 			 */
 			memcpy(page, ptrack_page, BLCKSZ);
 			free(ptrack_page);
-			if (is_checksum_enabled)
+			if (current.checksum_version)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
 		/* get lsn from page, provided by pg_ptrack_get_block() */
@@ -610,9 +631,9 @@ backup_data_file(backup_files_arg* arguments,
 			{
 				page_state = prepare_page(arguments, file, prev_backup_start_lsn,
 										  blknum, nblocks, in, &n_blocks_skipped,
-										  backup_mode, curr_page);
+										  backup_mode, curr_page, true);
 				compress_and_backup_page(file, blknum, in, out, &(file->crc),
-										 page_state, curr_page, calg, clevel);
+										  page_state, curr_page, calg, clevel);
 				n_blocks_read++;
 				if (page_state == PageIsTruncated)
 					break;
@@ -634,7 +655,7 @@ backup_data_file(backup_files_arg* arguments,
 		{
 			page_state = prepare_page(arguments, file, prev_backup_start_lsn,
 									  blknum, nblocks, in, &n_blocks_skipped,
-									  backup_mode, curr_page);
+									  backup_mode, curr_page, true);
 			compress_and_backup_page(file, blknum, in, out, &(file->crc),
 									  page_state, curr_page, calg, clevel);
 			n_blocks_read++;
@@ -1456,8 +1477,6 @@ validate_one_page(Page page, pgFile *file,
 {
 	PageHeader	phdr;
 	XLogRecPtr	lsn;
-	bool		page_header_is_sane = false;
-	bool		checksum_is_ok = false;
 
 	/* new level of paranoia */
 	if (page == NULL)
@@ -1487,72 +1506,146 @@ validate_one_page(Page page, pgFile *file,
 				 file->path, blknum);
 		}
 
-		/* Page is zeroed. No sense to check header and checksum. */
-		page_header_is_sane = false;
+		/* Page is zeroed. No sense in checking header and checksum. */
+		return PAGE_IS_FOUND_AND_VALID;
 	}
-	else
+
+	/* Verify checksum */
+	if (checksum_version)
 	{
-		if (PageGetPageSize(phdr) == BLCKSZ &&
-			PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
-			(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
-			phdr->pd_lower >= SizeOfPageHeaderData &&
-			phdr->pd_lower <= phdr->pd_upper &&
-			phdr->pd_upper <= phdr->pd_special &&
-			phdr->pd_special <= BLCKSZ &&
-			phdr->pd_special == MAXALIGN(phdr->pd_special))
-			page_header_is_sane = true;
+		/* Checksums are enabled, so check them. */
+		if (!(pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
+			== ((PageHeader) page)->pd_checksum))
+		{
+			elog(WARNING, "File: %s blknum %u have wrong checksum",
+				 file->path, blknum);
+			return PAGE_IS_FOUND_AND_NOT_VALID;
+		}
 	}
 
-	if (page_header_is_sane)
+	/* Check page for the sights of insanity.
+	 * TODO: We should give more information about what exactly is looking "wrong"
+	 */
+	if (!(PageGetPageSize(phdr) == BLCKSZ &&
+		PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
+		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
+		phdr->pd_lower >= SizeOfPageHeaderData &&
+		phdr->pd_lower <= phdr->pd_upper &&
+		phdr->pd_upper <= phdr->pd_special &&
+		phdr->pd_special <= BLCKSZ &&
+		phdr->pd_special == MAXALIGN(phdr->pd_special)))
 	{
-		/* Verify checksum */
-		if (checksum_version)
-		{
-			/*
-			* If checksum is wrong, sleep a bit and then try again
-			* several times. If it didn't help, throw error
-			*/
-			if (pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
-				== ((PageHeader) page)->pd_checksum)
-			{
-				checksum_is_ok = true;
-			}
-			else
-			{
-				elog(WARNING, "File: %s blknum %u have wrong checksum",
-					 file->path, blknum);
-			}
-		}
-		else
-		{
-			/* Get lsn from page header. Ensure that page is from our time */
-			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
+		/* Page does not looking good */
+		elog(WARNING, "Page header is looking insane: %s, block %i",
+			file->path, blknum);
+		return PAGE_IS_FOUND_AND_NOT_VALID;
+	}
 
-			if (lsn > stop_lsn)
-				elog(WARNING, "File: %s, block %u, checksum is not enabled. "
-							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
-					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
-					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-			else
-				return PAGE_IS_FOUND_AND_VALID;
-		}
+	/* At this point page header is sane, if checksums are enabled - the`re ok.
+	 * Check that page is not from future.
+	 */
+	if (stop_lsn > 0)
+	{
+		/* Get lsn from page header. Ensure that page is from our time. */
+		lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
-		if (checksum_is_ok)
+		if (lsn > stop_lsn)
 		{
-			/* Get lsn from page header. Ensure that page is from our time */
-			lsn = PageXLogRecPtrGet(phdr->pd_lsn);
-
-			if (lsn > stop_lsn)
-				elog(WARNING, "File: %s, block %u, checksum is correct. "
-							  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
-					file->path, blknum, (uint32) (lsn >> 32), (uint32) lsn,
-					 (uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-			else
-				return PAGE_IS_FOUND_AND_VALID;
+			elog(WARNING, "File: %s, block %u, checksum is %s. "
+						  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
+				file->path, blknum, checksum_version ? "correct" : "not enabled",
+				(uint32) (lsn >> 32), (uint32) lsn,
+				(uint32) (stop_lsn >> 32), (uint32) stop_lsn);
+			return PAGE_IS_FOUND_AND_NOT_VALID;
 		}
 	}
 
-	return PAGE_IS_FOUND_AND_NOT_VALID;
+	return PAGE_IS_FOUND_AND_VALID;
+}
+
+/*
+ * Valiate pages of datafile in PGDATA one by one.
+ *
+ * returns true if the file is valid
+ * also returns true if the file was not found
+ */
+bool
+check_data_file(backup_files_arg* arguments,
+				pgFile *file)
+{
+	FILE		*in;
+	BlockNumber	blknum = 0;
+	BlockNumber	nblocks = 0;
+	BlockNumber n_blocks_skipped = 0;
+	int			page_state;
+	char		curr_page[BLCKSZ];
+	bool 		is_valid = true;
+
+	in = fopen(file->path, PG_BINARY_R);
+	if (in == NULL)
+	{
+		/*
+		 * If file is not found, this is not en error.
+		 * It could have been deleted by concurrent postgres transaction.
+		 */
+		if (errno == ENOENT)
+		{
+			elog(LOG, "File \"%s\" is not found", file->path);
+			return true;
+		}
+
+		elog(WARNING, "cannot open file \"%s\": %s",
+			 file->path, strerror(errno));
+		return false;
+	}
+
+	if (file->size % BLCKSZ != 0)
+	{
+		fclose(in);
+		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
+	}
+
+	/*
+	 * Compute expected number of blocks in the file.
+	 * NOTE This is a normal situation, if the file size has changed
+	 * since the moment we computed it.
+	 */
+	nblocks = file->size/BLCKSZ;
+
+	for (blknum = 0; blknum < nblocks; blknum++)
+	{
+		page_state = prepare_page(arguments, file, InvalidXLogRecPtr,
+									blknum, nblocks, in, &n_blocks_skipped,
+									BACKUP_MODE_FULL, curr_page, false);
+
+		if (page_state == PageIsTruncated)
+			break;
+
+		if (page_state == PageIsCorrupted)
+		{
+			/* Page is corrupted, no need to elog about it,
+			 * prepare_page() already done that
+			 */
+			is_valid = false;
+			continue;
+		}
+
+		/* At this point page is found and its checksum is ok, if any
+		 * but could be 'insane'
+		 * TODO: between prepare_page and validate_one_page we
+		 * compute and compare checksum twice, it`s ineffective
+		 */
+		if (validate_one_page(curr_page, file, blknum,
+								  InvalidXLogRecPtr,
+								  0) == PAGE_IS_FOUND_AND_NOT_VALID)
+		{
+			/* Page is corrupted */
+			is_valid = false;
+		}
+	}
+
+	fclose(in);
+	return is_valid;
 }
 
 /* Valiate pages of datafile in backup one by one */
