@@ -15,7 +15,7 @@ module_name = 'checkdb'
 class CheckdbTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
-    def checkdb_amcheck_only_sanity(self):
+    def test_checkdb_amcheck_only_sanity(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -207,7 +207,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def checkdb_amcheck_only_sanity_1(self):
+    def test_checkdb_amcheck_only_sanity_1(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
