@@ -1089,7 +1089,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_sigint_hadnling(self):
+    def test_sigint_handling(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1127,7 +1127,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_sigterm_hadnling(self):
+    def test_sigterm_handling(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1165,7 +1165,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_sigquit_hadnling(self):
+    def test_sigquit_handling(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
