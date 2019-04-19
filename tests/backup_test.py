@@ -996,3 +996,94 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_pg_11_adjusted_wal_segment_size(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=[
+                '--data-checksums',
+                '--wal-segsize=64'],
+            pg_options={
+                'min_wal_size': '128MB',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if self.get_version(node) < self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL >= 11 for this test')
+
+        node.pgbench_init(scale=5)
+
+        # FULL STREAM backup
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        pgbench = node.pgbench(options=['-T', '5', '-c', '2'])
+        pgbench.wait()
+
+        # PAGE STREAM backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--stream'])
+
+        pgbench = node.pgbench(options=['-T', '5', '-c', '2'])
+        pgbench.wait()
+
+        # DELTA STREAM backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        pgbench = node.pgbench(options=['-T', '5', '-c', '2'])
+        pgbench.wait()
+
+        # FULL ARCHIVE backup
+        self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '5', '-c', '2'])
+        pgbench.wait()
+
+        # PAGE ARCHIVE backup
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        pgbench = node.pgbench(options=['-T', '5', '-c', '2'])
+        pgbench.wait()
+
+        # DELTA ARCHIVE backup
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # delete
+        output = self.delete_pb(
+            backup_dir, 'node',
+            options=[
+                '--expired',
+                '--delete-wal',
+                '--retention-redundancy=1'])
+
+        print(output)
+
+        # validate
+        self.validate_pb(backup_dir)
+
+        # merge
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        # restore
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=backup_id)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
