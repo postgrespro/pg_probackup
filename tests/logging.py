@@ -190,3 +190,63 @@ class LogTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_garbage_in_rotation_file(self):
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.set_config(
+            backup_dir, 'node',
+            options=['--log-rotation-age=1d'])
+
+        rotation_file_path = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log.rotation')
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--stream',
+                '--log-level-file=VERBOSE'])
+
+        self.assertTrue(os.path.isfile(rotation_file_path))
+
+        # mangle .rotation file
+        with open(rotation_file_path, "wtb", 0) as f:
+            f.write(b"blah")
+            f.flush()
+            f.close
+
+        output = self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--stream',
+                '--log-level-file=VERBOSE'],
+            return_id=False)
+
+        self.assertIn(
+            'WARNING: rotation file "{0}" has wrong '
+            'creation timestamp'.format(rotation_file_path),
+            output)
+
+        self.assertTrue(os.path.isfile(rotation_file_path))
+
+        output = self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--stream',
+                '--log-level-file=VERBOSE'],
+            return_id=False)
+
+        self.assertNotIn(
+            'WARNING:',
+            output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
