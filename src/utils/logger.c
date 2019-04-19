@@ -535,7 +535,8 @@ open_logfile(FILE **file, const char *filename_format)
 	FILE	   *control_file;
 	time_t		cur_time = time(NULL);
 	bool		rotation_requested = false,
-				logfile_exists = false;
+				logfile_exists = false,
+				rotation_file_exists = false;
 
 	filename = logfile_getname(filename_format, cur_time);
 
@@ -567,25 +568,25 @@ open_logfile(FILE **file, const char *filename_format)
 
 			if (stat(control, &control_st) < 0)
 			{
-				if (errno != ENOENT)
-					elog_stderr(ERROR, "cannot stat rotation file \"%s\": %s",
-								control, strerror(errno));
-				else
-				{
-					/* file not found, force rotation */
+				if (errno == ENOENT)
+					/* '.rotation' file is not found, force  its recreation */
 					elog_stderr(WARNING, "missing rotation file: \"%s\"",
 								control);
-					rotation_requested = true;
-				}
+				else
+					elog_stderr(ERROR, "cannot stat rotation file \"%s\": %s",
+								control, strerror(errno));
 			}
 			else
 			{
+				/* rotation file exists */
 				char		buf[1024];
 
 				control_file = fopen(control, "r");
 				if (control_file == NULL)
 					elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
 								control, strerror(errno));
+
+				rotation_file_exists = true;
 
 				if (fgets(buf, lengthof(buf), control_file))
 				{
@@ -599,7 +600,7 @@ open_logfile(FILE **file, const char *filename_format)
 						elog_stderr(WARNING, "rotation file \"%s\" has wrong "
 									"creation timestamp \"%s\"",
 									control, buf);
-						rotation_requested = true;
+						rotation_file_exists = false;
 					}
 					else
 						/* Parsed creation time */
@@ -612,7 +613,7 @@ open_logfile(FILE **file, const char *filename_format)
 					/* truncated .rotation file is not a critical error */
 					elog_stderr(WARNING, "cannot read creation timestamp from "
 								"rotation file \"%s\"", control);
-					rotation_requested = true;
+					rotation_file_exists = false;
 				}
 
 				fclose(control_file);
@@ -634,7 +635,7 @@ logfile_open:
 	pfree(filename);
 
 	/* Rewrite rotation control file */
-	if (rotation_requested || !logfile_exists)
+	if (rotation_requested || !logfile_exists || !rotation_file_exists)
 	{
 		time_t		timestamp = time(NULL);
 
