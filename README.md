@@ -29,7 +29,7 @@ Using `pg_probackup`, you can take full or incremental backups:
   * `DELTA` backup. In this mode, `pg_probackup` read all data files in PGDATA directory and only those pages, that where changed since previous backup, are copied. Continuous archiving is not necessary for it to operate. Also this mode could impose read-only I/O pressure equal to `Full` backup.
   * `PTRACK` backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special `PTRACK` bitmap for this relation. As one page requires just one bit in the `PTRACK` fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly.
 
-Regardless of the chosen backup type, all backups taken with `pg_probackup` support the following archiving strategies:
+Regardless of the chosen backup type, all backups taken with `pg_probackup` support the following strategies of WAL delivery:
 * `Autonomous backups` include all the files required to restore the cluster to a consistent state at the time the backup was taken. Even if continuous archiving is not set up, the required WAL segments are included into the backup.
 * `Archive backups` rely on continuous archiving. Such backups enable cluster recovery to an arbitrary point after the backup was taken (point-in-time recovery).
 
