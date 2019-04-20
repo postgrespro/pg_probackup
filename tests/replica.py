@@ -143,7 +143,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'archive_timeout': '10s',
                 'checkpoint_timeout': '30s',
-                'max_wal_size': '16MB'})
+                'max_wal_size': '32MB'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)

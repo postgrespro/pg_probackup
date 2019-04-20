@@ -1753,8 +1753,28 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # if result == "":
         # self.assertEqual(1, 0, 'Error is expected due to Master and Node1 having the common archive and archive_command')
 
+        node1.psql(
+            "postgres",
+            "create table t_heap_1 as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10) i")
+
         self.switch_wal_segment(node1)
+
+#        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
+#        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#        wals = map(str, wals)
+#        print(wals)
+
         self.switch_wal_segment(node2)
+
+#        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
+#        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#        wals = map(str, wals)
+#        print(wals)
+
         time.sleep(5)
 
         log_file = os.path.join(node2.logs_dir, 'postgresql.log')
