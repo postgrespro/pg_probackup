@@ -8,6 +8,8 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup init -B backup-path
 
   pg_probackup set-config -B backup-path --instance=instance_name
+                 [-D pgdata-path]
+                 [--external-dirs=external-directories-paths]
                  [--log-level-console=log-level-console]
                  [--log-level-file=log-level-file]
                  [--log-filename=log-filename]
@@ -19,19 +21,21 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--retention-window=retention-window]
                  [--compress-algorithm=compress-algorithm]
                  [--compress-level=compress-level]
-                 [-d dbname] [-h host] [-p port] [-U username]
-                 [--master-db=db_name] [--master-host=host_name]
-                 [--master-port=port] [--master-user=user_name]
-                 [--replica-timeout=timeout]
                  [--archive-timeout=timeout]
+                 [-d dbname] [-h host] [-p port] [-U username]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
 
   pg_probackup show-config -B backup-path --instance=instance_name
                  [--format=format]
 
   pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
-                 [-C] [--stream [-S slot-name]] [--temp-slot]
-                 [--backup-pg-log] [-j num-threads]
-                 [--archive-timeout=archive-timeout] [--progress]
+                 [-D pgdata-path] [-C]
+                 [--stream [-S slot-name]] [--temp-slot]
+                 [--backup-pg-log] [-j num-threads] [--progress]
+                 [--no-validate] [--skip-block-validation]
+                 [--external-dirs=external-directories-paths]
                  [--log-level-console=log-level-console]
                  [--log-level-file=log-level-file]
                  [--log-filename=log-filename]
@@ -45,20 +49,17 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--compress]
                  [--compress-algorithm=compress-algorithm]
                  [--compress-level=compress-level]
+                 [--archive-timeout=archive-timeout]
                  [-d dbname] [-h host] [-p port] [-U username]
                  [-w --no-password] [-W --password]
-                 [--master-db=db_name] [--master-host=host_name]
-                 [--master-port=port] [--master-user=user_name]
-                 [--replica-timeout=timeout]
-                 [--no-validate] [--skip-block-validation]
-                 [--external-dirs=external-directory-path]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
 
   pg_probackup restore -B backup-path --instance=instance_name
                  [-D pgdata-path] [-i backup-id] [-j num-threads]
-                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
+                 [--recovery-target-time=time|--recovery-target-xid=xid
+                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
                  [--recovery-target-timeline=timeline]
                  [--recovery-target=immediate|latest]
                  [--recovery-target-name=target-name]
@@ -74,10 +75,16 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup validate -B backup-path [--instance=instance_name]
                  [-i backup-id] [--progress] [-j num-threads]
-                 [--recovery-target-time=time|--recovery-target-xid=xid|--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
+                 [--recovery-target-time=time|--recovery-target-xid=xid
+                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
                  [--recovery-target-timeline=timeline]
                  [--recovery-target-name=target-name]
                  [--skip-block-validation]
+
+  pg_probackup checkdb [-B backup-path] [--instance=instance_name]
+                 [-D pgdata-path] [--progress] [-j num-threads]
+                 [--amcheck] [--skip-block-validation]
+                 [--heapallindexed]
 
   pg_probackup show -B backup-path
                  [--instance=instance_name [-i backup-id]]
@@ -92,7 +99,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup add-instance -B backup-path -D pgdata-path
                  --instance=instance_name
-                 [--external-dirs=external-directory-path]
+                 [--external-dirs=external-directories-paths]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
@@ -103,10 +110,10 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup archive-push -B backup-path --instance=instance_name
                  --wal-file-path=wal-file-path
                  --wal-file-name=wal-file-name
+                 [--overwrite]
                  [--compress]
                  [--compress-algorithm=compress-algorithm]
                  [--compress-level=compress-level]
-                 [--overwrite]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
