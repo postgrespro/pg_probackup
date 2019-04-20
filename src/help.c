@@ -150,7 +150,7 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
 
-	printf(_("\n  %s checkdb   [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
+	printf(_("\n  %s checkdb [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--amcheck] [--skip-block-validation]\n"));
 	printf(_("                 [--heapallindexed]\n"));
