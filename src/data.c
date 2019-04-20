@@ -1362,7 +1362,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 		{
 			read_len = fio_fread(in, buf, sizeof(buf));
-			if (ferror(in))
+			if (read_len < 0)
 			{
 				errno_temp = errno;
 				fio_unlink(to_path_temp, FIO_DB_HOST);
