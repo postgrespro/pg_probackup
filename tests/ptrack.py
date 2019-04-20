@@ -2563,7 +2563,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'max_wal_size': '16MB',
+                'max_wal_size': '32MB',
                 'archive_timeout': '10s',
                 'checkpoint_timeout': '30s'})
 

@@ -394,18 +394,30 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 " Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                "WARNING: File" in e.message and
-                "blknum" in e.message and
-                "have wrong checksum" in e.message and
-                "try to fetch via SQL" in e.message and
-                "WARNING:  page verification failed, "
-                "calculated checksum" in e.message and
-                "ERROR: query failed: "
-                "ERROR:  invalid page in block" in e.message and
-                "query was: SELECT pg_catalog.pg_ptrack_get_block_2" in e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+            if self.remote:
+                self.assertTrue(
+                    "WARNING: File" in e.message and
+                    "try to fetch via SQL" in e.message and
+                    "WARNING:  page verification failed, "
+                    "calculated checksum" in e.message and
+                    "ERROR: query failed: "
+                    "ERROR:  invalid page in block" in e.message and
+                    "query was: SELECT pg_catalog.pg_ptrack_get_block_2" in e.message,
+                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertTrue(
+                    "WARNING: File" in e.message and
+                    "blknum" in e.message and
+                    "have wrong checksum" in e.message and
+                    "try to fetch via SQL" in e.message and
+                    "WARNING:  page verification failed, "
+                    "calculated checksum" in e.message and
+                    "ERROR: query failed: "
+                    "ERROR:  invalid page in block" in e.message and
+                    "query was: SELECT pg_catalog.pg_ptrack_get_block_2" in e.message,
+                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                        repr(e.message), self.cmd))
 
         self.assertTrue(
              self.show_pb(backup_dir, 'node')[1]['status'] == 'ERROR',
