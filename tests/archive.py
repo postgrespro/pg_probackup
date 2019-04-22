@@ -324,8 +324,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
             self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
 
-        wal_src = os.path.join(
-            node.data_dir, 'pg_wal', '000000010000000000000001')
+        if self.get_version(node) < 100000:
+            wal_src = os.path.join(
+                node.data_dir, 'pg_xlog', '000000010000000000000001')
+        else:
+            wal_src = os.path.join(
+                node.data_dir, 'pg_wal', '000000010000000000000001')
 
         if self.archive_compress:
             with open(wal_src, 'rb') as f_in, gzip.open(

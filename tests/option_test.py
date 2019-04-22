@@ -120,7 +120,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             pg_options={
-                'wal_level': 'logical',
                 'max_wal_senders': '2'})
 
         self.assertEqual("INFO: Backup catalog '{0}' successfully inited\n".format(backup_dir),

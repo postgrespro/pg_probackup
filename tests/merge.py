@@ -485,7 +485,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'autovacuum': 'off'
             }
@@ -565,7 +564,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'autovacuum': 'off'
             }
@@ -650,7 +648,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
@@ -745,7 +742,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
@@ -840,7 +836,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off',
@@ -935,7 +930,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
@@ -1020,12 +1014,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica'
-            }
-        )
+            base_dir=os.path.join(
+                module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1072,7 +1064,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
 
-        gdb.continue_execution_until_break(20)
+        gdb.continue_execution_until_break(5)
 
         gdb._execute('signal SIGKILL')
 
@@ -1097,11 +1089,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica'
-            }
-        )
+            set_replication=True, initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1365,8 +1353,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1696,7 +1683,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'autovacuum': 'off'})
 

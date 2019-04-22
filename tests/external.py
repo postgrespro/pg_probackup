@@ -25,6 +25,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
+            set_replication=True,
             pg_options={
                 'max_wal_senders': '2'})
 
@@ -105,6 +106,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
+            set_replication=True,
             pg_options={
                 'max_wal_senders': '2'})
 
@@ -253,6 +255,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

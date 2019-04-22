@@ -27,7 +27,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off'})
@@ -107,7 +106,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
@@ -198,7 +196,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
@@ -268,7 +265,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'
                 }
@@ -428,7 +424,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'fsync': 'off',
                 'shared_buffers': '1GB',
@@ -511,7 +506,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s'
             }
@@ -603,7 +597,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_size': '10GB',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '5min',
@@ -734,7 +727,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_size': '10GB',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '5min',
@@ -843,7 +835,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
@@ -934,9 +925,9 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
+            set_replication=True,
+            initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
@@ -1030,7 +1021,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
@@ -1112,8 +1102,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
 
         self.init_pb(backup_dir)
@@ -1171,8 +1161,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-        )
+            pg_options={'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
 
         self.init_pb(backup_dir)
@@ -1324,6 +1314,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

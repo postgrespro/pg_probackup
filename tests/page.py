@@ -27,7 +27,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
@@ -120,7 +119,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
@@ -209,7 +207,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
@@ -304,7 +301,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'fsync': 'off',
                 'shared_buffers': '1GB',
@@ -387,7 +383,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
@@ -467,7 +462,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
@@ -674,9 +668,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -763,9 +756,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -884,9 +876,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         alien_node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'alien_node'))
 
@@ -1003,9 +994,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

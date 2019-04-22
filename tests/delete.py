@@ -17,8 +17,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -98,8 +97,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -140,7 +138,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'})
+            pg_options={'ptrack_enable': 'on'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -180,8 +178,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -252,7 +249,8 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'})
+            set_replication=True,
+            pg_options={'ptrack_enable': 'on'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

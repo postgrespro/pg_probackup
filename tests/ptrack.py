@@ -24,7 +24,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'
             }
@@ -73,7 +72,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on'
@@ -134,7 +132,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'ptrack_enable': 'on'
@@ -196,7 +193,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'ptrack_enable': 'on'
@@ -288,7 +284,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'ptrack_enable': 'on',
@@ -374,7 +369,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'ptrack_enable': 'on'
@@ -450,7 +444,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'ptrack_enable': 'on'
@@ -522,7 +515,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -617,7 +609,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -724,8 +715,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level':
-                'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -808,7 +797,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -880,7 +868,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on', 'autovacuum': 'off'
@@ -957,7 +944,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_size': '10GB',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '5min',
@@ -1084,7 +1070,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -1184,7 +1169,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -1282,7 +1266,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -1353,7 +1336,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on',
@@ -1437,10 +1419,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
+                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s', 'ptrack_enable': 'on',
-                'autovacuum': 'off'}
-            )
+                'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1550,7 +1531,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
+                'max_wal_senders': '2',
                 'ptrack_enable': 'on', 'fsync': 'off',
                 'autovacuum': 'off',
                 'full_page_writes': 'off'
@@ -1660,9 +1641,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'max_connections': '15'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1713,7 +1694,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -1825,7 +1805,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'archive_timeout': '30s'})
 
@@ -1962,7 +1941,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2043,7 +2021,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2121,7 +2098,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2221,7 +2197,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2327,7 +2302,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'autovacuum': 'off'})
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2408,8 +2382,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
@@ -2502,7 +2476,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2672,7 +2645,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2759,7 +2731,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30'})
 
@@ -2869,7 +2840,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2949,7 +2919,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3054,7 +3023,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3135,7 +3103,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3216,7 +3183,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'autovacuum': 'off',
                 'archive_timeout': '30s'}
@@ -3326,7 +3292,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3407,7 +3372,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30'})
 
@@ -3508,7 +3472,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'ptrack_enable': 'on',
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

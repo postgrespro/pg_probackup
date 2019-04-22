@@ -36,7 +36,6 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2'}
             )
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -193,10 +192,7 @@ class AuthTest(unittest.TestCase):
         cls.node = cls.pb.make_simple_node(
             base_dir="{}/node".format(module_name),
             set_replication=True,
-            initdb_params=['--data-checksums', '--auth-host=md5'],
-            pg_options={
-                'wal_level': 'replica'
-            }
+            initdb_params=['--data-checksums', '--auth-host=md5']
         )
         modify_pg_hba(cls.node)
 

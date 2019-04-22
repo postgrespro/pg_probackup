@@ -25,10 +25,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'ptrack_enable': 'on'}
-            )
+                'ptrack_enable': 'on'})
+
         master.slow_start()
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
@@ -292,10 +290,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'archive_timeout': '10s'}
-            )
+                'archive_timeout': '10s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
@@ -353,10 +349,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'max_wal_senders': '2',
-                'archive_timeout': '10s'}
-            )
+                'archive_timeout': '10s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)

@@ -22,7 +22,6 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'ptrack_enable': 'on',
                 'cfs_encryption': 'off',
                 'max_wal_senders': '2',

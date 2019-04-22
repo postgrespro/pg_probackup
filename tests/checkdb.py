@@ -37,9 +37,14 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create index on t_heap(id)")
 
-        node.safe_psql(
-            "postgres",
-            "create extension amcheck")
+        try:
+            node.safe_psql(
+                "postgres",
+                "create extension amcheck")
+        except QueryException as e:
+            node.safe_psql(
+                "postgres",
+                "create extension amcheck_next")
 
         log_file_path = os.path.join(
             backup_dir, 'log', 'pg_probackup.log')
@@ -221,10 +226,24 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # create two databases
         node.safe_psql("postgres", "create database db1")
-        node.safe_psql("db1", "create extension amcheck")
+        try:
+           node.safe_psql(
+               "db1",
+               "create extension amcheck")
+        except QueryException as e:
+            node.safe_psql(
+                "db1",
+                "create extension amcheck_next")
 
         node.safe_psql("postgres", "create database db2")
-        node.safe_psql("db2", "create extension amcheck")
+        try:
+            node.safe_psql(
+                "db2",
+                "create extension amcheck")
+        except QueryException as e:
+            node.safe_psql(
+                "db2",
+                "create extension amcheck_next")
 
         # init pgbench in two databases and corrupt both indexes
         node.pgbench_init(scale=5, dbname='db1')

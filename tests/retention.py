@@ -16,9 +16,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -74,9 +73,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1047,7 +1045,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

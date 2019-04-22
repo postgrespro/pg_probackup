@@ -13,7 +13,10 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_compression_stream_zlib(self):
-        """make archive node, make full and page stream backups, check data correctness in restored instance"""
+        """
+        make archive node, make full and page stream backups,
+        check data correctness in restored instance
+        """
         self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -462,7 +465,6 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on'}
@@ -505,9 +507,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

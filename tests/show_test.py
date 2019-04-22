@@ -16,8 +16,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -43,8 +42,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -70,8 +68,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -115,8 +112,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -145,8 +141,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -177,8 +172,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

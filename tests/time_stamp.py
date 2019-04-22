@@ -12,10 +12,12 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
         We should convert local time in UTC format"""
         # Create simple node
         fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir="{0}/{1}/node".format(module_name, fname),
-                                     initdb_params=['--data-checksums'],
-                                     pg_options={'wal_level': 'replica'}
-                                     )
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

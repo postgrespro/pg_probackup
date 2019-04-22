@@ -21,9 +21,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -69,9 +67,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -117,9 +114,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -186,9 +182,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -235,9 +230,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -298,10 +292,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'ptrack_enable': 'on',
-                'max_wal_senders': '2'}
-            )
+                'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -361,9 +353,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('10.0'):
             self.del_test_dir(module_name, fname)
@@ -434,9 +424,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('10.0'):
             self.del_test_dir(module_name, fname)
@@ -509,8 +497,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
-            )
+            pg_options={'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -557,8 +545,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'ptrack_enable': 'on'}
-            )
+            pg_options={'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -613,11 +601,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'wal_level': 'replica',
-                'ptrack_enable': 'on',
-                'max_wal_senders': '2'}
-            )
+            pg_options={'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -669,10 +654,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'ptrack_enable': 'on',
-                'max_wal_senders': '2'}
-            )
+                'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -735,10 +718,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'ptrack_enable': 'on',
-                'max_wal_senders': '2'}
-            )
+                'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -799,10 +780,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'ptrack_enable': 'on',
-                'max_wal_senders': '2'}
-            )
+                'ptrack_enable': 'on'})
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -917,9 +896,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1000,9 +978,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1050,9 +1027,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1099,9 +1075,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica', 'max_wal_senders': '2'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1147,9 +1122,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1207,9 +1181,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1256,9 +1229,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1312,9 +1284,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
 
         node_restored.cleanup()
 
@@ -1336,7 +1306,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'autovacuum': 'off',
                 'full_page_writes': 'on'}
             )
@@ -1404,9 +1373,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'),
-            initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'}
-            )
+            initdb_params=['--data-checksums'])
 
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -1462,7 +1429,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1553,7 +1519,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1736,7 +1701,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

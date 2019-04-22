@@ -22,9 +22,8 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica', 'max_wal_senders': '2',
-                'shared_buffers': '1GB', 'fsync': 'off', 'ptrack_enable': 'on'}
-            )
+                'max_wal_senders': '2',
+                'shared_buffers': '1GB', 'fsync': 'off', 'ptrack_enable': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -113,12 +112,10 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
                 'max_wal_senders': '2',
                 "shared_buffers": "10MB",
                 "fsync": "off",
-                'ptrack_enable': 'on'}
-            )
+                'ptrack_enable': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
