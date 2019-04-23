@@ -218,7 +218,8 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),
-            set_replication=True)
+            set_replication=True,
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
