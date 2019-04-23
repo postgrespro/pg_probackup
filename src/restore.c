@@ -512,7 +512,7 @@ restore_backup(pgBackup *backup, const char *external_dir_str)
 		{
 			char *external_path = parray_get(requested_external_dirs, i);
 			external_path = get_external_remap(external_path);
-			dir_create_dir(external_path, DIR_PERMISSION);
+			fio_mkdir(external_path, DIR_PERMISSION, FIO_DB_HOST);
 		}
 	}
 
@@ -562,7 +562,7 @@ restore_backup(pgBackup *backup, const char *external_dir_str)
 				dir_name = GetRelativePath(file->path, container_dir);
 				elog(VERBOSE, "Create directory \"%s\"", dir_name);
 				join_path_components(dirpath, external_path, dir_name);
-				dir_create_dir(dirpath, DIR_PERMISSION);
+				fio_mkdir(dirpath, DIR_PERMISSION, FIO_DB_HOST);
 			}
 		}
 
