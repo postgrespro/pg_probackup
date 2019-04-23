@@ -269,7 +269,7 @@ int fio_open(char const* path, int mode, fio_location location)
 /* Open stdio file */
 FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 {
-	FILE	   *f = NULL
+	FILE	   *f = NULL;
 
 	if (fio_is_remote(location))
 	{
@@ -283,7 +283,7 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 			flags |= O_APPEND;
 		}
 		fd = fio_open(path, flags, location);
-		if (fd != NULL)
+		if (fd >= 0)
 			f = (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER);
 	}
 	else
