@@ -1394,7 +1394,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     def test_restore_external_dir_not_empty(self):
         """
         Check that backup fails with error
-        if external directory points to tablespace
+        if external directory point to not empty tablespace and
+        if remapped directory also isn`t empty
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1435,7 +1436,32 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
-                "Expecting Error because external diris not empty"
+                "Expecting Error because external dir is not empty"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'Insert correct error message' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        external_dir_new = self.get_tblspace_path(node, 'external_dir_new')
+
+        # create empty file in directory, which will be a target of
+        # remapping
+        os.mkdir(external_dir_new)
+        with open(os.path.join(external_dir_new, 'file1'), 'w+') as f:
+            f.close()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=['--external-mapping={0}={1}'.format(
+                        external_dir, external_dir_new)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because remapped external dir is not empty"
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:

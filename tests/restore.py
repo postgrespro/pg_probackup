@@ -290,9 +290,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'ptrack_enable': 'on'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -778,9 +776,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'ptrack_enable': 'on'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -839,7 +835,30 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # 3 - Restore using tablespace-mapping
+        # 3 - Restore using tablespace-mapping to not empty directory
+        tblspc_path_temp = os.path.join(node.base_dir, "tblspc_temp")
+        os.mkdir(tblspc_path_temp)
+        with open(os.path.join(tblspc_path_temp, 'file'), 'w+') as f:
+            f.close()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=["-T", "%s=%s" % (tblspc_path, tblspc_path_temp)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because restore tablespace destination is "
+                "not empty.\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: restore tablespace destination is not empty:',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # 4 - Restore using tablespace-mapping
         tblspc_path_new = os.path.join(node.base_dir, "tblspc_new")
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
