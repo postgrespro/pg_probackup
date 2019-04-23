@@ -1227,14 +1227,24 @@ void fio_communicate(int in, int out)
 		  case FIO_OPENDIR: /* Open directory for traversal */
 			dir[hdr.handle] = opendir(buf);
 			break;
-		  case FIO_READDIR: /* Get next direcrtory entry */
-			entry = readdir(dir[hdr.handle]);
+		  case FIO_READDIR: /* Get next directory entry */
 			hdr.cop = FIO_SEND;
-			if (entry != NULL) {
-				hdr.size = sizeof(*entry);
-				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-				IO_CHECK(fio_write_all(out, entry, hdr.size), hdr.size);
-			} else {
+			entry = NULL;
+
+			if (dir[hdr.handle] != NULL)
+			{
+				entry = readdir(dir[hdr.handle]);
+				if (entry != NULL)
+				{
+					hdr.size = sizeof(*entry);
+					IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+					IO_CHECK(fio_write_all(out, entry, hdr.size), hdr.size);
+				}
+			}
+
+			/* We didn't manage to read the directory */
+			if (entry == NULL)
+			{
 				hdr.size = 0;
 				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			}
