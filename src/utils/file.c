@@ -162,6 +162,13 @@ DIR* fio_opendir(char const* path, fio_location location)
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
 
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return NULL;
+		}
 		dir = (DIR*)(size_t)(i + 1);
 	}
 	else
@@ -243,6 +250,13 @@ int fio_open(char const* path, int mode, fio_location location)
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
 
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
 		fd = i | FIO_PIPE_MARKER;
 	}
 	else
@@ -255,7 +269,8 @@ int fio_open(char const* path, int mode, fio_location location)
 /* Open stdio file */
 FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 {
-	FILE* f;
+	FILE	   *f = NULL
+
 	if (fio_is_remote(location))
 	{
 		int flags = O_RDWR|O_CREAT;
@@ -268,7 +283,8 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 			flags |= O_APPEND;
 		}
 		fd = fio_open(path, flags, location);
-		f = (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER);
+		if (fd != NULL)
+			f = (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER);
 	}
 	else
 	{
@@ -1226,35 +1242,33 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_OPENDIR: /* Open directory for traversal */
 			dir[hdr.handle] = opendir(buf);
+			hdr.arg = dir[hdr.handle] == NULL ? errno : 0;
+			hdr.size = 0;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_READDIR: /* Get next directory entry */
 			hdr.cop = FIO_SEND;
-			entry = NULL;
-
-			if (dir[hdr.handle] != NULL)
+			entry = readdir(dir[hdr.handle]);
+			if (entry != NULL)
 			{
-				entry = readdir(dir[hdr.handle]);
-				if (entry != NULL)
-				{
-					hdr.size = sizeof(*entry);
-					IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-					IO_CHECK(fio_write_all(out, entry, hdr.size), hdr.size);
-				}
+				hdr.size = sizeof(*entry);
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				IO_CHECK(fio_write_all(out, entry, hdr.size), hdr.size);
 			}
-
-			/* We didn't manage to read the directory */
-			if (entry == NULL)
+			else
 			{
 				hdr.size = 0;
 				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			}
 			break;
 		  case FIO_CLOSEDIR: /* Finish directory traversal */
-			if (dir[hdr.handle] != NULL)
-				SYS_CHECK(closedir(dir[hdr.handle]));
+			SYS_CHECK(closedir(dir[hdr.handle]));
 			break;
 		  case FIO_OPEN: /* Open file */
-			SYS_CHECK(fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSIONS));
+			fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSIONS);
+			hdr.arg = fd[hdr.handle] < 0 ? errno : 0;
+			hdr.size = 0;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_CLOSE: /* Close file */
 			SYS_CHECK(close(fd[hdr.handle]));
