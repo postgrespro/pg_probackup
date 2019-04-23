@@ -489,7 +489,7 @@ pgBackupCreateDir(pgBackup *backup)
 
 	pgBackupGetPath(backup, path, lengthof(path), NULL);
 
-	if (!dir_is_empty(path))
+	if (!dir_is_empty(path, FIO_BACKUP_HOST))
 		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
 	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);

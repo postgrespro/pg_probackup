@@ -359,7 +359,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 * If recovery target is provided, ensure that archive files exist in
 	 * archive directory.
 	 */
-	if (dir_is_empty(archivedir))
+	if (dir_is_empty(archivedir, FIO_BACKUP_HOST))
 		elog(ERROR, "WAL archive is empty. You cannot restore backup to a recovery target without WAL archive.");
 
 	/*

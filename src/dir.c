@@ -1277,7 +1277,7 @@ check_tablespace_mapping(pgBackup *backup)
 			elog(ERROR, "tablespace directory is not an absolute path: %s\n",
 				 linked_path);
 
-		if (!dir_is_empty(linked_path))
+		if (!dir_is_empty(linked_path, FIO_DB_HOST))
 			elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
 				 linked_path);
 	}
@@ -1619,12 +1619,12 @@ dir_read_file_list(const char *root, const char *external_prefix,
  * Check if directory empty.
  */
 bool
-dir_is_empty(const char *path)
+dir_is_empty(const char *path, fio_location location)
 {
 	DIR		   *dir;
 	struct dirent *dir_ent;
 
-	dir = opendir(path);
+	dir = fio_opendir(path, location);
 	if (dir == NULL)
 	{
 		/* Directory in path doesn't exist */
@@ -1634,7 +1634,7 @@ dir_is_empty(const char *path)
 	}
 
 	errno = 0;
-	while ((dir_ent = readdir(dir)))
+	while ((dir_ent = fio_readdir(dir)))
 	{
 		/* Skip entries point current dir or parent dir */
 		if (strcmp(dir_ent->d_name, ".") == 0 ||
@@ -1642,13 +1642,13 @@ dir_is_empty(const char *path)
 			continue;
 
 		/* Directory is not empty */
-		closedir(dir);
+		fio_closedir(dir);
 		return false;
 	}
 	if (errno)
 		elog(ERROR, "cannot read directory \"%s\": %s", path, strerror(errno));
 
-	closedir(dir);
+	fio_closedir(dir);
 
 	return true;
 }

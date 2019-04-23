@@ -64,7 +64,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			elog(ERROR,
 				"required parameter not specified: PGDATA (-D, --pgdata)");
 		/* Check if restore destination empty */
-		if (!dir_is_empty(instance_config.pgdata))
+		if (!dir_is_empty(instance_config.pgdata, FIO_DB_HOST))
 			elog(ERROR, "restore destination is not empty: \"%s\"",
 				 instance_config.pgdata);
 	}
