@@ -1250,7 +1250,8 @@ void fio_communicate(int in, int out)
 			}
 			break;
 		  case FIO_CLOSEDIR: /* Finish directory traversal */
-			SYS_CHECK(closedir(dir[hdr.handle]));
+			if (dir[hdr.handle] != NULL)
+				SYS_CHECK(closedir(dir[hdr.handle]));
 			break;
 		  case FIO_OPEN: /* Open file */
 			SYS_CHECK(fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSIONS));
