@@ -1292,7 +1292,6 @@ check_external_dir_mapping(pgBackup *backup)
 {
 	TablespaceListCell *cell;
 	parray *external_dirs_to_restore;
-	bool	found;
 	int		i;
 
 	if (!backup->external_dir_str)
@@ -1305,16 +1304,22 @@ check_external_dir_mapping(pgBackup *backup)
 	}
 
 	external_dirs_to_restore = make_external_directory_list(backup->external_dir_str);
+	/* 1 - each OLDDIR must have an entry in external_dirs_to_restore */
 	for (cell = external_remap_list.head; cell; cell = cell->next)
 	{
-		char *old_dir = cell->old_dir;
+		bool		found = false;
 
-		found = false;
 		for (i = 0; i < parray_num(external_dirs_to_restore); i++)
 		{
-			char *external_dir = parray_get(external_dirs_to_restore, i);
-			if (strcmp(old_dir, external_dir) == 0)
+			char	    *external_dir = parray_get(external_dirs_to_restore, i);
+
+			if (strcmp(cell->old_dir, external_dir) == 0)
 			{
+				/* Swap new dir name with old one, it is used by 2-nd step */
+				parray_set(external_dirs_to_restore, i,
+						   pgut_strdup(cell->new_dir));
+				pfree(external_dir);
+
 				found = true;
 				break;
 			}
@@ -1324,6 +1329,19 @@ check_external_dir_mapping(pgBackup *backup)
 				 "have an entry in list of external directories of current "
 				 "backup: \"%s\"", cell->old_dir);
 	}
+
+	/* 2 - all linked directories must be empty */
+	for (i = 0; i < parray_num(external_dirs_to_restore); i++)
+	{
+		char	    *external_dir = (char *) parray_get(external_dirs_to_restore,
+														i);
+
+		if (!dir_is_empty(external_dir, FIO_DB_HOST))
+			elog(ERROR, "External directory is not empty: \"%s\"",
+				 external_dir);
+	}
+
+	free_dir_list(external_dirs_to_restore);
 }
 
 char *

@@ -304,7 +304,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=["-j", "4"])
-        
+
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -1441,7 +1441,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'Insert correct error message' in e.message,
+                'External directory is not empty' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1466,7 +1466,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'Insert correct error message' in e.message,
+                'External directory is not empty' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
