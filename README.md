@@ -30,8 +30,8 @@ Using `pg_probackup`, you can take full or incremental backups:
   * `PTRACK` backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special `PTRACK` bitmap for this relation. As one page requires just one bit in the `PTRACK` fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly.
 
 Regardless of the chosen backup type, all backups taken with `pg_probackup` support the following strategies of WAL delivery:
-* `Autonomous backups` include all the files required to restore the cluster to a consistent state at the time the backup was taken. Even if continuous archiving is not set up, the required WAL segments are included into the backup.
-* `Archive backups` rely on continuous archiving. Such backups enable cluster recovery to an arbitrary point after the backup was taken (point-in-time recovery).
+* `Autonomous backups` streams via replication protocol all the WAL files required to restore the cluster to a consistent state at the time the backup was taken. Even if continuous archiving is not set up, the required WAL segments are included into the backup.
+* `Archive backups` rely on continuous archiving.
 
 `PTRACK` backup support provided via following options:
 * vanilla PostgreSQL compiled with ptrack patch. Currently there are patches for [PostgreSQL 9.6](https://gist.githubusercontent.com/gsmol/5b615c971dfd461c76ef41a118ff4d97/raw/e471251983f14e980041f43bea7709b8246f4178/ptrack_9.6.6_v1.5.patch) and [PostgreSQL 10](https://gist.githubusercontent.com/gsmol/be8ee2a132b88463821021fd910d960e/raw/de24f9499f4f314a4a3e5fae5ed4edb945964df8/ptrack_10.1_v1.5.patch)
