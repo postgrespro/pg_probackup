@@ -1243,10 +1243,8 @@ check_tablespace_mapping(pgBackup *backup)
 	/* Sort links by the path of a linked file*/
 	parray_qsort(links, pgFileCompareLinked);
 
-	if (logger_config.log_level_console <= LOG ||
-		logger_config.log_level_file <= LOG)
-		elog(LOG, "check tablespace directories of backup %s",
-			 base36enc(backup->start_time));
+	elog(LOG, "check tablespace directories of backup %s",
+			base36enc(backup->start_time));
 
 	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
 	for (cell = tablespace_dirs.head; cell; cell = cell->next)
@@ -1293,6 +1291,9 @@ check_external_dir_mapping(pgBackup *backup)
 	TablespaceListCell *cell;
 	parray *external_dirs_to_restore;
 	int		i;
+
+	elog(LOG, "check external directories of backup %s",
+			base36enc(backup->start_time));
 
 	if (!backup->external_dir_str)
 	{
