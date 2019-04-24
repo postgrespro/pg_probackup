@@ -71,7 +71,7 @@ extern FILE*   fio_fopen(char const* name, char const* mode, fio_location locati
 extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
 extern ssize_t fio_fread(FILE* f, void* buf, size_t size);
 extern int     fio_pread(FILE* f, void* buf, off_t offs);
-extern int     fio_fprintf(FILE* f, char const* arg, ...) __attribute__((format(printf, 2, 3)));
+extern int     fio_fprintf(FILE* f, char const* arg, ...) pg_attribute_printf(2, 3);
 extern int     fio_fflush(FILE* f);
 extern int     fio_fseek(FILE* f, off_t offs);
 extern int     fio_ftruncate(FILE* f, off_t size);
