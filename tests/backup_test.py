@@ -384,8 +384,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         try:
             self.backup_node(
-                backup_dir, 'node', node,
-                backup_type="full", options=["-j", "4", "--stream"])
+                backup_dir, 'node', node, backup_type="full",
+                options=["-j", "4", "--stream", '--log-level-console=LOG'])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
@@ -407,7 +407,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                         repr(e.message), self.cmd))
             else:
                 self.assertTrue(
-                    "WARNING: File" in e.message and
+                    "LOG: File" in e.message and
                     "blknum" in e.message and
                     "have wrong checksum" in e.message and
                     "try to fetch via SQL" in e.message and

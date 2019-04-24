@@ -1720,7 +1720,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2'})
+                'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
