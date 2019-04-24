@@ -160,6 +160,8 @@ sub build_pgprobackup
 	$probackup->AddFiles(
 		"$currpath/src/utils",
 		'configuration.c',
+		'file.c',
+		'remote.c',
 		'json.c',
 		'logger.c',
 		'parray.c',
