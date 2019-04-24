@@ -68,6 +68,11 @@
 #define XID_FMT "%u"
 #endif
 
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#endif
+
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
