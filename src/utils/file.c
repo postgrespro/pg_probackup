@@ -50,6 +50,16 @@ static bool fio_is_remote_fd(int fd)
 	return (fd & FIO_PIPE_MARKER) != 0;
 }
 
+#ifdef WIN32
+static ssize_t pread(int fd, void* buf, size_t size, off_t off)
+{
+	off_t rc = lseek(fd, SEEK_SET, off);
+	if (rc != off)
+		return -1;
+	return read(fd, buf, size);
+}
+#endif
+
 /* Check if specified location is local for current node */
 static bool fio_is_remote(fio_location location)
 {
@@ -119,7 +129,13 @@ FILE* fio_open_stream(char const* path, fio_location location)
 			Assert(fio_stdin_buffer == NULL);
 			fio_stdin_buffer = pgut_malloc(hdr.size);
 			IO_CHECK(fio_read_all(fio_stdin, fio_stdin_buffer, hdr.size), hdr.size);
+#ifdef WIN32
+			f = tmpfile();
+			IO_CHECK(fwrite(f, 1, hdr.size, fio_stdin_buffer), hdr.size);
+			SYS_CHECK(fseek(f, 0, SEEK_SET));
+#else
 			f = fmemopen(fio_stdin_buffer, hdr.size, "r");
+#endif
 		}
 		else
 		{
