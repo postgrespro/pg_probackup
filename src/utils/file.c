@@ -1,7 +1,12 @@
 #include <stdio.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <sys/stat.h>
+
+#ifdef WIN32
+#define __thread
+#else
+#include <pthread.h>
+#endif
 
 #include "pg_probackup.h"
 #include "file.h"

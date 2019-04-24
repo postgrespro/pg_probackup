@@ -1,3 +1,14 @@
+#ifdef WIN32
+
+#include "pg_probackup.h"
+
+bool launch_agent(void)
+{
+	return false;
+}
+
+#else
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -142,3 +153,4 @@ bool launch_agent(void)
 	return true;
 }
 
+#endif
