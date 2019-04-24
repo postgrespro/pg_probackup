@@ -53,7 +53,7 @@ static bool fio_is_remote_fd(int fd)
 #ifdef WIN32
 static ssize_t pread(int fd, void* buf, size_t size, off_t off)
 {
-	off_t rc = lseek(fd, SEEK_SET, off);
+	off_t rc = lseek(fd, off, SEEK_SET);
 	if (rc != off)
 		return -1;
 	return read(fd, buf, size);
