@@ -8,12 +8,13 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
+
 #include <dirent.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "pg_probackup.h"
 #include "utils/file.h"
 #include "utils/configuration.h"
 
