@@ -65,7 +65,7 @@ void launch_ssh(char* argv[])
 {
 	SYS_CHECK(dup2(atoi(argv[2]), 0));
 	SYS_CHECK(dup2(atoi(argv[3]), 1));
-	SYS_CHECK(execvp(ssh_argv[4], ssh_argv+4));
+	SYS_CHECK(execvp(argv[4], argv+4));
 }
 #endif
 
@@ -79,11 +79,12 @@ bool launch_agent(void)
 	int infd[2];
 
 	ssh_argc = 0;
-	ssh_argv[ssh_argc++] = instance_config.remote.proto;
 #ifdef WIN32
-	ssh_argv[ssh_argc] = "ssh";
-	ssh_argc += 3;
+	ssh_argv[ssh_argc++] = pg_probackup;
+	ssh_argv[ssh_argc++] = "ssh";
+	ssh_argc += 2; /* reserve space for pipe descriptors */
 #endif
+	ssh_argv[ssh_argc++] = instance_config.remote.proto;
 	if (instance_config.remote.port != NULL) {
 		ssh_argv[ssh_argc++] = "-p";
 		ssh_argv[ssh_argc++] = instance_config.remote.port;
@@ -133,7 +134,7 @@ bool launch_agent(void)
 	ssh_argv[2] = psprintf("%d", outfd[0]);
 	ssh_argv[3] = psprintf("%d", infd[1]);
 	{
-	    intptr_t pid = _spawnvp(_P_NOWAIT, pg_probackup, ssh_argv);
+	    intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv);
 		if (pid < 0)
 			return false;
 		child_pid = GetProcessId((HANDLE)pid);
