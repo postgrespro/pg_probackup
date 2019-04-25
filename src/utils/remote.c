@@ -1,14 +1,3 @@
-#ifdef WIN32
-
-#include "pg_probackup.h"
-
-bool launch_agent(void)
-{
-	return false;
-}
-
-#else
-
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +11,7 @@ bool launch_agent(void)
 #define MAX_CMDLINE_LENGTH  4096
 #define MAX_CMDLINE_OPTIONS 256
 #define ERR_BUF_SIZE        4096
+#define PIPE_SIZE           (64*1024)
 
 static int split_options(int argc, char* argv[], int max_options, char* options)
 {
@@ -111,6 +101,33 @@ bool launch_agent(void)
 	ssh_argv[ssh_argc++] = cmd;
 	ssh_argv[ssh_argc] = NULL;
 
+#ifdef WIN32
+	SYS_CHECK(_pipe(infd, PIPE_SIZE, BINARY)) ;
+	SYS_CHECK(_pipe(outfd, PIPE_SIZE, O_BINARY));
+
+	if (instance_config.remote.path)
+	{
+		char* sep = strrchr(pg_probackup, '\\');
+		if (sep != NULL) {
+			pg_probackup = sep + 1;
+		}
+		snprintf(cmd, sizeof(cmd), "%s\\%s agent %s %d %d",
+				 instance_config.remote.path, pg_probackup, PROGRAM_VERSION, outfd[0], infd[1]);
+	}
+	else
+	{
+		snprintf(cmd, sizeof(cmd), "%s agent %s %d %d",
+				 pg_probackup, PROGRAM_VERSION, outfd[0], infd[1]);
+	}
+	{
+		intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv) < 0)
+		if (pid < 0)
+			return false;
+		child_pid = GetProcessId(pid);
+#else
+	SYS_CHECK(pipe(infd));
+	SYS_CHECK(pipe(outfd));
+
 	if (instance_config.remote.path)
 	{
 		char* sep = strrchr(pg_probackup, '/');
@@ -122,9 +139,6 @@ bool launch_agent(void)
 	} else {
 		snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
 	}
-
-	SYS_CHECK(pipe(infd));
-	SYS_CHECK(pipe(outfd));
 
 	SYS_CHECK(child_pid = fork());
 
@@ -143,6 +157,7 @@ bool launch_agent(void)
 		if (execvp(ssh_argv[0], ssh_argv) < 0)
 			return false;
 	} else {
+#endif
 		elog(LOG, "Spawn agent %d version %s", child_pid, PROGRAM_VERSION);
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
 		SYS_CHECK(close(outfd[0]));
@@ -152,5 +167,3 @@ bool launch_agent(void)
 	}
 	return true;
 }
-
-#endif
