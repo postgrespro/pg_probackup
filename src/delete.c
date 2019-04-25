@@ -674,7 +674,7 @@ delete_backup_files(pgBackup *backup)
 		if (interrupted)
 			elog(ERROR, "interrupted during delete backup");
 
-		fio_unlink(file->path, FIO_BACKUP_HOST);
+		pgFileDelete(file);
 	}
 
 	parray_walk(files, pgFileFree);
