@@ -118,12 +118,21 @@ bool launch_agent(void)
 
 	if (instance_config.remote.path)
 	{
-		char* sep = strrchr(pg_probackup, '/');
+		char const* probackup = pg_probackup;
+		char* sep = strrchr(probackup, '/');
 		if (sep != NULL) {
-			pg_probackup = sep + 1;
+			probackup = sep + 1;
 		}
+#ifdef WIN32
+		else {
+			sep = strrchr(probackup, '\\');
+			if (sep != NULL) {
+				probackup = sep + 1;
+			}
+		}
+#endif
 		snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
-					   instance_config.remote.path, pg_probackup, PROGRAM_VERSION);
+					   instance_config.remote.path, probackup, PROGRAM_VERSION);
 	} else {
 		snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
 	}
