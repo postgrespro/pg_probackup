@@ -1710,14 +1710,25 @@ make_external_directory_list(const char *colon_separated_dirs)
 	parray	   *list = parray_new();
 	char	   *tmp = pg_strdup(colon_separated_dirs);
 
-	p = strtok(tmp,":");
+#ifndef WIN32
+#define EXTERNAL_DIRECTORY_DELIMITER ":"
+#else
+#define EXTERNAL_DIRECTORY_DELIMITER ";"
+#endif
+
+	p = strtok(tmp, EXTERNAL_DIRECTORY_DELIMITER);
 	while(p!=NULL)
 	{
-		if (is_absolute_path(p))
-			parray_append(list, pg_strdup(p));
+		char	   *external_path = pg_strdup(p);
+
+		canonicalize_path(external_path);
+		if (is_absolute_path(external_path))
+			parray_append(list, external_path);
 		else
-			elog(ERROR, "External directory \"%s\" is not an absolute path", p);
-		p=strtok(NULL,":");
+			elog(ERROR, "External directory \"%s\" is not an absolute path",
+				 external_path);
+
+		p = strtok(NULL, EXTERNAL_DIRECTORY_DELIMITER);
 	}
 	pfree(tmp);
 	parray_qsort(list, BlackListCompare);
