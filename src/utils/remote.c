@@ -102,7 +102,7 @@ bool launch_agent(void)
 	ssh_argv[ssh_argc] = NULL;
 
 #ifdef WIN32
-	SYS_CHECK(_pipe(infd, PIPE_SIZE, BINARY)) ;
+	SYS_CHECK(_pipe(infd, PIPE_SIZE, O_BINARY)) ;
 	SYS_CHECK(_pipe(outfd, PIPE_SIZE, O_BINARY));
 
 	if (instance_config.remote.path)
@@ -120,7 +120,7 @@ bool launch_agent(void)
 				 pg_probackup, PROGRAM_VERSION, outfd[0], infd[1]);
 	}
 	{
-		intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv) < 0)
+		intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv);
 		if (pid < 0)
 			return false;
 		child_pid = GetProcessId(pid);
