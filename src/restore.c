@@ -288,7 +288,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (is_restore)
 	{
 		check_tablespace_mapping(dest_backup);
-		check_external_dir_mapping(dest_backup);
+
+		/* no point in checking external directories if their restore is not resquested */
+		if (!skip_external_dirs)
+			check_external_dir_mapping(dest_backup);
 	}
 
 	/* At this point we are sure that parent chain is whole
