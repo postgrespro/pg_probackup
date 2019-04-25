@@ -1472,3 +1472,76 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_restore_external_dir_is_empty(self):
+        """
+        take FULL backup with not empty external directory
+        drop external directory content
+        take DELTA backup
+        restore page backup, check that restored
+        external directory is empty
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        shutil.rmtree(core_dir, ignore_errors=True)
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_wal_senders': '2',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        external_dir = self.get_tblspace_path(node, 'external_dir')
+
+        # create empty file in external directory
+        # open(os.path.join(external_dir, 'file'), 'a').close()
+        os.mkdir(external_dir)
+        with open(os.path.join(external_dir, 'file'), 'w+') as f:
+            f.close()
+
+        # FULL backup with external directory
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}".format(
+                    external_dir)])
+
+        # drop external directory
+        shutil.rmtree(external_dir, ignore_errors=True)
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=[
+                "-j", "4", "--stream",
+                "-E", "{0}".format(
+                    external_dir)])
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        # Restore Delta backup
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        external_dir_new = self.get_tblspace_path(node_restored, 'external_dir_new')
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=["--external-mapping={0}={1}".format(
+                        external_dir, external_dir_new)])
+
+        pgdata_restored = self.pgdata_content(
+            node_restored.base_dir, exclude_dirs=['logs'])
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
