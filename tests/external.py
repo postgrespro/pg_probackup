@@ -1473,10 +1473,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    def test_restore_external_dir_is_empty(self):
+    def test_restore_external_dir_is_missing(self):
         """
         take FULL backup with not empty external directory
-        drop external directory content
+        drop external directory
         take DELTA backup
         restore page backup, check that restored
         external directory is empty
