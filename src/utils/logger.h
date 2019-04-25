@@ -2,7 +2,7 @@
  *
  * logger.h: - prototypes of logger functions.
  *
- * Copyright (c) 2017-2018, Postgres Professional
+ * Copyright (c) 2017-2019, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

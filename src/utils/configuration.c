@@ -3,7 +3,7 @@
  * configuration.c: - function implementations to work with pg_probackup
  * configurations.
  *
- * Copyright (c) 2017-2018, Postgres Professional
+ * Copyright (c) 2017-2019, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

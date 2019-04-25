@@ -3,7 +3,7 @@
  * show.c: show backup information.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2018, Postgres Professional
+ * Portions Copyright (c) 2015-2019, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

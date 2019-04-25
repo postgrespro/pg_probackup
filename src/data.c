@@ -3,7 +3,7 @@
  * data.c: utils to parse and backup data pages
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2018, Postgres Professional
+ * Portions Copyright (c) 2015-2019, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
