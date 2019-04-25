@@ -63,11 +63,14 @@ static void kill_child(void)
 #ifdef WIN32
 void launch_ssh(char* argv[])
 {
+	int infd = atoi(argv[2]);
+	int outfd = atoi(argv[3]);
+
 	SYS_CHECK(close(STDIN_FILENO));
 	SYS_CHECK(close(STDOUT_FILENO));
 
-	SYS_CHECK(dup2(outfd[0], STDIN_FILENO));
-	SYS_CHECK(dup2(infd[1],  STDOUT_FILENO));
+	SYS_CHECK(dup2(infd, STDIN_FILENO));
+	SYS_CHECK(dup2(outfd, STDOUT_FILENO));
 
 	SYS_CHECK(execvp(argv[4], argv+4));
 }
