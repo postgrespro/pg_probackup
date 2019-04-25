@@ -110,8 +110,13 @@ bool launch_agent(void)
 		char* sep = strrchr(pg_probackup, '\\');
 		if (sep != NULL) {
 			pg_probackup = sep + 1;
+		} else {
+			sep = strrchr(pg_probackup, '/');
+			if (sep != NULL) {
+				pg_probackup = sep + 1;
+			}
 		}
-		snprintf(cmd, sizeof(cmd), "%s\\%s agent %s %d %d",
+		snprintf(cmd, sizeof(cmd), "%s/%s agent %s %d %d",
 				 instance_config.remote.path, pg_probackup, PROGRAM_VERSION, outfd[0], infd[1]);
 	}
 	else
@@ -123,7 +128,7 @@ bool launch_agent(void)
 		intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv);
 		if (pid < 0)
 			return false;
-		child_pid = GetProcessId(pid);
+		child_pid = GetProcessId((HANDLE)pid);
 #else
 	SYS_CHECK(pipe(infd));
 	SYS_CHECK(pipe(outfd));
