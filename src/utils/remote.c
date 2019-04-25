@@ -137,9 +137,12 @@ bool launch_agent(void)
 				probackup = sep + 1;
 			}
 		}
-#endif
+		snprintf(cmd, sizeof(cmd), "%s\\%s agent %s",
+					   instance_config.remote.path, probackup, PROGRAM_VERSION);
+#else
 		snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
 					   instance_config.remote.path, probackup, PROGRAM_VERSION);
+#endif
 	} else {
 		snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
 	}
