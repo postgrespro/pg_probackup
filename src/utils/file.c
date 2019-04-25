@@ -58,6 +58,17 @@ static ssize_t pread(int fd, void* buf, size_t size, off_t off)
 		return -1;
 	return read(fd, buf, size);
 }
+static int remove_file_or_dir(char const* path)
+{
+	int rc = remove(path);
+#ifdef WIN32
+	if (rc < 0 && errno == EACCESS)
+		rc = rmdir(path);
+#endif
+	return rc;
+}
+#else
+#define remove_file_or_dir(path) remove(path)
 #endif
 
 /* Check if specified location is local for current node */
@@ -715,7 +726,7 @@ int fio_unlink(char const* path, fio_location location)
 	}
 	else
 	{
-		return remove(path);
+		return remove_file_or_dir(path);
 	}
 }
 
@@ -1343,7 +1354,7 @@ void fio_communicate(int in, int out)
 			SYS_CHECK(symlink(buf, buf + strlen(buf) + 1));
 			break;
 		  case FIO_UNLINK: /* Remove file or directory (TODO: Win32) */
-			SYS_CHECK(remove(buf));
+			SYS_CHECK(remove_file_or_dir(buf));
 			break;
 		  case FIO_MKDIR:  /* Create direcory */
 			hdr.size = 0;
