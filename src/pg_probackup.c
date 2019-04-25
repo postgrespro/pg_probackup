@@ -291,6 +291,10 @@ main(int argc, char *argv[])
 			backup_subcmd = SHOW_CONFIG_CMD;
 		else if (strcmp(argv[1], "checkdb") == 0)
 			backup_subcmd = CHECKDB_CMD;
+#ifdef WIN32
+		else if (strcmp(argv[1], "ssh") == 0)
+		    launch_ssh(argv);
+#endif
 		else if (strcmp(argv[1], "agent") == 0 && argc > 2)
 		{
 			remote_agent = argv[2];
@@ -301,11 +305,7 @@ main(int argc, char *argv[])
 					 "Agent version %s doesn't match master pg_probackup version %s",
 					 remote_agent, PROGRAM_VERSION);
 			}
-#ifdef WIN32
-			fio_communicate(atoi(argv[3]), atoi(argv[4]));
-#else
 			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
-#endif
 			return 0;
 		}
 		else if (strcmp(argv[1], "--help") == 0 ||

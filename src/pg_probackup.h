@@ -3,7 +3,7 @@
  * pg_probackup.h: Backup/Recovery manager for PostgreSQL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2018, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -66,6 +66,11 @@
 /* 64-bit xid support for PGPRO_EE */
 #ifndef PGPRO_EE
 #define XID_FMT "%u"
+#endif
+
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
 #endif
 
 /* Check if an XLogRecPtr value is pointed to 0 offset */
@@ -440,6 +445,9 @@ extern bool heapallindexed;
 /* current settings */
 extern pgBackup current;
 
+/* argv of the process */
+extern char** commands_args;
+
 /* in dir.c */
 /* exclude directory list for $PGDATA file listing */
 extern const char *pgdata_exclude_dir[];
@@ -549,6 +557,7 @@ extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
 extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 extern bool launch_agent(void);
+extern void launch_ssh(char* argv[]);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
 #define COMPRESS_LEVEL_DEFAULT 1

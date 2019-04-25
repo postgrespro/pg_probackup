@@ -60,6 +60,16 @@ static void kill_child(void)
 }
 #endif
 
+#ifdef WIN32
+void launch_ssh(char* argv[])
+{
+	SYS_CHECK(dup2(atoi(argv[2]), 0));
+	SYS_CHECK(dup2(atoi(argv[3]), 1));
+	SYS_CHECK(execvp(ssh_argv[4], ssh_argv+4));
+}
+#endif
+
+
 bool launch_agent(void)
 {
 	char cmd[MAX_CMDLINE_LENGTH];
@@ -70,6 +80,10 @@ bool launch_agent(void)
 
 	ssh_argc = 0;
 	ssh_argv[ssh_argc++] = instance_config.remote.proto;
+#ifdef WIN32
+	ssh_argv[ssh_argc] = "ssh";
+	ssh_argc += 3;
+#endif
 	if (instance_config.remote.port != NULL) {
 		ssh_argv[ssh_argc++] = "-p";
 		ssh_argv[ssh_argc++] = instance_config.remote.port;
@@ -101,38 +115,6 @@ bool launch_agent(void)
 	ssh_argv[ssh_argc++] = cmd;
 	ssh_argv[ssh_argc] = NULL;
 
-#ifdef WIN32
-	SYS_CHECK(_pipe(infd, PIPE_SIZE, O_BINARY)) ;
-	SYS_CHECK(_pipe(outfd, PIPE_SIZE, O_BINARY));
-
-	if (instance_config.remote.path)
-	{
-		char* sep = strrchr(pg_probackup, '\\');
-		if (sep != NULL) {
-			pg_probackup = sep + 1;
-		} else {
-			sep = strrchr(pg_probackup, '/');
-			if (sep != NULL) {
-				pg_probackup = sep + 1;
-			}
-		}
-		snprintf(cmd, sizeof(cmd), "%s/%s agent %s %d %d",
-				 instance_config.remote.path, pg_probackup, PROGRAM_VERSION, outfd[0], infd[1]);
-	}
-	else
-	{
-		snprintf(cmd, sizeof(cmd), "%s agent %s %d %d",
-				 pg_probackup, PROGRAM_VERSION, outfd[0], infd[1]);
-	}
-	{
-		intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv);
-		if (pid < 0)
-			return false;
-		child_pid = GetProcessId((HANDLE)pid);
-#else
-	SYS_CHECK(pipe(infd));
-	SYS_CHECK(pipe(outfd));
-
 	if (instance_config.remote.path)
 	{
 		char* sep = strrchr(pg_probackup, '/');
@@ -144,6 +126,20 @@ bool launch_agent(void)
 	} else {
 		snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
 	}
+
+#ifdef WIN32
+	SYS_CHECK(_pipe(infd, PIPE_SIZE, O_BINARY)) ;
+	SYS_CHECK(_pipe(outfd, PIPE_SIZE, O_BINARY));
+	ssh_argv[2] = psprintf("%d", outfd[0]);
+	ssh_argv[3] = psprintf("%d", infd[1]);
+	{
+	    intptr_t pid = _spawnvp(_P_NOWAIT, pg_probackup, ssh_argv);
+		if (pid < 0)
+			return false;
+		child_pid = GetProcessId((HANDLE)pid);
+#else
+	SYS_CHECK(pipe(infd));
+	SYS_CHECK(pipe(outfd));
 
 	SYS_CHECK(child_pid = fork());
 
