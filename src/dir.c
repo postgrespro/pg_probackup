@@ -479,7 +479,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	{
 		/* For external directory this is not ok */
 		if (external_dir_num > 0)
-			elog(ERROR, "Exteral directory is not found: %s", root);
+			elog(ERROR, "External directory is not found: %s", root);
 		else
 			return;
 	}
