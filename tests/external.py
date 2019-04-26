@@ -1513,8 +1513,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "-E", "{0}".format(
                     external_dir)])
 
-        # drop external directory
-        shutil.rmtree(external_dir, ignore_errors=True)
+        # drop external file only
+        os.remove(os.path.join(external_dir, 'file'))
 
         self.backup_node(
             backup_dir, 'node', node,

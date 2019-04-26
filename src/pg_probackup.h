@@ -585,7 +585,8 @@ extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
 extern parray *dir_read_file_list(const char *root, const char *external_prefix,
 								  const char *file_txt, fio_location location);
-extern parray *make_external_directory_list(const char *colon_separated_dirs);
+extern parray *make_external_directory_list(const char *colon_separated_dirs,
+											bool remap);
 extern void free_dir_list(parray *list);
 extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
 									 const int dir_num);

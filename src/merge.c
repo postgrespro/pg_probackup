@@ -262,9 +262,11 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 
 	/* Create external directories lists */
 	if (to_backup->external_dir_str)
-		to_external = make_external_directory_list(to_backup->external_dir_str);
+		to_external = make_external_directory_list(to_backup->external_dir_str,
+												   false);
 	if (from_backup->external_dir_str)
-		from_external = make_external_directory_list(from_backup->external_dir_str);
+		from_external = make_external_directory_list(from_backup->external_dir_str,
+													 false);
 
 	/*
 	 * Rename external directoties in to_backup (if exists)

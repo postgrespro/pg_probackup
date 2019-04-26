@@ -504,7 +504,8 @@ do_backup_instance(void)
 	elog(LOG, "Database backup start");
 	if(current.external_dir_str)
 	{
-		external_dirs = make_external_directory_list(current.external_dir_str);
+		external_dirs = make_external_directory_list(current.external_dir_str,
+													 false);
 		check_external_for_tablespaces(external_dirs);
 	}
 
