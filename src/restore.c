@@ -640,7 +640,8 @@ remove_deleted_files(pgBackup *backup)
 
 	/* Get list of files actually existing in target database */
 	files_restored = parray_new();
-	dir_list_file(files_restored, instance_config.pgdata, true, true, false, 0, FIO_BACKUP_HOST);
+	dir_list_file(files_restored, instance_config.pgdata, true, true, false, 0,
+				  FIO_BACKUP_HOST);
 	/* To delete from leaf, sort in reversed order */
 	parray_qsort(files_restored, pgFileComparePathDesc);
 

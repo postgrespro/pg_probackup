@@ -163,13 +163,14 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, bool omit_symlink, int external_dir_num, fio_location location)
+pgFileNew(const char *path, bool omit_symlink, int external_dir_num,
+		  fio_location location)
 {
 	struct stat		st;
 	pgFile		   *file;
 
-    /* stat the file */
-    if (fio_stat(path, &st, omit_symlink, location) < 0)
+	/* stat the file */
+	if (fio_stat(path, &st, omit_symlink, location) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno == ENOENT)
@@ -475,11 +476,17 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 
 	file = pgFileNew(root, omit_symlink, external_dir_num, location);
 	if (file == NULL)
-		return;
+	{
+		/* For external directory this is not ok */
+		if (external_dir_num > 0)
+			elog(ERROR, "Exteral directory is not found: %s", root);
+		else
+			return;
+	}
 
 	if (!S_ISDIR(file->mode))
 	{
-		if (external_dir_num)
+		if (external_dir_num > 0)
 			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
 				 file->path);
 		else

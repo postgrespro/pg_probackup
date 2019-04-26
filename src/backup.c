@@ -888,7 +888,8 @@ do_backup_instance(void)
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0, FIO_BACKUP_HOST);
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0,
+					  FIO_BACKUP_HOST);
 
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
