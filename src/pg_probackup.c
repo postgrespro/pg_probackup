@@ -298,7 +298,6 @@ main(int argc, char *argv[])
 		else if (strcmp(argv[1], "agent") == 0 && argc > 2)
 		{
 			remote_agent = argv[2];
-			sleep(10);
 			if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
 			{
 				uint32 agent_version = parse_program_version(remote_agent);
