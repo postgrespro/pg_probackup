@@ -245,10 +245,12 @@ class ProbackupTest(object):
             exit(1)
 
         if os.name == 'posix':
+            self.EXTERNAL_DIRECTORY_DELIMITER = ':'
             os.environ['PATH'] = os.path.dirname(
                 self.probackup_path) + ':' + os.environ['PATH']
 
         elif os.name == 'nt':
+            self.EXTERNAL_DIRECTORY_DELIMITER = ';'
             os.environ['PATH'] = os.path.dirname(
                 self.probackup_path) + ';' + os.environ['PATH']
 
