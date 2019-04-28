@@ -1196,8 +1196,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         try:
             self.backup_node(
-                backup_dir, 'node', node,
-                backup_type="delta", options=["-j", "4", "--stream"])
+                backup_dir, 'node', node, backup_type="delta",
+                options=["-j", "4", "--stream", "--log-level-console=LOG"])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
@@ -1208,7 +1208,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             if self.remote:
                 self.assertTrue(
-                    "WARNING: File" in e.message and
+                    "LOG: File" in e.message and
                     "try to fetch via SQL" in e.message and
                     "WARNING:  page verification failed, "
                     "calculated checksum" in e.message and
