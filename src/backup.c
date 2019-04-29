@@ -3461,8 +3461,8 @@ check_external_for_tablespaces(parray *external_list)
 	int			i = 0;
 	int			j = 0;
 	char	   *tablespace_path = NULL;
-	char	   *query = "SELECT pg_catalog.pg_tablespace_location(oid)\n"
-						"FROM pg_tablespace\n"
+	char	   *query = "SELECT pg_catalog.pg_tablespace_location(oid) "
+						"FROM pg_catalog.pg_tablespace "
 						"WHERE pg_catalog.pg_tablespace_location(oid) <> '';";
 
 	conn = backup_conn;
@@ -3476,9 +3476,13 @@ check_external_for_tablespaces(parray *external_list)
 	{
 		tablespace_path = PQgetvalue(res, i, 0);
 		Assert (strlen(tablespace_path) > 0);
+
+		canonicalize_path(tablespace_path);
+
 		for (j = 0; j < parray_num(external_list); j++)
 		{
 			char *external_path = parray_get(external_list, j);
+
 			if (path_is_prefix_of_path(external_path, tablespace_path))
 				elog(ERROR, "External directory path (-E option) \"%s\" "
 							"contains tablespace \"%s\"",
