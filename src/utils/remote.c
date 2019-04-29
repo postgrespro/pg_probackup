@@ -148,8 +148,8 @@ bool launch_agent(void)
 	}
 
 #ifdef WIN32
-	SYS_CHECK(_pipe(infd, PIPE_SIZE, O_BINARY)) ;
-	SYS_CHECK(_pipe(outfd, PIPE_SIZE, O_BINARY));
+	SYS_CHECK(_pipe(infd, PIPE_SIZE, _O_BINARY)) ;
+	SYS_CHECK(_pipe(outfd, PIPE_SIZE, _O_BINARY));
 	ssh_argv[2] = psprintf("%d", outfd[0]);
 	ssh_argv[3] = psprintf("%d", infd[1]);
 	{

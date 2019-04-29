@@ -3,7 +3,7 @@
 #include <sys/stat.h>
 
 #ifdef WIN32
-#define __thread
+#define __thread __declspec(thread)
 #else
 #include <pthread.h>
 #endif
@@ -1258,7 +1258,12 @@ void fio_communicate(int in, int out)
 	struct stat st;
 	int rc;
 
-	/* Main loop until command of processing master command */
+#ifdef WIN32
+    SYS_CHECK(setmode(in, _O_BINARY));
+    SYS_CHECK(setmode(out, _O_BINARY));
+#endif
+
+    /* Main loop until command of processing master command */
 	while ((rc = fio_read_all(in, &hdr, sizeof hdr)) == sizeof(hdr)) {
 		if (hdr.size != 0) {
 			if (hdr.size > buf_size) {

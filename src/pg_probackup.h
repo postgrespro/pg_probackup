@@ -679,16 +679,4 @@ extern bool   parse_page(Page page, XLogRecPtr *lsn);
 int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				   CompressAlg alg, int level, const char **errormsg);
 
-#ifdef WIN32
-#ifdef _DEBUG
-#define lseek _lseek
-#define open _open
-#define fstat _fstat
-#define read _read
-#define close _close
-#define write _write
-#define mkdir(dir,mode) _mkdir(dir)
-#endif
-#endif
-
 #endif /* PG_PROBACKUP_H */
