@@ -52,10 +52,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                'ERROR:  --external-dirs option "{0}": '
-                'directory or symbolic link expected\n'.format(file_path),
-                e.message,
+            self.assertTrue(
+                'ERROR:  --external-dirs option' in e.message and
+                'directory or symbolic link expected' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
