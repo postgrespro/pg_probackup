@@ -217,6 +217,7 @@ pgFileInit(const char *path)
 
 	file->path = pgut_malloc(strlen(path) + 1);
 	strcpy(file->path, path);		/* enough buffer size guaranteed */
+	canonicalize_path(file->path);
 
 	/* Get file name from the path */
 	file_name = last_dir_separator(file->path);
