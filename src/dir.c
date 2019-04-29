@@ -988,6 +988,8 @@ opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
 	if (!*cell->old_dir || !*cell->new_dir)
 		elog(ERROR, "invalid %s mapping format \"%s\", "
 			 "must be \"OLDDIR=NEWDIR\"", type, arg);
+	canonicalize_path(cell->old_dir);
+	canonicalize_path(cell->new_dir);
 
 	/*
 	 * This check isn't absolutely necessary.  But all tablespaces are created
