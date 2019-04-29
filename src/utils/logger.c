@@ -84,6 +84,9 @@ init_logger(const char *root_path, LoggerConfig *config)
 							 root_path, LOG_DIRECTORY_DEFAULT);
 	}
 
+	if (config->log_directory != NULL)
+		canonicalize_path(config->log_directory);
+
 	logger_config = *config;
 }
 

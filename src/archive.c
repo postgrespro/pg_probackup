@@ -39,6 +39,8 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 	if (wal_file_path == NULL)
 		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
 
+	canonicalize_path(wal_file_path);
+
 	if (!getcwd(current_dir, sizeof(current_dir)))
 		elog(ERROR, "getcwd() error");
 
@@ -96,6 +98,8 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 
 	if (wal_file_path == NULL)
 		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
+
+	canonicalize_path(wal_file_path);
 
 	if (!getcwd(current_dir, sizeof(current_dir)))
 		elog(ERROR, "getcwd() error");
