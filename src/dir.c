@@ -1223,6 +1223,8 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		file->linked = pgut_malloc(strlen(path) + 1);
 		strcpy(file->linked, path);
 
+		canonicalize_path(file->linked);
+
 		parray_append(files, file);
 	}
 
