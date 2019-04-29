@@ -1225,6 +1225,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		strcpy(file->linked, path);
 
 		canonicalize_path(file->linked);
+		canonicalize_path(file->path);
 
 		parray_append(files, file);
 	}
