@@ -1662,8 +1662,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'External directory path (-E option)' in e.message,
+            self.assertIn(
+                'External directory path (-E option)',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1717,8 +1718,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'External directory is not empty' in e.message,
+            self.assertIn(
+                'External directory is not empty',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1742,8 +1744,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'External directory is not empty' in e.message,
+            self.assertIn(
+                'External directory is not empty',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1804,8 +1807,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: External directory is not found: "{0}"'.format(external_dir) in e.message,
+            self.assertIn(
+                'ERROR: External directory is not found:',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1890,8 +1894,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: External directory is not found: "{0}"'.format(external_dir) in e.message,
+            self.assertIn(
+                'ERROR: External directory is not found:',
+                external_dir,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
