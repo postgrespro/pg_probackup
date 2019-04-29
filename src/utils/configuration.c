@@ -310,52 +310,7 @@ get_next_token(const char *src, char *dst, const char *line)
 		s++;
 		for (i = 0, j = 0; s[i] != '\0'; i++)
 		{
-			if (s[i] == '\\')
-			{
-				i++;
-				switch (s[i])
-				{
-					case 'b':
-						dst[j] = '\b';
-						break;
-					case 'f':
-						dst[j] = '\f';
-						break;
-					case 'n':
-						dst[j] = '\n';
-						break;
-					case 'r':
-						dst[j] = '\r';
-						break;
-					case 't':
-						dst[j] = '\t';
-						break;
-					case '0':
-					case '1':
-					case '2':
-					case '3':
-					case '4':
-					case '5':
-					case '6':
-					case '7':
-						{
-							int			k;
-							long		octVal = 0;
-
-							for (k = 0;
-								 s[i + k] >= '0' && s[i + k] <= '7' && k < 3;
-									 k++)
-								octVal = (octVal << 3) + (s[i + k] - '0');
-							i += k - 1;
-							dst[j] = ((char) octVal);
-						}
-						break;
-					default:
-						dst[j] = s[i];
-						break;
-				}
-			}
-			else if (s[i] == '\'')
+			if (s[i] == '\'')
 			{
 				i++;
 				/* doubled quote becomes just one quote */
