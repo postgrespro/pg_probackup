@@ -1380,6 +1380,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         symlink pointing to external dir should be followed,
         but restored as directory
         """
+        if os.name == 'nt':
+            return unittest.skip('Skipped for Windows')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         core_dir = os.path.join(self.tmp_path, module_name, fname)
@@ -1462,6 +1465,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         symlink pointing to external dir should be followed,
         but restored as directory
         """
+        if os.name == 'nt':
+            return unittest.skip('Skipped for Windows')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         core_dir = os.path.join(self.tmp_path, module_name, fname)
@@ -1544,6 +1550,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         symlink pointing to external dir should be followed,
         but restored as directory
         """
+        if os.name == 'nt':
+            return unittest.skip('Skipped for Windows')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         core_dir = os.path.join(self.tmp_path, module_name, fname)
@@ -1896,7 +1905,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertIn(
                 'ERROR: External directory is not found:',
-                external_dir,
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
