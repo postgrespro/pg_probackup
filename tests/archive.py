@@ -296,9 +296,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
-            file = os.path.join(wals_dir, '000000010000000000000001.gz')
+            filename = '000000010000000000000001.gz'
+            file = os.path.join(wals_dir, filename)
         else:
-            file = os.path.join(wals_dir, '000000010000000000000001')
+            filename = '000000010000000000000001'
+            file = os.path.join(wals_dir, filename)
 
         with open(file, 'a') as f:
             f.write(b"blablablaadssaaaaaaaaaaaaaaa")
@@ -319,7 +321,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'LOG:  archive command failed with exit code 1' in log_content and
                 'DETAIL:  The failed archive command was:' in log_content and
                 'INFO: pg_probackup archive-push from' in log_content and
-                'ERROR: WAL segment "{0}" already exists.'.format(file) in log_content,
+                'ERROR: WAL segment ' in log_content and
+                '{0}" already exists.'.format(filename) in log_content,
                 'Expecting error messages about failed archive_command'
             )
             self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
@@ -369,9 +372,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
-            file = os.path.join(wals_dir, '000000010000000000000001.gz')
+            filename = '000000010000000000000001.gz'
+            file = os.path.join(wals_dir, filename)
         else:
-            file = os.path.join(wals_dir, '000000010000000000000001')
+            filename = '000000010000000000000001'
+            file = os.path.join(wals_dir, filename)
 
         with open(file, 'a') as f:
             f.write(b"blablablaadssaaaaaaaaaaaaaaa")
@@ -392,7 +397,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'LOG:  archive command failed with exit code 1' in log_content and
                 'DETAIL:  The failed archive command was:' in log_content and
                 'INFO: pg_probackup archive-push from' in log_content and
-                'ERROR: WAL segment "{0}" already exists.'.format(file) in log_content,
+                '{0}" already exists.'.format(filename) in log_content,
                 'Expecting error messages about failed archive_command'
             )
             self.assertFalse('pg_probackup archive-push completed successfully' in log_content)

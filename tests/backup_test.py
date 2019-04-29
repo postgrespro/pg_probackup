@@ -610,17 +610,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "drop tablespace some_lame_tablespace")
 
         self.backup_node(
-                backup_dir, 'node', node, backup_type="delta",
-                options=["-j", "4", "--stream"])
+            backup_dir, 'node', node, backup_type="delta",
+            options=["-j", "4", "--stream"])
 
         self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=[
-                    "-j", "4",
-                    "-T", "{0}={1}".format(
-                        tblspace1_old_path, tblspace1_new_path),
-                    "-T", "{0}={1}".format(
-                        tblspace2_old_path, tblspace2_new_path)])
+            backup_dir, 'node', node_restored,
+            options=[
+                "-j", "4",
+                "-T", "{0}={1}".format(
+                    tblspace1_old_path, tblspace1_new_path),
+                "-T", "{0}={1}".format(
+                    tblspace2_old_path, tblspace2_new_path)])
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
