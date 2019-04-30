@@ -705,8 +705,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'Could not read WAL record at' in e.message and
-                'WAL segment "{0}" is absent\n'.format(
-                    file) in e.message,
+                'is absent' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -823,8 +822,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'in archived WAL segment' in e.message and
                 'Could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
-                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
-                    file) in e.message,
+                'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1093,14 +1091,14 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # DROP DATABASE DB1
         node.safe_psql(
             "postgres", "drop database db1")
-        # SECOND PTRACK BACKUP
+        # SECOND PAGE BACKUP
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        # RESTORE SECOND PTRACK BACKUP
+        # RESTORE SECOND PAGE BACKUP
         self.restore_node(
             backup_dir, 'node', node_restored,
             backup_id=backup_id, options=["-j", "4"]
