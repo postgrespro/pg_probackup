@@ -210,7 +210,7 @@ setMyLocation(void)
 
 #ifdef WIN32
 	if (IsSshProtocol())
-		elog(ERROR, "Remote operations on Windows are not possible at this moment");
+		elog(ERROR, "Currently remote operations on Windows are not supported");
 #endif
 
 	MyLocation = IsSshProtocol()
