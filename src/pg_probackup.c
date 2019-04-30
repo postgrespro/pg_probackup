@@ -207,6 +207,12 @@ static ConfigOption cmd_options[] =
 static void
 setMyLocation(void)
 {
+
+#ifdef WIN32
+	if (IsSshProtocol())
+		elog(ERROR, "Remote operations on Windows are not possible at this moment");
+#endif
+
 	MyLocation = IsSshProtocol()
 		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
 		   ? FIO_DB_HOST
