@@ -730,8 +730,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for LSN' in e.message and
                 'in archived WAL segment' in e.message and
                 'Could not read WAL record at' in e.message and
-                'WAL segment "{0}" is absent\n'.format(
-                    file) in e.message,
+                'is absent' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
