@@ -911,7 +911,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             "create table t_heap_alien as select i as id, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,1000) i;")
+            "from generate_series(0,100000) i;")
 
         # copy lastest wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'alien_node')
@@ -925,6 +925,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 #        file = os.path.join(wals_dir, '000000010000000000000004')
         print(file)
         print(file_destination)
+        os.remove(file_destination)
         os.rename(file, file_destination)
 
         # Single-thread PAGE backup
@@ -944,8 +945,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'Could not read WAL record at' in e.message and
                 'WAL file is from different database system: WAL file database system identifier is' in e.message and
                 'pg_control database system identifier is' in e.message and
-                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
-                    file_destination) in e.message,
+                'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -971,8 +971,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'Could not read WAL record at' in e.message and
                 'WAL file is from different database system: WAL file database system identifier is' in e.message and
                 'pg_control database system identifier is' in e.message and
-                'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
-                    file_destination) in e.message,
+                'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

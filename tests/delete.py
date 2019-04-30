@@ -148,9 +148,9 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # full backup mode
         self.backup_node(backup_dir, 'node', node)
-        # page backup mode
+        # ptrack backup mode
         self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
-        # page backup mode
+        # ptrack backup mode
         self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
         # full backup mode
         self.backup_node(backup_dir, 'node', node)
@@ -249,8 +249,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            set_replication=True,
-            pg_options={'ptrack_enable': 'on'})
+            set_replication=True)
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

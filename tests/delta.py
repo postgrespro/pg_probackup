@@ -1268,7 +1268,9 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node)
 
         # Nullify some block in PostgreSQL
-        file = os.path.join(node.data_dir, file_path)
+        file = os.path.join(node.data_dir, file_path).replace("\\","/")
+        if os.name == 'nt':
+            file = file.replace("\\","/")
 
         with open(file, 'r+b', 0) as f:
             f.seek(8192)
@@ -1286,10 +1288,14 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         if not self.remote:
             log_file_path = os.path.join(backup_dir, "log", "pg_probackup.log")
             with open(log_file_path) as f:
-                self.assertTrue("LOG: File: {0} blknum 1, empty page".format(
-                    file) in f.read())
-                self.assertFalse("Skipping blknum: 1 in file: {0}".format(
-                    file) in f.read())
+                content = f.read()
+
+            self.assertIn(
+                "LOG: File: {0} blknum 1, empty page".format(file),
+                content)
+            self.assertNotIn(
+                "Skipping blknum: 1 in file: {0}".format(file),
+                 content)
 
         # Restore DELTA backup
         node_restored = self.make_simple_node(
