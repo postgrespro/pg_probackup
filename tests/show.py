@@ -88,14 +88,14 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
-                "Expecting Error because backup corrupted.\n"
+                "Expecting Error because backup corrupted."
                 " Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd
                 )
             )
         except ProbackupException as e:
             self.assertIn(
-                'data files are corrupted\n',
+                'data files are corrupted',
                 e.message,
                 '\n Unexpected Error Message: {0}\n'
                 ' CMD: {1}'.format(repr(e.message), self.cmd)
@@ -127,9 +127,15 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             backup_id, "backup.control")
         os.remove(file)
 
+        output = self.show_pb(backup_dir, 'node', as_text=True, as_json=False)
+
         self.assertIn(
-            'Control file "{0}" doesn\'t exist'.format(file),
-            self.show_pb(backup_dir, 'node', as_text=True, as_json=False))
+            'Control file',
+            output)
+
+        self.assertIn(
+            'doesn\'t exist',
+            output)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -157,9 +163,15 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fd = open(file, 'w')
         fd.close()
 
+        output = self.show_pb(backup_dir, 'node', as_text=True, as_json=False)
+
         self.assertIn(
-            'Control file "{0}" is empty'.format(file),
-            self.show_pb(backup_dir, 'node', as_text=True, as_json=False))
+            'Control file',
+            output)
+
+        self.assertIn(
+            'is empty',
+            output)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -190,7 +202,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fd.close()
 
         self.assertIn(
-            'WARNING: Invalid option "statuss" in file'.format(file),
+            'WARNING: Invalid option "statuss" in file',
             self.show_pb(backup_dir, 'node', as_json=False, as_text=True))
 
         # Clean after yourself
