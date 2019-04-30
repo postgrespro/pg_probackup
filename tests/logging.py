@@ -256,7 +256,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(os.path.isfile(rotation_file_path))
 
         # mangle .rotation file
-        with open(rotation_file_path, "wtb", 0) as f:
+        with open(rotation_file_path, "wt", 0) as f:
             f.write(b"blah")
             f.flush()
             f.close
@@ -274,8 +274,11 @@ class LogTest(ProbackupTest, unittest.TestCase):
             log_file_size)
 
         self.assertIn(
-            'WARNING: rotation file "{0}" has wrong '
-            'creation timestamp'.format(rotation_file_path),
+            'WARNING: rotation file',
+            output)
+
+        self.assertIn(
+            'has wrong creation timestamp',
             output)
 
         self.assertTrue(os.path.isfile(rotation_file_path))

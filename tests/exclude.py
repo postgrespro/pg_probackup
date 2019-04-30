@@ -112,9 +112,8 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
+                'autovacuum': 'off',
                 "shared_buffers": "10MB",
-                "fsync": "off",
                 'ptrack_enable': 'on'})
 
         self.init_pb(backup_dir)

@@ -1,7 +1,11 @@
 [см wiki](https://confluence.postgrespro.ru/display/DEV/pg_probackup)
 
 ```
-Note: For now there are tests only for Linix
+Note: For now these are works on Linix and "kinda" works on Windows
+```
+
+```
+Windows Note: For tablespaceses tests to work on Windows, you should explicitly(!) grant current user full access to tmp_dirs
 ```
 
 
