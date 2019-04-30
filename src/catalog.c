@@ -1004,8 +1004,6 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 	else
 		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
 				 base36enc(backup->start_time), subdir1, subdir2);
-
-	make_native_path(path);
 }
 
 /*
