@@ -21,7 +21,9 @@ class InitTest(ProbackupTest, unittest.TestCase):
             ['backups', 'wal']
         )
         self.add_instance(backup_dir, 'node', node)
-        self.assertEqual("INFO: Instance 'node' successfully deleted\n", self.del_instance(backup_dir, 'node'),
+        self.assertIn(
+            "INFO: Instance 'node' successfully deleted",
+            self.del_instance(backup_dir, 'node'),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(self.output), self.cmd))
 
         # Show non-existing instance
@@ -30,8 +32,9 @@ class InitTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, 'Expecting Error due to show of non-existing instance. Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                "ERROR: Instance 'node' does not exist in this backup catalog\n",
+            self.assertIn(
+                "ERROR: Instance 'node' does not exist in this backup catalog",
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(e.message, self.cmd))
 
         # Delete non-existing instance
@@ -40,8 +43,9 @@ class InitTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, 'Expecting Error due to delete of non-existing instance. Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                "ERROR: Instance 'node1' does not exist in this backup catalog\n",
+            self.assertIn(
+                "ERROR: Instance 'node1' does not exist in this backup catalog",
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(e.message, self.cmd))
 
         # Add instance without pgdata
@@ -54,8 +58,9 @@ class InitTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, 'Expecting Error due to adding instance without pgdata. Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                "ERROR: Required parameter not specified: PGDATA (-D, --pgdata)\n",
+            self.assertIn(
+                "ERROR: Required parameter not specified: PGDATA (-D, --pgdata)",
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(e.message, self.cmd))
 
         # Clean after yourself
@@ -73,8 +78,9 @@ class InitTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, 'Expecting Error due to initialization in non-empty directory. Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                "ERROR: Instance 'node' does not exist in this backup catalog\n",
+            self.assertIn(
+                "ERROR: Instance 'node' does not exist in this backup catalog",
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
@@ -91,8 +97,9 @@ class InitTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, 'Expecting Error due to initialization with non-absolute path in --backup-path. Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                "ERROR: -B, --backup-path must be an absolute path\n",
+            self.assertIn(
+                "ERROR: -B, --backup-path must be an absolute path",
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
