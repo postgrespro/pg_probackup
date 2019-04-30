@@ -1,7 +1,7 @@
 import unittest
 
 from . import init, merge, option, show, compatibility, \
-    backup_test, delete, delta, restore, validate, \
+    backup, delete, delta, restore, validate, \
     retention, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
     cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
@@ -12,7 +12,7 @@ def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
-    suite.addTests(loader.loadTestsFromModule(backup_test))
+    suite.addTests(loader.loadTestsFromModule(backup))
     suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(checkdb))
     suite.addTests(loader.loadTestsFromModule(config))
