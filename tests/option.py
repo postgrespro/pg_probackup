@@ -42,7 +42,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because '-B' parameter is not specified.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message, 'ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)\n',
+            self.assertIn(
+                'ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
 
@@ -63,8 +65,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because 'instance' parameter is not specified.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: required parameter not specified: --instance\n',
+            self.assertIn(
+                'ERROR: required parameter not specified: --instance',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # backup command failure without backup mode option
@@ -73,7 +76,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because '-b' parameter is not specified.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn('ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)',
+            self.assertIn(
+                'ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -83,8 +87,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because backup-mode parameter is invalid.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: invalid backup-mode "bad"\n',
+            self.assertIn(
+                'ERROR: invalid backup-mode "bad"',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # delete failure without delete options
@@ -94,8 +99,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because delete options are omitted.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: You must specify at least one of the delete options: --expired |--wal |--merge-expired |--delete-invalid |--backup_id\n',
+            self.assertIn(
+                'ERROR: You must specify at least one of the delete options: --expired |--wal |--merge-expired |--delete-invalid |--backup_id',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
 
@@ -106,7 +112,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because backup ID is omitted.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue("option requires an argument -- 'i'" in e.message,
+            self.assertIn(
+                "option requires an argument -- 'i'",
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
@@ -118,12 +126,16 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split(".")[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            pg_options={
-                'max_wal_senders': '2'})
+            base_dir=os.path.join(module_name, fname, 'node'))
 
-        self.assertEqual("INFO: Backup catalog '{0}' successfully inited\n".format(backup_dir),
-            self.init_pb(backup_dir))
+        output = self.init_pb(backup_dir)
+        self.assertIn(
+            "INFO: Backup catalog",
+            output)
+
+        self.assertIn(
+            "successfully inited",
+            output)
         self.add_instance(backup_dir, 'node', node)
 
         node.slow_start()
@@ -138,8 +150,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of garbage in pg_probackup.conf.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: Syntax error in " = INFINITE"\n',
+            self.assertIn(
+                'ERROR: Syntax error in " = INFINITE',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.clean_pb(backup_dir)
@@ -156,8 +169,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of invalid backup-mode in pg_probackup.conf.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: Invalid option "BACKUP_MODE" in file "{0}"\n'.format(conf_file),
+            self.assertIn(
+                'ERROR: Invalid option "BACKUP_MODE" in file',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.clean_pb(backup_dir)
@@ -177,8 +191,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because option system-identifier cannot be specified in command line.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: Option system-identifier cannot be specified in command line\n',
+            self.assertIn(
+                'ERROR: Option system-identifier cannot be specified in command line',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # invalid value in pg_probackup.conf
@@ -191,8 +206,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because option -C should be boolean.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: Invalid option "SMOOTH_CHECKPOINT" in file "{0}"\n'.format(conf_file),
+            self.assertIn(
+                'ERROR: Invalid option "SMOOTH_CHECKPOINT" in file',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.clean_pb(backup_dir)
@@ -209,8 +225,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, 'Expecting Error because of invalid option "TIMELINEID".\n Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertEqual(e.message,
-                'ERROR: Invalid option "TIMELINEID" in file "{0}"\n'.format(conf_file),
+            self.assertIn(
+                'ERROR: Invalid option "TIMELINEID" in file',
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # Clean after yourself
