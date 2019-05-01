@@ -405,7 +405,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		dest_backup->status == BACKUP_STATUS_DONE)
 	{
 		if (rt->no_validate)
-			elog(INFO, "Backup %s is used without validation.", base36enc(dest_backup->start_time));
+			elog(WARNING, "Backup %s is used without validation.", base36enc(dest_backup->start_time));
 		else
 			elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
 	}
