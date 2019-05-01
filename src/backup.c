@@ -3494,6 +3494,30 @@ check_external_for_tablespaces(parray *external_list)
 		}
 	}
 	PQclear(res);
+
+	/* Check that external directories do not overlap */
+	if (parray_num(external_list) < 2)
+		return;
+
+	for (i = 0; i < parray_num(external_list); i++)
+	{
+		char *external_path = parray_get(external_list, i);
+
+		for (j = 0; j < parray_num(external_list); j++)
+		{
+			char *tmp_external_path = parray_get(external_list, j);
+
+			/* skip yourself */
+			if (j == i)
+				continue;
+
+			if (path_is_prefix_of_path(external_path, tmp_external_path))
+				elog(ERROR, "External directory path (-E option) \"%s\" "
+							"contain another external directory \"%s\"",
+							external_path, tmp_external_path);
+
+		}
+	}
 }
 
 /* Get index list for given database */
