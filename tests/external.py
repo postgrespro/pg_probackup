@@ -112,7 +112,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # create directory in external_directory
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
         # FULL backup
@@ -134,7 +133,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # Delta backup without external directory
         self.backup_node(
             backup_dir, 'node', node, backup_type="delta",
-            options=['--external-dirs=none'])
+            options=['--external-dirs=none', '--stream'])
 
         shutil.rmtree(external_dir, ignore_errors=True)
         pgdata = self.pgdata_content(
@@ -149,6 +148,60 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_external_dirs_overlapping(self):
+        """
+        make node, create directory,
+        take backup with two external directories pointing to
+        the same directory, backup should fail
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            set_replication=True)
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        external_dir1 = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2 = self.get_tblspace_path(node, 'external_dir2')
+
+        # create directory in external_directory
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        os.mkdir(external_dir1)
+        os.mkdir(external_dir2)
+
+        # Full backup with external dirs
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=[
+                    "-j", "4", "--stream",
+                    "-E", "{0}{1}{2}{1}{0}".format(
+                        external_dir1,
+                        self.EXTERNAL_DIRECTORY_DELIMITER,
+                        external_dir2,
+                        self.EXTERNAL_DIRECTORY_DELIMITER,
+                        external_dir1)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: External directory path (-E option)' in e.message and
+                'contain another external directory' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
