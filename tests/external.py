@@ -128,6 +128,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             options=[
+                '--stream',
                 '--external-dirs={0}'.format(external_dir)])
 
         # Delta backup without external directory

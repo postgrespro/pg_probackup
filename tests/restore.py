@@ -1344,10 +1344,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'insert into tbl select i from generate_series(0,100000) as i')
 
-        print(node.safe_psql(
-            'postgres',
-            "select pg_relation_size('idx')"))
-
         node.safe_psql(
             'postgres',
             'delete from tbl where i%2 = 0')
@@ -1363,10 +1359,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             'postgres',
             'create extension pageinspect')
-
-        print(node.safe_psql(
-            'postgres',
-            "select * from bt_page_stats('idx',1)"))
 
         node.safe_psql(
             'postgres',
@@ -1413,8 +1405,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 if 'selected new timeline ID' in f.read():
                     break
 
-        with open(node_restored.pg_log_file, 'r') as f:
-                print(f.read())
+        # with open(node_restored.pg_log_file, 'r') as f:
+        #        print(f.read())
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
 
@@ -1905,8 +1897,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node)
 
-        with open(recovery_conf, 'r') as f:
-            print(f.read())
+        # with open(recovery_conf, 'r') as f:
+        #    print(f.read())
 
         hash_1 = hashlib.md5(
             open(recovery_conf, 'rb').read()).hexdigest()
@@ -1916,8 +1908,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node, options=['--recovery-target=latest'])
 
-        with open(recovery_conf, 'r') as f:
-            print(f.read())
+        # with open(recovery_conf, 'r') as f:
+        #     print(f.read())
 
         hash_2 = hashlib.md5(
             open(recovery_conf, 'rb').read()).hexdigest()
@@ -1999,8 +1991,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         with open(recovery_conf, 'r') as f:
             recovery_conf_content = f.read()
 
-        print(recovery_conf_content)
-
         self.assertIn(
             "recovery_target_time = '{0}'".format(target_time),
             recovery_conf_content)
@@ -2027,8 +2017,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         with open(recovery_conf, 'r') as f:
             recovery_conf_content = f.read()
-
-        print(recovery_conf_content)
 
         self.assertIn(
             "recovery_target_xid = '{0}'".format(target_xid),
@@ -2057,8 +2045,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         with open(recovery_conf, 'r') as f:
             recovery_conf_content = f.read()
 
-        print(recovery_conf_content)
-
         self.assertIn(
             "recovery_target_lsn = '{0}'".format(target_lsn),
             recovery_conf_content)
@@ -2085,8 +2071,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         with open(recovery_conf, 'r') as f:
             recovery_conf_content = f.read()
-
-        print(recovery_conf_content)
 
         self.assertIn(
             "recovery_target_name = '{0}'".format(target_name),
