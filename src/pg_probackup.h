@@ -625,8 +625,6 @@ extern void restore_data_file(const char *to_path,
 extern bool copy_file(const char *from_root, fio_location from_location, const char *to_root, fio_location to_location, pgFile *file);
 extern void move_file(const char *from_root, const char *to_root, pgFile *file);
 
-extern void calc_file_checksum(pgFile *file, fio_location location);
-
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */

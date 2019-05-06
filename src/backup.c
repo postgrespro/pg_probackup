@@ -537,7 +537,11 @@ do_backup_instance(void)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
 			if (S_ISREG(file->mode))
-				calc_file_checksum(file, FIO_BACKUP_HOST);
+			{
+				file->crc = pgFileGetCRC(file->path, true, false,
+										 &file->read_size, FIO_BACKUP_HOST);
+				file->write_size = file->read_size;
+			}
 			/* Remove file path root prefix*/
 			if (strstr(file->path, database_path) == file->path)
 			{
@@ -2022,7 +2026,9 @@ pg_stop_backup(pgBackup *backup)
 			if (backup_files_list)
 			{
 				file = pgFileNew(backup_label, true, 0, FIO_BACKUP_HOST);
-				calc_file_checksum(file, FIO_BACKUP_HOST);
+				file->crc = pgFileGetCRC(file->path, true, false,
+										 &file->read_size, FIO_BACKUP_HOST);
+				file->write_size = file->read_size;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -2066,7 +2072,11 @@ pg_stop_backup(pgBackup *backup)
 			{
 				file = pgFileNew(tablespace_map, true, 0, FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
-					calc_file_checksum(file, FIO_BACKUP_HOST);
+				{
+					file->crc = pgFileGetCRC(file->path, true, false,
+											 &file->read_size, FIO_BACKUP_HOST);
+					file->write_size = file->read_size;
+				}
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
 				parray_append(backup_files_list, file);
@@ -2475,7 +2485,9 @@ backup_files(void *arg)
 				if (prev_file && file->exists_in_prev &&
 					buf.st_mtime < current.parent_backup)
 				{
-					calc_file_checksum(file, FIO_DB_HOST);
+					file->crc = pgFileGetCRC(file->path, true, false,
+											 &file->read_size, FIO_DB_HOST);
+					file->write_size = file->read_size;
 					/* ...and checksum is the same... */
 					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
 						skip = true; /* ...skip copying file. */

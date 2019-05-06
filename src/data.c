@@ -1069,20 +1069,6 @@ copy_file(const char *from_root, fio_location from_location,
 }
 
 /*
- * Calculate checksum of various files which are not copied from PGDATA,
- * but created in process of backup, such as stream XLOG files,
- * PG_TABLESPACE_MAP_FILE and PG_BACKUP_LABEL_FILE.
- */
-void
-calc_file_checksum(pgFile *file, fio_location location)
-{
-	Assert(S_ISREG(file->mode));
-
-	file->crc = pgFileGetCRC(file->path, true, false, &file->read_size, location);
-	file->write_size = file->read_size;
-}
-
-/*
  * Validate given page.
  *
  * Returns value:
