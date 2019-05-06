@@ -622,8 +622,9 @@ extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
 							  bool write_header,
 							  uint32 backup_version);
-extern bool copy_file(const char *from_root, fio_location from_location, const char *to_root, fio_location to_location, pgFile *file);
-extern void move_file(const char *from_root, const char *to_root, pgFile *file);
+extern bool copy_file(const char *from_root, fio_location from_location,
+					  const char *to_root, fio_location to_location,
+					  pgFile *file);
 
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
@@ -659,11 +660,8 @@ extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 extern void copy_pgcontrol_file(const char *from_root, fio_location location, const char *to_root, fio_location to_location,
 								pgFile *file);
 
-extern void sanityChecks(void);
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
-extern void remove_trailing_space(char *buf, int comment_mark);
-extern void remove_not_digit(char *buf, size_t len, const char *str);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
