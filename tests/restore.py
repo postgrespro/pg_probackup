@@ -1732,11 +1732,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         node.pgbench_init(scale=3)
-        #pgbench = node.pgbench(options=['-T', '20', '-c', '2'])
-        #pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '20', '-c', '2'])
+        # pgbench.wait()
 
         # Take PAGE from future
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
         with open(
                 os.path.join(
@@ -1755,7 +1756,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
         node.cleanup()
@@ -1964,7 +1966,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with node.connect("postgres") as con:
-            res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
+            res = con.execute(
+                "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
             target_xid = res[0][0]
 
@@ -2101,3 +2104,70 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_smart_restore(self):
+        """
+        make node, create database, take full backup, drop database,
+        take incremental backup and restore it,
+        make sure that files from dropped database are not
+        copied during restore
+        https://github.com/postgrespro/pg_probackup/issues/63
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # create database
+        node.safe_psql(
+            "postgres",
+            "CREATE DATABASE testdb")
+
+        # take FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # drop database
+        node.safe_psql(
+            "postgres",
+            "DROP DATABASE testdb")
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # restore PAGE backup
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=page_id,
+            options=['--no-validate', '--log-level-file=VERBOSE'])
+
+        logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(logfile, 'r') as f:
+                logfile_content = f.read()
+
+        # get delta between FULL and PAGE filelists
+        filelist_full = self.get_backup_filelist(
+            backup_dir, 'node', full_id)
+
+        filelist_page = self.get_backup_filelist(
+            backup_dir, 'node', page_id)
+
+        filelist_diff = self.get_backup_filelist_diff(
+            filelist_full, filelist_page)
+
+        for file in filelist_diff:
+            self.assertNotIn(file, logfile_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+
+# smart restore of external dirs
