@@ -1666,6 +1666,152 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    def test_failed_merge_after_delete(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # add database
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE testdb')
+
+        dboid = node.safe_psql(
+            "postgres",
+            "select oid from pg_database where datname = 'testdb'").rstrip()
+
+        # take FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # drop database
+        node.safe_psql(
+            'postgres',
+            'DROP DATABASE testdb')
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        gdb = self.merge_backup(
+            backup_dir, 'node', page_id,
+            gdb=True, options=['--log-level-console=verbose'])
+        gdb.set_breakpoint('delete_backup_files')
+        gdb.run_until_break()
+
+        gdb.set_breakpoint('parray_bsearch')
+        gdb.continue_execution_until_break()
+
+        gdb.set_breakpoint('pgFileDelete')
+        gdb.continue_execution_until_break(30)
+
+        gdb._execute('signal SIGKILL')
+
+        # backup half-merged
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            full_id, self.show_pb(backup_dir, 'node')[0]['id'])
+
+        db_path = os.path.join(
+            backup_dir, 'backups', 'node',
+            full_id, 'database', 'base', dboid)
+
+        self.assertNotTrue(
+            os.path.isdir(db_path))
+
+        exit(1)
+
+        # try to continue failed MERGE
+        self.merge_backup(backup_dir, "node", backup_id)
+
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.del_test_dir(module_name, fname)
+
+    def test_failed_merge_after_delete_1(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # add database
+        node.pgbench_init(scale=1)
+
+        # take FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # drop database
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        gdb = self.merge_backup(
+            backup_dir, 'node', page_id,
+            gdb=True, options=['--log-level-console=verbose'])
+        gdb.set_breakpoint('delete_backup_files')
+        gdb.run_until_break()
+
+        gdb.set_breakpoint('parray_bsearch')
+        gdb.continue_execution_until_break()
+
+        gdb.set_breakpoint('pgFileDelete')
+        gdb.continue_execution_until_break(30)
+
+        gdb._execute('signal SIGKILL')
+
+        # backup half-merged
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            full_id, self.show_pb(backup_dir, 'node')[0]['id'])
+
+        # restore
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.del_test_dir(module_name, fname)
+
     # @unittest.skip("skip")
     def test_merge_backup_from_future(self):
         """
@@ -1902,6 +2048,66 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     page_id_a3) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_smart_merge(self):
+        """
+        make node, create database, take full backup, drop database,
+        take PAGE backup and merge it into FULL,
+        make sure that files from dropped database are not
+        copied during restore
+        https://github.com/postgrespro/pg_probackup/issues/63
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # create database
+        node.safe_psql(
+            "postgres",
+            "CREATE DATABASE testdb")
+
+        # take FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # drop database
+        node.safe_psql(
+            "postgres",
+            "DROP DATABASE testdb")
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # get delta between FULL and PAGE filelists
+        filelist_full = self.get_backup_filelist(
+            backup_dir, 'node', full_id)
+
+        filelist_page = self.get_backup_filelist(
+            backup_dir, 'node', page_id)
+
+        filelist_diff = self.get_backup_filelist_diff(
+            filelist_full, filelist_page)
+
+        # merge PAGE backup
+        self.merge_backup(
+            backup_dir, 'node', page_id,
+            options=['--log-level-file=VERBOSE'])
+
+        logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(logfile, 'r') as f:
+                logfile_content = f.read()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
