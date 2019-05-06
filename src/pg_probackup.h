@@ -391,7 +391,6 @@ typedef struct BackupPageHeader
 #endif
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
-#define IsReplicationProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "replication") == 0)
 
 /* directory options */
 extern char    *pg_probackup;
