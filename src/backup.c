@@ -81,7 +81,6 @@ bool heapallindexed_is_supported = false;
 /* Backup connections */
 static PGconn *backup_conn = NULL;
 static PGconn *master_conn = NULL;
-static PGconn *backup_conn_replication = NULL;
 
 /* PostgreSQL server version from "backup_conn" */
 static int server_version = 0;
@@ -101,7 +100,6 @@ static void backup_disconnect(bool fatal, void *userdata);
 static void pgdata_basic_setup(bool amcheck_only);
 
 static void *backup_files(void *arg);
-static void *remote_backup_files(void *arg);
 
 static void do_backup_instance(void);
 
@@ -127,9 +125,6 @@ static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
 static void make_pagemap_from_ptrack(parray *files);
 static void *StreamLog(void *arg);
 
-static void get_remote_pgdata_filelist(parray *files);
-static void ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum);
-static void	remote_copy_file(PGconn *conn, pgFile* file);
 static void check_external_for_tablespaces(parray *external_list);
 
 /* Ptrack functions */
@@ -156,324 +151,6 @@ static void set_cfs_datafiles(parray *files, const char *root, char *relative, s
 	if (conn != NULL) PQfinish(conn);			\
 	exit(code);									\
 	}
-
-/* Fill "files" with data about all the files to backup */
-static void
-get_remote_pgdata_filelist(parray *files)
-{
-	PGresult   *res;
-	int resultStatus;
-	int i;
-
-	backup_conn_replication = pgut_connect_replication(instance_config.pghost,
-													   instance_config.pgport,
-													   instance_config.pgdatabase,
-													   instance_config.pguser);
-
-	if (PQsendQuery(backup_conn_replication, "FILE_BACKUP FILELIST") == 0)
-		elog(ERROR,"%s: could not send replication command \"%s\": %s",
-				PROGRAM_NAME, "FILE_BACKUP", PQerrorMessage(backup_conn_replication));
-
-	res = PQgetResult(backup_conn_replication);
-
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		resultStatus = PQresultStatus(res);
-		PQclear(res);
-		elog(ERROR, "cannot start getting FILE_BACKUP filelist: %s, result_status %d",
-			 PQerrorMessage(backup_conn_replication), resultStatus);
-	}
-
-	if (PQntuples(res) < 1)
-		elog(ERROR, "%s: no data returned from server", PROGRAM_NAME);
-
-	for (i = 0; i < PQntuples(res); i++)
-	{
-		ReceiveFileList(files, backup_conn_replication, res, i);
-	}
-
-	res = PQgetResult(backup_conn_replication);
-	if (PQresultStatus(res) != PGRES_COMMAND_OK)
-	{
-		elog(ERROR, "%s: final receive failed: %s",
-				PROGRAM_NAME, PQerrorMessage(backup_conn_replication));
-	}
-
-	PQfinish(backup_conn_replication);
-}
-
-/*
- * workhorse for get_remote_pgdata_filelist().
- * Parse received message into pgFile structure.
- */
-static void
-ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
-{
-	char		filename[MAXPGPATH];
-	pgoff_t		current_len_left = 0;
-	bool		basetablespace;
-	char	   *copybuf = NULL;
-	pgFile	   *pgfile;
-
-	/* What for do we need this basetablespace field?? */
-	basetablespace = PQgetisnull(res, rownum, 0);
-	if (basetablespace)
-		elog(LOG,"basetablespace");
-	else
-		elog(LOG, "basetablespace %s", PQgetvalue(res, rownum, 1));
-
-	res = PQgetResult(conn);
-
-	if (PQresultStatus(res) != PGRES_COPY_OUT)
-		elog(ERROR, "Could not get COPY data stream: %s", PQerrorMessage(conn));
-
-	while (1)
-	{
-		int			r;
-		int			filemode;
-
-		if (copybuf != NULL)
-		{
-			PQfreemem(copybuf);
-			copybuf = NULL;
-		}
-
-		r = PQgetCopyData(conn, &copybuf, 0);
-
-		if (r == -2)
-			elog(ERROR, "Could not read COPY data: %s", PQerrorMessage(conn));
-
-		/* end of copy */
-		if (r == -1)
-			break;
-
-		/* This must be the header for a new file */
-		if (r != 512)
-			elog(ERROR, "Invalid tar block header size: %d\n", r);
-
-		current_len_left = read_tar_number(&copybuf[124], 12);
-
-		/* Set permissions on the file */
-		filemode = read_tar_number(&copybuf[100], 8);
-
-		/* First part of header is zero terminated filename */
-		snprintf(filename, sizeof(filename), "%s", copybuf);
-
-		pgfile = pgFileInit(filename);
-		pgfile->size = current_len_left;
-		pgfile->mode |= filemode;
-
-		if (filename[strlen(filename) - 1] == '/')
-		{
-			/* Symbolic link or directory has size zero */
-			Assert (pgfile->size == 0);
-			/* Ends in a slash means directory or symlink to directory */
-			if (copybuf[156] == '5')
-			{
-				/* Directory */
-				pgfile->mode |= S_IFDIR;
-			}
-			else if (copybuf[156] == '2')
-			{
-				/* Symlink */
-#ifndef WIN32
-				pgfile->mode |= S_IFLNK;
-#else
-				pgfile->mode |= S_IFDIR;
-#endif
-			}
-			else
-				elog(ERROR, "Unrecognized link indicator \"%c\"\n",
-							 copybuf[156]);
-		}
-		else
-		{
-			/* regular file */
-			pgfile->mode |= S_IFREG;
-		}
-
-		parray_append(files, pgfile);
-	}
-
-	if (copybuf != NULL)
-		PQfreemem(copybuf);
-}
-
-/* read one file via replication protocol
- * and write it to the destination subdir in 'backup_path' */
-static void
-remote_copy_file(PGconn *conn, pgFile* file)
-{
-	PGresult	*res;
-	char		*copybuf = NULL;
-	char		buf[32768];
-	FILE		*out;
-	char		database_path[MAXPGPATH];
-	char		to_path[MAXPGPATH];
-	bool skip_padding = false;
-
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
-	join_path_components(to_path, database_path, file->path);
-
-	out = fopen(to_path, PG_BINARY_W);
-	if (out == NULL)
-	{
-		int errno_tmp = errno;
-		elog(ERROR, "cannot open destination file \"%s\": %s",
-			to_path, strerror(errno_tmp));
-	}
-
-	INIT_FILE_CRC32(true, file->crc);
-
-	/* read from stream and write to backup file */
-	while (1)
-	{
-		int			row_length;
-		int			errno_tmp;
-		int			write_buffer_size = 0;
-		if (copybuf != NULL)
-		{
-			PQfreemem(copybuf);
-			copybuf = NULL;
-		}
-
-		row_length = PQgetCopyData(conn, &copybuf, 0);
-
-		if (row_length == -2)
-			elog(ERROR, "Could not read COPY data: %s", PQerrorMessage(conn));
-
-		if (row_length == -1)
-			break;
-
-		if (!skip_padding)
-		{
-			write_buffer_size = Min(row_length, sizeof(buf));
-			memcpy(buf, copybuf, write_buffer_size);
-			COMP_FILE_CRC32(true, file->crc, buf, write_buffer_size);
-
-			/* TODO calc checksum*/
-			if (fwrite(buf, 1, write_buffer_size, out) != write_buffer_size)
-			{
-				errno_tmp = errno;
-				/* oops */
-				FIN_FILE_CRC32(true, file->crc);
-				fclose(out);
-				PQfinish(conn);
-				elog(ERROR, "cannot write to \"%s\": %s", to_path,
-					strerror(errno_tmp));
-			}
-
-			file->read_size += write_buffer_size;
-		}
-		if (file->read_size >= file->size)
-		{
-			skip_padding = true;
-		}
-	}
-
-	res = PQgetResult(conn);
-
-	/* File is not found. That's normal. */
-	if (PQresultStatus(res) != PGRES_COMMAND_OK)
-	{
-		elog(ERROR, "final receive failed: status %d ; %s",PQresultStatus(res), PQerrorMessage(conn));
-	}
-
-	file->write_size = (int64) file->read_size;
-	FIN_FILE_CRC32(true, file->crc);
-
-	fclose(out);
-}
-
-/*
- * Take a remote backup of the PGDATA at a file level.
- * Copy all directories and files listed in backup_files_list.
- */
-static void *
-remote_backup_files(void *arg)
-{
-	int			i;
-	backup_files_arg *arguments = (backup_files_arg *) arg;
-	int			n_backup_files_list = parray_num(arguments->files_list);
-	PGconn	   *file_backup_conn = NULL;
-
-	for (i = 0; i < n_backup_files_list; i++)
-	{
-		char		*query_str;
-		PGresult	*res;
-		char		*copybuf = NULL;
-		pgFile		*file;
-		int			row_length;
-
-		file = (pgFile *) parray_get(arguments->files_list, i);
-
-		/* We have already copied all directories */
-		if (S_ISDIR(file->mode))
-			continue;
-
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
-		file_backup_conn = pgut_connect_replication(instance_config.pghost,
-													instance_config.pgport,
-													instance_config.pgdatabase,
-													instance_config.pguser);
-
-		/* check for interrupt */
-		if (interrupted || thread_interrupted)
-			elog(ERROR, "interrupted during backup");
-
-		query_str = psprintf("FILE_BACKUP FILEPATH '%s'",file->path);
-
-		if (PQsendQuery(file_backup_conn, query_str) == 0)
-			elog(ERROR,"%s: could not send replication command \"%s\": %s",
-				PROGRAM_NAME, query_str, PQerrorMessage(file_backup_conn));
-
-		res = PQgetResult(file_backup_conn);
-
-		/* File is not found. That's normal. */
-		if (PQresultStatus(res) == PGRES_COMMAND_OK)
-		{
-			PQclear(res);
-			PQfinish(file_backup_conn);
-			continue;
-		}
-
-		if (PQresultStatus(res) != PGRES_COPY_OUT)
-		{
-			PQclear(res);
-			PQfinish(file_backup_conn);
-			elog(ERROR, "Could not get COPY data stream: %s", PQerrorMessage(file_backup_conn));
-		}
-
-		/* read the header of the file */
-		row_length = PQgetCopyData(file_backup_conn, &copybuf, 0);
-
-		if (row_length == -2)
-			elog(ERROR, "Could not read COPY data: %s", PQerrorMessage(file_backup_conn));
-
-		/* end of copy TODO handle it */
-		if (row_length == -1)
-			elog(ERROR, "Unexpected end of COPY data");
-
-		if(row_length != 512)
-			elog(ERROR, "Invalid tar block header size: %d\n", row_length);
-		file->size = read_tar_number(&copybuf[124], 12);
-
-		/* receive the data from stream and write to backup file */
-		remote_copy_file(file_backup_conn, file);
-
-		elog(VERBOSE, "File \"%s\". Copied " INT64_FORMAT " bytes",
-			 file->path, file->write_size);
-		PQfinish(file_backup_conn);
-	}
-
-	/* Data files transferring is successful */
-	arguments->ret = 0;
-
-	return NULL;
-}
 
 /*
  * Take a backup of a single postgresql instance.
@@ -513,32 +190,7 @@ do_backup_instance(void)
 	current.data_bytes = 0;
 
 	/* Obtain current timeline */
-	if (IsReplicationProtocol())
-	{
-		char	   *sysidentifier;
-		TimeLineID	starttli;
-		XLogRecPtr	startpos;
-
-		backup_conn_replication = pgut_connect_replication(instance_config.pghost,
-														   instance_config.pgport,
-														   instance_config.pgdatabase,
-														   instance_config.pguser);
-
-		/* Check replication prorocol connection */
-		if (!RunIdentifySystem(backup_conn_replication, &sysidentifier,  &starttli, &startpos, NULL))
-			elog(ERROR, "Failed to send command for remote backup");
-
-// TODO implement the check
-// 		if (&sysidentifier != instance_config.system_identifier)
-// 			elog(ERROR, "Backup data directory was initialized for system id %ld, but target backup directory system id is %ld",
-// 			instance_config.system_identifier, sysidentifier);
-
-		current.tli = starttli;
-
-		PQfinish(backup_conn_replication);
-	}
-	else
-		current.tli = get_current_timeline(false);
+	current.tli = get_current_timeline(false);
 
 	/*
 	 * In incremental backup mode ensure that already-validated
@@ -664,12 +316,8 @@ do_backup_instance(void)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-
-	if (IsReplicationProtocol())
-		get_remote_pgdata_filelist(backup_files_list);
-	else
-		dir_list_file(backup_files_list, instance_config.pgdata,
-					  true, true, false, 0, FIO_DB_HOST);
+	dir_list_file(backup_files_list, instance_config.pgdata,
+				  true, true, false, 0, FIO_DB_HOST);
 
 	/*
 	 * Append to backup list all files and directories
@@ -749,15 +397,12 @@ do_backup_instance(void)
 			char		dirpath[MAXPGPATH];
 			char	   *dir_name;
 
-			if (!IsReplicationProtocol())
-				if (file->external_dir_num)
-					dir_name = GetRelativePath(file->path,
-									parray_get(external_dirs,
-											   file->external_dir_num - 1));
-				else
-					dir_name = GetRelativePath(file->path, instance_config.pgdata);
+			if (file->external_dir_num)
+				dir_name = GetRelativePath(file->path,
+								parray_get(external_dirs,
+											file->external_dir_num - 1));
 			else
-				dir_name = file->path;
+				dir_name = GetRelativePath(file->path, instance_config.pgdata);
 
 			elog(VERBOSE, "Create directory \"%s\"", dir_name);
 
@@ -812,11 +457,7 @@ do_backup_instance(void)
 		backup_files_arg *arg = &(threads_args[i]);
 
 		elog(VERBOSE, "Start thread num: %i", i);
-
-		if (!IsReplicationProtocol())
-			pthread_create(&threads[i], NULL, backup_files, arg);
-		else
-			pthread_create(&threads[i], NULL, remote_backup_files, arg);
+		pthread_create(&threads[i], NULL, backup_files, arg);
 	}
 
 	/* Wait threads */
@@ -896,7 +537,11 @@ do_backup_instance(void)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
 			if (S_ISREG(file->mode))
-				calc_file_checksum(file, FIO_BACKUP_HOST);
+			{
+				file->crc = pgFileGetCRC(file->path, true, false,
+										 &file->read_size, FIO_BACKUP_HOST);
+				file->write_size = file->read_size;
+			}
 			/* Remove file path root prefix*/
 			if (strstr(file->path, database_path) == file->path)
 			{
@@ -1234,8 +879,7 @@ pgdata_basic_setup(bool amcheck_only)
 	 * instance we opened connection to. And that target backup database PGDATA
 	 * belogns to the same instance.
 	 */
-	/* TODO fix it for remote backup */
-	if (!IsReplicationProtocol() && !amcheck_only)
+	if (!amcheck_only)
 		check_system_identifiers();
 
 	if (current.checksum_version)
@@ -2382,7 +2026,9 @@ pg_stop_backup(pgBackup *backup)
 			if (backup_files_list)
 			{
 				file = pgFileNew(backup_label, true, 0, FIO_BACKUP_HOST);
-				calc_file_checksum(file, FIO_BACKUP_HOST);
+				file->crc = pgFileGetCRC(file->path, true, false,
+										 &file->read_size, FIO_BACKUP_HOST);
+				file->write_size = file->read_size;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -2426,7 +2072,11 @@ pg_stop_backup(pgBackup *backup)
 			{
 				file = pgFileNew(tablespace_map, true, 0, FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
-					calc_file_checksum(file, FIO_BACKUP_HOST);
+				{
+					file->crc = pgFileGetCRC(file->path, true, false,
+											 &file->read_size, FIO_BACKUP_HOST);
+					file->write_size = file->read_size;
+				}
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
 				parray_append(backup_files_list, file);
@@ -2835,7 +2485,9 @@ backup_files(void *arg)
 				if (prev_file && file->exists_in_prev &&
 					buf.st_mtime < current.parent_backup)
 				{
-					calc_file_checksum(file, FIO_DB_HOST);
+					file->crc = pgFileGetCRC(file->path, true, false,
+											 &file->read_size, FIO_DB_HOST);
+					file->write_size = file->read_size;
 					/* ...and checksum is the same... */
 					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
 						skip = true; /* ...skip copying file. */
