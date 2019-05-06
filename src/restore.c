@@ -40,7 +40,6 @@ static void create_recovery_conf(time_t backup_id,
 								 pgBackup *backup);
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
-static void remove_deleted_files(pgBackup *backup, parray *external_dirs);
 
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
