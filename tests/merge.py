@@ -1732,7 +1732,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertFalse(
             os.path.isdir(db_path),
-            'Directory {0} should not exists'.format(
+            'Directory {0} should not exist'.format(
                 db_path, full_id))
 
         self.del_test_dir(module_name, fname)
