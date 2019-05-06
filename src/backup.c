@@ -259,7 +259,7 @@ ReceiveFileList(parray* files, PGconn *conn, PGresult *res, int rownum)
 		/* First part of header is zero terminated filename */
 		snprintf(filename, sizeof(filename), "%s", copybuf);
 
-		pgfile = pgFileInit(filename);
+		pgfile = pgFileInit(filename, filename);
 		pgfile->size = current_len_left;
 		pgfile->mode |= filemode;
 
@@ -2381,7 +2381,8 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true, 0, FIO_BACKUP_HOST);
+				file = pgFileNew(backup_label, backup_label, true, 0,
+								 FIO_BACKUP_HOST);
 				calc_file_checksum(file, FIO_BACKUP_HOST);
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
@@ -2424,7 +2425,8 @@ pg_stop_backup(pgBackup *backup)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true, 0, FIO_BACKUP_HOST);
+				file = pgFileNew(tablespace_map, tablespace_map, true, 0,
+								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 					calc_file_checksum(file, FIO_BACKUP_HOST);
 				free(file->path);
@@ -2826,7 +2828,6 @@ backup_files(void *arg)
 									file);
 			else
 			{
-				const char *src;
 				const char *dst;
 				bool		skip = false;
 				char		external_dst[MAXPGPATH];
@@ -2846,16 +2847,12 @@ backup_files(void *arg)
 					makeExternalDirPathByNum(external_dst,
 											 arguments->external_prefix,
 											 file->external_dir_num);
-					src = external_path;
 					dst = external_dst;
 				}
 				else
-				{
-					src = arguments->from_root;
 					dst = arguments->to_root;
-				}
 				if (skip ||
-					!copy_file(src, FIO_DB_HOST, dst, FIO_BACKUP_HOST, file))
+					!copy_file(FIO_DB_HOST, dst, FIO_BACKUP_HOST, file))
 				{
 					/* disappeared file not to be confused with 'not changed' */
 					if (file->write_size != FILE_NOT_FOUND)

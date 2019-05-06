@@ -635,7 +635,6 @@ merge_files(void *arg)
 		}
 		else if (file->external_dir_num)
 		{
-			char	from_root[MAXPGPATH];
 			char	to_root[MAXPGPATH];
 			int		new_dir_num;
 			char   *file_external_path = parray_get(argument->from_external,
@@ -644,16 +643,14 @@ merge_files(void *arg)
 			Assert(argument->from_external);
 			new_dir_num = get_external_index(file_external_path,
 											 argument->from_external);
-			makeExternalDirPathByNum(from_root, argument->from_external_prefix,
-									 file->external_dir_num);
 			makeExternalDirPathByNum(to_root, argument->to_external_prefix,
 									 new_dir_num);
-			copy_file(from_root, FIO_LOCAL_HOST, to_root, FIO_LOCAL_HOST, file);
+			copy_file(FIO_LOCAL_HOST, to_root, FIO_LOCAL_HOST, file);
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
 			copy_pgcontrol_file(argument->from_root, FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
 		else
-			copy_file(argument->from_root, FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
+			copy_file(FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
 
 		/*
 		 * We need to save compression algorithm type of the target backup to be

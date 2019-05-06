@@ -941,8 +941,8 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
  * it is either small control file or already compressed cfs file.
  */
 bool
-copy_file(const char *from_root, fio_location from_location,
-		  const char *to_root, fio_location to_location, pgFile *file)
+copy_file(fio_location from_location, const char *to_root,
+		  fio_location to_location, pgFile *file)
 {
 	char		to_path[MAXPGPATH];
 	FILE	   *in;
@@ -979,7 +979,7 @@ copy_file(const char *from_root, fio_location from_location,
 	}
 
 	/* open backup file for write  */
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	join_path_components(to_path, to_root, file->rel_path);
 	out = fio_fopen(to_path, PG_BINARY_W, to_location);
 	if (out == NULL)
 	{
