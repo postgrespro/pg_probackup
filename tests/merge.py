@@ -1707,6 +1707,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb = self.merge_backup(
             backup_dir, 'node', page_id,
             gdb=True, options=['--log-level-console=verbose'])
+
         gdb.set_breakpoint('delete_backup_files')
         gdb.run_until_break()
 
@@ -1714,7 +1715,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.continue_execution_until_break()
 
         gdb.set_breakpoint('pgFileDelete')
-        gdb.continue_execution_until_break(30)
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
 
@@ -1729,23 +1730,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'backups', 'node',
             full_id, 'database', 'base', dboid)
 
-        self.assertNotTrue(
-            os.path.isdir(db_path))
-
-        exit(1)
-
-        # try to continue failed MERGE
-        self.merge_backup(backup_dir, "node", backup_id)
-
-        self.assertEqual(
-            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
-
-        node.cleanup()
-
-        self.restore_node(backup_dir, 'node', node)
-
-        pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        self.assertFalse(
+            os.path.isdir(db_path),
+            'Directory {0} should not exists'.format(
+                db_path, full_id))
 
         self.del_test_dir(module_name, fname)
 
@@ -1785,6 +1773,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb = self.merge_backup(
             backup_dir, 'node', page_id,
             gdb=True, options=['--log-level-console=verbose'])
+
         gdb.set_breakpoint('delete_backup_files')
         gdb.run_until_break()
 
