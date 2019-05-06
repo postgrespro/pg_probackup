@@ -551,6 +551,35 @@ class ProbackupTest(object):
             #    success, 'Ptrack has failed to register changes in data files'
             # )
 
+    def get_backup_filelist(self, backup_dir, instance, backup_id):
+
+        filelist_path = os.path.join(
+            backup_dir, 'backups',
+            instance, backup_id, 'backup_content.control')
+
+        with open(filelist_path, 'r') as f:
+                filelist_raw = f.read()
+
+        filelist_splitted = filelist_raw.splitlines()
+
+        filelist = {}
+        for line in filelist_splitted:
+            line = json.loads(line)
+            filelist[line['path']] = line
+
+        return filelist
+
+    # return dict of files from filelist A,
+    # which are not exists in filelist_B
+    def get_backup_filelist_diff(self, filelist_A, filelist_B):
+
+        filelist_diff = {}
+        for file in filelist_A:
+            if file not in filelist_B:
+                filelist_diff[file] = filelist_A[file]
+
+        return filelist_diff
+
     def check_ptrack_recovery(self, idx_dict):
         size = idx_dict['size']
         for PageNum in range(size):
