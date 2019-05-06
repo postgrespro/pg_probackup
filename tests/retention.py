@@ -67,7 +67,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    #@unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_retention_window_2(self):
         """purge backups using window-based retention policy"""
         fname = self.id().split('.')[3]
@@ -120,7 +120,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    #@unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_retention_window_3(self):
         """purge all backups using window-based retention policy"""
         fname = self.id().split('.')[3]
@@ -134,8 +134,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-
-        # Take FULL BACKUP
+        # take FULL BACKUP
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
         # Take second FULL BACKUP
@@ -143,7 +142,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Take third FULL BACKUP
         backup_id_3 = self.backup_node(backup_dir, 'node', node)
-
 
         backups = os.path.join(backup_dir, 'backups', 'node')
         for backup in os.listdir(backups):
@@ -183,8 +181,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-
-        # Take FULL BACKUPs
+        # take FULL BACKUPs
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
         backup_id_2 = self.backup_node(backup_dir, 'node', node)
@@ -245,9 +242,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-
-        # Take FULL BACKUPs
-
+        # take FULL BACKUPs
         backup_id_a = self.backup_node(backup_dir, 'node', node)
         backup_id_b = self.backup_node(backup_dir, 'node', node)
 
@@ -334,7 +329,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
                     datetime.now() - timedelta(days=3)))
 
-
         self.delete_expired(
             backup_dir, 'node',
             options=['--retention-window=1', '--expired'])
@@ -361,8 +355,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-
-        # Take FULL BACKUPs
+        # take FULL BACKUPs
         backup_id_a = self.backup_node(backup_dir, 'node', node)
         backup_id_b = self.backup_node(backup_dir, 'node', node)
 
@@ -710,7 +703,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--retention-window=1', '--expired', '--merge-expired'])
 
-
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
         self.assertEqual(
@@ -1004,7 +996,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             "INFO: Delete: {0}".format(
                 page_id_a1), output)
 
-
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[2]['id'],
             page_id_b3)
@@ -1118,7 +1109,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
-
 
     # @unittest.skip("skip")
     def test_window_chains_1(self):
@@ -1245,4 +1235,4 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page')
 
         # Change FULLb backup status to ERROR
-        #self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+        # self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')

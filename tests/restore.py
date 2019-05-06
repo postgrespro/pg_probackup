@@ -2168,6 +2168,3 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
-
-
-# smart restore of external dirs
