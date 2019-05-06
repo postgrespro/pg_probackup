@@ -624,9 +624,6 @@ extern void restore_data_file(const char *to_path,
 							  uint32 backup_version);
 extern bool copy_file(const char *from_root, fio_location from_location, const char *to_root, fio_location to_location, pgFile *file);
 extern void move_file(const char *from_root, const char *to_root, pgFile *file);
-extern void push_wal_file(const char *from_path, const char *to_path,
-						  bool is_compress, bool overwrite);
-extern void get_wal_file(const char *from_path, const char *to_path);
 
 extern void calc_file_checksum(pgFile *file, fio_location location);
 
