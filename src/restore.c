@@ -21,9 +21,10 @@ typedef struct
 {
 	parray	   *files;
 	pgBackup   *backup;
-	parray	   *dest_external_dirs;
 	parray	   *external_dirs;
 	char	   *external_prefix;
+	parray	   *dest_external_dirs;
+	parray	   *dest_files;
 
 	/*
 	 * Return value from the thread.
@@ -32,14 +33,13 @@ typedef struct
 	int			ret;
 } restore_files_arg;
 
-static void restore_backup(pgBackup *backup, const char *external_dir_str,
-						   parray **external_dirs);
+static void restore_backup(pgBackup *backup, parray *dest_external_dirs,
+						   parray *dest_files);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
-static void remove_deleted_files(pgBackup *backup, parray *external_dirs);
 
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
@@ -423,7 +423,47 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (is_restore)
 	{
 		parray	   *dest_external_dirs = NULL;
+		parray	   *dest_files;
+		char		control_file[MAXPGPATH],
+					dest_backup_path[MAXPGPATH];
+		int			i;
 
+		/*
+		 * Preparations for actual restoring.
+		 */
+		pgBackupGetPath(dest_backup, control_file, lengthof(control_file),
+						DATABASE_FILE_LIST);
+		dest_files = dir_read_file_list(NULL, NULL, control_file,
+										FIO_BACKUP_HOST);
+		parray_qsort(dest_files, pgFileCompareRelPathWithExternal);
+
+		/*
+		 * Restore dest_backup internal directories.
+		 */
+		pgBackupGetPath(dest_backup, dest_backup_path,
+						lengthof(dest_backup_path), NULL);
+		create_data_directories(instance_config.pgdata, dest_backup_path, true,
+								FIO_DB_HOST);
+
+		/*
+		 * Restore dest_backup external directories.
+		 */
+		if (dest_backup->external_dir_str && !skip_external_dirs)
+		{
+			dest_external_dirs = make_external_directory_list(
+												dest_backup->external_dir_str,
+												true);
+			if (parray_num(dest_external_dirs) > 0)
+				elog(LOG, "Restore external directories");
+
+			for (i = 0; i < parray_num(dest_external_dirs); i++)
+				fio_mkdir(parray_get(dest_external_dirs, i),
+						  DIR_PERMISSION, FIO_DB_HOST);
+		}
+
+		/*
+		 * At least restore backups files starting from the parent backup.
+		 */
 		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
@@ -441,19 +481,14 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			if (rt->no_validate && !lock_backup(backup))
 				elog(ERROR, "Cannot lock backup directory");
 
-			restore_backup(backup, dest_backup->external_dir_str,
-						   &dest_external_dirs);
+			restore_backup(backup, dest_external_dirs, dest_files);
 		}
-
-		/*
-		 * Delete files which are not in dest backup file list. Files which were
-		 * deleted between previous and current backup are not in the list.
-		 */
-		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
-			remove_deleted_files(dest_backup, dest_external_dirs);
 
 		if (dest_external_dirs != NULL)
 			free_dir_list(dest_external_dirs);
+
+		parray_walk(dest_files, pgFileFree);
+		parray_free(dest_files);
 
 		/* Create recovery.conf with given recovery target parameters */
 		create_recovery_conf(target_backup_id, rt, dest_backup);
@@ -473,16 +508,14 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
  * Restore one backup.
  */
 void
-restore_backup(pgBackup *backup, const char *external_dir_str,
-			   parray **external_dirs)
+restore_backup(pgBackup *backup, parray *dest_external_dirs, parray *dest_files)
 {
 	char		timestamp[100];
-	char		this_backup_path[MAXPGPATH];
 	char		database_path[MAXPGPATH];
 	char		external_prefix[MAXPGPATH];
 	char		list_path[MAXPGPATH];
 	parray	   *files;
-	parray	   *backup_external_dirs = NULL;
+	parray	   *external_dirs = NULL;
 	int			i;
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
@@ -505,33 +538,11 @@ restore_backup(pgBackup *backup, const char *external_dir_str,
 			backup->wal_block_size, XLOG_BLCKSZ);
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	elog(LOG, "restoring database from backup %s", timestamp);
-
-	/*
-	 * Restore backup directories.
-	 * this_backup_path = $BACKUP_PATH/backups/instance_name/backup_id
-	 */
-	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	create_data_directories(instance_config.pgdata, this_backup_path, true,
-							FIO_DB_HOST);
-
-	if (external_dir_str && !skip_external_dirs &&
-		/* Make external directories only once */
-		*external_dirs == NULL)
-	{
-		*external_dirs = make_external_directory_list(external_dir_str, true);
-		for (i = 0; i < parray_num(*external_dirs); i++)
-		{
-			char	   *external_path = parray_get(*external_dirs, i);
-
-			fio_mkdir(external_path, DIR_PERMISSION, FIO_DB_HOST);
-		}
-	}
+	elog(LOG, "Restoring database from backup %s", timestamp);
 
 	if (backup->external_dir_str)
-		backup_external_dirs = make_external_directory_list(
-													backup->external_dir_str,
-													true);
+		external_dirs = make_external_directory_list(backup->external_dir_str,
+													 true);
 
 	/*
 	 * Get list of files which need to be restored.
@@ -558,17 +569,19 @@ restore_backup(pgBackup *backup, const char *external_dir_str,
 		 * If the entry was an external directory, create it in the backup.
 		 */
 		if (!skip_external_dirs &&
-			file->external_dir_num && S_ISDIR(file->mode))
+			file->external_dir_num && S_ISDIR(file->mode) &&
+			/* Do not create unnecessary external directories */
+			parray_bsearch(dest_files, file, pgFileCompareRelPathWithExternal))
 		{
 			char	   *external_path;
 
-			if (!backup_external_dirs ||
-				parray_num(backup_external_dirs) < file->external_dir_num - 1)
+			if (!external_dirs ||
+				parray_num(external_dirs) < file->external_dir_num - 1)
 				elog(ERROR, "Inconsistent external directory backup metadata");
 
-			external_path = parray_get(backup_external_dirs,
-										file->external_dir_num - 1);
-			if (backup_contains_external(external_path, *external_dirs))
+			external_path = parray_get(external_dirs,
+									   file->external_dir_num - 1);
+			if (backup_contains_external(external_path, dest_external_dirs))
 			{
 				char		container_dir[MAXPGPATH];
 				char		dirpath[MAXPGPATH];
@@ -598,9 +611,10 @@ restore_backup(pgBackup *backup, const char *external_dir_str,
 
 		arg->files = files;
 		arg->backup = backup;
-		arg->dest_external_dirs = *external_dirs;
-		arg->external_dirs = backup_external_dirs;
+		arg->external_dirs = external_dirs;
 		arg->external_prefix = external_prefix;
+		arg->dest_external_dirs = dest_external_dirs;
+		arg->dest_files = dest_files;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -627,107 +641,10 @@ restore_backup(pgBackup *backup, const char *external_dir_str,
 	parray_walk(files, pgFileFree);
 	parray_free(files);
 
-	if (backup_external_dirs != NULL)
-		free_dir_list(backup_external_dirs);
+	if (external_dirs != NULL)
+		free_dir_list(external_dirs);
 
-	if (logger_config.log_level_console <= LOG ||
-		logger_config.log_level_file <= LOG)
-		elog(LOG, "restore %s backup completed", base36enc(backup->start_time));
-}
-
-/*
- * Delete files which are not in backup's file list from target pgdata.
- * It is necessary to restore incremental backup correctly.
- * Files which were deleted between previous and current backup
- * are not in the backup's filelist.
- */
-static void
-remove_deleted_files(pgBackup *backup, parray *external_dirs)
-{
-	parray	   *files;
-	parray	   *files_restored;
-	char		filelist_path[MAXPGPATH];
-	char		external_prefix[MAXPGPATH];
-	int			i;
-
-	pgBackupGetPath(backup, filelist_path, lengthof(filelist_path),
-					DATABASE_FILE_LIST);
-	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix),
-					EXTERNAL_DIR);
-	/* Read backup's filelist using target database path as base path */
-	files = dir_read_file_list(instance_config.pgdata, external_prefix,
-							   filelist_path, FIO_BACKUP_HOST);
-	/* Replace external prefix with full path */
-	if (external_dirs)
-	{
-		for (i = 0; i < parray_num(files); i++)
-		{
-			pgFile	   *file = (pgFile *) parray_get(files, i);
-
-			if (file->external_dir_num > 0)
-			{
-				char	   *external_path = parray_get(external_dirs,
-													file->external_dir_num - 1);
-				char		container_dir[MAXPGPATH];
-				char	   *rel_path;
-				char		new_path[MAXPGPATH];
-
-				makeExternalDirPathByNum(container_dir, external_prefix,
-										 file->external_dir_num);
-				rel_path = GetRelativePath(file->path, container_dir);
-				join_path_components(new_path, external_path, rel_path);
-
-				pfree(file->path);
-				file->path = pg_strdup(new_path);
-			}
-		}
-	}
-	parray_qsort(files, pgFileComparePathDesc);
-
-	/* Get list of files actually existing in target database */
-	files_restored = parray_new();
-	dir_list_file(files_restored, instance_config.pgdata, true, true, false, 0,
-				  FIO_DB_HOST);
-	if (external_dirs)
-		for (i = 0; i < parray_num(external_dirs); i++)
-		{
-			parray	   *external_files;
-
-			/*
-			 * external_dirs paths already remmaped.
-			 */
-
-			external_files = parray_new();
-			dir_list_file(external_files, (char *) parray_get(external_dirs, i),
-						  true, true, false, 0, FIO_DB_HOST);
-			if (parray_num(external_files) > 0)
-				parray_concat(files_restored, external_files);
-
-			parray_free(external_files);
-		}
-	/* To delete from leaf, sort in reversed order */
-	parray_qsort(files_restored, pgFileComparePathDesc);
-
-	for (i = 0; i < parray_num(files_restored); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files_restored, i);
-
-		/* If the file is not in the file list, delete it */
-		if (parray_bsearch(files, file, pgFileComparePathDesc) == NULL)
-		{
-			pgFileDelete(file);
-			if (logger_config.log_level_console <= LOG ||
-				logger_config.log_level_file <= LOG)
-				elog(LOG, "deleted %s", GetRelativePath(file->path,
-														instance_config.pgdata));
-		}
-	}
-
-	/* cleanup */
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-	parray_walk(files_restored, pgFileFree);
-	parray_free(files_restored);
+	elog(LOG, "Restore %s backup completed", base36enc(backup->start_time));
 }
 
 /*
@@ -742,7 +659,6 @@ restore_files(void *arg)
 	for (i = 0; i < parray_num(arguments->files); i++)
 	{
 		char		from_root[MAXPGPATH];
-		char	   *rel_path;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 
 		if (!pg_atomic_test_set_flag(&file->lock))
@@ -753,13 +669,12 @@ restore_files(void *arg)
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "interrupted during restore database");
-
-		rel_path = GetRelativePath(file->path,from_root);
+			elog(ERROR, "Interrupted during restore database");
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%lu). Process file %s ",
-				 i + 1, (unsigned long) parray_num(arguments->files), rel_path);
+				 i + 1, (unsigned long) parray_num(arguments->files),
+				 file->rel_path);
 
 		/*
 		 * For PAGE and PTRACK backups skip files which haven't changed
@@ -783,7 +698,7 @@ restore_files(void *arg)
 		}
 
 		/* Do not restore tablespace_map file */
-		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, rel_path))
+		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, file->rel_path))
 		{
 			elog(VERBOSE, "Skip tablespace_map");
 			continue;
@@ -793,6 +708,14 @@ restore_files(void *arg)
 		if (skip_external_dirs && file->external_dir_num > 0)
 		{
 			elog(VERBOSE, "Skip external directory file");
+			continue;
+		}
+
+		/* Skip unnecessary file */
+		if (parray_bsearch(arguments->dest_files, file,
+						   pgFileCompareRelPathWithExternal) == NULL)
+		{
+			elog(VERBOSE, "Skip removed file");
 			continue;
 		}
 
@@ -809,7 +732,7 @@ restore_files(void *arg)
 			char		to_path[MAXPGPATH];
 
 			join_path_components(to_path, instance_config.pgdata,
-								 file->path + strlen(from_root) + 1);
+								 file->rel_path);
 			restore_data_file(to_path, file,
 							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
 							  false,
@@ -821,7 +744,7 @@ restore_files(void *arg)
 												   file->external_dir_num - 1);
 			if (backup_contains_external(external_path,
 										 arguments->dest_external_dirs))
-				copy_file(arguments->external_prefix, FIO_BACKUP_HOST,
+				copy_file(FIO_BACKUP_HOST,
 						  external_path, FIO_DB_HOST, file);
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
@@ -829,7 +752,7 @@ restore_files(void *arg)
 								instance_config.pgdata, FIO_DB_HOST,
 								file);
 		else
-			copy_file(from_root, FIO_BACKUP_HOST,
+			copy_file(FIO_BACKUP_HOST,
 					  instance_config.pgdata, FIO_DB_HOST,
 					  file);
 

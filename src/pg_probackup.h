@@ -123,7 +123,8 @@ typedef struct pgFile
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char	*linked;		/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char	*path;			/* absolute path of the file */
+	char	   *path;		/* absolute path of the file */
+	char	   *rel_path;	/* relative path of the file */
 	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
 	Oid		dbOid;			/* dbOid extracted from path, if applicable */
 	Oid		relOid;			/* relOid extracted from path, if applicable */
@@ -354,6 +355,8 @@ typedef struct BackupPageHeader
 /*
  * return pointer that exceeds the length of prefix from character string.
  * ex. str="/xxx/yyy/zzz", prefix="/xxx/yyy", return="zzz".
+ *
+ * Deprecated. Do not use this in new code.
  */
 #define GetRelativePath(str, prefix) \
 	((strlen(str) <= strlen(prefix)) ? "" : str + strlen(prefix) + 1)
@@ -597,14 +600,17 @@ extern bool dir_is_empty(const char *path, fio_location location);
 extern bool fileExists(const char *path, fio_location location);
 extern size_t pgFileSize(const char *path);
 
-extern pgFile *pgFileNew(const char *path, bool omit_symlink, int external_dir_num, fio_location location);
-extern pgFile *pgFileInit(const char *path);
+extern pgFile *pgFileNew(const char *path, const char *rel_path,
+						 bool omit_symlink, int external_dir_num,
+						 fio_location location);
+extern pgFile *pgFileInit(const char *path, const char *rel_path);
 extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
 							 bool raise_on_deleted, size_t *bytes_read, fio_location location);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathWithExternal(const void *f1, const void *f2);
+extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileComparePathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
@@ -622,9 +628,8 @@ extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
 							  bool write_header,
 							  uint32 backup_version);
-extern bool copy_file(const char *from_root, fio_location from_location,
-					  const char *to_root, fio_location to_location,
-					  pgFile *file);
+extern bool copy_file(fio_location from_location, const char *to_root,
+					  fio_location to_location, pgFile *file);
 
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);

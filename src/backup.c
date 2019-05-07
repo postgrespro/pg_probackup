@@ -2025,7 +2025,8 @@ pg_stop_backup(pgBackup *backup)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, true, 0, FIO_BACKUP_HOST);
+				file = pgFileNew(backup_label, backup_label, true, 0,
+								 FIO_BACKUP_HOST);
 				file->crc = pgFileGetCRC(file->path, true, false,
 										 &file->read_size, FIO_BACKUP_HOST);
 				file->write_size = file->read_size;
@@ -2070,7 +2071,8 @@ pg_stop_backup(pgBackup *backup)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, true, 0, FIO_BACKUP_HOST);
+				file = pgFileNew(tablespace_map, tablespace_map, true, 0,
+								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 				{
 					file->crc = pgFileGetCRC(file->path, true, false,
@@ -2476,7 +2478,6 @@ backup_files(void *arg)
 									file);
 			else
 			{
-				const char *src;
 				const char *dst;
 				bool		skip = false;
 				char		external_dst[MAXPGPATH];
@@ -2498,16 +2499,12 @@ backup_files(void *arg)
 					makeExternalDirPathByNum(external_dst,
 											 arguments->external_prefix,
 											 file->external_dir_num);
-					src = external_path;
 					dst = external_dst;
 				}
 				else
-				{
-					src = arguments->from_root;
 					dst = arguments->to_root;
-				}
 				if (skip ||
-					!copy_file(src, FIO_DB_HOST, dst, FIO_BACKUP_HOST, file))
+					!copy_file(FIO_DB_HOST, dst, FIO_BACKUP_HOST, file))
 				{
 					/* disappeared file not to be confused with 'not changed' */
 					if (file->write_size != FILE_NOT_FOUND)

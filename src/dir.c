@@ -120,13 +120,14 @@ typedef struct TablespaceCreatedList
 
 static int BlackListCompare(const void *str1, const void *str2);
 
-static char dir_check_file(const char *root, pgFile *file);
-static void dir_list_file_internal(parray *files, const char *root,
-								   pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list, int external_dir_num, fio_location location);
+static char dir_check_file(pgFile *file);
+static void dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
+								   bool omit_symlink, parray *black_list,
+								   int external_dir_num, fio_location location);
 
-static void list_data_directories(parray *files, const char *path, bool is_root,
-								  bool exclude, fio_location location);
+static void list_data_directories(parray *files, const char *root,
+								  const char *rel_path, bool exclude,
+								  fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
 
@@ -163,8 +164,8 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, bool omit_symlink, int external_dir_num,
-		  fio_location location)
+pgFileNew(const char *path, const char *rel_path, bool omit_symlink,
+		  int external_dir_num, fio_location location)
 {
 	struct stat		st;
 	pgFile		   *file;
@@ -179,7 +180,7 @@ pgFileNew(const char *path, bool omit_symlink, int external_dir_num,
 			strerror(errno));
 	}
 
-	file = pgFileInit(path);
+	file = pgFileInit(path, rel_path);
 	file->size = st.st_size;
 	file->mode = st.st_mode;
 	file->external_dir_num = external_dir_num;
@@ -188,36 +189,22 @@ pgFileNew(const char *path, bool omit_symlink, int external_dir_num,
 }
 
 pgFile *
-pgFileInit(const char *path)
+pgFileInit(const char *path, const char *rel_path)
 {
 	pgFile	   *file;
 	char	   *file_name;
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
+	MemSet(file, 0, sizeof(pgFile));
 
-	file->name = NULL;
-
-	file->size = 0;
-	file->mode = 0;
-	file->read_size = 0;
-	file->write_size = 0;
-	file->crc = 0;
-	file->is_datafile = false;
-	file->linked = NULL;
-	file->pagemap.bitmap = NULL;
-	file->pagemap.bitmapsize = PageBitmapIsEmpty;
-	file->pagemap_isabsent = false;
-	file->tblspcOid = 0;
-	file->dbOid = 0;
-	file->relOid = 0;
-	file->segno = 0;
-	file->is_database = false;
 	file->forkName = pgut_malloc(MAXPGPATH);
 	file->forkName[0] = '\0';
 
-	file->path = pgut_malloc(strlen(path) + 1);
-	strcpy(file->path, path);		/* enough buffer size guaranteed */
+	file->path = pgut_strdup(path);
 	canonicalize_path(file->path);
+
+	file->rel_path = pgut_strdup(rel_path);
+	canonicalize_path(file->rel_path);
 
 	/* Get file name from the path */
 	file_name = last_dir_separator(file->path);
@@ -229,12 +216,9 @@ pgFileInit(const char *path)
 		file->name = file_name;
 	}
 
-	file->is_cfs = false;
-	file->exists_in_prev = false;	/* can change only in Incremental backup. */
 	/* Number of blocks readed during backup */
 	file->n_blocks = BLOCKNUM_INVALID;
-	file->compress_alg = NOT_DEFINED_COMPRESS;
-	file->external_dir_num = 0;
+
 	return file;
 }
 
@@ -341,8 +325,9 @@ pgFileFree(void *file)
 	if (file_ptr->forkName)
 		free(file_ptr->forkName);
 
-	free(file_ptr->path);
-	free(file);
+	pfree(file_ptr->path);
+	pfree(file_ptr->rel_path);
+	pfree(file);
 }
 
 /* Compare two pgFile with their path in ascending order of ASCII code. */
@@ -368,6 +353,30 @@ pgFileComparePathWithExternal(const void *f1, const void *f2)
 
 	res = strcmp(f1p->path, f2p->path);
 	if (!res)
+	{
+		if (f1p->external_dir_num > f2p->external_dir_num)
+			return 1;
+		else if (f1p->external_dir_num < f2p->external_dir_num)
+			return -1;
+		else
+			return 0;
+	}
+	return res;
+}
+
+/*
+ * Compare two pgFile with their relative path and external_dir_num in ascending
+ * order of ASСII code.
+ */
+int
+pgFileCompareRelPathWithExternal(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	pgFile *f2p = *(pgFile **)f2;
+	int 		res;
+
+	res = strcmp(f1p->rel_path, f2p->rel_path);
+	if (res == 0)
 	{
 		if (f1p->external_dir_num > f2p->external_dir_num)
 			return 1;
@@ -445,7 +454,8 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
 	if (root && instance_config.pgdata &&
-		strcmp(root, instance_config.pgdata) == 0 && fileExists(path, FIO_BACKUP_HOST))
+		strcmp(root, instance_config.pgdata) == 0 &&
+		fileExists(path, FIO_BACKUP_HOST))
 	{
 		FILE	   *black_list_file = NULL;
 		char		buf[MAXPGPATH * 2];
@@ -475,7 +485,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, omit_symlink, external_dir_num, location);
+	file = pgFileNew(root, "", omit_symlink, external_dir_num, location);
 	if (file == NULL)
 	{
 		/* For external directory this is not ok */
@@ -497,7 +507,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, root, file, exclude, omit_symlink, black_list,
+	dir_list_file_internal(files, file, exclude, omit_symlink, black_list,
 						   external_dir_num, location);
 
 	if (!add_root)
@@ -528,15 +538,13 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
  * - datafiles
  */
 static char
-dir_check_file(const char *root, pgFile *file)
+dir_check_file(pgFile *file)
 {
-	const char *rel_path;
 	int			i;
 	int			sscanf_res;
 	bool		in_tablespace = false;
 
-	rel_path = GetRelativePath(file->path, root);
-	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path);
+	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path);
 
 	/* Check if we need to exclude file by name */
 	if (S_ISREG(file->mode))
@@ -607,9 +615,9 @@ dir_check_file(const char *root, pgFile *file)
 		 * Valid path for the tablespace is
 		 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
 		 */
-		if (!path_is_prefix_of_path(PG_TBLSPC_DIR, rel_path))
+		if (!path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
 			return CHECK_FALSE;
-		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%s",
+		sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s",
 							&tblspcOid, tmp_rel_path);
 		if (sscanf_res == 0)
 			return CHECK_FALSE;
@@ -619,7 +627,7 @@ dir_check_file(const char *root, pgFile *file)
 	{
 		char		tmp_rel_path[MAXPGPATH];
 
-		sscanf_res = sscanf(rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
+		sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
 							&(file->tblspcOid), tmp_rel_path,
 							&(file->dbOid));
 
@@ -634,18 +642,18 @@ dir_check_file(const char *root, pgFile *file)
 			strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
 			file->is_database = true;
 	}
-	else if (path_is_prefix_of_path("global", rel_path))
+	else if (path_is_prefix_of_path("global", file->rel_path))
 	{
 		file->tblspcOid = GLOBALTABLESPACE_OID;
 
 		if (S_ISDIR(file->mode) && strcmp(file->name, "global") == 0)
 			file->is_database = true;
 	}
-	else if (path_is_prefix_of_path("base", rel_path))
+	else if (path_is_prefix_of_path("base", file->rel_path))
 	{
 		file->tblspcOid = DEFAULTTABLESPACE_OID;
 
-		sscanf(rel_path, "base/%u/", &(file->dbOid));
+		sscanf(file->rel_path, "base/%u/", &(file->dbOid));
 
 		if (S_ISDIR(file->mode) && strcmp(file->name, "base") != 0)
 			file->is_database = true;
@@ -712,12 +720,13 @@ dir_check_file(const char *root, pgFile *file)
 }
 
 /*
- * List files in "root" directory.  If "exclude" is true do not add into "files"
- * files from pgdata_exclude_files and directories from pgdata_exclude_dir.
+ * List files in parent->path directory.  If "exclude" is true do not add into
+ * "files" files from pgdata_exclude_files and directories from
+ * pgdata_exclude_dir.
  */
 static void
-dir_list_file_internal(parray *files, const char *root, pgFile *parent,
-					   bool exclude, bool omit_symlink, parray *black_list,
+dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
+					   bool omit_symlink, parray *black_list,
 					   int external_dir_num, fio_location location)
 {
 	DIR		    *dir;
@@ -735,7 +744,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 			/* Maybe the directory was removed */
 			return;
 		}
-		elog(ERROR, "cannot open directory \"%s\": %s",
+		elog(ERROR, "Cannot open directory \"%s\": %s",
 			 parent->path, strerror(errno));
 	}
 
@@ -744,11 +753,14 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 	{
 		pgFile	   *file;
 		char		child[MAXPGPATH];
+		char		rel_child[MAXPGPATH];
 		char		check_res;
 
 		join_path_components(child, parent->path, dent->d_name);
+		join_path_components(rel_child, parent->rel_path, dent->d_name);
 
-		file = pgFileNew(child, omit_symlink, external_dir_num, location);
+		file = pgFileNew(child, rel_child, omit_symlink, external_dir_num,
+						 location);
 		if (file == NULL)
 			continue;
 
@@ -782,7 +794,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 
 		if (exclude)
 		{
-			check_res = dir_check_file(root, file);
+			check_res = dir_check_file(file);
 			if (check_res == CHECK_FALSE)
 			{
 				/* Skip */
@@ -804,7 +816,7 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 		 * recursively.
 		 */
 		if (S_ISDIR(file->mode))
-			dir_list_file_internal(files, root, file, exclude, omit_symlink,
+			dir_list_file_internal(files, file, exclude, omit_symlink,
 								   black_list, external_dir_num, location);
 	}
 
@@ -812,32 +824,35 @@ dir_list_file_internal(parray *files, const char *root, pgFile *parent,
 	{
 		int			errno_tmp = errno;
 		fio_closedir(dir);
-		elog(ERROR, "cannot read directory \"%s\": %s",
+		elog(ERROR, "Cannot read directory \"%s\": %s",
 			 parent->path, strerror(errno_tmp));
 	}
 	fio_closedir(dir);
 }
 
 /*
- * List data directories excluding directories from
- * pgdata_exclude_dir array.
+ * List data directories excluding directories from pgdata_exclude_dir array.
  *
- * **is_root** is a little bit hack. We exclude only first level of directories
- * and on the first level we check all files and directories.
+ * We exclude first level of directories and on the first level we check all
+ * files and directories.
  */
 static void
-list_data_directories(parray *files, const char *path, bool is_root,
+list_data_directories(parray *files, const char *root, const char *rel_path,
 					  bool exclude, fio_location location)
 {
+	char		full_path[MAXPGPATH];
 	DIR		   *dir;
 	struct dirent *dent;
 	int			prev_errno;
 	bool		has_child_dirs = false;
 
+	join_path_components(full_path, root, rel_path);
+
 	/* open directory and list contents */
-	dir = fio_opendir(path, location);
+	dir = fio_opendir(full_path, location);
 	if (dir == NULL)
-		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
+		elog(ERROR, "Cannot open directory \"%s\": %s", full_path,
+			 strerror(errno));
 
 	errno = 0;
 	while ((dent = fio_readdir(dir)))
@@ -851,16 +866,17 @@ list_data_directories(parray *files, const char *path, bool is_root,
 			strcmp(dent->d_name, "..") == 0)
 			continue;
 
-		join_path_components(child, path, dent->d_name);
+		/* Make full child path */
+		join_path_components(child, full_path, dent->d_name);
 
 		if (fio_stat(child, &st, false, location) == -1)
-			elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
+			elog(ERROR, "Cannot stat file \"%s\": %s", child, strerror(errno));
 
 		if (!S_ISDIR(st.st_mode))
 			continue;
 
 		/* Check for exclude for the first level of listing */
-		if (is_root && exclude)
+		if (exclude && rel_path[0] == '\0')
 		{
 			int			i;
 
@@ -877,24 +893,22 @@ list_data_directories(parray *files, const char *path, bool is_root,
 			continue;
 
 		has_child_dirs = true;
-		list_data_directories(files, child, false, exclude, location);
+		/* Make relative child path */
+		join_path_components(child, rel_path, dent->d_name);
+		list_data_directories(files, root, child, exclude, location);
 	}
 
 	/* List only full and last directories */
-	if (!is_root && !has_child_dirs)
-	{
-		pgFile	   *dir;
-
-		dir = pgFileNew(path, false, 0, location);
-		parray_append(files, dir);
-	}
+	if (rel_path[0] != '\0' && !has_child_dirs)
+		parray_append(files,
+					  pgFileNew(full_path, rel_path, false, 0, location));
 
 	prev_errno = errno;
 	fio_closedir(dir);
 
 	if (prev_errno && prev_errno != ENOENT)
-		elog(ERROR, "cannot read directory \"%s\": %s",
-			 path, strerror(prev_errno));
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+			 full_path, strerror(prev_errno));
 }
 
 /*
@@ -1053,23 +1067,22 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 	}
 
 	join_path_components(backup_database_dir, backup_dir, DATABASE_DIR);
-	list_data_directories(dirs, backup_database_dir, true, false,
+	list_data_directories(dirs, backup_database_dir, "", false,
 						  FIO_BACKUP_HOST);
 
-	elog(LOG, "restore directories and symlinks...");
+	elog(LOG, "Restore directories and symlinks...");
 
 	for (i = 0; i < parray_num(dirs); i++)
 	{
 		pgFile	   *dir = (pgFile *) parray_get(dirs, i);
-		char	   *relative_ptr = GetRelativePath(dir->path, backup_database_dir);
 
 		Assert(S_ISDIR(dir->mode));
 
 		/* Try to create symlink and linked directory if necessary */
 		if (extract_tablespaces &&
-			path_is_prefix_of_path(PG_TBLSPC_DIR, relative_ptr))
+			path_is_prefix_of_path(PG_TBLSPC_DIR, dir->rel_path))
 		{
-			char	   *link_ptr = GetRelativePath(relative_ptr, PG_TBLSPC_DIR),
+			char	   *link_ptr = GetRelativePath(dir->rel_path, PG_TBLSPC_DIR),
 					   *link_sep,
 					   *tmp_ptr;
 			char		link_name[MAXPGPATH];
@@ -1130,10 +1143,10 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 				if (link_sep)
 					elog(VERBOSE, "create directory \"%s\" and symbolic link \"%.*s\"",
 						 linked_path,
-						 (int) (link_sep -  relative_ptr), relative_ptr);
+						 (int) (link_sep -  dir->rel_path), dir->rel_path);
 				else
 					elog(VERBOSE, "create directory \"%s\" and symbolic link \"%s\"",
-						 linked_path, relative_ptr);
+						 linked_path, dir->rel_path);
 
 				/* Firstly, create linked directory */
 				fio_mkdir(linked_path, DIR_PERMISSION, location);
@@ -1163,10 +1176,10 @@ create_data_directories(const char *data_dir, const char *backup_dir,
 		}
 
 create_directory:
-		elog(VERBOSE, "create directory \"%s\"", relative_ptr);
+		elog(VERBOSE, "create directory \"%s\"", dir->rel_path);
 
 		/* This is not symlink, create directory */
-		join_path_components(to_path, data_dir, relative_ptr);
+		join_path_components(to_path, data_dir, dir->rel_path);
 		fio_mkdir(to_path, DIR_PERMISSION, location);
 	}
 
@@ -1619,7 +1632,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		else
 			strcpy(filepath, path);
 
-		file = pgFileInit(filepath);
+		file = pgFileInit(filepath, path);
 
 		file->write_size = (int64) write_size;
 		file->mode = (mode_t) mode;
@@ -1634,7 +1647,10 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		 */
 
 		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
+		{
 			file->linked = pgut_strdup(linked);
+			canonicalize_path(file->linked);
+		}
 
 		if (get_control_value(buf, "segno", NULL, &segno, false))
 			file->segno = (int) segno;

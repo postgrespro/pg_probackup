@@ -360,7 +360,8 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
  * Copy pg_control file to backup. We do not apply compression to this file.
  */
 void
-copy_pgcontrol_file(const char *from_root, fio_location from_location, const char *to_root, fio_location to_location, pgFile *file)
+copy_pgcontrol_file(const char *from_root, fio_location from_location,
+					const char *to_root, fio_location to_location, pgFile *file)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
@@ -375,7 +376,7 @@ copy_pgcontrol_file(const char *from_root, fio_location from_location, const cha
 	file->read_size = size;
 	file->write_size = size;
 
-	join_path_components(to_path, to_root, file->path + strlen(from_root) + 1);
+	join_path_components(to_path, to_root, file->rel_path);
 	writeControlFile(&ControlFile, to_path, to_location);
 
 	pg_free(buffer);
