@@ -34,6 +34,12 @@
 
 #include "datapagemap.h"
 
+/* pgut client variables and full path */
+extern const char  *PROGRAM_NAME;
+extern const char  *PROGRAM_FULL_PATH;
+extern const char  *PROGRAM_URL;
+extern const char  *PROGRAM_EMAIL;
+
 /* Directory/File names */
 #define DATABASE_DIR				"database"
 #define BACKUPS_DIR				"backups"

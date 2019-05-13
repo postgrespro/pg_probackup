@@ -8,6 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
 #include "postgres_fe.h"
 
 #include "getopt_long.h"
@@ -21,8 +22,6 @@
 #include "logger.h"
 #include "file.h"
 
-
-const char *PROGRAM_NAME = "pg_probackup";
 
 static char	   *password = NULL;
 bool			prompt_password = true;
