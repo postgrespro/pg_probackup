@@ -686,16 +686,13 @@ restore_files(void *arg)
 			(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE
 			|| arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK))
 		{
-			elog(VERBOSE, "The file didn`t change. Skip restore: %s", file->path);
+			elog(VERBOSE, "The file didn`t change. Skip restore: \"%s\"", file->path);
 			continue;
 		}
 
 		/* Directories were created before */
 		if (S_ISDIR(file->mode))
-		{
-			elog(VERBOSE, "Directory, skip");
 			continue;
-		}
 
 		/* Do not restore tablespace_map file */
 		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, file->rel_path))
@@ -706,18 +703,12 @@ restore_files(void *arg)
 
 		/* Do no restore external directory file if a user doesn't want */
 		if (skip_external_dirs && file->external_dir_num > 0)
-		{
-			elog(VERBOSE, "Skip external directory file");
 			continue;
-		}
 
 		/* Skip unnecessary file */
 		if (parray_bsearch(arguments->dest_files, file,
 						   pgFileCompareRelPathWithExternal) == NULL)
-		{
-			elog(VERBOSE, "Skip removed file");
 			continue;
-		}
 
 		/*
 		 * restore the file.
