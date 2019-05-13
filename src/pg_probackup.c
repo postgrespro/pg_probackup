@@ -20,9 +20,10 @@
 #include "utils/thread.h"
 #include <time.h>
 
-const char *PROGRAM_URL		= "https://github.com/postgrespro/pg_probackup";
-const char *PROGRAM_EMAIL	= "https://github.com/postgrespro/pg_probackup/issues";
-const char *PROGRAM_FULL_PATH = NULL;
+const char  *PROGRAM_NAME = NULL;
+const char  *PROGRAM_FULL_PATH = NULL;
+const char  *PROGRAM_URL = "https://github.com/postgrespro/pg_probackup";
+const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues";
 
 typedef enum ProbackupSubcmd
 {
@@ -245,13 +246,7 @@ main(int argc, char *argv[])
 	PROGRAM_NAME = get_progname(argv[0]);
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
 
-	if (find_my_exec(argv[0],(char *) PROGRAM_FULL_PATH) < 0)
-	{
-		fprintf(stderr, _("%s: could not find own program executable\n"), PROGRAM_NAME);
-		exit(1);
-	}
-
-	set_pglocale_pgservice(argv[0], "pgscripts");
+	//set_pglocale_pgservice(argv[0], "pgscripts");
 
 #if PG_VERSION_NUM >= 110000
 	/*
@@ -512,6 +507,15 @@ main(int argc, char *argv[])
 
 		pfree(command);
 		command = NULL;
+	}
+
+	/* For archive-push and archive-get skip full path lookup */
+	if ((backup_subcmd != ARCHIVE_GET_CMD &&
+		backup_subcmd != ARCHIVE_PUSH_CMD) &&
+		(find_my_exec(argv[0],(char *) PROGRAM_FULL_PATH) < 0))
+	{
+			PROGRAM_FULL_PATH = NULL;
+			elog(WARNING, "%s: could not find a full path to executable", PROGRAM_NAME);
 	}
 
 	/*
