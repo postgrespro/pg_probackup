@@ -2152,3 +2152,44 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_pg_11_group_access(self):
+        """
+        test group access for PG >= 11
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=[
+                '--data-checksums',
+                '--allow-group-access'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        if self.get_version(node) < self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL >= 11 for this test')
+
+        # take FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # restore backup
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored)
+
+        # compare pgdata permissions
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

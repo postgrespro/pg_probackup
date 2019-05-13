@@ -1222,7 +1222,7 @@ class ProbackupTest(object):
         directory_dict = {}
         directory_dict['pgdata'] = pgdata
         directory_dict['files'] = {}
-        directory_dict['dirs'] = []
+        directory_dict['dirs'] = {}
         for root, dirs, files in os.walk(pgdata, followlinks=True):
             dirs[:] = [d for d in dirs if d not in dirs_to_ignore]
             for file in files:
@@ -1267,7 +1267,18 @@ class ProbackupTest(object):
                             break
 
                 if not found:
-                    directory_dict['dirs'].append(directory_relpath)
+                    directory_dict['dirs'][directory_relpath] = {}
+
+        # get permissions for every file and directory
+        for file in directory_dict['dirs']:
+            full_path = os.path.join(pgdata, file)
+            directory_dict['dirs'][file]['mode'] = os.stat(
+                full_path).st_mode
+
+        for file in directory_dict['files']:
+            full_path = os.path.join(pgdata, file)
+            directory_dict['files'][file]['mode'] = os.stat(
+                full_path).st_mode
 
         return directory_dict
 
@@ -1283,6 +1294,21 @@ class ProbackupTest(object):
                 error_message += '\nDirectory was not present'
                 error_message += ' in original PGDATA: {0}\n'.format(
                     os.path.join(restored_pgdata['pgdata'], directory))
+            else:
+                if (
+                    restored_pgdata['dirs'][directory]['mode'] !=
+                    original_pgdata['dirs'][directory]['mode']
+                ):
+                    fail = True
+                    error_message += '\nDir permissions mismatch:\n'
+                    error_message += ' Dir old: {0} Permissions: {1}\n'.format(
+                        os.path.join(original_pgdata['pgdata'], directory),
+                        original_pgdata['dirs'][directory]['mode'])
+                    error_message += ' Dir new: {0} Permissions: {1}\n'.format(
+                        os.path.join(restored_pgdata['pgdata'], directory),
+                        restored_pgdata['dirs'][directory]['mode'])
+
+
 
         for directory in original_pgdata['dirs']:
             if directory not in restored_pgdata['dirs']:
@@ -1304,6 +1330,19 @@ class ProbackupTest(object):
 
         for file in original_pgdata['files']:
             if file in restored_pgdata['files']:
+
+                if (
+                    restored_pgdata['files'][file]['mode'] !=
+                    original_pgdata['files'][file]['mode']
+                ):
+                    fail = True
+                    error_message += '\nFile permissions mismatch:\n'
+                    error_message += ' File_old: {0} Permissions: {1}\n'.format(
+                        os.path.join(original_pgdata['pgdata'], file),
+                        original_pgdata['files'][file]['mode'])
+                    error_message += ' File_new: {0} Permissions: {1}\n'.format(
+                        os.path.join(restored_pgdata['pgdata'], file),
+                        restored_pgdata['files'][file]['mode'])
 
                 if (
                     original_pgdata['files'][file]['md5'] !=
