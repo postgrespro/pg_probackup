@@ -45,6 +45,9 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 * Remote mode is in beta stage.
 
 ## Installation and Setup
+### Windows Installation
+[Installers download link](https://oc.postgrespro.ru/index.php/s/CGsjXlc5NmhRI0L)
+
 ### Linux Installation
 ```shell
 #DEB Ubuntu|Debian Packages
@@ -72,9 +75,6 @@ yum install pg_probackup-{11,10,9.6,9.5}
 #SRPM Packages
 yumdownloader --source pg_probackup-{11,10,9.6,9.5}
 ```
-
-### Windows Installation
-[Installers download link](https://oc.postgrespro.ru/index.php/s/CGsjXlc5NmhRI0L)
 
 Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup.html#pg-probackup-install-and-setup).
 
