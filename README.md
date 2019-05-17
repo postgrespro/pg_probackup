@@ -73,6 +73,9 @@ yum install pg_probackup-{11,10,9.6,9.5}
 yumdownloader --source pg_probackup-{11,10,9.6,9.5}
 ```
 
+### Windows Installation
+[Installers download link](https://oc.postgrespro.ru/index.php/s/CGsjXlc5NmhRI0L)
+
 Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup.html#pg-probackup-install-and-setup).
 
 ## Building from source
@@ -95,6 +98,10 @@ SET PATH=%PATH%;C:\Perl64\bin
 SET PATH=%PATH%;C:\msys64\usr\bin
 gen_probackup_project.pl C:\path_to_postgresql_source_tree
 ```
+
+## Current release
+
+[2.1.1](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.1)
 
 ## Documentation
 
