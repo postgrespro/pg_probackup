@@ -174,7 +174,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delete_orphaned_wal_segments(self):
-        """make archive node, make three full backups, delete second backup without --wal option, then delete orphaned wals via --wal option"""
+        """
+        make archive node, make three full backups,
+        delete second backup without --wal option,
+        then delete orphaned wals via --wal option
+        """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -235,6 +239,61 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.delete_pb(backup_dir, 'node', backup_3_id, options=['--wal'])
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
         self.assertEqual (0, len(wals), "Number of wals should be equal to 0")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delete_wal_between_multiple_timelines(self):
+        """
+                    /-------B1--
+        A1----------------A2----
+
+        delete A1 backup, check that WAL segments on [A1, A2) and
+        [A1, B1) are deleted and backups B1 and A2 keep
+        their WAL
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        A1 = self.backup_node(backup_dir, 'node', node)
+
+        # load some data to node
+        node.pgbench_init(scale=3)
+
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+
+        self.restore_node(backup_dir, 'node', node2)
+        node2.append_conf(
+            'postgresql.auto.conf', "port = {0}".format(node2.port))
+        node2.slow_start()
+
+        # load some more data to node
+        node.pgbench_init(scale=3)
+
+        # take A2
+        A2 = self.backup_node(backup_dir, 'node', node)
+
+        # load some more data to node2
+        node2.pgbench_init(scale=2)
+
+        B1 = self.backup_node(
+            backup_dir, 'node',
+            node2, data_dir=node2.data_dir)
+
+        self.delete_pb(backup_dir, 'node', backup_id=A1, options=['--wal'])
+
+        self.validate_pb(backup_dir)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

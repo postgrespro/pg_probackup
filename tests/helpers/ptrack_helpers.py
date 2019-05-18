@@ -737,20 +737,17 @@ class ProbackupTest(object):
             print('You must provide ether node or data_dir for backup')
             exit(1)
 
-        if node:
-            pgdata = node.data_dir
-
-        if data_dir:
-            pgdata = data_dir
-
         cmd_list = [
             'backup',
             '-B', backup_dir,
+            '--instance={0}'.format(instance),
             # "-D", pgdata,
             '-p', '%i' % node.port,
-            '-d', 'postgres',
-            '--instance={0}'.format(instance)
+            '-d', 'postgres'
         ]
+
+        if data_dir:
+            cmd_list += ['-D', data_dir]
 
         # don`t forget to kill old_binary after remote ssh release
         if self.remote and not old_binary:
