@@ -861,6 +861,18 @@ InitXLogPageRead(XLogReaderData *reader_data, const char *archivedir,
 }
 
 /*
+ * Comparison function to sort xlog_thread_arg array.
+ */
+static int
+xlog_thread_arg_comp(const void *a1, const void *a2)
+{
+	const xlog_thread_arg *arg1 = a1;
+	const xlog_thread_arg *arg2 = a2;
+
+	return arg1->reader_data.xlogsegno - arg2->reader_data.xlogsegno;
+}
+
+/*
  * Run WAL processing routines using threads. Start from startpoint up to
  * endpoint. It is possible to send zero endpoint, threads will read WAL
  * infinitely in this case.
@@ -877,7 +889,6 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 	int			i;
 	int			threads_need = 0;
 	XLogSegNo	endSegNo = 0;
-	XLogSegNo	errorSegNo = 0;
 	bool		result = true;
 
 	if (!XRecOffIsValid(startpoint))
@@ -956,27 +967,26 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 			result = false;
 	}
 
+	/* Release threads here, use thread_args only below */
+	pfree(threads);
+	threads = NULL;
+
 	if (last_rec)
+	{
+		/*
+		 * We need to sort xlog_thread_arg array by xlogsegno to return latest
+		 * possible record up to which restore is possible. We need to sort to
+		 * detect failed thread between start segment and target segment.
+		 *
+		 * Loop stops on first failed thread.
+		 */
+		if (threads_need > 1)
+			qsort((void *) thread_args, threads_need, sizeof(xlog_thread_arg),
+				  xlog_thread_arg_comp);
+
 		for (i = 0; i < threads_need; i++)
 		{
 			XLogRecTarget *cur_rec;
-
-			if (thread_args[i].ret != 0)
-			{
-				/*
-				 * Save invalid segment number after which all segments are not
-				 * valid.
-				 */
-				if (errorSegNo == 0 ||
-					errorSegNo > thread_args[i].reader_data.xlogsegno)
-					errorSegNo = thread_args[i].reader_data.xlogsegno;
-				continue;
-			}
-
-			/* Is this segment valid */
-			if (errorSegNo != 0 &&
-				thread_args[i].reader_data.xlogsegno > errorSegNo)
-				continue;
 
 			cur_rec = &thread_args[i].reader_data.cur_rec;
 			/*
@@ -997,9 +1007,16 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 			 */
 			else if (last_rec->rec_lsn < cur_rec->rec_lsn)
 				*last_rec = *cur_rec;
-		}
 
-	pfree(threads);
+			/*
+			 * We reached failed thread, so stop here. We cannot use following
+			 * WAL records after failed segment.
+			 */
+			if (thread_args[i].ret != 0)
+				break;
+		}
+	}
+
 	pfree(thread_args);
 
 	return result;
