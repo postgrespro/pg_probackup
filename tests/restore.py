@@ -2243,3 +2243,58 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_concurrent_drop_table(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=1)
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--compress'])
+
+        # DELTA backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--stream', '--compress', '--no-validate'],
+            gdb=True)
+
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+
+        node.safe_psql(
+            'postgres',
+            'DROP TABLE pgbench_accounts')
+
+        # do checkpoint to guarantee filenode removal
+        node.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        gdb.remove_all_breakpoints()
+        gdb.continue_execution_until_exit()
+
+        pgdata = self.pgdata_content(node.data_dir)
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node, options=['--no-validate'])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

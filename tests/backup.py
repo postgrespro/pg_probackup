@@ -1022,7 +1022,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup
         gdb = self.backup_node(
             backup_dir, 'node', node,
-            options=['--stream', '--compress', '--log-level-file=VERBOSE'],
+            options=['--stream', '--compress'],
             gdb=True)
 
         gdb.set_breakpoint('backup_data_file')
