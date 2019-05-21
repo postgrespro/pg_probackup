@@ -552,7 +552,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node, old_binary=True)
         node.slow_start()
 
-        node.pgbench_init(scale=5)
+        node.pgbench_init(scale=1)
 
         # FULL backup
         gdb = self.backup_node(

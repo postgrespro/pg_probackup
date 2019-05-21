@@ -1017,7 +1017,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=5)
+        node.pgbench_init(scale=1)
 
         # FULL backup
         gdb = self.backup_node(
