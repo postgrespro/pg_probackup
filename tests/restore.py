@@ -7,6 +7,7 @@ import sys
 from time import sleep
 from datetime import datetime, timedelta
 import hashlib
+import shutil
 
 
 module_name = 'restore'
@@ -2190,6 +2191,55 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # compare pgdata permissions
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_pg_10_waldir(self):
+        """
+        test group access for PG >= 11
+        """
+        fname = self.id().split('.')[3]
+        wal_dir = os.path.join(
+            os.path.join(self.tmp_path, module_name, fname), 'wal_dir')
+        shutil.rmtree(wal_dir, ignore_errors=True)
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=[
+                '--data-checksums',
+                '--waldir={0}'.format(wal_dir)])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
+
+        # take FULL backup
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # restore backup
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored)
+
+        # compare pgdata permissions
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.assertTrue(
+            os.path.islink(os.path.join(node_restored.data_dir, 'pg_wal')),
+            'pg_wal should be symlink')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
