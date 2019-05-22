@@ -235,7 +235,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 					DATABASE_FILE_LIST);
 	to_files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
 	/* To delete from leaf, sort in reversed order */
-	parray_qsort(to_files, pgFileComparePathDesc);
+	parray_qsort(to_files, pgFileComparePathWithExternalDesc);
 	/*
 	 * Get list of files which need to be moved.
 	 */
