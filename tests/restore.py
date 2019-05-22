@@ -2298,3 +2298,46 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_lost_non_data_file(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        file = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'postgresql.auto.conf')
+
+        os.remove(file)
+
+        node.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node, options=['--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of non-data file dissapearance.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'Insert correct error message', e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
