@@ -58,6 +58,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
+        sleep(1)
+
         # FULL backup
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -935,6 +937,98 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 "-j", "4",
                 "--external-mapping={0}={1}".format(external_dir1, external_dir1_new),
                 "--external-mapping={0}={1}".format(external_dir2, external_dir2_new)])
+
+        pgdata_restored = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_external_merge_3(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=3)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        external_dir1 = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2 = self.get_tblspace_path(node, 'external_dir2')
+
+        pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node)
+
+        # fill external directories with changed data
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir1)
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            data_dir=external_dir2)
+
+        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+
+        # page backup with external directories
+        self.backup_node(
+            backup_dir, 'node', node, backup_type="page",
+            options=[
+                "-j", "4",
+                "-E", "{0}{1}{2}".format(
+                    external_dir1,
+                    self.EXTERNAL_DIRECTORY_DELIMITER,
+                    external_dir2)])
+
+        # page backup with external directories
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="page",
+            options=[
+                "-j", "4",
+                "-E", "{0}{1}{2}".format(
+                    external_dir1,
+                    self.EXTERNAL_DIRECTORY_DELIMITER,
+                    external_dir2)])
+
+        pgdata = self.pgdata_content(
+            node.base_dir, exclude_dirs=['logs'])
+
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        # RESTORE
+        node.cleanup()
+        shutil.rmtree(node.base_dir, ignore_errors=True)
+
+        external_dir1_new = self.get_tblspace_path(node, 'external_dir1')
+        external_dir2_new = self.get_tblspace_path(node, 'external_dir2')
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                "-j", "4",
+                "--external-mapping={0}={1}".format(
+                    external_dir1, external_dir1_new),
+                "--external-mapping={0}={1}".format(
+                    external_dir2, external_dir2_new)])
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
