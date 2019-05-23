@@ -479,9 +479,9 @@ do_backup_instance(void)
 
 		if (tmp_file->write_size == FILE_NOT_FOUND)
 		{
-			pg_atomic_clear_flag(&tmp_file->lock);
 			pgFileFree(tmp_file);
 			parray_remove(backup_files_list, i);
+			i--;
 		}
 	}
 
