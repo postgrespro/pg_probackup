@@ -866,7 +866,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
-    def test_external_merge_single(self):
+    def test_external_merge_1(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1012,7 +1012,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.merge_backup(
+            backup_dir, 'node', backup_id=backup_id,
+            options=['--log-level-file=verbose'])
 
         # RESTORE
         node.cleanup()
@@ -1040,7 +1042,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
-    def test_external_merge_double(self):
+    def test_external_merge_2(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1445,7 +1447,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
-
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")

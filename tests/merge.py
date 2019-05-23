@@ -1721,7 +1721,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # backup half-merged
         self.assertEqual(
-            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
 
         self.assertEqual(
             full_id, self.show_pb(backup_dir, 'node')[0]['id'])
@@ -1753,22 +1753,30 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        # add database
-        node.pgbench_init(scale=1)
-
         # take FULL backup
         full_id = self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
 
+        node.pgbench_init(scale=1)
+
+        page_1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change FULL B backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_1, 'ERROR')
+
         pgdata = self.pgdata_content(node.data_dir)
 
-        # drop database
+        # add data
         pgbench = node.pgbench(options=['-T', '10', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
         # take PAGE backup
         page_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
+
+        # Change FULL B backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_1, 'OK')
 
         gdb = self.merge_backup(
             backup_dir, 'node', page_id,
@@ -1827,7 +1835,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=3)
 
         # Take PAGE from future
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
         with open(
                 os.path.join(
