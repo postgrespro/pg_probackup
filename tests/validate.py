@@ -3365,6 +3365,44 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_validation_after_backup(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, gdb=True, options=['--stream'])
+
+        gdb.set_breakpoint('pgBackupValidate')
+        gdb.run_until_break()
+
+        backup_id = self.show_pb(backup_dir, 'node')[0]['id']
+
+        file = os.path.join(
+            backup_dir, "backups", "node", backup_id,
+            "database", "postgresql.conf")
+        os.remove(file)
+
+        gdb.continue_execution_until_exit()
+
+        self.assertEqual(
+            'CORRUPT',
+            self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup STATUS should be "ERROR"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # validate empty backup list
 # page from future during validate
 # page from future during backup
