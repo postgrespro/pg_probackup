@@ -928,8 +928,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
-                'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
             }
         )

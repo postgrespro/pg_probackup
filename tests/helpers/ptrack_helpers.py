@@ -274,6 +274,11 @@ class ProbackupTest(object):
         if 'PGPROBACKUP_SSH_REMOTE' in self.test_env:
             self.remote = True
 
+    @property
+    def pg_config_version(self):
+        return self.version_to_num(
+            testgres.get_pg_config()['VERSION'].split(" ")[1])
+
 #            if 'PGPROBACKUP_SSH_HOST' in self.test_env:
 #                self.remote_host = self.test_env['PGPROBACKUP_SSH_HOST']
 #            else

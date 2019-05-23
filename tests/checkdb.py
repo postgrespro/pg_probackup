@@ -466,11 +466,6 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 "postgres",
                 "create extension amcheck_next")
 
-        # truncate log_file
-        #with open(node.pg_log_file, 'w') as f:
-        #    f.truncate()
-        #    f.close()
-
         # FULL backup
         gdb = self.checkdb_node(
             backup_dir, 'node', gdb=True,
@@ -482,7 +477,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('amcheck_one_index')
         gdb.run_until_break()
 
-        gdb.continue_execution_until_break(4)
+        gdb.continue_execution_until_break(10)
         gdb.remove_all_breakpoints()
 
         gdb._execute('signal SIGINT')

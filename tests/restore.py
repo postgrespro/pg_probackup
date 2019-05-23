@@ -2159,6 +2159,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         test group access for PG >= 11
         """
+        if self.pg_config_version < self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL >= 11 for this test')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -2171,9 +2174,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
-
-        if self.get_version(node) < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
 
         # take FULL backup
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
@@ -2200,6 +2200,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         test group access for PG >= 11
         """
+        if self.pg_config_version < self.version_to_num('10.0'):
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
+
         fname = self.id().split('.')[3]
         wal_dir = os.path.join(
             os.path.join(self.tmp_path, module_name, fname), 'wal_dir')
@@ -2215,9 +2218,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
-
-        if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
 
         # take FULL backup
         self.backup_node(
@@ -2335,7 +2335,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'Insert correct error message', e.message,
+                'is not found', e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                'ERROR: Data files restoring failed', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

@@ -1050,6 +1050,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_pg_11_adjusted_wal_segment_size(self):
         """"""
+        if self.pg_config_version < self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL >= 11 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1066,9 +1069,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
-
-        if self.get_version(node) < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
 
         node.pgbench_init(scale=5)
 
@@ -1118,8 +1118,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 '--expired',
                 '--delete-wal',
                 '--retention-redundancy=1'])
-
-        print(output)
 
         # validate
         self.validate_pb(backup_dir)
