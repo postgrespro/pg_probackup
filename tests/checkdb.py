@@ -442,3 +442,58 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_checkdb_sigint_handling(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        try:
+            node.safe_psql(
+               "postgres",
+               "create extension amcheck")
+        except QueryException as e:
+            node.safe_psql(
+                "postgres",
+                "create extension amcheck_next")
+
+        # truncate log_file
+        #with open(node.pg_log_file, 'w') as f:
+        #    f.truncate()
+        #    f.close()
+
+        # FULL backup
+        gdb = self.checkdb_node(
+            backup_dir, 'node', gdb=True,
+            options=[
+                '-d', 'postgres', '-j', '4',
+                '--skip-block-validation',
+                '--amcheck', '-p', str(node.port)])
+
+        gdb.set_breakpoint('amcheck_one_index')
+        gdb.run_until_break()
+
+        gdb.continue_execution_until_break(4)
+        gdb.remove_all_breakpoints()
+
+        gdb._execute('signal SIGINT')
+        gdb.continue_execution_until_exit()
+
+        with open(node.pg_log_file, 'r') as f:
+            output = f.read()
+
+        self.assertNotIn('could not receive data from client', output)
+        self.assertNotIn('could not send data to client', output)
+        self.assertNotIn('connection to client lost', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
