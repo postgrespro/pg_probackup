@@ -12,7 +12,7 @@ class RemoteTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_remote_1(self):
+    def test_remote_sanity(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -21,26 +21,24 @@ class RemoteTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-#        self.set_archiving(backup_dir, 'node', node, remote=True)
         node.slow_start()
 
-        self.backup_node(
-            backup_dir, 'node', node,
-            options=['--remote-proto=ssh', '--remote-host=localhost', '--stream'])
-
-        pgdata = self.pgdata_content(node.data_dir)
-
-        node.cleanup()
-
-        self.restore_node(
-            backup_dir, 'node', node,
-            options=[
-                '--remote-proto=ssh',
-                '--remote-host=localhost'])
-
-        # Physical comparison
-        pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        try:
+            self.backup_node(
+                backup_dir, 'node',
+                node, options=['--remote-proto=ssh', '--stream'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because remote-host option is missing."
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "Insert correct error",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
