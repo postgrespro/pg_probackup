@@ -996,10 +996,14 @@ do_backup(time_t start_time, bool no_validate)
 	if (!no_validate)
 		pgBackupValidate(&current);
 
-	elog(INFO, "Backup %s completed", base36enc(current.start_time));
+	if (current.status == BACKUP_STATUS_OK ||
+		current.status == BACKUP_STATUS_DONE)
+		elog(INFO, "Backup %s completed", base36enc(current.start_time));
+	else
+		elog(ERROR, "Backup %s failed", base36enc(current.start_time));
 
 	/*
-	 * After successfil backup completion remove backups
+	 * After successful backup completion remove backups
 	 * which are expired according to retention policies
 	 */
 	if (delete_expired || merge_expired || delete_wal)
