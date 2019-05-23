@@ -313,7 +313,7 @@ help_backup(void)
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
-	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
 	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
 	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
 	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
@@ -407,7 +407,7 @@ help_restore(void)
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
-	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
 	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
 	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
 	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
@@ -689,7 +689,7 @@ help_set_config(void)
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
-	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
 	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
 	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
 	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
@@ -736,7 +736,7 @@ help_add_instance(void)
 	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
-	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
 	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
 	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
 	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
@@ -786,7 +786,7 @@ help_archive_push(void)
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
-	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
 	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
 	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
 	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
@@ -815,7 +815,7 @@ help_archive_get(void)
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
-	printf(_("                                   available options: 'ssh', 'none' (default: none)\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
 	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
 	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
 	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
