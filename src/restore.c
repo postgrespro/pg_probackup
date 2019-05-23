@@ -677,17 +677,23 @@ restore_files(void *arg)
 				 file->rel_path);
 
 		/*
-		 * For PAGE and PTRACK backups skip files which haven't changed
+		 * For PAGE and PTRACK backups skip datafiles which haven't changed
 		 * since previous backup and thus were not backed up.
 		 * We cannot do the same when restoring DELTA backup because we need information
-		 * about every file to correctly truncate them.
+		 * about every datafile to correctly truncate them.
 		 */
-		if (file->write_size == BYTES_INVALID &&
-			(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE
-			|| arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK))
+		if (file->write_size == BYTES_INVALID)
 		{
-			elog(VERBOSE, "The file didn`t change. Skip restore: \"%s\"", file->path);
-			continue;
+			/* data file, only PAGE and PTRACK can skip */
+			if (((file->is_datafile && !file->is_cfs) &&
+				(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
+				 arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)) ||
+				/* non-data file can be skipped regardless of backup type */
+				!(file->is_datafile && !file->is_cfs))
+			{
+				elog(VERBOSE, "The file didn`t change. Skip restore: \"%s\"", file->path);
+				continue;
+			}
 		}
 
 		/* Directories were created before */
