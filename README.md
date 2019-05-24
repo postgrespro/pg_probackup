@@ -102,7 +102,7 @@ gen_probackup_project.pl C:\path_to_postgresql_source_tree
 
 ## Current release
 
-[2.1.1](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.1)
+[2.1.2](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.2)
 
 ## Documentation
 
