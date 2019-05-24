@@ -742,7 +742,7 @@ restore_files(void *arg)
 			if (backup_contains_external(external_path,
 										 arguments->dest_external_dirs))
 				copy_file(FIO_BACKUP_HOST,
-						  external_path, FIO_DB_HOST, file);
+						  external_path, FIO_DB_HOST, file, false);
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
 			copy_pgcontrol_file(from_root, FIO_BACKUP_HOST,
@@ -751,7 +751,7 @@ restore_files(void *arg)
 		else
 			copy_file(FIO_BACKUP_HOST,
 					  instance_config.pgdata, FIO_DB_HOST,
-					  file);
+					  file, false);
 
 		/* print size of restored file */
 		if (file->write_size != BYTES_INVALID)
