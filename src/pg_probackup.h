@@ -577,10 +577,16 @@ extern const char* deparse_compress_alg(int alg);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool omit_symlink, bool add_root, int external_dir_num, fio_location location);
 
-extern void create_data_directories(const char *data_dir,
+extern void create_data_directories_manual(const char *data_dir,
 									const char *backup_dir,
 									bool extract_tablespaces,
 									fio_location location);
+
+extern void create_data_directories(parray *dest_files,
+										const char *data_dir,
+										const char *backup_dir,
+										bool extract_tablespaces,
+										fio_location location);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
@@ -614,6 +620,7 @@ extern void pgFileDelete(pgFile *file);
 extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
 							 bool raise_on_deleted, size_t *bytes_read, fio_location location);
+extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileComparePathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);

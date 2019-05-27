@@ -340,6 +340,16 @@ pgFileComparePath(const void *f1, const void *f2)
 	return strcmp(f1p->path, f2p->path);
 }
 
+/* Compare two pgFile with their name in ascending order of ASCII code. */
+int
+pgFileCompareName(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	pgFile *f2p = *(pgFile **)f2;
+
+	return strcmp(f1p->name, f2p->name);
+}
+
 /*
  * Compare two pgFile with their path and external_dir_num
  * in ascending order of ASCII code.
@@ -1047,9 +1057,145 @@ opt_externaldir_map(ConfigOption *opt, const char *arg)
  *
  * If **extract_tablespaces** is true then try to extract tablespace data
  * directories into their initial path using tablespace_map file.
+ *
+ * Enforce permissions from backup_content.control. The only
+ * problem now is with PGDATA itself, we must preserve PGDATA permissions
+ * somewhere.
+ *
+ * TODO: symlink handling. If user located symlink in PG_TBLSPC_DIR, it will
+ * be restored as directory.
  */
 void
-create_data_directories(const char *data_dir, const char *backup_dir,
+create_data_directories(parray *dest_files, const char *data_dir, const char *backup_dir,
+						bool extract_tablespaces, fio_location location)
+{
+	int			i;
+	parray		*links = NULL;
+	mode_t		pg_tablespace_mode;
+	char		to_path[MAXPGPATH];
+
+	/* Ugly: get PG_TBLSPC_DIR pemission mask */
+	for (i = 0; i < parray_num(dest_files); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(dest_files, i);
+
+		if (!S_ISDIR(file->mode))
+			continue;
+
+		if (strcmp(file->rel_path, PG_TBLSPC_DIR) == 0)
+		{
+			if (file->external_dir_num == 0)
+			{
+				pg_tablespace_mode = file->mode;
+				break;
+			}
+		}
+	}
+
+	/* get tablespace map */
+	if (extract_tablespaces)
+	{
+		links = parray_new();
+		read_tablespace_map(links, backup_dir);
+		/* Sort links by a link name */
+		parray_qsort(links, pgFileCompareName);
+	}
+
+	/* Fun part is that backup_content.control is from beginning
+	 * of a backup, and tablespace_map is from the end
+	 * of a backup.
+	 * If we trust tablspace_map, we would have to we create first
+	 * tablespaces from it, then the start creating directories and files
+	 * from backup_content.
+	 * The problem if that backup_content could contain files from
+	 * deleted tablespaces and so would have to
+	 * check every file and directory if it comes from tablespace,
+	 * not presented in tablespace_map and skip it restoring if it
+	 * is not.
+	 * Trusting backup_content.control is safest way, there is no risk
+	 * of not restoring something.
+	 */
+
+	elog(LOG, "Restore directories and symlinks...");
+
+	/* create directories */
+	for (i = 0; i < parray_num(dest_files); i++)
+	{
+		char parent_dir[MAXPGPATH];
+		pgFile	   *dir = (pgFile *) parray_get(dest_files, i);
+
+		if (!S_ISDIR(dir->mode))
+			continue;
+
+		/* skip external directory content */
+		if (dir->external_dir_num != 0)
+			continue;
+
+		/* tablespace_map exists */
+		if (links)
+		{
+			/* get parent dir of rel_path */
+			strncpy(parent_dir, dir->rel_path, MAXPGPATH);
+			get_parent_directory(parent_dir);
+
+			/* check if directory is actually link to tablespace */
+			if (strcmp(parent_dir, PG_TBLSPC_DIR) == 0)
+			{
+				/* this directory located in pg_tblspc
+				 * check it against tablespace map
+				 */
+				pgFile **link = (pgFile **) parray_bsearch(links, dir, pgFileCompareName);
+
+				/* got match */
+				if (link)
+				{
+					const char *linked_path = get_tablespace_mapping((*link)->linked);
+
+					if (!is_absolute_path(linked_path))
+							elog(ERROR, "Tablespace directory is not an absolute path: %s\n",
+								 linked_path);
+
+					join_path_components(to_path, data_dir, dir->rel_path);
+
+					elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+							 linked_path, to_path);
+
+					/* create tablespace directory */
+					fio_mkdir(linked_path, pg_tablespace_mode, location);
+
+					/* create link to linked_path */
+					if (fio_symlink(linked_path, to_path, location) < 0)
+						elog(ERROR, "Could not create symbolic link \"%s\": %s",
+							 to_path, strerror(errno));
+
+					continue;
+				}
+			}
+		}
+
+		/* This is not symlink, create directory */
+		elog(INFO, "Create directory \"%s\"", dir->rel_path);
+
+		join_path_components(to_path, data_dir, dir->rel_path);
+		fio_mkdir(to_path, dir->mode, location);
+	}
+
+	if (extract_tablespaces)
+	{
+		parray_walk(links, pgFileFree);
+		parray_free(links);
+	}
+}
+
+/*
+ * Create backup directories from **backup_dir** to **data_dir**. Doesn't raise
+ * an error if target directories exist.
+ *
+ * If **extract_tablespaces** is true then try to extract tablespace data
+ * directories into their initial path using tablespace_map file.
+ */
+void
+create_data_directories_manual(const char *data_dir, const char *backup_dir,
 						bool extract_tablespaces, fio_location location)
 {
 	parray	   *dirs,
@@ -1233,6 +1379,8 @@ read_tablespace_map(parray *files, const char *backup_dir)
 
 		file->path = pgut_malloc(strlen(link_name) + 1);
 		strcpy(file->path, link_name);
+
+		file->name = file->path;
 
 		file->linked = pgut_malloc(strlen(path) + 1);
 		strcpy(file->linked, path);
