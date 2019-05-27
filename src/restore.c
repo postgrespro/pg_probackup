@@ -442,7 +442,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 */
 		pgBackupGetPath(dest_backup, dest_backup_path,
 						lengthof(dest_backup_path), NULL);
-		create_data_directories(instance_config.pgdata, dest_backup_path, true,
+		create_data_directories(dest_files, instance_config.pgdata, dest_backup_path, true,
 								FIO_DB_HOST);
 
 		/*

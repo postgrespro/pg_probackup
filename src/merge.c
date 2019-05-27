@@ -255,7 +255,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	write_backup_status(to_backup, BACKUP_STATUS_MERGING);
 	write_backup_status(from_backup, BACKUP_STATUS_MERGING);
 
-	create_data_directories(to_database_path, from_backup_path, false, FIO_BACKUP_HOST);
+	create_data_directories(files, to_database_path, from_backup_path, false, FIO_BACKUP_HOST);
 
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (merge_files_arg *) palloc(sizeof(merge_files_arg) * num_threads);
