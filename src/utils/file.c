@@ -51,6 +51,41 @@ static bool fio_is_remote_fd(int fd)
 }
 
 #ifdef WIN32
+
+#undef stat
+
+/*
+ * The stat() function in win32 is not guaranteed to update the st_size
+ * field when run. So we define our own version that uses the Win32 API
+ * to update this field.
+ */
+static int
+fio_safestat(const char *path, struct stat *buf)
+{
+    int            r;
+    WIN32_FILE_ATTRIBUTE_DATA attr;
+
+    r = stat(path, buf);
+    if (r < 0)
+        return r;
+
+    if (!GetFileAttributesEx(path, GetFileExInfoStandard, &attr))
+    {
+        errno = ENOENT;
+        return -1;
+    }
+
+    /*
+     * XXX no support for large files here, but we don't do that in general on
+     * Win32 yet.
+     */
+    buf->st_size = attr.nFileSizeLow;
+
+    return 0;
+}
+
+#define stat(x) fio_safestat(x)
+
 static ssize_t pread(int fd, void* buf, size_t size, off_t off)
 {
 	off_t rc = lseek(fd, off, SEEK_SET);
