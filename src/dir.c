@@ -939,6 +939,7 @@ opt_externaldir_map(ConfigOption *opt, const char *arg)
  * Enforce permissions from backup_content.control. The only
  * problem now is with PGDATA itself.
  * TODO: we must preserve PGDATA permissions somewhere. Is it actually a problem?
+ * Shouldn`t starting postgres force correct permissions on PGDATA?
  *
  * TODO: symlink handling. If user located symlink in PG_TBLSPC_DIR, it will
  * be restored as directory.
@@ -949,34 +950,8 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 {
 	int			i;
 	parray		*links = NULL;
-	mode_t		pg_tablespace_mode = 0;
+	mode_t		pg_tablespace_mode = DIR_PERMISSION;
 	char		to_path[MAXPGPATH];
-
-	/* Ugly: get PG_TBLSPC_DIR pemission mask.
-	 * We will use it to set permissions for tablespace directories.
-	 */
-	for (i = 0; i < parray_num(dest_files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(dest_files, i);
-
-		if (!S_ISDIR(file->mode))
-			continue;
-
-		/* skip external directory content */
-		if (file->external_dir_num != 0)
-			continue;
-
-		/* look for 'pg_tblspc' directory  */
-		if (strcmp(file->rel_path, PG_TBLSPC_DIR) == 0)
-		{
-			pg_tablespace_mode = file->mode;
-			break;
-		}
-	}
-
-	/* sanity */
-	if (!pg_tablespace_mode)
-		pg_tablespace_mode = DIR_PERMISSION;
 
 	/* get tablespace map */
 	if (extract_tablespaces)
@@ -986,6 +961,39 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		/* Sort links by a link name */
 		parray_qsort(links, pgFileCompareName);
 	}
+
+	/*
+	 * We have no idea about tablespace permission
+	 * For PG < 11 we can just force default permissions.
+	 */
+#if PG_VERSION_NUM >= 110000
+	if (links)
+	{
+		/* For PG>=11 we use temp kludge: trust permissions on 'pg_tblspc'
+		 * and force them on every tablespace.
+		 * TODO: remove kludge and ask data_directory_mode
+		 * at the start of backup.
+		 */
+		for (i = 0; i < parray_num(dest_files); i++)
+		{
+			pgFile	   *file = (pgFile *) parray_get(dest_files, i);
+
+			if (!S_ISDIR(file->mode))
+				continue;
+
+			/* skip external directory content */
+			if (file->external_dir_num != 0)
+				continue;
+
+			/* look for 'pg_tblspc' directory  */
+			if (strcmp(file->rel_path, PG_TBLSPC_DIR) == 0)
+			{
+				pg_tablespace_mode = file->mode;
+				break;
+			}
+		}
+	}
+#endif
 
 	/*
 	 * We iterate over dest_files and for every directory with parent 'pg_tblspc'
