@@ -2466,7 +2466,8 @@ backup_files(void *arg)
 									  arguments->prev_start_lsn,
 									  current.backup_mode,
 									  instance_config.compress_alg,
-									  instance_config.compress_level))
+									  instance_config.compress_level,
+									  true))
 				{
 					/* disappeared file not to be confused with 'not changed' */
 					if (file->write_size != FILE_NOT_FOUND)
@@ -2508,7 +2509,7 @@ backup_files(void *arg)
 				else
 					dst = arguments->to_root;
 				if (skip ||
-					!copy_file(FIO_DB_HOST, dst, FIO_BACKUP_HOST, file))
+					!copy_file(FIO_DB_HOST, dst, FIO_BACKUP_HOST, file, true))
 				{
 					/* disappeared file not to be confused with 'not changed' */
 					if (file->write_size != FILE_NOT_FOUND)

@@ -629,13 +629,14 @@ extern bool backup_data_file(backup_files_arg* arguments,
 							 const char *to_path, pgFile *file,
 							 XLogRecPtr prev_backup_start_lsn,
 							 BackupMode backup_mode,
-							 CompressAlg calg, int clevel);
+							 CompressAlg calg, int clevel,
+							 bool missing_ok);
 extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
 							  bool write_header,
 							  uint32 backup_version);
 extern bool copy_file(fio_location from_location, const char *to_root,
-					  fio_location to_location, pgFile *file);
+					  fio_location to_location, pgFile *file, bool missing_ok);
 
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);

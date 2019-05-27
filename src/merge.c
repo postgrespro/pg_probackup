@@ -489,7 +489,7 @@ merge_files(void *arg)
 		 * of DELTA backup we should consider n_blocks to truncate the target
 		 * backup.
 		 */
-		if (file->write_size == BYTES_INVALID && file->n_blocks == -1)
+		if (file->write_size == BYTES_INVALID && file->n_blocks == BLOCKNUM_INVALID)
 		{
 			elog(VERBOSE, "Skip merging file \"%s\", the file didn't change",
 				 file->path);
@@ -605,7 +605,8 @@ merge_files(void *arg)
 								 to_backup->start_lsn,
 								 to_backup->backup_mode,
 								 to_backup->compress_alg,
-								 to_backup->compress_level);
+								 to_backup->compress_level,
+								 false);
 
 				file->path = prev_path;
 
@@ -645,12 +646,12 @@ merge_files(void *arg)
 											 argument->from_external);
 			makeExternalDirPathByNum(to_root, argument->to_external_prefix,
 									 new_dir_num);
-			copy_file(FIO_LOCAL_HOST, to_root, FIO_LOCAL_HOST, file);
+			copy_file(FIO_LOCAL_HOST, to_root, FIO_LOCAL_HOST, file, false);
 		}
 		else if (strcmp(file->name, "pg_control") == 0)
 			copy_pgcontrol_file(argument->from_root, FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
 		else
-			copy_file(FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file);
+			copy_file(FIO_LOCAL_HOST, argument->to_root, FIO_LOCAL_HOST, file, false);
 
 		/*
 		 * We need to save compression algorithm type of the target backup to be

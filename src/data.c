@@ -521,7 +521,7 @@ bool
 backup_data_file(backup_files_arg* arguments,
 				 const char *to_path, pgFile *file,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-				 CompressAlg calg, int clevel)
+				 CompressAlg calg, int clevel, bool missing_ok)
 {
 	FILE		*in;
 	FILE		*out;
@@ -567,9 +567,14 @@ backup_data_file(backup_files_arg* arguments,
 		 */
 		if (errno == ENOENT)
 		{
-			elog(LOG, "File \"%s\" is not found", file->path);
-			file->write_size = FILE_NOT_FOUND;
-			return false;
+			if (missing_ok)
+			{
+				elog(LOG, "File \"%s\" is not found", file->path);
+				file->write_size = FILE_NOT_FOUND;
+				return false;
+			}
+			else
+				elog(ERROR, "File \"%s\" is not found", file->path);
 		}
 
 		elog(ERROR, "cannot open file \"%s\": %s",
@@ -754,7 +759,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 			break;
 
 		/*
-		 * We need to truncate result file if data file in a incremental backup
+		 * We need to truncate result file if data file in an incremental backup
 		 * less than data file in a full backup. We know it thanks to n_blocks.
 		 *
 		 * It may be equal to -1, then we don't want to truncate the result
@@ -939,7 +944,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
  */
 bool
 copy_file(fio_location from_location, const char *to_root,
-		  fio_location to_location, pgFile *file)
+		  fio_location to_location, pgFile *file, bool missing_ok)
 {
 	char		to_path[MAXPGPATH];
 	FILE	   *in;
@@ -963,12 +968,17 @@ copy_file(fio_location from_location, const char *to_root,
 		FIN_FILE_CRC32(true, crc);
 		file->crc = crc;
 
-		/* maybe deleted, it's not error */
+		/* maybe deleted, it's not error in case of backup */
 		if (errno == ENOENT)
 		{
-			elog(LOG, "File \"%s\" is not found", file->path);
-			file->write_size = FILE_NOT_FOUND;
-			return false;
+			if (missing_ok)
+			{
+				elog(LOG, "File \"%s\" is not found", file->path);
+				file->write_size = FILE_NOT_FOUND;
+				return false;
+			}
+			else
+				elog(ERROR, "File \"%s\" is not found", file->path);
 		}
 
 		elog(ERROR, "cannot open source file \"%s\": %s", file->path,
