@@ -577,11 +577,6 @@ extern const char* deparse_compress_alg(int alg);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool omit_symlink, bool add_root, int external_dir_num, fio_location location);
 
-extern void create_data_directories_manual(const char *data_dir,
-									const char *backup_dir,
-									bool extract_tablespaces,
-									fio_location location);
-
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
 										const char *backup_dir,
