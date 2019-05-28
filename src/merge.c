@@ -328,8 +328,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 
 	/*
 	 * Update to_backup metadata.
+	 * We cannot set backup status to OK just yet,
+	 * because it still has old start_time.
 	 */
-	to_backup->status = BACKUP_STATUS_OK;
 	StrNCpy(to_backup->program_version, PROGRAM_VERSION,
 			sizeof(to_backup->program_version));
 	to_backup->parent_backup = INVALID_BACKUP_ID;
@@ -421,7 +422,12 @@ delete_source_backup:
 
 	/*
 	 * Merging finished, now we can safely update ID of the destination backup.
+	 * TODO: for this critical section we must save incremental backup start_tome
+	 * to FULL backup meta, so even if crash happens after incremental backup removal
+	 * but before full backup obtaining new start_time we could safely continue
+	 * this failed backup.
 	 */
+	to_backup->status = BACKUP_STATUS_OK;
 	to_backup->start_time = from_backup->start_time;
 	write_backup(to_backup);
 
