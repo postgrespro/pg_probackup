@@ -12,7 +12,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_compression_stream_zlib(self):
+    def test_basic_compression_stream_zlib(self):
         """
         make archive node, make full and page stream backups,
         check data correctness in restored instance
@@ -25,7 +25,6 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on'}
             )
@@ -245,7 +244,6 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on'}
             )
@@ -355,7 +353,6 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on'}
             )
@@ -465,7 +462,6 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'ptrack_enable': 'on'}
             )

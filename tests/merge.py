@@ -12,7 +12,7 @@ module_name = "merge"
 
 class MergeTest(ProbackupTest, unittest.TestCase):
 
-    def test_merge_full_page(self):
+    def test_basic_merge_full_page(self):
         """
         Test MERGE command, it merges FULL backup with target PAGE backups
         """

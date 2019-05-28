@@ -24,7 +24,11 @@ Specify path to pg_probackup binary file. By default tests use <Path to Git repo
  export PGPROBACKUPBIN=<path to pg_probackup>
 
 Remote backup depends on key authentithication to local machine via ssh as current user.
- PGPROBACKUP_SSH_REMOTE=ON
+ export PGPROBACKUP_SSH_REMOTE=ON
+
+Run suit of basic simple tests:
+ export PG_PROBACKUP_TEST_BASIC=ON
+
 
 Usage:
  pip install testgres

@@ -13,7 +13,7 @@ module_name = 'page'
 class PageBackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
-    def test_page_vacuum_truncate(self):
+    def test_basic_page_vacuum_truncate(self):
         """
         make node, create table, take full backup,
         delete last 3 pages, vacuum relation,
@@ -27,7 +27,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
             }
@@ -119,7 +118,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
 
@@ -207,7 +205,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
 
@@ -301,7 +298,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'fsync': 'off',
                 'shared_buffers': '1GB',
                 'maintenance_work_mem': '1GB',
@@ -383,7 +379,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
             }
@@ -462,7 +457,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
             }
@@ -1030,7 +1024,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'max_wal_size': '10GB',
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '5min',
                 'autovacuum': 'off'
             }

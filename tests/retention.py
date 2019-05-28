@@ -739,7 +739,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_window_merge_multiple_descendants(self):
+    def test_basic_window_merge_multiple_descendants(self):
         """
         PAGEb3
           |                 PAGEa3
@@ -937,8 +937,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             options=[
                 '--retention-window=1', '--expired',
                 '--merge-expired', '--log-level-console=log'])
-
-        print(output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
 

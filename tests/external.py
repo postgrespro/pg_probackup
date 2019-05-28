@@ -13,7 +13,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_external_simple(self):
+    def test_basic_external(self):
         """
         make node, create external directory, take backup
         with external directory, restore backup, check that

@@ -1301,7 +1301,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             conn.execute(
                 "insert into tbl select i from generate_series(0,100) as i")
 
-
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'),
             initdb_params=['--data-checksums'])
@@ -1439,9 +1438,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -1529,9 +1526,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

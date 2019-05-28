@@ -25,7 +25,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)
@@ -83,7 +82,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)
@@ -232,7 +230,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)
@@ -287,7 +284,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)
@@ -363,7 +359,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)
@@ -639,7 +634,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
-    def test_master_and_replica_concurrent_archiving(self):
+    def test_basic_master_and_replica_concurrent_archiving(self):
         """
             make node 'master 'with archiving,
             take archive backup and turn it into replica,
@@ -736,7 +731,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
@@ -810,7 +804,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '30s'}
             )
         self.init_pb(backup_dir)

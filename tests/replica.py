@@ -278,7 +278,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_make_replica_via_restore(self):
+    def test_basic_make_replica_via_restore(self):
         """
         make archive master, take full and page archive backups from master,
         set replica, make archive backup from replica

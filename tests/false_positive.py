@@ -20,9 +20,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -123,7 +121,6 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'ptrack_enable': 'on'
             }
@@ -205,7 +202,6 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_senders': '2',
                 'checkpoint_timeout': '300s',
                 'ptrack_enable': 'on'
             }

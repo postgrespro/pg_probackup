@@ -1,4 +1,5 @@
 import unittest
+import os
 
 from . import init, merge, option, show, compatibility, \
     backup, delete, delta, restore, validate, \
@@ -10,6 +11,10 @@ from . import init, merge, option, show, compatibility, \
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
+
+    if os.environ['PG_PROBACKUP_TEST_BASIC'] == 'ON':
+        loader.testMethodPrefix = 'test_basic'
+
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup))
