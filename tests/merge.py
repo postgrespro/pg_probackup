@@ -5,6 +5,7 @@ import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import shutil
 from datetime import datetime, timedelta
+import time
 
 module_name = "merge"
 
@@ -1704,6 +1705,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         page_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
+        page_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
         gdb = self.merge_backup(
             backup_dir, 'node', page_id,
             gdb=True, options=['--log-level-console=verbose'])
@@ -1730,10 +1734,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'backups', 'node',
             full_id, 'database', 'base', dboid)
 
-        self.assertFalse(
-            os.path.isdir(db_path),
-            'Directory {0} should not exist'.format(
-                db_path, full_id))
+        self.merge_backup(
+            backup_dir, 'node', page_id_2,
+            options=['--log-level-console=verbose'])
+
+        #self.assertFalse(
+        #    os.path.isdir(db_path),
+        #    'Directory {0} should not exist'.format(
+        #        db_path, full_id))
 
         self.del_test_dir(module_name, fname)
 
@@ -1795,7 +1803,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # backup half-merged
         self.assertEqual(
-            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
 
         self.assertEqual(
             full_id, self.show_pb(backup_dir, 'node')[0]['id'])
