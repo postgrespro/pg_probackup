@@ -84,7 +84,7 @@ fio_safestat(const char *path, struct stat *buf)
     return 0;
 }
 
-#define stat(x) fio_safestat(x)
+#define stat(x, y) fio_safestat(x, y)
 
 static ssize_t pread(int fd, void* buf, size_t size, off_t off)
 {
