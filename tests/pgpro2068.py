@@ -23,12 +23,12 @@ class BugTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '60min',
+                # 'checkpoint_timeout': '60min',
                 'checkpoint_completion_target': '0.9',
                 'bgwriter_delay': '10ms',
                 'bgwriter_lru_maxpages': '2000',
                 'bgwriter_lru_multiplier': '4.0',
-                'max_wal_size': '100GB'})
+                'max_wal_size': '256MB'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -75,36 +75,42 @@ class BugTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-
         # generate some more data and leave it in background
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            options=["-c", "4", "-T", "30"])
+            options=["-c", "4", "-j 4", "-T", "100"])
 
         # get pids of background workers
         startup_pid = replica.safe_psql(
             'postgres',
-            "select pid from pg_stat_activity where backend_type = 'startup'").rstrip()
+            "select pid from pg_stat_activity "
+            "where backend_type = 'startup'").rstrip()
 
         checkpointer_pid = replica.safe_psql(
             'postgres',
-            "select pid from pg_stat_activity where backend_type = 'checkpointer'").rstrip()
+            "select pid from pg_stat_activity "
+            "where backend_type = 'checkpointer'").rstrip()
 
         bgwriter_pid = replica.safe_psql(
             'postgres',
-            "select pid from pg_stat_activity where backend_type = 'background writer'").rstrip()
+            "select pid from pg_stat_activity "
+            "where backend_type = 'background writer'").rstrip()
 
         # wait for shared buffer on replica to be filled with dirty data
         sleep(10)
 
         # break checkpointer on UpdateLastRemovedPtr
         gdb_checkpointer = self.gdb_attach(checkpointer_pid)
+        gdb_checkpointer._execute('handle SIGINT noprint nostop pass')
+        gdb_checkpointer._execute('handle SIGUSR1 noprint nostop pass')
         gdb_checkpointer.set_breakpoint('UpdateLastRemovedPtr')
         gdb_checkpointer.continue_execution_until_break()
 
         # break recovery on UpdateControlFile
         gdb_recovery = self.gdb_attach(startup_pid)
+        gdb_recovery._execute('handle SIGINT noprint nostop pass')
+        gdb_recovery._execute('handle SIGUSR1 noprint nostop pass')
         gdb_recovery.set_breakpoint('UpdateMinRecoveryPoint')
         gdb_recovery.continue_execution_until_break()
         gdb_recovery.set_breakpoint('UpdateControlFile')
