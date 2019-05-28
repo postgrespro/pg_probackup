@@ -1246,3 +1246,38 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_drop_table(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        connect_1 = node.connect("postgres")
+        connect_1.execute(
+            "create table t_heap as select i"
+            " as id from generate_series(0,100) i")
+        connect_1.commit()
+
+        connect_2 = node.connect("postgres")
+        connect_2.execute("SELECT * FROM t_heap")
+        connect_2.commit()
+
+        # DROP table
+        connect_2.execute("DROP TABLE t_heap")
+        connect_2.commit()
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
