@@ -107,8 +107,8 @@ static void do_block_validation(void);
 static void do_amcheck(void);
 static void *check_files(void *arg);
 static void *check_indexes(void *arg);
-static parray* get_index_list(PGresult* res_db, int db_number,
-							  bool first_db_with_amcheck, PGconn* db_conn);
+static parray* get_index_list(PGresult* res_db,
+							  bool first_db_with_amcheck, PGconn* db_conn, char *dbname);
 static bool amcheck_one_index(backup_files_arg *arguments,
 				 pg_indexEntry *ind);
 
@@ -730,6 +730,7 @@ do_amcheck(void)
 	for(i = 0; i < n_databases; i++)
 	{
 		int j;
+		char *dbname;
 
 		if (index_list != NULL)
 		{
@@ -737,8 +738,10 @@ do_amcheck(void)
 			index_list = NULL;
 		}
 
-		index_list = get_index_list(res_db, i,
-									first_db_with_amcheck, db_conn);
+		dbname = PQgetvalue(res_db, i, 0);
+
+		index_list = get_index_list(res_db,
+									first_db_with_amcheck, db_conn, dbname);
 
 		if (index_list == NULL)
 		{
@@ -786,6 +789,11 @@ do_amcheck(void)
 			if (threads_args[j].ret > 0)
 				check_isok = false;
 		}
+
+		if (check_isok)
+			elog(INFO, "Amcheck succeeded for database '%s'", dbname);
+		else
+			elog(WARNING, "Amcheck failed for database '%s'", dbname);
 
 		/* cleanup */
 		pgut_disconnect(db_conn);
@@ -3176,14 +3184,12 @@ check_external_for_tablespaces(parray *external_list)
 
 /* Get index list for given database */
 static parray*
-get_index_list(PGresult *res_db, int db_number,
-			   bool first_db_with_amcheck, PGconn *db_conn)
+get_index_list(PGresult *res_db, bool first_db_with_amcheck,
+			   PGconn *db_conn, char *dbname)
 {
 	PGresult   *res;
 	char *nspname = NULL;
 	int i;
-
-	dbname = PQgetvalue(res_db, db_number, 0);
 
 	db_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
 							dbname,
@@ -3326,19 +3332,24 @@ amcheck_one_index(backup_files_arg *arguments,
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		elog(WARNING, "Thread [%d]. Amcheck failed for index: '%s.%s': %s",
-					   arguments->thread_num, ind->amcheck_nspname,
+		elog(WARNING, "Thread [%d]. Amcheck failed in database '%s' for index: '%s.%s': %s",
+					   arguments->thread_num,
+					   ind->dbname,
+					   ind->amcheck_nspname,
 					   ind->name, PQresultErrorMessage(res));
 
 		pfree(params[0]);
+		pfree(query);
 		PQclear(res);
 		return false;
 	}
 	else
-		elog(LOG, "Thread [%d]. Amcheck succeeded for index: '%s.%s'",
-				arguments->thread_num, ind->amcheck_nspname, ind->name);
+		elog(LOG, "Thread [%d]. Amcheck succeeded in database '%s' for index: '%s.%s'",
+				arguments->thread_num, ind->dbname,
+				ind->amcheck_nspname, ind->name);
 
 	pfree(params[0]);
+	pfree(query);
 	PQclear(res);
 	return true;
 }
