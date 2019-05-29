@@ -26,7 +26,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
                 # 'checkpoint_timeout': '60min',
                 'checkpoint_completion_target': '0.9',
                 'bgwriter_delay': '10ms',
-                'bgwriter_lru_maxpages': '2000',
+                'bgwriter_lru_maxpages': '1000',
                 'bgwriter_lru_multiplier': '4.0',
                 'max_wal_size': '256MB'})
 

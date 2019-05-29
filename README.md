@@ -55,6 +55,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
 wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
 apt-get install pg-probackup-{11,10,9.6,9.5}
+apt-get install pg-probackup-{11,10,9.6,9.5}-dbg
 
 #DEB-SRC Packages
 echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
@@ -64,14 +65,17 @@ apt-get source pg-probackup-{11,10,9.6,9.5}
 #RPM Centos Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
 yum install pg_probackup-{11,10,9.6,9.5}
+yum install pg_probackup-{11,10,9.6,9.5}-debuginfo
 
 #RPM RHEL Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-rhel.noarch.rpm
 yum install pg_probackup-{11,10,9.6,9.5}
+yum install pg_probackup-{11,10,9.6,9.5}-debuginfo
 
 #RPM Oracle Linux Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-oraclelinux.noarch.rpm
 yum install pg_probackup-{11,10,9.6,9.5}
+yum install pg_probackup-{11,10,9.6,9.5}-debuginfo
 
 #SRPM Packages
 yumdownloader --source pg_probackup-{11,10,9.6,9.5}
