@@ -88,7 +88,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     '--amcheck',
                     '--skip-block-validation',
                     '--log-level-file=verbose',
-                    '-d', 'postgres','-p', str(node.port)])
+                    '-d', 'postgres', '-p', str(node.port)])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
@@ -202,7 +202,8 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'ERROR: Checkdb --amcheck failed',
                 log_file_content)
             self.assertIn(
-                "WARNING: Thread [1]. Amcheck failed for index: 'public.t_heap_id_idx':",
+                "WARNING: Thread [1]. Amcheck failed in database 'postgres' "
+                "for index: 'public.t_heap_id_idx':",
                 log_file_content)
             self.assertIn(
                 'ERROR:  could not open relation with OID',
@@ -333,11 +334,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         with open(log_file_path) as f:
             log_file_content = f.read()
             self.assertIn(
-                "WARNING: Thread [1]. Amcheck failed for index: 'public.pgbench_accounts_pkey':",
+                "WARNING: Thread [1]. Amcheck failed in database 'db1' "
+                "for index: 'public.pgbench_accounts_pkey':",
                 log_file_content)
 
             self.assertIn(
-                "WARNING: Thread [1]. Amcheck failed for index: 'public.some_index':",
+                "WARNING: Thread [1]. Amcheck failed in database 'db2' "
+                "for index: 'public.some_index':",
                 log_file_content)
 
             self.assertIn(
