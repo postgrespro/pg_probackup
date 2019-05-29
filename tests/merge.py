@@ -176,7 +176,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Initialize instance and backup directory
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=["--data-checksums"],
+            set_replication=True, initdb_params=["--data-checksums"],
             pg_options={
                 'autovacuum': 'off'
             }
@@ -253,7 +253,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Initialize instance and backup directory
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=["--data-checksums"],
+            set_replication=True, initdb_params=["--data-checksums"],
             pg_options={
                 'autovacuum': 'off'
             }
@@ -329,7 +329,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Initialize instance and backup directory
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=["--data-checksums"],
+            set_replication=True, initdb_params=["--data-checksums"],
             pg_options={
                 'autovacuum': 'off'
             }
@@ -406,7 +406,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Initialize instance and backup directory
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=["--data-checksums"],
+            set_replication=True, initdb_params=["--data-checksums"],
             pg_options={
                 'autovacuum': 'off'
             }
@@ -1734,14 +1734,22 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'backups', 'node',
             full_id, 'database', 'base', dboid)
 
-        self.merge_backup(
-            backup_dir, 'node', page_id_2,
-            options=['--log-level-console=verbose'])
-
-        #self.assertFalse(
-        #    os.path.isdir(db_path),
-        #    'Directory {0} should not exist'.format(
-        #        db_path, full_id))
+        try:
+            self.merge_backup(
+                backup_dir, 'node', page_id_2,
+                options=['--log-level-console=verbose'])
+            self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of missing parent.\n "
+                    "Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "ERROR: Parent full backup for the given "
+                "backup {0} was not found".format(
+                    page_id_2) in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         self.del_test_dir(module_name, fname)
 
@@ -1798,22 +1806,26 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb.set_breakpoint('pgFileDelete')
         gdb.continue_execution_until_break(30)
-
         gdb._execute('signal SIGKILL')
-
-        # backup half-merged
-        #self.assertEqual(
-        #    'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
 
         self.assertEqual(
             full_id, self.show_pb(backup_dir, 'node')[0]['id'])
 
         # restore
         node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
-
-        pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        try:
+            self.restore_node(backup_dir, 'node', node)
+            self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of orphan status.\n "
+                    "Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} is orphan".format(page_1),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         self.del_test_dir(module_name, fname)
 
