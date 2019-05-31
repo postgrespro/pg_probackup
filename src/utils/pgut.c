@@ -228,7 +228,10 @@ pgut_connect(const char *host, const char *port,
 							dbname, username, password);
 
 		if (PQstatus(conn) == CONNECTION_OK)
+		{
+			pgut_atexit_push(pgut_disconnect_callback, conn);
 			return conn;
+		}
 
 		if (conn && PQconnectionNeedsPassword(conn) && prompt_password)
 		{
@@ -354,6 +357,7 @@ pgut_disconnect(PGconn *conn)
 {
 	if (conn)
 		PQfinish(conn);
+	pgut_atexit_pop(pgut_disconnect_callback, conn);
 }
 
 
@@ -780,6 +784,14 @@ struct pgut_atexit_item
 };
 
 static pgut_atexit_item *pgut_atexit_stack = NULL;
+
+void
+pgut_disconnect_callback(bool fatal, void *userdata)
+{
+	PGconn *conn = (PGconn *) userdata;
+	if (conn)
+		pgut_disconnect(conn);
+}
 
 void
 pgut_atexit_push(pgut_atexit_callback callback, void *userdata)

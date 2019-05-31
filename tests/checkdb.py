@@ -75,10 +75,10 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 '-d', 'postgres', '-p', str(node.port)])
 
         self.assertIn(
-            'INFO: Checkdb --amcheck executed successfully',
+            'INFO: checkdb --amcheck finished successfully',
             output)
         self.assertIn(
-            'INFO: Indexes are valid',
+            'All checked indexes are valid',
             output)
 
         # logging to file sanity
@@ -143,7 +143,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         with open(log_file_path) as f:
             log_file_content = f.read()
             self.assertIn(
-                'INFO: Checkdb --amcheck executed successfully',
+                'INFO: checkdb --amcheck finished successfully',
                 log_file_content)
             self.assertIn(
                 'VERBOSE: (query)',
@@ -167,7 +167,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         with open(log_file_path) as f:
             log_file_content = f.read()
             self.assertIn(
-                'INFO: Checkdb --amcheck executed successfully',
+                'INFO: checkdb --amcheck finished successfully',
                 log_file_content)
             self.assertIn(
                 'VERBOSE: (query)',
@@ -199,7 +199,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         with open(log_file_path) as f:
             log_file_content = f.read()
             self.assertIn(
-                'ERROR: Checkdb --amcheck failed',
+                'ERROR: checkdb --amcheck finished with failure',
                 log_file_content)
             self.assertIn(
                 "WARNING: Thread [1]. Amcheck failed in database 'postgres' "
@@ -323,7 +323,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Checkdb --amcheck failed",
+                "ERROR: checkdb --amcheck finished with failure",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -344,7 +344,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 log_file_content)
 
             self.assertIn(
-                "ERROR: Checkdb --amcheck failed",
+                "ERROR: checkdb --amcheck finished with failure",
                 log_file_content)
 
         # Clean after yourself

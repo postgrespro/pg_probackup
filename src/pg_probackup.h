@@ -148,15 +148,6 @@ typedef struct pgFile
 							   * i.e. datafiles without _ptrack */
 } pgFile;
 
-typedef struct pg_indexEntry
-{
-	Oid indexrelid;
-	char *name;
-	char *dbname;
-	char *amcheck_nspname; /* schema where amcheck extention is located */
-	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
-} pg_indexEntry;
-
 /* Special values of datapagemap_t bitmapsize */
 #define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
 
@@ -199,6 +190,21 @@ typedef enum ShowFormat
 #define PROGRAM_VERSION	"2.1.3"
 #define AGENT_PROTOCOL_VERSION 20103
 
+
+typedef struct ConnectionOptions
+{
+	const char *pgdatabase;
+	const char *pghost;
+	const char *pgport;
+	const char *pguser;
+} ConnectionOptions;
+
+typedef struct ConnectionArgs
+{
+	PGconn	   *conn;
+	PGcancel   *cancel_conn;
+} ConnectionArgs;
+
 /*
  * An instance configuration. It can be stored in a configuration file or passed
  * from command line.
@@ -210,15 +216,10 @@ typedef struct InstanceConfig
 
 	char	   *pgdata;
 	char	   *external_dir_str;
-	const char *pgdatabase;
-	const char *pghost;
-	const char *pgport;
-	const char *pguser;
 
-	const char *master_host;
-	const char *master_port;
-	const char *master_db;
-	const char *master_user;
+	ConnectionOptions conn_opt;
+	ConnectionOptions master_conn_opt;
+
 	uint32		replica_timeout;
 
 	/* Wait timeout for WAL segment archiving */
@@ -240,6 +241,16 @@ typedef struct InstanceConfig
 
 extern ConfigOption instance_options[];
 extern InstanceConfig instance_config;
+
+typedef struct PGNodeInfo
+{
+	uint32			block_size;
+	uint32			wal_block_size;
+	uint32			checksum_version;
+
+	char			program_version[100];
+	char			server_version[100];
+} PGNodeInfo;
 
 typedef struct pgBackup pgBackup;
 
@@ -278,10 +289,10 @@ struct pgBackup
 	int				compress_level;
 
 	/* Fields needed for compatibility check */
+	PGNodeInfo		nodeInfo;
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
-
 	char			program_version[100];
 	char			server_version[100];
 
@@ -330,9 +341,7 @@ typedef struct
 	parray	   *external_dirs;
 	XLogRecPtr	prev_start_lsn;
 
-	PGconn	   *backup_conn;
-	PGcancel   *cancel_conn;
-	parray	   *index_list;
+	ConnectionArgs conn_arg;
 	int			thread_num;
 
 	/*
@@ -341,6 +350,7 @@ typedef struct
 	 */
 	int			ret;
 } backup_files_arg;
+
 
 /*
  * When copying datafiles to backup we validate and compress them block
@@ -462,13 +472,14 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time, bool no_validate);
-extern void do_checkdb(bool need_amcheck);
+extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt, 
+				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
-extern char *pg_ptrack_get_block(backup_files_arg *arguments,
+extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 Oid dbOid, Oid tblsOid, Oid relOid,
 								 BlockNumber blknum,
 								 size_t *result_size);
@@ -625,8 +636,7 @@ extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 
 /* in data.c */
-extern bool check_data_file(backup_files_arg* arguments,
-							pgFile *file);
+extern bool check_data_file(ConnectionArgs* arguments, pgFile* file, uint32 checksum_version);
 extern bool backup_data_file(backup_files_arg* arguments,
 							 const char *to_path, pgFile *file,
 							 XLogRecPtr prev_backup_start_lsn,
@@ -684,5 +694,11 @@ extern uint32 parse_program_version(const char *program_version);
 extern bool   parse_page(Page page, XLogRecPtr *lsn);
 int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				   CompressAlg alg, int level, const char **errormsg);
+
+
+extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
+extern void check_system_identifiers(PGconn *conn, char *pgdata);
+extern void parse_filelist_filenames(parray *files, const char *root);
+
 
 #endif /* PG_PROBACKUP_H */

@@ -418,7 +418,10 @@ main(int argc, char *argv[])
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
 
-	/* Option --instance is required for all commands except init and show */
+	/*
+	 * Option --instance is required for all commands except
+	 * init, show, checkdb and validate
+	 */
 	if (instance_name == NULL)
 	{
 		if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
@@ -553,16 +556,16 @@ main(int argc, char *argv[])
 			elog(ERROR, "Invalid backup-id \"%s\"", backup_id_string);
 	}
 
-	if (!instance_config.pghost && instance_config.remote.host)
-		instance_config.pghost = instance_config.remote.host;
+	if (!instance_config.conn_opt.pghost && instance_config.remote.host)
+		instance_config.conn_opt.pghost = instance_config.remote.host;
 
 		/* Setup stream options. They are used in streamutil.c. */
-	if (instance_config.pghost != NULL)
-		dbhost = pstrdup(instance_config.pghost);
-	if (instance_config.pgport != NULL)
-		dbport = pstrdup(instance_config.pgport);
-	if (instance_config.pguser != NULL)
-		dbuser = pstrdup(instance_config.pguser);
+	if (instance_config.conn_opt.pghost != NULL)
+		dbhost = pstrdup(instance_config.conn_opt.pghost);
+	if (instance_config.conn_opt.pgport != NULL)
+		dbport = pstrdup(instance_config.conn_opt.pgport);
+	if (instance_config.conn_opt.pguser != NULL)
+		dbuser = pstrdup(instance_config.conn_opt.pguser);
 
 	/* setup exclusion list for file search */
 	if (!backup_logs)
@@ -663,7 +666,8 @@ main(int argc, char *argv[])
 			do_set_config(false);
 			break;
 		case CHECKDB_CMD:
-			do_checkdb(need_amcheck);
+			do_checkdb(need_amcheck,
+					   instance_config.conn_opt, instance_config.pgdata);
 			break;
 		case NO_CMD:
 			/* Should not happen */

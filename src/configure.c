@@ -72,43 +72,43 @@ ConfigOption instance_options[] =
 	/* Connection options */
 	{
 		's', 'd', "pgdatabase",
-		&instance_config.pgdatabase, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pgdatabase, SOURCE_CMD, 0,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	{
 		's', 'h', "pghost",
-		&instance_config.pghost, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pghost, SOURCE_CMD, 0,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	{
 		's', 'p', "pgport",
-		&instance_config.pgport, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pgport, SOURCE_CMD, 0,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	{
 		's', 'U', "pguser",
-		&instance_config.pguser, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pguser, SOURCE_CMD, 0,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	/* Replica options */
 	{
 		's', 202, "master-db",
-		&instance_config.master_db, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pgdatabase, SOURCE_CMD, 0,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{
 		's', 203, "master-host",
-		&instance_config.master_host, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pghost, SOURCE_CMD, 0,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{
 		's', 204, "master-port",
-		&instance_config.master_port, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pgport, SOURCE_CMD, 0,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{
 		's', 205, "master-user",
-		&instance_config.master_user, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pguser, SOURCE_CMD, 0,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{

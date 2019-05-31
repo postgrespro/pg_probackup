@@ -49,8 +49,6 @@ const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
-/* list of indexes for use in checkdb --amcheck */
-static parray *index_list = NULL;
 
 /* We need critical section for datapagemap_add() in case of using threads */
 static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -68,6 +66,9 @@ typedef struct
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
+
+	XLogRecPtr	startpos;
+	TimeLineID	starttli;
 } StreamThreadArg;
 
 static pthread_t stream_thread;
@@ -76,11 +77,6 @@ static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
 bool exclusive_backup = false;
-bool heapallindexed_is_supported = false;
-
-/* Backup connections */
-static PGconn *backup_conn = NULL;
-static PGconn *master_conn = NULL;
 
 /* PostgreSQL server version from "backup_conn" */
 static int server_version = 0;
@@ -95,69 +91,67 @@ static bool pg_stop_backup_is_sent = false;
  * Backup routines
  */
 static void backup_cleanup(bool fatal, void *userdata);
-static void backup_disconnect(bool fatal, void *userdata);
-
-static void pgdata_basic_setup(bool amcheck_only);
 
 static void *backup_files(void *arg);
 
-static void do_backup_instance(void);
+static void do_backup_instance(PGconn *backup_conn);
 
-static void do_block_validation(void);
-static void do_amcheck(void);
-static void *check_files(void *arg);
-static void *check_indexes(void *arg);
-static parray* get_index_list(PGresult* res_db, int db_number,
-							  bool first_db_with_amcheck, PGconn* db_conn);
-static bool amcheck_one_index(backup_files_arg *arguments,
-				 pg_indexEntry *ind);
-
-static void pg_start_backup(const char *label, bool smooth, pgBackup *backup);
+static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
+							PGconn *backup_conn, PGconn *master_conn);
 static void pg_switch_wal(PGconn *conn);
-static void pg_stop_backup(pgBackup *backup);
-static int checkpoint_timeout(void);
+static void pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn);
+static int checkpoint_timeout(PGconn *backup_conn);
 
 //static void backup_list_file(parray *files, const char *root, )
-static void parse_backup_filelist_filenames(parray *files, const char *root);
 static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
 							   bool wait_prev_segment);
-static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup);
-static void make_pagemap_from_ptrack(parray *files);
+static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup, PGconn *backup_conn);
+static void make_pagemap_from_ptrack(parray* files, PGconn* backup_conn);
 static void *StreamLog(void *arg);
 
-static void check_external_for_tablespaces(parray *external_list);
+static void check_external_for_tablespaces(parray *external_list,
+										   PGconn *backup_conn);
 
 /* Ptrack functions */
-static void pg_ptrack_clear(void);
-static bool pg_ptrack_support(void);
-static bool pg_ptrack_enable(void);
-static bool pg_checksum_enable(void);
-static bool pg_is_in_recovery(void);
-static bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid);
+static void pg_ptrack_clear(PGconn *backup_conn);
+static bool pg_ptrack_support(PGconn *backup_conn);
+static bool pg_ptrack_enable(PGconn *backup_conn);
+static bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid,
+									   PGconn *backup_conn);
 static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
-									 size_t *result_size);
-static XLogRecPtr get_last_ptrack_lsn(void);
+									 size_t *result_size,
+									 PGconn *backup_conn);
+static XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn);
 
 /* Check functions */
-static void check_server_version(void);
-static void check_system_identifiers(void);
-static void confirm_block_size(const char *name, int blcksz);
+static bool pg_checksum_enable(PGconn *conn);
+static bool pg_is_in_recovery(PGconn *conn);
+static void check_server_version(PGconn *conn);
+static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
 static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 
-#define disconnect_and_exit(code)				\
-	{											\
-	if (conn != NULL) PQfinish(conn);			\
-	exit(code);									\
+static void
+backup_stopbackup_callback(bool fatal, void *userdata)
+{
+	PGconn *pg_startbackup_conn = (PGconn *) userdata;
+	/*
+	 * If backup is in progress, notify stop of backup to PostgreSQL
+	 */
+	if (backup_in_progress)
+	{
+		elog(WARNING, "backup in progress, stop backup");
+		pg_stop_backup(NULL, pg_startbackup_conn);	/* don't care stop_lsn on error case */
 	}
+}
 
 /*
  * Take a backup of a single postgresql instance.
  * Move files from 'pgdata' to a subdirectory in 'backup_path'.
  */
 static void
-do_backup_instance(void)
+do_backup_instance(PGconn *backup_conn)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -177,13 +171,15 @@ do_backup_instance(void)
 	parray	   *external_dirs = NULL;
 
 	pgFile	   *pg_control = NULL;
+	PGconn	   *master_conn = NULL;
+	PGconn	   *pg_startbackup_conn = NULL;
 
 	elog(LOG, "Database backup start");
 	if(current.external_dir_str)
 	{
 		external_dirs = make_external_directory_list(current.external_dir_str,
 													 false);
-		check_external_for_tablespaces(external_dirs);
+		check_external_for_tablespaces(external_dirs, backup_conn);
 	}
 
 	/* Initialize size summary */
@@ -228,7 +224,7 @@ do_backup_instance(void)
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn();
+		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn);
 
 		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
@@ -242,13 +238,27 @@ do_backup_instance(void)
 
 	/* Clear ptrack files for FULL and PAGE backup */
 	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && is_ptrack_enable)
-		pg_ptrack_clear();
+		pg_ptrack_clear(backup_conn);
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
-	pg_start_backup(label, smooth_checkpoint, &current);
+
+	/* Create connection to master server needed to call pg_start_backup */
+	if (current.from_replica && exclusive_backup)
+	{
+		master_conn = pgut_connect(instance_config.master_conn_opt.pghost,
+								   instance_config.master_conn_opt.pgport,
+								   instance_config.master_conn_opt.pgdatabase,
+								   instance_config.master_conn_opt.pguser);
+		pg_startbackup_conn = master_conn;
+	}
+	else
+		pg_startbackup_conn = backup_conn;
+
+	pg_start_backup(label, smooth_checkpoint, &current,
+					backup_conn, pg_startbackup_conn);
 
 	/* For incremental backup check that start_lsn is not from the past */
 	if (current.backup_mode != BACKUP_MODE_FULL &&
@@ -270,6 +280,10 @@ do_backup_instance(void)
 	/* start stream replication */
 	if (stream_wal)
 	{
+		/* How long we should wait for streaming end after pg_stop_backup */
+		stream_stop_timeout = checkpoint_timeout(backup_conn);
+		stream_stop_timeout = stream_stop_timeout + stream_stop_timeout * 0.1;
+
 		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
 		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
@@ -278,10 +292,10 @@ do_backup_instance(void)
 		/*
 		 * Connect in replication mode to the server.
 		 */
-		stream_thread_arg.conn = pgut_connect_replication(instance_config.pghost,
-														  instance_config.pgport,
-														  instance_config.pgdatabase,
-														  instance_config.pguser);
+		stream_thread_arg.conn = pgut_connect_replication(instance_config.conn_opt.pghost,
+														  instance_config.conn_opt.pgport,
+														  instance_config.conn_opt.pgdatabase,
+														  instance_config.conn_opt.pguser);
 
 		if (!CheckServerVersionForStreaming(stream_thread_arg.conn))
 		{
@@ -307,6 +321,9 @@ do_backup_instance(void)
 
         /* By default there are some error */
 		stream_thread_arg.ret = 1;
+		/* we must use startpos as start_lsn from start_backup */
+		stream_thread_arg.startpos = current.start_lsn;
+		stream_thread_arg.starttli = current.tli;
 
 		thread_interrupted = false;
 		pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
@@ -346,13 +363,13 @@ do_backup_instance(void)
 	 * 1 - create 'base'
 	 * 2 - create 'base/1'
 	 *
-	 * Sorted array is used at least in parse_backup_filelist_filenames(),
+	 * Sorted array is used at least in parse_filelist_filenames(),
 	 * extractPageMap(), make_pagemap_from_ptrack().
 	 */
 	parray_qsort(backup_files_list, pgFileComparePath);
 
 	/* Extract information about files in backup_list parsing their names:*/
-	parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
+	parse_filelist_filenames(backup_files_list, instance_config.pgdata);
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -381,7 +398,7 @@ do_backup_instance(void)
 		/*
 		 * Build the page map from ptrack information.
 		 */
-		make_pagemap_from_ptrack(backup_files_list);
+		make_pagemap_from_ptrack(backup_files_list, backup_conn);
 	}
 
 	/*
@@ -443,8 +460,8 @@ do_backup_instance(void)
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
 		arg->prev_start_lsn = prev_backup_start_lsn;
-		arg->backup_conn = NULL;
-		arg->cancel_conn = NULL;
+		arg->conn_arg.conn = NULL;
+		arg->conn_arg.cancel_conn = NULL;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -514,9 +531,8 @@ do_backup_instance(void)
 		}
 	}
 
-
 	/* Notify end of backup */
-	pg_stop_backup(&current);
+	pg_stop_backup(&current, pg_startbackup_conn);
 
 	if (current.from_replica && !exclusive_backup)
 		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
@@ -589,251 +605,6 @@ do_backup_instance(void)
 	backup_files_list = NULL;
 }
 
-/* collect list of files and run threads to check files in the instance */
-static void
-do_block_validation(void)
-{
-	int			i;
-	char		database_path[MAXPGPATH];
-	/* arrays with meta info for multi threaded backup */
-	pthread_t	*threads;
-	backup_files_arg *threads_args;
-	bool		check_isok = true;
-
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
-
-	/* initialize file list */
-	backup_files_list = parray_new();
-
-	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(backup_files_list, instance_config.pgdata,
-				  true, true, false, 0, FIO_DB_HOST);
-
-	/*
-	 * Sort pathname ascending.
-	 *
-	 * For example:
-	 * 1 - create 'base'
-	 * 2 - create 'base/1'
-	 */
-	parray_qsort(backup_files_list, pgFileComparePath);
-	/* Extract information about files in backup_list parsing their names:*/
-	parse_backup_filelist_filenames(backup_files_list, instance_config.pgdata);
-
-	/* setup threads */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-		pg_atomic_clear_flag(&file->lock);
-	}
-
-	/* Sort by size for load balancing */
-	parray_qsort(backup_files_list, pgFileCompareSize);
-
-	/* init thread args with own file lists */
-	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
-
-	for (i = 0; i < num_threads; i++)
-	{
-		backup_files_arg *arg = &(threads_args[i]);
-
-		arg->from_root = instance_config.pgdata;
-		arg->to_root = database_path;
-		arg->files_list = backup_files_list;
-		arg->index_list = NULL;
-		arg->prev_filelist = NULL;
-		arg->prev_start_lsn = InvalidXLogRecPtr;
-		arg->backup_conn = NULL;
-		arg->cancel_conn = NULL;
-		/* By default there are some error */
-		arg->ret = 1;
-	}
-
-	/* TODO write better info message */
-	elog(INFO, "Start checking data files");
-
-	/* Run threads */
-	for (i = 0; i < num_threads; i++)
-	{
-		backup_files_arg *arg = &(threads_args[i]);
-
-		elog(VERBOSE, "Start thread num: %i", i);
-
-		pthread_create(&threads[i], NULL, check_files, arg);
-	}
-
-	/* Wait threads */
-	for (i = 0; i < num_threads; i++)
-	{
-		pthread_join(threads[i], NULL);
-		if (threads_args[i].ret > 0)
-			check_isok = false;
-	}
-
-	/* cleanup */
-	if (backup_files_list)
-	{
-		parray_walk(backup_files_list, pgFileFree);
-		parray_free(backup_files_list);
-		backup_files_list = NULL;
-	}
-
-	/* TODO write better info message */
-	if (check_isok)
-		elog(INFO, "Data files are valid");
-	else
-		elog(ERROR, "Checkdb failed");
-}
-
-/*
- * Entry point of checkdb --amcheck.
- *
- * Connect to all databases in the cluster
- * and get list of persistent indexes,
- * then run parallel threads to perform bt_index_check()
- * for all indexes from the list.
- *
- * If amcheck extension is not installed in the database,
- * skip this database and report it via warning message.
- */
-static void
-do_amcheck(void)
-{
-	int			i;
-	char		database_path[MAXPGPATH];
-	/* arrays with meta info for multi threaded backup */
-	pthread_t	*threads;
-	backup_files_arg *threads_args;
-	bool		check_isok = true;
-	PGresult   *res_db;
-	int n_databases = 0;
-	bool first_db_with_amcheck = true;
-	PGconn *db_conn = NULL;
-	bool db_skipped = false;
-
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
-
-	res_db = pgut_execute(backup_conn,
-						"SELECT datname, oid, dattablespace "
-						"FROM pg_database "
-						"WHERE datname NOT IN ('template0', 'template1')",
-						  0, NULL);
-
-	n_databases =  PQntuples(res_db);
-
-	elog(INFO, "Start amchecking PostgreSQL instance");
-
-	/* For each database check indexes. In parallel. */
-	for(i = 0; i < n_databases; i++)
-	{
-		int j;
-
-		if (index_list != NULL)
-		{
-			free(index_list);
-			index_list = NULL;
-		}
-
-		index_list = get_index_list(res_db, i,
-									first_db_with_amcheck, db_conn);
-
-		if (index_list == NULL)
-		{
-			if (db_conn)
-				pgut_disconnect(db_conn);
-			db_skipped = true;
-			continue;
-		}
-
-		first_db_with_amcheck = false;
-
-		/* init thread args with own file lists */
-		threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-		threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
-
-		for (j = 0; j < num_threads; j++)
-		{
-			backup_files_arg *arg = &(threads_args[j]);
-
-			arg->from_root = instance_config.pgdata;
-			arg->to_root = database_path;
-			arg->files_list = NULL;
-			arg->index_list = index_list;
-			arg->prev_filelist = NULL;
-			arg->prev_start_lsn = InvalidXLogRecPtr;
-			arg->backup_conn = NULL;
-			arg->cancel_conn = NULL;
-			arg->thread_num = j + 1;
-			/* By default there are some error */
-			arg->ret = 1;
-		}
-
-		/* Run threads */
-		for (j = 0; j < num_threads; j++)
-		{
-			backup_files_arg *arg = &(threads_args[j]);
-			elog(VERBOSE, "Start thread num: %i", j);
-			pthread_create(&threads[j], NULL, check_indexes, arg);
-		}
-
-		/* Wait threads */
-		for (j = 0; j < num_threads; j++)
-		{
-			pthread_join(threads[j], NULL);
-			if (threads_args[j].ret > 0)
-				check_isok = false;
-		}
-
-		/* cleanup */
-		pgut_disconnect(db_conn);
-
-		if (interrupted)
-			break;
-	}
-
-	/* Inform user about amcheck results */
-	if (!check_isok || interrupted)
-		elog(ERROR, "Checkdb --amcheck failed");
-
-	if (db_skipped)
-		elog(ERROR, "Some databases were not amchecked");
-
-	elog(INFO, "Checkdb --amcheck executed successfully");
-
-	/* We cannot state that all indexes are ok
-	 * without checking indexes in all databases
-	 */
-	if (check_isok && !interrupted && !db_skipped)
-		elog(INFO, "Indexes are valid");
-
-	/* cleanup */
-	PQclear(res_db);
-}
-
-/* Entry point of pg_probackup CHECKDB subcommand. */
-void
-do_checkdb(bool need_amcheck)
-{
-	bool amcheck_only = false;
-
-	if (skip_block_validation && !need_amcheck)
-		elog(ERROR, "Option '--skip-block-validation' must be used with '--amcheck' option");
-
-	if (skip_block_validation && need_amcheck)
-		amcheck_only = true;
-
-	pgdata_basic_setup(amcheck_only);
-
-	if (!skip_block_validation)
-		do_block_validation();
-
-	if (need_amcheck)
-		do_amcheck();
-}
-
 /*
  * Common code for CHECKDB and BACKUP commands.
  * Ensure that we're able to connect to the instance
@@ -843,44 +614,38 @@ do_checkdb(bool need_amcheck)
  * check remote PostgreSQL instance.
  * Also checking system ID in this case serves no purpose, because
  * all work is done by server.
+ * 
+ * Returns established connection
  */
-static void
-pgdata_basic_setup(bool amcheck_only)
+PGconn *
+pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 {
-	/* PGDATA is always required unless running checkdb in amcheck only mode */
-	if (!instance_config.pgdata && !amcheck_only)
-		elog(ERROR, "required parameter not specified: PGDATA "
-						 "(-D, --pgdata)");
+	PGconn *cur_conn;
 
 	/* Create connection for PostgreSQL */
-	backup_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
-							   instance_config.pgdatabase,
-							   instance_config.pguser);
-	pgut_atexit_push(backup_disconnect, NULL);
+	cur_conn = pgut_connect(conn_opt.pghost, conn_opt.pgport,
+							   conn_opt.pgdatabase,
+							   conn_opt.pguser);
 
-	current.primary_conninfo = pgut_get_conninfo_string(backup_conn);
+	current.primary_conninfo = pgut_get_conninfo_string(cur_conn);
 
 	/* Confirm data block size and xlog block size are compatible */
-	confirm_block_size("block_size", BLCKSZ);
-	confirm_block_size("wal_block_size", XLOG_BLCKSZ);
+	confirm_block_size(cur_conn, "block_size", BLCKSZ);
+	confirm_block_size(cur_conn, "wal_block_size", XLOG_BLCKSZ);
+	nodeInfo->block_size = BLCKSZ;
+	nodeInfo->wal_block_size = XLOG_BLCKSZ;
 
-	current.from_replica = pg_is_in_recovery();
+	current.from_replica = pg_is_in_recovery(cur_conn);
 
 	/* Confirm that this server version is supported */
-	check_server_version();
+	check_server_version(cur_conn);
 
-	if (pg_checksum_enable())
+	if (pg_checksum_enable(cur_conn))
 		current.checksum_version = 1;
 	else
 		current.checksum_version = 0;
 
-	/*
-	 * Ensure that backup directory was initialized for the same PostgreSQL
-	 * instance we opened connection to. And that target backup database PGDATA
-	 * belogns to the same instance.
-	 */
-	if (!amcheck_only)
-		check_system_identifiers();
+	nodeInfo->checksum_version = current.checksum_version;
 
 	if (current.checksum_version)
 		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
@@ -892,6 +657,11 @@ pgdata_basic_setup(bool amcheck_only)
 
 	StrNCpy(current.server_version, server_version_str,
 			sizeof(current.server_version));
+
+	StrNCpy(nodeInfo->server_version, server_version_str,
+			sizeof(nodeInfo->server_version));
+
+	return cur_conn;
 }
 
 /*
@@ -900,11 +670,23 @@ pgdata_basic_setup(bool amcheck_only)
 int
 do_backup(time_t start_time, bool no_validate)
 {
+	PGconn *backup_conn = NULL;
+
+	if (!instance_config.pgdata)
+		elog(ERROR, "required parameter not specified: PGDATA "
+						 "(-D, --pgdata)");
 	/*
 	 * setup backup_conn, do some compatibility checks and
 	 * fill basic info about instance
 	 */
-	pgdata_basic_setup(false);
+	backup_conn = pgdata_basic_setup(instance_config.conn_opt,
+										 &(current.nodeInfo));
+	/*
+	 * Ensure that backup directory was initialized for the same PostgreSQL
+	 * instance we opened connection to. And that target backup database PGDATA
+	 * belogns to the same instance.
+	 */
+	check_system_identifiers(backup_conn, instance_config.pgdata);
 
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
@@ -917,10 +699,10 @@ do_backup(time_t start_time, bool no_validate)
 
 	current.stream = stream_wal;
 
-	is_ptrack_support = pg_ptrack_support();
+	is_ptrack_support = pg_ptrack_support(backup_conn);
 	if (is_ptrack_support)
 	{
-		is_ptrack_enable = pg_ptrack_enable();
+		is_ptrack_enable = pg_ptrack_enable(backup_conn);
 	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
@@ -935,17 +717,9 @@ do_backup(time_t start_time, bool no_validate)
 	}
 
 	if (current.from_replica && exclusive_backup)
-	{
 		/* Check master connection options */
-		if (instance_config.master_host == NULL)
+		if (instance_config.master_conn_opt.pghost == NULL)
 			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
-
-		/* Create connection to master server */
-		master_conn = pgut_connect(instance_config.master_host,
-								   instance_config.master_port,
-								   instance_config.master_db,
-								   instance_config.master_user);
-	}
 
 	/* Start backup. Update backup status. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -974,7 +748,7 @@ do_backup(time_t start_time, bool no_validate)
 	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
-	do_backup_instance();
+	do_backup_instance(backup_conn);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
@@ -1016,12 +790,12 @@ do_backup(time_t start_time, bool no_validate)
  * Confirm that this server version is supported
  */
 static void
-check_server_version(void)
+check_server_version(PGconn *conn)
 {
 	PGresult   *res;
 
 	/* confirm server version */
-	server_version = PQserverVersion(backup_conn);
+	server_version = PQserverVersion(conn);
 
 	if (server_version == 0)
 		elog(ERROR, "Unknown server version %d", server_version);
@@ -1044,7 +818,7 @@ check_server_version(void)
 			 "server version is %s, must be %s or higher for backup from replica",
 			 server_version_str, "9.6");
 
-	res = pgut_execute_extended(backup_conn, "SELECT pgpro_edition()",
+	res = pgut_execute_extended(conn, "SELECT pgpro_edition()",
 								0, NULL, true, true);
 
 	/*
@@ -1088,14 +862,14 @@ check_server_version(void)
  * belogns to the same instance.
  * All system identifiers must be equal.
  */
-static void
-check_system_identifiers(void)
+void
+check_system_identifiers(PGconn *conn, char *pgdata)
 {
 	uint64		system_id_conn;
 	uint64		system_id_pgdata;
 
-	system_id_pgdata = get_system_identifier(instance_config.pgdata);
-	system_id_conn = get_remote_system_identifier(backup_conn);
+	system_id_pgdata = get_system_identifier(pgdata);
+	system_id_conn = get_remote_system_identifier(conn);
 
 	/* for checkdb check only system_id_pgdata and system_id_conn */
 	if (current.backup_mode == BACKUP_MODE_INVALID)
@@ -1124,15 +898,15 @@ check_system_identifiers(void)
  * compatible settings. Currently check BLCKSZ and XLOG_BLCKSZ.
  */
 static void
-confirm_block_size(const char *name, int blcksz)
+confirm_block_size(PGconn *conn, const char *name, int blcksz)
 {
 	PGresult   *res;
 	char	   *endp;
 	int			block_size;
 
-	res = pgut_execute(backup_conn, "SELECT pg_catalog.current_setting($1)", 1, &name);
+	res = pgut_execute(conn, "SELECT pg_catalog.current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
-		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(backup_conn));
+		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(conn));
 
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
 	if ((endp && *endp) || block_size != blcksz)
@@ -1147,7 +921,8 @@ confirm_block_size(const char *name, int blcksz)
  * Notify start of backup to PostgreSQL server.
  */
 static void
-pg_start_backup(const char *label, bool smooth, pgBackup *backup)
+pg_start_backup(const char *label, bool smooth, pgBackup *backup,
+				PGconn *backup_conn, PGconn *pg_startbackup_conn)
 {
 	PGresult   *res;
 	const char *params[2];
@@ -1158,10 +933,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	params[0] = label;
 
 	/* For 9.5 replica we call pg_start_backup() on master */
-	if (backup->from_replica && exclusive_backup)
-		conn = master_conn;
-	else
-		conn = backup_conn;
+	conn = pg_startbackup_conn;
 
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
@@ -1181,6 +953,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	 * is necessary to call pg_stop_backup() in backup_cleanup().
 	 */
 	backup_in_progress = true;
+	pgut_atexit_push(backup_stopbackup_callback, pg_startbackup_conn);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
@@ -1214,7 +987,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup)
 	 * wait for start_lsn to be replayed by replica
 	 */
 	if (backup->from_replica && exclusive_backup)
-		wait_replica_wal_lsn(backup->start_lsn, true);
+		wait_replica_wal_lsn(backup->start_lsn, true, backup_conn);
 }
 
 /*
@@ -1243,7 +1016,7 @@ pg_switch_wal(PGconn *conn)
  * TODO Maybe we should rather check ptrack_version()?
  */
 static bool
-pg_ptrack_support(void)
+pg_ptrack_support(PGconn *backup_conn)
 {
 	PGresult   *res_db;
 
@@ -1282,7 +1055,7 @@ pg_ptrack_support(void)
 
 /* Check if ptrack is enabled in target instance */
 static bool
-pg_ptrack_enable(void)
+pg_ptrack_enable(PGconn *backup_conn)
 {
 	PGresult   *res_db;
 
@@ -1299,11 +1072,11 @@ pg_ptrack_enable(void)
 
 /* Check if ptrack is enabled in target instance */
 static bool
-pg_checksum_enable(void)
+pg_checksum_enable(PGconn *conn)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "SHOW data_checksums", 0, NULL);
+	res_db = pgut_execute(conn, "SHOW data_checksums", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
 	{
@@ -1316,11 +1089,11 @@ pg_checksum_enable(void)
 
 /* Check if target instance is replica */
 static bool
-pg_is_in_recovery(void)
+pg_is_in_recovery(PGconn *conn)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "SELECT pg_catalog.pg_is_in_recovery()", 0, NULL);
+	res_db = pgut_execute(conn, "SELECT pg_catalog.pg_is_in_recovery()", 0, NULL);
 
 	if (PQgetvalue(res_db, 0, 0)[0] == 't')
 	{
@@ -1333,7 +1106,7 @@ pg_is_in_recovery(void)
 
 /* Clear ptrack files in all databases of the instance we connected to */
 static void
-pg_ptrack_clear(void)
+pg_ptrack_clear(PGconn *backup_conn)
 {
 	PGresult   *res_db,
 			   *res;
@@ -1358,9 +1131,10 @@ pg_ptrack_clear(void)
 		dbOid = atoi(PQgetvalue(res_db, i, 1));
 		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
 
-		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+		tmp_conn = pgut_connect(instance_config.conn_opt.pghost, instance_config.conn_opt.pgport,
 								dbname,
-								instance_config.pguser);
+								instance_config.conn_opt.pguser);
+
 		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()",
 						   0, NULL);
 		PQclear(res);
@@ -1380,7 +1154,7 @@ pg_ptrack_clear(void)
 }
 
 static bool
-pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
+pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn)
 {
 	char	   *params[2];
 	char	   *dbname;
@@ -1440,7 +1214,7 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid)
  */
 static char *
 pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
-						size_t *result_size)
+						size_t *result_size, PGconn *backup_conn)
 {
 	PGconn	   *tmp_conn;
 	PGresult   *res_db,
@@ -1476,9 +1250,9 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 			return NULL;
 		}
 
-		tmp_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
+		tmp_conn = pgut_connect(instance_config.conn_opt.pghost, instance_config.conn_opt.pgport,
 								dbname,
-								instance_config.pguser);
+								instance_config.conn_opt.pguser);
 		sprintf(params[0], "%i", tablespace_oid);
 		sprintf(params[1], "%i", rel_filenode);
 		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
@@ -1707,7 +1481,8 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
  * Wait for target 'lsn' on replica instance from master.
  */
 static void
-wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
+wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup,
+					 PGconn *backup_conn)
 {
 	uint32		try_count = 0;
 
@@ -1775,7 +1550,7 @@ wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup)
  * Notify end of backup to PostgreSQL server.
  */
 static void
-pg_stop_backup(pgBackup *backup)
+pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 {
 	PGconn		*conn;
 	PGresult	*res;
@@ -1803,11 +1578,7 @@ pg_stop_backup(pgBackup *backup)
 	if (!backup_in_progress)
 		elog(ERROR, "backup is not in progress");
 
-	/* For 9.5 replica we call pg_stop_backup() on master */
-	if (current.from_replica && exclusive_backup)
-		conn = master_conn;
-	else
-		conn = backup_conn;
+	conn = pg_startbackup_conn;
 
 	/* Remove annoying NOTICE messages generated by backend */
 	res = pgut_execute(conn, "SET client_min_messages = warning;",
@@ -1902,6 +1673,9 @@ pg_stop_backup(pgBackup *backup)
 		if (!sent)
 			elog(ERROR, "Failed to send pg_stop_backup query");
 	}
+
+	/* After we have sent pg_stop_backup, we don't need this callback anymore */
+	pgut_atexit_pop(backup_stopbackup_callback, pg_startbackup_conn);
 
 	/*
 	 * Wait for the result of pg_stop_backup(), but no longer than
@@ -2152,7 +1926,7 @@ pg_stop_backup(pgBackup *backup)
  * Retreive checkpoint_timeout GUC value in seconds.
  */
 static int
-checkpoint_timeout(void)
+checkpoint_timeout(PGconn *backup_conn)
 {
 	PGresult   *res;
 	const char *val;
@@ -2197,174 +1971,6 @@ backup_cleanup(bool fatal, void *userdata)
 		current.status = BACKUP_STATUS_ERROR;
 		write_backup(&current);
 	}
-
-	/*
-	 * If backup is in progress, notify stop of backup to PostgreSQL
-	 */
-	if (backup_in_progress)
-	{
-		elog(WARNING, "backup in progress, stop backup");
-		pg_stop_backup(NULL);	/* don't care stop_lsn on error case */
-	}
-}
-
-/*
- * Disconnect backup connection during quit pg_probackup.
- */
-static void
-backup_disconnect(bool fatal, void *userdata)
-{
-	pgut_disconnect(backup_conn);
-	if (master_conn)
-		pgut_disconnect(master_conn);
-}
-
-/*
- * Check files in PGDATA.
- * Read all files listed in backup_files_list.
- * If the file is 'datafile' (regular relation's main fork), read it page by page,
- * verify checksum and copy.
- */
-static void *
-check_files(void *arg)
-{
-	int			i;
-	backup_files_arg *arguments = (backup_files_arg *) arg;
-	int			n_backup_files_list = 0;
-
-	if (arguments->files_list)
-		n_backup_files_list = parray_num(arguments->files_list);
-
-	/* check a file */
-	for (i = 0; i < n_backup_files_list; i++)
-	{
-		int			ret;
-		struct stat	buf;
-		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
-
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
-		elog(VERBOSE, "Checking file:  \"%s\" ", file->path);
-
-		/* check for interrupt */
-		if (interrupted || thread_interrupted)
-			elog(ERROR, "interrupted during checkdb");
-
-		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_backup_files_list, file->path);
-
-		/* stat file to check its current state */
-		ret = stat(file->path, &buf);
-		if (ret == -1)
-		{
-			if (errno == ENOENT)
-			{
-				/*
-				 * If file is not found, this is not en error.
-				 * It could have been deleted by concurrent postgres transaction.
-				 */
-				elog(LOG, "File \"%s\" is not found", file->path);
-				continue;
-			}
-			else
-			{
-				elog(ERROR,
-					"can't stat file to check \"%s\": %s",
-					file->path, strerror(errno));
-			}
-		}
-
-		/* No need to check directories */
-		if (S_ISDIR(buf.st_mode))
-			continue;
-
-		if (S_ISREG(buf.st_mode))
-		{
-			/* check only uncompressed by cfs datafiles */
-			if (file->is_datafile && !file->is_cfs)
-			{
-				char		to_path[MAXPGPATH];
-
-				join_path_components(to_path, arguments->to_root,
-									 file->path + strlen(arguments->from_root) + 1);
-
-				if (!check_data_file(arguments, file))
-					arguments->ret = 2; /* corruption found */
-			}
-		}
-		else
-			elog(WARNING, "unexpected file type %d", buf.st_mode);
-	}
-
-	/* Ret values:
-	 * 0 everything is ok
-	 * 1 thread errored during execution, e.g. interruption (default value)
-	 * 2 corruption is definitely(!) found
-	 */
-	if (arguments->ret == 1)
-		arguments->ret = 0;
-
-	return NULL;
-}
-
-/* Check indexes with amcheck */
-static void *
-check_indexes(void *arg)
-{
-	int			i;
-	backup_files_arg *arguments = (backup_files_arg *) arg;
-	int			n_indexes = 0;
-
-	if (arguments->index_list)
-		n_indexes = parray_num(arguments->index_list);
-
-	for (i = 0; i < n_indexes; i++)
-	{
-		pg_indexEntry *ind = (pg_indexEntry *) parray_get(arguments->index_list, i);
-
-		if (!pg_atomic_test_set_flag(&ind->lock))
-			continue;
-
-		/* check for interrupt */
-		if (interrupted || thread_interrupted)
-			elog(ERROR, "Thread [%d]: interrupted during checkdb --amcheck",
-				arguments->thread_num);
-
-		if (progress)
-			elog(INFO, "Thread [%d]. Progress: (%d/%d). Amchecking index '%s.%s'",
-				 arguments->thread_num, i + 1, n_indexes,
-				 ind->amcheck_nspname, ind->name);
-
-		if (arguments->backup_conn == NULL)
-		{
-
-			arguments->backup_conn = pgut_connect(instance_config.pghost,
-												instance_config.pgport,
-												ind->dbname,
-												instance_config.pguser);
-			arguments->cancel_conn = PQgetCancel(arguments->backup_conn);
-		}
-
-		/* remember that we have a failed check */
-		if (!amcheck_one_index(arguments, ind))
-			arguments->ret = 2; /* corruption found */
-	}
-
-	/* Close connection */
-	if (arguments->backup_conn)
-		pgut_disconnect(arguments->backup_conn);
-
-	/* Ret values:
-	 * 0 everything is ok
-	 * 1 thread errored during execution, e.g. interruption (default value)
-	 * 2 corruption is definitely(!) found
-	 */
-	if (arguments->ret == 1)
-		arguments->ret = 0;
-
-	return NULL;
 }
 
 /*
@@ -2529,8 +2135,8 @@ backup_files(void *arg)
 	}
 
 	/* Close connection */
-	if (arguments->backup_conn)
-		pgut_disconnect(arguments->backup_conn);
+	if (arguments->conn_arg.conn)
+		pgut_disconnect(arguments->conn_arg.conn);
 
 	/* Data files transferring is successful */
 	arguments->ret = 0;
@@ -2545,8 +2151,8 @@ backup_files(void *arg)
  * - set flags for database directories
  * - set flags for datafiles
  */
-static void
-parse_backup_filelist_filenames(parray *files, const char *root)
+void
+parse_filelist_filenames(parray *files, const char *root)
 {
 	size_t		i = 0;
 	Oid			unlogged_file_reloid = 0;
@@ -2731,7 +2337,7 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
  * NOTE we rely on the fact that provided parray is sorted by file->path.
  */
 static void
-make_pagemap_from_ptrack(parray *files)
+make_pagemap_from_ptrack(parray *files, PGconn *backup_conn)
 {
 	size_t		i;
 	Oid dbOid_with_ptrack_init = 0;
@@ -2763,7 +2369,7 @@ make_pagemap_from_ptrack(parray *files)
 			 * to avoid any possible specific errors.
 			 */
 			if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
-				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid))
+				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid, backup_conn))
 			{
 				dbOid_with_ptrack_init = file->dbOid;
 				tblspcOid_with_ptrack_init = file->tblspcOid;
@@ -2789,7 +2395,7 @@ make_pagemap_from_ptrack(parray *files)
 				ptrack_nonparsed_size = 0;
 
 				ptrack_nonparsed = pg_ptrack_get_and_clear(file->tblspcOid, file->dbOid,
-											   file->relOid, &ptrack_nonparsed_size);
+											   file->relOid, &ptrack_nonparsed_size, backup_conn);
 			}
 
 			if (ptrack_nonparsed != NULL)
@@ -2848,8 +2454,6 @@ make_pagemap_from_ptrack(parray *files)
 		}
 	}
 	elog(LOG, "Pagemap compiled");
-//	res = pgut_execute(backup_conn, "SET client_min_messages = warning;", 0, NULL, true);
-//	PQclear(pgut_execute(backup_conn, "CHECKPOINT;", 0, NULL, true));
 }
 
 
@@ -2865,7 +2469,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	/* check for interrupt */
 	if (interrupted || thread_interrupted)
-		elog(ERROR, "Interrupted during backup");
+		elog(ERROR, "Interrupted during backup stop_streaming");
 
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
@@ -2893,13 +2497,10 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 		}
 
 		/* pg_stop_backup() was executed, wait for the completion of stream */
-		if (stream_stop_timeout == 0)
+		if (stream_stop_begin == 0)
 		{
 			elog(INFO, "Wait for LSN %X/%X to be streamed",
 				 (uint32) (stop_backup_lsn >> 32), (uint32) stop_backup_lsn);
-
-			stream_stop_timeout = checkpoint_timeout();
-			stream_stop_timeout = stream_stop_timeout + stream_stop_timeout * 0.1;
 
 			stream_stop_begin = time(NULL);
 		}
@@ -2922,20 +2523,12 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 static void *
 StreamLog(void *arg)
 {
-	XLogRecPtr	startpos;
-	TimeLineID	starttli;
 	StreamThreadArg *stream_arg = (StreamThreadArg *) arg;
-
-	/*
-	 * We must use startpos as start_lsn from start_backup
-	 */
-	startpos = current.start_lsn;
-	starttli = current.tli;
 
 	/*
 	 * Always start streaming at the beginning of a segment
 	 */
-	startpos -= startpos % instance_config.xlog_seg_size;
+	stream_arg->startpos -= stream_arg->startpos % instance_config.xlog_seg_size;
 
 	/* Initialize timeout */
 	stream_stop_timeout = 0;
@@ -2959,7 +2552,8 @@ StreamLog(void *arg)
 	 * Start the replication
 	 */
 	elog(LOG, _("started streaming WAL at %X/%X (timeline %u)"),
-		 (uint32) (startpos >> 32), (uint32) startpos, starttli);
+		 (uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
+		  stream_arg->starttli);
 
 #if PG_VERSION_NUM >= 90600
 	{
@@ -2967,8 +2561,8 @@ StreamLog(void *arg)
 
 		MemSet(&ctl, 0, sizeof(ctl));
 
-		ctl.startpos = startpos;
-		ctl.timeline = starttli;
+		ctl.startpos = stream_arg->startpos;
+		ctl.timeline = stream_arg->starttli;
 		ctl.sysidentifier = NULL;
 
 #if PG_VERSION_NUM >= 100000
@@ -2998,14 +2592,14 @@ StreamLog(void *arg)
 #endif
 	}
 #else
-	if(ReceiveXlogStream(stream_arg->conn, startpos, starttli, NULL,
+	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli, NULL,
 						 (char *) stream_arg->basedir, stop_streaming,
 						 standby_message_timeout, NULL, false, false) == false)
 		elog(ERROR, "Problem in receivexlog");
 #endif
 
 	elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
-		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, starttli);
+		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, stream_arg->starttli);
 	stream_arg->ret = 0;
 
 	PQfinish(stream_arg->conn);
@@ -3018,7 +2612,7 @@ StreamLog(void *arg)
  * Get lsn of the moment when ptrack was enabled the last time.
  */
 static XLogRecPtr
-get_last_ptrack_lsn(void)
+get_last_ptrack_lsn(PGconn *backup_conn)
 
 {
 	PGresult   *res;
@@ -3039,7 +2633,7 @@ get_last_ptrack_lsn(void)
 }
 
 char *
-pg_ptrack_get_block(backup_files_arg *arguments,
+pg_ptrack_get_block(ConnectionArgs *arguments,
 					Oid dbOid,
 					Oid tblsOid,
 					Oid relOid,
@@ -3064,19 +2658,19 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 	sprintf(params[2], "%i", relOid);
 	sprintf(params[3], "%u", blknum);
 
-	if (arguments->backup_conn == NULL)
+	if (arguments->conn == NULL)
 	{
-		arguments->backup_conn = pgut_connect(instance_config.pghost,
-											  instance_config.pgport,
-											  instance_config.pgdatabase,
-											  instance_config.pguser);
+		arguments->conn = pgut_connect(instance_config.conn_opt.pghost,
+											  instance_config.conn_opt.pgport,
+											  instance_config.conn_opt.pgdatabase,
+											  instance_config.conn_opt.pguser);
 	}
 
 	if (arguments->cancel_conn == NULL)
-		arguments->cancel_conn = PQgetCancel(arguments->backup_conn);
+		arguments->cancel_conn = PQgetCancel(arguments->conn);
 
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
-	res = pgut_execute_parallel(arguments->backup_conn,
+	res = pgut_execute_parallel(arguments->conn,
 								arguments->cancel_conn,
 					"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
 					4, (const char **)params, true, false, false);
@@ -3109,9 +2703,8 @@ pg_ptrack_get_block(backup_files_arg *arguments,
 }
 
 static void
-check_external_for_tablespaces(parray *external_list)
+check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 {
-	PGconn	   *conn;
 	PGresult   *res;
 	int			i = 0;
 	int			j = 0;
@@ -3120,8 +2713,7 @@ check_external_for_tablespaces(parray *external_list)
 						"FROM pg_catalog.pg_tablespace "
 						"WHERE pg_catalog.pg_tablespace_location(oid) <> '';";
 
-	conn = backup_conn;
-	res = pgut_execute(conn, query, 0, NULL);
+	res = pgut_execute(backup_conn, query, 0, NULL);
 
 	/* Check successfull execution of query */
 	if (!res)
@@ -3173,173 +2765,4 @@ check_external_for_tablespaces(parray *external_list)
 
 		}
 	}
-}
-
-/* Get index list for given database */
-static parray*
-get_index_list(PGresult *res_db, int db_number,
-			   bool first_db_with_amcheck, PGconn *db_conn)
-{
-	PGresult   *res;
-	char *nspname = NULL;
-	int i;
-
-	dbname = PQgetvalue(res_db, db_number, 0);
-
-	db_conn = pgut_connect(instance_config.pghost, instance_config.pgport,
-							dbname,
-							instance_config.pguser);
-
-	res = pgut_execute(db_conn, "SELECT "
-								"extname, nspname, extversion "
-								"FROM pg_namespace n "
-								"JOIN pg_extension e "
-								"ON n.oid=e.extnamespace "
-								"WHERE e.extname IN ('amcheck', 'amcheck_next') "
-								"ORDER BY extversion DESC "
-								"LIMIT 1",
-								0, NULL);
-
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		PQclear(res);
-		elog(ERROR, "Cannot check if amcheck is installed in database %s: %s",
-			dbname, PQerrorMessage(db_conn));
-	}
-
-	if (PQntuples(res) < 1)
-	{
-		elog(WARNING, "Extension 'amcheck' or 'amcheck_next' are not installed in database %s", dbname);
-		return NULL;
-	}
-
-	nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
-	strcpy(nspname, PQgetvalue(res, 0, 1));
-
-	/* heapallindexed_is_supported is database specific */
-	if (strcmp(PQgetvalue(res, 0, 2), "1.0") != 0 &&
-		strcmp(PQgetvalue(res, 0, 2), "1") != 0)
-			heapallindexed_is_supported = true;
-
-	elog(INFO, "Amchecking database '%s' using extension '%s' version %s from schema '%s'",
-					dbname, PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
-
-	if (!heapallindexed_is_supported && heapallindexed)
-		elog(WARNING, "Extension '%s' verion %s in schema '%s' do not support 'heapallindexed' option",
-						PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
-
-	/*
-	 * In order to avoid duplicates, select global indexes
-	 * (tablespace pg_global with oid 1664) only once.
-	 *
-	 * select only persistent btree indexes.
-	 */
-	if (first_db_with_amcheck)
-	{
-
-		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
-									"FROM pg_index idx "
-									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
-									"JOIN pg_am am ON cls.relam=am.oid "
-									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
-									0, NULL);
-	}
-	else
-	{
-
-		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
-									"FROM pg_index idx "
-									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
-									"JOIN pg_am am ON cls.relam=am.oid "
-									"LEFT JOIN pg_tablespace tbl "
-									"ON cls.reltablespace=tbl.oid "
-									"AND tbl.spcname <> 'pg_global' "
-									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
-									0, NULL);
-	}
-
-	/* add info needed to check indexes into index_list */
-	for (i = 0; i < PQntuples(res); i++)
-	{
-		pg_indexEntry *ind = (pg_indexEntry *) pgut_malloc(sizeof(pg_indexEntry));
-		char *name = NULL;
-
-		ind->indexrelid = atoi(PQgetvalue(res, i, 0));
-		name = PQgetvalue(res, i, 1);
-		ind->name = pgut_malloc(strlen(name) + 1);
-		strcpy(ind->name, name);	/* enough buffer size guaranteed */
-
-		ind->dbname = pgut_malloc(strlen(dbname) + 1);
-		strcpy(ind->dbname, dbname);
-
-		ind->amcheck_nspname = pgut_malloc(strlen(nspname) + 1);
-		strcpy(ind->amcheck_nspname, nspname);
-		pg_atomic_clear_flag(&ind->lock);
-
-		if (index_list == NULL)
-			index_list = parray_new();
-
-		parray_append(index_list, ind);
-	}
-
-	PQclear(res);
-
-	return index_list;
-}
-
-/* check one index. Return true if everything is ok, false otherwise. */
-static bool
-amcheck_one_index(backup_files_arg *arguments,
-				 pg_indexEntry *ind)
-{
-	PGresult   *res;
-	char		*params[2];
-	char		*query = NULL;
-
-	params[0] = palloc(64);
-
-	/* first argument is index oid */
-	sprintf(params[0], "%i", ind->indexrelid);
-	/* second argument is heapallindexed */
-	params[1] = heapallindexed ? "true" : "false";
-
-	if (interrupted)
-		elog(ERROR, "Interrupted");
-
-	if (heapallindexed_is_supported)
-	{
-		query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1, $2)")+1);
-		sprintf(query, "SELECT %s.bt_index_check($1, $2)", ind->amcheck_nspname);
-
-		res = pgut_execute_parallel(arguments->backup_conn,
-								arguments->cancel_conn,
-								query, 2, (const char **)params, true, true, true);
-	}
-	else
-	{
-		query = palloc(strlen(ind->amcheck_nspname)+strlen("SELECT .bt_index_check($1)")+1);
-		sprintf(query, "SELECT %s.bt_index_check($1)", ind->amcheck_nspname);
-
-		res = pgut_execute_parallel(arguments->backup_conn,
-								arguments->cancel_conn,
-								query, 1, (const char **)params, true, true, true);
-	}
-
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		elog(WARNING, "Thread [%d]. Amcheck failed for index: '%s.%s': %s",
-					   arguments->thread_num, ind->amcheck_nspname,
-					   ind->name, PQresultErrorMessage(res));
-
-		pfree(params[0]);
-		PQclear(res);
-		return false;
-	}
-	else
-		elog(LOG, "Thread [%d]. Amcheck succeeded for index: '%s.%s'",
-				arguments->thread_num, ind->amcheck_nspname, ind->name);
-
-	pfree(params[0]);
-	PQclear(res);
-	return true;
 }

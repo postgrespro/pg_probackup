@@ -195,7 +195,8 @@ parse_page(Page page, XLogRecPtr *lsn)
  */
 static int
 read_page_from_file(pgFile *file, BlockNumber blknum,
-					FILE *in, Page page, XLogRecPtr *page_lsn)
+					FILE *in, Page page, XLogRecPtr *page_lsn,
+					uint32 checksum_version)
 {
 	off_t		offset = blknum * BLCKSZ;
 	ssize_t		read_len = 0;
@@ -251,7 +252,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	}
 
 	/* Verify checksum */
-	if (current.checksum_version)
+	if (checksum_version)
 	{
 		BlockNumber blkno = file->segno * RELSEG_SIZE + blknum;
 		/*
@@ -289,13 +290,14 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
  *         PageIsCorrupted(-4) if the page check mismatch
  */
 static int32
-prepare_page(backup_files_arg *arguments,
+prepare_page(ConnectionArgs *arguments,
 			 pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			 BlockNumber blknum, BlockNumber nblocks,
 			 FILE *in, BlockNumber *n_skipped,
 			 BackupMode backup_mode,
 			 Page page,
-			 bool strict)
+			 bool strict,
+			 uint32 checksum_version)
 {
 	XLogRecPtr	page_lsn = 0;
 	int			try_again = 100;
@@ -316,7 +318,8 @@ prepare_page(backup_files_arg *arguments,
 	{
 		while(!page_is_valid && try_again)
 		{
-			int result = read_page_from_file(file, blknum, in, page, &page_lsn);
+			int result = read_page_from_file(file, blknum, in, page,
+											 &page_lsn, checksum_version);
 
 			try_again--;
 			if (result == 0)
@@ -335,7 +338,7 @@ prepare_page(backup_files_arg *arguments,
 			 * If ptrack support is available use it to get invalid block
 			 * instead of rereading it 99 times
 			 */
-			//elog(WARNING, "Checksum_Version: %i", current.checksum_version ? 1 : 0);
+			//elog(WARNING, "Checksum_Version: %i", checksum_version ? 1 : 0);
 
 			if (result == -1 && is_ptrack_support && strict)
 			{
@@ -399,7 +402,7 @@ prepare_page(backup_files_arg *arguments,
 			 */
 			memcpy(page, ptrack_page, BLCKSZ);
 			free(ptrack_page);
-			if (current.checksum_version)
+			if (checksum_version)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
 		/* get lsn from page, provided by pg_ptrack_get_block() */
@@ -631,9 +634,9 @@ backup_data_file(backup_files_arg* arguments,
 		  RetryUsingPtrack:
 			for (blknum = 0; blknum < nblocks; blknum++)
 			{
-				page_state = prepare_page(arguments, file, prev_backup_start_lsn,
+				page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
 										  blknum, nblocks, in, &n_blocks_skipped,
-										  backup_mode, curr_page, true);
+										  backup_mode, curr_page, true, current.checksum_version);
 				compress_and_backup_page(file, blknum, in, out, &(file->crc),
 										  page_state, curr_page, calg, clevel);
 				n_blocks_read++;
@@ -655,9 +658,9 @@ backup_data_file(backup_files_arg* arguments,
 		iter = datapagemap_iterate(&file->pagemap);
 		while (datapagemap_next(iter, &blknum))
 		{
-			page_state = prepare_page(arguments, file, prev_backup_start_lsn,
+			page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
 									  blknum, nblocks, in, &n_blocks_skipped,
-									  backup_mode, curr_page, true);
+									  backup_mode, curr_page, true, current.checksum_version);
 			compress_and_backup_page(file, blknum, in, out, &(file->crc),
 									  page_state, curr_page, calg, clevel);
 			n_blocks_read++;
@@ -1189,8 +1192,8 @@ validate_one_page(Page page, pgFile *file,
  * also returns true if the file was not found
  */
 bool
-check_data_file(backup_files_arg* arguments,
-				pgFile *file)
+check_data_file(ConnectionArgs *arguments,
+				pgFile *file, uint32 checksum_version)
 {
 	FILE		*in;
 	BlockNumber	blknum = 0;
@@ -1235,7 +1238,7 @@ check_data_file(backup_files_arg* arguments,
 	{
 		page_state = prepare_page(arguments, file, InvalidXLogRecPtr,
 									blknum, nblocks, in, &n_blocks_skipped,
-									BACKUP_MODE_FULL, curr_page, false);
+									BACKUP_MODE_FULL, curr_page, false, checksum_version);
 
 		if (page_state == PageIsTruncated)
 			break;

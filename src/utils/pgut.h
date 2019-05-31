@@ -43,6 +43,7 @@ extern PGconn *pgut_connect_replication(const char *host, const char *port,
 										const char *dbname,
 										const char *username);
 extern void pgut_disconnect(PGconn *conn);
+extern void pgut_disconnect_callback(bool fatal, void *userdata);
 extern PGresult *pgut_execute(PGconn* conn, const char *query, int nParams,
 							  const char **params);
 extern PGresult *pgut_execute_extended(PGconn* conn, const char *query, int nParams,
