@@ -1989,6 +1989,7 @@ pg_stop_backup(pgBackup *backup)
 				else
 					xlog_path = arclog_path;
 
+				wait_wal_lsn(stop_backup_lsn, false, true);
 				stop_backup_lsn = get_last_wal_lsn(xlog_path, backup->start_lsn,
 												   stop_backup_lsn, backup->tli,
 												   true, instance_config.xlog_seg_size);
