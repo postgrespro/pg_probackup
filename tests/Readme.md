@@ -32,7 +32,6 @@ Run suit of basic simple tests:
 
 Usage:
  pip install testgres
- pip install psycopg2
  export PG_CONFIG=/path/to/pg_config
  python -m unittest [-v] tests[.specific_module][.class.test]
 ```

@@ -7,6 +7,7 @@ from testgres import QueryException
 import shutil
 import sys
 import time
+from threading import Thread
 
 
 module_name = 'ptrack'
@@ -213,27 +214,21 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             " as id from generate_series(0,1000000) i"
             )
 
-        # create async connection
-        conn = self.get_async_connect(port=node.port)
+        pg_connect = node.connect("postgres", autocommit=True)
 
-        self.wait(conn)
-
-        acurs = conn.cursor()
-        acurs.execute("select pg_backend_pid()")
-
-        self.wait(conn)
-        pid = acurs.fetchall()[0][0]
-        print(pid)
-
-        gdb = self.gdb_attach(pid)
+        gdb = self.gdb_attach(pg_connect.pid)
         gdb.set_breakpoint('reform_and_rewrite_tuple')
 
         gdb.continue_execution_until_running()
 
-        acurs.execute("VACUUM FULL t_heap")
+        process = Thread(
+            target=pg_connect.execute, args=["VACUUM FULL t_heap"])
+        process.start()
 
-        if gdb.stopped_in_breakpoint():
-            gdb.continue_execution_until_break(20)
+        while not gdb.stopped_in_breakpoint:
+            sleep(1)
+
+        gdb.continue_execution_until_break(20)
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack')
@@ -243,6 +238,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
+
+        gdb.remove_all_breakpoints()
+        gdb._execute('detach')
+        process.join()
 
         old_tablespace = self.get_tblspace_path(node, 'somedata')
         new_tablespace = self.get_tblspace_path(node_restored, 'somedata_new')

@@ -9,7 +9,6 @@ import hashlib
 import re
 import getpass
 import select
-import psycopg2
 from time import sleep
 import re
 import json
@@ -1408,31 +1407,6 @@ class ProbackupTest(object):
                 fail = True
         self.assertFalse(fail, error_message)
 
-    def get_async_connect(self, database=None, host=None, port=5432):
-        if not database:
-            database = 'postgres'
-        if not host:
-            host = '127.0.0.1'
-
-        return psycopg2.connect(
-            database='postgres',
-            host='127.0.0.1',
-            port=port,
-            async_=True
-        )
-
-    def wait(self, connection):
-        while True:
-            state = connection.poll()
-            if state == psycopg2.extensions.POLL_OK:
-                break
-            elif state == psycopg2.extensions.POLL_WRITE:
-                select.select([], [connection.fileno()], [])
-            elif state == psycopg2.extensions.POLL_READ:
-                select.select([connection.fileno()], [], [])
-            else:
-                raise psycopg2.OperationalError('poll() returned %s' % state)
-
     def gdb_attach(self, pid):
         return GDBobj([str(pid)], self.verbose, attach=True)
 
@@ -1540,7 +1514,7 @@ class GDBobj(ProbackupTest):
                 return
 
         raise GdbException(
-            'Failed to set breakpoint.\n Output:\n {0}'.format(result)
+            'Failed to remove breakpoints.\n Output:\n {0}'.format(result)
         )
 
     def run_until_break(self):
@@ -1632,6 +1606,18 @@ class GDBobj(ProbackupTest):
         self.proc.stdin.flush()
         self.proc.stdin.write(cmd + '\n')
         self.proc.stdin.flush()
+        sleep(1)
+
+        # look for command we just send
+        while True:
+            line = self.proc.stdout.readline()
+            if self.verbose:
+                print(repr(line))
+
+            if cmd not in line:
+                continue
+            else:
+                break
 
         while True:
             line = self.proc.stdout.readline()
