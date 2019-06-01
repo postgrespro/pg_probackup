@@ -565,7 +565,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         """
         take backup with old binary without external dirs support
         take delta backup with new binary and 2 external directories
-        merge delta backup ajd restore it
+        merge delta backup and restore it
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -654,7 +654,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        # Merge chain chain with new binary
+        # Merge chain using new binary
         self.merge_backup(backup_dir, 'node', backup_id=backup_id)
 
         # Restore merged backup
@@ -663,15 +663,19 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         node_restored.cleanup()
 
-        external_dir1_new = self.get_tblspace_path(node_restored, 'external_dir1')
-        external_dir2_new = self.get_tblspace_path(node_restored, 'external_dir2')
+        external_dir1_new = self.get_tblspace_path(
+            node_restored, 'external_dir1')
+        external_dir2_new = self.get_tblspace_path(
+            node_restored, 'external_dir2')
 
         self.restore_node(
             backup_dir, 'node', node_restored,
             options=[
                 "-j", "4",
-                "--external-mapping={0}={1}".format(external_dir1, external_dir1_new),
-                "--external-mapping={0}={1}".format(external_dir2, external_dir2_new)])
+                "--external-mapping={0}={1}".format(
+                    external_dir1, external_dir1_new),
+                "--external-mapping={0}={1}".format(
+                    external_dir2, external_dir2_new)])
 
         pgdata_restored = self.pgdata_content(
             node_restored.base_dir, exclude_dirs=['logs'])
@@ -699,7 +703,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         node.pgbench_init(scale=3)
 
-        # FULL backup with old binary without external dirs support
+        # take temp FULL backup
         tmp_id = self.backup_node(
             backup_dir, 'node', node, options=["-j", "4", "--stream"])
 
@@ -753,8 +757,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             options=[
                 "-j", "4",
-                "--external-mapping={0}={1}".format(external_dir1, external_dir1_new),
-                "--external-mapping={0}={1}".format(external_dir2, external_dir2_new)])
+                "--external-mapping={0}={1}".format(
+                    external_dir1, external_dir1_new),
+                "--external-mapping={0}={1}".format(
+                    external_dir2, external_dir2_new)])
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -2456,6 +2462,78 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         for file in filelist_diff:
             self.assertNotIn(file, logfile_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_external_validation(self):
+        """
+        make node, create database,
+        take full backup with external directory,
+        corrupt external file in backup,
+        run validate which should fail
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # take temp FULL backup
+        tmp_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        external_dir = self.get_tblspace_path(node, 'external_dir')
+
+        # fill external directories with data
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=tmp_id,
+            data_dir=external_dir, options=["-j", "4"])
+
+        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+
+        # take FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--stream', '-E', "{0}".format(external_dir)])
+
+        # Corrupt file
+        file = os.path.join(
+            backup_dir, 'backups', 'node', full_id,
+            'external_directories', 'externaldir1', 'postgresql.auto.conf')
+
+        with open(file, "r+b", 0) as f:
+            f.seek(42)
+            f.write(b"blah")
+            f.flush()
+            f.close
+
+        try:
+            self.validate_pb(backup_dir)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because file in external dir is corrupted"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Invalid CRC of backup file',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'CORRUPT',
+            self.show_pb(backup_dir, 'node', full_id)['status'],
+            'Backup STATUS should be "CORRUPT"')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
