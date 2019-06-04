@@ -96,6 +96,10 @@ bool no_validate = false;
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
 
+/* array for datnames, provided via db-include and db-exclude */
+static parray *datname_exclude_list = NULL;
+static parray *datname_include_list = NULL;
+
 /* checkdb options */
 bool need_amcheck = false;
 bool heapallindexed = false;
@@ -132,6 +136,9 @@ static void opt_backup_mode(ConfigOption *opt, const char *arg);
 static void opt_show_format(ConfigOption *opt, const char *arg);
 
 static void compress_init(void);
+
+static void opt_datname_exclude_list(ConfigOption *opt, const char *arg);
+static void opt_datname_include_list(ConfigOption *opt, const char *arg);
 
 /*
  * Short name should be non-printable ASCII character.
@@ -171,6 +178,8 @@ static ConfigOption cmd_options[] =
 	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
+	{ 'f', 158, "db-include", 		opt_datname_include_list, SOURCE_CMD_STRICT },
+	{ 'f', 159, "db-exclude", 		opt_datname_exclude_list, SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -631,15 +640,37 @@ main(int argc, char *argv[])
 				return do_backup(start_time, no_validate);
 			}
 		case RESTORE_CMD:
-			return do_restore_or_validate(current.backup_id,
-						  recovery_target_options,
-						  true);
+			{
+				parray *datname_list = NULL;
+				/* true for 'include', false for 'exclude' */
+				bool partial_restore_type = false;
+
+				if (datname_exclude_list && datname_include_list)
+					elog(ERROR, "You cannot specify '--db-include' and '--db-exclude' together");
+
+				/* At this point we are sure that user requested partial restore */
+				if (datname_exclude_list)
+					datname_list = datname_exclude_list;
+
+				if (datname_include_list)
+				{
+					partial_restore_type = true;
+					datname_list = datname_include_list;
+				}
+				return do_restore_or_validate(current.backup_id,
+							  recovery_target_options,
+							  true,
+							  datname_list,
+							  partial_restore_type);
+			}
 		case VALIDATE_CMD:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
 				return do_validate_all();
 			else
 				return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
+						  false,
+						  NULL,
 						  false);
 		case SHOW_CMD:
 			return do_show(current.backup_id);
@@ -740,4 +771,38 @@ compress_init(void)
 		if (instance_config.compress_alg == PGLZ_COMPRESS && num_threads > 1)
 			elog(ERROR, "Multithread backup does not support pglz compression");
 	}
+}
+
+/* Construct array of datnames, provided by user via db-exclude option */
+void
+opt_datname_exclude_list(ConfigOption *opt, const char *arg)
+{
+	char *dbname = NULL;
+
+	if (!datname_exclude_list)
+		datname_exclude_list =  parray_new();
+
+	dbname = pgut_malloc(strlen(arg) + 1);
+
+	/* add sanity for database name */
+	strcpy(dbname, arg);
+
+	parray_append(datname_exclude_list, dbname);
+}
+
+/* Construct array of datnames, provided by user via db-include option */
+void
+opt_datname_include_list(ConfigOption *opt, const char *arg)
+{
+	char *dbname = NULL;
+
+	if (!datname_include_list)
+		datname_include_list =  parray_new();
+
+	dbname = pgut_malloc(strlen(arg) + 1);
+
+	/* add sanity for database name */
+	strcpy(dbname, arg);
+
+	parray_append(datname_include_list, dbname);
 }

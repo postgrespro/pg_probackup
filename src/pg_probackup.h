@@ -60,6 +60,7 @@ extern const char  *PROGRAM_EMAIL;
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 #define EXTERNAL_DIR			"external_directories/externaldir"
+#define DATABASE_MAP			"database_map"
 
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
@@ -82,6 +83,12 @@ extern const char  *PROGRAM_EMAIL;
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
+
+typedef struct db_map_entry
+{
+	Oid dbOid;
+	char *datname;
+} db_map_entry;
 
 typedef enum CompressAlg
 {
@@ -486,7 +493,9 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  pgRecoveryTarget *rt,
-					  bool is_restore);
+					  bool is_restore,
+					  parray * datname_list,
+					  bool partial_restore_type);
 extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
@@ -499,6 +508,8 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 /* in merge.c */
 extern void do_merge(time_t backup_id);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
+
+extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
 extern int do_init(void);
@@ -601,6 +612,11 @@ extern void check_tablespace_mapping(pgBackup *backup);
 extern void check_external_dir_mapping(pgBackup *backup);
 extern char *get_external_remap(char *current_dir);
 
+extern void print_database_map(FILE *out, parray *database_list);
+extern void write_database_map(pgBackup *backup, parray *database_list,
+								   parray *backup_file_list);
+extern void db_map_entry_free(void *map);
+
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
 extern parray *dir_read_file_list(const char *root, const char *external_prefix,
@@ -649,6 +665,8 @@ extern void restore_data_file(const char *to_path,
 							  uint32 backup_version);
 extern bool copy_file(fio_location from_location, const char *to_root,
 					  fio_location to_location, pgFile *file, bool missing_ok);
+extern bool create_empty_file(fio_location from_location, const char *to_root,
+							  fio_location to_location, pgFile *file);
 
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);

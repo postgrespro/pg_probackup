@@ -25,6 +25,7 @@ typedef struct
 	char	   *external_prefix;
 	parray	   *dest_external_dirs;
 	parray	   *dest_files;
+	parray	   *dbOid_exclude_list;
 
 	/*
 	 * Return value from the thread.
@@ -34,19 +35,24 @@ typedef struct
 } restore_files_arg;
 
 static void restore_backup(pgBackup *backup, parray *dest_external_dirs,
-						   parray *dest_files);
+						   parray *dest_files, parray *dbOid_exclude_list);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup);
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 
+static parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
+									  bool partial_restore_type);
+
+static int pgCompareOid(const void *f1, const void *f2);
+
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
  */
 int
 do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
-					   bool is_restore)
+					   bool is_restore, parray *datname_list, bool partial_restore_type)
 {
 	int			i = 0;
 	int			j = 0;
@@ -58,6 +64,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	pgBackup   *corrupted_backup = NULL;
 	char	   *action = is_restore ? "Restore":"Validate";
 	parray	   *parent_chain = NULL;
+	parray	   *dbOid_exclude_list = NULL;
 
 	if (is_restore)
 	{
@@ -429,6 +436,14 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		int			i;
 
 		/*
+		 * Get a list of dbOid`s to skip if user requested the partial restore.
+		 * It is important that we do this after(!) validation so
+		 * database_map can be trusted.
+		 */
+		dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, datname_list,
+														  partial_restore_type);
+
+		/*
 		 * Preparations for actual restoring.
 		 */
 		pgBackupGetPath(dest_backup, control_file, lengthof(control_file),
@@ -481,7 +496,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			if (rt->no_validate && !lock_backup(backup))
 				elog(ERROR, "Cannot lock backup directory");
 
-			restore_backup(backup, dest_external_dirs, dest_files);
+			restore_backup(backup, dest_external_dirs, dest_files, dbOid_exclude_list);
 		}
 
 		if (dest_external_dirs != NULL)
@@ -508,7 +523,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
  * Restore one backup.
  */
 void
-restore_backup(pgBackup *backup, parray *dest_external_dirs, parray *dest_files)
+restore_backup(pgBackup *backup, parray *dest_external_dirs,
+				parray *dest_files, parray *dbOid_exclude_list)
 {
 	char		timestamp[100];
 	char		database_path[MAXPGPATH];
@@ -615,6 +631,7 @@ restore_backup(pgBackup *backup, parray *dest_external_dirs, parray *dest_files)
 		arg->external_prefix = external_prefix;
 		arg->dest_external_dirs = dest_external_dirs;
 		arg->dest_files = dest_files;
+		arg->dbOid_exclude_list = dbOid_exclude_list;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -707,6 +724,13 @@ restore_files(void *arg)
 			continue;
 		}
 
+		/* Do not restore database_map file */
+		if (path_is_prefix_of_path(DATABASE_MAP, file->rel_path))
+		{
+			elog(VERBOSE, "Skip database_map");
+			continue;
+		}
+
 		/* Do no restore external directory file if a user doesn't want */
 		if (skip_external_dirs && file->external_dir_num > 0)
 			continue;
@@ -716,14 +740,31 @@ restore_files(void *arg)
 						   pgFileCompareRelPathWithExternal) == NULL)
 			continue;
 
+		/* only files from pgdata can be skipped by partial restore */
+		if (arguments->dbOid_exclude_list && !file->external_dir_num)
+		{
+			/* exclude map is not empty */
+			if (parray_bsearch(arguments->dbOid_exclude_list,
+							   &file->dbOid, pgCompareOid))
+			{
+				/* got a match, destination file will truncated */
+				create_empty_file(FIO_BACKUP_HOST,
+					  instance_config.pgdata, FIO_DB_HOST, file);
+
+				elog(VERBOSE, "Exclude file due to partial restore: \"%s\"", file->rel_path);
+				continue;
+			}
+		}
+
 		/*
 		 * restore the file.
 		 * We treat datafiles separately, cause they were backed up block by
 		 * block and have BackupPageHeader meta information, so we cannot just
 		 * copy the file from backup.
 		 */
-		elog(VERBOSE, "Restoring file %s, is_datafile %i, is_cfs %i",
+		elog(VERBOSE, "Restoring file \"%s\", is_datafile %i, is_cfs %i",
 			 file->path, file->is_datafile?1:0, file->is_cfs?1:0);
+
 		if (file->is_datafile && !file->is_cfs)
 		{
 			char		to_path[MAXPGPATH];
@@ -1117,4 +1158,120 @@ parseRecoveryTargetOptions(const char *target_time,
 		elog(ERROR, "--recovery-target-inclusive option applies when either --recovery-target-time, --recovery-target-xid or --recovery-target-lsn is specified");
 
 	return rt;
+}
+
+/* Return dbOid array of databases that should not be restored
+ * Regardless of what options user used, db-include or db-exclude,
+ * we convert it into exclude_list.
+ * Return NULL if partial restore is not requested.
+ */
+parray *
+get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_restore_type)
+{
+	int i;
+	int j;
+	parray *database_map = NULL;
+	parray * dbOid_exclude_list = NULL;
+	bool found_match = false;
+
+	/* partial restore was not requested */
+	if (!datname_list)
+		return NULL;
+
+	database_map = read_database_map(backup);
+
+	/* partial restore requested but database_map is missing */
+	if (datname_list && !database_map)
+		elog(ERROR, "database_map is missing in backup %s", base36enc(backup->start_time));
+
+	/* So we have db-include list and database list for it.
+	 * We must form up a list of databases to exclude
+	 */
+	if (partial_restore_type)
+	{
+		/* For 'include' find dbOid of every datname NOT specified by user */
+		for (i = 0; i < parray_num(datname_list); i++)
+		{
+			char   *datname = (char *) parray_get(datname_list, i);
+
+			found_match = false;
+			for (j = 0; j < parray_num(database_map); j++)
+			{
+				db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, j);
+
+				/* got a match */
+				if (strcmp(db_entry->datname, datname) == 0)
+				{
+					found_match = true;
+					/* for db-include we must exclude db_entry from database_map */
+					parray_remove(database_map, j);
+					j--;
+				}
+			}
+			/* If specified datname is not found in database_map, error out */
+			if (!found_match)
+				elog(ERROR, "Failed to find a database '%s' in database_map of backup %s",
+					datname, base36enc(backup->start_time));
+		}
+
+		/* At this moment only databases to exclude are left in the map */
+		for (j = 0; j < parray_num(database_map); j++)
+		{
+			db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, j);
+
+			if (!dbOid_exclude_list)
+				dbOid_exclude_list = parray_new();
+			parray_append(dbOid_exclude_list, &db_entry->dbOid);
+		}
+	}
+	else
+	{
+		/* For exclude job is easier, find dbOid for every specified datname  */
+		for (i = 0; i < parray_num(datname_list); i++)
+		{
+			char   *datname = (char *) parray_get(datname_list, i);
+
+			found_match = false;
+			for (j = 0; j < parray_num(database_map); j++)
+			{
+				db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, j);
+
+				/* got a match */
+				if (strcmp(db_entry->datname, datname) == 0)
+				{
+					found_match = true;
+					/* for db-exclude we must add dbOid to exclude list */
+					if (!dbOid_exclude_list)
+						dbOid_exclude_list = parray_new();
+					parray_append(dbOid_exclude_list, &db_entry->dbOid);
+				}
+			}
+			/* If specified datname is not found in database_map, error out */
+			if (!found_match)
+				elog(ERROR, "Failed to find a database '%s' in database_map of backup %s",
+					datname, base36enc(backup->start_time));
+		}
+	}
+
+	/* extra sanity, we must be totaly sure that list is not empty */
+	if (parray_num(dbOid_exclude_list) < 1)
+	{
+		parray_free(dbOid_exclude_list);
+		return NULL;
+	}
+
+	if (dbOid_exclude_list)
+		parray_qsort(dbOid_exclude_list, pgCompareOid);
+
+	return dbOid_exclude_list;
+}
+
+/* Compare two Oid */
+int
+pgCompareOid(const void *f1, const void *f2)
+{
+	Oid *f1p = *(Oid **)f1;
+	Oid *f2p = *(Oid **)f2;
+
+	return (*(Oid*)f1p - *(Oid*)f2p);
 }

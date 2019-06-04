@@ -111,6 +111,7 @@ static void *StreamLog(void *arg);
 
 static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
+static parray *get_database_map(PGconn *pg_startbackup_conn);
 
 /* Ptrack functions */
 static void pg_ptrack_clear(PGconn *backup_conn);
@@ -169,6 +170,7 @@ do_backup_instance(PGconn *backup_conn)
 	parray	   *prev_backup_filelist = NULL;
 	parray	   *backup_list = NULL;
 	parray	   *external_dirs = NULL;
+	parray	   *database_map = NULL;
 
 	pgFile	   *pg_control = NULL;
 	PGconn	   *master_conn = NULL;
@@ -260,7 +262,10 @@ do_backup_instance(PGconn *backup_conn)
 	pg_start_backup(label, smooth_checkpoint, &current,
 					backup_conn, pg_startbackup_conn);
 
-	/* For incremental backup check that start_lsn is not from the past */
+	/* For incremental backup check that start_lsn is not from the past
+	 * Though it will not save us if PostgreSQL instance is actually
+	 * restored STREAM backup.
+	 */
 	if (current.backup_mode != BACKUP_MODE_FULL &&
 		prev_backup->start_lsn > current.start_lsn)
 			elog(ERROR, "Current START LSN %X/%X is lower than START LSN %X/%X of previous backup %s. "
@@ -335,6 +340,9 @@ do_backup_instance(PGconn *backup_conn)
 	/* list files with the logical path. omit $PGDATA */
 	dir_list_file(backup_files_list, instance_config.pgdata,
 				  true, true, false, 0, FIO_DB_HOST);
+
+	/* create database_map used for partial restore */
+	database_map = get_database_map(pg_startbackup_conn);
 
 	/*
 	 * Append to backup list all files and directories
@@ -500,6 +508,15 @@ do_backup_instance(PGconn *backup_conn)
 			parray_remove(backup_files_list, i);
 			i--;
 		}
+	}
+
+	/* write database map to file and add it to control file */
+	if (database_map)
+	{
+		write_database_map(&current, database_map, backup_files_list);
+		/* we don`t need it anymore */
+		parray_walk(database_map, db_map_entry_free);
+		parray_free(database_map);
 	}
 
 	/* clean previous backup file list */
@@ -1051,6 +1068,53 @@ pg_ptrack_support(PGconn *backup_conn)
 
 	PQclear(res_db);
 	return true;
+}
+
+/*
+ * Create 'datname to Oid' map
+ */
+parray *
+get_database_map(PGconn *conn)
+{
+	PGresult   *res;
+	parray *database_map = NULL;
+	int i;
+
+	res = pgut_execute(conn,
+						  "SELECT oid, datname FROM pg_catalog.pg_database "
+						  "WHERE datname NOT IN ('template1', 'template0')",
+						  0, NULL);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		PQclear(res);
+		elog(WARNING, "Failed to get database map: %s",
+			PQerrorMessage(conn));
+
+		return NULL;
+	}
+
+	/* Construct database map */
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		char *datname = NULL;
+		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
+
+		/* get Oid */
+		db_entry->dbOid = atoi(PQgetvalue(res, i, 0));
+
+		/* get datname */
+		datname = PQgetvalue(res, i, 1);
+		db_entry->datname = pgut_malloc(strlen(datname) + 1);
+		strcpy(db_entry->datname, datname);
+
+		if (database_map == NULL)
+			database_map = parray_new();
+
+		parray_append(database_map, db_entry);
+	}
+
+	return database_map;
 }
 
 /* Check if ptrack is enabled in target instance */
