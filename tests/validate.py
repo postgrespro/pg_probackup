@@ -3391,6 +3391,46 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_validate_corrupt_tablespace_map(self):
+        """
+        Check that corruption in tablespace_map is detected
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.create_tblspace_in_node(node, 'external_dir')
+
+        node.safe_psql(
+            'postgres',
+            'CREATE TABLE t_heap(a int) TABLESPACE "external_dir"')
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        tablespace_map = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'tablespace_map')
+
+        # Corrupt tablespace_map file in FULL backup
+        with open(tablespace_map, "rb+", 0) as f:
+            f.seek(84)
+            f.write(b"blah")
+            f.flush()
+            f.close
+
+        self.validate_pb(backup_dir, 'node', backup_id=backup_id)
+
 # validate empty backup list
 # page from future during validate
 # page from future during backup
