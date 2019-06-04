@@ -955,7 +955,6 @@ copy_file(fio_location from_location, const char *to_root,
 	size_t		read_len = 0;
 	int			errno_tmp;
 	char		buf[BLCKSZ];
-	struct stat	st;
 	pg_crc32	crc;
 
 	INIT_FILE_CRC32(true, crc);
@@ -997,15 +996,6 @@ copy_file(fio_location from_location, const char *to_root,
 		fio_fclose(in);
 		elog(ERROR, "cannot open destination file \"%s\": %s",
 			 to_path, strerror(errno_tmp));
-	}
-
-	/* stat source file to change mode of destination file */
-	if (fio_ffstat(in, &st) == -1)
-	{
-		fio_fclose(in);
-		fio_fclose(out);
-		elog(ERROR, "cannot stat \"%s\": %s", file->path,
-			 strerror(errno));
 	}
 
 	/* copy content and calc CRC */
@@ -1064,7 +1054,7 @@ copy_file(fio_location from_location, const char *to_root,
 	file->crc = crc;
 
 	/* update file permission */
-	if (fio_chmod(to_path, st.st_mode, to_location) == -1)
+	if (fio_chmod(to_path, file->mode, to_location) == -1)
 	{
 		errno_tmp = errno;
 		fio_fclose(in);
