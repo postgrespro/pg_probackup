@@ -6,6 +6,7 @@ import subprocess
 from time import sleep
 import shutil
 import signal
+from testgres import ProcessType
 
 
 module_name = '2068'
@@ -81,24 +82,13 @@ class BugTest(ProbackupTest, unittest.TestCase):
             stderr=subprocess.STDOUT,
             options=["-c", "4", "-j 4", "-T", "100"])
 
-        # get pids of background workers
-        startup_pid = replica.safe_psql(
-            'postgres',
-            "select pid from pg_stat_activity "
-            "where backend_type = 'startup'").rstrip()
-
-        checkpointer_pid = replica.safe_psql(
-            'postgres',
-            "select pid from pg_stat_activity "
-            "where backend_type = 'checkpointer'").rstrip()
-
-        bgwriter_pid = replica.safe_psql(
-            'postgres',
-            "select pid from pg_stat_activity "
-            "where backend_type = 'background writer'").rstrip()
-
         # wait for shared buffer on replica to be filled with dirty data
         sleep(10)
+
+        # get pids of replica background workers
+        startup_pid = replica.auxiliary_pids[ProcessType.Startup][0]
+        checkpointer_pid = replica.auxiliary_pids[ProcessType.Checkpointer][0]
+        bgwriter_pid = replica.auxiliary_pids[ProcessType.BackgroundWriter][0]
 
         # break checkpointer on UpdateLastRemovedPtr
         gdb_checkpointer = self.gdb_attach(checkpointer_pid)
@@ -138,7 +128,29 @@ class BugTest(ProbackupTest, unittest.TestCase):
             'recovery.conf', "recovery_target_action = 'promote'")
         replica.slow_start()
 
-        script = '''
+        if self.get_version(node) < 100000:
+            script = '''
+DO
+$$
+relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")
+current_xlog_lsn = plpy.execute("select pg_last_xlog_replay_location() as lsn")[0]['lsn']
+plpy.notice('CURRENT LSN: {0}'.format(current_xlog_lsn))
+found_corruption = False
+for relation in relations:
+    pages_from_future = plpy.execute("with number_of_blocks as (select blknum from generate_series(0, pg_relation_size({0}) / 8192 -1) as blknum) select blknum, lsn, checksum, flags, lower, upper, special, pagesize, version, prune_xid from number_of_blocks, page_header(get_raw_page('{0}'::oid::regclass::text, number_of_blocks.blknum::int)) where lsn > '{1}'::pg_lsn".format(relation['oid'], current_xlog_lsn))
+
+    if pages_from_future.nrows() == 0:
+        continue
+
+    for page in pages_from_future:
+        plpy.notice('Found page from future. OID: {0}, BLKNUM: {1}, LSN: {2}'.format(relation['oid'], page['blknum'], page['lsn']))
+        found_corruption = True
+if found_corruption:
+    plpy.error('Found Corruption')
+$$ LANGUAGE plpythonu;
+'''
+        else:
+            script = '''
 DO
 $$
 relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")
