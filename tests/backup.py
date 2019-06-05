@@ -1159,7 +1159,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         gdb.remove_all_breakpoints()
 
         gdb._execute('signal SIGINT')
-        gdb.continue_execution_until_exit()
+        # gdb.continue_execution_until_exit()
 
         backup_id = self.show_pb(backup_dir, 'node')[0]['id']
 
