@@ -436,7 +436,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		int			i;
 
 		/*
-		 * Get a list of dbOid`s to skip if user requested the partial restore.
+		 * Get a list of dbOids to skip if user requested the partial restore.
 		 * It is important that we do this after(!) validation so
 		 * database_map can be trusted.
 		 * NOTE: database_map could be missing for legal reasons, e.g. missing
@@ -692,10 +692,31 @@ restore_files(void *arg)
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during restore database");
 
+		/* Directories were created before */
+		if (S_ISDIR(file->mode))
+			continue;
+
 		if (progress)
 			elog(INFO, "Progress: (%d/%lu). Process file %s ",
 				 i + 1, (unsigned long) parray_num(arguments->files),
 				 file->rel_path);
+
+		/* only files from pgdata can be skipped by partial restore */
+		if (arguments->dbOid_exclude_list &&
+			file->external_dir_num == 0)
+		{
+			/* exclude map is not empty */
+			if (parray_bsearch(arguments->dbOid_exclude_list,
+							   &file->dbOid, pgCompareOid))
+			{
+				/* got a match, destination file will truncated */
+				create_empty_file(FIO_BACKUP_HOST,
+					  instance_config.pgdata, FIO_DB_HOST, file);
+
+				elog(VERBOSE, "Exclude file due to partial restore: \"%s\"", file->rel_path);
+				continue;
+			}
+		}
 
 		/*
 		 * For PAGE and PTRACK backups skip datafiles which haven't changed
@@ -717,10 +738,6 @@ restore_files(void *arg)
 			}
 		}
 
-		/* Directories were created before */
-		if (S_ISDIR(file->mode))
-			continue;
-
 		/* Do not restore tablespace_map file */
 		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, file->rel_path))
 		{
@@ -729,7 +746,8 @@ restore_files(void *arg)
 		}
 
 		/* Do not restore database_map file */
-		if (path_is_prefix_of_path(DATABASE_MAP, file->rel_path))
+		if ((file->external_dir_num == 0) &&
+			strcmp(DATABASE_MAP, file->rel_path) == 0)
 		{
 			elog(VERBOSE, "Skip database_map");
 			continue;
@@ -743,22 +761,6 @@ restore_files(void *arg)
 		if (parray_bsearch(arguments->dest_files, file,
 						   pgFileCompareRelPathWithExternal) == NULL)
 			continue;
-
-		/* only files from pgdata can be skipped by partial restore */
-		if (arguments->dbOid_exclude_list && !file->external_dir_num)
-		{
-			/* exclude map is not empty */
-			if (parray_bsearch(arguments->dbOid_exclude_list,
-							   &file->dbOid, pgCompareOid))
-			{
-				/* got a match, destination file will truncated */
-				create_empty_file(FIO_BACKUP_HOST,
-					  instance_config.pgdata, FIO_DB_HOST, file);
-
-				elog(VERBOSE, "Exclude file due to partial restore: \"%s\"", file->rel_path);
-				continue;
-			}
-		}
 
 		/*
 		 * restore the file.
@@ -1164,9 +1166,9 @@ parseRecoveryTargetOptions(const char *target_time,
 	return rt;
 }
 
-/* Return dbOid array of databases that should not be restored
- * Regardless of what options user used, db-include or db-exclude,
- * we convert it into exclude_list.
+/* Return array of dbOids of databases that should not be restored
+ * Regardless of what option user used, db-include or db-exclude,
+ * we always convert it into exclude_list.
  */
 parray *
 get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_restore_type)
@@ -1174,17 +1176,17 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_rest
 	int i;
 	int j;
 	parray *database_map = NULL;
-	parray * dbOid_exclude_list = NULL;
+	parray *dbOid_exclude_list = NULL;
 
 	/* get database_map from file */
 	database_map = read_database_map(backup);
 
 	/* partial restore requested but database_map is missing */
 	if (!database_map)
-		elog(ERROR, "Backup %s has empty database_map", base36enc(backup->start_time));
+		elog(ERROR, "Backup %s has empty or mangled database_map", base36enc(backup->start_time));
 
-	/* So we have db-include list and database list for it.
-	 * We must form up a list of databases to exclude
+	/* So we have list of datnames and database_map for it.
+	 * We must construct a list of dbOids to exclude.
 	 */
 	if (partial_restore_type)
 	{
@@ -1263,7 +1265,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_rest
 	return dbOid_exclude_list;
 }
 
-/* Compare two Oid */
+/* Compare two Oids */
 int
 pgCompareOid(const void *f1, const void *f2)
 {
