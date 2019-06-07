@@ -439,8 +439,12 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * Get a list of dbOid`s to skip if user requested the partial restore.
 		 * It is important that we do this after(!) validation so
 		 * database_map can be trusted.
+		 * NOTE: database_map could be missing for legal reasons, e.g. missing
+		 * permissions on pg_database during `backup` and, as long as user do not request
+		 * partial restore, it`s OK
 		 */
-		dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, datname_list,
+		if (datname_list)
+			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, datname_list,
 														  partial_restore_type);
 
 		/*
@@ -1163,7 +1167,6 @@ parseRecoveryTargetOptions(const char *target_time,
 /* Return dbOid array of databases that should not be restored
  * Regardless of what options user used, db-include or db-exclude,
  * we convert it into exclude_list.
- * Return NULL if partial restore is not requested.
  */
 parray *
 get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_restore_type)
@@ -1172,17 +1175,13 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_rest
 	int j;
 	parray *database_map = NULL;
 	parray * dbOid_exclude_list = NULL;
-	bool found_match = false;
 
-	/* partial restore was not requested */
-	if (!datname_list)
-		return NULL;
-
+	/* get database_map from file */
 	database_map = read_database_map(backup);
 
 	/* partial restore requested but database_map is missing */
-	if (datname_list && !database_map)
-		elog(ERROR, "database_map is missing in backup %s", base36enc(backup->start_time));
+	if (!database_map)
+		elog(ERROR, "Backup %s has empty database_map", base36enc(backup->start_time));
 
 	/* So we have db-include list and database list for it.
 	 * We must form up a list of databases to exclude
@@ -1192,9 +1191,9 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_rest
 		/* For 'include' find dbOid of every datname NOT specified by user */
 		for (i = 0; i < parray_num(datname_list); i++)
 		{
+			bool found_match = false;
 			char   *datname = (char *) parray_get(datname_list, i);
 
-			found_match = false;
 			for (j = 0; j < parray_num(database_map); j++)
 			{
 				db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, j);
@@ -1229,9 +1228,9 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_rest
 		/* For exclude job is easier, find dbOid for every specified datname  */
 		for (i = 0; i < parray_num(datname_list); i++)
 		{
+			bool found_match = false;
 			char   *datname = (char *) parray_get(datname_list, i);
 
-			found_match = false;
 			for (j = 0; j < parray_num(database_map); j++)
 			{
 				db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, j);
@@ -1253,15 +1252,13 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_rest
 		}
 	}
 
-	/* extra sanity, we must be totaly sure that list is not empty */
-	if (parray_num(dbOid_exclude_list) < 1)
-	{
-		parray_free(dbOid_exclude_list);
-		return NULL;
-	}
+	/* extra sanity, we must be totally sure that list is not empty */
+	if (!dbOid_exclude_list || parray_num(dbOid_exclude_list) < 1)
+		elog(ERROR, "Failed to find a match for partial restore in database_map of backup %s",
+					base36enc(backup->start_time));
 
-	if (dbOid_exclude_list)
-		parray_qsort(dbOid_exclude_list, pgCompareOid);
+	/* sort dbOid array in ASC order */
+	parray_qsort(dbOid_exclude_list, pgCompareOid);
 
 	return dbOid_exclude_list;
 }
