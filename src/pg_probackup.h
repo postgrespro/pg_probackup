@@ -141,6 +141,7 @@ typedef struct pgFile
 	bool	is_database;
 	int		external_dir_num; /* Number of external directory. 0 if not external */
 	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
+	bool    encryption;     /* encrypt backup */
 	CompressAlg compress_alg; /* compression algorithm applied to the file */
 	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
@@ -237,6 +238,8 @@ typedef struct InstanceConfig
 
 	CompressAlg	compress_alg;
 	int			compress_level;
+
+	bool        encryption;
 } InstanceConfig;
 
 extern ConfigOption instance_options[];

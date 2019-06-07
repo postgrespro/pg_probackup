@@ -137,7 +137,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			  bool overwrite)
 {
 	FILE	   *in = NULL;
-	int			out = -1;
+	FILE       *out = NULL;
 	char		buf[XLOG_BLCKSZ];
 	const char *to_path_p;
 	char		to_path_temp[MAXPGPATH];
@@ -157,7 +157,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		to_path_p = to_path;
 
 	/* open file for read */
-	in = fio_fopen(from_path, PG_BINARY_R, FIO_DB_HOST);
+	in = fio_fopen(from_path, PG_BINARY_R, FIO_DB_HOST, false);
 	if (in == NULL)
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s", from_path,
 			 strerror(errno));
@@ -178,7 +178,8 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	{
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
-		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST);
+		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST,
+							instance_config.encryption);
 		if (gz_out == NULL)
 			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
@@ -186,12 +187,14 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
+		int	out_fd = -1;
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
-		out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
-		if (out < 0)
+		out_fd = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
+		if (out_fd < 0)
 			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
+		out = fio_fdopen(to_path_temp, out_fd, PG_BINARY_W, instance_config.encryption);
 	}
 
 	/* copy content */
@@ -226,7 +229,8 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			else
 #endif
 			{
-				if (fio_write(out, buf, read_len) != read_len)
+				ssize_t write_len = fio_fwrite(out, buf, read_len);
+ 				if (write_len != read_len)
 				{
 					errno_temp = errno;
 					fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -254,7 +258,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
-		if (fio_flush(out) != 0 || fio_close(out) != 0)
+		if (fio_fflush(out) != 0 && fio_fclose(out) != 0)
 		{
 			errno_temp = errno;
 			fio_unlink(to_path_temp, FIO_BACKUP_HOST);
@@ -332,7 +336,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open file for read */
 	if (!is_decompress)
 	{
-		in = fio_fopen(from_path, PG_BINARY_R, FIO_BACKUP_HOST);
+		in = fio_fopen(from_path, PG_BINARY_R, FIO_BACKUP_HOST, instance_config.encryption);
 		if (in == NULL)
 			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
 					from_path, strerror(errno));
@@ -341,7 +345,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	else
 	{
 		gz_in = fio_gzopen(gz_from_path, PG_BINARY_R, Z_DEFAULT_COMPRESSION,
-						   FIO_BACKUP_HOST);
+						   FIO_BACKUP_HOST, instance_config.encryption);
 		if (gz_in == NULL)
 			elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
 					 gz_from_path, strerror(errno));
@@ -496,7 +500,7 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 		gzFile		gz_in = NULL;
 
 		INIT_FILE_CRC32(true, crc2);
-		gz_in = fio_gzopen(path2, PG_BINARY_R, Z_DEFAULT_COMPRESSION, FIO_BACKUP_HOST);
+		gz_in = fio_gzopen(path2, PG_BINARY_R, Z_DEFAULT_COMPRESSION, FIO_BACKUP_HOST, instance_config.encryption);
 		if (gz_in == NULL)
 			/* File cannot be read */
 			elog(ERROR,

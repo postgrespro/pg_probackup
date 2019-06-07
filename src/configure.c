@@ -40,6 +40,7 @@ static void show_configure_json(ConfigOption *opt);
 #define OPTION_RETENTION_GROUP	"Retention parameters"
 #define OPTION_COMPRESS_GROUP	"Compression parameters"
 #define OPTION_REMOTE_GROUP		"Remote access parameters"
+#define OPTION_ENCRYPTION_GROUP "Encryption parameters"
 
 /*
  * Short name should be non-printable ASCII character.
@@ -215,6 +216,12 @@ ConfigOption instance_options[] =
 		's', 225, "ssh-config",
 		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
+	},
+	/* Encryption options */
+	{
+		'b', 226, "encryption",
+		&instance_config.encryption, SOURCE_CMD, 0,
+		OPTION_ENCRYPTION_GROUP, 0, option_get_value
 	},
 	{ 0 }
 };

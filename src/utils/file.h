@@ -46,6 +46,7 @@ typedef enum
 
 #define FIO_FDMAX 64
 #define FIO_PIPE_MARKER 0x40000000
+#define FIO_AES_MARKER  1
 #define PAGE_CHECKSUM_MISMATCH (-256)
 
 #define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
@@ -67,7 +68,7 @@ extern fio_location MyLocation;
 extern void    fio_redirect(int in, int out);
 extern void    fio_communicate(int in, int out);
 
-extern FILE*   fio_fopen(char const* name, char const* mode, fio_location location);
+extern FILE*   fio_fopen(char const* name, char const* mode, fio_location location, bool encryption);
 extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
 extern ssize_t fio_fread(FILE* f, void* buf, size_t size);
 extern int     fio_pread(FILE* f, void* buf, off_t offs);
@@ -79,7 +80,7 @@ extern int     fio_fclose(FILE* f);
 extern int     fio_ffstat(FILE* f, struct stat* st);
 
 struct pgFile;
-extern  int    fio_send_pages(FILE* in, FILE* out, struct pgFile *file, XLogRecPtr horizonLsn, 
+extern  int    fio_send_pages(FILE* in, FILE* out, struct pgFile *file, XLogRecPtr horizonLsn,
 							  BlockNumber* nBlocksSkipped, int calg, int clevel);
 
 extern int     fio_open(char const* name, int mode, fio_location location);
@@ -90,6 +91,7 @@ extern int     fio_seek(int fd, off_t offs);
 extern int     fio_fstat(int fd, struct stat* st);
 extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
+extern FILE*   fio_fdopen(char const* path, int fd, char const* mode, bool encryption);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
 extern int     fio_symlink(char const* target, char const* link_path, fio_location location);
@@ -104,8 +106,10 @@ extern int     fio_closedir(DIR *dirp);
 extern FILE*   fio_open_stream(char const* name, fio_location location);
 extern int     fio_close_stream(FILE* f);
 
+extern void    fio_crypto_init(void);
+
 #ifdef HAVE_LIBZ
-extern gzFile  fio_gzopen(char const* path, char const* mode, int level, fio_location location);
+extern gzFile  fio_gzopen(char const* path, char const* mode, int level, fio_location location, bool encryption);
 extern int     fio_gzclose(gzFile file);
 extern int     fio_gzread(gzFile f, void *buf, unsigned size);
 extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);

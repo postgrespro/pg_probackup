@@ -601,7 +601,7 @@ write_backup(pgBackup *backup)
 	pgBackupGetPath(backup, path, lengthof(path), BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST, false);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open configuration file \"%s\": %s",
 			 path_temp, strerror(errno));
@@ -640,7 +640,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST, false);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));

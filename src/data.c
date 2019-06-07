@@ -559,7 +559,7 @@ backup_data_file(backup_files_arg* arguments,
 	INIT_FILE_CRC32(true, file->crc);
 
 	/* open backup mode file for read */
-	in = fio_fopen(file->path, PG_BINARY_R, FIO_DB_HOST);
+	in = fio_fopen(file->path, PG_BINARY_R, FIO_DB_HOST, false);
 	if (in == NULL)
 	{
 		FIN_FILE_CRC32(true, file->crc);
@@ -598,7 +598,7 @@ backup_data_file(backup_files_arg* arguments,
 	nblocks = file->size/BLCKSZ;
 
 	/* open backup file for write  */
-	out = fio_fopen(to_path, PG_BINARY_W, FIO_BACKUP_HOST);
+	out = fio_fopen(to_path, PG_BINARY_W, FIO_BACKUP_HOST, instance_config.encryption);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -740,7 +740,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	 * modified pages for differential restore. If the file does not exist,
 	 * re-open it with "w" to create an empty file.
 	 */
-	out = fio_fopen(to_path, PG_BINARY_R "+", FIO_DB_HOST);
+	out = fio_fopen(to_path, PG_BINARY_R "+", FIO_DB_HOST, false);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -964,7 +964,7 @@ copy_file(fio_location from_location, const char *to_root,
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fio_fopen(file->path, PG_BINARY_R, from_location);
+	in = fio_fopen(file->path, PG_BINARY_R, from_location, instance_config.encryption && from_location == FIO_BACKUP_HOST);
 	if (in == NULL)
 	{
 		FIN_FILE_CRC32(true, crc);
@@ -989,7 +989,7 @@ copy_file(fio_location from_location, const char *to_root,
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->rel_path);
-	out = fio_fopen(to_path, PG_BINARY_W, to_location);
+	out = fio_fopen(to_path, PG_BINARY_W, to_location, instance_config.encryption && to_location == FIO_BACKUP_HOST);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;

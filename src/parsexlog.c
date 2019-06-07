@@ -108,7 +108,7 @@ typedef struct XLogReaderData
 
 	bool		need_switch;
 
-	int			xlogfile;
+	FILE*		xlogfile;
 	char		xlogpath[MAXPGPATH];
 
 #ifdef HAVE_LIBZ
@@ -720,20 +720,23 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		if (fileExists(reader_data->xlogpath, FIO_BACKUP_HOST))
 		{
+			int fd;
 			elog(LOG, "Thread [%d]: Opening WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->xlogfile = fio_open(reader_data->xlogpath,
+			fd = fio_open(reader_data->xlogpath,
 											 O_RDONLY | PG_BINARY, FIO_BACKUP_HOST);
 
-			if (reader_data->xlogfile < 0)
+			if (fd < 0)
 			{
 				elog(WARNING, "Thread [%d]: Could not open WAL segment \"%s\": %s",
 					 reader_data->thread_num, reader_data->xlogpath,
 					 strerror(errno));
 				return -1;
 			}
+			reader_data->xlogfile = fio_fdopen(reader_data->xlogpath, fd, "rb",
+											   instance_config.encryption);
 		}
 #ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
@@ -748,7 +751,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 				reader_data->xlogexists = true;
 				reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
-													  "rb", -1, FIO_BACKUP_HOST);
+													  "rb", -1, FIO_BACKUP_HOST,
+													  instance_config.encryption);
 				if (reader_data->gz_xlogfile == NULL)
 				{
 					elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
@@ -782,16 +786,16 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	}
 
 	/* Read the requested page */
-	if (reader_data->xlogfile != -1)
+	if (reader_data->xlogfile != NULL)
 	{
-		if (fio_seek(reader_data->xlogfile, (off_t) targetPageOff) < 0)
+		if (fio_fseek(reader_data->xlogfile, (off_t) targetPageOff) < 0)
 		{
 			elog(WARNING, "Thread [%d]: Could not seek in WAL segment \"%s\": %s",
 				 reader_data->thread_num, reader_data->xlogpath, strerror(errno));
 			return -1;
 		}
 
-		if (fio_read(reader_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (fio_fread(reader_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 		{
 			elog(WARNING, "Thread [%d]: Could not read from WAL segment \"%s\": %s",
 				 reader_data->thread_num, reader_data->xlogpath, strerror(errno));
@@ -842,7 +846,7 @@ InitXLogPageRead(XLogReaderData *reader_data, const char *archivedir,
 
 	MemSet(reader_data, 0, sizeof(XLogReaderData));
 	reader_data->tli = tli;
-	reader_data->xlogfile = -1;
+	reader_data->xlogfile = NULL;
 
 	if (allocate_reader)
 	{
@@ -1365,10 +1369,10 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 	XLogReaderData *reader_data;
 
 	reader_data = (XLogReaderData *) xlogreader->private_data;
-	if (reader_data->xlogfile >= 0)
+	if (reader_data->xlogfile != NULL)
 	{
-		fio_close(reader_data->xlogfile);
-		reader_data->xlogfile = -1;
+		fio_fclose(reader_data->xlogfile);
+		reader_data->xlogfile = NULL;
 	}
 #ifdef HAVE_LIBZ
 	else if (reader_data->gz_xlogfile != NULL)
@@ -1393,7 +1397,7 @@ PrintXLogCorruptionMsg(XLogReaderData *reader_data, int elevel)
 		if (!reader_data->xlogexists)
 			elog(elevel, "Thread [%d]: WAL segment \"%s\" is absent",
 				 reader_data->thread_num, reader_data->xlogpath);
-		else if (reader_data->xlogfile != -1)
+		else if (reader_data->xlogfile != NULL)
 			elog(elevel, "Thread [%d]: Possible WAL corruption. "
 						 "Error has occured during reading WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);

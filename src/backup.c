@@ -1786,7 +1786,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
-			fp = fio_fopen(backup_label, PG_BINARY_W, FIO_BACKUP_HOST);
+			fp = fio_fopen(backup_label, PG_BINARY_W, FIO_BACKUP_HOST, false);
 			if (fp == NULL)
 				elog(ERROR, "can't open backup label file \"%s\": %s",
 					 backup_label, strerror(errno));
@@ -1836,7 +1836,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 			char		tablespace_map[MAXPGPATH];
 
 			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
-			fp = fio_fopen(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST);
+			fp = fio_fopen(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST, false);
 			if (fp == NULL)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
 					 tablespace_map, strerror(errno));

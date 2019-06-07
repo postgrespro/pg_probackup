@@ -111,6 +111,9 @@ bool		dry_run = false;
 /* compression options */
 bool 		compress_shortcut = false;
 
+/* encryption options */
+bool 		encryption_shortcut = false;
+
 /* other options */
 char	   *instance_name;
 
@@ -193,6 +196,8 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	/* encryption options */
+	{ 'b', 154, "encryption",		&encryption_shortcut,SOURCE_CMD_STRICT },
 
 	/* options for backward compatibility */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
@@ -596,6 +601,8 @@ main(int argc, char *argv[])
 		num_threads = 1;
 
 	compress_init();
+	if (instance_config.encryption)
+		fio_crypto_init();
 
 	/* do actual operation */
 	switch (backup_subcmd)
@@ -716,6 +723,9 @@ compress_init(void)
 	/* Default algorithm is zlib */
 	if (compress_shortcut)
 		instance_config.compress_alg = ZLIB_COMPRESS;
+
+	if (encryption_shortcut)
+		instance_config.encryption = encryption_shortcut;
 
 	if (backup_subcmd != SET_CONFIG_CMD)
 	{

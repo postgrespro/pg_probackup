@@ -11,6 +11,7 @@
 #include "pg_probackup.h"
 #include "file.h"
 #include "storage/checksum.h"
+#include "rijndael.h"
 
 #define PRINTF_BUF_SIZE  1024
 #define FILE_PERMISSIONS 0600
@@ -33,6 +34,13 @@ typedef struct
 	int         clevel;
 } fio_send_request;
 
+typedef struct
+{
+	uint32		 in[4];		/* 16 bytes, 128 bits */
+	uint32	     out[4];
+	uint32       offs;
+	FILE*        file;
+} fio_aes_channel;
 
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
@@ -48,6 +56,18 @@ void fio_redirect(int in, int out)
 static bool fio_is_remote_fd(int fd)
 {
 	return (fd & FIO_PIPE_MARKER) != 0;
+}
+
+static bool fio_is_aes_channel(FILE* f)
+{
+	size_t fi = (size_t)f;
+	return fi > FIO_FDMAX && (fi & FIO_AES_MARKER) != 0;
+}
+
+static fio_aes_channel*
+fio_to_aes_channel(FILE* f)
+{
+	return (fio_aes_channel*)((char*)f - FIO_AES_MARKER);
 }
 
 #ifdef WIN32
@@ -333,8 +353,116 @@ int fio_open(char const* path, int mode, fio_location location)
 	return fd;
 }
 
+static rijndael_ctx aes_context;
+
+void
+fio_crypto_init(void)
+{
+	uint8		aes_key[32] = {0};	/* at most 256 bits */
+	int			key_length;
+	char	   *cipher_key;
+
+	cipher_key = getenv("PG_CIPHER_KEY");
+	if (cipher_key == NULL)
+	{
+		elog(ERROR, "PG_CIPHER_KEY environment variable is not set");
+	}
+	unsetenv("PG_CIPHER_KEY");	/* disable inspection of this environment
+								 * variable */
+
+	key_length = strlen(cipher_key);
+
+	memcpy(&aes_key, cipher_key, key_length > sizeof(aes_key) ? sizeof(aes_key) : key_length);
+	rijndael_set_key(
+		&aes_context,
+		(u4byte *) &aes_key,	/* key */
+		sizeof(aes_key) * 8 /* key size in bits */ ,
+		1			/* for CTR mode we need only encryption */
+		);
+}
+
+/*
+ * For a file name like 'path/to/16384/16401[.123]' return part1 = 16384, part2 = 16401 and part3 = 123.
+ * Returns 0 on success and negative value on error.
+ */
+static int
+extract_fname_parts(const char *fname, uint32 *part1, uint32 *part2, uint32 *part3)
+{
+	int	 idx = strlen(fname);
+
+	if (idx == 0)
+		return -1;
+
+	if (idx > 8 && strncmp(&fname[idx-8], ".partial", 8) == 0)
+		idx -= 8;
+	if (idx > 3 && strncmp(&fname[idx-3], ".gz", 3) == 0)
+		idx -= 3;
+
+	while (--idx >= 0 && isdigit(fname[idx]));
+
+	if (idx == 0)
+		return -2;
+
+	if (fname[idx] != '.')
+	{
+		*part3 = 0;
+		goto assign_part2;
+	}
+	*part3 = atoi(&fname[idx + 1]);
+
+	idx--;
+	while (idx >= 0 && isdigit(fname[idx]))
+		idx--;
+
+	if (idx == 0)
+		return -3;
+
+assign_part2:
+	*part2 = atoi(&fname[idx + 1]);
+
+	idx--;
+	while (idx >= 0 && isdigit(fname[idx]))
+		idx--;
+
+	if (idx == 0)
+		return -4;
+
+	*part1 = atoi(&fname[idx + 1]);
+	return 0;
+}
+
+static fio_aes_channel* fio_open_aes_channel(FILE* file, char const* file_name)
+{
+	fio_aes_channel* chan = (fio_aes_channel*)calloc(sizeof(fio_aes_channel), 1);
+	extract_fname_parts(file_name, &chan->in[0], &chan->in[1], &chan->in[2]);
+	rijndael_encrypt(&aes_context, (u4byte *) &chan->in, (u4byte *) &chan->out);
+	chan->file = file;
+	return chan;
+}
+
+static void fio_aes_crypt(fio_aes_channel* chan, void *block, uint32 size)
+{
+	uint32 offs = chan->offs;
+	uint8 *plaintext = (uint8 *) block;
+	uint8 *gamma = (uint8 *) &chan->out;
+	uint32 i;
+
+	for (i = 0; i < size; i++)
+	{
+		plaintext[i] ^= gamma[offs & 0xF];
+		offs++;
+		if ((offs & 0xF) == 0)
+		{
+			/* Prepare next gamma part */
+			chan->in[3] = offs;
+			rijndael_encrypt(&aes_context, (u4byte *) &chan->in, (u4byte *) &chan->out);
+		}
+	}
+	chan->offs = offs;
+}
+
 /* Open stdio file */
-FILE* fio_fopen(char const* path, char const* mode, fio_location location)
+FILE* fio_fopen(char const* path, char const* mode, fio_location location, bool encryption)
 {
 	FILE	   *f = NULL;
 
@@ -359,6 +487,22 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 		if (f == NULL && strcmp(mode, PG_BINARY_R "+") == 0)
 			f = fopen(path, PG_BINARY_W);
 	}
+	if (encryption)
+		f = (FILE*)((char*)fio_open_aes_channel(f, path) + FIO_AES_MARKER);
+
+	return f;
+}
+
+
+FILE* fio_fdopen(char const* path, int fd, char const* mode, bool encryption)
+{
+	FILE* f = fio_is_remote_fd(fd)
+		? (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER)
+		: fdopen(fd, mode);
+
+	if (encryption)
+		f = (FILE*)((char*)fio_open_aes_channel(f, path) + FIO_AES_MARKER);
+
 	return f;
 }
 
@@ -411,6 +555,13 @@ int fio_flush(int fd)
 /* Close output stream */
 int fio_fclose(FILE* f)
 {
+	if (fio_is_aes_channel(f))
+	{
+		fio_aes_channel* chan = fio_to_aes_channel(f);
+		int rc = fio_fclose(chan->file);
+		free(chan);
+		return rc;
+	}
 	return fio_is_remote_file(f)
 		? fio_close(fio_fileno(f))
 		: fclose(f);
@@ -530,6 +681,12 @@ int fio_seek(int fd, off_t offs)
 /* Write data to stdio file */
 size_t fio_fwrite(FILE* f, void const* buf, size_t size)
 {
+	if (fio_is_aes_channel(f))
+	{
+		fio_aes_channel* chan = fio_to_aes_channel(f);
+		fio_aes_crypt(chan, (void*)buf, size);
+		return fio_fwrite(chan->file, buf, size);
+	}
 	return fio_is_remote_file(f)
 		? fio_write(fio_fileno(f), buf, size)
 		: fwrite(buf, 1, size, f);
@@ -560,7 +717,17 @@ ssize_t fio_write(int fd, void const* buf, size_t size)
 /* Read data from stdio file */
 ssize_t fio_fread(FILE* f, void* buf, size_t size)
 {
-	size_t rc;
+	ssize_t rc;
+
+	if (fio_is_aes_channel(f))
+	{
+		fio_aes_channel* chan = fio_to_aes_channel(f);
+		rc = fio_fread(chan->file, buf, size);
+		if (rc > 0)
+			fio_aes_crypt(chan, buf, rc);
+		return rc;
+	}
+
 	if (fio_is_remote_file(f))
 		return fio_read(fio_fileno(f), buf, size);
 	rc = fread(buf, 1, size, f);
@@ -829,14 +996,15 @@ typedef struct fioGZFile
 	int      errnum;
 	bool     compress;
 	bool     eof;
+	fio_aes_channel* aes;
 	Bytef    buf[ZLIB_BUFFER_SIZE];
 } fioGZFile;
 
 gzFile
-fio_gzopen(char const* path, char const* mode, int level, fio_location location)
+fio_gzopen(char const* path, char const* mode, int level, fio_location location, bool encryption)
 {
 	int rc;
-	if (fio_is_remote(location))
+	if (fio_is_remote(location) || encryption)
 	{
 		fioGZFile* gz = (fioGZFile*) pgut_malloc(sizeof(fioGZFile));
 		memset(&gz->strm, 0, sizeof(gz->strm));
@@ -881,6 +1049,8 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 			free(gz);
 			return NULL;
 		}
+		gz->aes = encryption ? fio_open_aes_channel(NULL, path) : NULL;
+
 		return (gzFile)((size_t)gz + FIO_GZ_REMOTE_MARKER);
 	}
 	else
@@ -951,6 +1121,8 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 			rc = fio_read(gz->fd, gz->strm.next_in + gz->strm.avail_in, gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
 			if (rc > 0)
 			{
+				if (gz->aes)
+					fio_aes_crypt(gz->aes, gz->strm.next_in + gz->strm.avail_in, rc);
 				gz->strm.avail_in += rc;
 			}
 			else
@@ -979,7 +1151,6 @@ fio_gzwrite(gzFile f, void const* buf, unsigned size)
 
 		gz->strm.next_in = (Bytef *)buf;
 		gz->strm.avail_in = size;
-
 		do
 		{
 			if (gz->strm.avail_out == ZLIB_BUFFER_SIZE) /* Compress buffer is empty */
@@ -997,6 +1168,9 @@ fio_gzwrite(gzFile f, void const* buf, unsigned size)
 					break;
 				}
 			}
+			if (gz->aes)
+				fio_aes_crypt(gz->aes, gz->strm.next_out, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
+
 			rc = fio_write(gz->fd, gz->strm.next_out, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
 			if (rc >= 0)
 			{
@@ -1041,6 +1215,8 @@ fio_gzclose(gzFile f)
 			inflateEnd(&gz->strm);
 		}
 		rc = fio_close(gz->fd);
+		if (gz->aes)
+			free(gz->aes);
 		free(gz);
 		return rc;
 	}
@@ -1144,6 +1320,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 	while (true)
 	{
 		fio_header hdr;
+		int compressed_size;
 		char buf[BLCKSZ + sizeof(BackupPageHeader)];
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_PAGE);
@@ -1159,6 +1336,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 		IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
 
 		COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
+		compressed_size = ((BackupPageHeader*)buf)->compressed_size;
 
 		if (fio_fwrite(out, buf, hdr.size) != hdr.size)
 		{
@@ -1170,7 +1348,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 		file->write_size += hdr.size;
 		n_blocks_read++;
 
-		if (((BackupPageHeader*)buf)->compressed_size == PageIsTruncated)
+		if (compressed_size == PageIsTruncated)
 		{
 			blknum += 1;
 			break;
