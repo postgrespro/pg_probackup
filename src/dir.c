@@ -1271,52 +1271,6 @@ get_external_remap(char *current_dir)
 	return current_dir;
 }
 
-/*
- * Print backup content list.
- */
-void
-print_file_list(FILE *out, const parray *files, const char *root,
-				const char *external_prefix, parray *external_list)
-{
-	size_t		i;
-
-	/* print each file in the list */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-		char	   *path = file->path;
-
-		/* omit root directory portion */
-		if (root && strstr(path, root) == path)
-			path = GetRelativePath(path, root);
-		else if (file->external_dir_num && !external_prefix)
-		{
-			Assert(external_list);
-			path = GetRelativePath(path, parray_get(external_list,
-													file->external_dir_num - 1));
-		}
-
-		fio_fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
-					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
-					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
-				path, file->write_size, file->mode,
-				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
-				deparse_compress_alg(file->compress_alg), file->external_dir_num);
-
-		if (file->is_datafile)
-			fio_fprintf(out, ",\"segno\":\"%d\"", file->segno);
-
-		if (file->linked)
-			fio_fprintf(out, ",\"linked\":\"%s\"", file->linked);
-
-		if (file->n_blocks != BLOCKNUM_INVALID)
-			fio_fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
-
-		fio_fprintf(out, "}\n");
-	}
-}
-
 /* Parsing states for get_control_value() */
 #define CONTROL_WAIT_NAME			1
 #define CONTROL_INNAME				2

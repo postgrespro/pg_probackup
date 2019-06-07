@@ -632,22 +632,96 @@ void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					  const char *external_prefix, parray *external_list)
 {
-	FILE	   *fp;
+	FILE	   *out;
 	char		path[MAXPGPATH];
 	char		path_temp[MAXPGPATH];
 	int			errno_temp;
+	size_t		i = 0;
+	#define BUFFERSZ BLCKSZ*500
+	char		buf[BUFFERSZ];
+	size_t		write_len = 0;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
-	if (fp == NULL)
+	out = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+	if (out == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
 
-	print_file_list(fp, files, root, external_prefix, external_list);
+	/* print each file in the list */
+	while(i < parray_num(files))
+	{
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+		char	   *path = file->path;
+		char	line[BLCKSZ];
+		int 	len = 0;
 
-	if (fio_fflush(fp) || fio_fclose(fp))
+		/* omit root directory portion */
+		if (root && strstr(path, root) == path)
+			path = GetRelativePath(path, root);
+		else if (file->external_dir_num && !external_prefix)
+		{
+			Assert(external_list);
+			path = GetRelativePath(path, parray_get(external_list,
+													file->external_dir_num - 1));
+		}
+
+		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
+					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
+					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
+					path, file->write_size, file->mode,
+					file->is_datafile ? 1 : 0,
+					file->is_cfs ? 1 : 0,
+					file->crc,
+					deparse_compress_alg(file->compress_alg),
+					file->external_dir_num);
+
+		if (file->is_datafile)
+			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
+
+		if (file->linked)
+			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
+
+		if (file->n_blocks != BLOCKNUM_INVALID)
+			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
+
+		len += sprintf(line+len, "}\n");
+
+		if (write_len + len <= BUFFERSZ)
+		{
+			memcpy(buf+write_len, line, len);
+			write_len += len;
+		}
+		else
+		{
+			/* write buffer to file */
+			if (fio_fwrite(out, buf, write_len) != write_len)
+			{
+				errno_temp = errno;
+				fio_unlink(path_temp, FIO_BACKUP_HOST);
+				elog(ERROR, "Cannot write file list \"%s\": %s",
+					path_temp, strerror(errno));
+			}
+			/* reset write_len */
+			write_len = 0;
+		}
+
+		i++;
+	}
+
+	/* write what is left in the buffer to file */
+	if (write_len > 0)
+		if (fio_fwrite(out, buf, write_len) != write_len)
+		{
+			errno_temp = errno;
+			fio_unlink(path_temp, FIO_BACKUP_HOST);
+			elog(ERROR, "Cannot write file list \"%s\": %s",
+				path_temp, strerror(errno));
+		}
+
+	if (fio_fflush(out) || fio_fclose(out))
 	{
 		errno_temp = errno;
 		fio_unlink(path_temp, FIO_BACKUP_HOST);

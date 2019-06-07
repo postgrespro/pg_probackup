@@ -462,6 +462,7 @@ do_backup_instance(PGconn *backup_conn)
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->conn_arg.conn = NULL;
 		arg->conn_arg.cancel_conn = NULL;
+		arg->thread_num = i+1;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -1987,6 +1988,9 @@ backup_files(void *arg)
 	int			i;
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int			n_backup_files_list = parray_num(arguments->files_list);
+	static time_t prev_time;
+
+	prev_time = current.start_time;
 
 	/* backup a file */
 	for (i = 0; i < n_backup_files_list; i++)
@@ -1994,6 +1998,21 @@ backup_files(void *arg)
 		int			ret;
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
+
+		
+		if (arguments->thread_num == 1)
+		{
+			/* update every 10 seconds */
+			if ((difftime(time(NULL), prev_time)) > 10)
+			{
+				prev_time = time(NULL);
+				elog(INFO, "write_backup_filelist N=%ld, starttime %ld, time %ld",
+					 parray_num(backup_files_list), current.start_time,  prev_time);
+
+				write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
+									NULL, arguments->external_dirs);
+			}
+		}
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
