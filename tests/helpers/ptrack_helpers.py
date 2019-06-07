@@ -130,7 +130,7 @@ def slow_start(self, replica=False):
     self.start()
     while True:
         try:
-            if self.safe_psql('postgres', query) == 't\n':
+            if self.safe_psql('template1', query) == 't\n':
                 break
         except testgres.QueryException as e:
             if 'database system is starting up' in e[0]:
@@ -296,8 +296,6 @@ class ProbackupTest(object):
 #                print('PGPROBACKUP_SSH_USER is not set')
 #                exit(1)
 
-
-
     def make_simple_node(
             self,
             base_dir=None,
@@ -341,6 +339,10 @@ class ProbackupTest(object):
             node.append_conf(
                 'postgresql.auto.conf',
                 'max_wal_senders = 10')
+
+        # set major version
+        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
+            node.major_version = f.read().rstrip()
 
         return node
 
@@ -583,6 +585,13 @@ class ProbackupTest(object):
                 filelist_diff[file] = filelist_A[file]
 
         return filelist_diff
+
+    # used for partial restore
+    def truncate_every_file_in_dir(self, path):
+        for file in os.listdir(path):
+            print(file)
+            with open(os.path.join(path, file), "w") as f:
+                f.close()
 
     def check_ptrack_recovery(self, idx_dict):
         size = idx_dict['size']
@@ -1309,15 +1318,12 @@ class ProbackupTest(object):
                         os.path.join(restored_pgdata['pgdata'], directory),
                         restored_pgdata['dirs'][directory]['mode'])
 
-
-
         for directory in original_pgdata['dirs']:
             if directory not in restored_pgdata['dirs']:
                 fail = True
                 error_message += '\nDirectory dissappeared'
                 error_message += ' in restored PGDATA: {0}\n'.format(
                     os.path.join(restored_pgdata['pgdata'], directory))
-
 
         for file in restored_pgdata['files']:
             # File is present in RESTORED PGDATA
