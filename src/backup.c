@@ -1072,6 +1072,7 @@ pg_ptrack_support(PGconn *backup_conn)
 
 /*
  * Create 'datname to Oid' map
+ * Return NULL if failed to construct database_map
  */
 parray *
 get_database_map(PGconn *conn)
@@ -1080,10 +1081,10 @@ get_database_map(PGconn *conn)
 	parray *database_map = NULL;
 	int i;
 
-	res = pgut_execute(conn,
+	res = pgut_execute_extended(conn,
 						  "SELECT oid, datname FROM pg_catalog.pg_database "
 						  "WHERE datname NOT IN ('template1', 'template0')",
-						  0, NULL);
+						  0, NULL, true, true);
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
@@ -1112,6 +1113,14 @@ get_database_map(PGconn *conn)
 			database_map = parray_new();
 
 		parray_append(database_map, db_entry);
+	}
+
+	/* extra paranoia */
+	if (database_map && (parray_num(database_map) == 0))
+	{
+		parray_free(database_map);
+		elog(WARNING, "Failed to get database map");
+		return NULL;
 	}
 
 	return database_map;

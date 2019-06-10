@@ -42,8 +42,8 @@ static void create_recovery_conf(time_t backup_id,
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 
-static parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
-									  bool partial_restore_type);
+static parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
+									  parray *datname_list, bool partial_restore_type);
 
 static int pgCompareOid(const void *f1, const void *f2);
 
@@ -436,6 +436,15 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		int			i;
 
 		/*
+		 * Preparations for actual restoring.
+		 */
+		pgBackupGetPath(dest_backup, control_file, lengthof(control_file),
+						DATABASE_FILE_LIST);
+		dest_files = dir_read_file_list(NULL, NULL, control_file,
+										FIO_BACKUP_HOST);
+		parray_qsort(dest_files, pgFileCompareRelPathWithExternal);
+
+		/*
 		 * Get a list of dbOids to skip if user requested the partial restore.
 		 * It is important that we do this after(!) validation so
 		 * database_map can be trusted.
@@ -444,17 +453,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * partial restore, it`s OK
 		 */
 		if (datname_list)
-			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, datname_list,
+			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, dest_files, datname_list,
 														  partial_restore_type);
-
-		/*
-		 * Preparations for actual restoring.
-		 */
-		pgBackupGetPath(dest_backup, control_file, lengthof(control_file),
-						DATABASE_FILE_LIST);
-		dest_files = dir_read_file_list(NULL, NULL, control_file,
-										FIO_BACKUP_HOST);
-		parray_qsort(dest_files, pgFileCompareRelPathWithExternal);
 
 		/*
 		 * Restore dest_backup internal directories.
@@ -1171,19 +1171,39 @@ parseRecoveryTargetOptions(const char *target_time,
  * we always convert it into exclude_list.
  */
 parray *
-get_dbOid_exclude_list(pgBackup *backup, parray *datname_list, bool partial_restore_type)
+get_dbOid_exclude_list(pgBackup *backup, parray *files,
+					   parray *datname_list, bool partial_restore_type)
 {
 	int i;
 	int j;
 	parray *database_map = NULL;
 	parray *dbOid_exclude_list = NULL;
+	bool found_database_map = false;
+
+	/* make sure that database_map is in backup_content.control */
+	for (i = 0; i < parray_num(files); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+
+		if ((file->external_dir_num == 0) &&
+			strcmp(DATABASE_MAP, file->rel_path) == 0)
+		{
+			found_database_map = true;
+			break;
+		}
+	}
+
+	if (!found_database_map)
+		elog(ERROR, "Backup %s has missing database_map, partial restore is impossible.",
+			base36enc(backup->start_time));
 
 	/* get database_map from file */
 	database_map = read_database_map(backup);
 
 	/* partial restore requested but database_map is missing */
 	if (!database_map)
-		elog(ERROR, "Backup %s has empty or mangled database_map", base36enc(backup->start_time));
+		elog(ERROR, "Backup %s has empty or mangled database_map, partial restore is impossible.",
+			base36enc(backup->start_time));
 
 	/* So we have list of datnames and database_map for it.
 	 * We must construct a list of dbOids to exclude.

@@ -1779,18 +1779,11 @@ read_database_map(pgBackup *backup)
 	fp = fio_open_stream(database_map_path, FIO_BACKUP_HOST);
 	if (fp == NULL)
 	{
-		/* It is NOT ok for database_map to be missing at this point
-		 * But at this point we are sure that partial restore is requested,
-		 * so we error here if database_map is missing.
+		/* It is NOT ok for database_map to be missing at this point, so
+		 * we should error here.
 		 * It`s a job of the caller to error if database_map is not empty.
 		 */
-		if (errno == ENOENT)
-		{
-			elog(ERROR, "Backup %s has missing database_map: \"%s\"",
-					base36enc(backup->start_time), database_map_path);
-		}
-		else
-			elog(ERROR, "Cannot open \"%s\": %s", database_map_path, strerror(errno));
+		elog(ERROR, "Cannot open \"%s\": %s", database_map_path, strerror(errno));
 	}
 
 	database_map = parray_new();
