@@ -17,7 +17,7 @@ As compared to other backup solutions, `pg_probackup` offers the following benef
 * Extended logging settings
 * Custom commands to simplify WAL log archiving
 * External to PGDATA directories, such as directories with config files and scripts, can be included in backup
-* Remote backup, restore, archive-push and archive-get operations via ssh (beta)
+* Remote backup, restore, add-instance, archive-push and archive-get operations via ssh (beta)
 * Checking running PostgreSQL instance for the sights of corruption in read-only mode via `checkdb` command.
 
 To manage backup data, `pg_probackup` creates a backup catalog. This directory stores all backup files with additional meta information, as well as WAL archives required for [point-in-time recovery](https://postgrespro.com/docs/postgresql/current/continuous-archiving.html). You can store backups for different instances in separate subdirectories of a single backup catalog.

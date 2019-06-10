@@ -589,7 +589,6 @@ class ProbackupTest(object):
     # used for partial restore
     def truncate_every_file_in_dir(self, path):
         for file in os.listdir(path):
-            print(file)
             with open(os.path.join(path, file), "w") as f:
                 f.close()
 
@@ -743,12 +742,16 @@ class ProbackupTest(object):
 
     def backup_node(
             self, backup_dir, instance, node, data_dir=False,
-            backup_type='full', options=[], asynchronous=False, gdb=False,
+            backup_type='full', datname=False, options=[],
+            asynchronous=False, gdb=False,
             old_binary=False, return_id=True
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
             exit(1)
+
+        if not datname:
+            datname = 'postgres'
 
         cmd_list = [
             'backup',
@@ -756,7 +759,7 @@ class ProbackupTest(object):
             '--instance={0}'.format(instance),
             # "-D", pgdata,
             '-p', '%i' % node.port,
-            '-d', 'postgres'
+            '-d', datname
         ]
 
         if data_dir:
