@@ -197,7 +197,7 @@ static ConfigOption cmd_options[] =
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
 	/* encryption options */
-	{ 'b', 154, "encryption",		&encryption_shortcut,SOURCE_CMD_STRICT },
+	{ 'b', 158, "encryption",		&encryption_shortcut,SOURCE_CMD_STRICT },
 
 	/* options for backward compatibility */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },

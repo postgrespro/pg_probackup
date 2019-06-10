@@ -555,7 +555,7 @@ do_backup_instance(PGconn *backup_conn)
 			if (S_ISREG(file->mode))
 			{
 				file->crc = pgFileGetCRC(file->path, true, false,
-										 &file->read_size, FIO_BACKUP_HOST);
+										 &file->read_size, FIO_BACKUP_HOST, false);
 				file->write_size = file->read_size;
 			}
 			/* Remove file path root prefix*/
@@ -1807,7 +1807,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 				file = pgFileNew(backup_label, backup_label, true, 0,
 								 FIO_BACKUP_HOST);
 				file->crc = pgFileGetCRC(file->path, true, false,
-										 &file->read_size, FIO_BACKUP_HOST);
+										 &file->read_size, FIO_BACKUP_HOST, false);
 				file->write_size = file->read_size;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
@@ -1855,7 +1855,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 				if (S_ISREG(file->mode))
 				{
 					file->crc = pgFileGetCRC(file->path, true, false,
-											 &file->read_size, FIO_BACKUP_HOST);
+											 &file->read_size, FIO_BACKUP_HOST, false);
 					file->write_size = file->read_size;
 				}
 				free(file->path);
@@ -2099,7 +2099,7 @@ backup_files(void *arg)
 					buf.st_mtime < current.parent_backup)
 				{
 					file->crc = pgFileGetCRC(file->path, true, false,
-											 &file->read_size, FIO_DB_HOST);
+											 &file->read_size, FIO_DB_HOST, false);
 					file->write_size = file->read_size;
 					/* ...and checksum is the same... */
 					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))

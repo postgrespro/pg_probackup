@@ -251,7 +251,7 @@ delete_file:
 
 pg_crc32
 pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
-			 size_t *bytes_read, fio_location location)
+			 size_t *bytes_read, fio_location location, bool encryption)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
@@ -263,7 +263,7 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
 	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* open file in binary read mode */
-	fp = fio_fopen(file_path, PG_BINARY_R, location, location == FIO_BACKUP_HOST && instance_config.encryption);
+	fp = fio_fopen(file_path, PG_BINARY_R, location, encryption);
 	if (fp == NULL)
 	{
 		if (!raise_on_deleted && errno == ENOENT)

@@ -257,7 +257,7 @@ pgBackupValidateFiles(void *arg)
 				crc = pgFileGetCRC(file->path,
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
-								   true, NULL, FIO_LOCAL_HOST);
+								   true, NULL, FIO_LOCAL_HOST, file->is_datafile && instance_config.encryption);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",

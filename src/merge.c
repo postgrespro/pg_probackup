@@ -513,7 +513,7 @@ merge_files(void *arg)
 				 * Recalculate crc for backup prior to 2.0.25.
 				 */
 				if (parse_program_version(from_backup->program_version) < 20025)
-					file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST);
+					file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST, instance_config.encryption);
 				/* Otherwise just get it from the previous file */
 				else
 					file->crc = to_file->crc;
@@ -637,7 +637,7 @@ merge_files(void *arg)
 				 * do that.
 				 */
 				file->write_size = pgFileSize(to_file_path);
-				file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST);
+				file->crc = pgFileGetCRC(to_file_path, true, true, NULL, FIO_LOCAL_HOST, instance_config.encryption);
 			}
 		}
 		else if (file->external_dir_num)

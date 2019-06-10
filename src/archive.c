@@ -187,7 +187,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
-		int	out_fd = -1;
+		int	out_fd;
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
 
 		out_fd = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
@@ -531,11 +531,11 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 	else
 #endif
 	{
-		crc2 = pgFileGetCRC(path2, true, true, NULL, FIO_BACKUP_HOST);
+		crc2 = pgFileGetCRC(path2, true, true, NULL, FIO_BACKUP_HOST, instance_config.encryption);
 	}
 
 	/* Get checksum of original file */
-	crc1 = pgFileGetCRC(path1, true, true, NULL, FIO_DB_HOST);
+	crc1 = pgFileGetCRC(path1, true, true, NULL, FIO_DB_HOST, false);
 
 	return EQ_CRC32C(crc1, crc2);
 }

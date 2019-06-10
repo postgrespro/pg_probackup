@@ -395,6 +395,8 @@ extract_fname_parts(const char *fname, uint32 *part1, uint32 *part2, uint32 *par
 
 	if (idx > 8 && strncmp(&fname[idx-8], ".partial", 8) == 0)
 		idx -= 8;
+	if (idx > 4 && strncmp(&fname[idx-4], ".tmp", 4) == 0)
+		idx -= 4;
 	if (idx > 3 && strncmp(&fname[idx-3], ".gz", 3) == 0)
 		idx -= 3;
 
@@ -438,6 +440,13 @@ static fio_aes_channel* fio_open_aes_channel(FILE* file, char const* file_name)
 	rijndael_encrypt(&aes_context, (u4byte *) &chan->in, (u4byte *) &chan->out);
 	chan->file = file;
 	return chan;
+}
+
+static void fio_aes_reset(fio_aes_channel* chan ,int offs)
+{
+	chan->offs = offs;
+	chan->in[3] = offs & ~0xF;
+	rijndael_encrypt(&aes_context, (u4byte *) &chan->in, (u4byte *) &chan->out);
 }
 
 static void fio_aes_crypt(fio_aes_channel* chan, void *block, uint32 size)
@@ -487,7 +496,7 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location, bool 
 		if (f == NULL && strcmp(mode, PG_BINARY_R "+") == 0)
 			f = fopen(path, PG_BINARY_W);
 	}
-	if (encryption)
+	if (f && encryption)
 		f = (FILE*)((char*)fio_open_aes_channel(f, path) + FIO_AES_MARKER);
 
 	return f;
@@ -500,7 +509,7 @@ FILE* fio_fdopen(char const* path, int fd, char const* mode, bool encryption)
 		? (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER)
 		: fdopen(fd, mode);
 
-	if (encryption)
+	if (f && encryption)
 		f = (FILE*)((char*)fio_open_aes_channel(f, path) + FIO_AES_MARKER);
 
 	return f;
@@ -512,7 +521,7 @@ int fio_fprintf(FILE* f, char const* format, ...)
 	int rc;
     va_list args;
     va_start (args, format);
-	if (fio_is_remote_file(f))
+	if (fio_is_remote_file(f) || fio_is_aes_channel(f))
 	{
 		char buf[PRINTF_BUF_SIZE];
 #ifdef HAS_VSNPRINTF
@@ -536,6 +545,8 @@ int fio_fprintf(FILE* f, char const* format, ...)
 int fio_fflush(FILE* f)
 {
 	int rc = 0;
+	if (fio_is_aes_channel(f))
+		return fio_fflush(fio_to_aes_channel(f)->file);
 	if (!fio_is_remote_file(f))
 	{
 		rc = fflush(f);
@@ -592,6 +603,7 @@ int fio_close(int fd)
 /* Truncate stdio file */
 int fio_ftruncate(FILE* f, off_t size)
 {
+	Assert(!fio_is_aes_channel(f));
 	return fio_is_remote_file(f)
 		? fio_truncate(fio_fileno(f), size)
 		: ftruncate(fileno(f), size);
@@ -651,6 +663,12 @@ int fio_pread(FILE* f, void* buf, off_t offs)
 /* Set position in stdio file */
 int fio_fseek(FILE* f, off_t offs)
 {
+	if (fio_is_aes_channel(f))
+	{
+		fio_aes_channel* chan = fio_to_aes_channel(f);
+		fio_aes_reset(chan, offs);
+		return fio_fseek(chan->file, offs);
+	}
 	return fio_is_remote_file(f)
 		? fio_seek(fio_fileno(f),  offs)
 		: fseek(f, offs, SEEK_SET);
@@ -730,6 +748,7 @@ ssize_t fio_fread(FILE* f, void* buf, size_t size)
 
 	if (fio_is_remote_file(f))
 		return fio_read(fio_fileno(f), buf, size);
+
 	rc = fread(buf, 1, size, f);
 	return rc == 0 && !feof(f) ? -1 : rc;
 }
@@ -763,9 +782,11 @@ ssize_t fio_read(int fd, void* buf, size_t size)
 /* Get information about stdio file */
 int fio_ffstat(FILE* f, struct stat* st)
 {
-	return fio_is_remote_file(f)
-		? fio_fstat(fio_fileno(f), st)
-		: fio_fstat(fileno(f), st);
+	return fio_is_aes_channel(f)
+		? fio_ffstat(fio_to_aes_channel(f)->file, st)
+		: fio_is_remote_file(f)
+			? fio_fstat(fio_fileno(f), st)
+			: fio_fstat(fileno(f), st);
 }
 
 /* Get information about file descriptor */
@@ -996,6 +1017,7 @@ typedef struct fioGZFile
 	int      errnum;
 	bool     compress;
 	bool     eof;
+	z_off_t  pos;
 	fio_aes_channel* aes;
 	Bytef    buf[ZLIB_BUFFER_SIZE];
 } fioGZFile;
@@ -1010,6 +1032,7 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location,
 		memset(&gz->strm, 0, sizeof(gz->strm));
 		gz->eof = 0;
 		gz->errnum = Z_OK;
+		gz->pos = 0;
 		if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
 		{
 			gz->strm.next_out = gz->buf;
@@ -1124,6 +1147,7 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 				if (gz->aes)
 					fio_aes_crypt(gz->aes, gz->strm.next_in + gz->strm.avail_in, rc);
 				gz->strm.avail_in += rc;
+				gz->pos += rc;
 			}
 			else
 			{
@@ -1176,6 +1200,7 @@ fio_gzwrite(gzFile f, void const* buf, unsigned size)
 			{
 				gz->strm.next_out += rc;
 				gz->strm.avail_out += rc;
+				gz->pos += rc;
 			}
 			else
 			{
@@ -1256,7 +1281,42 @@ const char* fio_gzerror(gzFile f, int *errnum)
 
 z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
 {
-	Assert(!((size_t)f & FIO_GZ_REMOTE_MARKER));
+	Assert(whence == SEEK_SET);
+
+	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		char buf[ZLIB_BUFFER_SIZE];
+		int rc;
+
+		Assert(gz->compress);
+
+		if (offset == gz->pos)
+			return offset; /* already there: do nothing */
+
+		if (fio_seek(gz->fd, 0) != 0)
+			return -1;
+
+		inflateEnd(&gz->strm);
+
+		memset(&gz->strm, 0, sizeof(gz->strm));
+		gz->eof = 0;
+		gz->errnum = Z_OK;
+		gz->pos = 0;
+		gz->strm.next_in = gz->buf;
+		gz->strm.avail_in = ZLIB_BUFFER_SIZE;
+		rc = inflateInit2(&gz->strm, 15 + 16);
+		gz->strm.avail_in = 0;
+
+		while (offset != 0)
+		{
+			rc = gzread(f, buf, offset < sizeof(buf) ? offset : sizeof(buf));
+			if (rc <= 0)
+				return rc;
+			offset -= rc;
+		}
+		return gz->pos;
+	}
 	return gzseek(f, offset, whence);
 }
 

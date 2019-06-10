@@ -117,6 +117,7 @@ help_pg_probackup(void)
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--encryption]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
@@ -182,6 +183,7 @@ help_pg_probackup(void)
 	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
 	printf(_("                 [--overwrite]\n"));
+	printf(_("                 [--encryption]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
@@ -233,6 +235,7 @@ help_backup(void)
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--encryption]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
@@ -299,6 +302,9 @@ help_backup(void)
 	printf(_("                                   available options: 'zlib', 'pglz', 'none' (default: none)\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
+
+	printf(_("\n  Encryption options:\n"));
+	printf(_("      --encryption                 enable backup encryption using PG_CIPHER_KEY\n"));
 
 	printf(_("\n  Archive options:\n"));
 	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));

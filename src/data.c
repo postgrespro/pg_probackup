@@ -727,7 +727,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	if (file->write_size != BYTES_INVALID)
 	{
 		/* open backup mode file for read */
-		in = fopen(file->path, PG_BINARY_R);
+		in = fio_fopen(file->path, PG_BINARY_R, FIO_LOCAL_HOST, file->is_datafile && instance_config.encryption);
 		if (in == NULL)
 		{
 			elog(ERROR, "Cannot open backup file \"%s\": %s", file->path,
@@ -744,7 +744,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
-		fclose(in);
+		fio_fclose(in);
 		elog(ERROR, "Cannot open restore target file \"%s\": %s",
 			 to_path, strerror(errno_tmp));
 	}
@@ -752,7 +752,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	while (true)
 	{
 		off_t		write_pos;
-		size_t		read_len;
+		ssize_t		read_len;
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
 		int32		uncompressed_size = 0;
@@ -777,13 +777,13 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		}
 
 		/* read BackupPageHeader */
-		read_len = fread(&header, 1, sizeof(header), in);
+		read_len = fio_fread(in, &header,  sizeof(header));
 		if (read_len != sizeof(header))
 		{
 			int errno_tmp = errno;
-			if (read_len == 0 && feof(in))
+			if (read_len == 0)
 				break;		/* EOF found */
-			else if (read_len != 0 && feof(in))
+			else if (read_len > 0)
 				elog(ERROR,
 					 "Odd size page found at block %u of \"%s\"",
 					 blknum, file->path);
@@ -818,8 +818,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		Assert(header.compressed_size <= BLCKSZ);
 
 		/* read a page from file */
-		read_len = fread(compressed_page.data, 1,
-			MAXALIGN(header.compressed_size), in);
+		read_len = fio_fread(in, compressed_page.data, MAXALIGN(header.compressed_size));
 		if (read_len != MAXALIGN(header.compressed_size))
 			elog(ERROR, "Cannot read block %u of \"%s\" read %zu of %d",
 				blknum, file->path, read_len, header.compressed_size);
@@ -926,7 +925,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		int errno_tmp = errno;
 
 		if (in)
-			fclose(in);
+			fio_fclose(in);
 		fio_fclose(out);
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno_tmp));
@@ -937,7 +936,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		elog(ERROR, "Cannot write \"%s\": %s", to_path, strerror(errno));
 
 	if (in)
-		fclose(in);
+		fio_fclose(in);
 }
 
 /*
@@ -964,7 +963,7 @@ copy_file(fio_location from_location, const char *to_root,
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fio_fopen(file->path, PG_BINARY_R, from_location, instance_config.encryption && from_location == FIO_BACKUP_HOST);
+	in = fio_fopen(file->path, PG_BINARY_R, from_location, file->is_datafile && instance_config.encryption && from_location == FIO_BACKUP_HOST);
 	if (in == NULL)
 	{
 		FIN_FILE_CRC32(true, crc);
@@ -989,7 +988,7 @@ copy_file(fio_location from_location, const char *to_root,
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->rel_path);
-	out = fio_fopen(to_path, PG_BINARY_W, to_location, instance_config.encryption && to_location == FIO_BACKUP_HOST);
+	out = fio_fopen(to_path, PG_BINARY_W, to_location, file->is_datafile && instance_config.encryption && to_location == FIO_BACKUP_HOST);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -1265,7 +1264,7 @@ bool
 check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 				 uint32 backup_version)
 {
-	size_t		read_len = 0;
+	ssize_t		read_len = 0;
 	bool		is_valid = true;
 	FILE		*in;
 	pg_crc32	crc;
@@ -1273,7 +1272,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 	elog(VERBOSE, "Validate relation blocks for file %s", file->path);
 
-	in = fopen(file->path, PG_BINARY_R);
+	in = fio_fopen(file->path, PG_BINARY_R, FIO_BACKUP_HOST, instance_config.encryption);
 	if (in == NULL)
 	{
 		if (errno == ENOENT)
@@ -1301,13 +1300,13 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 			elog(ERROR, "Interrupted during data file validation");
 
 		/* read BackupPageHeader */
-		read_len = fread(&header, 1, sizeof(header), in);
+		read_len = fio_fread(in, &header, sizeof(header));
 		if (read_len != sizeof(header))
 		{
 			int			errno_tmp = errno;
-			if (read_len == 0 && feof(in))
+			if (read_len == 0)
 				break;		/* EOF found */
-			else if (read_len != 0 && feof(in))
+			else if (read_len > 0)
 				elog(WARNING,
 					 "Odd size page found at block %u of \"%s\"",
 					 blknum, file->path);
@@ -1343,8 +1342,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 		Assert(header.compressed_size <= BLCKSZ);
 
-		read_len = fread(compressed_page.data, 1,
-			MAXALIGN(header.compressed_size), in);
+		read_len = fio_fread(in, compressed_page.data, MAXALIGN(header.compressed_size));
 		if (read_len != MAXALIGN(header.compressed_size))
 		{
 			elog(WARNING, "Cannot read block %u of \"%s\" read %zu of %d",
@@ -1395,7 +1393,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	}
 
 	FIN_FILE_CRC32(use_crc32c, crc);
-	fclose(in);
+	fio_fclose(in);
 
 	if (crc != file->crc)
 	{
