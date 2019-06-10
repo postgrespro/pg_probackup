@@ -135,6 +135,7 @@ static void opt_backup_mode(ConfigOption *opt, const char *arg);
 static void opt_show_format(ConfigOption *opt, const char *arg);
 
 static void compress_init(void);
+static void encryption_init(void);
 
 /*
  * Short name should be non-printable ASCII character.
@@ -600,9 +601,8 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
+	encryption_init();
 	compress_init();
-	if (instance_config.encryption)
-		fio_crypto_init();
 
 	/* do actual operation */
 	switch (backup_subcmd)
@@ -715,6 +715,23 @@ opt_show_format(ConfigOption *opt, const char *arg)
 }
 
 /*
+ * Initialize encryption support.
+ */
+static void encryption_init(void)
+{
+	if (encryption_shortcut)
+		instance_config.encryption = encryption_shortcut;
+
+	if (instance_config.encryption)
+	{
+		if (!instance_config.remote.host)
+			elog(ERROR, "Encryp;tion is upported only for remote backups");
+
+		fio_crypto_init();
+	}
+}
+
+/*
  * Initialize compress and sanity checks for compress.
  */
 static void
@@ -723,9 +740,6 @@ compress_init(void)
 	/* Default algorithm is zlib */
 	if (compress_shortcut)
 		instance_config.compress_alg = ZLIB_COMPRESS;
-
-	if (encryption_shortcut)
-		instance_config.encryption = encryption_shortcut;
 
 	if (backup_subcmd != SET_CONFIG_CMD)
 	{
