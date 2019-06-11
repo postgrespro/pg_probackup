@@ -750,7 +750,6 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
-	write_backup(backup);
 }
 
 /*

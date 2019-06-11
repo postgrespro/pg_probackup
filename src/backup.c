@@ -574,6 +574,8 @@ do_backup_instance(PGconn *backup_conn)
 	/* Print the list of files to backup catalog */
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
 						  external_dirs);
+	/* update backup control file to update size info */
+	write_backup(&current);
 
 	/* clean external directories list */
 	if (external_dirs)
@@ -1988,13 +1990,15 @@ backup_files(void *arg)
 
 		if (arguments->thread_num == 1)
 		{
-			/* update every 10 seconds */
+			/* update backup_content.control every 10 seconds */
 			if ((difftime(time(NULL), prev_time)) > 10)
 			{
 				prev_time = time(NULL);
 
 				write_backup_filelist(&current, arguments->files_list, instance_config.pgdata,
 									  arguments->external_dirs);
+				/* update backup control file to update size info */
+				write_backup(&current);
 			}
 		}
 
