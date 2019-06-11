@@ -518,6 +518,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	fio_fprintf(out, "#Configuration\n");
 	fio_fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
 	fio_fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
+	fio_fprintf(out, "encrypted = %s\n", backup->encrypted ? "true" : "false");
 	fio_fprintf(out, "compress-alg = %s\n",
 			deparse_compress_alg(backup->compress_alg));
 	fio_fprintf(out, "compress-level = %d\n", backup->compress_level);
@@ -702,6 +703,7 @@ readBackupControlFile(const char *path)
 		{'s', 0, "program-version",		&program_version, SOURCE_FILE_STRICT},
 		{'s', 0, "server-version",		&server_version, SOURCE_FILE_STRICT},
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
+		{'b', 0, "encrypted",			&backup->encrypted, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
@@ -933,6 +935,7 @@ pgBackupInit(pgBackup *backup)
 	backup->checksum_version = 0;
 
 	backup->stream = false;
+	backup->encrypted = false;
 	backup->from_replica = false;
 	backup->parent_backup = INVALID_BACKUP_ID;
 	backup->parent_backup_link = NULL;

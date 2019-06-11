@@ -302,6 +302,7 @@ struct pgBackup
 	bool			stream;			/* Was this backup taken in stream mode?
 									 * i.e. does it include all needed WAL files? */
 	bool			from_replica;	/* Was this backup taken from replica */
+	bool            encrypted;      /* Was this backup encrypted */
 	time_t			parent_backup; 	/* Identifier of the previous backup.
 									 * Which is basic backup for this
 									 * incremental backup. */
@@ -465,6 +466,9 @@ extern bool heapallindexed;
 
 /* current settings */
 extern pgBackup current;
+
+/* current backup */
+extern pgBackup* current_backup;
 
 /* argv of the process */
 extern char** commands_args;

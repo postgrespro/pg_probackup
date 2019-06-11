@@ -127,6 +127,7 @@ ShowFormat show_format = SHOW_PLAIN;
 
 /* current settings */
 pgBackup	current;
+pgBackup*	current_backup = &current;
 static ProbackupSubcmd backup_subcmd = NO_CMD;
 
 static bool help_opt = false;
@@ -197,8 +198,6 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
-	/* encryption options */
-	{ 'b', 158, "encryption",		&encryption_shortcut,SOURCE_CMD_STRICT },
 
 	/* options for backward compatibility */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
@@ -725,8 +724,13 @@ static void encryption_init(void)
 	if (instance_config.encryption)
 	{
 		if (!instance_config.remote.host)
-			elog(ERROR, "Encryp;tion is upported only for remote backups");
+			elog(ERROR, "Encryption is supported only for remote backups");
 
+		current.encrypted = true;
+	}
+
+	if (current.encrypted)
+	{
 		fio_crypto_init();
 	}
 }

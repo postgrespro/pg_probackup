@@ -736,7 +736,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				return -1;
 			}
 			reader_data->xlogfile = fio_fdopen(reader_data->xlogpath, fd, "rb",
-											   instance_config.encryption && !stream_wal);
+											   current_backup->encrypted && !current_backup->stream);
 		}
 #ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
@@ -752,7 +752,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				reader_data->xlogexists = true;
 				reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
 													  "rb", -1, FIO_BACKUP_HOST,
-													  instance_config.encryption && !stream_wal);
+													  current_backup->encrypted && !current_backup->stream);
 				if (reader_data->gz_xlogfile == NULL)
 				{
 					elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",

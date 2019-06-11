@@ -54,6 +54,8 @@ pgBackupValidate(pgBackup *backup)
 	validate_files_arg *threads_args;
 	int			i;
 
+	current_backup = backup;
+
 	/* Check backup version */
 	if (parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
 		elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
@@ -257,7 +259,7 @@ pgBackupValidateFiles(void *arg)
 				crc = pgFileGetCRC(file->path,
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
-								   true, NULL, FIO_LOCAL_HOST, file->is_datafile && instance_config.encryption);
+								   true, NULL, FIO_LOCAL_HOST, file->is_datafile && current_backup->encrypted);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",

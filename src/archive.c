@@ -179,7 +179,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
 
 		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST,
-							instance_config.encryption);
+							current_backup->encrypted);
 		if (gz_out == NULL)
 			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
@@ -194,7 +194,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		if (out_fd < 0)
 			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
-		out = fio_fdopen(to_path_temp, out_fd, PG_BINARY_W, instance_config.encryption);
+		out = fio_fdopen(to_path_temp, out_fd, PG_BINARY_W, current_backup->encrypted);
 	}
 
 	/* copy content */
@@ -336,7 +336,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	/* open file for read */
 	if (!is_decompress)
 	{
-		in = fio_fopen(from_path, PG_BINARY_R, FIO_BACKUP_HOST, instance_config.encryption);
+		in = fio_fopen(from_path, PG_BINARY_R, FIO_BACKUP_HOST, current_backup->encrypted);
 		if (in == NULL)
 			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
 					from_path, strerror(errno));
@@ -345,7 +345,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	else
 	{
 		gz_in = fio_gzopen(gz_from_path, PG_BINARY_R, Z_DEFAULT_COMPRESSION,
-						   FIO_BACKUP_HOST, instance_config.encryption);
+						   FIO_BACKUP_HOST, current_backup->encrypted);
 		if (gz_in == NULL)
 			elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
 					 gz_from_path, strerror(errno));
@@ -500,7 +500,7 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 		gzFile		gz_in = NULL;
 
 		INIT_FILE_CRC32(true, crc2);
-		gz_in = fio_gzopen(path2, PG_BINARY_R, Z_DEFAULT_COMPRESSION, FIO_BACKUP_HOST, instance_config.encryption);
+		gz_in = fio_gzopen(path2, PG_BINARY_R, Z_DEFAULT_COMPRESSION, FIO_BACKUP_HOST, current_backup->encrypted);
 		if (gz_in == NULL)
 			/* File cannot be read */
 			elog(ERROR,
@@ -531,7 +531,7 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 	else
 #endif
 	{
-		crc2 = pgFileGetCRC(path2, true, true, NULL, FIO_BACKUP_HOST, instance_config.encryption);
+		crc2 = pgFileGetCRC(path2, true, true, NULL, FIO_BACKUP_HOST, current_backup->encrypted);
 	}
 
 	/* Get checksum of original file */

@@ -598,7 +598,7 @@ backup_data_file(backup_files_arg* arguments,
 	nblocks = file->size/BLCKSZ;
 
 	/* open backup file for write  */
-	out = fio_fopen(to_path, PG_BINARY_W, FIO_BACKUP_HOST, instance_config.encryption);
+	out = fio_fopen(to_path, PG_BINARY_W, FIO_BACKUP_HOST, current_backup->encrypted);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -727,7 +727,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	if (file->write_size != BYTES_INVALID)
 	{
 		/* open backup mode file for read */
-		in = fio_fopen(file->path, PG_BINARY_R, FIO_LOCAL_HOST, file->is_datafile && instance_config.encryption);
+		in = fio_fopen(file->path, PG_BINARY_R, FIO_LOCAL_HOST, file->is_datafile && current_backup->encrypted);
 		if (in == NULL)
 		{
 			elog(ERROR, "Cannot open backup file \"%s\": %s", file->path,
@@ -963,7 +963,7 @@ copy_file(fio_location from_location, const char *to_root,
 	file->write_size = 0;
 
 	/* open backup mode file for read */
-	in = fio_fopen(file->path, PG_BINARY_R, from_location, file->is_datafile && instance_config.encryption && from_location == FIO_BACKUP_HOST);
+	in = fio_fopen(file->path, PG_BINARY_R, from_location, file->is_datafile && current_backup->encrypted && from_location == FIO_BACKUP_HOST);
 	if (in == NULL)
 	{
 		FIN_FILE_CRC32(true, crc);
@@ -988,7 +988,7 @@ copy_file(fio_location from_location, const char *to_root,
 
 	/* open backup file for write  */
 	join_path_components(to_path, to_root, file->rel_path);
-	out = fio_fopen(to_path, PG_BINARY_W, to_location, file->is_datafile && instance_config.encryption && to_location == FIO_BACKUP_HOST);
+	out = fio_fopen(to_path, PG_BINARY_W, to_location, file->is_datafile && current_backup->encrypted && to_location == FIO_BACKUP_HOST);
 	if (out == NULL)
 	{
 		int errno_tmp = errno;
@@ -1272,7 +1272,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 	elog(VERBOSE, "Validate relation blocks for file %s", file->path);
 
-	in = fio_fopen(file->path, PG_BINARY_R, FIO_BACKUP_HOST, instance_config.encryption);
+	in = fio_fopen(file->path, PG_BINARY_R, FIO_BACKUP_HOST, current_backup->encrypted);
 	if (in == NULL)
 	{
 		if (errno == ENOENT)

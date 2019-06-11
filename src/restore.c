@@ -522,6 +522,8 @@ restore_backup(pgBackup *backup, parray *dest_external_dirs, parray *dest_files)
 	restore_files_arg *threads_args;
 	bool		restore_isok = true;
 
+	current_backup = backup;
+
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE)
 		elog(ERROR, "Backup %s cannot be restored because it is not valid",
