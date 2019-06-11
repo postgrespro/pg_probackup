@@ -311,7 +311,6 @@ struct pgBackup
 	char			*external_dir_str;	/* List of external directories,
 										 * separated by ':' */
 
-	int64			size_on_disk; /* updated based on backup_content.control */
 	int64			duration; /* TODO write better comment. time(NULL)-start_time */
 };
 

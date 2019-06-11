@@ -108,7 +108,7 @@ write_backup_control_on_the_fly(pgBackup *backup)
 	}
 
 	tmp->status = backup->status;
-	tmp->size_on_disk = backup->size_on_disk;
+	tmp->data_bytes = backup->data_bytes;
 	backup->duration = difftime(time(NULL), backup->start_time);
 	tmp->duration = backup->duration;
 	write_backup(tmp);
@@ -611,7 +611,6 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->external_dir_str)
 		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
 
-	fio_fprintf(out, "size-on-disk = " INT64_FORMAT "\n", backup->size_on_disk);
 	fio_fprintf(out, "duration = " INT64_FORMAT "\n", backup->duration);
 }
 
@@ -668,7 +667,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	#define BUFFERSZ BLCKSZ*500
 	char		buf[BUFFERSZ];
 	size_t		write_len = 0;
-	int64 		backup_size_on_disk = BYTES_INVALID;
+	int64 		backup_size_on_disk = 0;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
@@ -687,10 +686,20 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		int 	len = 0;
 
 		i++;
-		if (!file->backuped)
-			continue;
 
-		backup_size_on_disk += file->write_size;
+		if (!file->backuped)
+		{
+			elog(WARNING, "file not backuped %s", file->rel_path);
+			continue;
+		}
+
+		if (S_ISDIR(file->mode))
+			backup_size_on_disk += 4096;
+
+		/* Count the amount of the data actually copied */
+		if (S_ISREG(file->mode))
+			backup_size_on_disk += file->write_size;
+
 		if (file->external_dir_num && external_list)
 		{
 			path = GetRelativePath(path, parray_get(external_list,
@@ -767,7 +776,8 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			 path_temp, path, strerror(errno_temp));
 	}
 
-	backup->size_on_disk = backup_size_on_disk;
+	/* use extra variable to avoid reset of previous data_bytes value in case of error */
+	backup->data_bytes = backup_size_on_disk;
 	write_backup_control_on_the_fly(backup);
 }
 
@@ -816,7 +826,6 @@ readBackupControlFile(const char *path)
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
-		{'I', 0, "size-on-disk",		&backup->size_on_disk, SOURCE_FILE_STRICT},
 		{'I', 0, "duration",			&backup->duration, SOURCE_FILE_STRICT},
 		{0}
 	};
@@ -1050,7 +1059,6 @@ pgBackupInit(pgBackup *backup)
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
 
-	backup->size_on_disk = BYTES_INVALID;
 	backup->duration = (time_t) 0;
 }
 

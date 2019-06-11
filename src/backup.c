@@ -182,9 +182,6 @@ do_backup_instance(PGconn *backup_conn)
 		check_external_for_tablespaces(external_dirs, backup_conn);
 	}
 
-	/* Initialize size summary */
-	current.data_bytes = 0;
-
 	/* Obtain current timeline */
 	current.tli = get_current_timeline(false);
 
@@ -432,6 +429,7 @@ do_backup_instance(PGconn *backup_conn)
 			}
 			else
 				join_path_components(dirpath, database_path, dir_name);
+			file->backuped = true;
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
 
@@ -580,19 +578,6 @@ do_backup_instance(PGconn *backup_conn)
 	/* clean external directories list */
 	if (external_dirs)
 		free_dir_list(external_dirs);
-
-	/* Compute summary of size of regular files in the backup */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-
-		if (S_ISDIR(file->mode))
-			current.data_bytes += 4096;
-
-		/* Count the amount of the data actually copied */
-		if (S_ISREG(file->mode))
-			current.data_bytes += file->write_size;
-	}
 
 	/* Cleanup */
 	if (backup_list)
@@ -1805,11 +1790,12 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, backup_label, true, 0,
+				file = pgFileNew(backup_label, PG_BACKUP_LABEL_FILE, true, 0,
 								 FIO_BACKUP_HOST);
 				file->crc = pgFileGetCRC(file->path, true, false,
 										 &file->read_size, FIO_BACKUP_HOST);
 				file->write_size = file->read_size;
+				file->backuped = true;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -1851,13 +1837,14 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, tablespace_map, true, 0,
+				file = pgFileNew(tablespace_map, PG_TABLESPACE_MAP_FILE, true, 0,
 								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 				{
 					file->crc = pgFileGetCRC(file->path, true, false,
 											 &file->read_size, FIO_BACKUP_HOST);
 					file->write_size = file->read_size;
+					file->backuped = true;
 				}
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
