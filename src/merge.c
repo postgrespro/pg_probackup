@@ -368,8 +368,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	else
 		to_backup->wal_bytes = BYTES_INVALID;
 
-	write_backup_filelist(to_backup, files, from_database_path,
-						  from_external_prefix, NULL);
+	write_backup_filelist(to_backup, files, from_database_path, NULL);
 	write_backup(to_backup);
 
 delete_source_backup:

@@ -146,6 +146,9 @@ typedef struct pgFile
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 	bool	pagemap_isabsent; /* Used to mark files with unknown state of pagemap,
 							   * i.e. datafiles without _ptrack */
+
+	/* state during bakup */
+	bool backuped; /* is file already completely copied into destination backup? */
 } pgFile;
 
 /* Special values of datapagemap_t bitmapsize */
@@ -555,8 +558,7 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
-								  const char *root, const char *external_prefix,
-								  parray *external_list);
+								  const char *root, parray *external_list);
 
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);

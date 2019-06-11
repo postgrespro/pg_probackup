@@ -575,7 +575,7 @@ do_backup_instance(PGconn *backup_conn)
 
 	/* Print the list of files to backup catalog */
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
-						  NULL, external_dirs);
+						  external_dirs);
 
 	/* clean external directories list */
 	if (external_dirs)
@@ -1999,18 +1999,17 @@ backup_files(void *arg)
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
 
-		
 		if (arguments->thread_num == 1)
 		{
 			/* update every 10 seconds */
 			if ((difftime(time(NULL), prev_time)) > 10)
 			{
 				prev_time = time(NULL);
-				elog(INFO, "write_backup_filelist N=%ld, starttime %ld, time %ld",
-					 parray_num(backup_files_list), current.start_time,  prev_time);
+				elog(INFO, "write_backup_filelist N=%d, starttime %ld, time %ld",
+					 n_backup_files_list, current.start_time,  prev_time);
 
-				write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
-									NULL, arguments->external_dirs);
+				write_backup_filelist(&current, arguments->files_list, instance_config.pgdata,
+									  arguments->external_dirs);
 			}
 		}
 
@@ -2146,6 +2145,7 @@ backup_files(void *arg)
 				}
 			}
 
+			file->backuped = true;
 			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
 				 file->path, file->write_size);
 		}

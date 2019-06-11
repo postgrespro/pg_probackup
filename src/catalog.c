@@ -630,7 +630,7 @@ write_backup(pgBackup *backup)
  */
 void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
-					  const char *external_prefix, parray *external_list)
+					  parray *external_list)
 {
 	FILE	   *out;
 	char		path[MAXPGPATH];
@@ -657,12 +657,15 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		char	line[BLCKSZ];
 		int 	len = 0;
 
+		i++;
+		if (!file->backuped)
+			continue;
+
 		/* omit root directory portion */
 		if (root && strstr(path, root) == path)
 			path = GetRelativePath(path, root);
-		else if (file->external_dir_num && !external_prefix)
+		else if (file->external_dir_num && external_list)
 		{
-			Assert(external_list);
 			path = GetRelativePath(path, parray_get(external_list,
 													file->external_dir_num - 1));
 		}
@@ -707,8 +710,6 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			/* reset write_len */
 			write_len = 0;
 		}
-
-		i++;
 	}
 
 	/* write what is left in the buffer to file */
