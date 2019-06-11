@@ -91,31 +91,6 @@ write_backup_status(pgBackup *backup, BackupStatus status)
 	pgBackupFree(tmp);
 }
 
-/* update some fields of backup control file */
-void
-write_backup_control_on_the_fly(pgBackup *backup)
-{
-	pgBackup   *tmp;
-
-	tmp = read_backup(backup->start_time);
-	if (!tmp)
-	{
-		/*
-		 * Silently exit the function, since read_backup already logged the
-		 * warning message.
-		 */
-		return;
-	}
-
-	tmp->status = backup->status;
-	tmp->data_bytes = backup->data_bytes;
-	backup->duration = difftime(time(NULL), backup->start_time);
-	tmp->duration = backup->duration;
-	write_backup(tmp);
-
-	pgBackupFree(tmp);
-}
-
 /*
  * Create exclusive lockfile in the backup's directory.
  */
@@ -610,8 +585,6 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* print external directories list */
 	if (backup->external_dir_str)
 		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
-
-	fio_fprintf(out, "duration = " INT64_FORMAT "\n", backup->duration);
 }
 
 /*
@@ -687,11 +660,10 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 		i++;
 
+		/* if file is not backuped yet, do not add it to the list */
+		/* TODO check that we correctly handle files which disappeared during backups */
 		if (!file->backuped)
-		{
-			elog(WARNING, "file not backuped %s", file->rel_path);
 			continue;
-		}
 
 		if (S_ISDIR(file->mode))
 			backup_size_on_disk += 4096;
@@ -778,7 +750,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
-	write_backup_control_on_the_fly(backup);
+	write_backup(backup);
 }
 
 /*
@@ -826,7 +798,6 @@ readBackupControlFile(const char *path)
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
-		{'I', 0, "duration",			&backup->duration, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -1058,8 +1029,6 @@ pgBackupInit(pgBackup *backup)
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
-
-	backup->duration = (time_t) 0;
 }
 
 /* free pgBackup object */

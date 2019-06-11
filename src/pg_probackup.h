@@ -310,8 +310,6 @@ struct pgBackup
 										* in the format suitable for recovery.conf */
 	char			*external_dir_str;	/* List of external directories,
 										 * separated by ':' */
-
-	int64			duration; /* TODO write better comment. time(NULL)-start_time */
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -549,7 +547,7 @@ extern int do_validate_all(void);
 extern pgBackup *read_backup(time_t timestamp);
 extern void write_backup(pgBackup *backup);
 extern void write_backup_status(pgBackup *backup, BackupStatus status);
-extern void write_backup_control_on_the_fly(pgBackup *backup);
+extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);

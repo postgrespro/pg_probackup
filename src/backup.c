@@ -1992,8 +1992,6 @@ backup_files(void *arg)
 			if ((difftime(time(NULL), prev_time)) > 10)
 			{
 				prev_time = time(NULL);
-				elog(INFO, "write_backup_filelist N=%d, starttime %ld, time %ld",
-					 n_backup_files_list, current.start_time,  prev_time);
 
 				write_backup_filelist(&current, arguments->files_list, instance_config.pgdata,
 									  arguments->external_dirs);
