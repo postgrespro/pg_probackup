@@ -1276,7 +1276,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 
 	/* extra sanity, we must be totally sure that list is not empty */
 	if (!dbOid_exclude_list || parray_num(dbOid_exclude_list) < 1)
-		elog(ERROR, "Failed to find a match for partial restore in database_map of backup %s",
+		elog(ERROR, "Failed to find a match in database_map of backup %s for partial restore",
 					base36enc(backup->start_time));
 
 	/* sort dbOid array in ASC order */

@@ -3180,6 +3180,22 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-exclude=db1", '--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: field "dbOid" is not found in the line 42 of '
+                'the file backup_content.control', e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
         # check that simple restore is still possible
         self.restore_node(
             backup_dir, 'node', node_restored, options=['--no-validate'])
