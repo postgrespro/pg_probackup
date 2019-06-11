@@ -91,6 +91,31 @@ write_backup_status(pgBackup *backup, BackupStatus status)
 	pgBackupFree(tmp);
 }
 
+/* update some fields of backup control file */
+void
+write_backup_control_on_the_fly(pgBackup *backup)
+{
+	pgBackup   *tmp;
+
+	tmp = read_backup(backup->start_time);
+	if (!tmp)
+	{
+		/*
+		 * Silently exit the function, since read_backup already logged the
+		 * warning message.
+		 */
+		return;
+	}
+
+	tmp->status = backup->status;
+	tmp->size_on_disk = backup->size_on_disk;
+	backup->duration = difftime(time(NULL), backup->start_time);
+	tmp->duration = backup->duration;
+	write_backup(tmp);
+
+	pgBackupFree(tmp);
+}
+
 /*
  * Create exclusive lockfile in the backup's directory.
  */
@@ -585,6 +610,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* print external directories list */
 	if (backup->external_dir_str)
 		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
+
+	fio_fprintf(out, "size-on-disk = " INT64_FORMAT "\n", backup->size_on_disk);
+	fio_fprintf(out, "duration = " INT64_FORMAT "\n", backup->duration);
 }
 
 /*
@@ -640,6 +668,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	#define BUFFERSZ BLCKSZ*500
 	char		buf[BUFFERSZ];
 	size_t		write_len = 0;
+	int64 		backup_size_on_disk = BYTES_INVALID;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
@@ -661,14 +690,14 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		if (!file->backuped)
 			continue;
 
-		/* omit root directory portion */
-		if (root && strstr(path, root) == path)
-			path = GetRelativePath(path, root);
-		else if (file->external_dir_num && external_list)
+		backup_size_on_disk += file->write_size;
+		if (file->external_dir_num && external_list)
 		{
 			path = GetRelativePath(path, parray_get(external_list,
 													file->external_dir_num - 1));
 		}
+		else
+			path = file->rel_path;
 
 		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
@@ -737,6 +766,9 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
 			 path_temp, path, strerror(errno_temp));
 	}
+
+	backup->size_on_disk = backup_size_on_disk;
+	write_backup_control_on_the_fly(backup);
 }
 
 /*
@@ -784,6 +816,8 @@ readBackupControlFile(const char *path)
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
+		{'I', 0, "size-on-disk",		&backup->size_on_disk, SOURCE_FILE_STRICT},
+		{'I', 0, "duration",			&backup->duration, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -1015,6 +1049,9 @@ pgBackupInit(pgBackup *backup)
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
+
+	backup->size_on_disk = BYTES_INVALID;
+	backup->duration = (time_t) 0;
 }
 
 /* free pgBackup object */
