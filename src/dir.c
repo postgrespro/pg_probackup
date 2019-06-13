@@ -1061,7 +1061,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		}
 
 		/* This is not symlink, create directory */
-		elog(INFO, "Create directory \"%s\"", dir->rel_path);
+		elog(VERBOSE, "Create directory \"%s\"", dir->rel_path);
 
 		join_path_components(to_path, data_dir, dir->rel_path);
 		fio_mkdir(to_path, dir->mode, location);
