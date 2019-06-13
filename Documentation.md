@@ -1,6 +1,8 @@
 # pg_probackup
----
+
 **pg_probackup** is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure. pg_probackup supports PostgreSQL 9.5 or higher.
+
+Current version - 2.1.3
 
 * [Synopsis](#synopsis)
 * [Overview](#overview)
