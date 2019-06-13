@@ -5,20 +5,35 @@
 ### Synopsis
 
 `pg_probackup init -B backupdir`
+
 `pg_probackup add-instance -B backupdir -D datadir --instance instance_name`
+
 `pg_probackup del-instance -B backupdir --instance instance_name`
+
 `pg_probackup set-config -B backupdir --instance instance_name [option...]`
+
 `pg_probackup show-config -B backupdir --instance instance_name [--format=format]`
+
 `pg_probackup backup -B backupdir --instance instance_name -b backup_mode [option...]`
+
 `pg_probackup merge -B backupdir --instance instance_name -i backup_id [option...]`
+
 `pg_probackup restore -B backupdir --instance instance_name [option...]`
+
 `pg_probackup validate -B backupdir [option...]`
+
 `pg_probackup show -B backupdir [option...]`
+
 `pg_probackup delete -B backupdir --instance instance_name { -i backup_id | --wal | --expired }`
+
 `pg_probackup archive-push -B backupdir --instance instance_name --wal-file-path %p --wal-file-name %f [option...]`
+
 `pg_probackup archive-get -B backupdir --instance instance_name --wal-file-path %p --wal-file-name %f`
+
 `pg_probackup checkdb -B backupdir --instance instance_name -D datadir [option...]`
+
 `pg_probackup version`
+
 `pg_probackup help [command]`
 
 * [Installation and Setup](#installation-and-setup)
