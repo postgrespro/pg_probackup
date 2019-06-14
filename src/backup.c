@@ -182,9 +182,6 @@ do_backup_instance(PGconn *backup_conn)
 		check_external_for_tablespaces(external_dirs, backup_conn);
 	}
 
-	/* Initialize size summary */
-	current.data_bytes = 0;
-
 	/* Obtain current timeline */
 	current.tli = get_current_timeline(false);
 
@@ -445,6 +442,11 @@ do_backup_instance(PGconn *backup_conn)
 	if (prev_backup_filelist)
 		parray_qsort(prev_backup_filelist, pgFileComparePathWithExternal);
 
+	/* write initial backup_content.control file and update backup.control  */
+	write_backup_filelist(&current, backup_files_list,
+						  instance_config.pgdata, external_dirs);
+	write_backup(&current);
+
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
@@ -462,6 +464,7 @@ do_backup_instance(PGconn *backup_conn)
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->conn_arg.conn = NULL;
 		arg->conn_arg.cancel_conn = NULL;
+		arg->thread_num = i+1;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -574,24 +577,13 @@ do_backup_instance(PGconn *backup_conn)
 
 	/* Print the list of files to backup catalog */
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
-						  NULL, external_dirs);
+						  external_dirs);
+	/* update backup control file to update size info */
+	write_backup(&current);
 
 	/* clean external directories list */
 	if (external_dirs)
 		free_dir_list(external_dirs);
-
-	/* Compute summary of size of regular files in the backup */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-
-		if (S_ISDIR(file->mode))
-			current.data_bytes += 4096;
-
-		/* Count the amount of the data actually copied */
-		if (S_ISREG(file->mode))
-			current.data_bytes += file->write_size;
-	}
 
 	/* Cleanup */
 	if (backup_list)
@@ -1804,7 +1796,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, backup_label, true, 0,
+				file = pgFileNew(backup_label, PG_BACKUP_LABEL_FILE, true, 0,
 								 FIO_BACKUP_HOST);
 				file->crc = pgFileGetCRC(file->path, true, false,
 										 &file->read_size, FIO_BACKUP_HOST);
@@ -1850,7 +1842,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, tablespace_map, true, 0,
+				file = pgFileNew(tablespace_map, PG_TABLESPACE_MAP_FILE, true, 0,
 								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 				{
@@ -1987,6 +1979,9 @@ backup_files(void *arg)
 	int			i;
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int			n_backup_files_list = parray_num(arguments->files_list);
+	static time_t prev_time;
+
+	prev_time = current.start_time;
 
 	/* backup a file */
 	for (i = 0; i < n_backup_files_list; i++)
@@ -1994,6 +1989,20 @@ backup_files(void *arg)
 		int			ret;
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
+
+		if (arguments->thread_num == 1)
+		{
+			/* update backup_content.control every 10 seconds */
+			if ((difftime(time(NULL), prev_time)) > 10)
+			{
+				prev_time = time(NULL);
+
+				write_backup_filelist(&current, arguments->files_list, arguments->from_root,
+									  arguments->external_dirs);
+				/* update backup control file to update size info */
+				write_backup(&current);
+			}
+		}
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;

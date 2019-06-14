@@ -544,6 +544,7 @@ extern int do_validate_all(void);
 extern pgBackup *read_backup(time_t timestamp);
 extern void write_backup(pgBackup *backup);
 extern void write_backup_status(pgBackup *backup, BackupStatus status);
+extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
@@ -555,8 +556,7 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
-								  const char *root, const char *external_prefix,
-								  parray *external_list);
+								  const char *root, parray *external_list);
 
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);

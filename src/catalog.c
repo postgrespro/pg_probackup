@@ -630,24 +630,104 @@ write_backup(pgBackup *backup)
  */
 void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
-					  const char *external_prefix, parray *external_list)
+					  parray *external_list)
 {
-	FILE	   *fp;
+	FILE	   *out;
 	char		path[MAXPGPATH];
 	char		path_temp[MAXPGPATH];
 	int			errno_temp;
+	size_t		i = 0;
+	#define BUFFERSZ BLCKSZ*500
+	char		buf[BUFFERSZ];
+	size_t		write_len = 0;
+	int64 		backup_size_on_disk = 0;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
-	if (fp == NULL)
+	out = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+	if (out == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
 
-	print_file_list(fp, files, root, external_prefix, external_list);
+	/* print each file in the list */
+	while(i < parray_num(files))
+	{
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+		char	   *path = file->path; /* for streamed WAL files */
+		char	line[BLCKSZ];
+		int 	len = 0;
 
-	if (fio_fflush(fp) || fio_fclose(fp))
+		i++;
+
+		if (S_ISDIR(file->mode))
+			backup_size_on_disk += 4096;
+
+		/* Count the amount of the data actually copied */
+		if (S_ISREG(file->mode) && file->write_size > 0)
+			backup_size_on_disk += file->write_size;
+
+		/* for files from PGDATA and external files use rel_path
+		 * streamed WAL files has rel_path relative not to "database/"
+		 * but to "database/pg_wal", so for them use path.
+		 */
+		if ((root && strstr(path, root) == path) ||
+			(file->external_dir_num && external_list))
+				path = file->rel_path;
+
+		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
+					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
+					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
+					path, file->write_size, file->mode,
+					file->is_datafile ? 1 : 0,
+					file->is_cfs ? 1 : 0,
+					file->crc,
+					deparse_compress_alg(file->compress_alg),
+					file->external_dir_num);
+
+		if (file->is_datafile)
+			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
+
+		if (file->linked)
+			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
+
+		if (file->n_blocks != BLOCKNUM_INVALID)
+			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
+
+		len += sprintf(line+len, "}\n");
+
+		if (write_len + len <= BUFFERSZ)
+		{
+			memcpy(buf+write_len, line, len);
+			write_len += len;
+		}
+		else
+		{
+			/* write buffer to file */
+			if (fio_fwrite(out, buf, write_len) != write_len)
+			{
+				errno_temp = errno;
+				fio_unlink(path_temp, FIO_BACKUP_HOST);
+				elog(ERROR, "Cannot write file list \"%s\": %s",
+					path_temp, strerror(errno));
+			}
+			/* reset write_len */
+			write_len = 0;
+		}
+	}
+
+	/* write what is left in the buffer to file */
+	if (write_len > 0)
+		if (fio_fwrite(out, buf, write_len) != write_len)
+		{
+			errno_temp = errno;
+			fio_unlink(path_temp, FIO_BACKUP_HOST);
+			elog(ERROR, "Cannot write file list \"%s\": %s",
+				path_temp, strerror(errno));
+		}
+
+	if (fio_fflush(out) || fio_fclose(out))
 	{
 		errno_temp = errno;
 		fio_unlink(path_temp, FIO_BACKUP_HOST);
@@ -662,6 +742,9 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
 			 path_temp, path, strerror(errno_temp));
 	}
+
+	/* use extra variable to avoid reset of previous data_bytes value in case of error */
+	backup->data_bytes = backup_size_on_disk;
 }
 
 /*
