@@ -654,7 +654,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	while(i < parray_num(files))
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-		char	   *path = file->path;
+		char	   *path = file->path; /* for streamed WAL files */
 		char	line[BLCKSZ];
 		int 	len = 0;
 
@@ -667,13 +667,13 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		if (S_ISREG(file->mode) && file->write_size > 0)
 			backup_size_on_disk += file->write_size;
 
-		if (file->external_dir_num && external_list)
-		{
-			path = GetRelativePath(path, parray_get(external_list,
-													file->external_dir_num - 1));
-		}
-		else
-			path = file->rel_path;
+		/* for files from PGDATA and external files use rel_path
+		 * streamed WAL files has rel_path relative not to "database/"
+		 * but to "database/pg_wal", so for them use path.
+		 */
+		if ((root && strstr(path, root) == path) ||
+			(file->external_dir_num && external_list))
+				path = file->rel_path;
 
 		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
