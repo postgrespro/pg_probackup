@@ -660,16 +660,11 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 		i++;
 
-		/* if file is not backuped yet, do not add it to the list */
-		/* TODO check that we correctly handle files which disappeared during backups */
-		if (!file->backuped)
-			continue;
-
 		if (S_ISDIR(file->mode))
 			backup_size_on_disk += 4096;
 
 		/* Count the amount of the data actually copied */
-		if (S_ISREG(file->mode))
+		if (S_ISREG(file->mode) && file->write_size > 0)
 			backup_size_on_disk += file->write_size;
 
 		if (file->external_dir_num && external_list)

@@ -146,9 +146,6 @@ typedef struct pgFile
 	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
 	bool	pagemap_isabsent; /* Used to mark files with unknown state of pagemap,
 							   * i.e. datafiles without _ptrack */
-
-	/* state during bakup */
-	bool backuped; /* is file already completely copied into destination backup? */
 } pgFile;
 
 /* Special values of datapagemap_t bitmapsize */

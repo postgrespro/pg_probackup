@@ -429,7 +429,6 @@ do_backup_instance(PGconn *backup_conn)
 			}
 			else
 				join_path_components(dirpath, database_path, dir_name);
-			file->backuped = true;
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
 
@@ -442,6 +441,11 @@ do_backup_instance(PGconn *backup_conn)
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
 		parray_qsort(prev_backup_filelist, pgFileComparePathWithExternal);
+
+	/* write initial backup_content.control file and update backup.control  */
+	write_backup_filelist(&current, backup_files_list,
+						  instance_config.pgdata, external_dirs);
+	write_backup(&current);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -1797,7 +1801,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 				file->crc = pgFileGetCRC(file->path, true, false,
 										 &file->read_size, FIO_BACKUP_HOST);
 				file->write_size = file->read_size;
-				file->backuped = true;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -1846,7 +1849,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 					file->crc = pgFileGetCRC(file->path, true, false,
 											 &file->read_size, FIO_BACKUP_HOST);
 					file->write_size = file->read_size;
-					file->backuped = true;
 				}
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
@@ -1995,7 +1997,7 @@ backup_files(void *arg)
 			{
 				prev_time = time(NULL);
 
-				write_backup_filelist(&current, arguments->files_list, instance_config.pgdata,
+				write_backup_filelist(&current, arguments->files_list, arguments->from_root,
 									  arguments->external_dirs);
 				/* update backup control file to update size info */
 				write_backup(&current);
@@ -2134,7 +2136,6 @@ backup_files(void *arg)
 				}
 			}
 
-			file->backuped = true;
 			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
 				 file->path, file->write_size);
 		}
