@@ -380,7 +380,8 @@ show_instance_plain(parray *backup_list, bool show_name)
 
 		/* Current/Parent TLI */
 		snprintf(row->tli, lengthof(row->tli), "%u / %u",
-				 backup->tli, get_parent_tli(backup->tli));
+				 backup->tli,
+				 backup->backup_mode == BACKUP_MODE_FULL ? 0 : get_parent_tli(backup->tli));
 		widths[cur] = Max(widths[cur], strlen(row->tli));
 		cur++;
 
@@ -570,7 +571,7 @@ show_instance_json(parray *backup_list)
 
 		json_add_value(buf, "from-replica",
 					   backup->from_replica ? "true" : "false", json_level,
-					   false);
+					   true);
 
 		json_add_key(buf, "block-size", json_level);
 		appendPQExpBuffer(buf, "%u", backup->block_size);
@@ -590,7 +591,12 @@ show_instance_json(parray *backup_list)
 		appendPQExpBuffer(buf, "%d", backup->tli);
 
 		json_add_key(buf, "parent-tli", json_level);
-		parent_tli = get_parent_tli(backup->tli);
+
+		/* Only incremental backup can have Parent TLI */
+		if (backup->backup_mode == BACKUP_MODE_FULL)
+			parent_tli = 0;
+		else
+			parent_tli = get_parent_tli(backup->tli);
 		appendPQExpBuffer(buf, "%u", parent_tli);
 
 		snprintf(lsn, lengthof(lsn), "%X/%X",
