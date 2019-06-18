@@ -468,15 +468,15 @@ merge_files(void *arg)
 		char		from_file_path[MAXPGPATH];
 		char	   *prev_file_path;
 
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during merging backups");
 
 		/* Directories were created before */
 		if (S_ISDIR(file->mode))
+			continue;
+
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		if (progress)
@@ -491,20 +491,28 @@ merge_files(void *arg)
 
 		/*
 		 * Skip files which haven't changed since previous backup. But in case
-		 * of DELTA backup we should consider n_blocks to truncate the target
-		 * backup.
+		 * of DELTA backup we must truncate the target file to n_blocks.
+		 * Unless it is a non data file, in this case truncation is not needed.
 		 */
-		if (file->write_size == BYTES_INVALID && file->n_blocks == BLOCKNUM_INVALID)
+		if (file->write_size == BYTES_INVALID)
 		{
-			elog(VERBOSE, "Skip merging file \"%s\", the file didn't change",
-				 file->path);
+			/* sanity */
+			if (!to_file)
+				elog(ERROR, "The file \"%s\" is missing in FULL backup %s",
+						file->rel_path, base36enc(to_backup->start_time));
 
-			/*
-			 * If the file wasn't changed in PAGE backup, retreive its
-			 * write_size from previous FULL backup.
-			 */
-			if (to_file)
+			/* for not changed files of all types in PAGE and PTRACK */
+			if (from_backup->backup_mode != BACKUP_MODE_DIFF_DELTA ||
+			/* and not changed non-data files in DELTA */
+				(!file->is_datafile || file->is_cfs))
 			{
+				elog(VERBOSE, "Skip merging file \"%s\", the file didn't change",
+					 file->path);
+
+				/*
+				 * If the file wasn't changed, retreive its
+				 * write_size and compression algorihtm from previous FULL backup.
+				 */
 				file->compress_alg = to_file->compress_alg;
 				file->write_size = to_file->write_size;
 
@@ -516,9 +524,9 @@ merge_files(void *arg)
 				/* Otherwise just get it from the previous file */
 				else
 					file->crc = to_file->crc;
-			}
 
-			continue;
+				continue;
+			}
 		}
 
 		/* We need to make full path, file object has relative path */
@@ -667,6 +675,8 @@ merge_files(void *arg)
 		if (file->write_size != BYTES_INVALID)
 			elog(VERBOSE, "Merged file \"%s\": " INT64_FORMAT " bytes",
 				 file->path, file->write_size);
+		else
+			elog(ERROR, "Merge of file \"%s\" failed. Invalid size: %i", BYTES_INVALID);
 
 		/* Restore relative path */
 		file->path = prev_file_path;

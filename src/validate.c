@@ -24,11 +24,12 @@ static bool skipped_due_to_lock = false;
 typedef struct
 {
 	const char *base_path;
-	parray	   *files;
+	parray		*files;
 	bool		corrupted;
-	XLogRecPtr	stop_lsn;
+	XLogRecPtr 	stop_lsn;
 	uint32		checksum_version;
 	uint32		backup_version;
+	BackupMode	backup_mode;
 
 	/*
 	 * Return value from the thread.
@@ -125,6 +126,7 @@ pgBackupValidate(pgBackup *backup)
 		arg->base_path = base_path;
 		arg->files = files;
 		arg->corrupted = false;
+		arg->backup_mode = backup->backup_mode;
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
 		arg->backup_version = parse_program_version(backup->program_version);
@@ -184,32 +186,45 @@ pgBackupValidateFiles(void *arg)
 		struct stat st;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during validate");
 
 		/* Validate only regular files */
 		if (!S_ISREG(file->mode))
 			continue;
-		/*
-		 * Skip files which has no data, because they
-		 * haven't changed between backups.
-		 */
-		if (file->write_size == BYTES_INVALID)
-			continue;
 
 		/*
 		 * Currently we don't compute checksums for
 		 * cfs_compressed data files, so skip them.
+		 * TODO: investigate
 		 */
 		if (file->is_cfs)
+			continue;
+
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
 				 i + 1, num_files, file->path);
+
+		/*
+		 * Skip files which has no data, because they
+		 * haven't changed between backups.
+		 */
+		if (file->write_size == BYTES_INVALID)
+		{
+			if (arguments->backup_mode == BACKUP_MODE_FULL)
+			{
+				/* It is illegal for file in FULL backup to have BYTES_INVALID */
+				elog(WARNING, "Backup file \"%s\" has invalid size. Possible metadata corruption.",
+					file->path);
+				arguments->corrupted = true;
+				break;
+			}
+			else
+				continue;
+		}
 
 		if (stat(file->path, &st) == -1)
 		{
