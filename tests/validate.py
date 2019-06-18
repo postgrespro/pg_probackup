@@ -3429,7 +3429,19 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close
 
-        self.validate_pb(backup_dir, 'node', backup_id=backup_id)
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id=backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace_map is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Invalid CRC of backup file',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
 # validate empty backup list
 # page from future during validate
