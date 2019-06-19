@@ -676,7 +676,8 @@ merge_files(void *arg)
 			elog(VERBOSE, "Merged file \"%s\": " INT64_FORMAT " bytes",
 				 file->path, file->write_size);
 		else
-			elog(ERROR, "Merge of file \"%s\" failed. Invalid size: %i", BYTES_INVALID);
+			elog(ERROR, "Merge of file \"%s\" failed. Invalid size: " INT64_FORMAT " bytes",
+				 file->path, file->write_size);
 
 		/* Restore relative path */
 		file->path = prev_file_path;
