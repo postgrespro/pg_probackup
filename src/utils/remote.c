@@ -76,6 +76,10 @@ void launch_ssh(char* argv[])
 }
 #endif
 
+static bool needs_quotes(char const* path)
+{
+	return strchr(path, ' ') != NULL;
+}
 
 bool launch_agent(void)
 {
@@ -137,14 +141,25 @@ bool launch_agent(void)
 				probackup = sep + 1;
 			}
 		}
-		snprintf(cmd, sizeof(cmd), "%s\\%s agent %s",
-					   instance_config.remote.path, probackup, PROGRAM_VERSION);
+		if (needs_quotes(instance_config.remote.path) || needs_quotes(pg_probackup))
+			snprintf(cmd, sizeof(cmd), "\"%s\\%s\" agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+		else
+			snprintf(cmd, sizeof(cmd), "%s\\%s agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
 #else
-		snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
-					   instance_config.remote.path, probackup, PROGRAM_VERSION);
+		if (needs_quotes(instance_config.remote.path) || needs_quotes(pg_probackup))
+			snprintf(cmd, sizeof(cmd), "\"%s/%s\" agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+		else
+			snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
 #endif
 	} else {
-		snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
+		if (needs_quotes(pg_probackup))
+			snprintf(cmd, sizeof(cmd), "\"%s\" agent %s", pg_probackup, PROGRAM_VERSION);
+		else
+			snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
 	}
 
 #ifdef WIN32
