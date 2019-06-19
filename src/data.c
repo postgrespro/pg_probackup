@@ -1400,7 +1400,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	if (crc != file->crc)
 	{
 		elog(WARNING, "Invalid CRC of backup file \"%s\": %X. Expected %X",
-				file->path, file->crc, crc);
+				file->path, crc, file->crc);
 		is_valid = false;
 	}
 

@@ -240,7 +240,7 @@ pgBackupValidateFiles(void *arg)
 		if (file->write_size != st.st_size)
 		{
 			elog(WARNING, "Invalid size of backup file \"%s\" : " INT64_FORMAT ". Expected %lu",
-				 file->path, file->write_size, (unsigned long) st.st_size);
+				 file->path, (unsigned long) st.st_size, file->write_size);
 			arguments->corrupted = true;
 			break;
 		}
@@ -276,7 +276,7 @@ pgBackupValidateFiles(void *arg)
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-						file->path, file->crc, crc);
+						file->path, crc, file->crc);
 				arguments->corrupted = true;
 			}
 		}
