@@ -20,7 +20,9 @@
 #include "utils/thread.h"
 #include <time.h>
 
-const char  *PROGRAM_NAME = NULL;
+const char  *PROGRAM_NAME = NULL;		/* PROGRAM_NAME_FULL without .exe suffix
+										 * if any */
+const char  *PROGRAM_NAME_FULL = NULL;
 const char  *PROGRAM_FULL_PATH = NULL;
 const char  *PROGRAM_URL = "https://github.com/postgrespro/pg_probackup";
 const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues";
@@ -44,8 +46,6 @@ typedef enum ProbackupSubcmd
 	CHECKDB_CMD
 } ProbackupSubcmd;
 
-
-char       *pg_probackup; /* Program name (argv[0]) */
 
 /* directory options */
 char	   *backup_path = NULL;
@@ -235,7 +235,7 @@ main(int argc, char *argv[])
 	struct stat stat_buf;
 	int			rc;
 
-	pg_probackup = argv[0];
+	PROGRAM_NAME_FULL = argv[0];
 
 	/* Initialize current backup */
 	pgBackupInit(&current);

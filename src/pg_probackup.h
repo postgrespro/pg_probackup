@@ -36,6 +36,7 @@
 
 /* pgut client variables and full path */
 extern const char  *PROGRAM_NAME;
+extern const char  *PROGRAM_NAME_FULL;
 extern const char  *PROGRAM_FULL_PATH;
 extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
@@ -412,7 +413,6 @@ typedef struct BackupPageHeader
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 
 /* directory options */
-extern char    *pg_probackup;
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
@@ -472,7 +472,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time, bool no_validate);
-extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt, 
+extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
