@@ -25,8 +25,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s'}
-            )
+                'checkpoint_timeout': '30s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -407,6 +407,193 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'pg_probackup archive-push completed successfully' in log_content,
                 'Expecting messages about successfull execution archive_command')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_arhive_push_partial_file_exists(self):
+        """Archive-push if file exists"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100500) i")
+
+        filename = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        if self.archive_compress:
+            filename = filename + '.gz' + '.partial'
+            file = os.path.join(wals_dir, filename)
+        else:
+            filename = filename + '.partial'
+            file = os.path.join(wals_dir, filename)
+
+        with open(file, 'a') as f:
+            f.write(b"blablablaadssaaaaaaaaaaaaaaa")
+            f.flush()
+            f.close()
+
+        self.switch_wal_segment(node)
+        sleep(15)
+
+        log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+            self.assertIn(
+                'Reusing stale destination temporary WAL file',
+                log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_archive_push_partial_file_exists(self):
+        """Archive-push if file exists"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t1()")
+        self.switch_wal_segment(node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t2()")
+
+        filename_orig = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        if self.archive_compress:
+            filename = filename_orig + '.gz' + '.partial'
+            file = os.path.join(wals_dir, filename)
+        else:
+            filename = filename_orig + '.partial'
+            file = os.path.join(wals_dir, filename)
+
+        with open(file, 'a') as f:
+            f.write(b"blablablaadssaaaaaaaaaaaaaaa")
+            f.flush()
+            f.close()
+
+        self.switch_wal_segment(node)
+        sleep(15)
+
+        # check that segment is archived
+        if self.archive_compress:
+            filename_orig = filename_orig + '.gz'
+
+        file = os.path.join(wals_dir, filename_orig)
+
+        self.assertTrue(os.path.isfile(file))
+
+        # log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        # with open(log_file, 'r') as f:
+        #     log_content = f.read()
+        #     self.assertIn(
+        #         'Reusing stale destination temporary WAL file',
+        #         log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_archive_push_partial_file_exists_not_stale(self):
+        """Archive-push if file exists"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t1()")
+        self.switch_wal_segment(node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t2()")
+
+        filename_orig = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        if self.archive_compress:
+            filename = filename_orig + '.gz' + '.partial'
+            file = os.path.join(wals_dir, filename)
+        else:
+            filename = filename_orig + '.partial'
+            file = os.path.join(wals_dir, filename)
+
+        with open(file, 'a') as f:
+            f.write(b"blahblah")
+            f.flush()
+            f.close()
+
+        self.switch_wal_segment(node)
+        sleep(4)
+
+        with open(file, 'a') as f:
+            f.write(b"blahblahblahblah")
+            f.flush()
+            f.close()
+
+        sleep(10)
+
+        # check that segment is NOT archived
+        if self.archive_compress:
+            filename_orig = filename_orig + '.gz'
+
+        file = os.path.join(wals_dir, filename_orig)
+
+        self.assertFalse(os.path.isfile(file))
+
+        # log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        # with open(log_file, 'r') as f:
+        #     log_content = f.read()
+        #     self.assertIn(
+        #         'is not stale',
+        #         log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
