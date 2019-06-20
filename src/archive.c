@@ -142,6 +142,11 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	const char *to_path_p;
 	char		to_path_temp[MAXPGPATH];
 	int			errno_temp;
+	/* partial handling */
+	int			partial_timeout = 0;
+	int			partial_size = 0;
+	struct stat		st;
+	bool		partial_exists = false;
 
 #ifdef HAVE_LIBZ
 	char		gz_to_path[MAXPGPATH];
@@ -180,8 +185,11 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST);
 		if (gz_out == NULL)
-			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+		{
+			partial_exists = true;
+			elog(WARNING, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
+		}
 	}
 	else
 #endif
@@ -190,8 +198,65 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
 		if (out < 0)
-			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+		{
+			partial_exists = true;
+			elog(WARNING, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
+		}
+	}
+
+	/* sleep a second, check if .partial file size is changing, if not, then goto p1
+	 * Algorihtm is not pretty however we do not expect conflict for '.partial' file
+	 * to be frequent occurrence.
+	 * The main goal is to protect against failed archive-push which left behind
+	 * orphan '.partial' file.
+	 */
+	if (partial_exists)
+	{
+		while (1)
+		{
+			/* exit from loop */
+			if (partial_timeout > 10)
+			{
+				/* For 10 second the file didn`t changed its size, so consider it stale and reuse it */
+				elog(WARNING, "Reusing stale destination temporary WAL file \"%s\"", to_path_temp);
+				fio_unlink(to_path_temp, FIO_BACKUP_HOST);
+
+#ifdef HAVE_LIBZ
+				if (is_compress)
+				{
+					gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST);
+					if (gz_out == NULL)
+						elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+							to_path_temp, strerror(errno));
+				}
+				else
+#endif
+				{
+					out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
+					if (out < 0)
+						elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+							to_path_temp, strerror(errno));
+				}
+				break;
+			}
+
+			if (fio_stat(to_path_temp, &st, false, FIO_BACKUP_HOST) < 0)
+				/* It is ok if partial is gone, we can safely error out */
+				elog(ERROR, "Cannot stat destination temporary WAL file \"%s\": %s", to_path_temp,
+					strerror(errno));
+
+			/* first round */
+			if (!partial_timeout)
+				partial_size = st.st_size;
+
+			/* file size is changing */
+			if (st.st_size > partial_size)
+				elog(ERROR, "Destination temporary WAL file \"%s\" is not stale", to_path_temp);
+
+			sleep(1);
+			partial_timeout++;
+		}
 	}
 
 	/* copy content */
