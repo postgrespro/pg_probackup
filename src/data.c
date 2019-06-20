@@ -585,10 +585,7 @@ backup_data_file(backup_files_arg* arguments,
 	}
 
 	if (file->size % BLCKSZ != 0)
-	{
-		fio_fclose(in);
 		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
-	}
 
 	/*
 	 * Compute expected number of blocks in the file.
