@@ -9,36 +9,37 @@ Current version - 2.1.3
 * [Installation and Setup](#installation-and-setup)
 * [Command-Line Reference](#command-line-reference)
 * [Usage](#usage)
+* [Quick Start](#quick_start)
 
 ### Synopsis
 
-`pg_probackup init -B backupdir`
+`pg_probackup init -B backup_dir`
 
-`pg_probackup add-instance -B backupdir -D datadir --instance instance_name`
+`pg_probackup add-instance -B backup_dir -D data_dir --instance instance_name`
 
-`pg_probackup del-instance -B backupdir --instance instance_name`
+`pg_probackup del-instance -B backup_dir --instance instance_name`
 
-`pg_probackup set-config -B backupdir --instance instance_name [option...]`
+`pg_probackup set-config -B backup_dir --instance instance_name [option...]`
 
-`pg_probackup show-config -B backupdir --instance instance_name [--format=format]`
+`pg_probackup show-config -B backup_dir --instance instance_name [--format=format]`
 
-`pg_probackup backup -B backupdir --instance instance_name -b backup_mode [option...]`
+`pg_probackup show -B backup_dir [option...]`
 
-`pg_probackup merge -B backupdir --instance instance_name -i backup_id [option...]`
+`pg_probackup backup -B backup_dir --instance instance_name -b backup_mode [option...]`
 
-`pg_probackup restore -B backupdir --instance instance_name [option...]`
+`pg_probackup restore -B backup_dir --instance instance_name [option...]`
 
-`pg_probackup validate -B backupdir [option...]`
+`pg_probackup validate -B backup_dir [option...]`
 
-`pg_probackup show -B backupdir [option...]`
+`pg_probackup merge -B backup_dir --instance instance_name -i backup_id [option...]`
 
-`pg_probackup delete -B backupdir --instance instance_name { -i backup_id | --wal | --expired }`
+`pg_probackup delete -B backup_dir --instance instance_name { -i backup_id | --wal | --expired | --merge-expired }`
 
-`pg_probackup archive-push -B backupdir --instance instance_name --wal-file-path %p --wal-file-name %f [option...]`
+`pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [option...]`
 
-`pg_probackup archive-get -B backupdir --instance instance_name --wal-file-path %p --wal-file-name %f`
+`pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f`
 
-`pg_probackup checkdb -B backupdir --instance instance_name -D datadir [option...]`
+`pg_probackup checkdb -B backup_dir --instance instance_name [-D data_dir] [option...]`
 
 `pg_probackup version`
 
@@ -48,29 +49,31 @@ Current version - 2.1.3
 
 As compared to other backup solutions, pg_probackup offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 
-- Choosing between full and page-level incremental backups to speed up backup and recovery
-- Implementing a single backup strategy for multi-server PostgreSQL clusters
-- Automatic data consistency checks and on-demand backup validation without actual data recovery
-- Managing backups in accordance with retention policy
-- Running backup, restore, and validation processes on multiple parallel threads
-- Storing backup data in a compressed state to save disk space
-- Taking backups from a standby server to avoid extra load on the master server
-- Extended logging settings
-- Custom commands to simplify WAL log archiving
-- Backing up files and directories located outside of PostgreSQL data directory, such as configuration or log files 
+- Incremental modes: page-level incremental backup with three different approaches of acquiring changed pages allows to choose incremental mode which suits your needs best or mix them in accordance with data flow
+- Validation: Automatic data consistency checks and on-demand backup validation without actual data recovery
+- Verification: PostgreSQL instance on-demand verification via dedicated `checkdb` command
+- Retention: Managing backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods - `delete expired` and/or `merge expired`
+- Parallelization: Running backup, restore, merge, checkdb and validation processes on multiple parallel threads
+- Compression: Storing backup data in a compressed state to save disk space
+- Deduplication: Saving disk space by not backpuping the not changed non-data files ('_vm', '_fsm', etc)
+- Remote operations: Backup PostgreSQL instance located on remote machine or restore backup on it
+- Backup from replica: Avoid extra load on the master server by taking backups from a standby
+- External directories: Add to backup content of directories located outside of PostgreSQL data directory, such as configs, logs or pg_dump files
+- Extended logging settings:
 
-To manage backup data, pg_probackup creates a *backup catalog*. This directory stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
+To manage backup data, pg_probackup creates a **backup catalog**. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
 
 Using pg_probackup, you can take full or incremental backups:
-- Full backups contain all the data files required to restore the database cluster from scratch.
+- FULL backups contain all the data files required to restore the database cluster from scratch.
 - Incremental backups only store the data that has changed since the previous backup. It allows to decrease the backup size and speed up backup operations. pg_probackup supports the following modes of incremental backups:
+    - DELTA backup. In this mode, pg_probackup reads all data files in the data directory and copies only those pages that has changed since the previous backup. Note that this mode can impose read-only I/O pressure equal to a full backup.
     - PAGE backup. In this mode, pg_probackup scans all WAL files in the archive from the moment the previous full or incremental backup was taken. Newly created backups contain only the pages that were mentioned in WAL records. This requires all the WAL files since the previous backup to be present in the WAL archive. If the size of these files is comparable to the total size of the database cluster files, speedup is smaller, but the backup still takes less space.
-    - DELTA backup. In this mode, pg_probackup reads all data files in the data directory and copies only those pages that has changed since the previous backup. Continuous archiving is not necessary for this mode to operate. Note that this mode can impose read-only I/O pressure equal to a full backup.
     - PTRACK backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special PTRACK bitmap for this relation. As one page requires just one bit in the PTRACK fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly. 
 
-Regardless of the chosen backup type, all backups taken with pg_probackup support the following archiving strategies:
-- Autonomous backups include all the files required to restore the cluster to a consistent state at the time the backup was taken. Even if continuous archiving is not set up, the required WAL segments are included into the backup.
-- Archive backups rely on continuous archiving. Such backups enable cluster recovery to an arbitrary point after the backup was taken (point-in-time recovery). 
+Regardless of the chosen backup type, all backups taken with pg_probackup support the following WAL delivery modes:
+- ARCHIVE backups rely on [continuous archiving](#setting-up-archive-backups). This is a default WAL delivery mode.
+
+- STREAM backups include all the files required to restore the cluster to a consistent state at the time the backup was taken. Regardless of continuous archiving been set up or not, the required WAL segments are included into the backup.
 
 ### Limitations
 
@@ -91,11 +94,11 @@ pg_probackup stores all WAL and backup files in the corresponding subdirectories
 
 To initialize the backup catalog, run the following command:
 
-    pg_probackup init -B backupdir
+    pg_probackup init -B backup_dir
 
-where backupdir is the backup catalog. If the backupdir already exists, it must be empty. Otherwise, pg_probackup returns an error.
+where backup_dir is the path to *backup catalog*. If the backup_dir already exists, it must be empty. Otherwise, pg_probackup returns an error.
 
-pg_probackup creates the backupdir backup catalog, with the following subdirectories:
+pg_probackup creates the backup_dir backup catalog, with the following subdirectories:
 - *wal/* — directory for WAL files.
 - *backups/* — directory for backup files.
 
@@ -106,19 +109,17 @@ pg_probackup can store backups for multiple database clusters in a single backup
 
 To add a new backup instance, run the following command:
 
-    pg_probackup add-instance -B backupdir -D datadir --instance instance_name
-    [--external-dirs=external_directory_path] [remote_backup_options]
+    pg_probackup add-instance -B backup_dir -D data_dir --instance instance_name
+    [remote_backup_options]
 
 where:
-- *datadir* is the data directory of the cluster you are going to back up. To set up and use pg_probackup, write access to this directory is required.
+- *data_dir* is the data directory of the cluster you are going to back up. To set up and use pg_probackup, write access to this directory is required.
 -  *instance_name* is the name of the subdirectories that will store WAL and backup files for this cluster.
-- The optional *--external-dirs* parameter provides the path to one or more directories to include into the backup that are located outside of the data directory. To specify several external directories, separate their paths by a colon. 
+- The optional [remote_backup_options](#remote-backup-options) should be used if *data_dir* is located on remote machine.
 
-pg_probackup creates the instance_name subdirectories under the *backups/* and *wal/* directories of the backup catalog. The *backups/instance_name* directory contains the *pg_probackup.conf* configuration file that controls backup and restore settings for this backup instance. If you run this command with the optional *--external-dirs* parameter, this setting is added to *pg_probackup.conf*, so the specified external directories will be backed up each time you create a backup of this instance. For details on how to fine-tune pg_probackup configuration, see the section called “Configuring pg_probackup”.
+pg_probackup creates the *instance_name* subdirectories under the *backups/* and *wal/* directories of the backup catalog. The *backups/instance_name* directory contains the *pg_probackup.conf* configuration file that controls backup and restore settings for this backup instance. If you run this command with the [remote_backup_options](#remote-backup-options), used parameters will be added to *pg_probackup.conf*. For details on how to fine-tune pg_probackup configuration, see the section [Configuring pg_probackup](#configuring-pg_probackup).
 
-The backup catalog must belong to the file system of the database server. The user launching pg_probackup must have full access to the contents of the backup catalog. If you specify the path to the backup catalog in the *BACKUP_PATH* environment variable, you can omit the corresponding option when running pg_probackup commands.
-
-Since pg_probackup uses a regular PostgreSQL connection and the replication protocol, pg_probackup commands require connection options. To avoid specifying these options each time on the command line, you can set them in the pg_probackup.conf configuration file using the *set-config* command. For details, see the section called “Configuring pg_probackup”.
+The user launching pg_probackup must have full access to **backup_dir** directory and at least read-only access to **data_dir** directory. If you specify the path to the backup catalog in the *BACKUP_PATH* environment variable, you can omit the corresponding option when running pg_probackup commands.
 
 ##### Configuring the Database Cluster
 
@@ -142,53 +143,58 @@ GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;
 
 Since pg_probackup needs to read cluster files directly, pg_probackup must be started on behalf of an OS user that has read access to all files and directories inside the data directory (PGDATA) you are going to back up.
 
-Depending on whether you are going to use autonomous or archive backup strategies, PostgreSQL cluster configuration will differ, as specified in the sections below. To back up the database cluster from a standby server or create PTRACK backups, additional setup is required. For details, see the section called “PTRACK Backup” and the section called “Backup from Standby”.
+Depending on whether you are plan to take STREAM and/or ARCHIVE backups, PostgreSQL cluster configuration will differ, as specified in the sections below. To back up the database cluster from a standby server or create PTRACK backups, additional setup is required. For details, see the sections called [Setting up STREAM Backups](#setting-up-stream-backups), [Setting up ARCHIVE Backups](#setting-up-archive-backups), [Setting up PTRACK Backups](#setting-up-ptrack-backups) and the section called [Backup from Standby](#backup-from-standby).
 
-##### Setting up Autonomous Backups
+###### Setting up STREAM Backups
 
-To set up the cluster for autonomous backups, complete the following steps:
+To set up the cluster for STREAM backups, complete the following steps:
 - Grant the REPLICATION privilege to the backup role:
 
         ALTER ROLE backup WITH REPLICATION;
+
 - In the pg_hba.conf file, allow replication on behalf of the backup role.
 - Modify the postgresql.conf configuration file of the PostgreSQL server, as follows:
-    - Make sure the max_wal_senders parameter is set high enough to leave at least one session available for the backup process.
-    - Set the *wal_level* parameter to be *replica* or higher. 
+    - Make sure the parameter `max_wal_senders` is set high enough to leave at least one session available for the backup process.
+    - Set the parameter `wal_level` to be higher than `minimal`.
 
-If you are going to take PAGE backups, you also have to configure WAL archiving as explained in the section called “Setting up Archive Backups”. 
+If you are going to take PAGE backups in STREAM mode, you also have to configure WAL archiving as explained in the section called “Setting up Archive Backups”.
 
-Once these steps are complete, you can start taking FULL, PAGE, or DELTA backups from the master server. If you are going to take backups from standby or use PTRACK backups, you must also complete additional setup, as explained in the section called “Backup from Standby” and the section called “PTRACK Backup”, respectively.
+Once these steps are complete, you can start taking FULL, PAGE, or DELTA backups from the master server in STREAM mode.
 
-##### Setting up Archive Backups
+###### Setting up ARCHIVE Backups
 To set up the cluster for archive backups, complete the following steps:
 - Configure the following parameters in postgresql.conf to enable continuous archiving on the PostgreSQL server:
-    - Make sure the wal_level parameter is set to replica or higher.
-    - Set the archive_mode parameter. If you are configuring backups on master, archive_mode must be set to on. To perform archiving on standby, set this parameter to always.
+    - Make sure the `wal_level` parameter is higher than 'minimal'.
+    - Set the `archive_mode` parameter. If you are configuring backups on master, `archive_mode` must be set to `on`. To perform archiving on standby, set this parameter to `always`.
     - Set the archive_command variable, as follows:
-            archive_command = 'pg_probackup archive-push -B backupdir --instance instance_name --wal-file-path %p --wal-file-name %f
-        where backupdir and instance_name refer to the already initialized backup catalog instance for this database cluster. 
+            archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name [remote_backup_options] --wal-file-path %p --wal-file-name %f
+        where `backup_dir` and `instance_name` refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_backup_options](#remote-backup-options) should be used to archive WAL on remote machine.
 
-Once these steps are complete, you can start taking FULL, PAGE, or DELTA backups from the master server. If you are going to take backups from standby or use PTRACK backups, you must also complete additional setup, as explained in the section called “Backup from Standby” and the section called “PTRACK Backup”, respectively.
+Once these steps are complete, you can start taking FULL, PAGE, or DELTA backups from the master server in ARCHIVE mode.
 
-##### Backup from Standby
+
+>NOTE: Instead of using `archive_mode` and `archive_command` parameters you may opt for [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to backup_dir/wal/instance_name directory, also WAL compression done be pg_receivewal is supported by pg_probackup. Only using pg_receivewal `zero data loss` archive strategy can be achieved.
+
+###### Backup from Standby
 
 For PostgreSQL 9.6 or higher, pg_probackup can take backups from a standby server. This requires the following additional setup:
 
-- On the standby server, allow replication connections:
-    - Set the max_wal_senders and hot_standby parameters in postgresql.conf.
-    - Configure host-based authentication in pg_hba.conf. 
-- On the master server, enable full_page_writes in postgresql.conf. 
+- On the replica server, set the parameter `hot_standby` to `on`.
+- On the master server, set the parameter `full_page_writes` to `on`.
+- To perform STREAM backup on standby, complete all steps in section [Setting up STREAM Backups](#setting-up-stream-backups)
+- To perform ARCHIVE backup on standby, complete all steps in section [Setting up ARCHIVE Backups](#setting-up-archive-backups)
+
+Once these steps are complete, you can start taking FULL, PAGE, or DELTA backups from the standby server.
 
 
+>NOTE: Backup from the standby server has the following limitations:
+- If the standby is promoted to the master during backup, the backup fails.
+- All WAL records required for the backup must contain sufficient full-page writes. This requires you to enable full_page_writes on the master, and not to use a tool like pg_compresslog as archive_command to remove full-page writes from WAL files.
 
->NOTE: Archive backup from the standby server has the following limitations:
-- If the standby is promoted to the master during archive backup, the backup fails.
-- All WAL records required for the backup must contain sufficient full-page writes. This requires you to enable full_page_writes on the master, and not to use a tool like pg_compresslog as archive_command to remove full-page writes from WAL files. 
-
-##### PTRACK Backup
+###### Setting up PTRACK Backups
 
 If you are going to use PTRACK backups, complete the following additional steps:
-- In postgresql.conf, set ptrack_enable to on.
+- Set the parameter `ptrack_enable` to `on`.
 - Grant the rights to execute ptrack functions to the backup role: 
 
         GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup;
@@ -198,139 +204,145 @@ If you are going to use PTRACK backups, complete the following additional steps:
 ### Command-Line Reference
 ##### Commands
 
-This section describes pg_probackup commands. Some commands require mandatory options and can take additional options. For detailed descriptions, see the section called “Options”.
+This section describes pg_probackup commands. Some commands require mandatory options and can take additional options. Optional parameters encased in square brackets: "[]". For detailed descriptions, see the section called [Options](#options).
 
 **init**
 
-    pg_probackup init -B backupdir
-Initializes the backupdir backup catalog that will store backup copies, WAL archive, and meta information for the backed up database clusters. If the specified backupdir already exists, it must be empty. Otherwise, pg_probackup displays a corresponding error message. 
+    pg_probackup init -B backup_dir [--help]
+Initializes the backup_dir backup catalog that will store backup copies, WAL archive, and meta information for the backed up database clusters. If the specified backup_dir already exists, it must be empty. Otherwise, pg_probackup displays a corresponding error message. 
 
 **add-instance**
 
-    pg_probackup add-instance -B backupdir -D datadir --instance instance_name [--external-dirs=external_directory_path]
-Initializes a new backup instance inside the backup catalog backupdir and generates the pg_probackup.conf configuration file that controls backup and restore settings for the cluster with the specified datadir data directory. For details, see the section called “Adding a New Backup Instance”. 
+    pg_probackup add-instance -B backup_dir -D data_dir --instance instance_name
+    [--help] [--external-dirs=external_directory_path]
+Initializes a new backup instance inside the backup catalog backup_dir and generates the pg_probackup.conf configuration file that controls backup and restore settings for the cluster with the specified data_dir data directory. For details, see the section called [Adding a New Backup Instance](#adding-a-new-backup-instance). 
 
 **del-instance**
 
-    pg_probackup del-instance -B backupdir --instance instance_name
+    pg_probackup del-instance -B backup_dir --instance instance_name
+    [--help]
 Deletes all backup and WAL files associated with the specified instance. 
 
 **set-config**
 
-    pg_probackup set-config -B backupdir --instance instance_name
-    [--log-level-console=log_level] [--log-level-file=log_level] [--log-filename=log_filename]
-    [--error-log-filename=error_log_filename] [--log-directory=log_directory]
-    [--log-rotation-size=log_rotation_size] [--log-rotation-age=log_rotation_age]
+    pg_probackup set-config -B backup_dir --instance instance_name
+    [--help] [--pgdata=pgdata-path]
     [--retention-redundancy=redundancy][--retention-window=window]
     [--compress-algorithm=compression_algorithm] [--compress-level=compression_level]
     [-d dbname] [-h host] [-p port] [-U username]
     [--archive-timeout=timeout] [--external-dirs=external_directory_path]
-    [remote_backup_options]
+    [remote_options]
+    [logging_options]
 Adds the specified connection, retention, logging or replica, and compression, and external directory settings into the pg_probackup.conf configuration file, or modifies the previously defined values. 
 
 **show-config**
 
-	pg_probackup show-config -B backupdir --instance instance_name [--format=plain|json]
-Displays the contents of the pg_probackup.conf configuration file located in the backupdir/backups/instance_name directory. You can specify the --format=json option to return the result in the JSON format. By default, configuration settings are shown as plain text.
+	pg_probackup show-config -B backup_dir --instance instance_name [--format=plain|json]
+Displays the contents of the pg_probackup.conf configuration file located in the backup_dir/backups/instance_name directory. You can specify the --format=json option to return the result in the JSON format. By default, configuration settings are shown as plain text.
 To edit pg_probackup.conf, use the set-config command.
 It is not allowed to edit pg_probackup.conf directly. 
 
 **backup**
 
-    pg_probackup backup -B backupdir -b backup_mode --instance instance_name
-    [-C] [--stream [-S slot_name] [--temp-slot]] [--backup-pg-log] [--external-dirs=external_directory_path]
-    [--delete-expired] [--merge-expired] [--delete-wal] [--no-validate] [--skip-block-validation]
-    [--retention-redundancy=redundancy] [--retention-window=window]
-    [-d dbname] [-h host] [-p port] [-U username]
+    pg_probackup backup -B backup_dir -b backup_mode --instance instance_name
+    [--help] [-j num_threads] [--progress]
+    [-C] [--stream [-S slot_name] [--temp-slot]] [--backup-pg-log]
+    [--no-validate] [--skip-block-validation]
     [-w --no-password] [-W --password]
-    [--archive-timeout=timeout]
-    [--compress] [--compress-algorithm=compression_algorithm] [--compress-level=compression_level]
-    [-j num_threads][--progress]
+    [--archive-timeout=timeout] [--external-dirs=external_directory_path]
+    [connection_options]
+    [compression_options]
+    [remote_options]
+    [retention_options]
     [logging_options]
-    [remote_backup_options]
-Creates a backup copy of the PostgreSQL instance. The backup_mode option specifies the backup mode to use. For details, see the section called “Creating a Backup”. 
+Creates a backup copy of the PostgreSQL instance. The backup_mode option specifies the backup mode to use. For details, see the section called [Creating a Backup](#creating-a-backup). 
 
 **merge**
 
-    pg_probackup merge -B backupdir --instance instance_name -i backup_id
-    [-j num_threads][--progress]
+    pg_probackup merge -B backup_dir --instance instance_name -i backup_id
+    [--help] [-j num_threads][--progress]
     [logging_options]
-    [remote_backup_options]
 
-Merges the specified incremental backup to its parent full backup, together with all incremental backups between them, if any. As a result, the full backup takes in all the merged data, and the incremental backups are removed as redundant. For details, see the section called “Merging Backups”. 
+Merges the specified incremental backup to its parent full backup, together with all incremental backups between them, if any. As a result, the full backup takes in all the merged data, and the incremental backups are removed as redundant. For details, see the section called [Merging Backups](#merging-backups). 
 
 **restore**
 
-    pg_probackup restore -B backupdir --instance instance_name
-    [-D datadir]
-    [-i backup_id] [{--recovery-target=immediate|latest | --recovery-target-time=time | --recovery-target-xid=xid | --recovery-target-lsn=lsn | --recovery-target-name=recovery_target_name} [--recovery-target-inclusive=boolean]]
-    [--recovery-target-timeline=timeline] [-T OLDDIR=NEWDIR]
-    [--external-mapping=OLDDIR=NEWDIR] [--skip-external-dirs]
-    [--recovery-target-action=pause|promote|shutdown]
-    [-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
+    pg_probackup restore -B backup_dir --instance instance_name
+    [--help] [-D data_dir] [-i backup_id]
     [-j num_threads] [--progress]
+    [-T OLDDIR=NEWDIR] [--external-mapping=OLDDIR=NEWDIR] [--skip-external-dirs]
+    [-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
+    [recovery_options]
     [logging_options]
-    [remote_backup_options]
+    [remote_options]
 
-Restores the PostgreSQL instance from a backup copy located in the backupdir backup catalog. If you specify a recovery target option, pg_probackup restores the database cluster up to the corresponding recovery target. Otherwise, the most recent backup is used. 
+Restores the PostgreSQL instance from a backup copy located in the backup_dir backup catalog. If you specify a recovery target option, pg_probackup will find the most suitable backup and restores it to the corresponding recovery target. Otherwise, the most recent backup is used.
 
 **validate**
 
-    pg_probackup validate -B backupdir
-    [--instance instance_name]
-    [-i backup_id] [{--recovery-target-time=time | --recovery-target-xid=xid | --recovery-target-lsn=lsn | --recovery-target-name=recovery_target_name } [--recovery-target-inclusive=boolean]]
-    [--recovery-target-timeline=timeline] [--skip-block-validation]
+    pg_probackup validate -B backup_dir
+    [--help] [--instance instance_name] [-i backup_id]
     [-j num_threads] [--progress]
+    [--skip-block-validation]
+    [recovery_options]
+    [logging_options]
 
-Verifies that all the files required to restore the cluster are present and not corrupted. If you specify the instance_name without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the instance_name with a recovery target option or a backup_id, pg_probackup checks whether it is possible to restore the cluster using these options. If instance_name is not specified, pg_probackup validates all backups available in the backup catalog. 
+Verifies that all the files required to restore the cluster are present and not corrupted. If instance_name is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the instance_name without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the instance_name with a recovery target option and/or a backup_id, pg_probackup checks whether it is possible to restore the cluster using these options.
 
 **show**
 
-    pg_probackup show -B backupdir
-    [--instance instance_name [-i backup_id]] [--format=plain|json]
+    pg_probackup show -B backup_dir
+    [--help] [--instance instance_name [-i backup_id]] [--format=plain|json]
 
 Shows the contents of the backup catalog. If instance_name and backup_id are specified, shows detailed information about this backup. You can specify the --format=json option to return the result in the JSON format. By default, the contents of the backup catalog is shown as plain text. 
 
 **delete**
 
-    pg_probackup delete -B backupdir --instance instance_name
-     [--wal] {-i backup_id | --expired [--merge-expired] | --merge-expired} [--dry-run]
+    pg_probackup delete -B backup_dir --instance instance_name
+    [--help] [-j num_threads] [--progress]
+    [--delete-wal] {-i backup_id | --delete-expired [--merge-expired] | --merge-expired}
+    [--dry-run]
 
-Deletes backup or WAL files of the specified backup instance from the backupdir backup catalog:
-- The wal option removes the WAL files that are no longer required to restore the cluster from any of the existing backups.
-- The -i option removes the specified backup copy.
-- The expired option removes the backups that are expired according to the current retention policy. If used together with merge-expired, this option takes effect only after the merge is performed.
-
-- The merge-expired option merges the oldest incremental backup that satisfies the requirements of retention policy with its parent backups that have already expired.
-
-- The dry-run option displays the current status of all the available backups, without deleting or merging expired backups, if any. 
+Deletes backup or WAL files of the specified backup instance from the backup_dir backup catalog:
+- The `--delete-wal` option removes the WAL files that are no longer required to restore the cluster from any of the existing backups.
+- The `-i` option removes the specified backup copy.
+- The `--delete-expired` option removes the backups that are expired according to the current retention policy. If used together with `--merge-expired`, this option takes effect only after the merge is performed.
+- The `--merge-expired` option merges the oldest incremental backup that satisfies the requirements of retention policy with its parent backups that have already expired.
+- The `--dry-run` option displays the current retention status of all the available backups, without deleting or merging expired backups, if any.
 
 **archive-push**
 
-    pg_probackup archive-push -B backupdir --instance instance_name
-    --wal-file-path %p --wal-file-name %f'
-    [--compress][--compress-algorithm=compression_algorithm][--compress-level=compression_level] [--overwrite]
-    [remote_backup_options]
+    pg_probackup archive-push -B backup_dir --instance instance_name
+    --wal-file-path %p --wal-file-name %f
+    [--help] [--compress] [--compress-algorithm=compression_algorithm]
+    [--compress-level=compression_level] [--overwrite]
+    [remote_options]
+    [logging_options]
 
 Copies WAL files into the corresponding subdirectory of the backup catalog and validates the backup instance by instance_name, system-identifier, and PGDATA. If parameters of the backup instance and the cluster do not match, this command fails with the following error message: “Refuse to push WAL segment segment_name into archive. Instance parameters mismatch.” For each WAL file moved to the backup catalog, you will see the following message in PostgreSQL logfile: “pg_probackup archive-push completed successfully”. If the files to be copied already exist in the backup catalog, pg_probackup computes and compares their checksums. If the checksums match, archive-push skips the corresponding file and returns successful execution code. Otherwise, archive-push fails with an error. If you would like to replace WAL files in the case of checksum mismatch, run the archive-push command with the --overwrite option.
+Copying always done to temp file with `.partial` suffix or, if compression is used, with `.gz.partial` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving. Copied to archive WAL segments are synced to disk.
 
 You can set archive-push as archive_command in postgresql.conf to perform archive backups. 
 
 **archive-get**
 
-    pg_probackup archive-get -B backupdir --instance instance_name
-    --wal-file-path %p --wal-file-name %f'
-    [remote backup options]
+    pg_probackup archive-get -B backup_dir --instance instance_name
+    --wal-file-path %p --wal-file-name %f
+    [--help]
+    [remote_options]
+    [logging_options]
 
 Moves WAL files from the corresponding subdirectory of the backup catalog to the cluster's write-ahead log location. This command is automatically set by pg_probackup as restore_command in recovery.conf when restoring backups using a WAL archive. You do not need to set it manually. 
 
 **checkdb**
 
-    pg_probackup checkdb -D datadir [-B backupdir] [--instance instance_name]
+    pg_probackup checkdb [-D data_dir] [-B backup_dir] [--instance instance_name]
+    [--help] [--progress] [-j num_threads]
     [--amcheck [--heapallindexed] [--skip-block-validation]]
-    [--progress] [-j num_threads]
+    [connection_options]
+    [logging_options]
 
-Validates all data files located in the specified data directory by performing block-level checksum verification and page header sanity checks. If run with the --amcheck option, this command also performs logical verification of all indexes in the specified PostgreSQL instance using the amcheck extension. 
+Validates all data files located in the specified data directory by performing block-level checksum verification and page header sanity checks. If run with the --amcheck option, this command also performs logical verification of all indexes in the specified PostgreSQL instance using the amcheck extension or the `amcheck_next` extension. 
 
 **version**
 
@@ -349,7 +361,8 @@ This section describes all command-line options for pg_probackup commands. If th
 
 If an option is specified using more than one method, command-line input has the highest priority, while the pg_probackup.conf settings have the lowest priority.
 
-**Common Options**
+###### Common Options
+The list of general options.
 ```
     -B directory
     --backup-path=directory
@@ -364,22 +377,21 @@ Specifies the absolute path to the data directory of the database cluster. This 
 
     -i backup_id
     -backup-id=backup_id
-Specifies the unique identifier of the backup. 
-
-    --skip-block-validation
-
-Disables block-level checksum verification to speed up validation. If this option is used with backup, restore, and validate commands, only file-level checksums will be verified. When used with the checkdb command run with the --amcheck option, --skip-block-validation completely disables validation of data files. 
+Specifies the unique identifier of the backup.
 
     -j num_threads
     --threads=num_threads
-Sets the number of parallel threads for backup, recovery, and backup validation processes. 
+Sets the number of parallel threads for backup, recovery, and backup validation processes.
 
     --progress
-Shows the progress of operations. 
+Shows the progress of operations.
 
-**Backup Options**
+    --help
+Shows detailed information about the options that can be used with this command.
 
-The following options can be used together with the backup command.
+###### Backup Options
+
+The following options can be used together with the `backup` command. Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options) and [Logging Options](#logging-options) can be used.
 
     -b mode
     --backup-mode=mode
@@ -405,7 +417,7 @@ Makes an autonomous backup that includes all the necessary WAL files by streamin
 Specifies the replication slot for WAL streaming. This option can only be used together with the --stream option. 
 
     --temp-slot
-Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the --stream option. 
+Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the --stream option. Default slot name is `pg_probackup_slot`, which can be changed via option `-S --slot`.
 
     --backup-pg-log
 Includes the log directory into the backup. This directory usually contains log messages. By default, log directory is excluded. 
@@ -413,26 +425,19 @@ Includes the log directory into the backup. This directory usually contains log 
     -E external_directory_path
     --external-dirs=external_directory_path
 
-Includes the specified directory into the backup. This option is useful to back up configuration files located outside of the data directory. If you would like to back up several external directories, separate their paths by a colon. 
+Includes the specified directory into the backup. This option is useful to back up configuration files located outside of the data directory. If you would like to back up several external directories, separate their paths by a colon on Unix and a semicolon on Windows.
 
     --archive-timeout=wait_time
-Sets the timeout for WAL segment archiving, in seconds. By default, pg_probackup waits 300 seconds. 
+Sets in seconds the timeout for WAL segment archiving and streaming. By default pg_probackup waits 300 seconds.
 
-    --delete-expired
-After a backup copy is successfully created, deletes backups that are expired according to the current retention policy. You can also clean up the expired backups by running the delete command with the expired option. If used together with merge-expired, this option takes effect after the merge is performed. For details, see the section called “Configuring Backup Retention Policy”. 
+    --skip-block-validation
+Disables block-level checksum verification to speed up backup.
 
-    --merge-expired
-After a backup copy is successfully created, merges the oldest incremental backup that satisfies the requirements of retention policy with its parent backups that have already expired. 
+    --no-validate
+Skips automatic validation after successfull backup. You can use this option if you validate backups regularly and would like to save time when running backup operations.
 
-    --delete-wal
-After a backup copy is successfully created, removes redundant WAL files in accordance with the current retention policy. You can also clean up the expired WAL files by running the delete command with the wal option. For details, see the section called “Configuring Backup Retention Policy”. 
-
-**Restore Options**
-
-    --recovery-target-action=pause|promote|shutdown
-    Default: pause 
-Specifies the action the server should take when the recovery target is reached, similar to the recovery_target_action option in the recovery.conf configuration file.
-
+###### Restore Options
+The following options can be used together with the `restore` command. Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options) and [Logging Options](#logging-options) can be used.
 
     -R | --restore-as-replica
 Writes a minimal recovery.conf in the output directory to facilitate setting up a standby server. The password is not included. If the replication connection requires a password, you must specify the password manually. 
@@ -446,25 +451,39 @@ Relocates the tablespace from the OLDDIR to the NEWDIR directory at the time of 
 Relocates an external directory included into the backup from the OLDDIR to the NEWDIR directory at the time of recovery. Both OLDDIR and NEWDIR must be absolute paths. If the path contains the equals sign (=), escape it with a backslash. This option can be specified multiple times for multiple directories. 
 
     --skip-external-dirs
-Skip external directories included into the backup with the --external-dirs option. The contents of these directories will not be restored. 
+Skip external directories included into the backup with the --external-dirs option. The contents of these directories will not be restored.
 
-    --recovery-target-timeline=timeline
-Specifies a particular timeline to restore the cluster into. By default, the timeline of the specified backup is used. 
+    --skip-block-validation
+Disables block-level checksum verification to speed up validation. During automatic validation before restore only file-level checksums will be verified.
 
     --no-validate
-Skips backup validation. You can use this option if you validate backups regularly and would like to save time when running backup or restore operations. 
+Skips backup validation. You can use this option if you validate backups regularly and would like to save time when running restore operations.
 
-**Recovery Target Options**
-If continuous WAL archiving is configured, you can use one of these options together with restore or validate commands to specify the moment up to which the database cluster must be restored.
+###### Checkdb Options
+The following options can be used together with the `checkdb` command. Additionally [Connection Options](#connection-options) and [Logging Options](#logging-options) can be used.
+
+    --amcheck
+Performs logical verification of indexes for the specified PostgreSQL instance if no corruption was found while checking data files. You must have the `amcheck` extention or the `amcheck_next` extension installed in the database to check its indexes. For databases without amcheck, index verification will be skipped.
+
+    --skip-block-validation
+Skip validation of data files.
+
+    --heapallindexed
+Checks that all heap tuples that should be indexed are actually indexed. You can use this option only together with the --amcheck option. Can be used only with `amcheck` extension of version 2.0 and `amcheck_next` extension of any version.
+
+###### Recovery Target Options
+If continuous WAL archiving is configured, you can use one of these options together with `restore` or `validate` commands to specify the moment up to which the database cluster must be restored.
 
     --recovery-target=immediate|latest
 Defines when to stop the recovery:
 - The immediate value stops the recovery after reaching the consistent state of the specified backup, or the latest available backup if the -i option is omitted.
-- The latest value continues the recovery until all WAL segments available in the archive are applied. 
+- The latest value continues the recovery until all WAL segments available in the archive are applied.
 
+    --recovery-target-timeline=timeline
+Specifies a particular timeline to which recovery will proceed. By default, the timeline of the specified backup is used. 
 
     --recovery-target-lsn=lsn
-Specifies the LSN of the write-ahead log location up to which recovery will proceed. 
+Specifies the LSN of the write-ahead log location up to which recovery will proceed. Can be used only when restoring database cluster of major version 10 or higher.
 
     --recovery-target-name=recovery_target_name
 Specifies a named savepoint up to which to restore the cluster data. 
@@ -473,27 +492,17 @@ Specifies a named savepoint up to which to restore the cluster data.
 Specifies the timestamp up to which recovery will proceed. 
 
     --recovery-target-xid=xid
-Specifies the transaction ID up to which recovery will proceed. 
+Specifies the transaction ID up to which recovery will proceed.
 
     --recovery-target-inclusive=boolean
-Specifies whether to stop just after the specified recovery target (true), or just before the recovery target (false). This option can only be used together with recovery-target-name, recovery-target-time, recovery-target-lsn, or recovery-target-xid options. The default value is taken from the recovery_target_inclusive variable. 
+Specifies whether to stop just after the specified recovery target (true), or just before the recovery target (false). This option can only be used together with recovery-target-name, recovery-target-time, recovery-target-lsn, or recovery-target-xid options. The default value is taken from the `recovery_target_inclusive` variable.
 
-**Delete Options**
+    --recovery-target-action=pause|promote|shutdown
+    Default: pause 
+Specifies the action the server should take when the recovery target is reached, similar to the `recovery_target_action` option in the recovery.conf configuration file.
 
-    --wal
-Deletes WAL files that are no longer required to restore the cluster from any of the existing backups. 
-
-    --expired
-Deletes backups that do not conform to the retention policy defined in the pg_probackup.conf configuration file. For details, see the section called “Configuring Backup Retention Policy”. 
-
-    --merge-expired
-Merges the oldest incremental backup that satisfies the requirements of retention policy with its parent backups that have already expired. 
-
-    --dry-run
-Displays the current status of all the available backups, without deleting or merging expired backups, if any. 
-
-**Retention Options**
-For details on configuring retention policy, see the section called “Configuring Backup Retention Policy”.
+###### Retention Options
+You can use these options together with `backup` or `delete` commands. For details on configuring retention policy, see the section called [Configuring Backup Retention Policy](#configuring-backup-retention-policy).
 
     --retention-redundancy=redundancy
     Default: 0 
@@ -501,9 +510,22 @@ Specifies the number of full backup copies to keep in the data directory. Must b
 
     --retention-window=window
     Default: 0 
-Number of days of recoverability. The zero value disables this setting.
+Number of days of recoverability. Must be a positive integer. The zero value disables this setting.
 
-**Logging Options**
+    --delete-wal
+Deletes WAL files that are no longer required to restore the cluster from any of the existing backups. 
+
+    --delete-expired
+Deletes backups that do not conform to the retention policy defined in the pg_probackup.conf configuration file.
+
+    --merge-expired
+Merges the oldest incremental backup that satisfies the requirements of retention policy with its parent backups that have already expired.
+
+    --dry-run
+Displays the current status of all the available backups, without deleting or merging expired backups, if any.
+
+###### Logging Options
+You can use these options with any command.
 
     --log-level-console=log_level
     Default: info 
@@ -524,7 +546,7 @@ Defines the filenames of log files for error messages. The filenames are treated
 If error-log-filename is not set, pg_probackup writes all error messages to stderr.
 
     --log-directory=log_directory
-    Default: $BACKUP_PATH/log/ 
+    Default: $BACKUP_PATH/log/
 Defines the directory in which log files will be created. You must specify the absolute path. This directory is created lazily, when the first log message is written.
 
     --log-rotation-size=log_rotation_size
@@ -535,7 +557,8 @@ Maximum size of an individual log file. If this value is reached, the log file i
     Default: 0 
 Maximum lifetime of an individual log file. If this value is reached, the log file is rotated once a pg_probackup command is launched, except help and version commands. The time of the last log file creation is stored in $BACKUP_PATH/log/log_rotation. The zero value disables time-based rotation. Supported units: ms, s, min, h, d (min by default).
 
-**Connection Options**
+###### Connection Options
+You can use these options together with `backup` and `checkdb` commands.
 
     -d dbname
     --dbname=dbname
@@ -567,21 +590,61 @@ User name to connect as.
     --password
 Forces a password prompt. 
 
-**Compression Options**
-
-    --compress
-Enables compression for data files. You can specify the compression algorithm and level using the --compress-algorithm and --compress-level options, respectively. If you omit these options, --compress uses zlib compression algorithm with compression level 1.
-By default, compression is disabled. 
+###### Compression Options
+You can use these options together with `backup` and `archive-push` commands.
 
     --compress-algorithm=compression_algorithm
-Defines the algorithm to use for compressing data files. Possible values are zlib, pglz, and none. If set to zlib or pglz, this option enables compression, regardless of whether the --compress option is specified. By default, compression is disabled.
-For the archive-push command, the pglz compression algorithm is not supported. 
+    Default: none
+Defines the algorithm to use for compressing data files. Possible values are zlib, pglz, and none. If set to zlib or pglz, this option enables compression. By default, compression is disabled.
+For the `archive-push` command, the pglz compression algorithm is not supported.
 
     --compress-level=compression_level
-    Default: 1 
-Defines compression level (0 through 9, 0 being no compression and 9 being best compression). This option can only be used together with --compress or --compress-algorithm options.
+    Default: 1
+Defines compression level (0 through 9, 0 being no compression and 9 being best compression). This option can be used together with --compress-algorithm option.
 
-**Replica Options**
+    --compress
+Alias for --compress-algorithm=zlib and --compress-level=1. 
+
+###### Archiving Options
+These options can be used with `archive-push` and `archive-get` commands.
+
+    --wal-file-path=wal_file_path %p
+Provides the path to the WAL file in archive_command and restore_command used by pg_probackup. The %p variable is required for correct processing. 
+
+    --wal-file-name=wal_file_name %f
+Provides the name of the WAL file in archive_command and restore_command used by pg_probackup. The %f variable is required for correct processing. 
+
+    --overwrite
+Overwrites archived WAL file. Use this option together with the archive-push command if the specified subdirectory of the backup catalog already contains this WAL file and it needs to be replaced with its newer copy. Otherwise, archive-push reports that a WAL segment already exists, and aborts the operation. If the file to replace has not changed, archive-push skips this file regardless of the --overwrite option.
+
+###### Remote Mode Options
+This section describes the options related to running pg_probackup operations remotely via SSH. These options can be used with `add-instance`, `set-config`, `backup`, `restore`, `archive-push` and `archive-get` commands. For details on configuring remote operation mode, see the section called [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode).
+
+    --remote-proto
+Specifies the protocol to use for remote operations. Currently only the SSH protocol is supported. Possible values are:
+- ssh enables the remote backup mode via SSH. This is the Default value.
+- none explicitly disables the remote mode. 
+
+You can omit this option if the --remote-host option is specified. 
+
+    --remote-host
+Specifies the remote host IP address or hostname to connect to. 
+
+    --remote-port
+    Default: 22 
+Specifies the remote host port to connect to.
+
+    --remote-user
+    Default: current user
+Specifies remote host user for SSH connection. If you omit this option, the current user initiating the SSH connection is used. 
+
+    --remote-path
+Specifies pg_probackup installation directory on the remote system.
+
+    --ssh-options
+Specifies a string of SSH command-line options.
+
+###### Replica Options
 This section describes the options related to taking a backup from standby.
 >NOTE: Starting from pg_probackup 2.0.24, backups can be taken from standby without connecting to the master server, so these options are no longer required. In lower versions, pg_probackup had to connect to the master to determine recovery time — the earliest moment for which you can restore a consistent state of the database cluster.
 
@@ -602,67 +665,25 @@ Deprecated. User name to connect as.
 
     --replica-timeout=timeout
     Default: 300 sec
-Deprecated. Wait time for WAL segment streaming via replication, in seconds. By default, pg_probackup waits 300 seconds. You can also define this parameter in the pg_probackup.conf configuration file using the set-config command. 
-
-**Archiving Options**
-
-    --wal-file-path=wal_file_path %p
-Provides the path to the WAL file in archive_command and restore_command used by pg_probackup. The %p variable is required for correct processing. 
-
-    --wal-file-name=wal_file_name %f
-Provides the name of the WAL file in archive_command and restore_command used by pg_probackup. The %f variable is required for correct processing. 
-
-    --overwrite
-Overwrites archived WAL file. Use this option together with the archive-push command if the specified subdirectory of the backup catalog already contains this WAL file and it needs to be replaced with its newer copy. Otherwise, archive-push reports that a WAL segment already exists, and aborts the operation. If the file to replace has not changed, archive-push skips this file regardless of the --overwrite option. 
-
-**checkdb Options**
-
-    --amcheck
-Performs logical verification of indexes for the specified PostgreSQL instance if no corruption was found while checking data files. Optionally, you can skip validation of data files by specifying --skip-block-validation. You must have the amcheck extension installed in the database to check its indexes. For databases without amcheck, index verification will be skipped. 
-
-    --heapallindexed
-Checks that all heap tuples that should be indexed are actually indexed. You can use this option only together with the --amcheck option starting from PostgreSQL 11. 
-
-**Remote Backup Options**
-This section describes the options related to running backup and restore operations remotely via SSH. These options can be used with add-instance, set-config, backup, restore, archive-push, and archive-get commands.
-
-    --remote-proto
-Specifies the protocol to use for remote operations. Currently only the SSH protocol is supported. Possible values are:
-- ssh enables the remote backup mode via SSH.
-- none explicitly disables the remote backup mode. 
-
-You can omit this option if the --remote-host option is specified. 
-
-    --remote-host
-Specifies the remote host IP address or hostname to connect to. 
-
-    --remote-port
-    Default: 22 
-Specifies the remote host port to connect to.
-
-    --remote-user
-Specifies remote host user for SSH connection. If you omit this option, the current user initiating the SSH connection is used. 
-
-    --remote-path
-Specifies pg_probackup installation directory on the remote system. 
-
-    --ssh-options
-Specifies a string of SSH command-line options. 
+Deprecated. Wait time for WAL segment streaming via replication, in seconds. By default, pg_probackup waits 300 seconds. You can also define this parameter in the pg_probackup.conf configuration file using the set-config command.
 
 ### Usage
 
 - [Creating a Backup](#creating-a-backup)
 - [Validating a Backup](#vaklidating-a-backup)
 - [Restoring a Cluster](#restoting-a-cluster)
-- [Using pg_probackup in the Remote Backup Mode](#using-pg_probackup-in-the-remote-backup-mode)
+- [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode)
 - [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
 - [Configuring pg_probackup](#configuring-pg_probackup)
 - [Managing the Backup Catalog](#managing-the-backup-Catalog)
+- [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
+- [Merging Backups](#merging-backups)
+- [Deleting Backups](#deleting-backups)
 
 ##### Creating a Backup
 To create a backup, run the following command:
 
-    pg_probackup backup -B backupdir --instance instance_name -b backup_mode
+    pg_probackup backup -B backup_dir --instance instance_name -b backup_mode
 where backup_mode can take one of the following values:
 - FULL — creates a full backup that contains all the data files of the cluster to be restored.
 - DELTA — reads all data files in the data directory and creates an incremental backup for pages that have changed since the previous backup.
@@ -675,7 +696,7 @@ If you have configured PTRACK backups, pg_probackup clears PTRACK bitmap of the 
 
 To make a backup autonomous, add the --stream option to the above command. For example, to create a full autonomous backup, run:
 
-    pg_probackup backup -B backupdir --instance instance_name -b FULL --stream --temp-slot
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --stream --temp-slot
 
 The optional --temp-slot parameter ensures that the required segments remain available if the WAL is rotated before the backup is complete.
 
@@ -702,17 +723,17 @@ To ensure that all the required backup files are present and can be used to rest
 
 For example, to check that you can restore the database cluster from a backup copy up to the specified xid transaction ID, run this command:
 
-    pg_probackup validate -B backupdir --instance instance_name --recovery-target-xid=xid
+    pg_probackup validate -B backup_dir --instance instance_name --recovery-target-xid=xid
 
 If validation completes successfully, pg_probackup displays the corresponding message. If validation fails, you will receive an error message with the exact time and transaction ID up to which the recovery is possible.
 
 ##### Restoring a Cluster
 To restore the database cluster from a backup, run the restore command with at least the following options:
 
-    pg_probackup restore -B backupdir --instance instance_name -i backup_id
+    pg_probackup restore -B backup_dir --instance instance_name -i backup_id
 
 where:
-- backupdir is the backup catalog that stores all backup files and meta information.
+- backup_dir is the backup catalog that stores all backup files and meta information.
 - instance_name is the backup instance for the cluster to be restored.
 - backup_id specifies the backup to restore the cluster from. If you omit this option, pg_probackup uses the latest backup available for the specified instance. If you specify an incremental backup to restore, pg_probackup automatically restores the underlying full backup and then sequentially applies all the necessary increments. 
 
@@ -720,7 +741,7 @@ If the cluster to restore contains tablespaces, pg_probackup restores them to th
 
 When using the --tablespace-mapping option, you must provide absolute paths to the old and new tablespace directories. If a path happens to contain an equals sign (=), escape it with a backslash. This option can be specified multiple times for multiple tablespaces. For example:
 
-    pg_probackup restore -B backupdir --instance instance_name -D datadir -j 4 -i backup_id -T tablespace1_dir=tablespace1_newdir -T tablespace2_dir=tablespace2_newdir
+    pg_probackup restore -B backup_dir --instance instance_name -D data_dir -j 4 -i backup_id -T tablespace1_dir=tablespace1_newdir -T tablespace2_dir=tablespace2_newdir
 
 Once the restore command is complete, start the database service. If you are restoring an autonomous backup, the restore is complete at once, with the cluster returned to a self-consistent state at the point when the backup was taken. For archive backups, PostgreSQL replays all archived WAL segments, so the cluster is restored to the latest state possible. You can change this behavior by using the recovery_target option with the restore command. Note that using the recovery-target=latest value with autonomous backups is only possible if the WAL archive is available at least starting from the time the autonomous backup was taken.
 
@@ -731,18 +752,18 @@ If you have enabled continuous WAL archiving before taking backups, you can rest
 
 - To restore the cluster state at the exact time, specify the recovery-target-time option, in the timestamp format. For example:
 
-        pg_probackup restore -B backupdir --instance instance_name --recovery-target-time='2017-05-18 14:18:11'
+        pg_probackup restore -B backup_dir --instance instance_name --recovery-target-time='2017-05-18 14:18:11'
 
 - To restore the cluster state up to a specific transaction ID, use the recovery-target-xid option:
 
-        pg_probackup restore -B backupdir --instance instance_name --recovery-target-xid=687
+        pg_probackup restore -B backup_dir --instance instance_name --recovery-target-xid=687
 - If you know the exact LSN up to which you need to restore the data, use recovery-target-lsn:
 
-        pg_probackup restore -B backupdir --instance instance_name --recovery-target-lsn=16/B374D848
+        pg_probackup restore -B backup_dir --instance instance_name --recovery-target-lsn=16/B374D848
 
 By default, the recovery_target_inclusive parameter defines whether the recovery target is included into the backup. You can explicitly include or exclude the recovery target by adding the --recovery-target-inclusive=boolean option to the commands listed above.
 
-##### Using pg_probackup in the Remote Backup Mode
+##### Using pg_probackup in the Remote Mode
 
 pg_probackup supports the remote backup mode that allows to perform backup and restore operations remotely via SSH. In this mode, the backup catalog is stored on a local system, while PostgreSQL instance to be backed up is located on a remote system. You must have pg_probackup installed on both systems.
 
@@ -762,7 +783,7 @@ Backup, recovery, and validation processes can be executed on several parallel t
 
 Parallel execution is controlled by the -j/--threads command line option. For example, to create a backup using four parallel threads, run:
 
-    pg_probackup backup -B backupdir --instance instance_name -b FULL -j 4
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL -j 4
 
 >NOTE: Parallel recovery applies only to copying data from the backup catalog to the data directory of the cluster. When PostgreSQL server is started, WAL records need to be replayed, and this cannot be done in parallel.
 
@@ -770,81 +791,27 @@ Parallel execution is controlled by the -j/--threads command line option. For ex
 
 Once the backup catalog is initialized and a new backup instance is added, you can use the pg_probackup.conf configuration file located in the backups/instance_name directory to fine-tune pg_probackup configuration.
 
+Since pg_probackup uses a regular PostgreSQL connection and, for STREAM backups, the replication protocol, pg_probackup `backup` and `checkdb` commands require connection options. To avoid specifying these options each time on the command line, you can set them in the pg_probackup.conf configuration file using the *set-config* command.
+
 Initially, pg_probackup.conf contains the following settings:
 - PGDATA — the path to the data directory of the cluster to back up.
 - system-identifier — the unique identifier of the PostgreSQL instance. 
 
 Additionally, you can define connection, retention, logging, and replica settings using the set-config command:
 
-    pg_probackup set-config -B backupdir --instance instance_name --external-dirs=external_directory_path [connection_options] [retention_options] [logging_options] [replica_options]
+    pg_probackup set-config -B backup_dir --instance instance_name --external-dirs=external_directory_path [connection_options] [retention_options] [logging_options] [replica_options]
 
 To view the current settings, run the following command:
 
-    pg_probackup show-config -B backupdir --instance instance_name
+    pg_probackup show-config -B backup_dir --instance instance_name
 
-You can override the settings defined in pg_probackup.conf when running the backup command.
+You can override the settings defined in pg_probackup.conf when running the backup command via corresponding environment variables and/or command line options.
 
 **Specifying Connection Settings**
 
 If you define connection settings in the pg_probackup.conf configuration file, you can omit connection options in all the subsequent pg_probackup commands. However, if the corresponding environment variables are set, they get higher priority. The options provided on the command line overwrite both environment variables and configuration file settings.
 
-If nothing is given, the default values are taken. pg_probackup tries to use local connection and tries to get the database name and the user name from the PGUSER environment variable or the current OS user name.
-
-**Configuring Backup Retention Policy**
-
-By default, all backup copies created with pg_probackup are stored in the specified backup catalog. To save disk space, you can configure retention policy and periodically clean up redundant backup copies accordingly.
-
-To configure retention policy, set one or more of the following variables in the pg_probackup.conf file:
-- retention-redundancy — specifies the number of full backup copies to keep in the backup catalog.
-- retention-window — defines the earliest point in time for which pg_probackup can complete the recovery. This option is set in the number of days from the current moment. For example, if retention-window=7, pg_probackup must keep at least one full backup copy that is older than seven days, with all the corresponding WAL files.
-
-If both retention-redundancy and retention-window options are set, pg_probackup keeps backup copies that satisfy both conditions. For example, if you set retention-redundancy=2 and retention-window=7, pg_probackup cleans up the backup directory to keep only two full backup copies if at least one of them is older than seven days.
-
-To clean up the backup catalog in accordance with retention policy, run:
-
-    pg_probackup delete -B backupdir --instance instance_name --expired
-
-pg_probackup deletes all backup copies that do not conform to the defined retention policy.
-
-If you would like to also remove the WAL files that are no longer required for any of the backups, add the --wal option:
-
-    pg_probackup delete -B backupdir --instance instance_name --expired --wal
-
-Alternatively, you can use the --delete-expired and --delete-wal options together with the backup command to remove the outdated backup copies once the new backup is created.
-
-Since incremental backups require that their parent full backup and all the preceding incremental backups are available, if any of such backups expire, they still cannot be removed while at least one incremental backup in this chain satisfies the retention policy. To avoid keeping expired backups that are still required to restore an active incremental one, you can merge them with this backup using the --merge-expired option when running backup or delete commands.
-
-Suppose you have backed up the node instance in the node-backup directory, with the retention-window option is set to 7, and you have the following backups available on April 10, 2019:
-
-```
-BACKUP INSTANCE 'node'
-===========================================================================================================================================
- Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI   Time   Data    Start LSN    Stop LSN    Status 
-===========================================================================================================================================
- node        10       P7XDHR  2019-04-10 05:27:15+03  FULL    STREAM     1 / 0               11s   200MB   0/18000059   0/18000197  OK
- node        10       P7XDQV  2019-04-08 05:32:59+03  DELTA   STREAM     1 / 0               11s    19MB   0/15000060   0/15000198  OK
- node        10       P7XDJA  2019-04-03 05:28:36+03  PTRACK  STREAM     1 / 0               21s    32MB   0/13000028   0/13000198  OK
- node        10       P7XDHU  2019-04-02 05:27:59+03  PTRACK  STREAM     1 / 0               31s    33MB   0/11000028   0/110001D0  OK
- node        10       P7XDHB  2019-04-01 05:27:15+03  FULL    STREAM     1 / 0               11s   200MB   0/F000028    0/F000198   OK
- node        10       P7XDFT  2019-03-29 05:26:25+03  FULL    STREAM     1 / 0               11s   200MB   0/D000028    0/D000198   OK
-```
-
-Even though P7XDHB and P7XDHU backups are outside the retention window, they cannot be removed as it invalidates the succeeding incremental backups P7XDHU and P7XDQV that are still required, so if you run the delete command with the --expired option, only the P7XDFT full backup will be removed. With the --merge-expired option, the P7XDJA backup is merged with the underlying P7XDHB and P7XDHU backups and becomes a full one, so there is no need to keep these expired backups anymore:
-
-    pg_probackup delete -B node-backup --instance node --expired --merge-expired
-    pg_probackup show -B node-backup
-
-```
-BACKUP INSTANCE 'node'
-============================================================================================================================================
- Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI    Time   Data    Start LSN    Stop LSN    Status
-============================================================================================================================================
- node        10       P7XDHR  2019-04-10 05:27:15+03  FULL    STREAM     1 / 0                11s   200MB   0/18000059   0/18000197  OK
- node        10       P7XDQV  2019-04-08 05:32:59+03  DELTA   STREAM     1 / 0                11s    19MB   0/15000060   0/15000198  OK
- node        10       P7XDJA  2019-04-04 05:28:36+03  FULL    STREAM     1 / 0                 5s   200MB   0/13000028   0/13000198  OK
-```
-
-Note that the Time field for the merged backup displays the time required for the merge.
+If nothing is given, the default values are taken. By default pg_probackup tries to use local connection via Unix socket(localhost on Windows) and tries to get the database name and the user name from the PGUSER environment variable or the current OS user name.
 
 ##### Managing the Backup Catalog
 
@@ -855,9 +822,9 @@ With pg_probackup, you can manage backups from the command line:
 - Delete backups 
 - Viewing Backup Information
 
-To view the list of existing backups, run the command:
+To view the list of existing backups for every instance, run the command:
 
-    pg_probackup show -B backupdir
+    pg_probackup show -B backup_dir
 
 pg_probackup displays the list of all the available backups. For example:
 
@@ -875,41 +842,48 @@ BACKUP INSTANCE 'node'
 
 For each backup, the following information is provided:
 - Instance — the instance name.
-- Version — PostgreSQL version.
+- Version — PostgreSQL major version.
 - ID — the backup identifier.
 - Recovery time — the earliest moment for which you can restore the state of the database cluster.
 - Mode — the method used to take this backup. Possible values: FULL, PAGE, DELTA, PTRACK.
 - WAL — the way of WAL log handling. Possible values: STREAM for autonomous backups and ARCHIVE for archive backups.
-- Current/Parent TLI — current and parent timelines of the database cluster.
+- Current/Parent TLI — timeline identifiers of current backup and its parent.
 - Time — the time it took to perform the backup.
 - Data — the size of the data files in this backup. This value does not include the size of WAL files.
 - Start LSN — WAL log sequence number corresponding to the start of the backup process.
 - Stop LSN — WAL log sequence number corresponding to the end of the backup process.
 - Status — backup status. Possible values:
     - OK — the backup is complete and valid.
-    - CORRUPT — some of the backup files are corrupted.
-    - DONE — the backup is complete, but was not validated.
-    - ERROR — the backup was aborted because of an unexpected error.
     - RUNNING — the backup is in progress.
+    - DONE — the backup is complete, but was not validated.
     - MERGING — the backup is being merged.
-    - ORPHAN — the backup is invalid because one of its parent backups is corrupt.
     - DELETING — the backup files are being deleted.
+    - CORRUPT — some of the backup files are corrupted.
+    - ERROR — the backup was aborted because of an unexpected error.
+    - ORPHAN — the backup is invalid because one of its parent backups is corrupt or missing.
 
-You can restore the cluster from the backup only if the backup status is OK. 
+You can restore the cluster from the backup only if the backup status is OK or DONE.
 
 To get more detailed information about the backup, run the show with the backup ID:
 
-    pg_probackup show -B backupdir --instance instance_name -i backup_id
+    pg_probackup show -B backup_dir --instance instance_name -i backup_id
 
 The sample output is as follows:
 ```
 #Configuration
 backup-mode = FULL
 stream = false
+compress-alg = zlib
+compress-level = 1
+from-replica = false
+
 #Compatibility
 block-size = 8192
 wal-block-size = 8192
-checksum-version = 0
+checksum-version = 1
+program-version = 2.1.3
+server-version = 10
+
 #Result backup info
 timelineid = 1
 start-lsn = 0/04000028
@@ -919,38 +893,141 @@ end-time = '2017-05-16 12:57:31'
 recovery-xid = 597
 recovery-time = '2017-05-16 12:57:31'
 data-bytes = 22288792
+wal-bytes = 16777216
 status = OK
+parent-backup-id = 'PT8XFX'
+primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any'
 ```
 
-**Merging Backups**
+To get more detailed information about the backup in json format, run the show with the backup ID:
+
+    pg_probackup show -B backup_dir --instance instance_name --format=json -i backup_id
+
+The sample output is as follows:
+```
+[
+    {
+        "instance": "node",
+        "backups": [
+            {
+                "id": "PT91HZ",
+                "parent-backup-id": "PT8XFX",
+                "backup-mode": "DELTA",
+                "wal": "ARCHIVE",
+                "compress-alg": "zlib",
+                "compress-level": 1,
+                "from-replica": false,
+                "block-size": 8192,
+                "xlog-block-size": 8192,
+                "checksum-version": 1,
+                "program-version": "2.1.3",
+                "server-version": "10",
+                "current-tli": 16,
+                "parent-tli": 2,
+                "start-lsn": "0/8000028",
+                "stop-lsn": "0/8000160",
+                "start-time": "2019-06-17 18:25:11+03",
+                "end-time": "2019-06-17 18:25:16+03",
+                "recovery-xid": 0,
+                "recovery-time": "2019-06-17 18:25:15+03",
+                "data-bytes": 106733,
+                "wal-bytes": 16777216,
+                "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                "status": "OK"
+            }
+        ]
+    }
+]
+```
+
+##### Configuring Backup Retention Policy
+
+By default, all backup copies created with pg_probackup are stored in the specified backup catalog. To save disk space, you can configure retention policy and periodically clean up redundant backup copies accordingly.
+
+To configure retention policy, set one or more of the following variables in the pg_probackup.conf file:
+- retention-redundancy — specifies the number of full backup copies to keep in the backup catalog.
+- retention-window — defines the earliest point in time for which pg_probackup can complete the recovery. This option is set in the number of days from the current moment. For example, if retention-window=7, pg_probackup must keep at least one full backup copy that is older than seven days, with all the corresponding WAL files.
+
+If both retention-redundancy and retention-window options are set, pg_probackup keeps backup copies that satisfy at least one condition. For example, if you set retention-redundancy=2 and retention-window=7, pg_probackup cleans up the backup directory to keep only two full backup copies and all backups that are newer than seven days.
+
+To clean up the backup catalog in accordance with retention policy, run:
+
+    pg_probackup delete -B backup_dir --instance instance_name --delete-expired
+
+pg_probackup deletes all backup copies that do not conform to the defined retention policy.
+
+If you would like to also remove the WAL files that are no longer required for any of the backups, add the --delete-wal option:
+
+    pg_probackup delete -B backup_dir --instance instance_name --delete-expired --delete-wal
+
+>NOTE: Alternatively, you can use the --delete-expired, --merge-expired and --delete-wal options together with the `backup` command to remove and merge the outdated backup copies once the new backup is created.
+
+Since incremental backups require that their parent full backup and all the preceding incremental backups are available, if any of such backups expire, they still cannot be removed while at least one incremental backup in this chain satisfies the retention policy. To avoid keeping expired backups that are still required to restore an active incremental one, you can merge them with this backup using the --merge-expired option when running `backup` or `delete` commands.
+
+Suppose you have backed up the node instance in the node-backup directory, with the retention-window option is set to 7, and you have the following backups available on April 10, 2019:
+
+```
+BACKUP INSTANCE 'node'
+===========================================================================================================================================
+ Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI   Time   Data    Start LSN    Stop LSN    Status 
+===========================================================================================================================================
+ node        10       P7XDHR  2019-04-10 05:27:15+03  FULL    STREAM     1 / 0               11s   200MB   0/18000059   0/18000197  OK
+ node        10       P7XDQV  2019-04-08 05:32:59+03  PAGE    STREAM     1 / 0               11s    19MB   0/15000060   0/15000198  OK
+ node        10       P7XDJA  2019-04-03 05:28:36+03  DELTA   STREAM     1 / 0               21s    32MB   0/13000028   0/13000198  OK
+ ---------------------------------------retention window-------------------------------------------------------------
+ node        10       P7XDHU  2019-04-02 05:27:59+03  PAGE    STREAM     1 / 0               31s    33MB   0/11000028   0/110001D0  OK
+ node        10       P7XDHB  2019-04-01 05:27:15+03  FULL    STREAM     1 / 0               11s   200MB   0/F000028    0/F000198   OK
+ node        10       P7XDFT  2019-03-29 05:26:25+03  FULL    STREAM     1 / 0               11s   200MB   0/D000028    0/D000198   OK
+```
+
+Even though P7XDHB and P7XDHU backups are outside the retention window, P7XDHB and P7XDHU cannot be removed as it invalidates the succeeding incremental backups P7XDJA and P7XDQV that are still required, so if you run the `delete` command with the --delete-expired option, only the P7XDFT full backup will be removed.
+With the --merge-expired option, the P7XDJA backup is merged with the underlying P7XDHU and P7XDHB backups and becomes a full one, so there is no need to keep these expired backups anymore:
+
+    pg_probackup delete -B node-backup --instance node --delete-expired --merge-expired
+    pg_probackup show -B node-backup
+
+```
+BACKUP INSTANCE 'node'
+============================================================================================================================================
+ Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI    Time   Data    Start LSN    Stop LSN    Status
+============================================================================================================================================
+ node        10       P7XDHR  2019-04-10 05:27:15+03  FULL    STREAM     1 / 0                11s   200MB   0/18000059   0/18000197  OK
+ node        10       P7XDQV  2019-04-08 05:32:59+03  DELTA   STREAM     1 / 0                11s    19MB   0/15000060   0/15000198  OK
+ node        10       P7XDJA  2019-04-04 05:28:36+03  FULL    STREAM     1 / 0                 5s   200MB   0/13000028   0/13000198  OK
+```
+
+>Note: The Time field for the merged backup displays the time required for the merge.
+
+##### Merging Backups
 
 As you take more and more incremental backups, the total size of the backup catalog can substantially grow. To save disk space, you can merge incremental backups to their parent full backup by running the merge command, specifying the backup ID of the most recent incremental backup you would like to merge:
 
-    pg_probackup merge -B backupdir --instance instance_name -i backup_id
+    pg_probackup merge -B backup_dir --instance instance_name -i backup_id
 
 This command merges the specified incremental backup to its parent full backup, together with all incremental backups between them. Once the merge is complete, the incremental backups are removed as redundant. Thus, the merge operation is virtually equivalent to retaking a full backup and removing all the outdated backups, but it allows to save much time, especially for large data volumes.
 
-Before the merge, pg_probackup validates all the affected backups to ensure that they are valid. You can check the current backup status by running the show command with the backup ID. If the merge is still in progress, the backup status is displayed as MERGING. You can restart the merge if it is interrupted.
-Deleting Backups
+Before the merge, pg_probackup validates all the affected backups to ensure that they are valid. You can check the current backup status by running the show command with the backup ID. If the merge is still in progress, the backup status is displayed as MERGING. The merge is idempotent, so you can restart the merge if it was interrupted.
+
+##### Deleting Backups
 
 To delete a backup that is no longer required, run the following command:
 
-    pg_probackup delete -B backupdir --instance instance_name -i backup_id
+    pg_probackup delete -B backup_dir --instance instance_name -i backup_id
 
 This command will delete the backup with the specified backup_id, together with all the incremental backups that followed, if any. This way, you can delete some recent incremental backups, retaining the underlying full backup and some of the incremental backups that follow it.
 In this case, the next PTRACK backup will be incomplete as some changes since the last retained backup will be lost. Either a full backup or an incremental PAGE backup (if all the necessary WAL files are still present in the archive) must be taken then.
 
 To delete obsolete WAL files that are not necessary to restore any of the remaining backups, use the --wal option:
 
-    pg_probackup delete -B backupdir --instance instance_name --wal
+    pg_probackup delete -B backup_dir --instance instance_name --delete-wal
 
-To delete backups that are expired according to the current retention policy, use the --expired option:
+To delete backups that are expired according to the current retention policy, use the --delete-expired option:
 
-    pg_probackup delete -B backupdir --instance instance_name --expired
+    pg_probackup delete -B backup_dir --instance instance_name --delete-expired
 
 Note that expired backups cannot be removed while at least one incremental backup that satisfies the retention policy is based on them. If you would like to minimize the number of backups still required to keep incremental backups valid, specify the --merge-expired option when running this command:
 
-    pg_probackup delete -B backupdir --instance instance_name --expired --merge-expired
+    pg_probackup delete -B backup_dir --instance instance_name --delete-expired --merge-expired
 
 In this case, pg_probackup searches for the oldest incremental backup that satisfies the retention policy and merges this backup with the underlying full and incremental backups that have already expired, thus making it a full backup. Once the merge is complete, the remaining expired backups are deleted.
 
@@ -959,4 +1036,4 @@ Before merging or deleting backups, you can run the delete command with the dry-
 ### Authors
 PostgreSQLfessional, Moscow, Russia.
 ### Credits
-pg_probackup utility is based on pg_arman, that was originally written by NTT and then developed and maintained by Michael Paquier. 
+pg_probackup utility is based on pg_arman, that was originally written by NTT and then developed and maintained by Michael Paquier.
