@@ -412,60 +412,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_arhive_push_partial_file_exists(self):
-        """Archive-push if file exists"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-
-        node.slow_start()
-        node.safe_psql(
-            "postgres",
-            "create table t_heap as select i as id, md5(i::text) as text, "
-            "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,100500) i")
-
-        filename = node.safe_psql(
-            "postgres",
-            "SELECT file_name "
-            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
-
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
-        if self.archive_compress:
-            filename = filename + '.gz' + '.partial'
-            file = os.path.join(wals_dir, filename)
-        else:
-            filename = filename + '.partial'
-            file = os.path.join(wals_dir, filename)
-
-        with open(file, 'a') as f:
-            f.write(b"blablablaadssaaaaaaaaaaaaaaa")
-            f.flush()
-            f.close()
-
-        self.switch_wal_segment(node)
-        sleep(15)
-
-        log_file = os.path.join(node.logs_dir, 'postgresql.log')
-        with open(log_file, 'r') as f:
-            log_content = f.read()
-            self.assertIn(
-                'Reusing stale destination temporary WAL file',
-                log_content)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
     def test_archive_push_partial_file_exists(self):
-        """Archive-push if file exists"""
+        """Archive-push if stale .partial file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -479,20 +427,23 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        node.safe_psql(
-            "postgres",
-            "create table t1()")
-        self.switch_wal_segment(node)
+        # this backup is needed only for validation to xid
+        self.backup_node(backup_dir, 'node', node)
 
         node.safe_psql(
             "postgres",
-            "create table t2()")
+            "create table t1(a int)")
+
+        xid = node.safe_psql(
+            "postgres",
+            "INSERT INTO t1 VALUES (1) RETURNING (xmin)").rstrip()
 
         filename_orig = node.safe_psql(
             "postgres",
             "SELECT file_name "
             "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
+        # form up path to next .partial WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
             filename = filename_orig + '.gz' + '.partial'
@@ -502,7 +453,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             file = os.path.join(wals_dir, filename)
 
         with open(file, 'a') as f:
-            f.write(b"blablablaadssaaaaaaaaaaaaaaa")
+            f.write(b"blahblah")
             f.flush()
             f.close()
 
@@ -517,6 +468,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(os.path.isfile(file))
 
+        self.validate_pb(
+            backup_dir, 'node',
+            options=['--recovery-target-xid={0}'.format(xid)])
+
         # log_file = os.path.join(node.logs_dir, 'postgresql.log')
         # with open(log_file, 'r') as f:
         #     log_content = f.read()
@@ -529,7 +484,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_archive_push_partial_file_exists_not_stale(self):
-        """Archive-push if file exists"""
+        """Archive-push if .partial file exists and it is not stale"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -557,6 +512,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "SELECT file_name "
             "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
+        # form up path to next .partial WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
             filename = filename_orig + '.gz' + '.partial'
