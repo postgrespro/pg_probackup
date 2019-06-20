@@ -621,7 +621,7 @@ main(int argc, char *argv[])
 
 				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote %s",
 						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", instance_config.remote.host ? "true" : "false");
+						  stream_wal ? "true" : "false", IsSshProtocol()  ? "true" : "false");
 
 				/* sanity */
 				if (current.backup_mode == BACKUP_MODE_INVALID)
