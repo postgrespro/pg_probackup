@@ -1148,8 +1148,11 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_PAGE);
 
-		if (hdr.arg < 0) /* read error */
-			return hdr.arg;
+		if ((int)hdr.arg < 0) /* read error */
+		{
+			errno = -(int)hdr.arg;
+			return -1;
+		}
 
 		blknum = hdr.arg;
 		if (hdr.size == 0) /* end of segment */
@@ -1205,7 +1208,7 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 				{
 					hdr.arg = -errno;
 					hdr.size = 0;
-					Assert(hdr.arg < 0);
+					Assert((int)hdr.arg < 0);
 					IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 				}
 				else
