@@ -209,7 +209,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	time_t		days_threshold = 0;
 
 	/* For fancy reporting */
-	float		actual_window = 0;
+	uint32		actual_window = 0;
 
 	/* Get current time */
 	current_time = time(NULL);
@@ -252,7 +252,9 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			cur_full_backup_num++;
 		}
 
-		/* Check if backup in needed by retention policy */
+		/* Check if backup in needed by retention policy
+		 * TODO: consider that ERROR backup most likely to have recovery_time == 0
+		 */
 		if ((days_threshold == 0 || (days_threshold > backup->recovery_time)) &&
 			(instance_config.retention_redundancy  <= (n_full_backups - cur_full_backup_num)))
 		{
@@ -324,7 +326,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	}
 
 	/* Message about retention state of backups
-	 * TODO: Float is ugly, rewrite somehow.
+	 * TODO: message is ugly, rewrite it to something like show table in stdout.
 	 */
 
 	cur_full_backup_num = 1;
@@ -340,9 +342,9 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		if (backup->recovery_time == 0)
 			actual_window = 0;
 		else
-			actual_window = ((float)current_time - (float)backup->recovery_time)/(60 * 60 * 24);
+			actual_window = (current_time - backup->recovery_time)/(60 * 60 * 24);
 
-		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %.2fd/%ud. %s",
+		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
 				base36enc(backup->start_time),
 				pgBackupGetBackupMode(backup),
 				status2str(backup->status),
