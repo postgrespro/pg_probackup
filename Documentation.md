@@ -781,7 +781,7 @@ Redardless of data checksums been enabled or not, pg_probackup always check page
 ##### STREAM mode
 To make a STREAM backup, add the `--stream` option to the above command. For example, to create a full STREAM backup, run:
 
-    pg_probackup backup -B backup_dir --instance instance_name -b FULL **--stream** --temp-slot
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --stream --temp-slot
 
 The optional `--temp-slot` parameter ensures that the required segments remain available if the WAL is rotated before the backup is complete.
 
@@ -891,7 +891,7 @@ The typical workflow is as follows:
 
 ##### Running pg_probackup on Parallel Threads
 
-[Backup](#backup), [restore](#restore), [merge](#merge), [delete](#delete), [checkdb](#checkdb) and validate[#validate] processes can be executed on several parallel threads. This can significantly speed up pg_probackup operation given enough resources (CPU cores, disk, and network throughput).
+[Backup](#backup), [restore](#restore), [merge](#merge), [delete](#delete), [checkdb](#checkdb) and [validate](#validate) processes can be executed on several parallel threads. This can significantly speed up pg_probackup operation given enough resources (CPU cores, disk, and network throughput).
 
 Parallel execution is controlled by the `-j/--threads` command line option. For example, to create a backup using four parallel threads, run:
 
