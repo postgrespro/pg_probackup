@@ -133,7 +133,7 @@ pg_probackup can take only physical online backups, and online backups require W
 
 pg_probackup currently has the following limitations:
 - Creating backups from a remote server is currently not supported on Windows systems.
-- The PostgreSQL server from which the backup was taken and the restored server must be compatible by the [block_size](#https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-BLOCK-SIZE) and [wal_block_size](#https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number. 
+- The PostgreSQL server from which the backup was taken and the restored server must be compatible by the [block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-BLOCK-SIZE) and [wal_block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number. 
 
 ### Installation and Setup
 
@@ -218,7 +218,7 @@ Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK
 >NOTE: Even if [continuous WAL archiving](#setting-up-continuous-wal-archiving) is set up, you may still take STREAM backups. It may be useful in some rare cases, such as backup from stale standby.
 
 #### Setting up continuous WAL archiving
-ARCHIVE backups require [continious WAL archiving](#https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
+ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
 - Configure the following parameters in postgresql.conf to enable continuous archiving on the PostgreSQL server:
     - Make sure the `wal_level` parameter is higher than 'minimal'.
     - Set the `archive_mode` parameter. If you are configuring backups on master, `archive_mode` must be set to `on`. To perform archiving on standby, set this parameter to `always`.
@@ -747,7 +747,7 @@ Where **backup_mode** can take one of the following values:
 
 When restoring a cluster from an incremental backup, pg_probackup relies on the previous full backup to restore all the data files first. Thus, you must create at least one full backup before taking incremental ones.
 
-If [data checksums](#https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS) are enabled in the database cluster, pg_probackup uses this information to check correctness of data files. While reading each page, pg_probackup checks whether the calculated checksum coincides with the checksum stored in the page header. This guarantees that the PostgreSQL instance and backup itself are free of corrupted pages.
+If [data checksums](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS) are enabled in the database cluster, pg_probackup uses this information to check correctness of data files. While reading each page, pg_probackup checks whether the calculated checksum coincides with the checksum stored in the page header. This guarantees that the PostgreSQL instance and backup itself are free of corrupted pages.
 Note that pg_probackup reads database files directly from filesystem, so under heavy write load during backup it can show false positive checksum failures because of partial writes. In case of page checksumm mismatch, page is readed again and checksumm comparison repeated.
 Page is considered corrupted if checksumm comparison failed more than 100 times, is this case backup is aborted.
 
@@ -767,7 +767,7 @@ Even if you are using [continuous archiving](#setting-up-continuous-wal-archivin
 
     1. STREAM backups can be restored on the server that has no file access to WAL archive.
     2. STREAM backups enable you to restore the cluster state at the point in time for which WAL files are no longer available.
-    3. Creating backup from standby of a server that generates small amount of WAL traffic and using [archive_timeout](#https://www.postgresql.org/docs/9.6/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) is not an option.
+    3. Creating backup from standby of a server that generates small amount of WAL traffic and using [archive_timeout](https://www.postgresql.org/docs/9.6/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) is not an option.
 
 ##### External directories
 
