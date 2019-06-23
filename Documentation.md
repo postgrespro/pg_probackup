@@ -552,6 +552,7 @@ Defines when to stop the recovery:
 - `immediate` value stops the recovery after reaching the consistent state of the specified backup, or the latest available backup if the `-i/--backup_id` option is omitted.
 - `latest` value continues the recovery until all WAL segments available in the archive are applied.
 
+Default value of `--recovery-target` depends on **WAL delivery method** of restored backup: for STREAM backup it is `immediate`, for ARCHIVE - `latest`.
 
     --recovery-target-timeline=timeline
 Specifies a particular timeline to which recovery will proceed. By default, the timeline of the specified backup is used. 
@@ -699,7 +700,7 @@ Specifies the protocol to use for remote operations. Currently only the SSH prot
 - `ssh` enables the remote backup mode via SSH. This is the Default value.
 - `none` explicitly disables the remote mode. 
 
-You can omit this option if the `--remote-host` option is specified. 
+You can omit this option if the `--remote-host` option is specified.
 
     --remote-host
 Specifies the remote host IP address or hostname to connect to. 
