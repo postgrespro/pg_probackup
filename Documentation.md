@@ -602,20 +602,20 @@ You can use these options with any command.
 
     --log-level-console=log_level
     Default: info 
-Controls which message levels are sent to the console log. Valid values are verbose, log, info, notice, warning, error, and off. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The off level disables console logging.
+Controls which message levels are sent to the console log. Valid values are `verbose`, `log`, `info`, `warning`, `error`, and `off`. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The `off` level disables console logging.
 
     --log-level-file=log_level
     Default: off 
-Controls which message levels are sent to a log file. Valid values are verbose, log, info, notice, warning, error, and off. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The off level disables file logging.
+Controls which message levels are sent to a log file. Valid values are `verbose`, `log`, `info`, `warning`, `error`, and `off`. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The `off` level disables file logging.
 
     --log-filename=log_filename
     Default: pg_probackup.log 
-Defines the filenames of the created log files. The filenames are treated as a strftime pattern, so you can use %-escapes to specify time-varying filenames, as explained in log_filename. For example, if you specify the pg_probackup-%u.log pattern, pg_probackup generates a separate log file for each day of the week, with %u replaced by the corresponding decimal number: pg_probackup-1.log for Monday, pg_probackup-2.log for Tuesday, and so on.
-This option takes effect if file logging is enabled by the log-level-file option.
+Defines the filenames of the created log files. The filenames are treated as a strftime pattern, so you can use %-escapes to specify time-varying filenames, as explained in **log_filename**. For example, if you specify the pg_probackup-%u.log pattern, pg_probackup generates a separate log file for each day of the week, with %u replaced by the corresponding decimal number: pg_probackup-1.log for Monday, pg_probackup-2.log for Tuesday, and so on.
+This option takes effect if file logging is enabled by the `log-level-file` option.
 
     --error-log-filename=error_log_filename
-    Default: none 
-Defines the filenames of log files for error messages. The filenames are treated as a strftime pattern, so you can use %-escapes to specify time-varying file names, as explained in log_filename.
+    Default: none
+Defines the filenames of log files for error messages. The filenames are treated as a strftime pattern, so you can use %-escapes to specify time-varying file names, as explained in **error_log_filename**.
 If error-log-filename is not set, pg_probackup writes all error messages to stderr.
 
     --log-directory=log_directory
@@ -627,7 +627,7 @@ Defines the directory in which log files will be created. You must specify the a
 Maximum size of an individual log file. If this value is reached, the log file is rotated once a pg_probackup command is launched, except help and version commands. The zero value disables size-based rotation. Supported units: kB, MB, GB, TB (kB by default).
 
     --log-rotation-age=log_rotation_age
-    Default: 0 
+    Default: 0
 Maximum lifetime of an individual log file. If this value is reached, the log file is rotated once a pg_probackup command is launched, except help and version commands. The time of the last log file creation is stored in $BACKUP_PATH/log/log_rotation. The zero value disables time-based rotation. Supported units: ms, s, min, h, d (min by default).
 
 ##### Connection Options
@@ -679,7 +679,7 @@ Defines compression level (0 through 9, 0 being no compression and 9 being best 
 Alias for --compress-algorithm=zlib and --compress-level=1. 
 
 ##### Archiving Options
-These options can be used with `archive-push` and `archive-get` commands.
+These options can be used with [archive-push](#archive-push) and [archive-get](#archive-get) commands.
 
     --wal-file-path=wal_file_path %p
 Provides the path to the WAL file in `archive_command` and `restore_command` used by pg_probackup. The %p variable is required for correct processing.
@@ -695,10 +695,10 @@ This section describes the options related to running pg_probackup operations re
 
     --remote-proto
 Specifies the protocol to use for remote operations. Currently only the SSH protocol is supported. Possible values are:
-- ssh enables the remote backup mode via SSH. This is the Default value.
-- none explicitly disables the remote mode. 
+- `ssh` enables the remote backup mode via SSH. This is the Default value.
+- `none` explicitly disables the remote mode. 
 
-You can omit this option if the --remote-host option is specified. 
+You can omit this option if the `--remote-host` option is specified. 
 
     --remote-host
 Specifies the remote host IP address or hostname to connect to. 
@@ -924,7 +924,7 @@ You can override the settings defined in pg_probackup.conf when running the back
 
 If you define connection settings in the **pg_probackup.conf** configuration file, you can omit connection options in all the subsequent pg_probackup commands. However, if the corresponding environment variables are set, they get higher priority. The options provided on the command line overwrite both environment variables and configuration file settings.
 
-If nothing is given, the default values are taken. By default pg_probackup tries to use local connection via Unix socket (localhost on Windows) and tries to get the database name and the user name from the PGUSER environment variable or the current OS user name.
+If nothing is given, the default values are taken. By default pg_probackup tries to use local connection via Unix domain socket (localhost on Windows) and tries to get the database name and the user name from the PGUSER environment variable or the current OS user name.
 
 ##### Managing the Backup Catalog
 
