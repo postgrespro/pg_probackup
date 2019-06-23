@@ -223,7 +223,8 @@ ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/do
     - Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than 'minimal'.
     - If you are configuring backups on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
     - Set the [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter, as follows:
-        archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]
+
+            archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]
 
         Where **backup_dir** and **instance_name** refer to the already initialized **backup catalog** instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote machine.
 
@@ -753,6 +754,7 @@ Deprecated. Wait time for WAL segment streaming via replication, in seconds. By 
 - [Deleting Backups](#deleting-backups)
 
 #### Creating a Backup
+
 To create a backup, run the following command:
 
     pg_probackup backup -B backup_dir --instance instance_name -b backup_mode
@@ -772,8 +774,7 @@ Page is considered corrupted if checksumm comparison failed more than 100 times,
 
 Redardless of data checksums been enabled or not, pg_probackup always check page header "sanity".
 
-##### STREAM
-
+##### STREAM mode
 To make a STREAM backup, add the `--stream` option to the above command. For example, to create a full STREAM backup, run:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL **--stream** --temp-slot
@@ -789,7 +790,6 @@ Even if you are using [continuous archiving](#setting-up-continuous-wal-archivin
     3. Creating backup from standby of a server that generates small amount of WAL traffic and using [archive_timeout](https://www.postgresql.org/docs/9.6/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) is not an option.
 
 ##### External directories
-
 To back up a directory located outside of the data directory, use the optional **--external-dirs** parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons. For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full backup of your node instance that will be stored under the node_backup directory, run:
 
     pg_probackup backup -B backup_dir --instance node -b FULL --external-dirs=/etc/dir1:/etc/dir2
@@ -797,6 +797,7 @@ To back up a directory located outside of the data directory, use the optional *
 pg_probackup creates a separate subdirectory in the backup directory for each external directory. Since external directories included into different backups do not have to be the same, when you are restoring the cluster from an incremental backup, only those directories that belong to this particular backup will be restored. Any external directories stored in the previous backups will be ignored. To include the same directories into each backup of your instance, you can specify them in the pg_probackup.conf configuration file using the `set-config` command with the **--external-dirs** option.
 
 #### Verifying a Cluster
+
 To verify that PostgreSQL database cluster is free of corruption, run the following command:
 
     pg_probackup checkdb [-B backup_dir] [-D data_dir]
