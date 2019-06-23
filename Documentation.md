@@ -532,7 +532,7 @@ Disables block-level checksum verification to speed up validation. During automa
 Skips backup validation. You can use this option if you validate backups regularly and would like to save time when running restore operations.
 
 ###### Checkdb Options
-The following options can be used together with the [checkdb](#checkdb) command. For details on verifying PostgreSQL database cluster, see section [Verifying a Cluster](#verifying-a-cluster)
+The following options can be used together with the [checkdb](#checkdb) command. For details on verifying PostgreSQL database cluster, see section [Verifying a Cluster](#verifying-a-cluster).
 
     --amcheck
 Performs logical verification of indexes for the specified PostgreSQL instance if no corruption was found while checking data files. You must have the `amcheck` extention or the `amcheck_next` extension installed in the database to check its indexes. For databases without amcheck, index verification will be skipped.
@@ -549,8 +549,8 @@ If [continuous WAL archiving](#setting-up-continuous-wal-archiving) is configure
 
     --recovery-target=immediate|latest
 Defines when to stop the recovery:
-The `immediate` value stops the recovery after reaching the consistent state of the specified backup, or the latest available backup if the `-i/--backup_id` option is omitted.
-The `latest` value continues the recovery until all WAL segments available in the archive are applied.
+- `immediate` value stops the recovery after reaching the consistent state of the specified backup, or the latest available backup if the `-i/--backup_id` option is omitted.
+- `latest` value continues the recovery until all WAL segments available in the archive are applied.
 
     --recovery-target-timeline=timeline
 Specifies a particular timeline to which recovery will proceed. By default, the timeline of the specified backup is used. 
