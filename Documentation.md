@@ -224,14 +224,14 @@ ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/do
     - If you are configuring backups on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
     - Set the [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter, as follows:
 
-            archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]
+            archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]'
 
         Where **backup_dir** and **instance_name** refer to the already initialized **backup catalog** instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote machine.
 
 Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in ARCHIVE mode.
 
 
->NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to **backup_dir/wal/instance_name** directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero data loss` archive strategy can be achieved only by using `pg_receivewal`.
+>NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to **backup_dir/wal/instance_name** directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero data loss` archive strategy can be achieved only by using pg_receivewal.
 
 #### Backup from Standby
 
@@ -323,7 +323,7 @@ It is **not recommended** to edit pg_probackup.conf manually.
     pg_probackup show -B backup_dir
     [--help] [--instance instance_name [-i backup_id]] [--format=plain|json]
 
-Shows the contents of the backup catalog. If instance_name and backup_id are specified, shows detailed information about this backup. You can specify the --format=json option to return the result in the JSON format. By default, the contents of the backup catalog is shown as plain text.
+Shows the contents of the backup catalog. If **instance_name** and **backup_id** are specified, shows detailed information about this backup. You can specify the **--format=json** option to return the result in the JSON format. By default, the contents of the backup catalog is shown as plain text.
 
 ##### backup
 
@@ -353,8 +353,8 @@ For details, see the sections [Backup Options](#backup-options) and [Creating a 
     [logging_options]
     [remote_options]
 
-Restores the PostgreSQL instance from a backup copy located in the backup_dir backup catalog. If you specify a recovery target option, pg_probackup will find the closest backup and restores it to the specified recovery target. Otherwise, the most recent backup is used.
-For details, see the sections [Restore Options](#backup-options) and [Restoring a Cluster](#restoring-a-cluster).
+Restores the PostgreSQL instance from a backup copy located in the **backup_dir** backup catalog. If you specify a recovery target option, pg_probackup will find the closest backup and restores it to the specified recovery target. Otherwise, the most recent backup is used.
+For details, see the sections [Restore Options](#restore-options), [Recovery Target Options](#recovery-target-options) and [Restoring a Cluster](#restoring-a-cluster).
 
 ##### checkdb
 
@@ -413,7 +413,7 @@ Copies WAL files into the corresponding subdirectory of the backup catalog,  and
 Copying is done to temporary file with `.partial` suffix or, if [compression](#compression-options) is used, with `.gz.partial` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
 Copied to archive WAL segments are synced to disk.
 
-You can use archive-push in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) PostgreSQL parameter to set up [continous WAl archiving](#setting-up-continuous-wal-archiving).
+You can use `archive-push` in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) PostgreSQL parameter to set up [continous WAl archiving](#setting-up-continuous-wal-archiving).
 For details, see section [Archiving Options](#archiving-options)
 
 ##### archive-get
@@ -508,6 +508,7 @@ Disables block-level checksum verification to speed up backup.
 Skips automatic validation after successfull backup. You can use this option if you validate backups regularly and would like to save time when running backup operations.
 
 ##### Restore Options
+
 The following options can be used together with the [restore](#restore) command. Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
 
     -R | --restore-as-replica
@@ -522,7 +523,7 @@ Relocates the tablespace from the OLDDIR to the NEWDIR directory at the time of 
 Relocates an external directory included into the backup from the OLDDIR to the NEWDIR directory at the time of recovery. Both OLDDIR and NEWDIR must be absolute paths. If the path contains the equals sign (=), escape it with a backslash. This option can be specified multiple times for multiple directories. 
 
     --skip-external-dirs
-Skip external directories included into the backup with the --external-dirs option. The contents of these directories will not be restored.
+Skip external directories included into the backup with the `--external-dirs` option. The contents of these directories will not be restored.
 
     --skip-block-validation
 Disables block-level checksum verification to speed up validation. During automatic validation before restore only file-level checksums will be verified.
@@ -543,12 +544,13 @@ Skip validation of data files. Can be used only with `--amcheck` option, so only
 Checks that all heap tuples that should be indexed are actually indexed. You can use this option only together with the `--amcheck` option. Can be used only with `amcheck` extension of version 2.0 and `amcheck_next` extension of any version.
 
 ##### Recovery Target Options
+
 If [continuous WAL archiving](#setting-up-continuous-wal-archiving) is configured, you can use one of these options together with [restore](#restore) or [validate](#validate) commands to specify the moment up to which the database cluster must be restored.
 
     --recovery-target=immediate|latest
 Defines when to stop the recovery:
-- The immediate value stops the recovery after reaching the consistent state of the specified backup, or the latest available backup if the `-i/--backup_id` option is omitted.
-- The latest value continues the recovery until all WAL segments available in the archive are applied.
+The `immediate` value stops the recovery after reaching the consistent state of the specified backup, or the latest available backup if the `-i/--backup_id` option is omitted.
+The `latest` value continues the recovery until all WAL segments available in the archive are applied.
 
     --recovery-target-timeline=timeline
 Specifies a particular timeline to which recovery will proceed. By default, the timeline of the specified backup is used. 
@@ -566,7 +568,7 @@ Specifies the timestamp up to which recovery will proceed.
 Specifies the transaction ID up to which recovery will proceed.
 
     --recovery-target-inclusive=boolean
-Specifies whether to stop just after the specified recovery target (true), or just before the recovery target (false). This option can only be used together with `--recovery-target-name`, `--recovery-target-time`, `--recovery-target-lsn`, or `--recovery-target-xid` options. The default value is taken from the [recovery_target_inclusive](https://www.postgresql.org/docs/current/recovery-target-settings.html#RECOVERY-TARGET-INCLUSIVE) parameter.
+Specifies whether to stop just after the specified recovery target (true), or just before the recovery target (false). This option can only be used together with `--recovery-target-name`, `--recovery-target-time`, `--recovery-target-lsn` or `--recovery-target-xid` options. The default value is taken from the [recovery_target_inclusive](https://www.postgresql.org/docs/current/recovery-target-settings.html#RECOVERY-TARGET-INCLUSIVE) parameter.
 
     --recovery-target-action=pause|promote|shutdown
     Default: pause 
