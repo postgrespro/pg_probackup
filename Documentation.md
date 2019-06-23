@@ -90,6 +90,8 @@ Current version - 2.1.3
 
 `pg_probackup restore -B backup_dir --instance instance_name [option...]`
 
+`pg_probackup checkdb -B backup_dir --instance instance_name [-D data_dir] [option...]`
+
 `pg_probackup validate -B backup_dir [option...]`
 
 `pg_probackup merge -B backup_dir --instance instance_name -i backup_id [option...]`
@@ -100,29 +102,27 @@ Current version - 2.1.3
 
 `pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f`
 
-`pg_probackup checkdb -B backup_dir --instance instance_name [-D data_dir] [option...]`
-
 ### Overview
 
 As compared to other backup solutions, pg_probackup offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 
-- Incremental backup: page-level incremental backup of three different modes allows you to devise the backup strategy in accordance with your data flow
+- Incremental backup: page-level incremental backup allows you save to disk space, speed up backup and restore. With three different incremental modes you can plan the backup strategy in accordance with your data flow
 - Validation: Automatic data consistency checks and on-demand backup validation without actual data recovery
 - Verification: On-demand verification of PostgreSQL instance via dedicated command `checkdb`
 - Retention: Managing backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`
-- Parallelization: Running backup, restore, merge, verificaton and validation processes on multiple parallel threads
+- Parallelization: Running backup, restore, merge, delete, verificaton and validation processes on multiple parallel threads
 - Compression: Storing backup data in a compressed state to save disk space
 - Deduplication: Saving disk space by not copying the not changed non-data files ('_vm', '_fsm', etc)
 - Remote operations: Backup PostgreSQL instance located on remote machine or restore backup on it
 - Backup from replica: Avoid extra load on the master server by taking backups from a standby
 - External directories: Add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
-- Backup Catalog: get list of backups and all corresponding metadata about them in `plain` or `json` formats
+- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
 
 To manage backup data, pg_probackup creates a **backup catalog**. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single **backup catalog**.
 
 Using pg_probackup, you can take full or incremental backups:
 - FULL backups contain all the data files required to restore the database cluster.
-- Incremental backups only store the data that has changed since the previous backup. It allows to decrease the backup size and speed up backup operations. pg_probackup supports the following modes of incremental backups:
+- Incremental backups only store the data that has changed since the previous backup. It allows to decrease the backup size and speed up backup and restore operations. pg_probackup supports the following modes of incremental backups:
     - DELTA backup. In this mode, pg_probackup reads all data files in the data directory and copies only those pages that has changed since the previous backup. Note that this mode can impose read-only I/O pressure equal to a full backup.
     - PAGE backup. In this mode, pg_probackup scans all WAL files in the archive from the moment the previous full or incremental backup was taken. Newly created backups contain only the pages that were mentioned in WAL records. This requires all the WAL files since the previous backup to be present in the WAL archive. If the size of these files is comparable to the total size of the database cluster files, speedup is smaller, but the backup still takes less space. You have to configure WAL archiving as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving) to make PAGE backups.
     - PTRACK backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special PTRACK bitmap for this relation. As one page requires just one bit in the PTRACK fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly. 
@@ -153,7 +153,7 @@ To initialize the backup catalog, run the following command:
 
     pg_probackup init -B backup_dir
 
-where **backup_dir** is the path to backup catalog. If the backup_dir already exists, it must be empty. Otherwise, pg_probackup returns an error.
+where **backup_dir** is the path to backup catalog. If the **backup_dir** already exists, it must be empty. Otherwise, pg_probackup returns an error.
 
 pg_probackup creates the backup_dir backup catalog, with the following subdirectories:
 - **wal/** — directory for WAL files.
@@ -219,17 +219,15 @@ Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK
 
 #### Setting up continuous WAL archiving
 ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
-- Configure the following parameters in postgresql.conf to enable continuous archiving on the PostgreSQL server:
-    - Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than 'minimal'.
-    - If you are configuring backups on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
-    - Set the [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter, as follows:
+- Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than 'minimal'.
+- If you are configuring backups on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
+- Set the [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter, as follows:
 
-            archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]'
+        archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]'
 
-        Where **backup_dir** and **instance_name** refer to the already initialized **backup catalog** instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote machine.
+    Where **backup_dir** and **instance_name** refer to the already initialized **backup catalog** instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote machine.
 
 Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in ARCHIVE mode.
-
 
 >NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to **backup_dir/wal/instance_name** directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero data loss` archive strategy can be achieved only by using pg_receivewal.
 
@@ -252,11 +250,11 @@ Backup from the standby server has the following limitations:
 
 If you are going to use PTRACK backups, complete the following additional steps:
 - Set the parameter `ptrack_enable` to `on`.
-- Grant the rights to execute ptrack functions to the backup role: 
+- Grant the rights to execute ptrack functions to the **backup** role: 
 
         GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup;
         GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;
-- The *backup* role must have access to all the databases of the cluster.
+- The **backup** role must have access to all the databases of the cluster.
 
 ### Command-Line Reference
 #### Commands
@@ -304,8 +302,7 @@ Deletes all backups and WAL files associated with the specified instance.
     [--compress-algorithm=compression_algorithm] [--compress-level=compression_level]
     [-d dbname] [-h host] [-p port] [-U username]
     [--archive-timeout=timeout] [--external-dirs=external_directory_path]
-    [remote_options]
-    [logging_options]
+    [remote_options] [logging_options]
 
 Adds the specified connection, compression, retention, logging and external directory settings into the pg_probackup.conf configuration file, or modifies the previously defined values.
 It is **not recommended** to edit pg_probackup.conf manually.
@@ -316,7 +313,6 @@ It is **not recommended** to edit pg_probackup.conf manually.
 
 Displays the contents of the pg_probackup.conf configuration file located in the **backup_dir/backups/instance_name** directory. You can specify the `--format=json` option to return the result in the JSON format. By default, configuration settings are shown as plain text.
 To edit pg_probackup.conf, use the [set-config](#set-config) command.
-It is **not recommended** to edit pg_probackup.conf manually.
 
 ##### show
 
@@ -333,11 +329,8 @@ Shows the contents of the backup catalog. If **instance_name** and **backup_id**
     [--no-validate] [--skip-block-validation]
     [-w --no-password] [-W --password]
     [--archive-timeout=timeout] [--external-dirs=external_directory_path]
-    [connection_options]
-    [compression_options]
-    [remote_options]
-    [retention_options]
-    [logging_options]
+    [connection_options] [compression_options] [remote_options]
+    [retention_options] [logging_options]
 
 Creates a backup copy of the PostgreSQL instance. The **backup_mode** option specifies the backup mode to use.
 For details, see the sections [Backup Options](#backup-options) and [Creating a Backup](#creating-a-backup). 
@@ -349,9 +342,7 @@ For details, see the sections [Backup Options](#backup-options) and [Creating a 
     [-j num_threads] [--progress]
     [-T OLDDIR=NEWDIR] [--external-mapping=OLDDIR=NEWDIR] [--skip-external-dirs]
     [-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
-    [recovery_options]
-    [logging_options]
-    [remote_options]
+    [recovery_options] [logging_options] [remote_options]
 
 Restores the PostgreSQL instance from a backup copy located in the **backup_dir** backup catalog. If you specify a recovery target option, pg_probackup will find the closest backup and restores it to the specified recovery target. Otherwise, the most recent backup is used.
 For details, see the sections [Restore Options](#restore-options), [Recovery Target Options](#recovery-target-options) and [Restoring a Cluster](#restoring-a-cluster).
@@ -362,8 +353,7 @@ For details, see the sections [Restore Options](#restore-options), [Recovery Tar
     [-B backup_dir] [--instance instance_name] [-D data_dir]
     [--help] [-j num_threads] [--progress]
     [--skip-block-validation] [--amcheck] [--heapallindexed]
-    [logging_options]
-    [connection_options]
+    [connection_options] [logging_options]
 
 Verifyes the PostgreSQL database cluster correctness by detecting physical and logical corruption.
 For details, see the sections [Checkdb Options](#checkdb-options) and [Verifying a Cluster](#verifying-a-cluster).
@@ -374,8 +364,7 @@ For details, see the sections [Checkdb Options](#checkdb-options) and [Verifying
     [--help] [--instance instance_name] [-i backup_id]
     [-j num_threads] [--progress]
     [--skip-block-validation]
-    [recovery_options]
-    [logging_options]
+    [recovery_options] [logging_options]
 
 Verifies that all the files required to restore the cluster are present and not corrupted. If **instance_name** is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the **instance_name** without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the **instance_name** with a [recovery target option](#recovery-target-options) and/or a **backup_id**, pg_probackup checks whether it is possible to restore the cluster using these options.
 For details, see the section [Validating a Backup](#validating-a-backup).
@@ -406,8 +395,7 @@ For details, see the sections [Deleting Backups](#deleting-backups), [Retention 
     --wal-file-path %p --wal-file-name %f
     [--help] [--compress] [--compress-algorithm=compression_algorithm]
     [--compress-level=compression_level] [--overwrite]
-    [remote_options]
-    [logging_options]
+    [remote_options] [logging_options]
 
 Copies WAL files into the corresponding subdirectory of the backup catalog,  and validates the backup instance by instance_name, system-identifier. If parameters of the backup instance and the cluster do not match, this command fails with the following error message: “Refuse to push WAL segment segment_name into archive. Instance parameters mismatch.” For each WAL file moved to the backup catalog, you will see the following message in PostgreSQL logfile: “pg_probackup archive-push completed successfully”. If the files to be copied already exist in the backup catalog, pg_probackup computes and compares their checksums. If the checksums match, archive-push skips the corresponding file and returns successful execution code. Otherwise, archive-push fails with an error. If you would like to replace WAL files in the case of checksum mismatch, run the archive-push command with the --overwrite option.
 Copying is done to temporary file with `.partial` suffix or, if [compression](#compression-options) is used, with `.gz.partial` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
@@ -418,11 +406,8 @@ For details, see section [Archiving Options](#archiving-options)
 
 ##### archive-get
 
-    pg_probackup archive-get -B backup_dir --instance instance_name
-    --wal-file-path %p --wal-file-name %f
-    [--help]
-    [remote_options]
-    [logging_options]
+    pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f
+    [--help] [remote_options] [logging_options]
 
 Copies WAL files from the corresponding subdirectory of the backup catalog to the cluster's write-ahead log location. This command is automatically set by pg_probackup as part of the `restore_command` in **recovery.conf** when restoring backups using a WAL archive. You do not need to set it manually.
 
@@ -545,7 +530,7 @@ Checks that all heap tuples that should be indexed are actually indexed. You can
 
 ##### Recovery Target Options
 
-If [continuous WAL archiving](#setting-up-continuous-wal-archiving) is configured, you can use one of these options together with [restore](#restore) or [validate](#validate) commands to specify the moment up to which the database cluster must be restored.
+If [continuous WAL archiving](#setting-up-continuous-wal-archiving) is configured, you can use one of these options together with [restore](#restore) or [validate](#validate) commands to specify the moment up to which the database cluster must be restored or validated.
 
     --recovery-target=immediate|latest
 Defines when to stop the recovery:
@@ -804,17 +789,17 @@ pg_probackup creates a separate subdirectory in the backup directory for each ex
 
 To verify that PostgreSQL database cluster is free of corruption, run the following command:
 
-    pg_probackup checkdb [-B backup_dir] [-D data_dir]
+    pg_probackup checkdb [-B backup_dir [--instance instance_name]] [-D data_dir]
 
 This physical verification works similar to [page validation](#page-validation) that is done during backup with several differences:
 - `checkdb` is read-only
 - if corrupted page is detected, `checkdb` is not aborted, but carry on, until all pages in the cluster are validated
 - `checkdb` do not strictly require **the backup catalog**, so it can be used to verify database clusters that are **not** [added to the backup catalog](#adding-a-new-backup-instance).
 
-If **backup_dir** is omitted, then [connection options](#connection-options) and **data_dir** must be provided via environment variables or command-line options.
+If **backup_dir** and **instance_name** are omitted, then [connection options](#connection-options) and **data_dir** must be provided via environment variables or command-line options.
 
-Physical verification cannot detect logical inconsistencies, missing and nullified blocks or entire files.
-Extensions [amcheck](https://www.postgresql.org/docs/current/amcheck.html) and [amcheck_next](https://github.com/petergeoghegan/amcheck) provide a limited solution to this problems.
+Physical verification cannot detect logical inconsistencies, missing and nullified blocks or entire files, repercussions from PostgreSQL bugs and other wicked anomalies.
+Extensions [amcheck](https://www.postgresql.org/docs/current/amcheck.html) and [amcheck_next](https://github.com/petergeoghegan/amcheck) provide a partial solution to these problems.
 
 If you would like, in addition to physical verification, to verify all indexes in all databases using these extensions, you can specify `--amcheck` option when running [checkdb](#checkdb) command:
 
@@ -822,7 +807,7 @@ If you would like, in addition to physical verification, to verify all indexes i
 
 Physical verification can be skipped if `--skip-block-validation` option is used. For logical only verification **backup_dir** and **data_dir** are optional, only [connection options](#connection-options) are mandatory:
 
-    pg_probackup checkdb --amcheck --skip-block-validation
+    pg_probackup checkdb --amcheck --skip-block-validation [connection options]
 
 Logical verification can be done more thoroughly with option `--heapallindexed` by checking that all heap tuples that should be indexed are actually indexed, but at the higher cost of CPU, memory and I/O comsumption.
 
@@ -849,9 +834,9 @@ Where:
 - **instance_name** is the backup instance for the cluster to be restored.
 - **backup_id** specifies the backup to restore the cluster from. If you omit this option, pg_probackup uses the latest valid backup available for the specified instance. If you specify an incremental backup to restore, pg_probackup automatically restores the underlying full backup and then sequentially applies all the necessary increments. 
 
-If the cluster to restore contains tablespaces, pg_probackup restores them to their original location by default. To restore tablespaces to a different location, use the `--tablespace-mapping` option. Otherwise, restoring the cluster on the same host will fail if tablespaces are in use, because the backup would have to be written to the same directories.
+If the cluster to restore contains tablespaces, pg_probackup restores them to their original location by default. To restore tablespaces to a different location, use the `--tablespace-mapping/-T` option. Otherwise, restoring the cluster on the same host will fail if tablespaces are in use, because the backup would have to be written to the same directories.
 
-When using the `--tablespace-mapping` option, you must provide absolute paths to the old and new tablespace directories. If a path happens to contain an equals sign (=), escape it with a backslash. This option can be specified multiple times for multiple tablespaces. For example:
+When using the `--tablespace-mapping/-T` option, you must provide absolute paths to the old and new tablespace directories. If a path happens to contain an equals sign (=), escape it with a backslash. This option can be specified multiple times for multiple tablespaces. For example:
 
     pg_probackup restore -B backup_dir --instance instance_name -D data_dir -j 4 -i backup_id -T tablespace1_dir=tablespace1_newdir -T tablespace2_dir=tablespace2_newdir
 
@@ -874,6 +859,14 @@ If you have enabled [continuous WAL archiving](#setting-up-continuous-wal-archiv
 - To restore the cluster state up to a specific LSN, use recovery-target-lsn:
 
         pg_probackup restore -B backup_dir --instance instance_name --recovery-target-lsn=16/B374D848
+
+- To restore the cluster state up to a specific named restore point, use recovery-target-name:
+
+        pg_probackup restore -B backup_dir --instance instance_name --recovery-target-name='before_app_upgrade'
+
+- To restore the cluster to the latest state available in archive, use recovery-target option:
+
+        pg_probackup restore -B backup_dir --instance instance_name --recovery-target='latest'
 
 ##### Using pg_probackup in the Remote Mode
 
