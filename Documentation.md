@@ -104,7 +104,7 @@ Current version - 2.1.3
 
 As compared to other backup solutions, pg_probackup offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 
-- Incremental backup: page-level incremental backup of three different types allows you to devise the backup strategy in accordance with your data flow
+- Incremental backup: page-level incremental backup of three different modes allows you to devise the backup strategy in accordance with your data flow
 - Validation: Automatic data consistency checks and on-demand backup validation without actual data recovery
 - Verification: On-demand verification of PostgreSQL instance via dedicated command `checkdb`
 - Retention: Managing backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`
@@ -114,6 +114,7 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 - Remote operations: Backup PostgreSQL instance located on remote machine or restore backup on it
 - Backup from replica: Avoid extra load on the master server by taking backups from a standby
 - External directories: Add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
+- Backup Catalog: get list of backups and all corresponding metadata about them in `plain` or `json` formats
 
 To manage backup data, pg_probackup creates a **backup catalog**. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single **backup catalog**.
 
@@ -124,7 +125,7 @@ Using pg_probackup, you can take full or incremental backups:
     - PAGE backup. In this mode, pg_probackup scans all WAL files in the archive from the moment the previous full or incremental backup was taken. Newly created backups contain only the pages that were mentioned in WAL records. This requires all the WAL files since the previous backup to be present in the WAL archive. If the size of these files is comparable to the total size of the database cluster files, speedup is smaller, but the backup still takes less space. You have to configure WAL archiving as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving) to make PAGE backups.
     - PTRACK backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special PTRACK bitmap for this relation. As one page requires just one bit in the PTRACK fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly. 
 
-pg_probackup can take only physical online backups, and online backups require WAL for consistent recovery. So regardless of the chosen **backup type** (FULL, PAGE, DELTA, etc), all backups taken with pg_probackup must use one of the following **WAL delivery methods**:
+pg_probackup can take only physical online backups, and online backups require WAL for consistent recovery. So regardless of the chosen **backup mode** (FULL, PAGE, DELTA, etc), all backups taken with pg_probackup must use one of the following **WAL delivery methods**:
 - ARCHIVE. Such backups rely on [continuous archiving](#setting-up-continuous-wal-archiving) to ensure consistent recovery. This is the default WAL delivery method.
 
 - STREAM. Such backups include all the files required to restore the cluster to a consistent state at the time the backup was taken. Regardless of [continuous archiving](#setting-up-continuous-wal-archiving) been set up or not, the WAL segments required for consistent recovery are streamed (hence STREAM) via replication protocol during backup and included into the backup files.
@@ -163,21 +164,20 @@ pg_probackup can store backups for multiple database clusters in a single backup
 
 To add a new backup instance, run the following command:
 
-    pg_probackup add-instance -B backup_dir -D data_dir --instance instance_name
-    [remote_options]
+    pg_probackup add-instance -B backup_dir -D data_dir --instance instance_name [remote_options]
 
 where:
 - **data_dir** is the data directory of the cluster you are going to back up. To set up and use pg_probackup, write access to this directory is required.
 - **instance_name** is the name of the subdirectories that will store WAL and backup files for this cluster.
-- The optional [remote_options](#remote-options) should be used if **data_dir** is located on remote machine.
+- The optional parameters [remote_options](#remote-options) should be used if **data_dir** is located on remote machine.
 
-pg_probackup creates the **instance_name** subdirectories under the **backups/* and **wal/** directories of the backup catalog. The **backups/instance_name** directory contains the **pg_probackup.conf** configuration file that controls backup and restore settings for this backup instance. If you run this command with the [remote_options](#remote-options), used parameters will be added to **pg_probackup.conf**. For details on how to fine-tune pg_probackup configuration, see the section [Configuring pg_probackup](#configuring-pg_probackup).
+pg_probackup creates the **instance_name** subdirectories under the **backups/** and **wal/** directories of the backup catalog. The **backups/instance_name** directory contains the **pg_probackup.conf** configuration file that controls backup and restore settings for this backup instance. If you run this command with the [remote_options](#remote-options), used parameters will be added to **pg_probackup.conf**. For details on how to fine-tune pg_probackup configuration, see the section [Configuring pg_probackup](#configuring-pg_probackup).
 
 The user launching pg_probackup must have full access to **backup_dir** directory and at least read-only access to **data_dir** directory. If you specify the path to the backup catalog in the *BACKUP_PATH* environment variable, you can omit the corresponding option when running pg_probackup commands.
 
 #### Configuring the Database Cluster
 
-Although pg_probackup can be used by a superuser, it is recommended to create a separate user or role with the minimum permissions required for the chosen backup strategy. In these configuration instructions, the **backup** role is used as an example.
+Although pg_probackup can be used by a superuser, it is recommended to create a separate role with the minimum permissions required for the chosen backup strategy. In these configuration instructions, the **backup** role is used as an example.
 
 To enable backups, the following rights are required:
 
@@ -197,7 +197,7 @@ GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;
 
 Since pg_probackup needs to read cluster files directly, pg_probackup must be started on behalf of an OS user that has read access to all files and directories inside the data directory (PGDATA) you are going to back up.
 
-Depending on whether you are plan to take STREAM and/or ARCHIVE backups, PostgreSQL cluster configuration will differ, as specified in the sections below. To back up the database cluster from a standby server or create PTRACK backups, additional setup is required. For details, see the sections called [Setting up STREAM Backups](#setting-up-stream-backups), [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving), [Setting up PTRACK Backups](#setting-up-ptrack-backups) and the section called [Backup from Standby](#backup-from-standby).
+Depending on whether you are plan to take STREAM and/or ARCHIVE backups, PostgreSQL cluster configuration will differ, as specified in the sections below. To back up the database cluster from a standby server or create PTRACK backups, additional setup is required. For details, see the sections called [Setting up STREAM Backups](#setting-up-stream-backups), [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving), [Setting up PTRACK Backups](#setting-up-ptrack-backups) and the section [Backup from Standby](#backup-from-standby).
 
 #### Setting up STREAM Backups
 
@@ -211,7 +211,7 @@ To set up the cluster for STREAM backups, complete the following steps:
     - Make sure the parameter `max_wal_senders` is set high enough to leave at least one session available for the backup process.
     - Set the parameter `wal_level` to be higher than `minimal`.
 
-If you are going to take PAGE backups in STREAM mode, you also have to configure WAL archiving as explained in the section called [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving).
+Even if you are planning to take PAGE backups in STREAM mode, you have to configure WAL archiving as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving).
 
 Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in STREAM mode.
 
@@ -220,10 +220,12 @@ Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK
 #### Setting up continuous WAL archiving
 ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
 - Configure the following parameters in postgresql.conf to enable continuous archiving on the PostgreSQL server:
-    - Make sure the `wal_level` parameter is higher than 'minimal'.
-    - Set the `archive_mode` parameter. If you are configuring backups on master, `archive_mode` must be set to `on`. To perform archiving on standby, set this parameter to `always`.
-    - Set the `archive_command` parameter, as follows:
-            archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name [remote_options] --wal-file-path %p --wal-file-name %f
+    - Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than 'minimal'.
+    - Set the [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) parameter. If you are configuring backups on master, `archive_mode` must be set to `on`. To perform archiving on standby, set this parameter to `always`.
+    - Set the [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter, as follows:
+```
+        archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name [remote_options]    --wal-file-path %p --wal-file-name %f
+```
         Where **backup_dir** and **instance_name** refer to the already initialized **backup catalog** instance for this database cluster and optional parameters [remote_options](#remote-options) should be used to archive WAL to the remote machine.
 
 Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in ARCHIVE mode.
@@ -235,16 +237,16 @@ Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK
 
 For PostgreSQL 9.6 or higher, pg_probackup can take backups from a standby server. This requires the following additional setup:
 
-- On the standby server, set the parameter `hot_standby` to `on`.
-- On the master server, set the parameter `full_page_writes` to `on`.
+- On the standby server, set the parameter [hot_standby](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-HOT-STANDBY) to `on`.
+- On the master server, set the parameter [full_page_writes](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-FULL-PAGE-WRITES) to `on`.
 - To perform STREAM backup on standby, complete all steps in section [Setting up STREAM Backups](#setting-up-stream-backups)
 - To perform ARCHIVE backup on standby, complete all steps in section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving)
 
-Once these steps are complete, you can start taking FULL, PAGE, DELTA or PTRACK Backups backups of appropriate WAL delivery method, ARCHIVE or STREAM, from the standby server.
+Once these steps are complete, you can start taking FULL, PAGE, DELTA or PTRACK backups of appropriate WAL delivery method: ARCHIVE or STREAM, from the standby server.
 
 >NOTE: Backup from the standby server has the following limitations:
 - If the standby is promoted to the master during backup, the backup fails.
-- All WAL records required for the backup must contain sufficient full-page writes. This requires you to enable full_page_writes on the master, and not to use a tool like pg_compresslog as archive_command to remove full-page writes from WAL files.
+- All WAL records required for the backup must contain sufficient full-page writes. This requires you to enable `full_page_writes` on the master, and not to use a tools like **pg_compresslog** as `archive_command` to remove full-page writes from WAL files.
 
 #### Setting up PTRACK Backups
 
@@ -254,7 +256,7 @@ If you are going to use PTRACK backups, complete the following additional steps:
 
         GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup;
         GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;
-    The *backup* role must have access to all the databases of the cluster.
+- The *backup* role must have access to all the databases of the cluster.
 
 ### Command-Line Reference
 #### Commands
@@ -284,7 +286,7 @@ Initializes the backup_dir backup catalog that will store backup copies, WAL arc
     pg_probackup add-instance -B backup_dir -D data_dir --instance instance_name
     [--help] [--external-dirs=external_directory_path]
 
-Initializes a new backup instance inside the backup catalog backup_dir and generates the pg_probackup.conf configuration file that controls backup and restore settings for the cluster with the specified data_dir data directory. For details, see the section called [Adding a New Backup Instance](#adding-a-new-backup-instance). 
+Initializes a new backup instance inside the backup catalog backup_dir and generates the pg_probackup.conf configuration file that controls backup and restore settings for the cluster with the specified data_dir data directory. For details, see the section [Adding a New Backup Instance](#adding-a-new-backup-instance). 
 
 ##### del-instance
 
@@ -335,7 +337,7 @@ Shows the contents of the backup catalog. If instance_name and backup_id are spe
     [retention_options]
     [logging_options]
 
-Creates a backup copy of the PostgreSQL instance. The backup_mode option specifies the backup mode to use.
+Creates a backup copy of the PostgreSQL instance. The **backup_mode** option specifies the backup mode to use.
 For details, see the section [Creating a Backup](#creating-a-backup). 
 
 ##### restore
@@ -411,7 +413,7 @@ Copies WAL files from the corresponding subdirectory of the backup catalog to th
 
 #### Options
 
-This section describes all command-line options for pg_probackup commands. If the option value can be derived from an environment variable, this variable is specified below the command-line option, in the uppercase. Some values can be taken from the pg_probackup.conf configuration file located in the backup catalog. For details, see the section called “Configuring pg_probackup”.
+This section describes all command-line options for pg_probackup commands. If the option value can be derived from an environment variable, this variable is specified below the command-line option, in the uppercase. Some values can be taken from the pg_probackup.conf configuration file located in the backup catalog. For details, see the section “Configuring pg_probackup”.
 
 If an option is specified using more than one method, command-line input has the highest priority, while the pg_probackup.conf settings have the lowest priority.
 
@@ -455,7 +457,7 @@ Specifies the backup mode to use. Possible values are:
 - PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly. 
 
-For details, see the section called “Creating a Backup”.
+For details, see the section “Creating a Backup”.
 
     -C
     --smooth-checkpoint
@@ -555,7 +557,7 @@ Specifies whether to stop just after the specified recovery target (true), or ju
 Specifies the action the server should take when the recovery target is reached, similar to the `recovery_target_action` option in the recovery.conf configuration file.
 
 ##### Retention Options
-You can use these options together with `backup` or `delete` commands. For details on configuring retention policy, see the section called [Configuring Backup Retention Policy](#configuring-backup-retention-policy).
+You can use these options together with `backup` or `delete` commands. For details on configuring retention policy, see the section [Configuring Backup Retention Policy](#configuring-backup-retention-policy).
 
     --retention-redundancy=redundancy
     Default: 0 
@@ -671,7 +673,7 @@ Provides the name of the WAL file in archive_command and restore_command used by
 Overwrites archived WAL file. Use this option together with the archive-push command if the specified subdirectory of the backup catalog already contains this WAL file and it needs to be replaced with its newer copy. Otherwise, archive-push reports that a WAL segment already exists, and aborts the operation. If the file to replace has not changed, archive-push skips this file regardless of the --overwrite option.
 
 ##### Remote Mode Options
-This section describes the options related to running pg_probackup operations remotely via SSH. These options can be used with `add-instance`, `set-config`, `backup`, `restore`, `archive-push` and `archive-get` commands. For details on configuring remote operation mode, see the section called [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode).
+This section describes the options related to running pg_probackup operations remotely via SSH. These options can be used with `add-instance`, `set-config`, `backup`, `restore`, `archive-push` and `archive-get` commands. For details on configuring remote operation mode, see the section [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode).
 
     --remote-proto
 Specifies the protocol to use for remote operations. Currently only the SSH protocol is supported. Possible values are:
@@ -737,7 +739,7 @@ Deprecated. Wait time for WAL segment streaming via replication, in seconds. By 
 #### Creating a Backup
 To create a backup, run the following command:
 
-    pg_probackup backup -B backup_dir --instance instance_name -b **backup_mode**
+    pg_probackup backup -B backup_dir --instance instance_name -b backup_mode
 
 Where **backup_mode** can take one of the following values:
 - FULL — creates a full backup that contains all the data files of the cluster to be restored.
@@ -753,11 +755,11 @@ Page is considered corrupted if checksumm comparison failed more than 100 times,
 
 Redardless of data checksums been enabled or not, pg_probackup always check page header "sanity".
 
-##### STREAM mode
+##### STREAM
 
 To make a STREAM backup, add the `--stream` option to the above command. For example, to create a full STREAM backup, run:
 
-    pg_probackup backup -B backup_dir --instance instance_name -b FULL --stream --temp-slot
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL **--stream** --temp-slot
 
 The optional `--temp-slot` parameter ensures that the required segments remain available if the WAL is rotated before the backup is complete.
 
@@ -832,9 +834,9 @@ pg_probackup supports the remote mode that allows to perform `backup` and `resto
 
 The typical workflow is as follows:
 
- - On your local system, configure pg_probackup as explained in the section called [Installation and Setup](#installation-and-setup). For the `add-instance` and `set-config` commands, make sure to specify [remote options](#remote-options) that point to the remote server with the PostgreSQL instance.
+ - On your local system, configure pg_probackup as explained in the section [Installation and Setup](#installation-and-setup). For the `add-instance` and `set-config` commands, make sure to specify [remote options](#remote-options) that point to the remote server with the PostgreSQL instance.
 
-- If you would like to take ARCHIVE backups, configure continuous WAL archiving on the remote system as explained in the section called [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the `archive-push` and `archive-get` commands, you must specify the [remote options](#remote-options) that point to host with **backup catalog**.
+- If you would like to take ARCHIVE backups, configure continuous WAL archiving on the remote system as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the `archive-push` and `archive-get` commands, you must specify the [remote options](#remote-options) that point to host with **backup catalog**.
 
 - Run `backup` or `restore` commands with remote options on system with **backup catalog**. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively. 
 
