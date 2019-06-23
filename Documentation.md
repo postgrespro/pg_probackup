@@ -21,6 +21,7 @@ Current version - 2.1.3
     * [Commands](#commands)
         * [version](#version)
         * [help](#help)
+        * [init](#init)
         * [add-instance](#add-instance)
         * [del-instance](#del-instance)
         * [set-config](#set-config)
@@ -43,17 +44,16 @@ Current version - 2.1.3
         * [Retention Options](#retention-options)
         * [Logging Options](#logging-options)
         * [Connection Options](#connection-options)
-        * [Compression Options](#compression-ptions)
+        * [Compression Options](#compression-options)
         * [Archiving Options](#archiving-options)
         * [Remote Mode Options](#remote-mode-options)
-        * [Compression Options](#compression-ptions)
         * [Replica Options](#replica-options)
 
 5. [Usage](#usage)
     * [Creating a Backup](#creating-a-backup)
-    * [Validating a Backup](#vaklidating-a-backup)
+    * [Validating a Backup](#validating-a-backup)
     * [Restoring a Cluster](#restoring-a-cluster)
-    * [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-(pitr)-recovery)
+    * [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-pitr-recovery)
     * [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode)
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
@@ -307,14 +307,15 @@ Deletes all backups and WAL files associated with the specified instance.
     [logging_options]
 
 Adds the specified connection, compression, retention, logging and external directory settings into the pg_probackup.conf configuration file, or modifies the previously defined values.
+It is **not recommended** to edit pg_probackup.conf manually.
 
 ##### show-config
 
 	pg_probackup show-config -B backup_dir --instance instance_name [--format=plain|json]
 
-Displays the contents of the pg_probackup.conf configuration file located in the backup_dir/backups/instance_name directory. You can specify the --format=json option to return the result in the JSON format. By default, configuration settings are shown as plain text.
-To edit pg_probackup.conf, use the set-config command.
-It is **not recommended** to edit pg_probackup.conf directly.
+Displays the contents of the pg_probackup.conf configuration file located in the **backup_dir/backups/instance_name** directory. You can specify the `--format=json` option to return the result in the JSON format. By default, configuration settings are shown as plain text.
+To edit pg_probackup.conf, use the [set-config](#set-config) command.
+It is **not recommended** to edit pg_probackup.conf manually.
 
 ##### show
 
@@ -338,7 +339,7 @@ Shows the contents of the backup catalog. If instance_name and backup_id are spe
     [logging_options]
 
 Creates a backup copy of the PostgreSQL instance. The **backup_mode** option specifies the backup mode to use.
-For details, see the section [Creating a Backup](#creating-a-backup). 
+For details, see the sections [Backup Options](#backup-options) and [Creating a Backup](#creating-a-backup). 
 
 ##### restore
 
@@ -352,7 +353,7 @@ For details, see the section [Creating a Backup](#creating-a-backup).
     [remote_options]
 
 Restores the PostgreSQL instance from a backup copy located in the backup_dir backup catalog. If you specify a recovery target option, pg_probackup will find the closest backup and restores it to the specified recovery target. Otherwise, the most recent backup is used.
-For details, see the section [Restoring a Cluster](#restoring-a-cluster).
+For details, see the sections [Restore Options](#backup-options) and [Restoring a Cluster](#restoring-a-cluster).
 
 ##### validate
 
@@ -363,7 +364,8 @@ For details, see the section [Restoring a Cluster](#restoring-a-cluster).
     [recovery_options]
     [logging_options]
 
-Verifies that all the files required to restore the cluster are present and not corrupted. If *instance_name* is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the *instance_name* without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the *instance_name* with a recovery target option and/or a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
+Verifies that all the files required to restore the cluster are present and not corrupted. If **instance_name** is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the **instance_name** without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the **instance_name** with a [recovery target option](#recovery-target-options) and/or a **backup_id**, pg_probackup checks whether it is possible to restore the cluster using these options.
+For details, see the section [Validating a Backup](#validating-a-backup).
 
 ##### merge
 
@@ -409,11 +411,12 @@ For details, see section [Archiving Options](#archiving-options)
     [remote_options]
     [logging_options]
 
-Copies WAL files from the corresponding subdirectory of the backup catalog to the cluster's write-ahead log location. This command is automatically set by pg_probackup as `restore_command` in **recovery.conf** when restoring backups using a WAL archive. You do not need to set it manually.
+Copies WAL files from the corresponding subdirectory of the backup catalog to the cluster's write-ahead log location. This command is automatically set by pg_probackup as part of the `restore_command` in **recovery.conf** when restoring backups using a WAL archive. You do not need to set it manually.
 
 #### Options
 
-This section describes all command-line options for pg_probackup commands. If the option value can be derived from an environment variable, this variable is specified below the command-line option, in the uppercase. Some values can be taken from the pg_probackup.conf configuration file located in the backup catalog. For details, see the section “Configuring pg_probackup”.
+This section describes all command-line options for pg_probackup commands. If the option value can be derived from an environment variable, this variable is specified below the command-line option, in the uppercase. Some values can be taken from the pg_probackup.conf configuration file located in the backup catalog.
+For details, see the section [Configuring pg_probackup](#configuring-pg_probackup).
 
 If an option is specified using more than one method, command-line input has the highest priority, while the pg_probackup.conf settings have the lowest priority.
 
@@ -423,12 +426,12 @@ The list of general options.
     -B directory
     --backup-path=directory
     BACKUP_PATH
-Specifies the absolute path to the backup catalog. Backup catalog is a directory where all backup files and meta information are stored. Since this option is required for most of the pg_probackup commands, you are recommended to specify it once in the BACKUP_PATH environment variable. In this case, you do not need to use this option each time on the command line. 
+Specifies the absolute path to the **backup catalog**. Backup catalog is a directory where all backup files and meta information are stored. Since this option is required for most of the pg_probackup commands, you are recommended to specify it once in the BACKUP_PATH environment variable. In this case, you do not need to use this option each time on the command line. 
 
     -D directory
     --pgdata=directory
     PGDATA
-Specifies the absolute path to the data directory of the database cluster. This option is mandatory only for the init command. Other commands can take its value from the PGDATA environment variable, or from the pg_probackup.conf configuration file.
+Specifies the absolute path to the data directory of the database cluster. This option is mandatory only for the [add-instance](#add-instance) command. Other commands can take its value from the PGDATA environment variable, or from the pg_probackup.conf configuration file.
 
     -i backup_id
     -backup-id=backup_id
@@ -446,7 +449,7 @@ Shows detailed information about the options that can be used with this command.
 
 ##### Backup Options
 
-The following options can be used together with the `backup` command. Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options) and [Logging Options](#logging-options) can be used.
+The following options can be used together with the [backup](#backup) command. Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
 
     -b mode
     --backup-mode=mode
@@ -457,7 +460,7 @@ Specifies the backup mode to use. Possible values are:
 - PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly. 
 
-For details, see the section “Creating a Backup”.
+For details, see the section [Creating a Backup](#creating-a-backup).
 
     -C
     --smooth-checkpoint
@@ -469,10 +472,10 @@ Makes an STREAM backup that includes all the necessary WAL files by streaming th
 
     -S slot_name
     --slot=slot_name
-Specifies the replication slot for WAL streaming. This option can only be used together with the --stream option. 
+Specifies the replication slot for WAL streaming. This option can only be used together with the `--stream` option. 
 
     --temp-slot
-Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the --stream option. Default slot name is `pg_probackup_slot`, which can be changed via option `-S --slot`.
+Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the --stream option. Default slot name is `pg_probackup_slot`, which can be changed via option `-S / --slot`.
 
     --backup-pg-log
 Includes the log directory into the backup. This directory usually contains log messages. By default, log directory is excluded. 
@@ -480,7 +483,7 @@ Includes the log directory into the backup. This directory usually contains log 
     -E external_directory_path
     --external-dirs=external_directory_path
 
-Includes the specified directory into the backup. This option is useful to back up configuration files located outside of the data directory. If you would like to back up several external directories, separate their paths by a colon on Unix and a semicolon on Windows.
+Includes the specified directory into the backup. This option is useful to back up scripts, sql dumps and configuration files located outside of the data directory. If you would like to back up several external directories, separate their paths by a colon on Unix and a semicolon on Windows.
 
     --archive-timeout=wait_time
 Sets in seconds the timeout for WAL segment archiving and streaming. By default pg_probackup waits 300 seconds.
@@ -492,7 +495,7 @@ Disables block-level checksum verification to speed up backup.
 Skips automatic validation after successfull backup. You can use this option if you validate backups regularly and would like to save time when running backup operations.
 
 ##### Restore Options
-The following options can be used together with the `restore` command. Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options) and [Logging Options](#logging-options) can be used.
+The following options can be used together with the [restore](#restore) command. Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
 
     -R | --restore-as-replica
 Writes a minimal recovery.conf in the output directory to facilitate setting up a standby server. The password is not included. If the replication connection requires a password, you must specify the password manually. 
@@ -705,7 +708,7 @@ This section describes the options related to taking a backup from standby.
 
     --master-db=dbname
      Default: postgres, the default PostgreSQL database.
-Deprecated. Specifies the name of the database on the master server to connect to. The connection is used only for managing the backup process, so you can connect to any existing database. Can be set in the pg_probackup.conf using the set-config command. 
+Deprecated. Specifies the name of the database on the master server to connect to. The connection is used only for managing the backup process, so you can connect to any existing database. Can be set in the pg_probackup.conf using the [set-config](#set-config) command. 
 
     --master-host=host
 Deprecated. Specifies the host name of the system on which the master server is running. 
@@ -720,18 +723,18 @@ Deprecated. User name to connect as.
 
     --replica-timeout=timeout
     Default: 300 sec
-Deprecated. Wait time for WAL segment streaming via replication, in seconds. By default, pg_probackup waits 300 seconds. You can also define this parameter in the pg_probackup.conf configuration file using the set-config command.
+Deprecated. Wait time for WAL segment streaming via replication, in seconds. By default, pg_probackup waits 300 seconds. You can also define this parameter in the pg_probackup.conf configuration file using the [set-config](#set-config) command.
 
 ### Usage
 
 - [Creating a Backup](#creating-a-backup)
 - [Validating a Backup](#vaklidating-a-backup)
 - [Restoring a Cluster](#restoring-a-cluster)
-- [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-(pitr)-recovery)
+- [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-pitr-recovery)
 - [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode)
 - [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
 - [Configuring pg_probackup](#configuring-pg_probackup)
-- [Managing the Backup Catalog](#managing-the-backup-Catalog)
+- [Managing the Backup Catalog](#managing-the-backup-catalog)
 - [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
 - [Merging Backups](#merging-backups)
 - [Deleting Backups](#deleting-backups)
@@ -844,27 +847,30 @@ The typical workflow is as follows:
 
 ##### Running pg_probackup on Parallel Threads
 
-Backup, recovery, merge, delete, checkdb and validate processes can be executed on several parallel threads. This can significantly speed up pg_probackup operation given enough resources (CPU cores, disk, and network throughput).
+[Backup](#backup), [restore](#restore), [merge](#merge), [delete](#delete), [checkdb](#checkdb) and validate[#validate] processes can be executed on several parallel threads. This can significantly speed up pg_probackup operation given enough resources (CPU cores, disk, and network throughput).
 
 Parallel execution is controlled by the `-j/--threads` command line option. For example, to create a backup using four parallel threads, run:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL -j 4
 
->NOTE: Parallel recovery applies only to copying data from the backup catalog to the data directory of the cluster. When PostgreSQL server is started, WAL records need to be replayed, and this cannot be done in parallel.
+>NOTE: Parallel restore applies only to copying data from the backup catalog to the data directory of the cluster. When PostgreSQL server is started, WAL records need to be replayed, and this cannot be done in parallel.
 
 ##### Configuring pg_probackup
 
-Once the backup catalog is initialized and a new backup instance is added, you can use the pg_probackup.conf configuration file located in the backups/instance_name directory to fine-tune pg_probackup configuration.
+Once the backup catalog is initialized and a new backup instance is added, you can use the pg_probackup.conf configuration file located in the **backup_dir/backups/instance_name** directory to fine-tune pg_probackup configuration.
 
-For example, `backup` and `checkdb` commands uses a regular PostgreSQL connection. To avoid specifying these options each time on the command line, you can set them in the pg_probackup.conf configuration file using the `set-config` command.
+For example, [backup](#backup) and [checkdb](#checkdb) commands uses a regular PostgreSQL connection. To avoid specifying these options each time on the command line, you can set them in the pg_probackup.conf configuration file using the [set-config](#set-config) command.
+
+> Note: It is **not recommended** to edit pg_probackup.conf manually.
 
 Initially, pg_probackup.conf contains the following settings:
 - PGDATA — the path to the data directory of the cluster to back up.
-- system-identifier — the unique identifier of the PostgreSQL instance. 
+- system-identifier — the unique identifier of the PostgreSQL instance.
 
-Additionally, you can define remote, retention, logging and compression settings using the `set-config` command:
+Additionally, you can define [remote](#remote-options), [retention](#retention-options), [logging](#logging-options) and [compression](#compression-options) settings using the `set-config` command:
 
-    pg_probackup set-config -B backup_dir --instance instance_name --external-dirs=external_directory_path [remote_options] [connection_options] [retention_options] [logging_options]
+    pg_probackup set-config -B backup_dir --instance instance_name
+    [--external-dirs=external_directory_path] [remote_options] [connection_options] [retention_options] [logging_options]
 
 To view the current settings, run the following command:
 
