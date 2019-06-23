@@ -51,8 +51,8 @@ Current version - 2.1.3
         * [Replica Options](#replica-options)
 
 5. [Usage](#usage)
-    * [Verifying a Cluster](#verifying-a-cluster)
     * [Creating a Backup](#creating-a-backup)
+    * [Verifying a Cluster](#verifying-a-cluster)
     * [Validating a Backup](#validating-a-backup)
     * [Restoring a Cluster](#restoring-a-cluster)
     * [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-pitr-recovery)
@@ -245,7 +245,7 @@ Once these steps are complete, you can start taking FULL, PAGE, DELTA or PTRACK 
 
 Backup from the standby server has the following limitations:
 - If the standby is promoted to the master during backup, the backup fails.
-- All WAL records required for the backup must contain sufficient full-page writes. This requires you to enable `full_page_writes` on the master, and not to use a tools like **pg_compresslog** as `archive_command` to remove full-page writes from WAL files.
+- All WAL records required for the backup must contain sufficient full-page writes. This requires you to enable `full_page_writes` on the master, and not to use a tools like **pg_compresslog** as [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) to remove full-page writes from WAL files.
 
 #### Setting up PTRACK Backups
 
@@ -412,7 +412,7 @@ Copies WAL files into the corresponding subdirectory of the backup catalog,  and
 Copying is done to temporary file with `.partial` suffix or, if [compression](#compression-options) is used, with `.gz.partial` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
 Copied to archive WAL segments are synced to disk.
 
-You can use archive-push in `archive_command` PostgreSQL parameter to set up [continous WAl archiving](#setting-up-continuous-wal-archiving).
+You can use archive-push in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) PostgreSQL parameter to set up [continous WAl archiving](#setting-up-continuous-wal-archiving).
 For details, see section [Archiving Options](#archiving-options)
 
 ##### archive-get
@@ -679,13 +679,13 @@ Alias for --compress-algorithm=zlib and --compress-level=1.
 These options can be used with `archive-push` and `archive-get` commands.
 
     --wal-file-path=wal_file_path %p
-Provides the path to the WAL file in archive_command and restore_command used by pg_probackup. The %p variable is required for correct processing. 
+Provides the path to the WAL file in `archive_command` and `restore_command` used by pg_probackup. The %p variable is required for correct processing.
 
     --wal-file-name=wal_file_name %f
-Provides the name of the WAL file in archive_command and restore_command used by pg_probackup. The %f variable is required for correct processing. 
+Provides the name of the WAL file in `archive_command` and `restore_command` used by pg_probackup. The %f variable is required for correct processing. 
 
     --overwrite
-Overwrites archived WAL file. Use this option together with the archive-push command if the specified subdirectory of the backup catalog already contains this WAL file and it needs to be replaced with its newer copy. Otherwise, archive-push reports that a WAL segment already exists, and aborts the operation. If the file to replace has not changed, archive-push skips this file regardless of the --overwrite option.
+Overwrites archived WAL file. Use this option together with the archive-push command if the specified subdirectory of the backup catalog already contains this WAL file and it needs to be replaced with its newer copy. Otherwise, archive-push reports that a WAL segment already exists, and aborts the operation. If the file to replace has not changed, archive-push skips this file regardless of the `--overwrite` option.
 
 ##### Remote Mode Options
 This section describes the options related to running pg_probackup operations remotely via SSH. These options can be used with [add-instance](#add-instance), [set-config](#set-config), [backup](#backup), [restore](#restore), [archive-push](#archive-push) and [archive-get](#archive-get) commands. For details on configuring remote operation mode, see the section [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode).
@@ -802,8 +802,8 @@ To verify that PostgreSQL database cluster is free of corruption, run the follow
     pg_probackup checkdb [-B backup_dir] [-D data_dir]
 
 This physical verification works similar to [page validation](#page-validation) that is done during backup with several differences:
-- `checkdb` is read-only unlike `backup`
-- if corrupted page is detected `checkdb` is not aborted, but carry on, until every page in the cluster is validated
+- `checkdb` is read-only
+- if corrupted page is detected, `checkdb` is not aborted, but carry on, until all pages in the cluster are validated
 - `checkdb` do not strictly require **the backup catalog**, so it can be used to verify database clusters that are **not** [added to the backup catalog](#adding-a-new-backup-instance).
 
 If **backup_dir** is omitted, then [connection options](#connection-options) and **data_dir** must be provided via environment variables or command-line options.
@@ -852,11 +852,11 @@ When using the `--tablespace-mapping` option, you must provide absolute paths to
 
 Once the restore command is complete, start the database service. If you are restoring an STREAM backup, the restore is complete at once, with the cluster returned to a self-consistent state at the point when the backup was taken. For ARCHIVE backups, PostgreSQL replays all available archived WAL segments, so the cluster is restored to the latest state possible. You can change this behavior by using the [recovery target options](#recovery-target-options) with the `restore` command. Note that using the [recovery target options](#recovery-target-options) when restoring STREAM backup is possible if the WAL archive is available at least starting from the time the STREAM backup was taken.
 
->NOTE: By default, the `restore` command validates the specified backup before restoring the cluster. If you run regular backup validations and would like to save time when restoring the cluster, you can specify the `--no-validate` option to skip validation and speed up the recovery.
+>NOTE: By default, the [restore](#restore) command validates the specified backup before restoring the cluster. If you run regular backup validations and would like to save time when restoring the cluster, you can specify the `--no-validate` option to skip validation and speed up the recovery.
 
 #### Performing Point-in-Time (PITR) Recovery
 
-If you have enabled [continuous WAL archiving](#setting-up-continuous-wal-archiving) before taking backups, you can restore the cluster to its state at an arbitrary point in time (recovery target) using [recovery target options](#recovery-target-options) with the `restore` command. If `-i/--backup-id` option is omitted pg_probackup automatically chooses the backup that is the closest to the specified **recovery target** and starts the restore process, otherwise pg_probackup will try to restore **backup_id** to the specified **recovery target**.
+If you have enabled [continuous WAL archiving](#setting-up-continuous-wal-archiving) before taking backups, you can restore the cluster to its state at an arbitrary point in time (recovery target) using [recovery target options](#recovery-target-options) with the [restore](#restore) and [validate](#validate) commands. If `-i/--backup-id` option is omitted, pg_probackup automatically chooses the backup that is the closest to the specified **recovery target** and starts the restore process, otherwise pg_probackup will try to restore **backup_id** to the specified **recovery target**.
 
 - To restore the cluster state at the exact time, specify the recovery-target-time option, in the timestamp format. For example:
 
