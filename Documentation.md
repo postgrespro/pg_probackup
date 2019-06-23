@@ -552,6 +552,7 @@ Defines when to stop the recovery:
 - `immediate` value stops the recovery after reaching the consistent state of the specified backup, or the latest available backup if the `-i/--backup_id` option is omitted.
 - `latest` value continues the recovery until all WAL segments available in the archive are applied.
 
+
     --recovery-target-timeline=timeline
 Specifies a particular timeline to which recovery will proceed. By default, the timeline of the specified backup is used. 
 
