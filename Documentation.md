@@ -13,8 +13,9 @@ Current version - 2.1.3
     * [Adding a New Backup Instance](#adding-a-new-backup-instance)
     * [Configuring the Database Cluster](#configuring-the-database-cluster)
     * [Setting up STREAM Backups](#setting-up-stream-backups)
-    * [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving)
-    * [Setting up backup from Standby](#backup-from-standby)
+    * [Setting up Continuous WAL Archiving](#setting-up-continuous-wal-archiving)
+    * [Setting up Backup from Standby](#backup-from-standby)
+    * [Setting up Cluster Verification](#setting-up-cluster-verification)
     * [Setting up PTRACK Backups](#setting-up-ptrack-backups)
 
 4. [Command-Line Reference](#command-line-reference)
@@ -219,7 +220,7 @@ Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK
 
 #### Setting up continuous WAL archiving
 ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
-- Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than 'minimal'.
+- Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than `minimal`.
 - If you are configuring backups on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
 - Set the [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter, as follows:
 
@@ -246,11 +247,29 @@ Backup from the standby server has the following limitations:
 - If the standby is promoted to the master during backup, the backup fails.
 - All WAL records required for the backup must contain sufficient full-page writes. This requires you to enable `full_page_writes` on the master, and not to use a tools like **pg_compresslog** as [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) to remove full-page writes from WAL files.
 
+#### Setting up Cluster Verification
+
+Logical verification of database cluster requires the following additional setup. Role **backup** is used as an example:
+- Install extension `amcheck` or `amcheck_next` in every database of the cluster:
+
+        CREATE EXTENSION amcheck;
+
+- To perform logical verification the following rights are requiared:
+```
+GRANT SELECT ON TABLE pg_catalog.pg_am TO backup;
+GRANT SELECT ON TABLE pg_catalog.pg_class TO backup;
+GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
+GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup;
+GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup;
+GRANT EXECUTE ON FUNCTION bt_index_check(oid) TO backup;
+GRANT EXECUTE ON FUNCTION bt_index_check(oid, bool) TO backup;
+```
+
 #### Setting up PTRACK Backups
 
 If you are going to use PTRACK backups, complete the following additional steps:
 - Set the parameter `ptrack_enable` to `on`.
-- Grant the rights to execute ptrack functions to the **backup** role: 
+- Grant the rights to execute ptrack functions to the **backup** role:
 
         GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup;
         GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;
@@ -397,7 +416,8 @@ For details, see the sections [Deleting Backups](#deleting-backups), [Retention 
     [--compress-level=compression_level] [--overwrite]
     [remote_options] [logging_options]
 
-Copies WAL files into the corresponding subdirectory of the backup catalog,  and validates the backup instance by instance_name, system-identifier. If parameters of the backup instance and the cluster do not match, this command fails with the following error message: “Refuse to push WAL segment segment_name into archive. Instance parameters mismatch.” For each WAL file moved to the backup catalog, you will see the following message in PostgreSQL logfile: “pg_probackup archive-push completed successfully”. If the files to be copied already exist in the backup catalog, pg_probackup computes and compares their checksums. If the checksums match, archive-push skips the corresponding file and returns successful execution code. Otherwise, archive-push fails with an error. If you would like to replace WAL files in the case of checksum mismatch, run the archive-push command with the --overwrite option.
+Copies WAL files into the corresponding subdirectory of the backup catalog and validates the backup instance by **instance_name** and **system-identifier**. If parameters of the backup instance and the cluster do not match, this command fails with the following error message: “Refuse to push WAL segment segment_name into archive. Instance parameters mismatch.” For each WAL file moved to the backup catalog, you will see the following message in PostgreSQL logfile: “pg_probackup archive-push completed successfully”.
+If the files to be copied already exist in the backup catalog, pg_probackup computes and compares their checksums. If the checksums match, archive-push skips the corresponding file and returns successful execution code. Otherwise, archive-push fails with an error. If you would like to replace WAL files in the case of checksum mismatch, run the archive-push command with the `--overwrite` option.
 Copying is done to temporary file with `.partial` suffix or, if [compression](#compression-options) is used, with `.gz.partial` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
 Copied to archive WAL segments are synced to disk.
 
@@ -473,14 +493,13 @@ Makes an STREAM backup that includes all the necessary WAL files by streaming th
 Specifies the replication slot for WAL streaming. This option can only be used together with the `--stream` option. 
 
     --temp-slot
-Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the --stream option. Default slot name is `pg_probackup_slot`, which can be changed via option `-S / --slot`.
+Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the `--stream` option. Default slot name is `pg_probackup_slot`, which can be changed via option `-S / --slot`.
 
     --backup-pg-log
 Includes the log directory into the backup. This directory usually contains log messages. By default, log directory is excluded. 
 
     -E external_directory_path
     --external-dirs=external_directory_path
-
 Includes the specified directory into the backup. This option is useful to back up scripts, sql dumps and configuration files located outside of the data directory. If you would like to back up several external directories, separate their paths by a colon on Unix and a semicolon on Windows.
 
     --archive-timeout=wait_time
@@ -589,21 +608,23 @@ You can use these options with any command.
 
     --log-level-console=log_level
     Default: info 
-Controls which message levels are sent to the console log. Valid values are `verbose`, `log`, `info`, `warning`, `error`, and `off`. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The `off` level disables console logging.
+Controls which message levels are sent to the console log. Valid values are `verbose`, `log`, `info`, `warning`, `error` and `off`. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The `off` level disables console logging.
+
+>NOTE: all console log messages are going to stderr, so output from [show](#show) and [show-config](#show-config) commands do not mingle with log messages.
 
     --log-level-file=log_level
     Default: off 
-Controls which message levels are sent to a log file. Valid values are `verbose`, `log`, `info`, `warning`, `error`, and `off`. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The `off` level disables file logging.
+Controls which message levels are sent to a log file. Valid values are `verbose`, `log`, `info`, `warning`, `error` and `off`. Each level includes all the levels that follow it. The later the level, the fewer messages are sent. The `off` level disables file logging.
 
     --log-filename=log_filename
-    Default: pg_probackup.log 
+    Default: pg_probackup.log
 Defines the filenames of the created log files. The filenames are treated as a strftime pattern, so you can use %-escapes to specify time-varying filenames, as explained in **log_filename**. For example, if you specify the pg_probackup-%u.log pattern, pg_probackup generates a separate log file for each day of the week, with %u replaced by the corresponding decimal number: pg_probackup-1.log for Monday, pg_probackup-2.log for Tuesday, and so on.
 This option takes effect if file logging is enabled by the `log-level-file` option.
 
     --error-log-filename=error_log_filename
     Default: none
-Defines the filenames of log files for error messages. The filenames are treated as a strftime pattern, so you can use %-escapes to specify time-varying file names, as explained in **error_log_filename**.
-If error-log-filename is not set, pg_probackup writes all error messages to stderr.
+Defines the filenames of log files for error messages only. The filenames are treated as a strftime pattern, so you can use %-escapes to specify time-varying filenames, as explained in **error_log_filename**. For example, if you specify the error-pg_probackup-%u.log pattern, pg_probackup generates a separate log file for each day of the week, with %u replaced by the corresponding decimal number: error-pg_probackup-1.log for Monday, error-pg_probackup-2.log for Tuesday, and so on.
+This option is useful for troubleshooting and monitoring.
 
     --log-directory=log_directory
     Default: $BACKUP_PATH/log/
@@ -663,7 +684,7 @@ For the `archive-push` command, the pglz compression algorithm is not supported.
 Defines compression level (0 through 9, 0 being no compression and 9 being best compression). This option can be used together with --compress-algorithm option.
 
     --compress
-Alias for --compress-algorithm=zlib and --compress-level=1. 
+Alias for `--compress-algorithm=zlib` and `--compress-level=1`.
 
 ##### Archiving Options
 These options can be used with [archive-push](#archive-push) and [archive-get](#archive-get) commands.
@@ -779,9 +800,9 @@ Even if you are using [continuous archiving](#setting-up-continuous-wal-archivin
     3. Creating backup from standby of a server that generates small amount of WAL traffic and using [archive_timeout](https://www.postgresql.org/docs/9.6/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) is not an option.
 
 ##### External directories
-To back up a directory located outside of the data directory, use the optional **--external-dirs** parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons. For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full backup of your node instance that will be stored under the node_backup directory, run:
+To back up a directory located outside of the data directory, use the optional **--external-dirs** parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons. For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full backup of your **instance_name** instance that will be stored under the **backup_dir** directory, run:
 
-    pg_probackup backup -B backup_dir --instance node -b FULL --external-dirs=/etc/dir1:/etc/dir2
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=/etc/dir1:/etc/dir2
 
 pg_probackup creates a separate subdirectory in the backup directory for each external directory. Since external directories included into different backups do not have to be the same, when you are restoring the cluster from an incremental backup, only those directories that belong to this particular backup will be restored. Any external directories stored in the previous backups will be ignored. To include the same directories into each backup of your instance, you can specify them in the pg_probackup.conf configuration file using the `set-config` command with the **--external-dirs** option.
 
@@ -898,7 +919,7 @@ Once the backup catalog is initialized and a new backup instance is added, you c
 
 For example, [backup](#backup) and [checkdb](#checkdb) commands uses a regular PostgreSQL connection. To avoid specifying these options each time on the command line, you can set them in the pg_probackup.conf configuration file using the [set-config](#set-config) command.
 
-> Note: It is **not recommended** to edit pg_probackup.conf manually.
+>NOTE: It is **not recommended** to edit pg_probackup.conf manually.
 
 Initially, pg_probackup.conf contains the following settings:
 - PGDATA — the path to the data directory of the cluster to back up.
@@ -942,11 +963,10 @@ BACKUP INSTANCE 'node'
 ============================================================================================================================================
  Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI    Time    Data   Start LSN    Stop LSN    Status 
 ============================================================================================================================================
- node        10       P7XDQV  2018-04-29 05:32:59+03  DELTA   STREAM     1 / 0                11s    19MB   0/15000060   0/15000198  OK
- node        10       P7XDJA  2018-04-29 05:28:36+03  PTRACK  STREAM     1 / 0                21s    32MB   0/13000028   0/13000198  OK
- node        10       P7XDHU  2018-04-29 05:27:59+03  PTRACK  STREAM     1 / 0                31s    33MB   0/11000028   0/110001D0  OK
+ node        10       P7XDQV  2018-04-29 05:32:59+03  DELTA   STREAM     1 / 1                11s    19MB   0/15000060   0/15000198  OK
+ node        10       P7XDJA  2018-04-29 05:28:36+03  PTRACK  STREAM     1 / 1                21s    32MB   0/13000028   0/13000198  OK
+ node        10       P7XDHU  2018-04-29 05:27:59+03  PAGE    STREAM     1 / 1                31s    33MB   0/11000028   0/110001D0  OK
  node        10       P7XDHB  2018-04-29 05:27:15+03  FULL    STREAM     1 / 0                11s    39MB   0/F000028    0/F000198   OK
- node        10       P7XDFT  2018-04-29 05:26:25+03  PTRACK  STREAM     1 / 0                11s    40MB   0/D000028    0/D000198   OK
 ```
 
 For each backup, the following information is provided:
@@ -1105,7 +1125,7 @@ BACKUP INSTANCE 'node'
  node        10       P7XDJA  2019-04-04 05:28:36+03  FULL    STREAM     1 / 0                 5s   200MB   0/13000028   0/13000198  OK
 ```
 
->Note: The Time field for the merged backup displays the time required for the merge.
+>NOTE: The Time field for the merged backup displays the time required for the merge.
 
 ##### Merging Backups
 
