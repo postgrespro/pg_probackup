@@ -190,7 +190,8 @@ Although pg_probackup can be used by a superuser, it is recommended to create a 
 
 To enable backups, the following rights are required:
 
-```CREATE ROLE backup WITH LOGIN;
+```
+CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION current_setting(text) TO backup;
 GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup;
