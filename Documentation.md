@@ -709,7 +709,7 @@ User name to connect as.
 
     -w
     --no-password
- Disables a password prompt. If the server requires password authentication and a password is not available by other means such as a .pgpass file, the connection attempt will fail. This option can be useful in batch jobs and scripts where no user is present to enter a password. 
+ Disables a password prompt. If the server requires password authentication and a password is not available by other means such as a [.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) file, the connection attempt will fail. This option can be useful in batch jobs and scripts where no user is present to enter a password. 
 
     -W
     --password
@@ -720,7 +720,7 @@ You can use these options together with [backup](#backup) and [archive-push](#ar
 
     --compress-algorithm=compression_algorithm
     Default: none
-Defines the algorithm to use for compressing data files. Possible values are zlib, pglz, and none. If set to zlib or pglz, this option enables compression. By default, compression is disabled.
+Defines the algorithm to use for compressing data files. Possible values are `zlib`, `pglz`, and `none`. If set to zlib or pglz, this option enables compression. By default, compression is disabled.
 For the `archive-push` command, the pglz compression algorithm is not supported.
 
     --compress-level=compression_level
@@ -731,13 +731,13 @@ Defines compression level (0 through 9, 0 being no compression and 9 being best 
 Alias for `--compress-algorithm=zlib` and `--compress-level=1`.
 
 ##### Archiving Options
-These options can be used with [archive-push](#archive-push) and [archive-get](#archive-get) commands.
+These options can be used with [archive-push](#archive-push) and [archive-get](#archive-get) commands in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) and [restore_command](https://www.postgresql.org/docs/current/archive-recovery-settings.html#RESTORE-COMMAND) settings.
 
     --wal-file-path=wal_file_path %p
-Provides the path to the WAL file in `archive_command` and `restore_command` used by pg_probackup. The %p variable is required for correct processing.
+Provides the path to the WAL file in `archive_command` and `restore_command`. The %p variable is required for correct processing.
 
     --wal-file-name=wal_file_name %f
-Provides the name of the WAL file in `archive_command` and `restore_command` used by pg_probackup. The %f variable is required for correct processing. 
+Provides the name of the WAL file in `archive_command` and `restore_command`. The %f variable is required for correct processing. 
 
     --overwrite
 Overwrites archived WAL file. Use this option together with the archive-push command if the specified subdirectory of the backup catalog already contains this WAL file and it needs to be replaced with its newer copy. Otherwise, archive-push reports that a WAL segment already exists, and aborts the operation. If the file to replace has not changed, archive-push skips this file regardless of the `--overwrite` option.
@@ -774,6 +774,7 @@ Specifies a string of SSH command-line options.
 
 ##### Replica Options
 This section describes the options related to taking a backup from standby.
+
 >NOTE: Starting from pg_probackup 2.0.24, backups can be taken from standby without connecting to the master server, so these options are no longer required. In lower versions, pg_probackup had to connect to the master to determine recovery time — the earliest moment for which you can restore a consistent state of the database cluster.
 
     --master-db=dbname
@@ -844,9 +845,9 @@ STREAM backups include all the WAL segments required to restore the cluster to a
 
 Even if you are using [continuous archiving](#setting-up-continuous-wal-archiving), STREAM backups can still be useful in the following cases:
 
-    1. STREAM backups can be restored on the server that has no file access to WAL archive.
-    2. STREAM backups enable you to restore the cluster state at the point in time for which WAL files are no longer available.
-    3. Creating backup from standby of a server that generates small amount of WAL traffic and using [archive_timeout](https://www.postgresql.org/docs/9.6/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) is not an option.
+- STREAM backups can be restored on the server that has no file access to WAL archive.
+- STREAM backups enable you to restore the cluster state at the point in time for which WAL files are no longer available.
+- Backup in STREAM mode can be taken from standby of a server, that generates small amount of WAL traffic, without long waiting for WAL segment to fill up.
 
 ##### External directories
 To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons.
@@ -857,7 +858,7 @@ For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full 
 
 pg_probackup creates a separate subdirectory in the backup directory for each external directory. Since external directories included into different backups do not have to be the same, when you are restoring the cluster from an incremental backup, only those directories that belong to this particular backup will be restored. Any external directories stored in the previous backups will be ignored.
 
-To include the same directories into each backup of your instance, you can specify them in the pg_probackup.conf configuration file using the `set-config` command with the `--external-dirs` option.
+To include the same directories into each backup of your instance, you can specify them in the pg_probackup.conf configuration file using the [set-config](#set-config) command with the `--external-dirs` option.
 
 #### Verifying a Cluster
 
@@ -888,17 +889,21 @@ Logical verification can be done more thoroughly with option `--heapallindexed` 
 
 #### Validating Backups
 
-pg_probackup calculates checksums for each file in a backup during `backup` process. The process of checking  checksumms of backup data files is called `backup validation`. By default validation is run immediately after backup is taken and right before restore, to detect possible backup corruptions.
+pg_probackup calculates checksums for each file in a backup during backup process. The process of checking  checksumms of backup data files is called `backup validation`. By default validation is run immediately after backup is taken and right before restore, to detect possible backup corruptions.
 
-If you would like to skip backup validation, you can specify the `--no-validate` option when running `backup` and `restore` commands.
+If you would like to skip backup validation, you can specify the `--no-validate` option when running [backup](#backup) and [restore](#restore) commands.
 
-To ensure that all the required backup files are present and can be used to restore the database cluster, you can run the [validate](#validate) command with the exact recovery target options you are going to use for recovery. If you omit all the parameters, all backups are validated.
+To ensure that all the required backup files are present and can be used to restore the database cluster, you can run the [validate](#validate) command with the exact recovery target options you are going to use for recovery.
 
 For example, to check that you can restore the database cluster from a backup copy up to the specified xid transaction ID, run this command:
 
     pg_probackup validate -B backup_dir --instance instance_name --recovery-target-xid=xid
 
 If validation completes successfully, pg_probackup displays the corresponding message. If validation fails, you will receive an error message with the exact time, transaction ID and LSN up to which the recovery is possible.
+
+If you specify *backup_id* via `-i/--backup-id` option, then only backup copy with specified backup ID will be validated. If *backup_id* belong to incremental backup, then all its parents starting from FULL backup will be validated.
+
+If you omit all the parameters, all backups are validated.
 
 #### Restoring a Cluster
 
@@ -918,7 +923,9 @@ When using the `--tablespace-mapping/-T` option, you must provide absolute paths
 
     pg_probackup restore -B backup_dir --instance instance_name -D data_dir -j 4 -i backup_id -T tablespace1_dir=tablespace1_newdir -T tablespace2_dir=tablespace2_newdir
 
-Once the restore command is complete, start the database service. If you are restoring an STREAM backup, the restore is complete at once, with the cluster returned to a self-consistent state at the point when the backup was taken. For ARCHIVE backups, PostgreSQL replays all available archived WAL segments, so the cluster is restored to the latest state possible. You can change this behavior by using the [recovery target options](#recovery-target-options) with the `restore` command. Note that using the [recovery target options](#recovery-target-options) when restoring STREAM backup is possible if the WAL archive is available at least starting from the time the STREAM backup was taken.
+Once the restore command is complete, start the database service.
+
+If you are restoring an STREAM backup, the restore is complete at once, with the cluster returned to a self-consistent state at the point when the backup was taken. For ARCHIVE backups, PostgreSQL replays all available archived WAL segments, so the cluster is restored to the latest state possible. You can change this behavior by using the [recovery target options](#recovery-target-options) with the `restore` command. Note that using the [recovery target options](#recovery-target-options) when restoring STREAM backup is possible if the WAL archive is available at least starting from the time the STREAM backup was taken.
 
 >NOTE: By default, the [restore](#restore) command validates the specified backup before restoring the cluster. If you run regular backup validations and would like to save time when restoring the cluster, you can specify the `--no-validate` option to skip validation and speed up the recovery.
 
@@ -994,11 +1001,11 @@ To view the current settings, run the following command:
 
     pg_probackup show-config -B backup_dir --instance instance_name
 
-You can override the settings defined in pg_probackup.conf when running the backup command via corresponding environment variables and/or command line options.
+You can override the settings defined in pg_probackup.conf when running pg_probackups [commands](#commands) via corresponding environment variables and/or command line options.
 
 ###### Specifying Connection Settings
 
-If you define connection settings in the *pg_probackup.conf* configuration file, you can omit connection options in all the subsequent pg_probackup commands. However, if the corresponding environment variables are set, they get higher priority. The options provided on the command line overwrite both environment variables and configuration file settings.
+If you define connection settings in the 'pg_probackup.conf' configuration file, you can omit connection options in all the subsequent pg_probackup commands. However, if the corresponding environment variables are set, they get higher priority. The options provided on the command line overwrite both environment variables and configuration file settings.
 
 If nothing is given, the default values are taken. By default pg_probackup tries to use local connection via Unix domain socket (localhost on Windows) and tries to get the database name and the user name from the PGUSER environment variable or the current OS user name.
 
