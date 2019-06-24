@@ -178,7 +178,7 @@ Where:
 - *instance_name* is the name of the subdirectories that will store WAL and backup files for this cluster.
 - The optional parameters [remote_options](#remote-mode-options) should be used if *data_dir* is located on remote machine.
 
-pg_probackup creates the *instance_name* subdirectories under the 'backups/' and 'wal/' directories of the backup catalog. The 'backups/*instance_name*' directory contains the 'pg_probackup.conf' configuration file that controls backup and restore settings for this backup instance. If you run this command with the [remote_options](#remote-mode-options), used parameters will be added to 'pg_probackup.conf'.
+pg_probackup creates the *instance_name* subdirectories under the 'backups/' and 'wal/' directories of the backup catalog. The 'backups/*instance_name*' directory contains the 'pg_probackup.conf' configuration file that controls pg_probackup settings for this backup instance. If you run this command with the [remote_options](#remote-mode-options), used parameters will be added to 'pg_probackup.conf'.
 
 For details on how to fine-tune pg_probackup configuration, see the section [Configuring pg_probackup](#configuring-pg_probackup).
 
@@ -316,7 +316,7 @@ For details, see the secion [Initializing the Backup Catalog](#initializing-the-
     pg_probackup add-instance -B backup_dir -D data_dir --instance instance_name
     [--help] [--external-dirs=external_directory_path]
 
-Initializes a new backup instance inside the backup catalog backup_dir and generates the pg_probackup.conf configuration file that controls backup and restore settings for the cluster with the specified data_dir data directory.
+Initializes a new backup instance inside the backup catalog *backup_dir* and generates the pg_probackup.conf configuration file that controls pg_probackup settings for the cluster with the specified *data_dir* data directory.
 
 For details, see the section [Adding a New Backup Instance](#adding-a-new-backup-instance). 
 
@@ -395,6 +395,7 @@ For details, see the sections [Restore Options](#restore-options), [Recovery Tar
     [connection_options] [logging_options]
 
 Verifyes the PostgreSQL database cluster correctness by detecting physical and logical corruption.
+
 For details, see the sections [Checkdb Options](#checkdb-options) and [Verifying a Cluster](#verifying-a-cluster).
 
 ##### validate
@@ -493,7 +494,9 @@ Shows detailed information about the options that can be used with this command.
 
 ##### Backup Options
 
-The following options can be used together with the [backup](#backup) command. Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
+The following options can be used together with the [backup](#backup) command.
+
+Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
 
     -b mode
     --backup-mode=mode
@@ -540,7 +543,9 @@ Skips automatic validation after successfull backup. You can use this option if 
 
 ##### Restore Options
 
-The following options can be used together with the [restore](#restore) command. Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
+The following options can be used together with the [restore](#restore) command.
+
+Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
 
     -R | --restore-as-replica
 Writes a minimal recovery.conf in the output directory to facilitate setting up a standby server. The password is not included. If the replication connection requires a password, you must specify the password manually. 
@@ -563,7 +568,9 @@ Disables block-level checksum verification to speed up validation. During automa
 Skips backup validation. You can use this option if you validate backups regularly and would like to save time when running restore operations.
 
 ###### Checkdb Options
-The following options can be used together with the [checkdb](#checkdb) command. For details on verifying PostgreSQL database cluster, see section [Verifying a Cluster](#verifying-a-cluster).
+The following options can be used together with the [checkdb](#checkdb) command.
+
+For details on verifying PostgreSQL database cluster, see section [Verifying a Cluster](#verifying-a-cluster).
 
     --amcheck
 Performs logical verification of indexes for the specified PostgreSQL instance if no corruption was found while checking data files. You must have the `amcheck` extention or the `amcheck_next` extension installed in the database to check its indexes. For databases without amcheck, index verification will be skipped.
@@ -609,7 +616,9 @@ Specifies whether to stop just after the specified recovery target (true), or ju
 Specifies [the action](https://www.postgresql.org/docs/current/recovery-target-settings.html#RECOVERY-TARGET-ACTION) the server should take when the recovery target is reached.
 
 ##### Retention Options
-You can use these options together with [backup](#backup) and [delete](#delete) commands. For details on configuring retention policy, see the section [Configuring Backup Retention Policy](#configuring-backup-retention-policy).
+You can use these options together with [backup](#backup) and [delete](#delete) commands.
+
+For details on configuring retention policy, see the section [Configuring Backup Retention Policy](#configuring-backup-retention-policy).
 
     --retention-redundancy=redundancy
     Default: 0 
@@ -733,7 +742,9 @@ Provides the name of the WAL file in `archive_command` and `restore_command` use
 Overwrites archived WAL file. Use this option together with the archive-push command if the specified subdirectory of the backup catalog already contains this WAL file and it needs to be replaced with its newer copy. Otherwise, archive-push reports that a WAL segment already exists, and aborts the operation. If the file to replace has not changed, archive-push skips this file regardless of the `--overwrite` option.
 
 ##### Remote Mode Options
-This section describes the options related to running pg_probackup operations remotely via SSH. These options can be used with [add-instance](#add-instance), [set-config](#set-config), [backup](#backup), [restore](#restore), [archive-push](#archive-push) and [archive-get](#archive-get) commands. For details on configuring remote operation mode, see the section [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode).
+This section describes the options related to running pg_probackup operations remotely via SSH. These options can be used with [add-instance](#add-instance), [set-config](#set-config), [backup](#backup), [restore](#restore), [archive-push](#archive-push) and [archive-get](#archive-get) commands.
+
+For details on configuring remote operation mode, see the section [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode).
 
     --remote-proto
 Specifies the protocol to use for remote operations. Currently only the SSH protocol is supported. Possible values are:
@@ -1142,7 +1153,7 @@ If you would like to also remove the WAL files that are no longer required for a
 
     pg_probackup delete -B backup_dir --instance instance_name --delete-expired --delete-wal
 
->NOTE: Alternatively, you can use the --delete-expired, --merge-expired and --delete-wal options together with the `backup` command to remove and merge the outdated backup copies once the new backup is created.
+>NOTE: Alternatively, you can use the `--delete-expired`, `--merge-expired` and `--delete-wal` options together with the [backup](#backup) command to remove and merge the outdated backup copies once the new backup is created.
 
 Since incremental backups require that their parent full backup and all the preceding incremental backups are available, if any of such backups expire, they still cannot be removed while at least one incremental backup in this chain satisfies the retention policy. To avoid keeping expired backups that are still required to restore an active incremental one, you can merge them with this backup using the `--merge-expired` option when running [backup](#backup) or [delete](#delete) commands.
 
@@ -1162,7 +1173,7 @@ BACKUP INSTANCE 'node'
  node        10       P7XDFT  2019-03-29 05:26:25+03  FULL    STREAM     1 / 0               11s   200MB   0/D000028    0/D000198   OK
 ```
 
-Even though P7XDHB and P7XDHU backups are outside the retention window, P7XDHB and P7XDHU cannot be removed as it invalidates the succeeding incremental backups P7XDJA and P7XDQV that are still required, so if you run the `delete` command with the `--delete-expired` option, only the P7XDFT full backup will be removed.
+Even though P7XDHB and P7XDHU backups are outside the retention window, they cannot be removed as it invalidates the succeeding incremental backups P7XDJA and P7XDQV that are still required, so if you run the `delete` command with the `--delete-expired` option, only the P7XDFT full backup will be removed.
 
 With the `--merge-expired` option, the P7XDJA backup is merged with the underlying P7XDHU and P7XDHB backups and becomes a full one, so there is no need to keep these expired backups anymore:
 
