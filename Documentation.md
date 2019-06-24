@@ -178,7 +178,7 @@ Where:
 - *instance_name* is the name of the subdirectories that will store WAL and backup files for this cluster.
 - The optional parameters [remote_options](#remote-mode-options) should be used if *data_dir* is located on remote machine.
 
-pg_probackup creates the *instance_name* subdirectories under the 'backups/' and 'wal/' directories of the backup catalog. The 'backups/instance_name' directory contains the 'pg_probackup.conf' configuration file that controls backup and restore settings for this backup instance. If you run this command with the [remote_options](#remote-mode-options), used parameters will be added to 'pg_probackup.conf'.
+pg_probackup creates the *instance_name* subdirectories under the 'backups/' and 'wal/' directories of the backup catalog. The 'backups/*instance_name*' directory contains the 'pg_probackup.conf' configuration file that controls backup and restore settings for this backup instance. If you run this command with the [remote_options](#remote-mode-options), used parameters will be added to 'pg_probackup.conf'.
 
 For details on how to fine-tune pg_probackup configuration, see the section [Configuring pg_probackup](#configuring-pg_probackup).
 
@@ -237,7 +237,7 @@ Where *backup_dir* and *instance_name* refer to the already initialized backup c
 
 Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in ARCHIVE mode.
 
->NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to 'backup_dir/wal/instance_name' directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero data loss` archive strategy can be achieved only by using pg_receivewal.
+>NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to '*backup_dir*/wal/*instance_name*' directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero data loss` archive strategy can be achieved only by using pg_receivewal.
 
 #### Backup from Standby
 
@@ -345,7 +345,7 @@ It is **not recommended** to edit pg_probackup.conf manually.
 
 	pg_probackup show-config -B backup_dir --instance instance_name [--format=plain|json]
 
-Displays the contents of the pg_probackup.conf configuration file located in the 'backup_dir/backups/instance_name' directory. You can specify the `--format=json` option to return the result in the JSON format. By default, configuration settings are shown as plain text.
+Displays the contents of the pg_probackup.conf configuration file located in the '*backup_dir*/backups/*instance_name*' directory. You can specify the `--format=json` option to return the result in the JSON format. By default, configuration settings are shown as plain text.
 
 To edit pg_probackup.conf, use the [set-config](#set-config) command.
 
@@ -962,7 +962,7 @@ Parallel execution is controlled by the `-j/--threads` command line option. For 
 
 ##### Configuring pg_probackup
 
-Once the backup catalog is initialized and a new backup instance is added, you can use the pg_probackup.conf configuration file located in the 'backup_dir/backups/instance_name' directory to fine-tune pg_probackup configuration.
+Once the backup catalog is initialized and a new backup instance is added, you can use the pg_probackup.conf configuration file located in the '*backup_dir*/backups/*instance_name*' directory to fine-tune pg_probackup configuration.
 
 For example, [backup](#backup) and [checkdb](#checkdb) commands uses a regular PostgreSQL connection. To avoid specifying these options each time on the command line, you can set them in the pg_probackup.conf configuration file using the [set-config](#set-config) command.
 
@@ -986,7 +986,7 @@ You can override the settings defined in pg_probackup.conf when running the back
 
 ###### Specifying Connection Settings
 
-If you define connection settings in the 'pg_probackup.conf' configuration file, you can omit connection options in all the subsequent pg_probackup commands. However, if the corresponding environment variables are set, they get higher priority. The options provided on the command line overwrite both environment variables and configuration file settings.
+If you define connection settings in the *pg_probackup.conf* configuration file, you can omit connection options in all the subsequent pg_probackup commands. However, if the corresponding environment variables are set, they get higher priority. The options provided on the command line overwrite both environment variables and configuration file settings.
 
 If nothing is given, the default values are taken. By default pg_probackup tries to use local connection via Unix domain socket (localhost on Windows) and tries to get the database name and the user name from the PGUSER environment variable or the current OS user name.
 
@@ -1125,7 +1125,7 @@ The sample output is as follows:
 
 By default, all backup copies created with pg_probackup are stored in the specified backup catalog. To save disk space, you can configure retention policy and periodically clean up redundant backup copies accordingly.
 
-To configure retention policy, set one or more of the following variables in the pg_probackup.conf file:
+To configure retention policy, set one or more of the following variables in the pg_probackup.conf file via [set-config](#set-config):
 
 - retention-redundancy — specifies the number of full backup copies to keep in the backup catalog.
 - retention-window — defines the earliest point in time for which pg_probackup can complete the recovery. This option is set in the number of days from the current moment. For example, if retention-window=7, pg_probackup must keep at least one full backup copy that is older than seven days, with all the corresponding WAL files.
