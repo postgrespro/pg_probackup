@@ -524,7 +524,7 @@ Makes an STREAM backup that includes all the necessary WAL files by streaming th
 Specifies the replication slot for WAL streaming. This option can only be used together with the `--stream` option. 
 
     --temp-slot
-Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the `--stream` option. Default slot name is `pg_probackup_slot`, which can be changed via option `-S / --slot`.
+Creates a temporary physical replication slot for streaming WAL from the backed up PostgreSQL instance. It ensures that all the required WAL segments remain available if WAL is rotated while the backup is in progress. This option can only be used together with the `--stream` option. Default slot name is `pg_probackup_slot`, which can be changed via option `--slot/-S`.
 
     --backup-pg-log
 Includes the log directory into the backup. This directory usually contains log messages. By default, log directory is excluded. 
@@ -610,7 +610,7 @@ Specifies the timestamp up to which recovery will proceed.
 Specifies the transaction ID up to which recovery will proceed.
 
     --recovery-target-inclusive=boolean
-Specifies whether to stop just after the specified recovery target (true), or just before the recovery target (false). This option can only be used together with `--recovery-target-name`, `--recovery-target-time`, `--recovery-target-lsn` or `--recovery-target-xid` options. The default value is taken from the [recovery_target_inclusive](https://www.postgresql.org/docs/current/recovery-target-settings.html#RECOVERY-TARGET-INCLUSIVE) parameter.
+Specifies whether to stop just after the specified recovery target (true), or just before the recovery target (false). This option can only be used together with `--recovery-target-name`, `--recovery-target-time`, `--recovery-target-lsn` or `--recovery-target-xid` options. The default depends on [recovery_target_inclusive](https://www.postgresql.org/docs/current/recovery-target-settings.html#RECOVERY-TARGET-INCLUSIVE) parameter.
 
     --recovery-target-action=pause|promote|shutdown
     Default: pause 
@@ -721,17 +721,17 @@ You can use these options together with [backup](#backup) and [archive-push](#ar
     --compress-algorithm=compression_algorithm
     Default: none
 Defines the algorithm to use for compressing data files. Possible values are `zlib`, `pglz`, and `none`. If set to zlib or pglz, this option enables compression. By default, compression is disabled.
-For the `archive-push` command, the pglz compression algorithm is not supported.
+For the [archive-push](#archive-push) command, the pglz compression algorithm is not supported.
 
     --compress-level=compression_level
     Default: 1
-Defines compression level (0 through 9, 0 being no compression and 9 being best compression). This option can be used together with --compress-algorithm option.
+Defines compression level (0 through 9, 0 being no compression and 9 being best compression). This option can be used together with `--compress-algorithm` option.
 
     --compress
 Alias for `--compress-algorithm=zlib` and `--compress-level=1`.
 
 ##### Archiving Options
-These options can be used with [archive-push](#archive-push) and [archive-get](#archive-get) commands in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) and [restore_command](https://www.postgresql.org/docs/current/archive-recovery-settings.html#RESTORE-COMMAND) settings.
+These options can be used with [archive-push](#archive-push) command in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) setting and [archive-get](#archive-get) command in [restore_command](https://www.postgresql.org/docs/current/archive-recovery-settings.html#RESTORE-COMMAND) setting.
 
     --wal-file-path=wal_file_path %p
 Provides the path to the WAL file in `archive_command` and `restore_command`. The %p variable is required for correct processing.
