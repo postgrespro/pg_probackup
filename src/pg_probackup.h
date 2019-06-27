@@ -553,7 +553,8 @@ extern parray *catalog_get_backup_list(time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
-											  TimeLineID tli);
+											  TimeLineID tli,
+											  time_t current_start_time);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list);

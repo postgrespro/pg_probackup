@@ -2,6 +2,7 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+import shutil
 
 
 module_name = 'backup'
@@ -1472,6 +1473,197 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # self.backup_node(
         #     backup_dir, 'node', node, backup_type='ptrack',
         #     datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_choosing(self):
+        """
+        PAGE3 <- RUNNING(parent should be FULL)
+        PAGE2 <- OK
+        PAGE1 <- CORRUPT
+        FULL
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        page1_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        page2_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change PAGE1 to ERROR
+        self.change_backup_status(backup_dir, 'node', page1_id, 'ERROR')
+
+        # PAGE3
+        page3_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--log-level-file=LOG'])
+
+        log_file_path = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file_path) as f:
+            log_file_content = f.read()
+
+        self.assertIn(
+            "WARNING: Backup {0} has invalid parent: {1}. "
+            "Cannot be a parent".format(page2_id, page1_id),
+            log_file_content)
+
+        self.assertIn(
+            "WARNING: Backup {0} has status: ERROR. "
+            "Cannot be a parent".format(page1_id),
+            log_file_content)
+
+        self.assertIn(
+            "Parent backup: {0}".format(full_id),
+            log_file_content)
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node', backup_id=page3_id)['parent-backup-id'],
+            full_id)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_choosing_1(self):
+        """
+        PAGE3 <- RUNNING(parent should be FULL)
+        PAGE2 <- OK
+        PAGE1 <- (missing)
+        FULL
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        page1_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        page2_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Delete PAGE1
+        shutil.rmtree(
+            os.path.join(backup_dir, 'backups', 'node', page1_id))
+
+        # PAGE3
+        page3_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--log-level-file=LOG'])
+
+        log_file_path = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file_path) as f:
+            log_file_content = f.read()
+
+        self.assertIn(
+            "WARNING: Backup {0} has missing parent: {1}. "
+            "Cannot be a parent".format(page2_id, page1_id),
+            log_file_content)
+
+        self.assertIn(
+            "Parent backup: {0}".format(full_id),
+            log_file_content)
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node', backup_id=page3_id)['parent-backup-id'],
+            full_id)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_choosing_2(self):
+        """
+        PAGE3 <- RUNNING(backup should fail)
+        PAGE2 <- OK
+        PAGE1 <- OK
+        FULL  <- (missing)
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        page1_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        page2_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Delete FULL
+        shutil.rmtree(
+            os.path.join(backup_dir, 'backups', 'node', full_id))
+
+        # PAGE3
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page', options=['--log-level-file=LOG'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because FULL backup is missing"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Failed to find a valid backup chain',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn(
+                'ERROR: Valid backup on current timeline is not found. '
+                'Create new FULL backup before an incremental one.',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node')[2]['status'],
+            'ERROR')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
