@@ -356,7 +356,7 @@ prepare_page(ConnectionArgs *arguments,
 			((strict && !is_ptrack_support) || !strict))
 		{
 			/* show this message for checkdb or backup without ptrack support */
-			elog(WARNING, "CORRUPTION in file %s, block %u",
+			elog(WARNING, "Corruption detected in file \"%s\", block %u",
 						file->path, blknum);
 		}
 
