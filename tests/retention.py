@@ -247,11 +247,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         backup_id_a = self.backup_node(backup_dir, 'node', node)
         backup_id_b = self.backup_node(backup_dir, 'node', node)
 
-        # Change FULL B backup status to ERROR
+        # Change FULLb backup status to ERROR
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # FULLb  ERROR
         # FULLa  OK
+
         # Take PAGEa1 backup
         page_id_a1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -259,57 +260,69 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 OK
         # FULLb  ERROR
         # FULLa  OK
-        # Change FULL B backup status to OK
+
+        # Change FULLb backup status to OK
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa1 backup status to ERROR
+        # Change PAGEa1 and FULLa to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
 
         # PAGEa1 ERROR
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
+
         page_id_b1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # PAGEb1 OK
         # PAGEa1 ERROR
         # FULLb  OK
-        # FULLa  OK
-        # Now we start to play with first generation of PAGE backups
-        # Change PAGEb1 status to ERROR
-        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        # FULLa  ERROR
 
-        # Change PAGEa1 status to OK
+        # Now we start to play with first generation of PAGE backups
+        # Change PAGEb1 and FULLb to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # Change PAGEa1 and FULLa to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
+
         page_id_a2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
-        # Change PAGEa2 status to ERROR
-        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
 
-        # Change PAGEb1 status to OK
+        # Change PAGEa2 and FULLa to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
+
+        # Change PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
+
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        # Change PAGEa2 status to OK
+        # Change PAGEa2 and FULla to OK
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb2 OK
         # PAGEa2 OK
@@ -321,14 +334,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Purge backups
         backups = os.path.join(backup_dir, 'backups', 'node')
         for backup in os.listdir(backups):
-            if backup in [page_id_a2, page_id_b2, 'pg_probackup.conf']:
-                continue
-
-            with open(
-                    os.path.join(
-                        backups, backup, "backup.control"), "a") as conf:
-                conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
-                    datetime.now() - timedelta(days=3)))
+            if backup not in [page_id_a2, page_id_b2, 'pg_probackup.conf']:
+                with open(
+                        os.path.join(
+                            backups, backup, "backup.control"), "a") as conf:
+                    conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                        datetime.now() - timedelta(days=3)))
 
         self.delete_expired(
             backup_dir, 'node',
@@ -372,32 +383,38 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 OK
         # FULLb  ERROR
         # FULLa  OK
-        # Change FULL B backup status to OK
+
+        # Change FULLb backup status to OK
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa1 backup status to ERROR
+        # Change PAGEa1 and FULLa backup status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
 
         # PAGEa1 ERROR
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
+
         page_id_b1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # PAGEb1 OK
         # PAGEa1 ERROR
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
+
         # Now we start to play with first generation of PAGE backups
         # Change PAGEb1 status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # Change PAGEa1 status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
         page_id_a2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -405,24 +422,28 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
-        # Change PAGEa2 status to ERROR
-        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
 
-        # Change PAGEb1 status to OK
+        # Change PAGEa2 and FULLa status to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
+
+        # Change PAGEb1 and FULLb status to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        # Change PAGEa2 status to OK
+        # Change PAGEa2 and FULLa status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb2 OK
         # PAGEa2 OK
@@ -461,11 +482,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         backup_id_a = self.backup_node(backup_dir, 'node', node)
         backup_id_b = self.backup_node(backup_dir, 'node', node)
 
-        # Change FULL B backup status to ERROR
+        # Change FULLb backup status to ERROR
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # FULLb  ERROR
         # FULLa  OK
+
         # Take PAGEa1 backup
         page_id_a1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -473,7 +495,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 OK
         # FULLb  ERROR
         # FULLa  OK
-        # Change FULL B backup status to OK
+
+        # Change FULLb to OK
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         # Change PAGEa1 backup status to ERROR
@@ -482,6 +505,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 ERROR
         # FULLb  OK
         # FULLa  OK
+
         page_id_b1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -489,41 +513,49 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 ERROR
         # FULLb  OK
         # FULLa  OK
-        # Now we start to play with first generation of PAGE backups
-        # Change PAGEb1 status to ERROR
-        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
 
-        # Change PAGEa1 status to OK
+        # Now we start to play with first generation of PAGE backups
+        # Change PAGEb1 and FULLb to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # Change PAGEa1 to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
+
         page_id_a2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
-        # Change PAGEa2 status to ERROR
-        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
 
-        # Change PAGEb1 status to OK
+        # Change PAGEa2 and FULLa to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
+
+        # Change PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
+
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        # Change PAGEa2 status to OK
+        # Change PAGEa2 and FULLa to OK
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb2 OK
         # PAGEa2 OK
@@ -535,14 +567,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Purge backups
         backups = os.path.join(backup_dir, 'backups', 'node')
         for backup in os.listdir(backups):
-            if backup in [page_id_a2, page_id_b2, 'pg_probackup.conf']:
-                continue
-
-            with open(
-                    os.path.join(
-                        backups, backup, "backup.control"), "a") as conf:
-                conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
-                    datetime.now() - timedelta(days=3)))
+            if backup not in [page_id_a2, page_id_b2, 'pg_probackup.conf']:
+                with open(
+                        os.path.join(
+                            backups, backup, "backup.control"), "a") as conf:
+                    conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                        datetime.now() - timedelta(days=3)))
 
         output = self.delete_expired(
             backup_dir, 'node',
@@ -808,12 +838,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Change PAGEa1 backup status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
-        # Change PAGEb1 backup status to ERROR
+        # Change PAGEb1 and FULLb backup status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a2 = self.backup_node(
@@ -825,20 +856,22 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEb1 backup status to OK
+        # Change PAGEb1 and FULLb backup status to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa2 backup status to ERROR
+        # Change PAGEa2 and FULLa backup status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -851,17 +884,21 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
         # Change PAGEb2 and PAGEb1  status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
 
+        # and FULL stuff
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
         # PAGEb2 ERROR
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a3 = self.backup_node(
@@ -874,7 +911,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         # Change PAGEa3 status to ERROR
@@ -882,6 +919,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Change PAGEb2 status to OK
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         page_id_b3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -1203,7 +1241,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_window_error_backups(self):
         """
         PAGE ERROR

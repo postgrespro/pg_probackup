@@ -441,22 +441,47 @@ catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
 }
 
 /*
- * Find the last completed backup on given timeline
+ * Find the latest valid child of latest valid FULL backup on given timeline
  */
 pgBackup *
 catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
 {
 	int			i;
-	pgBackup   *backup = NULL;
+	pgBackup   *full_backup = NULL;
 
 	/* backup_list is sorted in order of descending ID */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		backup = (pgBackup *) parray_get(backup_list, (size_t) i);
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
 
-		if ((backup->status == BACKUP_STATUS_OK ||
-			backup->status == BACKUP_STATUS_DONE) && backup->tli == tli)
-			return backup;
+		if ((backup->backup_mode == BACKUP_MODE_FULL &&
+			(backup->status == BACKUP_STATUS_OK ||
+			 backup->status == BACKUP_STATUS_DONE)) && backup->tli == tli)
+		{
+			full_backup = backup;
+			break;
+		}
+	}
+
+	/* Failed to find valid FULL backup to fulfill ancestor role */
+	if (!full_backup)
+		return NULL;
+
+	/* FULL backup is found, lets find his latest child */
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
+
+		if (is_parent(full_backup->start_time, backup, true))
+		{
+
+			/* only valid descendants are acceptable */
+			if (backup->status == BACKUP_STATUS_OK ||
+				backup->status == BACKUP_STATUS_DONE)
+			{
+				return backup;
+			}
+		}
 	}
 
 	return NULL;

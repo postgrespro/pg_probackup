@@ -89,7 +89,62 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_delete_archive_mix_compress_and_non_compressed_segments(self):
-        """stub"""
+        """delete full backups"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(
+            backup_dir, 'node', node, compress=False)
+        node.slow_start()
+
+        # full backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.pgbench_init(scale=10)
+
+        # Restart archiving with compression
+        self.set_archiving(backup_dir, 'node', node, compress=True)
+
+        node.restart()
+
+        # full backup
+        self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--retention-redundancy=3',
+                '--delete-expired'])
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--retention-redundancy=3',
+                '--delete-expired'])
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=[
+                '--retention-redundancy=3',
+                '--delete-expired'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_delete_increment_page(self):
@@ -358,11 +413,12 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         backup_id_a = self.backup_node(backup_dir, 'node', node)
         backup_id_b = self.backup_node(backup_dir, 'node', node)
 
-        # Change FULL B backup status to ERROR
+        # Change FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # FULLb  ERROR
         # FULLa  OK
+
         # Take PAGEa1 backup
         page_id_a1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -370,15 +426,17 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 OK
         # FULLb  ERROR
         # FULLa  OK
-        # Change FULL B backup status to OK
+
+        # Change FULLb to OK
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa1 backup status to ERROR
+        # Change PAGEa1 to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
 
         # PAGEa1 ERROR
         # FULLb  OK
         # FULLa  OK
+
         page_id_b1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -386,41 +444,49 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 ERROR
         # FULLb  OK
         # FULLa  OK
+
         # Now we start to play with first generation of PAGE backups
-        # Change PAGEb1 status to ERROR
+        # Change PAGEb1 and FULLb status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # Change PAGEa1 status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
+
         page_id_a2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
-        # Change PAGEa2 status to ERROR
-        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
 
-        # Change PAGEb1 status to OK
+        # Change PAGEa2 and FULla to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
+
+        # Change PAGEb1 and FULlb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
+
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        # Change PAGEa2 status to OK
+        # Change PAGEa2 and FULLa status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         # PAGEb2 OK
         # PAGEa2 OK
@@ -478,16 +544,15 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Take FULL BACKUPs
         backup_id_a = self.backup_node(backup_dir, 'node', node)
-
         backup_id_b = self.backup_node(backup_dir, 'node', node)
 
-        # Change FULLb backup status to ERROR
+        # Change FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         page_id_a1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        # Change FULLb backup status to OK
+        # Change FULLb to OK
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         # Change PAGEa1 backup status to ERROR
@@ -505,15 +570,16 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # FULLb  OK
         # FULLa  OK
 
-        # Change PAGEa1 backup status to OK
+        # Change PAGEa1 to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
-        # Change PAGEb1 backup status to ERROR
+        # Change PAGEb1 and FULLb backup status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a2 = self.backup_node(
@@ -522,20 +588,22 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEb1 backup status to OK
+        # Change PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa2 backup status to ERROR
+        # Change PAGEa2 and FULLa to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -545,17 +613,21 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
-        # Change PAGEb2 and PAGEb1  status to ERROR
+        # Change PAGEb2, PAGEb1 and FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # Change FULLa to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb2 ERROR
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a3 = self.backup_node(
@@ -566,14 +638,15 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         # Change PAGEa3 status to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
 
-        # Change PAGEb2 status to OK
+        # Change PAGEb2 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         page_id_b3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -587,7 +660,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # FULLb  OK
         # FULLa  OK
 
-        # Change PAGEa3, PAGEa2 and PAGEb1 status to OK
+        # Change PAGEa3, PAGEa2 and PAGEb1 to OK
         self.change_backup_status(backup_dir, 'node', page_id_a3, 'OK')
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
