@@ -1150,8 +1150,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 
 		if ((int)hdr.arg < 0) /* read error */
 		{
-			errno = -(int)hdr.arg;
-			return -1;
+			return (int)hdr.arg;
 		}
 
 		blknum = hdr.arg;
