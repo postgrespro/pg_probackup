@@ -585,7 +585,7 @@ backup_data_file(backup_files_arg* arguments,
 	}
 
 	if (file->size % BLCKSZ != 0)
-		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
+		elog(WARNING, "File: \"%s\", invalid file size %zu", file->path, file->size);
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -622,7 +622,7 @@ backup_data_file(backup_files_arg* arguments,
 			if (rc == PAGE_CHECKSUM_MISMATCH && is_ptrack_support)
 				goto RetryUsingPtrack;
 			if (rc < 0)
-				elog(ERROR, "Failed to read file %s: %s",
+				elog(ERROR, "Failed to read file \"%s\": %s",
 					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
 			n_blocks_read = rc;
 		}
@@ -1209,10 +1209,7 @@ check_data_file(ConnectionArgs *arguments,
 	}
 
 	if (file->size % BLCKSZ != 0)
-	{
-		fclose(in);
-		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
-	}
+		elog(WARNING, "File: \"%s\", invalid file size %zu", file->path, file->size);
 
 	/*
 	 * Compute expected number of blocks in the file.
