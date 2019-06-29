@@ -798,12 +798,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Take FULL BACKUPs
         backup_id_a = self.backup_node(backup_dir, 'node', node)
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
 
         backup_id_b = self.backup_node(backup_dir, 'node', node)
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
 
         # Change FULLb backup status to ERROR
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
@@ -811,13 +811,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         page_id_a1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
 
-        # Change FULLb backup status to OK
+        # Change FULLb  to OK
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa1 backup status to ERROR
+        # Change PAGEa1 to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
 
         # PAGEa1 ERROR
@@ -832,13 +832,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # FULLb  OK
         # FULLa  OK
 
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
 
-        # Change PAGEa1 backup status to OK
+        # Change PAGEa1 to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
-        # Change PAGEb1 and FULLb backup status to ERROR
+        # Change PAGEb1 and FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
@@ -850,8 +850,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         page_id_a2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
 
         # PAGEa2 OK
         # PAGEb1 ERROR
@@ -859,11 +859,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEb1 and FULLb backup status to OK
+        # Change PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa2 and FULLa backup status to ERROR
+        # Change PAGEa2 and FULLa to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
         self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
 
@@ -876,8 +876,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
 
         # PAGEb2 OK
         # PAGEa2 ERROR
@@ -886,7 +886,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # FULLb  OK
         # FULLa  ERROR
 
-        # Change PAGEb2 and PAGEb1  status to ERROR
+        # Change PAGEb2 and PAGEb1 to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
 
@@ -903,8 +903,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         page_id_a3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
-        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
-        pgbench.wait()
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
 
         # PAGEa3 OK
         # PAGEb2 ERROR
@@ -914,11 +914,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEa3 status to ERROR
+        # Change PAGEa3 to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
 
-        # Change PAGEb2 status to OK
+        # Change PAGEb2, PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
         page_id_b3 = self.backup_node(
@@ -928,7 +929,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa3 ERROR
         # PAGEb2 OK
         # PAGEa2 ERROR
-        # PAGEb1 ERROR
+        # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
         # FULLa  OK
@@ -949,15 +950,14 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Check that page_id_a3 and page_id_a2 are both direct descendants of page_id_a1
         self.assertEqual(
-            self.show_pb(backup_dir, 'node', backup_id=page_id_a3)['parent-backup-id'],
+            self.show_pb(
+                backup_dir, 'node', backup_id=page_id_a3)['parent-backup-id'],
             page_id_a1)
 
         self.assertEqual(
-            self.show_pb(backup_dir, 'node', backup_id=page_id_a2)['parent-backup-id'],
+            self.show_pb(
+                backup_dir, 'node', backup_id=page_id_a2)['parent-backup-id'],
             page_id_a1)
-
-        print("Backups {0} and {1} are children of {2}".format(
-            page_id_a3, page_id_a2, page_id_a1))
 
         # Purge backups
         backups = os.path.join(backup_dir, 'backups', 'node')
