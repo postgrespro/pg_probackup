@@ -1941,15 +1941,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # FULLb  OK
         # FULLa  OK
 
-        # Change PAGEa1 backup status to OK
+        # Change PAGEa1 to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
-        # Change PAGEb1 backup status to ERROR
+        # Change PAGEb1 and FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a2 = self.backup_node(
@@ -1958,20 +1959,22 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEb1 backup status to OK
+        # Change PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa2 backup status to ERROR
+        # Change PAGEa2 and FULL to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -1981,17 +1984,21 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
-        # Change PAGEb2 and PAGEb1  status to ERROR
+        # Change PAGEb2, PAGEb1 and FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # Change FULLa to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb2 ERROR
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a3 = self.backup_node(
@@ -2002,14 +2009,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEa3 status to ERROR
+        # Change PAGEa3 and FULLa to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
 
-        # Change PAGEb2 status to OK
+        # Change PAGEb2, PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         page_id_b3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -2018,15 +2027,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEa3 ERROR
         # PAGEb2 OK
         # PAGEa2 ERROR
-        # PAGEb1 ERROR
+        # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
-        # Change PAGEa3, PAGEa2 and PAGEb1 status to OK
+        # Change PAGEa3, PAGEa2 and FULLa status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a3, 'OK')
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
-        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb3 OK
         # PAGEa3 OK
