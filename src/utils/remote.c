@@ -5,6 +5,12 @@
 #include <sys/wait.h>
 #include <signal.h>
 
+#ifdef WIN32
+#define __thread __declspec(thread)
+#else
+#include <pthread.h>
+#endif
+
 #include "pg_probackup.h"
 #include "file.h"
 
@@ -52,7 +58,7 @@ static int split_options(int argc, char* argv[], int max_options, char* options)
 	return argc;
 }
 
-static int child_pid;
+static __thread int child_pid;
 
 #if 0
 static void kill_child(void)
