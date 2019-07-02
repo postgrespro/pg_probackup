@@ -577,6 +577,7 @@ extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 extern bool launch_agent(void);
 extern void launch_ssh(char* argv[]);
+extern void wait_ssh(void);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
 #define COMPRESS_LEVEL_DEFAULT 1

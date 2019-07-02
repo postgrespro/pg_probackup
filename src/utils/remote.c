@@ -53,12 +53,21 @@ static int split_options(int argc, char* argv[], int max_options, char* options)
 }
 
 static int child_pid;
+
 #if 0
 static void kill_child(void)
 {
 	kill(child_pid, SIGTERM);
 }
 #endif
+
+
+void wait_ssh(void)
+{
+	int status;
+	waitpid(child_pid, &status, 0);
+	elog(LOG, "SSH process %d is terminated with status %d",  child_pid, status);
+}
 
 #ifdef WIN32
 void launch_ssh(char* argv[])

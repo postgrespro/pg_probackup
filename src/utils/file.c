@@ -344,6 +344,7 @@ fio_disconnect(void)
 		SYS_CHECK(close(fio_stdout));
 		fio_stdin = 0;
 		fio_stdout = 0;
+		wait_ssh();
 	}
 }
 
