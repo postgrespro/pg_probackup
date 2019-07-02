@@ -534,6 +534,9 @@ do_backup_instance(PGconn *backup_conn)
 		}
 	}
 
+	/* ssh connection to longer needed */
+	fio_disconnect();
+
 	/* Notify end of backup */
 	pg_stop_backup(&current, pg_startbackup_conn);
 
@@ -679,6 +682,9 @@ do_backup(time_t start_time, bool no_validate)
 	 * belogns to the same instance.
 	 */
 	check_system_identifiers(backup_conn, instance_config.pgdata);
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
 
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
@@ -2142,6 +2148,9 @@ backup_files(void *arg)
 		else
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
 
 	/* Close connection */
 	if (arguments->conn_arg.conn)
