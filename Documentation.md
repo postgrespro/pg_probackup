@@ -107,7 +107,7 @@ Current version - 2.1.3
 
 As compared to other backup solutions, pg_probackup offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 
-- Incremental backup: page-level incremental backup allows you save to disk space, speed up backup and restore. With three different incremental modes you can plan the backup strategy in accordance with your data flow
+- Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes you can plan the backup strategy in accordance with your data flow
 - Validation: Automatic data consistency checks and on-demand backup validation without actual data recovery
 - Verification: On-demand verification of PostgreSQL instance via dedicated command `checkdb`
 - Retention: Managing backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`
@@ -778,7 +778,7 @@ Specifies remote host user for SSH connection. If you omit this option, the curr
 Specifies pg_probackup installation directory on the remote system.
 
     --ssh-options
-Specifies a string of SSH command-line options.
+Specifies a string of SSH command-line options. For example, the following options can used to set keep-alive for ssh connections opened by pg_probackup: `--ssh-options='-o ServerAliveCountMax=5 -o ServerAliveInterval=60'`. Full list of possible options can be found here: (https://linux.die.net/man/5/ssh_config)[https://linux.die.net/man/5/ssh_config]
 
 #### Replica Options
 
