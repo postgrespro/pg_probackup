@@ -452,22 +452,23 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             filename = filename_orig + '.partial'
             file = os.path.join(wals_dir, filename)
 
+        # emulate stale .partial file
         with open(file, 'a') as f:
             f.write(b"blahblah")
             f.flush()
             f.close()
 
         self.switch_wal_segment(node)
-        sleep(15)
+        sleep(20)
 
         # check that segment is archived
         if self.archive_compress:
             filename_orig = filename_orig + '.gz'
 
         file = os.path.join(wals_dir, filename_orig)
-
         self.assertTrue(os.path.isfile(file))
 
+        # successful validate means that archive-push reused stale wal segment
         self.validate_pb(
             backup_dir, 'node',
             options=['--recovery-target-xid={0}'.format(xid)])

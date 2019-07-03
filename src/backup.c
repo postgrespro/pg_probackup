@@ -344,6 +344,9 @@ do_backup_instance(PGconn *backup_conn)
 			dir_list_file(backup_files_list, parray_get(external_dirs, i),
 						  false, true, false, i+1, FIO_DB_HOST);
 
+	/* close ssh session in main thread */
+	fio_disconnect();
+
 	/* Sanity check for backup_files_list, thank you, Windows:
 	 * https://github.com/postgrespro/pg_probackup/issues/48
 	 */
@@ -512,6 +515,9 @@ do_backup_instance(PGconn *backup_conn)
 		parray_free(prev_backup_filelist);
 	}
 
+	/* Notify end of backup */
+	pg_stop_backup(&current, pg_startbackup_conn);
+
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in backup_files_list.
 	 */
@@ -532,13 +538,16 @@ do_backup_instance(PGconn *backup_conn)
 				break;
 			}
 		}
+
+		if (!pg_control)
+			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
+							pg_control_path);
+
+		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
 	}
 
-	/* Notify end of backup */
-	pg_stop_backup(&current, pg_startbackup_conn);
-
-	if (current.from_replica && !exclusive_backup)
-		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
+	/* close ssh session in main thread */
+	fio_disconnect();
 
 	/* Add archived xlog files into the list of files of this backup */
 	if (stream_wal)
@@ -2142,6 +2151,9 @@ backup_files(void *arg)
 		else
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
 
 	/* Close connection */
 	if (arguments->conn_arg.conn)

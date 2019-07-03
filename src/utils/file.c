@@ -333,6 +333,21 @@ int fio_open(char const* path, int mode, fio_location location)
 	return fd;
 }
 
+
+/* Close ssh session */
+void
+fio_disconnect(void)
+{
+	if (fio_stdin)
+	{
+		SYS_CHECK(close(fio_stdin));
+		SYS_CHECK(close(fio_stdout));
+		fio_stdin = 0;
+		fio_stdout = 0;
+		wait_ssh();
+	}
+}
+
 /* Open stdio file */
 FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 {
@@ -340,14 +355,30 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 
 	if (fio_is_remote(location))
 	{
-		int flags = O_RDWR|O_CREAT;
+		int flags = 0;
 		int fd;
 		if (strcmp(mode, PG_BINARY_W) == 0) {
-			flags |= O_TRUNC|PG_BINARY;
-		} else if (strncmp(mode, PG_BINARY_R, strlen(PG_BINARY_R)) == 0) {
-			flags |= PG_BINARY;
+			flags = O_TRUNC|PG_BINARY|O_RDWR|O_CREAT;
+		} else if (strcmp(mode, "w") == 0) {
+			flags = O_TRUNC|O_RDWR|O_CREAT;
+		} else if (strcmp(mode, PG_BINARY_R) == 0) {
+			flags = O_RDONLY|PG_BINARY;
+		} else if (strcmp(mode, "r") == 0) {
+			flags = O_RDONLY;
+		} else if (strcmp(mode, PG_BINARY_R "+") == 0) {
+			/* stdio fopen("rb+") actually doesn't create unexisted file, but probackup frequently
+			 * needs to open existed file or create new one if not exists.
+			 * In stdio it can be done using two fopen calls: fopen("r+") and if failed then fopen("w").
+			 * But to eliminate extra call which especially critical in case of remote connection
+			 * we change r+ semantic to create file if not exists.
+			 */
+			flags = O_RDWR|O_CREAT|PG_BINARY;
+		} else if (strcmp(mode, "r+") == 0) { /* see comment above */
+			flags |= O_RDWR|O_CREAT;
 		} else if (strcmp(mode, "a") == 0) {
-			flags |= O_APPEND;
+			flags |= O_CREAT|O_RDWR|O_APPEND;
+		} else {
+			Assert(false);
 		}
 		fd = fio_open(path, flags, location);
 		if (fd >= 0)

@@ -469,16 +469,74 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                'WARNING: Corruption detected in file',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'ERROR: Data file corruption',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+            if self.remote:
+                self.assertTrue(
+                    "ERROR: Failed to read file" in e.message and
+                    "data file checksum mismatch" in e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    'WARNING: Corruption detected in file',
+                    e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+                self.assertIn(
+                    'ERROR: Data file corruption',
+                    e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_truncate_misaligned(self):
+        """
+        make node, truncate file to size not even to BLCKSIZE,
+        take backup
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100000) i")
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        heap_size = node.safe_psql(
+            "postgres",
+            "select pg_relation_size('t_heap')")
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+            f.truncate(int(heap_size) - 4096)
+            f.flush()
+            f.close
+
+        output = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"], return_id=False)
+
+        self.assertIn("WARNING: File", output)
+        self.assertIn("invalid file size", output)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1450,16 +1508,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             'backupdb',
-            "REVOKE TEMPORARY ON DATABASE backupdb FROM PUBLIC;"
-            "REVOKE ALL on SCHEMA public from PUBLIC; "
+            "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+            "REVOKE ALL ON SCHEMA public from PUBLIC; "
             "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
             "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
             "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
-            "REVOKE ALL on SCHEMA pg_catalog from PUBLIC; "
+            "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
             "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
             "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
             "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
-            "REVOKE ALL on SCHEMA information_schema from PUBLIC; "
+            "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
             "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
             "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
             "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
