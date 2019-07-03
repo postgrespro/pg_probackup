@@ -437,3 +437,91 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_promote(self):
+        """
+        start backup from replica, during backup promote replica
+        check that backup is failed
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '10s',
+                'checkpoint_timeout': '30s',
+                'max_wal_size': '32MB'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+        master.slow_start()
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        self.backup_node(backup_dir, 'master', master)
+
+        master.psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,165000) i")
+
+        self.restore_node(
+            backup_dir, 'master', replica, options=['-R'])
+
+        # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+        self.set_replica(
+            master, replica,
+            replica_name='replica', synchronous=True)
+
+        replica.slow_start(replica=True)
+
+        master.psql(
+            "postgres",
+            "create table t_heap_1 as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,165000) i")
+
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        # start backup from replica
+        gdb = self.backup_node(
+            backup_dir, 'replica', replica, gdb=True,
+            options=['--log-level-file=verbose'])
+
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(20)
+
+        replica.promote()
+
+        gdb.remove_all_breakpoints()
+        gdb.continue_execution_until_exit()
+
+        backup_id = self.show_pb(
+            backup_dir, 'replica')[0]["id"]
+
+        # read log file content
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            f.close
+
+        self.assertIn(
+            'ERROR:  the standby was promoted during online backup',
+            log_content)
+
+        self.assertIn(
+            'WARNING: Backup {0} is running, '
+            'setting its status to ERROR'.format(backup_id),
+            log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
