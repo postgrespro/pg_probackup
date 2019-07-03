@@ -588,7 +588,7 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool omit_symlink, bool add_root, int external_dir_num, fio_location location);
+						  bool follow_symlink, bool add_root, int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
@@ -621,7 +621,7 @@ extern bool fileExists(const char *path, fio_location location);
 extern size_t pgFileSize(const char *path);
 
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
-						 bool omit_symlink, int external_dir_num,
+						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
 extern pgFile *pgFileInit(const char *path, const char *rel_path);
 extern void pgFileDelete(pgFile *file);

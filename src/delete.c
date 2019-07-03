@@ -832,9 +832,12 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
 int
 do_delete_instance(void)
 {
-	parray	   *backup_list;
-	int i;
+	parray		*backup_list;
+	parray		*xlog_files_list;
+	int 		i;
+	int 		rc;
 	char		instance_config_path[MAXPGPATH];
+
 
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
@@ -852,23 +855,40 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	delete_walfiles(InvalidXLogRecPtr, 0, instance_config.xlog_seg_size);
+	xlog_files_list = parray_new();
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+
+	for (i = 0; i < parray_num(xlog_files_list); i++)
+	{
+		pgFile	   *wal_file = (pgFile *) parray_get(xlog_files_list, i);
+		if (S_ISREG(wal_file->mode))
+		{
+			rc = unlink(wal_file->path);
+			if (rc != 0)
+				elog(WARNING, "Failed to remove file \"%s\": %s",
+					 wal_file->path, strerror(errno));
+		}
+	}
+
+	/* Cleanup */
+	parray_walk(xlog_files_list, pgFileFree);
+	parray_free(xlog_files_list);
 
 	/* Delete backup instance config file */
 	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
 	if (remove(instance_config_path))
 	{
-		elog(ERROR, "can't remove \"%s\": %s", instance_config_path,
+		elog(ERROR, "Can't remove \"%s\": %s", instance_config_path,
 			strerror(errno));
 	}
 
 	/* Delete instance root directories */
 	if (rmdir(backup_instance_path) != 0)
-		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+		elog(ERROR, "Can't remove \"%s\": %s", backup_instance_path,
 			strerror(errno));
 
 	if (rmdir(arclog_path) != 0)
-		elog(ERROR, "can't remove \"%s\": %s", arclog_path,
+		elog(ERROR, "Can't remove \"%s\": %s", arclog_path,
 			strerror(errno));
 
 	elog(INFO, "Instance '%s' successfully deleted", instance_name);

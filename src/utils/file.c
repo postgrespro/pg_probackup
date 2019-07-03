@@ -663,7 +663,7 @@ int fio_fstat(int fd, struct stat* st)
 }
 
 /* Get information about file */
-int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_location location)
+int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -672,7 +672,7 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_locati
 
 		hdr.cop = FIO_STAT;
 		hdr.handle = -1;
-		hdr.arg = follow_symlinks;
+		hdr.arg = follow_symlink;
 		hdr.size = path_len;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
@@ -691,7 +691,7 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_locati
 	}
 	else
 	{
-		return follow_symlinks ? stat(path, st) : lstat(path,  st);
+		return follow_symlink ? stat(path, st) : lstat(path,  st);
 	}
 }
 
