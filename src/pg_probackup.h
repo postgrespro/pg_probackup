@@ -700,6 +700,8 @@ int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
 extern void check_system_identifiers(PGconn *conn, char *pgdata);
 extern void parse_filelist_filenames(parray *files, const char *root);
+extern int32 do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
+						   CompressAlg alg, const char **errormsg);
 
 
 #endif /* PG_PROBACKUP_H */

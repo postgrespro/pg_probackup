@@ -566,6 +566,35 @@ size_t fio_fwrite(FILE* f, void const* buf, size_t size)
 		: fwrite(buf, 1, size, f);
 }
 
+/* Write data to stdio file */
+size_t fio_fwrite_compressed(FILE* f, void const* buf, size_t size, int compress_alg, const char** errmsg)
+{
+	uint32 decompressed_size;
+	char decompressed_page[BLCKSZ];
+
+	if (fio_is_remote_file(f))
+	{
+		fio_header hdr;
+
+		hdr.cop = FIO_WRITE_COMPRESSED;
+		hdr.handle = fio_fileno(f) & ~FIO_PIPE_MARKER;
+		hdr.size = size;
+		hdr.arg = compress_alg;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, buf, size), size);
+
+		return size;
+	}
+	decompressed_size = do_decompress(decompressed_page,
+									  BLCKSZ,
+									  buf,
+									  size,
+									  (CompressAlg)compress_alg, errmsg);
+	return decompressed_size != BLCKSZ
+		? 0 : fwrite(decompressed_page, 1, decompressed_size, f);
+}
+
 /* Write data to the file */
 ssize_t fio_write(int fd, void const* buf, size_t size)
 {
@@ -1380,6 +1409,22 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_WRITE: /* Write to the current position in file */
 			IO_CHECK(fio_write_all(fd[hdr.handle], buf, hdr.size), hdr.size);
+			break;
+		  case FIO_WRITE_COMPRESSED: /* Write to the current position in file */
+		    {
+				char decompressed_page[BLCKSZ];
+				char const* errmsg = NULL;
+				int32 decompressed_size = do_decompress(decompressed_page, BLCKSZ,
+														buf,
+														hdr.size,
+														(CompressAlg)hdr.arg, &errmsg);
+				if (errmsg != NULL || decompressed_size != BLCKSZ)
+				{
+					fprintf(stderr, "Failed to decompress block: %s", errmsg ? errmsg: "unknown error");
+					exit(EXIT_FAILURE);
+				}
+				IO_CHECK(fio_write_all(fd[hdr.handle], decompressed_page, BLCKSZ), BLCKSZ);
+			}
 			break;
 		  case FIO_READ: /* Read from the current position in file */
 			if ((size_t)hdr.arg > buf_size) {
