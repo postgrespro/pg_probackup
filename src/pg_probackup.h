@@ -63,6 +63,7 @@ extern const char  *PROGRAM_EMAIL;
 #define EXTERNAL_DIR			"external_directories/externaldir"
 
 /* Timeout defaults */
+#define PARTIAL_WAL_TIMER			60
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
 
