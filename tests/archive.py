@@ -459,7 +459,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         self.switch_wal_segment(node)
-        sleep(20)
+        sleep(70)
 
         # check that segment is archived
         if self.archive_compress:
@@ -528,14 +528,14 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         self.switch_wal_segment(node)
-        sleep(4)
+        sleep(30)
 
         with open(file, 'a') as f:
             f.write(b"blahblahblahblah")
             f.flush()
             f.close()
 
-        sleep(10)
+        sleep(40)
 
         # check that segment is NOT archived
         if self.archive_compress:
