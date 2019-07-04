@@ -2,6 +2,7 @@ import os
 import unittest
 from datetime import datetime, timedelta
 from .helpers.ptrack_helpers import ProbackupTest
+from time import sleep
 
 
 module_name = 'retention'
@@ -1233,4 +1234,46 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page')
 
         # Change FULLb backup status to ERROR
-        # self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+    def test_retention_redundancy_overlapping_chains(self):
+        """"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.set_config(
+            backup_dir, 'node', options=['--retention-redundancy=1'])
+
+        # Make backups to be purged
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Make backups to be keeped
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_files')
+        gdb.run_until_break()
+
+        sleep(1)
+
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        gdb.remove_all_breakpoints()
+        gdb.continue_execution_until_exit()
+
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Purge backups
+        log = self.delete_expired(
+            backup_dir, 'node', options=['--expired', '--wal'])
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

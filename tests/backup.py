@@ -424,6 +424,123 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_backup_detect_corruption(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+                f.seek(9000)
+                f.write(b"bla")
+                f.flush()
+                f.close
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="full", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            if self.remote:
+                self.assertTrue(
+                    "ERROR: Failed to read file" in e.message and
+                    "data file checksum mismatch" in e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    'WARNING: Corruption detected in file',
+                    e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+                self.assertIn(
+                    'ERROR: Data file corruption',
+                    e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_truncate_misaligned(self):
+        """
+        make node, truncate file to size not even to BLCKSIZE,
+        take backup
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100000) i")
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        heap_size = node.safe_psql(
+            "postgres",
+            "select pg_relation_size('t_heap')")
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+            f.truncate(int(heap_size) - 4096)
+            f.flush()
+            f.close
+
+        output = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"], return_id=False)
+
+        self.assertIn("WARNING: File", output)
+        self.assertIn("invalid file size", output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_tablespace_in_pgdata_pgpro_1376(self):
         """PGPRO-1376 """
         fname = self.id().split('.')[3]
@@ -1362,6 +1479,116 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         os.chmod(full_path, 700)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_with_least_privileges_role(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            # pg_options={'ptrack_enable': 'on'},
+            initdb_params=['--data-checksums'],
+
+        )
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        node.safe_psql(
+            'backupdb',
+            "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+            "REVOKE ALL ON SCHEMA public from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+            "CREATE ROLE backup WITH LOGIN REPLICATION; "
+            "GRANT CONNECT ON DATABASE backupdb to backup; "
+            "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+            "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+            # for partial restore, checkdb and ptrack
+            "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+            # for exclusive backup for PG 9.5 and ptrack
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+        )
+
+        # ptrack functions
+        # for fname in [
+        #         'oideq(oid, oid)',
+        #         'ptrack_version()',
+        #         'pg_ptrack_clear()',
+        #         'pg_ptrack_control_lsn()',
+        #         'pg_ptrack_get_and_clear_db(oid, oid)',
+        #         'pg_ptrack_get_and_clear(oid, oid)',
+        #         'pg_ptrack_get_block_2(oid, oid, oid, bigint)']:
+        #     try:
+        #         node.safe_psql(
+        #             "backupdb",
+        #             "GRANT EXECUTE ON FUNCTION pg_catalog.{0} "
+        #             "TO backup".format(fname))
+        #     except:
+        #         pass
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['-U', 'backup'])
+
+        # PAGE
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page', datname='backupdb',
+            options=['--stream', '-U', 'backup'])
+
+        # DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # PTRACK
+        # self.backup_node(
+        #     backup_dir, 'node', node, backup_type='ptrack',
+        #     datname='backupdb', options=['-U', 'backup'])
+        # self.backup_node(
+        #     backup_dir, 'node', node, backup_type='ptrack',
+        #     datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -209,7 +209,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	time_t		days_threshold = 0;
 
 	/* For fancy reporting */
-	float		actual_window = 0;
+	uint32		actual_window = 0;
 
 	/* Get current time */
 	current_time = time(NULL);
@@ -252,7 +252,9 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			cur_full_backup_num++;
 		}
 
-		/* Check if backup in needed by retention policy */
+		/* Check if backup in needed by retention policy
+		 * TODO: consider that ERROR backup most likely to have recovery_time == 0
+		 */
 		if ((days_threshold == 0 || (days_threshold > backup->recovery_time)) &&
 			(instance_config.retention_redundancy  <= (n_full_backups - cur_full_backup_num)))
 		{
@@ -324,7 +326,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	}
 
 	/* Message about retention state of backups
-	 * TODO: Float is ugly, rewrite somehow.
+	 * TODO: message is ugly, rewrite it to something like show table in stdout.
 	 */
 
 	cur_full_backup_num = 1;
@@ -340,9 +342,9 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		if (backup->recovery_time == 0)
 			actual_window = 0;
 		else
-			actual_window = ((float)current_time - (float)backup->recovery_time)/(60 * 60 * 24);
+			actual_window = (current_time - backup->recovery_time)/(60 * 60 * 24);
 
-		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %.2fd/%ud. %s",
+		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
 				base36enc(backup->start_time),
 				pgBackupGetBackupMode(backup),
 				status2str(backup->status),
@@ -801,9 +803,12 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
 int
 do_delete_instance(void)
 {
-	parray	   *backup_list;
-	int i;
+	parray		*backup_list;
+	parray		*xlog_files_list;
+	int 		i;
+	int 		rc;
 	char		instance_config_path[MAXPGPATH];
+
 
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
@@ -821,23 +826,40 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	delete_walfiles(InvalidXLogRecPtr, 0, instance_config.xlog_seg_size);
+	xlog_files_list = parray_new();
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+
+	for (i = 0; i < parray_num(xlog_files_list); i++)
+	{
+		pgFile	   *wal_file = (pgFile *) parray_get(xlog_files_list, i);
+		if (S_ISREG(wal_file->mode))
+		{
+			rc = unlink(wal_file->path);
+			if (rc != 0)
+				elog(WARNING, "Failed to remove file \"%s\": %s",
+					 wal_file->path, strerror(errno));
+		}
+	}
+
+	/* Cleanup */
+	parray_walk(xlog_files_list, pgFileFree);
+	parray_free(xlog_files_list);
 
 	/* Delete backup instance config file */
 	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
 	if (remove(instance_config_path))
 	{
-		elog(ERROR, "can't remove \"%s\": %s", instance_config_path,
+		elog(ERROR, "Can't remove \"%s\": %s", instance_config_path,
 			strerror(errno));
 	}
 
 	/* Delete instance root directories */
 	if (rmdir(backup_instance_path) != 0)
-		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+		elog(ERROR, "Can't remove \"%s\": %s", backup_instance_path,
 			strerror(errno));
 
 	if (rmdir(arclog_path) != 0)
-		elog(ERROR, "can't remove \"%s\": %s", arclog_path,
+		elog(ERROR, "Can't remove \"%s\": %s", arclog_path,
 			strerror(errno));
 
 	elog(INFO, "Instance '%s' successfully deleted", instance_name);
