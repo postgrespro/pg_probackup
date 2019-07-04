@@ -144,7 +144,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	int			errno_temp;
 	/* partial handling */
 	struct stat		st;
-	int			partial_file_timeout = 0;
+	int			partial_try_count = 0;
 	int			partial_file_size = 0;
 	bool		partial_file_exists = false;
 
@@ -219,7 +219,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	 */
 	if (partial_file_exists)
 	{
-		while (partial_file_timeout < PARTIAL_WAL_TIMER)
+		while (partial_try_count < PARTIAL_WAL_TIMER)
 		{
 
 			if (fio_stat(to_path_temp, &st, false, FIO_BACKUP_HOST) < 0)
@@ -228,7 +228,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 					strerror(errno));
 
 			/* first round */
-			if (!partial_file_timeout)
+			if (!partial_try_count)
 				partial_file_size = st.st_size;
 
 			/* file size is changing */
@@ -236,7 +236,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 				elog(ERROR, "Destination temporary WAL file \"%s\" is not stale", to_path_temp);
 
 			sleep(1);
-			partial_file_timeout++;
+			partial_try_count++;
 		}
 
 		/* Partial segment is considered stale, so reuse it */
