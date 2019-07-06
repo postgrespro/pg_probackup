@@ -79,6 +79,7 @@ typedef struct pg_indexEntry
 {
 	Oid indexrelid;
 	char *name;
+	char *namespace;
 	bool heapallindexed_is_supported;
 	/* schema where amcheck extention is located */
 	char *amcheck_nspname;
@@ -98,6 +99,8 @@ pg_indexEntry_free(void *index)
 
 	if (index_ptr->name)
 		free(index_ptr->name);
+	if (index_ptr->name)
+		free(index_ptr->namespace);
 	if (index_ptr->amcheck_nspname)
 		free(index_ptr->amcheck_nspname);
 
@@ -324,7 +327,7 @@ check_indexes(void *arg)
 		if (progress)
 			elog(INFO, "Thread [%d]. Progress: (%d/%d). Amchecking index '%s.%s'",
 				 arguments->thread_num, i + 1, n_indexes,
-				 ind->amcheck_nspname, ind->name);
+				 ind->namespace, ind->name);
 
 		if (arguments->conn_arg.conn == NULL)
 		{
@@ -362,7 +365,7 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 			   PGconn *db_conn)
 {
 	PGresult   *res;
-	char *nspname = NULL;
+	char *amcheck_nspname = NULL;
 	int i;
 	bool heapallindexed_is_supported = false;
 	parray *index_list = NULL;
@@ -391,8 +394,8 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 		return NULL;
 	}
 
-	nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
-	strcpy(nspname, PQgetvalue(res, 0, 1));
+	amcheck_nspname = pgut_malloc(strlen(PQgetvalue(res, 0, 1)) + 1);
+	strcpy(amcheck_nspname, PQgetvalue(res, 0, 1));
 
 	/* heapallindexed_is_supported is database specific */
 	if (strcmp(PQgetvalue(res, 0, 2), "1.0") != 0 &&
@@ -419,24 +422,28 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 	if (first_db_with_amcheck)
 	{
 
-		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
-									"FROM pg_index idx "
-									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
-									"JOIN pg_am am ON cls.relam=am.oid "
-									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
+		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname, nmspc.nspname "
+									"FROM pg_catalog.pg_index idx "
+									"LEFT JOIN pg_catalog.pg_class cls ON idx.indexrelid=cls.oid "
+									"LEFT JOIN pg_catalog.pg_namespace nmspc ON cls.relnamespace=nmspc.oid "
+									"LEFT JOIN pg_catalog.pg_am am ON cls.relam=am.oid "
+									"WHERE am.amname='btree' AND cls.relpersistence != 't' "
+									"ORDER BY nmspc.nspname DESC",
 									0, NULL);
 	}
 	else
 	{
 
-		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname "
-									"FROM pg_index idx "
-									"JOIN pg_class cls ON idx.indexrelid=cls.oid "
-									"JOIN pg_am am ON cls.relam=am.oid "
-									"LEFT JOIN pg_tablespace tbl "
-									"ON cls.reltablespace=tbl.oid "
-									"AND tbl.spcname <> 'pg_global' "
-									"WHERE am.amname='btree' AND cls.relpersistence != 't'",
+		res = pgut_execute(db_conn, "SELECT cls.oid, cls.relname, nmspc.nspname "
+									"FROM pg_catalog.pg_index idx "
+									"LEFT JOIN pg_catalog.pg_class cls ON idx.indexrelid=cls.oid "
+									"LEFT JOIN pg_catalog.pg_namespace nmspc ON cls.relnamespace=nmspc.oid "
+									"LEFT JOIN pg_catalog.pg_am am ON cls.relam=am.oid "
+									"WHERE am.amname='btree' AND cls.relpersistence != 't' AND "
+									"(cls.reltablespace IN "
+									"(SELECT oid from pg_catalog.pg_tablespace where spcname <> 'pg_global') "
+									"OR cls.reltablespace = 0) "
+									"ORDER BY nmspc.nspname DESC",
 									0, NULL);
 	}
 
@@ -445,15 +452,24 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 	{
 		pg_indexEntry *ind = (pg_indexEntry *) pgut_malloc(sizeof(pg_indexEntry));
 		char *name = NULL;
+		char *namespace = NULL;
 
+		/* index oid */
 		ind->indexrelid = atoi(PQgetvalue(res, i, 0));
+
+		/* index relname */
 		name = PQgetvalue(res, i, 1);
 		ind->name = pgut_malloc(strlen(name) + 1);
 		strcpy(ind->name, name);	/* enough buffer size guaranteed */
 
+		/* index namespace */
+		namespace = PQgetvalue(res, i, 2);
+		ind->namespace = pgut_malloc(strlen(namespace) + 1);
+		strcpy(ind->namespace, namespace);	/* enough buffer size guaranteed */
+
 		ind->heapallindexed_is_supported = heapallindexed_is_supported;
-		ind->amcheck_nspname = pgut_malloc(strlen(nspname) + 1);
-		strcpy(ind->amcheck_nspname, nspname);
+		ind->amcheck_nspname = pgut_malloc(strlen(amcheck_nspname) + 1);
+		strcpy(ind->amcheck_nspname, amcheck_nspname);
 		pg_atomic_clear_flag(&ind->lock);
 
 		if (index_list == NULL)
@@ -509,7 +525,7 @@ amcheck_one_index(check_indexes_arg *arguments,
 	{
 		elog(WARNING, "Thread [%d]. Amcheck failed in database '%s' for index: '%s.%s': %s",
 					   arguments->thread_num, arguments->conn_opt.pgdatabase,
-					   ind->amcheck_nspname, ind->name, PQresultErrorMessage(res));
+					   ind->namespace, ind->name, PQresultErrorMessage(res));
 
 		pfree(params[0]);
 		pfree(query);
@@ -519,7 +535,7 @@ amcheck_one_index(check_indexes_arg *arguments,
 	else
 		elog(LOG, "Thread [%d]. Amcheck succeeded in database '%s' for index: '%s.%s'",
 				arguments->thread_num,
-				arguments->conn_opt.pgdatabase, ind->amcheck_nspname, ind->name);
+				arguments->conn_opt.pgdatabase, ind->namespace, ind->name);
 
 	pfree(params[0]);
 	pfree(query);
