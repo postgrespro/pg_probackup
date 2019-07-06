@@ -434,12 +434,12 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
             self.assertIn(
-                "WARNING: CORRUPTION in file {0}, block 1".format(
+                'WARNING: Corruption detected in file "{0}", block 1'.format(
                     os.path.normpath(heap_full_path)),
                 e.message)
 
             self.assertIn(
-                "WARNING: CORRUPTION in file {0}, block 5".format(
+                'WARNING: Corruption detected in file "{0}", block 5'.format(
                     os.path.normpath(heap_full_path)),
                 e.message)
 
