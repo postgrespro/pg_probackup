@@ -467,10 +467,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 
 	/* Failed to find valid FULL backup to fulfill ancestor role */
 	if (!full_backup)
-	{
-		elog(WARNING, "Failed to find a valid backup chain");
 		return NULL;
-	}
 
 	elog(INFO, "Latest valid FULL backup: %s",
 		base36enc(full_backup->start_time));
@@ -480,7 +477,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 	{
 		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
 
-		/* only valid descendants are acceptable */
+		/* only valid descendants are acceptable for evaluation */
 		if ((backup->status == BACKUP_STATUS_OK ||
 			backup->status == BACKUP_STATUS_DONE))
 		{
@@ -505,9 +502,9 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 					continue;
 
 				/* chain is ok */
-				case 2 :
-					/* Yes, we could call is_parent() earlier, after choosing the ancestor,
-					 * but this way we have an opportunity to report about all possible
+				case 2:
+					/* Yes, we could call is_parent() earlier - after choosing the ancestor,
+					 * but this way we have an opportunity to detect and report all possible
 					 * anomalies.
 					 */
 					if (is_parent(full_backup->start_time, backup, true))

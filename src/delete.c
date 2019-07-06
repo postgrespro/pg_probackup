@@ -225,7 +225,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-			/* Consider only valid backups for Redundancy */
+			/* Consider only valid FULL backups for Redundancy */
 			if (instance_config.retention_redundancy > 0 &&
 				backup->backup_mode == BACKUP_MODE_FULL &&
 				(backup->status == BACKUP_STATUS_OK ||
@@ -233,6 +233,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			{
 				n_full_backups++;
 
+				/* Add every FULL backup that satisfy Redundancy policy to separate list */
 				if (n_full_backups <= instance_config.retention_redundancy)
 				{
 					if (!redundancy_full_backup_list)
@@ -260,7 +261,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		bool redundancy_keep = false;
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
 
-		/* check if backups FULL parent is in redundancy list */
+		/* check if backup`s FULL ancestor is in redundancy list */
 		if (redundancy_full_backup_list)
 		{
 			pgBackup   *full_backup = find_parent_full_backup(backup);
@@ -283,7 +284,6 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		 * TODO: consider that ERROR backup most likely to have recovery_time == 0
 		 */
 		if ((days_threshold == 0 || (days_threshold > backup->recovery_time)) &&
-//			(instance_config.retention_redundancy  <= (n_full_backups - cur_full_backup_num)))
 			(instance_config.retention_redundancy == 0 || !redundancy_keep))
 		{
 			/* This backup is not guarded by retention

@@ -200,8 +200,9 @@ do_backup_instance(PGconn *backup_conn)
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli, current.start_time);
 		if (prev_backup == NULL)
-			elog(ERROR, "Valid backup on current timeline is not found. "
-						"Create new FULL backup before an incremental one.");
+			elog(ERROR, "Valid backup on current timeline %X is not found. "
+						"Create new FULL backup before an incremental one.",
+						current.tli);
 
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
 						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
