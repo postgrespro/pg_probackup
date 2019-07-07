@@ -311,17 +311,33 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,100500) i")
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
 
+        self.switch_wal_segment(node)
+        sleep(1)
+
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertTrue(
-                'LOG:  archive command failed with exit code 1' in log_content and
-                'DETAIL:  The failed archive command was:' in log_content and
-                'INFO: pg_probackup archive-push from' in log_content and
-                'ERROR: WAL segment ' in log_content and
-                '{0}" already exists.'.format(filename) in log_content,
-                'Expecting error messages about failed archive_command'
-            )
-            self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
+        self.assertIn(
+            'LOG:  archive command failed with exit code 1',
+            log_content)
+
+        self.assertIn(
+            'DETAIL:  The failed archive command was:',
+            log_content)
+
+        self.assertIn(
+            'INFO: pg_probackup archive-push from',
+            log_content)
+
+        self.assertIn(
+            'ERROR: WAL segment ',
+            log_content)
+
+        self.assertIn(
+            'already exists.',
+            log_content)
+
+        self.assertNotIn(
+            'pg_probackup archive-push completed successfully', log_content)
 
         if self.get_version(node) < 100000:
             wal_src = os.path.join(
@@ -342,9 +358,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertTrue(
-                'pg_probackup archive-push completed successfully' in log_content,
-                'Expecting messages about successfull execution archive_command')
+
+        self.assertIn(
+            'pg_probackup archive-push completed successfully',
+            log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -386,16 +403,23 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,100500) i")
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
 
+        self.switch_wal_segment(node)
+        sleep(1)
+
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertTrue(
-                'LOG:  archive command failed with exit code 1' in log_content and
-                'DETAIL:  The failed archive command was:' in log_content and
-                'INFO: pg_probackup archive-push from' in log_content and
-                '{0}" already exists.'.format(filename) in log_content,
-                'Expecting error messages about failed archive_command'
-            )
-            self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
+
+        self.assertIn(
+            'LOG:  archive command failed with exit code 1', log_content)
+        self.assertIn(
+            'DETAIL:  The failed archive command was:', log_content)
+        self.assertIn(
+            'INFO: pg_probackup archive-push from', log_content)
+        self.assertIn(
+            '{0}" already exists.'.format(filename), log_content)
+
+        self.assertNotIn(
+            'pg_probackup archive-push completed successfully', log_content)
 
         self.set_archiving(backup_dir, 'node', node, overwrite=True)
         node.reload()
