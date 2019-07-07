@@ -413,7 +413,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_archive_push_partial_file_exists(self):
-        """Archive-push if stale .partial file exists"""
+        """Archive-push if stale '.partial' file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

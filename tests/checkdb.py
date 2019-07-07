@@ -484,7 +484,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         gdb.remove_all_breakpoints()
 
         gdb._execute('signal SIGINT')
-        gdb.continue_execution_until_exit()
+        gdb.continue_execution_until_error()
 
         with open(node.pg_log_file, 'r') as f:
             output = f.read()

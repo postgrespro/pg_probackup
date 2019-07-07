@@ -131,7 +131,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Valid backup on current timeline is not found. "
+                "ERROR: Valid backup on current timeline 1 is not found. "
                 "Create new FULL backup before an incremental one.",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
@@ -149,7 +149,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Valid backup on current timeline is not found. "
+                "ERROR: Valid backup on current timeline 1 is not found. "
                 "Create new FULL backup before an incremental one.",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
@@ -213,7 +213,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Valid backup on current timeline is not found. "
+                "ERROR: Valid backup on current timeline 1 is not found. "
                 "Create new FULL backup before an incremental one.",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
