@@ -789,7 +789,7 @@ create_recovery_conf(time_t backup_id,
 	elog(LOG, "creating recovery.conf");
 
 	snprintf(path, lengthof(path), "%s/recovery.conf", instance_config.pgdata);
-	fp = fio_fopen(path, PG_BINARY_W, FIO_DB_HOST);
+	fp = fio_fopen(path, "w", FIO_DB_HOST);
 	if (fp == NULL)
 		elog(ERROR, "cannot open recovery.conf \"%s\": %s", path,
 			strerror(errno));
