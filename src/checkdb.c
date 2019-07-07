@@ -649,7 +649,7 @@ do_amcheck(ConnectionOptions conn_opt, PGconn *conn)
 		if (check_isok)
 			elog(INFO, "Amcheck succeeded for database '%s'", dbname);
 		else
-			elog(WARNING, "Amcheck failed for database %s", dbname);
+			elog(WARNING, "Amcheck failed for database '%s'", dbname);
 
 		parray_walk(index_list, pg_indexEntry_free);
 		parray_free(index_list);
