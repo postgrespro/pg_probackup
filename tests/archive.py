@@ -462,10 +462,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "INSERT INTO t1 VALUES (1) RETURNING (xmin)").rstrip()
 
-        filename_orig = node.safe_psql(
-            "postgres",
-            "SELECT file_name "
-            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+        if self.get_version(node) < 100000:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_xlogfile_name_offset(pg_current_xlog_location());").rstrip()
+        else:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
         # form up path to next .partial WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
@@ -532,10 +538,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t2()")
 
-        filename_orig = node.safe_psql(
-            "postgres",
-            "SELECT file_name "
-            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+        if self.get_version(node) < 100000:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_xlogfile_name_offset(pg_current_xlog_location());").rstrip()
+        else:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
         # form up path to next .partial WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
