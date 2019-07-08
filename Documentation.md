@@ -1174,7 +1174,7 @@ If you would like to also remove the WAL files that are no longer required for a
 
 Since incremental backups require that their parent full backup and all the preceding incremental backups are available, if any of such backups expire, they still cannot be removed while at least one incremental backup in this chain satisfies the retention policy. To avoid keeping expired backups that are still required to restore an active incremental one, you can merge them with this backup using the `--merge-expired` option when running [backup](#backup) or [delete](#delete) commands.
 
-Suppose you have backed up the node instance in the *backup_dir* directory, with the `retention-window` option is set to 7, and you have the following backups available on April 10, 2019:
+Suppose you have backed up the *node* instance in the *backup_dir* directory, with the `retention-window` option is set to 7, and you have the following backups available on April 10, 2019:
 
 ```
 BACKUP INSTANCE 'node'
@@ -1194,8 +1194,8 @@ Even though P7XDHB and P7XDHU backups are outside the retention window, they can
 
 With the `--merge-expired` option, the P7XDJA backup is merged with the underlying P7XDHU and P7XDHB backups and becomes a full one, so there is no need to keep these expired backups anymore:
 
-    pg_probackup delete -B node-backup --instance node --delete-expired --merge-expired
-    pg_probackup show -B node-backup
+    pg_probackup delete -B backup_dir --instance node --delete-expired --merge-expired
+    pg_probackup show -B backup_dir
 
 ```
 BACKUP INSTANCE 'node'
