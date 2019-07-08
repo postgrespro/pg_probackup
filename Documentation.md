@@ -1052,7 +1052,7 @@ For each backup, the following information is provided:
 - ID — the backup identifier.
 - Recovery time — the earliest moment for which you can restore the state of the database cluster.
 - Mode — the method used to take this backup. Possible values: FULL, PAGE, DELTA, PTRACK.
-- WAL — the way of WAL log handling. Possible values: STREAM for autonomous backups and ARCHIVE for archive backups.
+- WAL — the WAL delivery method. Possible values: STREAM and ARCHIVE.
 - Current/Parent TLI — timeline identifiers of current backup and its parent.
 - Time — the time it took to perform the backup.
 - Data — the size of the data files in this backup. This value does not include the size of WAL files.
@@ -1061,8 +1061,8 @@ For each backup, the following information is provided:
 - Status — backup status. Possible values:
 
     - OK — the backup is complete and valid.
-    - RUNNING — the backup is in progress.
     - DONE — the backup is complete, but was not validated.
+    - RUNNING — the backup is in progress.
     - MERGING — the backup is being merged.
     - DELETING — the backup files are being deleted.
     - CORRUPT — some of the backup files are corrupted.
@@ -1156,9 +1156,9 @@ By default, all backup copies created with pg_probackup are stored in the specif
 To configure retention policy, set one or more of the following variables in the pg_probackup.conf file via [set-config](#set-config):
 
 - retention-redundancy — specifies the number of full backup copies to keep in the backup catalog.
-- retention-window — defines the earliest point in time for which pg_probackup can complete the recovery. This option is set in the number of days from the current moment. For example, if retention-window=7, pg_probackup must keep at least one full backup copy that is older than seven days, with all the corresponding WAL files.
+- retention-window — defines the earliest point in time for which pg_probackup can complete the recovery. This option is set in the number of days from the current moment. For example, if `retention-window=7`, pg_probackup must keep at least one full backup copy that is older than seven days, with all the corresponding WAL files.
 
-If both retention-redundancy and retention-window options are set, pg_probackup keeps backup copies that satisfy at least one condition. For example, if you set retention-redundancy=2 and retention-window=7, pg_probackup cleans up the backup directory to keep only two full backup copies and all backups that are newer than seven days.
+If both `retention-redundancy` and `retention-window` options are set, pg_probackup keeps backup copies that satisfy at least one condition. For example, if you set `retention-redundancy=2` and `retention-window=7`, pg_probackup cleans up the backup directory to keep only two full backup copies and all backups that are newer than seven days.
 
 To clean up the backup catalog in accordance with retention policy, run:
 
@@ -1170,11 +1170,11 @@ If you would like to also remove the WAL files that are no longer required for a
 
     pg_probackup delete -B backup_dir --instance instance_name --delete-expired --delete-wal
 
->NOTE: Alternatively, you can use the `--delete-expired`, `--merge-expired` and `--delete-wal` options together with the [backup](#backup) command to remove and merge the outdated backup copies once the new backup is created.
+>NOTE: Alternatively, you can use the `--delete-expired`, `--merge-expired`, `--delete-wal` flags and the `--retention-window` and `--retention-redundancy` options together with the [backup](#backup) command to remove and merge the outdated backup copies once the new backup is created.
 
 Since incremental backups require that their parent full backup and all the preceding incremental backups are available, if any of such backups expire, they still cannot be removed while at least one incremental backup in this chain satisfies the retention policy. To avoid keeping expired backups that are still required to restore an active incremental one, you can merge them with this backup using the `--merge-expired` option when running [backup](#backup) or [delete](#delete) commands.
 
-Suppose you have backed up the node instance in the node-backup directory, with the retention-window option is set to 7, and you have the following backups available on April 10, 2019:
+Suppose you have backed up the node instance in the *backup_dir* directory, with the `retention-window` option is set to 7, and you have the following backups available on April 10, 2019:
 
 ```
 BACKUP INSTANCE 'node'
@@ -1190,7 +1190,7 @@ BACKUP INSTANCE 'node'
  node        10       P7XDFT  2019-03-29 05:26:25+03  FULL    STREAM     1 / 0               11s   200MB   0/D000028    0/D000198   OK
 ```
 
-Even though P7XDHB and P7XDHU backups are outside the retention window, they cannot be removed as it invalidates the succeeding incremental backups P7XDJA and P7XDQV that are still required, so if you run the `delete` command with the `--delete-expired` option, only the P7XDFT full backup will be removed.
+Even though P7XDHB and P7XDHU backups are outside the retention window, they cannot be removed as it invalidates the succeeding incremental backups P7XDJA and P7XDQV that are still required, so, if you run the [delete](#delete) command with the `--delete-expired` option, only the P7XDFT full backup will be removed.
 
 With the `--merge-expired` option, the P7XDJA backup is merged with the underlying P7XDHU and P7XDHB backups and becomes a full one, so there is no need to keep these expired backups anymore:
 
@@ -1215,9 +1215,13 @@ As you take more and more incremental backups, the total size of the backup cata
 
     pg_probackup merge -B backup_dir --instance instance_name -i backup_id
 
-This command merges the specified incremental backup to its parent full backup, together with all incremental backups between them. Once the merge is complete, the incremental backups are removed as redundant. Thus, the merge operation is virtually equivalent to retaking a full backup and removing all the outdated backups, but it allows to save much time, especially for large data volumes.
+This command merges the specified incremental backup to its parent full backup, together with all incremental backups between them. Once the merge is complete, the incremental backups are removed as redundant. Thus, the merge operation is virtually equivalent to retaking a full backup and removing all the outdated backups, but it allows to save much time, especially for large data volumes, I/O and network traffic in case of [remote](#using-pg_probackup-in-the-remote-mode) backup.
 
-Before the merge, pg_probackup validates all the affected backups to ensure that they are valid. You can check the current backup status by running the show command with the backup ID. If the merge is still in progress, the backup status is displayed as MERGING. The merge is idempotent, so you can restart the merge if it was interrupted.
+Before the merge, pg_probackup validates all the affected backups to ensure that they are valid. You can check the current backup status by running the [show](#show) command with the backup ID:
+
+    pg_probackup show -B backup_dir --instance instance_name -i backup_id
+
+If the merge is still in progress, the backup status is displayed as MERGING. The merge is idempotent, so you can restart the merge if it was interrupted.
 
 ### Deleting Backups
 
@@ -1225,7 +1229,7 @@ To delete a backup that is no longer required, run the following command:
 
     pg_probackup delete -B backup_dir --instance instance_name -i backup_id
 
-This command will delete the backup with the specified *backup_id*, together with all the incremental backups that followed, if any. This way, you can delete some recent incremental backups, retaining the underlying full backup and some of the incremental backups that follow it.
+This command will delete the backup with the specified *backup_id*, together with all the incremental backups that descend from *backup_id* if any. This way you can delete some recent incremental backups, retaining the underlying full backup and some of the incremental backups that follow it.
 
 To delete obsolete WAL files that are not necessary to restore any of the remaining backups, use the `--delete-wal` option:
 
