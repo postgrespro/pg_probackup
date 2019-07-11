@@ -469,7 +469,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 	if (!full_backup)
 		return NULL;
 
-	elog(INFO, "Latest valid FULL backup: %s",
+	elog(LOG, "Latest valid FULL backup: %s",
 		base36enc(full_backup->start_time));
 
 	/* FULL backup is found, lets find his latest child */
