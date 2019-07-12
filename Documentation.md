@@ -184,32 +184,55 @@ For details on how to fine-tune pg_probackup configuration, see the section [Con
 
 The user launching pg_probackup must have full access to *backup_dir* directory and at least read-only access to *data_dir* directory. If you specify the path to the backup catalog in the `BACKUP_PATH` environment variable, you can omit the corresponding option when running pg_probackup commands.
 
+>NOTE: For PostgreSQL >= 11 it is recommended to use [allow-group-access](https://www.postgresql.org/docs/11/app-initdb.html#APP-INITDB-ALLOW-GROUP-ACCESS) feature, so backup can be done by OS user with read-only permissions.
+
 ### Configuring the Database Cluster
 
 Although pg_probackup can be used by a superuser, it is recommended to create a separate role with the minimum permissions required for the chosen backup strategy. In these configuration instructions, the *backup* role is used as an example.
 
-To enable backups, the following rights are required:
+To perform [backup](#backup), the following permissions are required:
 
+For PostgreSQL 9.5:
 ```
+BEGIN;
 CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
-GRANT EXECUTE ON FUNCTION current_setting(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup;
-GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup;
-GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_switch_wal() TO backup;
-GRANT EXECUTE ON FUNCTION txid_current() TO backup;
-GRANT EXECUTE ON FUNCTION txid_current_snapshot() TO backup;
-GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
+COMMIT;
 ```
+
+For PostgreSQL >= 9.6:
+```
+BEGIN;
+CREATE ROLE backup WITH LOGIN;
+GRANT USAGE ON SCHEMA pg_catalog TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
+COMMIT;
+```
+
+>NOTE: In PostgreSQL 9.5 functions `pg_create_restore_point(text)` and `pg_switch_xlog()` can be executed only by superuser role. So during backup of PostgreSQL 9.5 pg_probackup will use them only if backup role is superuser, although it is NOT recommended to run backup under superuser.
 
 Since pg_probackup needs to read cluster files directly, pg_probackup must be started on behalf of an OS user that has read access to all files and directories inside the data directory (PGDATA) you are going to back up.
 
 Depending on whether you are plan to take STREAM and/or ARCHIVE backups, PostgreSQL cluster configuration will differ, as specified in the sections below. To back up the database cluster from a standby server or create PTRACK backups, additional setup is required.
 
-For details, see the sections [Setting up STREAM Backups](#setting-up-stream-backups), [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving), [Setting up PTRACK Backups](#setting-up-ptrack-backups) and [Setting up Backup from Standby](#backup-from-standby).
+For details, see the sections [Setting up STREAM Backups](#setting-up-stream-backups), [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving), [Setting up Backup from Standby](#backup-from-standby) and [Setting up PTRACK Backups](#setting-up-ptrack-backups).
 
 ### Setting up STREAM Backups
 
