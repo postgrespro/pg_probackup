@@ -229,7 +229,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         # create two databases
         node.safe_psql("postgres", "create database db1")
         try:
-           node.safe_psql(
+            node.safe_psql(
                "db1",
                "create extension amcheck")
         except QueryException as e:

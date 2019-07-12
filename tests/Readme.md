@@ -29,6 +29,9 @@ Remote backup depends on key authentithication to local machine via ssh as curre
 Run suit of basic simple tests:
  export PG_PROBACKUP_TEST_BASIC=ON
 
+Run ptrack tests:
+ export PG_PROBACKUP_PTRACK=ON
+
 
 Usage:
  pip install testgres

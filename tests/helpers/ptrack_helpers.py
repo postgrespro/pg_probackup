@@ -271,7 +271,13 @@ class ProbackupTest(object):
         self.remote_user = None
 
         if 'PGPROBACKUP_SSH_REMOTE' in self.test_env:
-            self.remote = True
+            if self.test_env['PGPROBACKUP_SSH_REMOTE'] == 'ON':
+                self.remote = True
+
+        self.ptrack = False
+        if 'PG_PROBACKUP_PTRACK' in self.test_env:
+            if self.test_env['PG_PROBACKUP_PTRACK'] == 'ON':
+                self.ptrack = True
 
     @property
     def pg_config_version(self):

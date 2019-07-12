@@ -228,10 +228,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s'}
-            )
+            initdb_params=['--data-checksums'])
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -258,18 +256,19 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         log_file = os.path.join(backup_dir, 'log/pg_probackup.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertNotIn(
-                "ERROR: pg_stop_backup doesn't answer",
-                log_content,
-                "pg_stop_backup timeouted")
+
+        self.assertIn(
+            "ERROR: pg_stop_backup doesn't answer in 60 seconds, cancel it",
+            log_content)
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertNotIn(
-                'FailedAssertion',
-                log_content,
-                'PostgreSQL crashed because of a failed assert')
+
+        self.assertNotIn(
+            'FailedAssertion',
+            log_content,
+            'PostgreSQL crashed because of a failed assert')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

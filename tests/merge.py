@@ -826,6 +826,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         take page backup, merge full and page,
         restore last page backup and check data correctness
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1651,8 +1654,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         os.remove(file_to_remove)
 
         # Try to continue failed MERGE
-        #print(backup_id)
-        #exit(1)
         self.merge_backup(backup_dir, "node", backup_id)
 
         self.assertEqual(
@@ -1875,15 +1876,28 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
-        node.cleanup()
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored, backup_id=backup_id)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # check that merged backup has the same state as
+        node_restored.cleanup()
         self.merge_backup(backup_dir, 'node', backup_id=backup_id)
-
-        self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
-
-        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored, backup_id=backup_id)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself

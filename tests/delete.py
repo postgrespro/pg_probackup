@@ -188,6 +188,9 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_delete_increment_ptrack(self):
         """delete increment and all after him"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),

@@ -57,8 +57,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -114,6 +113,10 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
     def test_ptrack_concurrent_get_and_clear_1(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
+
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -195,6 +198,10 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
     def test_ptrack_concurrent_get_and_clear_2(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
+
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
