@@ -419,7 +419,7 @@ pgut_execute_parallel(PGconn* conn,
 			}
 
 			if (!PQconsumeInput(conn))
-				elog(ERROR, "query failed: %squery was: %s",
+				elog(ERROR, "query failed: %s query was: %s",
 						PQerrorMessage(conn), query);
 
 			/* query is no done */
