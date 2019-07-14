@@ -269,8 +269,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
-        ptrack_result = node.execute("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(
+        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--stream', '--compress-algorithm=pglz'])
 
