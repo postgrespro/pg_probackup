@@ -469,11 +469,15 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "select pg_relation_filepath('t_heap')").rstrip()
 
+        node.stop()
+
         with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
                 f.seek(9000)
                 f.write(b"bla")
                 f.flush()
                 f.close
+
+        node.slow_start()
 
         try:
             self.backup_node(
@@ -486,23 +490,33 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            if self.remote:
+            if self.ptrack:
                 self.assertTrue(
-                    "ERROR: Failed to read file" in e.message and
-                    "data file checksum mismatch" in e.message,
+                    'WARNING:  page verification failed, '
+                    'calculated checksum' in e.message and
+                    'ERROR: query failed: ERROR:  '
+                    'invalid page in block 1 of relation' in e.message and
+                    'ERROR: Data files transferring failed' in e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
             else:
-                self.assertIn(
-                    'WARNING: Corruption detected in file',
-                    e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                        repr(e.message), self.cmd))
-                self.assertIn(
-                    'ERROR: Data file corruption',
-                    e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                        repr(e.message), self.cmd))
+                if self.remote:
+                    self.assertTrue(
+                        "ERROR: Failed to read file" in e.message and
+                        "data file checksum mismatch" in e.message,
+                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                            repr(e.message), self.cmd))
+                else:
+                    self.assertIn(
+                        'WARNING: Corruption detected in file',
+                        e.message,
+                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                            repr(e.message), self.cmd))
+                    self.assertIn(
+                        'ERROR: Data file corruption',
+                        e.message,
+                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                            repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
