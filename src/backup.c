@@ -103,6 +103,7 @@ static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
 							   bool wait_prev_segment);
 static void make_pagemap_from_ptrack(parray* files, PGconn* backup_conn);
 static void *StreamLog(void *arg);
+static void IdentifySystem(StreamThreadArg *stream_thread_arg);
 
 static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
@@ -289,30 +290,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 														  instance_config.conn_opt.pgport,
 														  instance_config.conn_opt.pgdatabase,
 														  instance_config.conn_opt.pguser);
+		/* sanity */
+		IdentifySystem(&stream_thread_arg);
 
-		if (!CheckServerVersionForStreaming(stream_thread_arg.conn))
-		{
-			PQfinish(stream_thread_arg.conn);
-			/*
-			 * Error message already written in CheckServerVersionForStreaming().
-			 * There's no hope of recovering from a version mismatch, so don't
-			 * retry.
-			 */
-			elog(ERROR, "Cannot continue backup because stream connect has failed.");
-		}
-
-		/*
-		 * Identify server, obtaining start LSN position and current timeline ID
-		 * at the same time, necessary if not valid data can be found in the
-		 * existing output directory.
-		 */
-		if (!RunIdentifySystem(stream_thread_arg.conn, NULL, NULL, NULL, NULL))
-		{
-			PQfinish(stream_thread_arg.conn);
-			elog(ERROR, "Cannot continue backup because stream connect has failed.");
-		}
-
-        /* By default there are some error */
+		/* By default there are some error */
 		stream_thread_arg.ret = 1;
 		/* we must use startpos as start_lsn from start_backup */
 		stream_thread_arg.startpos = current.start_lsn;
@@ -522,7 +503,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		char		pg_control_path[MAXPGPATH];
 
 		snprintf(pg_control_path, sizeof(pg_control_path), "%s/%s",
-				 instance_config.pgdata, "global/pg_control");
+				 instance_config.pgdata, XLOG_CONTROL_FILE);
 
 		for (i = 0; i < parray_num(backup_files_list); i++)
 		{
@@ -2529,7 +2510,7 @@ StreamLog(void *arg)
 	/*
 	 * Start the replication
 	 */
-	elog(LOG, _("started streaming WAL at %X/%X (timeline %u)"),
+	elog(LOG, "started streaming WAL at %X/%X (timeline %u)",
 		 (uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
 		  stream_arg->starttli);
 
@@ -2570,13 +2551,13 @@ StreamLog(void *arg)
 #endif
 	}
 #else
-	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli, NULL,
-						 (char *) stream_arg->basedir, stop_streaming,
-						 standby_message_timeout, NULL, false, false) == false)
+	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli,
+						NULL, (char *) stream_arg->basedir, stop_streaming,
+						standby_message_timeout, NULL, false, false) == false)
 		elog(ERROR, "Problem in receivexlog");
 #endif
 
-	elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
+	elog(LOG, "finished streaming WAL at %X/%X (timeline %u)",
 		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, stream_arg->starttli);
 	stream_arg->ret = 0;
 
@@ -2743,4 +2724,63 @@ check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 
 		}
 	}
+}
+
+/*
+ * Run IDENTIFY_SYSTEM through a given connection and
+ * check system identifier and timeline are matching
+ */
+void
+IdentifySystem(StreamThreadArg *stream_thread_arg)
+{
+	PGresult	*res;
+
+	uint64 stream_conn_sysidentifier = 0;
+	char *stream_conn_sysidentifier_str;
+	TimeLineID stream_conn_tli = 0;
+
+	if (!CheckServerVersionForStreaming(stream_thread_arg->conn))
+	{
+		PQfinish(stream_thread_arg->conn);
+		/*
+		 * Error message already written in CheckServerVersionForStreaming().
+		 * There's no hope of recovering from a version mismatch, so don't
+		 * retry.
+		 */
+		elog(ERROR, "Cannot continue backup because stream connect has failed.");
+	}
+
+	/*
+	 * Identify server, obtain server system identifier and timeline
+	 */
+	res = pgut_execute(stream_thread_arg->conn, "IDENTIFY_SYSTEM", 0, NULL);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		elog(WARNING,"Could not send replication command \"%s\": %s",
+						"IDENTIFY_SYSTEM", PQerrorMessage(stream_thread_arg->conn));
+		PQfinish(stream_thread_arg->conn);
+		elog(ERROR, "Cannot continue backup because stream connect has failed.");
+	}
+
+	stream_conn_sysidentifier_str = PQgetvalue(res, 0, 0);
+	stream_conn_tli = atoi(PQgetvalue(res, 0, 1));
+
+	/* Additional sanity, primary for PG 9.5,
+	 * where system id can be obtained only via "IDENTIFY SYSTEM"
+	 */
+	if (!parse_uint64(stream_conn_sysidentifier_str, &stream_conn_sysidentifier, 0))
+		elog(ERROR, "%s is not system_identifier", stream_conn_sysidentifier_str);
+
+	if (stream_conn_sysidentifier != instance_config.system_identifier)
+		elog(ERROR, "System identifier mismatch. Connected PostgreSQL instance has system id: "
+			"" UINT64_FORMAT ". Expected: " UINT64_FORMAT ".",
+					stream_conn_sysidentifier, instance_config.system_identifier);
+
+	if (stream_conn_tli != current.tli)
+		elog(ERROR, "Timeline identifier mismatch. "
+			"Connected PostgreSQL instance has timeline id: %X. Expected: %X.",
+			stream_conn_tli, current.tli);
+
+	PQclear(res);
 }
