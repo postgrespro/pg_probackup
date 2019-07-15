@@ -690,6 +690,9 @@ do_checkdb(bool need_amcheck,
 	PGNodeInfo nodeInfo;
 	PGconn *cur_conn;
 
+	/* Initialize PGInfonode */
+	pgNodeInit(&nodeInfo);
+
 	if (skip_block_validation && !need_amcheck)
 		elog(ERROR, "Option '--skip-block-validation' must be used with '--amcheck' option");
 

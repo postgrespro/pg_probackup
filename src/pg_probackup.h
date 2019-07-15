@@ -248,9 +248,11 @@ typedef struct PGNodeInfo
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
+	bool			is_superuser;
 
-	char			program_version[100];
-	char			server_version[100];
+	int				server_version;
+	char			server_version_str[100];
+
 } PGNodeInfo;
 
 typedef struct pgBackup pgBackup;
@@ -290,7 +292,6 @@ struct pgBackup
 	int				compress_level;
 
 	/* Fields needed for compatibility check */
-	PGNodeInfo		nodeInfo;
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
@@ -564,6 +565,7 @@ extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
+extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
@@ -696,6 +698,8 @@ extern uint32 parse_program_version(const char *program_version);
 extern bool   parse_page(Page page, XLogRecPtr *lsn);
 int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				   CompressAlg alg, int level, const char **errormsg);
+
+extern void pretty_size(int64 size, char *buf, size_t len);
 
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);

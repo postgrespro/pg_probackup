@@ -1054,6 +1054,22 @@ deparse_compress_alg(int alg)
 }
 
 /*
+ * Fill PGNodeInfo struct with default values.
+ */
+void
+pgNodeInit(PGNodeInfo *node)
+{
+	node->block_size = 0;
+	node->wal_block_size = 0;
+	node->checksum_version = 0;
+
+	node->is_superuser = false;
+
+	node->server_version = 0;
+	node->server_version_str[0] = '\0';
+}
+
+/*
  * Fill pgBackup struct with default values.
  */
 void

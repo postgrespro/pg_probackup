@@ -612,16 +612,9 @@ main(int argc, char *argv[])
 			return do_init();
 		case BACKUP_CMD:
 			{
-				const char *backup_mode;
-				time_t		start_time;
+				time_t	start_time = time(NULL);
 
-				start_time = time(NULL);
-				backup_mode = deparse_backup_mode(current.backup_mode);
 				current.stream = stream_wal;
-
-				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote %s",
-						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", IsSshProtocol()  ? "true" : "false");
 
 				/* sanity */
 				if (current.backup_mode == BACKUP_MODE_INVALID)
