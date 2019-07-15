@@ -279,6 +279,8 @@ class ProbackupTest(object):
             if self.test_env['PG_PROBACKUP_PTRACK'] == 'ON':
                 self.ptrack = True
 
+        os.environ["PGAPPNAME"] = "pg_probackup"
+
     @property
     def pg_config_version(self):
         return self.version_to_num(

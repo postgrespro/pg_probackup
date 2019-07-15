@@ -18,6 +18,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         make node, take full backup, restore it and make replica from it,
         take full stream backup from replica
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(

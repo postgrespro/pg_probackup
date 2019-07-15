@@ -1528,6 +1528,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'CREATE DATABASE backupdb')
 
+        # PG 9.5
         if self.get_version(node) < 90600:
             node.safe_psql(
                 'backupdb',
@@ -1559,6 +1560,43 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # >= 10
         else:
             node.safe_psql(
                 'backupdb',
@@ -1595,17 +1633,18 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         if self.ptrack:
             for fname in [
-                    'oideq(oid, oid)',
-                    'ptrack_version()',
-                    'pg_ptrack_clear()',
-                    'pg_ptrack_control_lsn()',
-                    'pg_ptrack_get_and_clear_db(oid, oid)',
-                    'pg_ptrack_get_and_clear(oid, oid)',
-                    'pg_ptrack_get_block_2(oid, oid, oid, bigint)']:
+                    'pg_catalog.oideq(oid, oid)',
+                    'pg_catalog.ptrack_version()',
+                    'pg_catalog.pg_ptrack_clear()',
+                    'pg_catalog.pg_ptrack_control_lsn()',
+                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
+                    'pg_catalog.pg_stop_backup()']:
                 # try:
                 node.safe_psql(
                     "backupdb",
-                    "GRANT EXECUTE ON FUNCTION pg_catalog.{0} "
+                    "GRANT EXECUTE ON FUNCTION {0} "
                     "TO backup".format(fname))
                 # except:
                 #     pass
