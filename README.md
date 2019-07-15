@@ -45,6 +45,10 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 * Remote mode is in beta stage.
 * Incremental chain can span only within one timeline. So if you have backup incremental chain taken from replica and it gets promoted, you would be forced to take another FULL backup.
 
+## Current release
+
+[2.1.3](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.3)
+
 ## Installation and Setup
 ### Windows Installation
 [Installers download link](https://oc.postgrespro.ru/index.php/s/CGsjXlc5NmhRI0L)
@@ -81,7 +85,7 @@ yum install pg_probackup-{11,10,9.6,9.5}-debuginfo
 yumdownloader --source pg_probackup-{11,10,9.6,9.5}
 ```
 
-Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup.html#pg-probackup-install-and-setup).
+Once you have `pg_probackup` installed, complete [the setup](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#installation-and-setup).
 
 ## Building from source
 ### Linux
@@ -103,10 +107,6 @@ SET PATH=%PATH%;C:\Perl64\bin
 SET PATH=%PATH%;C:\msys64\usr\bin
 gen_probackup_project.pl C:\path_to_postgresql_source_tree
 ```
-
-## Current release
-
-[2.1.3](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.3)
 
 ## Documentation
 

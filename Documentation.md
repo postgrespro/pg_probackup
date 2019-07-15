@@ -6,6 +6,7 @@ Current version - 2.1.3
 
 1. [Synopsis](#synopsis)
 2. [Overview](#overview)
+    * [Versioning](#versioning)
     * [Limitations](#limitations)
 
 3. [Installation and Setup](#installation-and-setup)
@@ -134,12 +135,16 @@ pg_probackup can take only physical online backups, and online backups require W
 - ARCHIVE. Such backups rely on [continuous archiving](#setting-up-continuous-wal-archiving) to ensure consistent recovery. This is the default WAL delivery method.
 - STREAM. Such backups include all the files required to restore the cluster to a consistent state at the time the backup was taken. Regardless of [continuous archiving](#setting-up-continuous-wal-archiving) been set up or not, the WAL segments required for consistent recovery are streamed (hence STREAM) via replication protocol during backup and included into the backup files.
 
+### Versioning
+
+pg_probackup is following [semantic](https://semver.org/) versioning.
+
 ### Limitations
 
 pg_probackup currently has the following limitations:
 
 - Creating backups from a remote server is currently not supported on Windows systems.
-- The PostgreSQL server from which the backup was taken and the restored server must be compatible by the [block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-BLOCK-SIZE) and [wal_block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number. 
+- The PostgreSQL server from which the backup was taken and the restored server must be compatible by the [block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-BLOCK-SIZE) and [wal_block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number.
 
 ## Installation and Setup
 
