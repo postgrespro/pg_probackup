@@ -1689,7 +1689,11 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 
 		while (1)
 		{
-			if (!PQconsumeInput(conn) || PQisBusy(conn))
+			if (!PQconsumeInput(conn))
+				elog(ERROR, "pg_stop backup() failed: %s",
+						PQerrorMessage(conn));
+
+			if (PQisBusy(conn))
 			{
 				pg_stop_backup_timeout++;
 				sleep(1);
@@ -1754,6 +1758,9 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 			{
 				char	   *xlog_path,
 							stream_xlog_path[MAXPGPATH];
+
+				elog(WARNING, "Invalid stop_backup_lsn value %X/%X",
+					 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
 
 				if (stream_wal)
 				{
@@ -1885,10 +1892,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 		char	   *xlog_path,
 					stream_xlog_path[MAXPGPATH];
 
-		/* Wait for stop_lsn to be received by replica */
-		/* XXX Do we need this? */
-//		if (current.from_replica)
-//			wait_replica_wal_lsn(stop_backup_lsn, false);
 		/*
 		 * Wait for stop_lsn to be archived or streamed.
 		 * We wait for stop_lsn in stream mode just in case.
