@@ -209,7 +209,25 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup
 COMMIT;
 ```
 
-For PostgreSQL >= 9.6:
+For PostgreSQL 9.6:
+```
+BEGIN;
+CREATE ROLE backup WITH LOGIN;
+GRANT USAGE ON SCHEMA pg_catalog TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
+COMMIT;
+```
+
+For PostgreSQL >= 10:
 ```
 BEGIN;
 CREATE ROLE backup WITH LOGIN;
@@ -220,6 +238,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO 
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
@@ -307,10 +326,10 @@ GRANT EXECUTE ON FUNCTION bt_index_check(oid, bool) TO backup;
 If you are going to use PTRACK backups, complete the following additional steps:
 
 - Set the parameter `ptrack_enable` to `on`.
-- Grant the rights to execute ptrack functions to the *backup* role:
+- Grant the rights to execute `ptrack` functions to the *backup* role:
 
-        GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup;
-        GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;
+        GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
+        GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
 - The *backup* role must have access to all the databases of the cluster.
 
 ## Command-Line Reference
