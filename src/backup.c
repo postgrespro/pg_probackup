@@ -809,6 +809,7 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 			 "server version is %s, must be %s or higher for backup from replica",
 			 nodeInfo->server_version_str, "9.6");
 
+	/* TODO: search pg_proc for pgpro_edition before calling */
 	res = pgut_execute_extended(conn, "SELECT pgpro_edition()",
 								0, NULL, true, true);
 
@@ -1526,9 +1527,8 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 	PQclear(res);
 
 	/* Create restore point
-	 * Only if it is backup from master.
-	 * If PG 9.5, then create restore point only if
-	 * pguser is superuser.
+	 * Only if backup is from master.
+	 * For PG 9.5 create restore point only if pguser is superuser.
 	 */
 	if (backup != NULL && !current.from_replica &&
 		!(nodeInfo->server_version < 90600 &&
