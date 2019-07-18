@@ -5,11 +5,13 @@ pg_probackup is a utility to manage backup and recovery of PostgreSQL database c
 Current version - 2.1.3
 
 1. [Synopsis](#synopsis)
-2. [Overview](#overview)
-    * [Versioning](#versioning)
+2. [Versioning](#versioning)
+3. [Overview](#overview)
+    * [Backup modes](#backup-modes)
+    * [WAL methods](#wal-methods)
     * [Limitations](#limitations)
 
-3. [Installation and Setup](#installation-and-setup)
+4. [Installation and Setup](#installation-and-setup)
     * [Initializing the Backup Catalog](#initializing-the-backup-catalog)
     * [Adding a New Backup Instance](#adding-a-new-backup-instance)
     * [Configuring the Database Cluster](#configuring-the-database-cluster)
@@ -19,7 +21,7 @@ Current version - 2.1.3
     * [Setting up Cluster Verification](#setting-up-cluster-verification)
     * [Setting up PTRACK Backups](#setting-up-ptrack-backups)
 
-4. [Command-Line Reference](#command-line-reference)
+5. [Command-Line Reference](#command-line-reference)
     * [Commands](#commands)
         * [version](#version)
         * [help](#help)
@@ -52,7 +54,7 @@ Current version - 2.1.3
         * [Remote Mode Options](#remote-mode-options)
         * [Replica Options](#replica-options)
 
-5. [Usage](#usage)
+6. [Usage](#usage)
     * [Creating a Backup](#creating-a-backup)
     * [Verifying a Cluster](#verifying-a-cluster)
     * [Validating a Backup](#validating-a-backup)
@@ -66,8 +68,8 @@ Current version - 2.1.3
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
 
-6. [Authors](#authors)
-7. [Credits](#credits)
+7. [Authors](#authors)
+8. [Credits](#credits)
 
 
 ## Synopsis
@@ -104,6 +106,11 @@ Current version - 2.1.3
 
 `pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f`
 
+
+## Versioning
+
+pg_probackup is following [semantic](https://semver.org/) versioning.
+
 ## Overview
 
 As compared to other backup solutions, pg_probackup offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
@@ -122,22 +129,22 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
 
+### Backup Modes
+
 Using pg_probackup, you can take full or incremental backups:
 
 - FULL backups contain all the data files required to restore the database cluster.
 - Incremental backups only store the data that has changed since the previous backup. It allows to decrease the backup size and speed up backup and restore operations. pg_probackup supports the following modes of incremental backups:
     - DELTA backup. In this mode, pg_probackup reads all data files in the data directory and copies only those pages that has changed since the previous backup. Note that this mode can impose read-only I/O pressure equal to a full backup.
     - PAGE backup. In this mode, pg_probackup scans all WAL files in the archive from the moment the previous full or incremental backup was taken. Newly created backups contain only the pages that were mentioned in WAL records. This requires all the WAL files since the previous backup to be present in the WAL archive. If the size of these files is comparable to the total size of the database cluster files, speedup is smaller, but the backup still takes less space. You have to configure WAL archiving as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving) to make PAGE backups.
-    - PTRACK backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special PTRACK bitmap for this relation. As one page requires just one bit in the PTRACK fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly. 
+    - PTRACK backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special PTRACK bitmap for this relation. As one page requires just one bit in the PTRACK fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly.
 
-pg_probackup can take only physical online backups, and online backups require WAL for consistent recovery. So regardless of the chosen `backup mode` (FULL, PAGE, DELTA, etc), all backups taken with pg_probackup must use one of the following `WAL delivery methods`:
+### WAL methods
+
+pg_probackup can take only physical online backups, and online backups require WAL for consistent recovery. So regardless of the chosen [backup mode](#backup-modes) (FULL, PAGE or DELTA), any backup taken with pg_probackup must use one of the following `WAL delivery methods`:
 
 - ARCHIVE. Such backups rely on [continuous archiving](#setting-up-continuous-wal-archiving) to ensure consistent recovery. This is the default WAL delivery method.
 - STREAM. Such backups include all the files required to restore the cluster to a consistent state at the time the backup was taken. Regardless of [continuous archiving](#setting-up-continuous-wal-archiving) been set up or not, the WAL segments required for consistent recovery are streamed (hence STREAM) via replication protocol during backup and included into the backup files.
-
-### Versioning
-
-pg_probackup is following [semantic](https://semver.org/) versioning.
 
 ### Limitations
 
@@ -284,11 +291,13 @@ ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/do
 
         archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]'
 
-Where *backup_dir* and *instance_name* refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote machine.
+Where *backup_dir* and *instance_name* refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote machine. For details about all possible `archive-push` parameters, see the section [archive-push](#archive-push).
 
 Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in ARCHIVE mode.
 
->NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to '*backup_dir*/wal/*instance_name*' directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero data loss` archive strategy can be achieved only by using pg_receivewal.
+>NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to '*backup_dir*/wal/*instance_name*' directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero Data Loss` archive strategy can be achieved only by using pg_receivewal.
+
+>NOTE: using pg_probackup command [archive-push](#archive-push) for continious archiving is optional. You can use any other tool you like as long as it delivers WAL segments into '*backup_dir*/wal/*instance_name*' directory. If compression is used, it should be gzip and '.gz' suffix is mandatory.
 
 ### Backup from Standby
 
@@ -1015,13 +1024,15 @@ If `-i/--backup-id` option is omitted, pg_probackup automatically chooses the ba
 
 pg_probackup supports the remote mode that allows to perform `backup` and `restore` operations remotely via SSH. In this mode, the backup catalog is stored on a local system, while PostgreSQL instance to be backed up is located on a remote system. You must have pg_probackup installed on both systems.
 
+Do note that pg_probackup rely on passwordless SSH connection for communication between the hosts.
+
 The typical workflow is as follows:
 
- - On your local system, configure pg_probackup as explained in the section [Installation and Setup](#installation-and-setup). For the [add-instance](#add-instance) and [set-config](#set-config) commands, make sure to specify [remote options](#remote-mode-options) that point to the remote server with the PostgreSQL instance.
+ - On your backup host, configure pg_probackup as explained in the section [Installation and Setup](#installation-and-setup). For the [add-instance](#add-instance) and [set-config](#set-config) commands, make sure to specify [remote options](#remote-mode-options) that point to the database host with the PostgreSQL instance.
 
-- If you would like to take ARCHIVE backups, configure continuous WAL archiving on the remote system as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the [archive-push](#archive-push) and [archive-get](#archive-get) commands, you must specify the [remote options](#remote-mode-options) that point to host with backup catalog.
+- If you would like to take remote backup in [PAGE](#backup-modes) mode, or rely on [ARCHIVE](#wal-methods) WAL delivery method, or use [PITR](#performing-point-in-time-pitr-recovery), then configure continuous WAL archiving from database host to the backup host as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the [archive-push](#archive-push) and [archive-get](#archive-get) commands, you must specify the [remote options](#remote-mode-options) that point to backup host with backup catalog.
 
-- Run [backup](#backup) or [restore](#restore) commands with remote options on system with backup catalog. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively. 
+- Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) on backup host. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
 
 >NOTE: The remote backup mode is currently unavailable for Windows systems.
 
