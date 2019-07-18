@@ -7,8 +7,6 @@ Current version - 2.1.3
 1. [Synopsis](#synopsis)
 2. [Versioning](#versioning)
 3. [Overview](#overview)
-    * [Backup modes](#backup-modes)
-    * [WAL methods](#wal-methods)
     * [Limitations](#limitations)
 
 4. [Installation and Setup](#installation-and-setup)
@@ -129,9 +127,7 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
 
-### Backup Modes
-
-Using pg_probackup, you can take full or incremental backups:
+Using pg_probackup, you can take full or incremental [backups](#creating-a-backup):
 
 - FULL backups contain all the data files required to restore the database cluster.
 - Incremental backups only store the data that has changed since the previous backup. It allows to decrease the backup size and speed up backup and restore operations. pg_probackup supports the following modes of incremental backups:
@@ -139,12 +135,10 @@ Using pg_probackup, you can take full or incremental backups:
     - PAGE backup. In this mode, pg_probackup scans all WAL files in the archive from the moment the previous full or incremental backup was taken. Newly created backups contain only the pages that were mentioned in WAL records. This requires all the WAL files since the previous backup to be present in the WAL archive. If the size of these files is comparable to the total size of the database cluster files, speedup is smaller, but the backup still takes less space. You have to configure WAL archiving as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving) to make PAGE backups.
     - PTRACK backup. In this mode, PostgreSQL tracks page changes on the fly. Continuous archiving is not necessary for it to operate. Each time a relation page is updated, this page is marked in a special PTRACK bitmap for this relation. As one page requires just one bit in the PTRACK fork, such bitmaps are quite small. Tracking implies some minor overhead on the database server operation, but speeds up incremental backups significantly.
 
-### WAL methods
+pg_probackup can take only physical online backups, and online backups require WAL for consistent recovery. So regardless of the chosen backup mode (FULL, PAGE or DELTA), any backup taken with pg_probackup must use one of the following `WAL delivery methods`:
 
-pg_probackup can take only physical online backups, and online backups require WAL for consistent recovery. So regardless of the chosen [backup mode](#backup-modes) (FULL, PAGE or DELTA), any backup taken with pg_probackup must use one of the following `WAL delivery methods`:
-
-- ARCHIVE. Such backups rely on [continuous archiving](#setting-up-continuous-wal-archiving) to ensure consistent recovery. This is the default WAL delivery method.
-- STREAM. Such backups include all the files required to restore the cluster to a consistent state at the time the backup was taken. Regardless of [continuous archiving](#setting-up-continuous-wal-archiving) been set up or not, the WAL segments required for consistent recovery are streamed (hence STREAM) via replication protocol during backup and included into the backup files.
+- [ARCHIVE](#archive-mode). Such backups rely on [continuous archiving](#setting-up-continuous-wal-archiving) to ensure consistent recovery. This is the default WAL delivery method.
+- [STREAM](#stream-mode). Such backups include all the files required to restore the cluster to a consistent state at the time the backup was taken. Regardless of [continuous archiving](#setting-up-continuous-wal-archiving) been set up or not, the WAL segments required for consistent recovery are streamed (hence STREAM) via replication protocol during backup and included into the backup files.
 
 ### Limitations
 
@@ -889,30 +883,47 @@ Where *backup_mode* can take one of the following values:
 - PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly. 
 
-When restoring a cluster from an incremental backup, pg_probackup relies on the previous full backup to restore all the data files first. Thus, you must create at least one full backup before taking incremental ones.
+When restoring a cluster from an incremental backup, pg_probackup relies on the parent full backup and all the incremental backups between them, which is called `backup chain`. You must create at least one full backup before taking incremental ones.
 
-#### Page validation
-If [data checksums](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS) are enabled in the database cluster, pg_probackup uses this information to check correctness of data files. While reading each page, pg_probackup checks whether the calculated checksum coincides with the checksum stored in the page header. This guarantees that the PostgreSQL instance and backup itself are free of corrupted pages.
-Note that pg_probackup reads database files directly from filesystem, so under heavy write load during backup it can show false positive checksum failures because of partial writes. In case of page checksumm mismatch, page is readed again and checksumm comparison repeated.
+#### ARCHIVE mode
 
-Page is considered corrupted if checksumm comparison failed more than 100 times, is this case backup is aborted.
+ARCHIVE is the default WAl delivery mode.
 
-Redardless of data checksums been enabled or not, pg_probackup always check page header "sanity".
+For example, to make a FULL backup in ARCHIVE mode, run:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL
+
+ARCHIVE backup rely on [continuous archiving](#setting-up-continuous-wal-archiving) to provide WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
+
+During [backup](#backup) pg_probackup ensures that WAL files containing WAL records between START LSN and STOP LSN are actually exists in '*backup_dir*/wal/*instance_name*' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This costly precations eliminates the risk of silent WAL corruption.
 
 #### STREAM mode
-To make a STREAM backup, add the `--stream` option to the above command. For example, to create a full STREAM backup, run:
+
+STREAM is the optional WAl delivery mode.
+
+For example, to make a FULL backup in STREAM mode, add the `--stream` option to the command from the previous example:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --stream --temp-slot
 
-The optional `--temp-slot` parameter ensures that the required segments remain available if the WAL is rotated before the backup is complete.
+The optional `--temp-slot` flag ensures that the required segments remain available if the WAL is rotated before the backup is complete.
 
-STREAM backups include all the WAL segments required to restore the cluster to a consistent state at the time the backup was taken. To restore a cluster from an incremental STREAM backup, pg_probackup still requires the full backup and all the incremental backups it depends on.
+STREAM backups include all the WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
+
+During [backup](#backup) pg_probackup streams WAL files containing WAL records between START LSN and STOP LSN in '*backup_dir*/backups/*instance_name*/*BACKUP ID*/database/pg_wal' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This costly precations eliminates the risk of silent WAL corruption.
 
 Even if you are using [continuous archiving](#setting-up-continuous-wal-archiving), STREAM backups can still be useful in the following cases:
 
 - STREAM backups can be restored on the server that has no file access to WAL archive.
 - STREAM backups enable you to restore the cluster state at the point in time for which WAL files are no longer available.
 - Backup in STREAM mode can be taken from standby of a server, that generates small amount of WAL traffic, without long waiting for WAL segment to fill up.
+
+#### Page validation
+If [data checksums](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS) are enabled in the database cluster, pg_probackup uses this information to check correctness of data files during backup. While reading each page, pg_probackup checks whether the calculated checksum coincides with the checksum stored in the page header. This guarantees that the PostgreSQL instance and backup itself are free of corrupted pages.
+Note that pg_probackup reads database files directly from filesystem, so under heavy write load during backup it can show false positive checksum failures because of partial writes. In case of page checksumm mismatch, page is readed again and checksumm comparison repeated.
+
+Page is considered corrupted if checksumm comparison failed more than 100 times, is this case backup is aborted.
+
+Redardless of data checksums been enabled or not, pg_probackup always check page header "sanity".
 
 #### External directories
 To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons.
@@ -1030,7 +1041,7 @@ The typical workflow is as follows:
 
  - On your backup host, configure pg_probackup as explained in the section [Installation and Setup](#installation-and-setup). For the [add-instance](#add-instance) and [set-config](#set-config) commands, make sure to specify [remote options](#remote-mode-options) that point to the database host with the PostgreSQL instance.
 
-- If you would like to take remote backup in [PAGE](#backup-modes) mode, or rely on [ARCHIVE](#wal-methods) WAL delivery method, or use [PITR](#performing-point-in-time-pitr-recovery), then configure continuous WAL archiving from database host to the backup host as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the [archive-push](#archive-push) and [archive-get](#archive-get) commands, you must specify the [remote options](#remote-mode-options) that point to backup host with backup catalog.
+- If you would like to take remote backup in [PAGE](#creating-a-backup) mode, or rely on [ARCHIVE](#archive-mode) WAL delivery method, or use [PITR](#performing-point-in-time-pitr-recovery), then configure continuous WAL archiving from database host to the backup host as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the [archive-push](#archive-push) and [archive-get](#archive-get) commands, you must specify the [remote options](#remote-mode-options) that point to backup host with backup catalog.
 
 - Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) on backup host. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
 
