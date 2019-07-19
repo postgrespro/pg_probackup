@@ -740,6 +740,8 @@ Maximum lifetime of an individual log file. If this value is reached, the log fi
 #### Connection Options
 You can use these options together with [backup](#backup) and [checkdb](#checkdb) commands.
 
+All libpq environment variables are fully [supported](https://www.postgresql.org/docs/current/libpq-envars.html).
+
     -d dbname
     --dbname=dbname
     PGDATABASE
@@ -764,7 +766,7 @@ User name to connect as.
 
     -w
     --no-password
- Disables a password prompt. If the server requires password authentication and a password is not available by other means such as a [.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) file, the connection attempt will fail. This option can be useful in batch jobs and scripts where no user is present to enter a password. 
+ Disables a password prompt. If the server requires password authentication and a password is not available by other means such as a [.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) file or PGPASSWORD environment variable, the connection attempt will fail. This option can be useful in batch jobs and scripts where no user is present to enter a password.
 
     -W
     --password
@@ -895,7 +897,7 @@ For example, to make a FULL backup in ARCHIVE mode, run:
 
 ARCHIVE backup rely on [continuous archiving](#setting-up-continuous-wal-archiving) to provide WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
 
-During [backup](#backup) pg_probackup ensures that WAL files containing WAL records between START LSN and STOP LSN are actually exists in '*backup_dir*/wal/*instance_name*' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This costly precations eliminates the risk of silent WAL corruption.
+During [backup](#backup) pg_probackup ensures that WAL files containing WAL records between START LSN and STOP LSN are actually exists in '*backup_dir*/wal/*instance_name*' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This precations eliminates the risk of silent WAL corruption.
 
 #### STREAM mode
 
@@ -909,7 +911,7 @@ The optional `--temp-slot` flag ensures that the required segments remain availa
 
 STREAM backups include all the WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
 
-During [backup](#backup) pg_probackup streams WAL files containing WAL records between START LSN and STOP LSN in '*backup_dir*/backups/*instance_name*/*BACKUP ID*/database/pg_wal' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This costly precations eliminates the risk of silent WAL corruption.
+During [backup](#backup) pg_probackup streams WAL files containing WAL records between START LSN and STOP LSN in '*backup_dir*/backups/*instance_name*/*BACKUP ID*/database/pg_wal' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This precations eliminates the risk of silent WAL corruption.
 
 Even if you are using [continuous archiving](#setting-up-continuous-wal-archiving), STREAM backups can still be useful in the following cases:
 
