@@ -317,7 +317,7 @@ Logical verification of database cluster requires the following additional setup
 
         CREATE EXTENSION amcheck;
 
-- To perform logical verification the following rights are requiared:
+- To perform logical verification the following permissions are requiared:
 
 ```
 GRANT SELECT ON TABLE pg_catalog.pg_am TO backup;
@@ -503,7 +503,7 @@ Copied to archive WAL segments are synced to disk.
 
 You can use `archive-push` in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) PostgreSQL parameter to set up [continous WAl archiving](#setting-up-continuous-wal-archiving).
 
-For details, see section [Archiving Options](#archiving-options)
+For details, see sections [Archiving Options](#archiving-options) and [Compression Options](#compression-options).
 
 #### archive-get
 
@@ -791,6 +791,8 @@ Alias for `--compress-algorithm=zlib` and `--compress-level=1`.
 #### Archiving Options
 
 These options can be used with [archive-push](#archive-push) command in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) setting and [archive-get](#archive-get) command in [restore_command](https://www.postgresql.org/docs/current/archive-recovery-settings.html#RESTORE-COMMAND) setting.
+
+Additionally [Remote Mode Options](#remote-mode-options) and [Logging Options](#logging-options) can be used.
 
     --wal-file-path=wal_file_path %p
 Provides the path to the WAL file in `archive_command` and `restore_command`. The %p variable is required for correct processing.
