@@ -1540,8 +1540,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('print_file_list')
-        gdb.continue_execution_until_break()
+        gdb.set_breakpoint('fio_fwrite')
+        gdb.continue_execution_until_break(2)
 
         gdb._execute('signal SIGKILL')
 
@@ -1631,8 +1631,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('print_file_list')
+        gdb.set_breakpoint('fio_fwrite')
         gdb.continue_execution_until_break()
+
+        gdb._execute('bt')
 
         gdb._execute('signal SIGKILL')
 

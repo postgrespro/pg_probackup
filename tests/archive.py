@@ -256,15 +256,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         with open(log_file, 'r') as f:
             log_content = f.read()
 
-        self.assertIn(
-            "ERROR: Switched WAL segment 000000010000000000000002 "
-            "could not be archived in 60 seconds",
-            log_content)
-
-        self.assertIn(
-            "ERROR: Switched WAL segment 000000010000000000000002 "
-            "could not be archived in 60 seconds",
-            log_content)
+        # in PG =< 9.6 pg_stop_backup always wait
+        if self.get_version(node) < 100000:
+            self.assertIn(
+                "ERROR: pg_stop_backup doesn't answer in 60 seconds, cancel it",
+                log_content)
+        else:
+            self.assertIn(
+                "ERROR: Switched WAL segment 000000010000000000000002 "
+                "could not be archived in 60 seconds",
+                log_content)
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
