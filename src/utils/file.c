@@ -333,6 +333,21 @@ int fio_open(char const* path, int mode, fio_location location)
 	return fd;
 }
 
+
+/* Close ssh session */
+void
+fio_disconnect(void)
+{
+	if (fio_stdin)
+	{
+		SYS_CHECK(close(fio_stdin));
+		SYS_CHECK(close(fio_stdout));
+		fio_stdin = 0;
+		fio_stdout = 0;
+		wait_ssh();
+	}
+}
+
 /* Open stdio file */
 FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 {
@@ -340,14 +355,30 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 
 	if (fio_is_remote(location))
 	{
-		int flags = O_RDWR|O_CREAT;
+		int flags = 0;
 		int fd;
 		if (strcmp(mode, PG_BINARY_W) == 0) {
-			flags |= O_TRUNC|PG_BINARY;
-		} else if (strncmp(mode, PG_BINARY_R, strlen(PG_BINARY_R)) == 0) {
-			flags |= PG_BINARY;
+			flags = O_TRUNC|PG_BINARY|O_RDWR|O_CREAT;
+		} else if (strcmp(mode, "w") == 0) {
+			flags = O_TRUNC|O_RDWR|O_CREAT;
+		} else if (strcmp(mode, PG_BINARY_R) == 0) {
+			flags = O_RDONLY|PG_BINARY;
+		} else if (strcmp(mode, "r") == 0) {
+			flags = O_RDONLY;
+		} else if (strcmp(mode, PG_BINARY_R "+") == 0) {
+			/* stdio fopen("rb+") actually doesn't create unexisted file, but probackup frequently
+			 * needs to open existed file or create new one if not exists.
+			 * In stdio it can be done using two fopen calls: fopen("r+") and if failed then fopen("w").
+			 * But to eliminate extra call which especially critical in case of remote connection
+			 * we change r+ semantic to create file if not exists.
+			 */
+			flags = O_RDWR|O_CREAT|PG_BINARY;
+		} else if (strcmp(mode, "r+") == 0) { /* see comment above */
+			flags |= O_RDWR|O_CREAT;
 		} else if (strcmp(mode, "a") == 0) {
-			flags |= O_APPEND;
+			flags |= O_CREAT|O_RDWR|O_APPEND;
+		} else {
+			Assert(false);
 		}
 		fd = fio_open(path, flags, location);
 		if (fd >= 0)
@@ -632,7 +663,7 @@ int fio_fstat(int fd, struct stat* st)
 }
 
 /* Get information about file */
-int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_location location)
+int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -641,7 +672,7 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_locati
 
 		hdr.cop = FIO_STAT;
 		hdr.handle = -1;
-		hdr.arg = follow_symlinks;
+		hdr.arg = follow_symlink;
 		hdr.size = path_len;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
@@ -660,7 +691,7 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_locati
 	}
 	else
 	{
-		return follow_symlinks ? stat(path, st) : lstat(path,  st);
+		return follow_symlink ? stat(path, st) : lstat(path,  st);
 	}
 }
 
@@ -1148,8 +1179,10 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_PAGE);
 
-		if (hdr.arg < 0) /* read error */
-			return hdr.arg;
+		if ((int)hdr.arg < 0) /* read error */
+		{
+			return (int)hdr.arg;
+		}
 
 		blknum = hdr.arg;
 		if (hdr.size == 0) /* end of segment */
@@ -1205,7 +1238,7 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 				{
 					hdr.arg = -errno;
 					hdr.size = 0;
-					Assert(hdr.arg < 0);
+					Assert((int)hdr.arg < 0);
 					IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 				}
 				else

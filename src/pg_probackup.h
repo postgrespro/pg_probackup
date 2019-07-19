@@ -36,6 +36,7 @@
 
 /* pgut client variables and full path */
 extern const char  *PROGRAM_NAME;
+extern const char  *PROGRAM_NAME_FULL;
 extern const char  *PROGRAM_FULL_PATH;
 extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
@@ -187,8 +188,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.1.3"
-#define AGENT_PROTOCOL_VERSION 20103
+#define PROGRAM_VERSION	"2.1.4"
+#define AGENT_PROTOCOL_VERSION 20104
 
 
 typedef struct ConnectionOptions
@@ -247,9 +248,11 @@ typedef struct PGNodeInfo
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
+	bool			is_superuser;
 
-	char			program_version[100];
-	char			server_version[100];
+	int				server_version;
+	char			server_version_str[100];
+
 } PGNodeInfo;
 
 typedef struct pgBackup pgBackup;
@@ -289,7 +292,6 @@ struct pgBackup
 	int				compress_level;
 
 	/* Fields needed for compatibility check */
-	PGNodeInfo		nodeInfo;
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
@@ -412,7 +414,6 @@ typedef struct BackupPageHeader
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 
 /* directory options */
-extern char    *pg_probackup;
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
@@ -472,7 +473,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time, bool no_validate);
-extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt, 
+extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
@@ -553,7 +554,8 @@ extern parray *catalog_get_backup_list(time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
-											  TimeLineID tli);
+											  TimeLineID tli,
+											  time_t current_start_time);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list);
@@ -563,6 +565,7 @@ extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
+extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
@@ -577,6 +580,7 @@ extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 extern bool launch_agent(void);
 extern void launch_ssh(char* argv[]);
+extern void wait_ssh(void);
 
 #define COMPRESS_ALG_DEFAULT NOT_DEFINED_COMPRESS
 #define COMPRESS_LEVEL_DEFAULT 1
@@ -586,7 +590,7 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool omit_symlink, bool add_root, int external_dir_num, fio_location location);
+						  bool follow_symlink, bool add_root, int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
@@ -619,7 +623,7 @@ extern bool fileExists(const char *path, fio_location location);
 extern size_t pgFileSize(const char *path);
 
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
-						 bool omit_symlink, int external_dir_num,
+						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
 extern pgFile *pgFileInit(const char *path, const char *rel_path);
 extern void pgFileDelete(pgFile *file);
@@ -694,6 +698,8 @@ extern uint32 parse_program_version(const char *program_version);
 extern bool   parse_page(Page page, XLogRecPtr *lsn);
 int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				   CompressAlg alg, int level, const char **errormsg);
+
+extern void pretty_size(int64 size, char *buf, size_t len);
 
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);

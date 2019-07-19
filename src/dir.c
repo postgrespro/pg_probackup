@@ -122,7 +122,7 @@ static int BlackListCompare(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file);
 static void dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list,
+								   bool follow_symlink, parray *black_list,
 								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -159,14 +159,14 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, const char *rel_path, bool omit_symlink,
+pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 		  int external_dir_num, fio_location location)
 {
 	struct stat		st;
 	pgFile		   *file;
 
 	/* stat the file */
-	if (fio_stat(path, &st, omit_symlink, location) < 0)
+	if (fio_stat(path, &st, follow_symlink, location) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno == ENOENT)
@@ -445,11 +445,11 @@ BlackListCompare(const void *str1, const void *str2)
  * List files, symbolic links and directories in the directory "root" and add
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
  *
- * When omit_symlink is true, symbolic link is ignored and only file or
+ * When follow_symlink is true, symbolic link is ignored and only file or
  * directory linked to will be listed.
  */
 void
-dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
+dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink,
 			  bool add_root, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
@@ -490,7 +490,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, "", omit_symlink, external_dir_num, location);
+	file = pgFileNew(root, "", follow_symlink, external_dir_num, location);
 	if (file == NULL)
 	{
 		/* For external directory this is not ok */
@@ -512,7 +512,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, file, exclude, omit_symlink, black_list,
+	dir_list_file_internal(files, file, exclude, follow_symlink, black_list,
 						   external_dir_num, location);
 
 	if (!add_root)
@@ -731,7 +731,7 @@ dir_check_file(pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-					   bool omit_symlink, parray *black_list,
+					   bool follow_symlink, parray *black_list,
 					   int external_dir_num, fio_location location)
 {
 	DIR		    *dir;
@@ -764,7 +764,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		join_path_components(child, parent->path, dent->d_name);
 		join_path_components(rel_child, parent->rel_path, dent->d_name);
 
-		file = pgFileNew(child, rel_child, omit_symlink, external_dir_num,
+		file = pgFileNew(child, rel_child, follow_symlink, external_dir_num,
 						 location);
 		if (file == NULL)
 			continue;
@@ -821,7 +821,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		 * recursively.
 		 */
 		if (S_ISDIR(file->mode))
-			dir_list_file_internal(files, file, exclude, omit_symlink,
+			dir_list_file_internal(files, file, exclude, follow_symlink,
 								   black_list, external_dir_num, location);
 	}
 

@@ -153,7 +153,7 @@ get_current_timeline(bool safe)
 	size_t      size;
 
 	/* First fetch file... */
-	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
+	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size,
 					   safe, FIO_DB_HOST);
 	if (safe && buffer == NULL)
 		return 0;
@@ -196,7 +196,7 @@ get_checkpoint_location(PGconn *conn)
 	size_t		size;
 	ControlFileData ControlFile;
 
-	buffer = fetchFile(conn, "global/pg_control", &size);
+	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -212,7 +212,7 @@ get_system_identifier(const char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -246,7 +246,7 @@ get_remote_system_identifier(PGconn *conn)
 	size_t		size;
 	ControlFileData ControlFile;
 
-	buffer = fetchFile(conn, "global/pg_control", &size);
+	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -263,9 +263,7 @@ get_xlog_seg_size(char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_DB_HOST);
-	if (buffer == NULL)
-		return 0;
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -283,7 +281,7 @@ get_data_checksum_version(bool safe)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(instance_config.pgdata, "global/pg_control", &size,
+	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size,
 					   safe, FIO_DB_HOST);
 	if (buffer == NULL)
 		return 0;
@@ -301,9 +299,8 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, "global/pg_control", &size, false, FIO_BACKUP_HOST);
-	if (buffer == NULL)
-		return 0;
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_BACKUP_HOST);
+
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -325,9 +322,6 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 
 	/* First fetch file content */
 	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
-	if (buffer == NULL)
-		elog(ERROR, "ERROR");
-
 	digestControlFile(&ControlFile, buffer, size);
 
 	elog(LOG, "Current minRecPoint %X/%X",

@@ -441,22 +441,88 @@ catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
 }
 
 /*
- * Find the last completed backup on given timeline
+ * Find the latest valid child of latest valid FULL backup on given timeline
  */
 pgBackup *
-catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
+catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current_start_time)
 {
 	int			i;
-	pgBackup   *backup = NULL;
+	pgBackup   *full_backup = NULL;
+	pgBackup   *tmp_backup = NULL;
+	char 	   *invalid_backup_id;
 
 	/* backup_list is sorted in order of descending ID */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		backup = (pgBackup *) parray_get(backup_list, (size_t) i);
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
 
+		if ((backup->backup_mode == BACKUP_MODE_FULL &&
+			(backup->status == BACKUP_STATUS_OK ||
+			 backup->status == BACKUP_STATUS_DONE)) && backup->tli == tli)
+		{
+			full_backup = backup;
+			break;
+		}
+	}
+
+	/* Failed to find valid FULL backup to fulfill ancestor role */
+	if (!full_backup)
+		return NULL;
+
+	elog(LOG, "Latest valid FULL backup: %s",
+		base36enc(full_backup->start_time));
+
+	/* FULL backup is found, lets find his latest child */
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* only valid descendants are acceptable for evaluation */
 		if ((backup->status == BACKUP_STATUS_OK ||
-			backup->status == BACKUP_STATUS_DONE) && backup->tli == tli)
-			return backup;
+			backup->status == BACKUP_STATUS_DONE))
+		{
+			switch (scan_parent_chain(backup, &tmp_backup))
+			{
+				/* broken chain */
+				case 0:
+					invalid_backup_id = base36enc_dup(tmp_backup->parent_backup);
+
+					elog(WARNING, "Backup %s has missing parent: %s. Cannot be a parent",
+						base36enc(backup->start_time), invalid_backup_id);
+					pg_free(invalid_backup_id);
+					continue;
+
+				/* chain is intact, but at least one parent is invalid */
+				case 1:
+					invalid_backup_id = base36enc_dup(tmp_backup->start_time);
+
+					elog(WARNING, "Backup %s has invalid parent: %s. Cannot be a parent",
+						base36enc(backup->start_time), invalid_backup_id);
+					pg_free(invalid_backup_id);
+					continue;
+
+				/* chain is ok */
+				case 2:
+					/* Yes, we could call is_parent() earlier - after choosing the ancestor,
+					 * but this way we have an opportunity to detect and report all possible
+					 * anomalies.
+					 */
+					if (is_parent(full_backup->start_time, backup, true))
+					{
+						elog(INFO, "Parent backup: %s",
+							base36enc(backup->start_time));
+						return backup;
+					}
+			}
+		}
+		/* skip yourself */
+		else if (backup->start_time == current_start_time)
+			continue;
+		else
+		{
+			elog(WARNING, "Backup %s has status: %s. Cannot be a parent.",
+				base36enc(backup->start_time), status2str(backup->status));
+		}
 	}
 
 	return NULL;
@@ -985,6 +1051,22 @@ deparse_compress_alg(int alg)
 	}
 
 	return NULL;
+}
+
+/*
+ * Fill PGNodeInfo struct with default values.
+ */
+void
+pgNodeInit(PGNodeInfo *node)
+{
+	node->block_size = 0;
+	node->wal_block_size = 0;
+	node->checksum_version = 0;
+
+	node->is_superuser = false;
+
+	node->server_version = 0;
+	node->server_version_str[0] = '\0';
 }
 
 /*

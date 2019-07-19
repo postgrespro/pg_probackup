@@ -217,6 +217,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_backward_compatibility_ptrack(self):
         """Description in jira issue PGPRO-434"""
+
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -224,8 +228,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off'}
-            )
+                'autovacuum': 'off',
+                'ptrack_enable': 'on'})
+
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)
 
@@ -262,7 +267,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Delta BACKUP with old binary
+        # ptrack BACKUP with old binary
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -272,7 +277,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
+            backup_dir, 'node', node, backup_type='ptrack',
             old_binary=True)
 
         if self.paranoia:
@@ -287,7 +292,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Delta BACKUP with new binary
+        # Ptrack BACKUP with new binary
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -297,7 +302,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta')
+            backup_dir, 'node', node, backup_type='ptrack')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -529,52 +534,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_backup_concurrent_drop_table(self):
-        """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        node.slow_start()
-
-        node.pgbench_init(scale=1)
-
-        # FULL backup
-        gdb = self.backup_node(
-            backup_dir, 'node', node,
-            options=['--stream', '--compress', '--log-level-file=VERBOSE'],
-            gdb=True, old_binary=True)
-
-        gdb.set_breakpoint('backup_data_file')
-        gdb.run_until_break()
-
-        node.safe_psql(
-            'postgres',
-            'DROP TABLE pgbench_accounts')
-
-        # do checkpoint to guarantee filenode removal
-        node.safe_psql(
-            'postgres',
-            'CHECKPOINT')
-
-        gdb.remove_all_breakpoints()
-        gdb.continue_execution_until_exit()
-
-        # show_backup = self.show_pb(backup_dir, 'node')[0]
-        # self.assertEqual(show_backup['status'], "OK")
-
-        # validate with fresh binary, it MUST be successful
-        self.validate_pb(backup_dir)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -510,8 +510,17 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 	xlogreader = InitXLogPageRead(&reader_data, archivedir, target_tli,
 								  wal_seg_size, false, false, true);
 
+	if (xlogreader == NULL)
+			elog(ERROR, "Out of memory");
+
+	xlogreader->system_identifier = instance_config.system_identifier;
+
 	res = XLogReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
 	/* Didn't find 'target_lsn' and there is no error, return false */
+
+	if (errormsg)
+		elog(WARNING, "Could not read WAL record at %X/%X: %s",
+				(uint32) (target_lsn >> 32), (uint32) (target_lsn), errormsg);
 
 	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
@@ -550,6 +559,11 @@ get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
 
 	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
 								  false, false, true);
+
+	if (xlogreader == NULL)
+			elog(ERROR, "Out of memory");
+
+	xlogreader->system_identifier = instance_config.system_identifier;
 
 	/*
 	 * Calculate startpoint. Decide: we should use 'start_lsn' or offset 0.

@@ -5,6 +5,12 @@
 #include <sys/wait.h>
 #include <signal.h>
 
+#ifdef WIN32
+#define __thread __declspec(thread)
+#else
+#include <pthread.h>
+#endif
+
 #include "pg_probackup.h"
 #include "file.h"
 
@@ -52,13 +58,22 @@ static int split_options(int argc, char* argv[], int max_options, char* options)
 	return argc;
 }
 
-static int child_pid;
+static __thread int child_pid;
+
 #if 0
 static void kill_child(void)
 {
 	kill(child_pid, SIGTERM);
 }
 #endif
+
+
+void wait_ssh(void)
+{
+	int status;
+	waitpid(child_pid, &status, 0);
+	elog(LOG, "SSH process %d is terminated with status %d",  child_pid, status);
+}
 
 #ifdef WIN32
 void launch_ssh(char* argv[])
@@ -76,6 +91,10 @@ void launch_ssh(char* argv[])
 }
 #endif
 
+static bool needs_quotes(char const* path)
+{
+	return strchr(path, ' ') != NULL;
+}
 
 bool launch_agent(void)
 {
@@ -87,7 +106,7 @@ bool launch_agent(void)
 
 	ssh_argc = 0;
 #ifdef WIN32
-	ssh_argv[ssh_argc++] = pg_probackup;
+	ssh_argv[ssh_argc++] = PROGRAM_NAME_FULL;
 	ssh_argv[ssh_argc++] = "ssh";
 	ssh_argc += 2; /* reserve space for pipe descriptors */
 #endif
@@ -107,11 +126,9 @@ bool launch_agent(void)
 	if (instance_config.remote.ssh_options != NULL) {
 		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, pg_strdup(instance_config.remote.ssh_options));
 	}
-	if (num_threads > 1)
-	{
-		ssh_argv[ssh_argc++] = "-o";
-		ssh_argv[ssh_argc++] = "PasswordAuthentication=no";
-	}
+
+	ssh_argv[ssh_argc++] = "-o";
+	ssh_argv[ssh_argc++] = "PasswordAuthentication=no";
 
 	ssh_argv[ssh_argc++] = "-o";
 	ssh_argv[ssh_argc++] = "Compression=no";
@@ -125,7 +142,7 @@ bool launch_agent(void)
 
 	if (instance_config.remote.path)
 	{
-		char const* probackup = pg_probackup;
+		char const* probackup = PROGRAM_NAME_FULL;
 		char* sep = strrchr(probackup, '/');
 		if (sep != NULL) {
 			probackup = sep + 1;
@@ -137,14 +154,25 @@ bool launch_agent(void)
 				probackup = sep + 1;
 			}
 		}
-		snprintf(cmd, sizeof(cmd), "%s\\%s agent %s",
-					   instance_config.remote.path, probackup, PROGRAM_VERSION);
+		if (needs_quotes(instance_config.remote.path) || needs_quotes(PROGRAM_NAME_FULL))
+			snprintf(cmd, sizeof(cmd), "\"%s\\%s\" agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+		else
+			snprintf(cmd, sizeof(cmd), "%s\\%s agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
 #else
-		snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
-					   instance_config.remote.path, probackup, PROGRAM_VERSION);
+		if (needs_quotes(instance_config.remote.path) || needs_quotes(PROGRAM_NAME_FULL))
+			snprintf(cmd, sizeof(cmd), "\"%s/%s\" agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+		else
+			snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
+					 instance_config.remote.path, probackup, PROGRAM_VERSION);
 #endif
 	} else {
-		snprintf(cmd, sizeof(cmd), "%s agent %s", pg_probackup, PROGRAM_VERSION);
+		if (needs_quotes(PROGRAM_NAME_FULL))
+			snprintf(cmd, sizeof(cmd), "\"%s\" agent %s", PROGRAM_NAME_FULL, PROGRAM_VERSION);
+		else
+			snprintf(cmd, sizeof(cmd), "%s agent %s", PROGRAM_NAME_FULL, PROGRAM_VERSION);
 	}
 
 #ifdef WIN32

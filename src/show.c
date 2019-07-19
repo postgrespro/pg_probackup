@@ -118,7 +118,7 @@ do_show(time_t requested_backup_id)
 		return show_backup(requested_backup_id);
 }
 
-static void
+void
 pretty_size(int64 size, char *buf, size_t len)
 {
 	int			exp = 0;
