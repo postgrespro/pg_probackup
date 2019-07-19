@@ -740,7 +740,7 @@ Maximum lifetime of an individual log file. If this value is reached, the log fi
 #### Connection Options
 You can use these options together with [backup](#backup) and [checkdb](#checkdb) commands.
 
-All libpq environment variables are fully [supported](https://www.postgresql.org/docs/current/libpq-envars.html).
+All [libpq environment variables](https://www.postgresql.org/docs/current/libpq-envars.html) are supported.
 
     -d dbname
     --dbname=dbname
