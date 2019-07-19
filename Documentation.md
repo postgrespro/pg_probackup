@@ -280,7 +280,7 @@ Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK
 ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
 
 - Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than `minimal`.
-- If you are configuring backups on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
+- If you are configuring archiving on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
 - Set the [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter, as follows:
 
         archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]'
@@ -891,7 +891,7 @@ When restoring a cluster from an incremental backup, pg_probackup relies on the 
 
 #### ARCHIVE mode
 
-ARCHIVE is the default WAl delivery mode.
+ARCHIVE is the default WAL delivery mode.
 
 For example, to make a FULL backup in ARCHIVE mode, run:
 
@@ -903,7 +903,7 @@ During [backup](#backup) pg_probackup ensures that WAL files containing WAL reco
 
 #### STREAM mode
 
-STREAM is the optional WAl delivery mode.
+STREAM is the optional WAL delivery mode.
 
 For example, to make a FULL backup in STREAM mode, add the `--stream` option to the command from the previous example:
 
