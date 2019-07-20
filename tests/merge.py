@@ -1632,9 +1632,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
 
         gdb.set_breakpoint('fio_fwrite')
-        gdb.continue_execution_until_break()
-
-        gdb._execute('bt')
+        gdb.continue_execution_until_break(2)
 
         gdb._execute('signal SIGKILL')
 

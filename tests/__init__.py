@@ -16,6 +16,10 @@ def load_tests(loader, tests, pattern):
         if os.environ['PG_PROBACKUP_TEST_BASIC'] == 'ON':
             loader.testMethodPrefix = 'test_basic'
 
+    if 'PG_PROBACKUP_PTRACK' in os.environ:
+        if os.environ['PG_PROBACKUP_PTRACK'] == 'ON':
+            suite.addTests(loader.loadTestsFromModule(ptrack))
+
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup))
@@ -48,10 +52,6 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(snapfs))
     suite.addTests(loader.loadTestsFromModule(time_stamp))
     suite.addTests(loader.loadTestsFromModule(validate))
-
-    if 'PG_PROBACKUP_PTRACK' in os.environ:
-        if os.environ['PG_PROBACKUP_PTRACK'] == 'ON':
-            suite.addTests(loader.loadTestsFromModule(ptrack))
 
     return suite
 
