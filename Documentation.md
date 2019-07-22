@@ -261,7 +261,7 @@ For details, see the sections [Setting up STREAM Backups](#setting-up-stream-bac
 
 ### Setting up STREAM Backups
 
-To set up the cluster for STREAM backups, complete the following steps:
+To set up the cluster for [STREAM](#stream-mode) backups, complete the following steps:
 
 - Grant the REPLICATION privilege to the backup role:
 
@@ -273,11 +273,11 @@ To set up the cluster for STREAM backups, complete the following steps:
 
 If you are planning to take PAGE backups in STREAM mode, you still have to configure WAL archiving as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving).
 
-Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in STREAM mode.
+Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups with [STREAM](#stream-mode) WAL mode.
 
 ### Setting up continuous WAL archiving
 
-ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
+Making backups in PAGE backup mode, performing [PITR](#performing-point-in-time-pitr-recovery) and making backups with [ARCHIVE](#archive-mode) WAL delivery mode require [continious WAL archiving](https://www.postgresql.org/docs/current/continuous-archiving.html) to be enabled. To set up continious archiving in the cluster, complete the following steps:
 
 - Make sure the [wal_level](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL) parameter is higher than `minimal`.
 - If you are configuring archiving on master, [archive_mode](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-MODE) must be set to `on`. To perform archiving on standby, set this parameter to `always`.
@@ -285,13 +285,15 @@ ARCHIVE backups require [continious WAL archiving](https://www.postgresql.org/do
 
         archive_command = 'pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path %p --wal-file-name %f [remote_options]'
 
-Where *backup_dir* and *instance_name* refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote machine. For details about all possible `archive-push` parameters, see the section [archive-push](#archive-push).
+Where *backup_dir* and *instance_name* refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote host. For details about all possible `archive-push` parameters, see the section [archive-push](#archive-push).
 
-Once these steps are complete, you can start taking FULL, PAGE, DELTA and PTRACK backups in ARCHIVE mode.
+Once these steps are complete, you can start making backups with ARCHIVE WAL mode, backups in PAGE backup mode and perform [PITR](#performing-point-in-time-pitr-recovery).
+
+If you are planning to make PAGE backups and/or backups with [ARCHIVE](#archive-mode) WAL mode from a standby of a server, that generates small amount of WAL traffic, without long waiting for WAL segment to fill up, consider setting [archive_timeout](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) PostgreSQL parameter **on master**. It is advisable to synchronize the value of this setting with pg_probackup option `--archive-timeout`.
+
+>NOTE: using pg_probackup command [archive-push](#archive-push) for continious archiving is optional. You can use any other tool you like as long as it delivers WAL segments into '*backup_dir*/wal/*instance_name*' directory. If compression is used, it should be `gzip`, and '.gz' suffix in filename is mandatory.
 
 >NOTE: Instead of `archive_mode`+`archive_command` method you may opt to use the utility [pg_receivewal](https://www.postgresql.org/docs/current/app-pgreceivewal.html). In this case pg_receivewal `-D directory` option should point to '*backup_dir*/wal/*instance_name*' directory. WAL compression that could be done by pg_receivewal is supported by pg_probackup. `Zero Data Loss` archive strategy can be achieved only by using pg_receivewal.
-
->NOTE: using pg_probackup command [archive-push](#archive-push) for continious archiving is optional. You can use any other tool you like as long as it delivers WAL segments into '*backup_dir*/wal/*instance_name*' directory. If compression is used, it should be gzip and '.gz' suffix is mandatory.
 
 ### Backup from Standby
 
@@ -302,7 +304,7 @@ For PostgreSQL 9.6 or higher, pg_probackup can take backups from a standby serve
 - To perform STREAM backup on standby, complete all steps in section [Setting up STREAM Backups](#setting-up-stream-backups)
 - To perform ARCHIVE backup on standby, complete all steps in section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving)
 
-Once these steps are complete, you can start taking FULL, PAGE, DELTA or PTRACK backups of appropriate WAL delivery method: ARCHIVE or STREAM, from the standby server.
+Once these steps are complete, you can start taking FULL, PAGE, DELTA or PTRACK backups with appropriate WAL delivery mode: ARCHIVE or STREAM, from the standby server.
 
 Backup from the standby server has the following limitations:
 
@@ -922,6 +924,7 @@ Even if you are using [continuous archiving](#setting-up-continuous-wal-archivin
 - Backup in STREAM mode can be taken from standby of a server, that generates small amount of WAL traffic, without long waiting for WAL segment to fill up.
 
 #### Page validation
+
 If [data checksums](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS) are enabled in the database cluster, pg_probackup uses this information to check correctness of data files during backup. While reading each page, pg_probackup checks whether the calculated checksum coincides with the checksum stored in the page header. This guarantees that the PostgreSQL instance and backup itself are free of corrupted pages.
 Note that pg_probackup reads database files directly from filesystem, so under heavy write load during backup it can show false positive checksum failures because of partial writes. In case of page checksumm mismatch, page is readed again and checksumm comparison repeated.
 
