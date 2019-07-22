@@ -897,7 +897,7 @@ For example, to make a FULL backup in ARCHIVE mode, run:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL
 
-ARCHIVE backup rely on [continuous archiving](#setting-up-continuous-wal-archiving) to provide WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
+Unlike backup in STREAM mode, ARCHIVE backup rely on [continuous archiving](#setting-up-continuous-wal-archiving) to provide WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
 
 During [backup](#backup) pg_probackup ensures that WAL files containing WAL records between START LSN and STOP LSN are actually exists in '*backup_dir*/wal/*instance_name*' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This precations eliminates the risk of silent WAL corruption.
 
@@ -911,7 +911,7 @@ For example, to make a FULL backup in STREAM mode, add the `--stream` option to 
 
 The optional `--temp-slot` flag ensures that the required segments remain available if the WAL is rotated before the backup is complete.
 
-STREAM backups include all the WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
+Unlike backup in ARCHIVE mode, STREAM backup include all the WAL segments required to restore the cluster to a consistent state at the time the backup was taken.
 
 During [backup](#backup) pg_probackup streams WAL files containing WAL records between START LSN and STOP LSN in '*backup_dir*/backups/*instance_name*/*BACKUP ID*/database/pg_wal' directory. Also pg_probackup ensures that WAL records between START LSN and STOP LSN can be parsed. This precations eliminates the risk of silent WAL corruption.
 
@@ -925,11 +925,12 @@ Even if you are using [continuous archiving](#setting-up-continuous-wal-archivin
 If [data checksums](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS) are enabled in the database cluster, pg_probackup uses this information to check correctness of data files during backup. While reading each page, pg_probackup checks whether the calculated checksum coincides with the checksum stored in the page header. This guarantees that the PostgreSQL instance and backup itself are free of corrupted pages.
 Note that pg_probackup reads database files directly from filesystem, so under heavy write load during backup it can show false positive checksum failures because of partial writes. In case of page checksumm mismatch, page is readed again and checksumm comparison repeated.
 
-Page is considered corrupted if checksumm comparison failed more than 100 times, is this case backup is aborted.
+Page is considered corrupted if checksumm comparison failed more than 100 times, in this case backup is aborted.
 
 Redardless of data checksums been enabled or not, pg_probackup always check page header "sanity".
 
 #### External directories
+
 To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons.
 
 For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory, run:
