@@ -906,7 +906,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,100000) i;")
 
-        # copy lastest wal segment
+        # copy latest wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'alien_node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
             wals_dir, f)) and not f.endswith('.backup')]

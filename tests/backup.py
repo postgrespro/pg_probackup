@@ -2,6 +2,7 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+import shutil
 
 
 module_name = 'backup'
@@ -14,6 +15,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # PGPRO-707
     def test_backup_modes_archive(self):
         """standart backup modes with ARCHIVE WAL method"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -108,6 +112,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_incremental_backup_without_full(self):
         """page-level backup without validated full backup"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -130,7 +137,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Valid backup on current timeline is not found. "
+                "ERROR: Valid backup on current timeline 1 is not found. "
                 "Create new FULL backup before an incremental one.",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
@@ -148,7 +155,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Valid backup on current timeline is not found. "
+                "ERROR: Valid backup on current timeline 1 is not found. "
                 "Create new FULL backup before an incremental one.",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
@@ -167,8 +174,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -212,7 +218,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Valid backup on current timeline is not found. "
+                "ERROR: Valid backup on current timeline 1 is not found. "
                 "Create new FULL backup before an incremental one.",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
@@ -229,6 +235,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_ptrack_threads(self):
         """ptrack multi thread backup mode"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -257,6 +266,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_ptrack_threads_stream(self):
         """ptrack multi thread backup mode and stream"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -286,6 +298,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_page_corruption_heal_via_ptrack_1(self):
         """make node, corrupt some page, check that backup failed"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -342,6 +357,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_page_corruption_heal_via_ptrack_2(self):
         """make node, corrupt some page, check that backup failed"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -424,6 +442,137 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_backup_detect_corruption(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000) i")
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        node.stop()
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+                f.seek(9000)
+                f.write(b"bla")
+                f.flush()
+                f.close
+
+        node.slow_start()
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="full", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace mapping is incorrect"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            if self.ptrack:
+                self.assertTrue(
+                    'WARNING:  page verification failed, '
+                    'calculated checksum' in e.message and
+                    'ERROR: query failed: ERROR:  '
+                    'invalid page in block 1 of relation' in e.message and
+                    'ERROR: Data files transferring failed' in e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                if self.remote:
+                    self.assertTrue(
+                        "ERROR: Failed to read file" in e.message and
+                        "data file checksum mismatch" in e.message,
+                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                            repr(e.message), self.cmd))
+                else:
+                    self.assertIn(
+                        'WARNING: Corruption detected in file',
+                        e.message,
+                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                            repr(e.message), self.cmd))
+                    self.assertIn(
+                        'ERROR: Data file corruption',
+                        e.message,
+                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                            repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_truncate_misaligned(self):
+        """
+        make node, truncate file to size not even to BLCKSIZE,
+        take backup
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100000) i")
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT;")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        heap_size = node.safe_psql(
+            "postgres",
+            "select pg_relation_size('t_heap')")
+
+        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+            f.truncate(int(heap_size) - 4096)
+            f.flush()
+            f.close
+
+        output = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            options=["-j", "4", "--stream"], return_id=False)
+
+        self.assertIn("WARNING: File", output)
+        self.assertIn("invalid file size", output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_tablespace_in_pgdata_pgpro_1376(self):
         """PGPRO-1376 """
         fname = self.id().split('.')[3]
@@ -494,7 +643,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     path = os.path.join(root, file)
                     list = list + [path]
 
-        # We expect that relfilenode occures only once
+        # We expect that relfilenode can be encountered only once
         if len(list) > 1:
             message = ""
             for string in list:
@@ -870,6 +1019,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_drop_rel_during_backup_ptrack(self):
         """"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1362,6 +1514,526 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         os.chmod(full_path, 700)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_with_least_privileges_role(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s'})
+
+        if self.ptrack:
+            node.append_conf('postgresql.auto.conf', 'ptrack_enable = on')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+
+        if self.ptrack:
+            for fname in [
+                    'pg_catalog.oideq(oid, oid)',
+                    'pg_catalog.ptrack_version()',
+                    'pg_catalog.pg_ptrack_clear()',
+                    'pg_catalog.pg_ptrack_control_lsn()',
+                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
+                    'pg_catalog.pg_stop_backup()']:
+                # try:
+                node.safe_psql(
+                    "backupdb",
+                    "GRANT EXECUTE ON FUNCTION {0} "
+                    "TO backup".format(fname))
+                # except:
+                #     pass
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['-U', 'backup'])
+
+        # PAGE
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page', datname='backupdb',
+            options=['--stream', '-U', 'backup'])
+
+        # DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # PTRACK
+        if self.ptrack:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='ptrack',
+                datname='backupdb', options=['-U', 'backup'])
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='ptrack',
+                datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_choosing(self):
+        """
+        PAGE3 <- RUNNING(parent should be FULL)
+        PAGE2 <- OK
+        PAGE1 <- CORRUPT
+        FULL
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        page1_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        page2_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change PAGE1 to ERROR
+        self.change_backup_status(backup_dir, 'node', page1_id, 'ERROR')
+
+        # PAGE3
+        page3_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--log-level-file=LOG'])
+
+        log_file_path = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file_path) as f:
+            log_file_content = f.read()
+
+        self.assertIn(
+            "WARNING: Backup {0} has invalid parent: {1}. "
+            "Cannot be a parent".format(page2_id, page1_id),
+            log_file_content)
+
+        self.assertIn(
+            "WARNING: Backup {0} has status: ERROR. "
+            "Cannot be a parent".format(page1_id),
+            log_file_content)
+
+        self.assertIn(
+            "Parent backup: {0}".format(full_id),
+            log_file_content)
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node', backup_id=page3_id)['parent-backup-id'],
+            full_id)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_choosing_1(self):
+        """
+        PAGE3 <- RUNNING(parent should be FULL)
+        PAGE2 <- OK
+        PAGE1 <- (missing)
+        FULL
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        page1_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        page2_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Delete PAGE1
+        shutil.rmtree(
+            os.path.join(backup_dir, 'backups', 'node', page1_id))
+
+        # PAGE3
+        page3_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--log-level-file=LOG'])
+
+        log_file_path = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file_path) as f:
+            log_file_content = f.read()
+
+        self.assertIn(
+            "WARNING: Backup {0} has missing parent: {1}. "
+            "Cannot be a parent".format(page2_id, page1_id),
+            log_file_content)
+
+        self.assertIn(
+            "Parent backup: {0}".format(full_id),
+            log_file_content)
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node', backup_id=page3_id)['parent-backup-id'],
+            full_id)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_choosing_2(self):
+        """
+        PAGE3 <- RUNNING(backup should fail)
+        PAGE2 <- OK
+        PAGE1 <- OK
+        FULL  <- (missing)
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE1
+        page1_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGE2
+        page2_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Delete FULL
+        shutil.rmtree(
+            os.path.join(backup_dir, 'backups', 'node', full_id))
+
+        # PAGE3
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='page', options=['--log-level-file=LOG'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because FULL backup is missing"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Valid backup on current timeline 1 is not found. '
+                'Create new FULL backup before an incremental one.',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node')[2]['status'],
+            'ERROR')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_with_less_privileges_role(self):
+        """
+        check permissions correctness from documentation:
+        https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#configuring-the-database-cluster
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s'})
+
+        if self.ptrack:
+            node.append_conf('postgresql.auto.conf', 'ptrack_enable = on')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "BEGIN; "
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
+                "COMMIT;"
+            )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "BEGIN; "
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
+                "COMMIT;"
+            )
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "BEGIN; "
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
+                "COMMIT;"
+            )
+
+        # enable STREAM backup
+        node.safe_psql(
+            'backupdb',
+            'ALTER ROLE backup WITH REPLICATION;')
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['-U', 'backup'])
+
+        # PAGE
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page', datname='backupdb',
+            options=['--stream', '-U', 'backup'])
+
+        # DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # Restore as replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        self.restore_node(backup_dir, 'node', replica)
+        self.set_replica(node, replica)
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        replica.slow_start(replica=True)
+
+        # FULL backup from replica
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        self.backup_node(
+            backup_dir, 'replica', replica, datname='backupdb',
+            options=['-U', 'backup', '--log-level-file=verbose'])
+
+        # PAGE backup from replica
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='page',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='page',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # DELTA backup from replica
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='delta',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='delta',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

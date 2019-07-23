@@ -15,7 +15,7 @@
 /* members of struct parray are hidden from client. */
 struct parray
 {
-	void **data;		/* poiter array, expanded if necessary */
+	void **data;		/* pointer array, expanded if necessary */
 	size_t alloced;		/* number of elements allocated */
 	size_t used;		/* number of elements in use */
 };
@@ -97,7 +97,7 @@ parray_insert(parray *array, size_t index, void *elem)
 }
 
 /*
- * Concatinate two parray.
+ * Concatenate two parray.
  * parray_concat() appends the copy of the content of src to the end of dest.
  */
 parray *

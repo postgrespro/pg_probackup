@@ -229,7 +229,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         # create two databases
         node.safe_psql("postgres", "create database db1")
         try:
-           node.safe_psql(
+            node.safe_psql(
                "db1",
                "create extension amcheck")
         except QueryException as e:
@@ -330,7 +330,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # corruption of both indexes in db1 and db2 must be detected
         # also the that amcheck is not installed in 'postgres'
-        # musted be logged
+        # should be logged
         with open(log_file_path) as f:
             log_file_content = f.read()
             self.assertIn(
@@ -434,12 +434,12 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
             self.assertIn(
-                "WARNING: CORRUPTION in file {0}, block 1".format(
+                'WARNING: Corruption detected in file "{0}", block 1'.format(
                     os.path.normpath(heap_full_path)),
                 e.message)
 
             self.assertIn(
-                "WARNING: CORRUPTION in file {0}, block 5".format(
+                'WARNING: Corruption detected in file "{0}", block 5'.format(
                     os.path.normpath(heap_full_path)),
                 e.message)
 
@@ -484,7 +484,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         gdb.remove_all_breakpoints()
 
         gdb._execute('signal SIGINT')
-        gdb.continue_execution_until_exit()
+        gdb.continue_execution_until_error()
 
         with open(node.pg_log_file, 'r') as f:
             output = f.read()

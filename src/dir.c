@@ -122,7 +122,7 @@ static int BlackListCompare(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file);
 static void dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-								   bool omit_symlink, parray *black_list,
+								   bool follow_symlink, parray *black_list,
 								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -159,14 +159,14 @@ dir_create_dir(const char *dir, mode_t mode)
 }
 
 pgFile *
-pgFileNew(const char *path, const char *rel_path, bool omit_symlink,
+pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 		  int external_dir_num, fio_location location)
 {
 	struct stat		st;
 	pgFile		   *file;
 
 	/* stat the file */
-	if (fio_stat(path, &st, omit_symlink, location) < 0)
+	if (fio_stat(path, &st, follow_symlink, location) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno == ENOENT)
@@ -454,11 +454,11 @@ db_map_entry_free(void *map)
  * List files, symbolic links and directories in the directory "root" and add
  * pgFile objects to "files".  We add "root" to "files" if add_root is true.
  *
- * When omit_symlink is true, symbolic link is ignored and only file or
+ * When follow_symlink is true, symbolic link is ignored and only file or
  * directory linked to will be listed.
  */
 void
-dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
+dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink,
 			  bool add_root, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
@@ -499,7 +499,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 		parray_qsort(black_list, BlackListCompare);
 	}
 
-	file = pgFileNew(root, "", omit_symlink, external_dir_num, location);
+	file = pgFileNew(root, "", follow_symlink, external_dir_num, location);
 	if (file == NULL)
 	{
 		/* For external directory this is not ok */
@@ -521,7 +521,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool omit_symlink,
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, file, exclude, omit_symlink, black_list,
+	dir_list_file_internal(files, file, exclude, follow_symlink, black_list,
 						   external_dir_num, location);
 
 	if (!add_root)
@@ -740,7 +740,7 @@ dir_check_file(pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-					   bool omit_symlink, parray *black_list,
+					   bool follow_symlink, parray *black_list,
 					   int external_dir_num, fio_location location)
 {
 	DIR		    *dir;
@@ -773,7 +773,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		join_path_components(child, parent->path, dent->d_name);
 		join_path_components(rel_child, parent->rel_path, dent->d_name);
 
-		file = pgFileNew(child, rel_child, omit_symlink, external_dir_num,
+		file = pgFileNew(child, rel_child, follow_symlink, external_dir_num,
 						 location);
 		if (file == NULL)
 			continue;
@@ -830,7 +830,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		 * recursively.
 		 */
 		if (S_ISDIR(file->mode))
-			dir_list_file_internal(files, file, exclude, omit_symlink,
+			dir_list_file_internal(files, file, exclude, follow_symlink,
 								   black_list, external_dir_num, location);
 	}
 
@@ -1070,7 +1070,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		}
 
 		/* This is not symlink, create directory */
-		elog(INFO, "Create directory \"%s\"", dir->rel_path);
+		elog(VERBOSE, "Create directory \"%s\"", dir->rel_path);
 
 		join_path_components(to_path, data_dir, dir->rel_path);
 		fio_mkdir(to_path, dir->mode, location);
@@ -1084,7 +1084,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 }
 
 /*
- * Read names of symbolik names of tablespaces with links to directories from
+ * Read names of symbolic names of tablespaces with links to directories from
  * tablespace_map or tablespace_map.txt.
  */
 void
@@ -1278,54 +1278,6 @@ get_external_remap(char *current_dir)
 			return cell->new_dir;
 	}
 	return current_dir;
-}
-
-/*
- * Print backup content list.
- */
-void
-print_file_list(FILE *out, const parray *files, const char *root,
-				const char *external_prefix, parray *external_list)
-{
-	size_t		i;
-
-	/* print each file in the list */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-		char	   *path = file->path;
-
-		/* omit root directory portion */
-		if (root && strstr(path, root) == path)
-			path = GetRelativePath(path, root);
-		else if (file->external_dir_num && !external_prefix)
-		{
-			Assert(external_list);
-			path = GetRelativePath(path, parray_get(external_list,
-													file->external_dir_num - 1));
-		}
-
-		fio_fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
-					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
-					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
-					 "\"dbOid\":\"%u\"",
-				path, file->write_size, file->mode,
-				file->is_datafile ? 1 : 0, file->is_cfs ? 1 : 0, file->crc,
-				deparse_compress_alg(file->compress_alg), file->external_dir_num,
-				file->dbOid);
-
-		if (file->is_datafile)
-			fio_fprintf(out, ",\"segno\":\"%d\"", file->segno);
-
-		if (file->linked)
-			fio_fprintf(out, ",\"linked\":\"%s\"", file->linked);
-
-		if (file->n_blocks != BLOCKNUM_INVALID)
-			fio_fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
-
-		fio_fprintf(out, "}\n");
-	}
 }
 
 /* Parsing states for get_control_value() */
@@ -1628,7 +1580,7 @@ pgFileSize(const char *path)
 }
 
 /*
- * Construct parray containing remmaped external directories paths
+ * Construct parray containing remapped external directories paths
  * from string like /path1:/path2
  */
 parray *

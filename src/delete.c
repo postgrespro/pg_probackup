@@ -116,7 +116,7 @@ do_delete(time_t backup_id)
  *
  * Invalid backups handled in Oracle style, so invalid backups are ignored
  * for the purpose of retention fulfillment,
- * i.e. CORRUPT full backup do not taken in account when deteremine
+ * i.e. CORRUPT full backup do not taken in account when determine
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
@@ -175,6 +175,8 @@ int do_retention(void)
 	if (delete_wal && !dry_run)
 		do_retention_wal();
 
+	/* TODO: consider dry-run flag */
+
 	if (!backup_merged)
 		elog(INFO, "There are no backups to merge by retention policy");
 
@@ -203,13 +205,15 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	int			i;
 	time_t 		current_time;
 
+	parray *redundancy_full_backup_list = NULL;
+
 	/* For retention calculation */
 	uint32		n_full_backups = 0;
 	int			cur_full_backup_num = 0;
 	time_t		days_threshold = 0;
 
 	/* For fancy reporting */
-	float		actual_window = 0;
+	uint32		actual_window = 0;
 
 	/* Get current time */
 	current_time = time(NULL);
@@ -221,15 +225,27 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-			/* Consider only valid backups for Redundancy */
+			/* Consider only valid FULL backups for Redundancy */
 			if (instance_config.retention_redundancy > 0 &&
 				backup->backup_mode == BACKUP_MODE_FULL &&
 				(backup->status == BACKUP_STATUS_OK ||
 					backup->status == BACKUP_STATUS_DONE))
 			{
 				n_full_backups++;
+
+				/* Add every FULL backup that satisfy Redundancy policy to separate list */
+				if (n_full_backups <= instance_config.retention_redundancy)
+				{
+					if (!redundancy_full_backup_list)
+						redundancy_full_backup_list = parray_new();
+
+					parray_append(redundancy_full_backup_list, backup);
+				}
 			}
 		}
+		/* Sort list of full backups to keep */
+		if (redundancy_full_backup_list)
+			parray_qsort(redundancy_full_backup_list, pgBackupCompareIdDesc);
 	}
 
 	if (instance_config.retention_window > 0)
@@ -242,7 +258,19 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 	{
 
+		bool redundancy_keep = false;
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
+
+		/* check if backup`s FULL ancestor is in redundancy list */
+		if (redundancy_full_backup_list)
+		{
+			pgBackup   *full_backup = find_parent_full_backup(backup);
+
+			if (full_backup && parray_bsearch(redundancy_full_backup_list,
+											  full_backup,
+											  pgBackupCompareIdDesc))
+				redundancy_keep = true;
+		}
 
 		/* Remember the serial number of latest valid FULL backup */
 		if (backup->backup_mode == BACKUP_MODE_FULL &&
@@ -252,9 +280,11 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			cur_full_backup_num++;
 		}
 
-		/* Check if backup in needed by retention policy */
+		/* Check if backup in needed by retention policy
+		 * TODO: consider that ERROR backup most likely to have recovery_time == 0
+		 */
 		if ((days_threshold == 0 || (days_threshold > backup->recovery_time)) &&
-			(instance_config.retention_redundancy  <= (n_full_backups - cur_full_backup_num)))
+			(instance_config.retention_redundancy == 0 || !redundancy_keep))
 		{
 			/* This backup is not guarded by retention
 			 *
@@ -317,14 +347,14 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 							backup->parent_backup_link,
 							pgBackupCompareIdDesc))
 		{
-			/* make keep list a bit sparse */
+			/* make keep list a bit more compact */
 			parray_append(to_keep_list, backup);
 			continue;
 		}
 	}
 
 	/* Message about retention state of backups
-	 * TODO: Float is ugly, rewrite somehow.
+	 * TODO: message is ugly, rewrite it to something like show table in stdout.
 	 */
 
 	cur_full_backup_num = 1;
@@ -340,9 +370,10 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		if (backup->recovery_time == 0)
 			actual_window = 0;
 		else
-			actual_window = ((float)current_time - (float)backup->recovery_time)/(60 * 60 * 24);
+			actual_window = (current_time - backup->recovery_time)/(60 * 60 * 24);
 
-		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %.2fd/%ud. %s",
+		/* TODO: add ancestor(chain full backup) ID */
+		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
 				base36enc(backup->start_time),
 				pgBackupGetBackupMode(backup),
 				status2str(backup->status),
@@ -414,7 +445,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 			continue;
 		}
 
-		/* FULL backup in purge list, thanks to sparsing of keep_list current backup is
+		/* FULL backup in purge list, thanks to compacting of keep_list current backup is
 		 * final target for merge, but there could be intermediate incremental
 		 * backups from purge_list.
 		 */
@@ -460,7 +491,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 * 2 PAGE1
 		 * 3 FULL
 		 *
-		 * Сonsequentially merge incremental backups from PAGE1 to PAGE3
+		 * Consequentially merge incremental backups from PAGE1 to PAGE3
 		 * into FULL.
 		 */
 
@@ -801,9 +832,12 @@ delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
 int
 do_delete_instance(void)
 {
-	parray	   *backup_list;
-	int i;
+	parray		*backup_list;
+	parray		*xlog_files_list;
+	int 		i;
+	int 		rc;
 	char		instance_config_path[MAXPGPATH];
+
 
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
@@ -821,23 +855,40 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	delete_walfiles(InvalidXLogRecPtr, 0, instance_config.xlog_seg_size);
+	xlog_files_list = parray_new();
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+
+	for (i = 0; i < parray_num(xlog_files_list); i++)
+	{
+		pgFile	   *wal_file = (pgFile *) parray_get(xlog_files_list, i);
+		if (S_ISREG(wal_file->mode))
+		{
+			rc = unlink(wal_file->path);
+			if (rc != 0)
+				elog(WARNING, "Failed to remove file \"%s\": %s",
+					 wal_file->path, strerror(errno));
+		}
+	}
+
+	/* Cleanup */
+	parray_walk(xlog_files_list, pgFileFree);
+	parray_free(xlog_files_list);
 
 	/* Delete backup instance config file */
 	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
 	if (remove(instance_config_path))
 	{
-		elog(ERROR, "can't remove \"%s\": %s", instance_config_path,
+		elog(ERROR, "Can't remove \"%s\": %s", instance_config_path,
 			strerror(errno));
 	}
 
 	/* Delete instance root directories */
 	if (rmdir(backup_instance_path) != 0)
-		elog(ERROR, "can't remove \"%s\": %s", backup_instance_path,
+		elog(ERROR, "Can't remove \"%s\": %s", backup_instance_path,
 			strerror(errno));
 
 	if (rmdir(arclog_path) != 0)
-		elog(ERROR, "can't remove \"%s\": %s", arclog_path,
+		elog(ERROR, "Can't remove \"%s\": %s", arclog_path,
 			strerror(errno));
 
 	elog(INFO, "Instance '%s' successfully deleted", instance_name);

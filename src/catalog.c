@@ -260,7 +260,7 @@ lock_backup(pgBackup *backup)
 
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		errno = save_errno;
-		elog(ERROR, "Culd not write lock file \"%s\": %s",
+		elog(ERROR, "Could not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
 
@@ -441,22 +441,88 @@ catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
 }
 
 /*
- * Find the last completed backup on given timeline
+ * Find the latest valid child of latest valid FULL backup on given timeline
  */
 pgBackup *
-catalog_get_last_data_backup(parray *backup_list, TimeLineID tli)
+catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current_start_time)
 {
 	int			i;
-	pgBackup   *backup = NULL;
+	pgBackup   *full_backup = NULL;
+	pgBackup   *tmp_backup = NULL;
+	char 	   *invalid_backup_id;
 
 	/* backup_list is sorted in order of descending ID */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
-		backup = (pgBackup *) parray_get(backup_list, (size_t) i);
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
 
+		if ((backup->backup_mode == BACKUP_MODE_FULL &&
+			(backup->status == BACKUP_STATUS_OK ||
+			 backup->status == BACKUP_STATUS_DONE)) && backup->tli == tli)
+		{
+			full_backup = backup;
+			break;
+		}
+	}
+
+	/* Failed to find valid FULL backup to fulfill ancestor role */
+	if (!full_backup)
+		return NULL;
+
+	elog(LOG, "Latest valid FULL backup: %s",
+		base36enc(full_backup->start_time));
+
+	/* FULL backup is found, lets find his latest child */
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* only valid descendants are acceptable for evaluation */
 		if ((backup->status == BACKUP_STATUS_OK ||
-			backup->status == BACKUP_STATUS_DONE) && backup->tli == tli)
-			return backup;
+			backup->status == BACKUP_STATUS_DONE))
+		{
+			switch (scan_parent_chain(backup, &tmp_backup))
+			{
+				/* broken chain */
+				case 0:
+					invalid_backup_id = base36enc_dup(tmp_backup->parent_backup);
+
+					elog(WARNING, "Backup %s has missing parent: %s. Cannot be a parent",
+						base36enc(backup->start_time), invalid_backup_id);
+					pg_free(invalid_backup_id);
+					continue;
+
+				/* chain is intact, but at least one parent is invalid */
+				case 1:
+					invalid_backup_id = base36enc_dup(tmp_backup->start_time);
+
+					elog(WARNING, "Backup %s has invalid parent: %s. Cannot be a parent",
+						base36enc(backup->start_time), invalid_backup_id);
+					pg_free(invalid_backup_id);
+					continue;
+
+				/* chain is ok */
+				case 2:
+					/* Yes, we could call is_parent() earlier - after choosing the ancestor,
+					 * but this way we have an opportunity to detect and report all possible
+					 * anomalies.
+					 */
+					if (is_parent(full_backup->start_time, backup, true))
+					{
+						elog(INFO, "Parent backup: %s",
+							base36enc(backup->start_time));
+						return backup;
+					}
+			}
+		}
+		/* skip yourself */
+		else if (backup->start_time == current_start_time)
+			continue;
+		else
+		{
+			elog(WARNING, "Backup %s has status: %s. Cannot be a parent.",
+				base36enc(backup->start_time), status2str(backup->status));
+		}
 	}
 
 	return NULL;
@@ -630,24 +696,104 @@ write_backup(pgBackup *backup)
  */
 void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
-					  const char *external_prefix, parray *external_list)
+					  parray *external_list)
 {
-	FILE	   *fp;
+	FILE	   *out;
 	char		path[MAXPGPATH];
 	char		path_temp[MAXPGPATH];
 	int			errno_temp;
+	size_t		i = 0;
+	#define BUFFERSZ BLCKSZ*500
+	char		buf[BUFFERSZ];
+	size_t		write_len = 0;
+	int64 		backup_size_on_disk = 0;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
-	if (fp == NULL)
+	out = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+	if (out == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
 
-	print_file_list(fp, files, root, external_prefix, external_list);
+	/* print each file in the list */
+	while(i < parray_num(files))
+	{
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+		char	   *path = file->path; /* for streamed WAL files */
+		char	line[BLCKSZ];
+		int 	len = 0;
 
-	if (fio_fflush(fp) || fio_fclose(fp))
+		i++;
+
+		if (S_ISDIR(file->mode))
+			backup_size_on_disk += 4096;
+
+		/* Count the amount of the data actually copied */
+		if (S_ISREG(file->mode) && file->write_size > 0)
+			backup_size_on_disk += file->write_size;
+
+		/* for files from PGDATA and external files use rel_path
+		 * streamed WAL files has rel_path relative not to "database/"
+		 * but to "database/pg_wal", so for them use path.
+		 */
+		if ((root && strstr(path, root) == path) ||
+			(file->external_dir_num && external_list))
+				path = file->rel_path;
+
+		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
+					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
+					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
+					path, file->write_size, file->mode,
+					file->is_datafile ? 1 : 0,
+					file->is_cfs ? 1 : 0,
+					file->crc,
+					deparse_compress_alg(file->compress_alg),
+					file->external_dir_num);
+
+		if (file->is_datafile)
+			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
+
+		if (file->linked)
+			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
+
+		if (file->n_blocks != BLOCKNUM_INVALID)
+			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
+
+		len += sprintf(line+len, "}\n");
+
+		if (write_len + len <= BUFFERSZ)
+		{
+			memcpy(buf+write_len, line, len);
+			write_len += len;
+		}
+		else
+		{
+			/* write buffer to file */
+			if (fio_fwrite(out, buf, write_len) != write_len)
+			{
+				errno_temp = errno;
+				fio_unlink(path_temp, FIO_BACKUP_HOST);
+				elog(ERROR, "Cannot write file list \"%s\": %s",
+					path_temp, strerror(errno));
+			}
+			/* reset write_len */
+			write_len = 0;
+		}
+	}
+
+	/* write what is left in the buffer to file */
+	if (write_len > 0)
+		if (fio_fwrite(out, buf, write_len) != write_len)
+		{
+			errno_temp = errno;
+			fio_unlink(path_temp, FIO_BACKUP_HOST);
+			elog(ERROR, "Cannot write file list \"%s\": %s",
+				path_temp, strerror(errno));
+		}
+
+	if (fio_fflush(out) || fio_fclose(out))
 	{
 		errno_temp = errno;
 		fio_unlink(path_temp, FIO_BACKUP_HOST);
@@ -662,6 +808,9 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
 			 path_temp, path, strerror(errno_temp));
 	}
+
+	/* use extra variable to avoid reset of previous data_bytes value in case of error */
+	backup->data_bytes = backup_size_on_disk;
 }
 
 /*
@@ -873,7 +1022,7 @@ parse_compress_alg(const char *arg)
 	len = strlen(arg);
 
 	if (len == 0)
-		elog(ERROR, "compress algrorithm is empty");
+		elog(ERROR, "compress algorithm is empty");
 
 	if (pg_strncasecmp("zlib", arg, len) == 0)
 		return ZLIB_COMPRESS;
@@ -902,6 +1051,22 @@ deparse_compress_alg(int alg)
 	}
 
 	return NULL;
+}
+
+/*
+ * Fill PGNodeInfo struct with default values.
+ */
+void
+pgNodeInit(PGNodeInfo *node)
+{
+	node->block_size = 0;
+	node->wal_block_size = 0;
+	node->checksum_version = 0;
+
+	node->is_superuser = false;
+
+	node->server_version = 0;
+	node->server_version_str[0] = '\0';
 }
 
 /*
@@ -1066,7 +1231,7 @@ find_parent_full_backup(pgBackup *current_backup)
 }
 
 /*
- * Interate over parent chain and look for any problems.
+ * Iterate over parent chain and look for any problems.
  * Return 0 if chain is broken.
  *  result_backup must contain oldest existing backup after missing backup.
  *  we have no way to know if there are multiple missing backups.
@@ -1097,7 +1262,7 @@ scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 		target_backup = target_backup->parent_backup_link;
 	}
 
-	/* Prevous loop will skip FULL backup because his parent_backup_link is NULL */
+	/* Previous loop will skip FULL backup because his parent_backup_link is NULL */
 	if (target_backup->backup_mode == BACKUP_MODE_FULL &&
 		(target_backup->status != BACKUP_STATUS_OK &&
 		target_backup->status != BACKUP_STATUS_DONE))

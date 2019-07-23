@@ -24,11 +24,12 @@ static bool skipped_due_to_lock = false;
 typedef struct
 {
 	const char *base_path;
-	parray	   *files;
+	parray		*files;
 	bool		corrupted;
-	XLogRecPtr	stop_lsn;
+	XLogRecPtr 	stop_lsn;
 	uint32		checksum_version;
 	uint32		backup_version;
+	BackupMode	backup_mode;
 
 	/*
 	 * Return value from the thread.
@@ -125,6 +126,7 @@ pgBackupValidate(pgBackup *backup)
 		arg->base_path = base_path;
 		arg->files = files;
 		arg->corrupted = false;
+		arg->backup_mode = backup->backup_mode;
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
 		arg->backup_version = parse_program_version(backup->program_version);
@@ -184,32 +186,45 @@ pgBackupValidateFiles(void *arg)
 		struct stat st;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during validate");
 
 		/* Validate only regular files */
 		if (!S_ISREG(file->mode))
 			continue;
-		/*
-		 * Skip files which has no data, because they
-		 * haven't changed between backups.
-		 */
-		if (file->write_size == BYTES_INVALID)
-			continue;
 
 		/*
 		 * Currently we don't compute checksums for
 		 * cfs_compressed data files, so skip them.
+		 * TODO: investigate
 		 */
 		if (file->is_cfs)
+			continue;
+
+		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
 				 i + 1, num_files, file->path);
+
+		/*
+		 * Skip files which has no data, because they
+		 * haven't changed between backups.
+		 */
+		if (file->write_size == BYTES_INVALID)
+		{
+			if (arguments->backup_mode == BACKUP_MODE_FULL)
+			{
+				/* It is illegal for file in FULL backup to have BYTES_INVALID */
+				elog(WARNING, "Backup file \"%s\" has invalid size. Possible metadata corruption.",
+					file->path);
+				arguments->corrupted = true;
+				break;
+			}
+			else
+				continue;
+		}
 
 		if (stat(file->path, &st) == -1)
 		{
@@ -225,7 +240,7 @@ pgBackupValidateFiles(void *arg)
 		if (file->write_size != st.st_size)
 		{
 			elog(WARNING, "Invalid size of backup file \"%s\" : " INT64_FORMAT ". Expected %lu",
-				 file->path, file->write_size, (unsigned long) st.st_size);
+				 file->path, (unsigned long) st.st_size, file->write_size);
 			arguments->corrupted = true;
 			break;
 		}
@@ -261,7 +276,7 @@ pgBackupValidateFiles(void *arg)
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-						file->path, file->crc, crc);
+						file->path, crc, file->crc);
 				arguments->corrupted = true;
 			}
 		}
@@ -356,7 +371,7 @@ do_validate_all(void)
 	/* TODO: Probably we should have different exit code for every condition
 	 * and they combination:
 	 *  0 - all backups are valid
-	 *  1 - some backups are corrup
+	 *  1 - some backups are corrupt
 	 *  2 - some backups where skipped due to concurrent locks
 	 *  3 - some backups are corrupt and some are skipped due to concurrent locks
 	 */
@@ -532,7 +547,7 @@ do_validate_instance(void)
 		/* For every OK backup we try to revalidate all his ORPHAN descendants. */
 		if (current_backup->status == BACKUP_STATUS_OK)
 		{
-			/* revalidate all ORPHAN descendats
+			/* revalidate all ORPHAN descendants
 			 * be very careful not to miss a missing backup
 			 * for every backup we must check that he is descendant of current_backup
 			 */
@@ -577,7 +592,7 @@ do_validate_instance(void)
 								skipped_due_to_lock = true;
 								continue;
 							}
-							/* Revaliate backup files*/
+							/* Revalidate backup files*/
 							pgBackupValidate(backup);
 
 							if (backup->status == BACKUP_STATUS_OK)

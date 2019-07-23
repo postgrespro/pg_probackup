@@ -28,7 +28,7 @@
 
 /*
  * Macro needed to parse ptrack.
- * NOTE Keep those values syncronised with definitions in ptrack.h
+ * NOTE Keep those values synchronized with definitions in ptrack.h
  */
 #define PTRACK_BITS_PER_HEAPBLOCK 1
 #define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
@@ -39,7 +39,7 @@ static XLogRecPtr stop_stream_lsn = InvalidXLogRecPtr;
 
 /*
  * How long we should wait for streaming end in seconds.
- * Retreived as checkpoint_timeout + checkpoint_timeout * 0.1
+ * Retrieved as checkpoint_timeout + checkpoint_timeout * 0.1
  */
 static uint32 stream_stop_timeout = 0;
 /* Time in which we started to wait for streaming end */
@@ -78,10 +78,6 @@ static int is_ptrack_enable = false;
 bool is_ptrack_support = false;
 bool exclusive_backup = false;
 
-/* PostgreSQL server version from "backup_conn" */
-static int server_version = 0;
-static char server_version_str[100] = "";
-
 /* Is pg_start_backup() was executed */
 static bool backup_in_progress = false;
 /* Is pg_stop_backup() was sent */
@@ -94,20 +90,20 @@ static void backup_cleanup(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
 
-static void do_backup_instance(PGconn *backup_conn);
+static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
-							PGconn *backup_conn, PGconn *master_conn);
+							PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *master_conn);
 static void pg_switch_wal(PGconn *conn);
-static void pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn);
+static void pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo);
 static int checkpoint_timeout(PGconn *backup_conn);
 
 //static void backup_list_file(parray *files, const char *root, )
 static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn,
 							   bool wait_prev_segment);
-static void wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup, PGconn *backup_conn);
 static void make_pagemap_from_ptrack(parray* files, PGconn* backup_conn);
 static void *StreamLog(void *arg);
+static void IdentifySystem(StreamThreadArg *stream_thread_arg);
 
 static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
@@ -129,7 +125,8 @@ static XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn);
 /* Check functions */
 static bool pg_checksum_enable(PGconn *conn);
 static bool pg_is_in_recovery(PGconn *conn);
-static void check_server_version(PGconn *conn);
+static bool pg_is_superuser(PGconn *conn);
+static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
 static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 
@@ -143,7 +140,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
 	if (backup_in_progress)
 	{
 		elog(WARNING, "backup in progress, stop backup");
-		pg_stop_backup(NULL, pg_startbackup_conn);	/* don't care stop_lsn on error case */
+		pg_stop_backup(NULL, pg_startbackup_conn, NULL);	/* don't care about stop_lsn in case of error */
 	}
 }
 
@@ -152,7 +149,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
  * Move files from 'pgdata' to a subdirectory in 'backup_path'.
  */
 static void
-do_backup_instance(PGconn *backup_conn)
+do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -184,9 +181,6 @@ do_backup_instance(PGconn *backup_conn)
 		check_external_for_tablespaces(external_dirs, backup_conn);
 	}
 
-	/* Initialize size summary */
-	current.data_bytes = 0;
-
 	/* Obtain current timeline */
 	current.tli = get_current_timeline(false);
 
@@ -203,10 +197,11 @@ do_backup_instance(PGconn *backup_conn)
 		/* get list of backups already taken */
 		backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
 
-		prev_backup = catalog_get_last_data_backup(backup_list, current.tli);
+		prev_backup = catalog_get_last_data_backup(backup_list, current.tli, current.start_time);
 		if (prev_backup == NULL)
-			elog(ERROR, "Valid backup on current timeline is not found. "
-						"Create new FULL backup before an incremental one.");
+			elog(ERROR, "Valid backup on current timeline %X is not found. "
+						"Create new FULL backup before an incremental one.",
+						current.tli);
 
 		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
 						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
@@ -259,8 +254,7 @@ do_backup_instance(PGconn *backup_conn)
 	else
 		pg_startbackup_conn = backup_conn;
 
-	pg_start_backup(label, smooth_checkpoint, &current,
-					backup_conn, pg_startbackup_conn);
+	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, backup_conn, pg_startbackup_conn);
 
 	/* For incremental backup check that start_lsn is not from the past
 	 * Though it will not save us if PostgreSQL instance is actually
@@ -301,30 +295,10 @@ do_backup_instance(PGconn *backup_conn)
 														  instance_config.conn_opt.pgport,
 														  instance_config.conn_opt.pgdatabase,
 														  instance_config.conn_opt.pguser);
+		/* sanity */
+		IdentifySystem(&stream_thread_arg);
 
-		if (!CheckServerVersionForStreaming(stream_thread_arg.conn))
-		{
-			PQfinish(stream_thread_arg.conn);
-			/*
-			 * Error message already written in CheckServerVersionForStreaming().
-			 * There's no hope of recovering from a version mismatch, so don't
-			 * retry.
-			 */
-			elog(ERROR, "Cannot continue backup because stream connect has failed.");
-		}
-
-		/*
-		 * Identify server, obtaining start LSN position and current timeline ID
-		 * at the same time, necessary if not valid data can be found in the
-		 * existing output directory.
-		 */
-		if (!RunIdentifySystem(stream_thread_arg.conn, NULL, NULL, NULL, NULL))
-		{
-			PQfinish(stream_thread_arg.conn);
-			elog(ERROR, "Cannot continue backup because stream connect has failed.");
-		}
-
-        /* By default there are some error */
+		/* By default there are some error */
 		stream_thread_arg.ret = 1;
 		/* we must use startpos as start_lsn from start_backup */
 		stream_thread_arg.startpos = current.start_lsn;
@@ -354,6 +328,9 @@ do_backup_instance(PGconn *backup_conn)
 			 * 0 value is not external dir */
 			dir_list_file(backup_files_list, parray_get(external_dirs, i),
 						  false, true, false, i+1, FIO_DB_HOST);
+
+	/* close ssh session in main thread */
+	fio_disconnect();
 
 	/* Sanity check for backup_files_list, thank you, Windows:
 	 * https://github.com/postgrespro/pg_probackup/issues/48
@@ -453,6 +430,11 @@ do_backup_instance(PGconn *backup_conn)
 	if (prev_backup_filelist)
 		parray_qsort(prev_backup_filelist, pgFileComparePathWithExternal);
 
+	/* write initial backup_content.control file and update backup.control  */
+	write_backup_filelist(&current, backup_files_list,
+						  instance_config.pgdata, external_dirs);
+	write_backup(&current);
+
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
@@ -470,13 +452,14 @@ do_backup_instance(PGconn *backup_conn)
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->conn_arg.conn = NULL;
 		arg->conn_arg.cancel_conn = NULL;
+		arg->thread_num = i+1;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
 
 	/* Run threads */
 	thread_interrupted = false;
-	elog(INFO, "Start transfering data files");
+	elog(INFO, "Start transferring data files");
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
@@ -493,7 +476,7 @@ do_backup_instance(PGconn *backup_conn)
 			backup_isok = false;
 	}
 	if (backup_isok)
-		elog(INFO, "Data files are transfered");
+		elog(INFO, "Data files are transferred");
 	else
 		elog(ERROR, "Data files transferring failed");
 
@@ -526,6 +509,9 @@ do_backup_instance(PGconn *backup_conn)
 		parray_free(prev_backup_filelist);
 	}
 
+	/* Notify end of backup */
+	pg_stop_backup(&current, pg_startbackup_conn, nodeInfo);
+
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in backup_files_list.
 	 */
@@ -534,7 +520,7 @@ do_backup_instance(PGconn *backup_conn)
 		char		pg_control_path[MAXPGPATH];
 
 		snprintf(pg_control_path, sizeof(pg_control_path), "%s/%s",
-				 instance_config.pgdata, "global/pg_control");
+				 instance_config.pgdata, XLOG_CONTROL_FILE);
 
 		for (i = 0; i < parray_num(backup_files_list); i++)
 		{
@@ -546,13 +532,16 @@ do_backup_instance(PGconn *backup_conn)
 				break;
 			}
 		}
+
+		if (!pg_control)
+			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
+							pg_control_path);
+
+		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
 	}
 
-	/* Notify end of backup */
-	pg_stop_backup(&current, pg_startbackup_conn);
-
-	if (current.from_replica && !exclusive_backup)
-		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
+	/* close ssh session in main thread */
+	fio_disconnect();
 
 	/* Add archived xlog files into the list of files of this backup */
 	if (stream_wal)
@@ -591,24 +580,13 @@ do_backup_instance(PGconn *backup_conn)
 
 	/* Print the list of files to backup catalog */
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
-						  NULL, external_dirs);
+						  external_dirs);
+	/* update backup control file to update size info */
+	write_backup(&current);
 
 	/* clean external directories list */
 	if (external_dirs)
 		free_dir_list(external_dirs);
-
-	/* Compute summary of size of regular files in the backup */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-
-		if (S_ISDIR(file->mode))
-			current.data_bytes += 4096;
-
-		/* Count the amount of the data actually copied */
-		if (S_ISREG(file->mode))
-			current.data_bytes += file->write_size;
-	}
 
 	/* Cleanup */
 	if (backup_list)
@@ -651,11 +629,12 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 	confirm_block_size(cur_conn, "wal_block_size", XLOG_BLCKSZ);
 	nodeInfo->block_size = BLCKSZ;
 	nodeInfo->wal_block_size = XLOG_BLCKSZ;
+	nodeInfo->is_superuser = pg_is_superuser(cur_conn);
 
 	current.from_replica = pg_is_in_recovery(cur_conn);
 
 	/* Confirm that this server version is supported */
-	check_server_version(cur_conn);
+	check_server_version(cur_conn, nodeInfo);
 
 	if (pg_checksum_enable(cur_conn))
 		current.checksum_version = 1;
@@ -672,11 +651,12 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 						"pg_probackup have no way to detect data block corruption without them. "
 						"Reinitialize PGDATA with option '--data-checksums'.");
 
-	StrNCpy(current.server_version, server_version_str,
-			sizeof(current.server_version));
+	if (nodeInfo->is_superuser)
+		elog(WARNING, "Current PostgreSQL role is superuser. "
+						"It is not recommended to run backup or checkdb as superuser.");
 
-	StrNCpy(nodeInfo->server_version, server_version_str,
-			sizeof(nodeInfo->server_version));
+	StrNCpy(current.server_version, nodeInfo->server_version_str,
+			sizeof(current.server_version));
 
 	return cur_conn;
 }
@@ -688,16 +668,24 @@ int
 do_backup(time_t start_time, bool no_validate)
 {
 	PGconn *backup_conn = NULL;
+	PGNodeInfo nodeInfo;
+	char  pretty_data_bytes[20];
+
+	/* Initialize PGInfonode */
+	pgNodeInit(&nodeInfo);
 
 	if (!instance_config.pgdata)
 		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
+
+	current.compress_alg = instance_config.compress_alg;
+	current.compress_level = instance_config.compress_level;
+
 	/*
 	 * setup backup_conn, do some compatibility checks and
 	 * fill basic info about instance
 	 */
-	backup_conn = pgdata_basic_setup(instance_config.conn_opt,
-										 &(current.nodeInfo));
+	backup_conn = pgdata_basic_setup(instance_config.conn_opt, &nodeInfo);
 	/*
 	 * Ensure that backup directory was initialized for the same PostgreSQL
 	 * instance we opened connection to. And that target backup database PGDATA
@@ -705,16 +693,18 @@ do_backup(time_t start_time, bool no_validate)
 	 */
 	check_system_identifiers(backup_conn, instance_config.pgdata);
 
+	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
+			"wal-method: %s, remote: %s, replica: %s, compress-algorithm: %s, compress-level: %i",
+			PROGRAM_VERSION, instance_name, base36enc(start_time), pgBackupGetBackupMode(&current),
+			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
+			current.from_replica ? "true" : "false", deparse_compress_alg(current.compress_alg),
+			current.compress_level);
+
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(backup_conn))
-		elog(ERROR, "Failed to retreive wal_segment_size");
+		elog(ERROR, "Failed to retrieve wal_segment_size");
 #endif
-
-	current.compress_alg = instance_config.compress_alg;
-	current.compress_level = instance_config.compress_level;
-
-	current.stream = stream_wal;
 
 	is_ptrack_support = pg_ptrack_support(backup_conn);
 	if (is_ptrack_support)
@@ -765,7 +755,7 @@ do_backup(time_t start_time, bool no_validate)
 	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
-	do_backup_instance(backup_conn);
+	do_backup_instance(backup_conn, &nodeInfo);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
@@ -781,11 +771,12 @@ do_backup(time_t start_time, bool no_validate)
 	current.status = BACKUP_STATUS_DONE;
 	write_backup(&current);
 
-	//elog(LOG, "Backup completed. Total bytes : " INT64_FORMAT "",
-	//		current.data_bytes);
-
 	if (!no_validate)
 		pgBackupValidate(&current);
+
+	/* Notify user about backup size */
+	pretty_size(current.data_bytes, pretty_data_bytes, lengthof(pretty_data_bytes));
+	elog(INFO, "Backup %s real size: %s", base36enc(current.start_time), pretty_data_bytes);
 
 	if (current.status == BACKUP_STATUS_OK ||
 		current.status == BACKUP_STATUS_DONE)
@@ -807,34 +798,35 @@ do_backup(time_t start_time, bool no_validate)
  * Confirm that this server version is supported
  */
 static void
-check_server_version(PGconn *conn)
+check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 {
 	PGresult   *res;
 
 	/* confirm server version */
-	server_version = PQserverVersion(conn);
+	nodeInfo->server_version = PQserverVersion(conn);
 
-	if (server_version == 0)
-		elog(ERROR, "Unknown server version %d", server_version);
+	if (nodeInfo->server_version == 0)
+		elog(ERROR, "Unknown server version %d", nodeInfo->server_version);
 
-	if (server_version < 100000)
-		sprintf(server_version_str, "%d.%d",
-				server_version / 10000,
-				(server_version / 100) % 100);
+	if (nodeInfo->server_version < 100000)
+		sprintf(nodeInfo->server_version_str, "%d.%d",
+				nodeInfo->server_version / 10000,
+				(nodeInfo->server_version / 100) % 100);
 	else
-		sprintf(server_version_str, "%d",
-				server_version / 10000);
+		sprintf(nodeInfo->server_version_str, "%d",
+				nodeInfo->server_version / 10000);
 
-	if (server_version < 90500)
+	if (nodeInfo->server_version < 90500)
 		elog(ERROR,
 			 "server version is %s, must be %s or higher",
-			 server_version_str, "9.5");
+			 nodeInfo->server_version_str, "9.5");
 
-	if (current.from_replica && server_version < 90600)
+	if (current.from_replica && nodeInfo->server_version < 90600)
 		elog(ERROR,
 			 "server version is %s, must be %s or higher for backup from replica",
-			 server_version_str, "9.6");
+			 nodeInfo->server_version_str, "9.6");
 
+	/* TODO: search pg_proc for pgpro_edition before calling */
 	res = pgut_execute_extended(conn, "SELECT pgpro_edition()",
 								0, NULL, true, true);
 
@@ -847,29 +839,29 @@ check_server_version(PGconn *conn)
 		/* It seems we connected to PostgreSQL (not Postgres Pro) */
 		elog(ERROR, "%s was built with Postgres Pro %s %s, "
 					"but connection is made with PostgreSQL %s",
-			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, server_version_str);
-	else if (strcmp(server_version_str, PG_MAJORVERSION) != 0 &&
+			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, nodeInfo->server_version_str);
+	else if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0 &&
 			 strcmp(PQgetvalue(res, 0, 0), PGPRO_EDITION) != 0)
 		elog(ERROR, "%s was built with Postgres Pro %s %s, "
 					"but connection is made with Postgres Pro %s %s",
 			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION,
-			 server_version_str, PQgetvalue(res, 0, 0));
+			 nodeInfo->server_version_str, PQgetvalue(res, 0, 0));
 #else
 	if (PQresultStatus(res) != PGRES_FATAL_ERROR)
 		/* It seems we connected to Postgres Pro (not PostgreSQL) */
 		elog(ERROR, "%s was built with PostgreSQL %s, "
 					"but connection is made with Postgres Pro %s %s",
 			 PROGRAM_NAME, PG_MAJORVERSION,
-			 server_version_str, PQgetvalue(res, 0, 0));
-	else if (strcmp(server_version_str, PG_MAJORVERSION) != 0)
+			 nodeInfo->server_version_str, PQgetvalue(res, 0, 0));
+	else if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0)
 		elog(ERROR, "%s was built with PostgreSQL %s, but connection is made with %s",
-			 PROGRAM_NAME, PG_MAJORVERSION, server_version_str);
+			 PROGRAM_NAME, PG_MAJORVERSION, nodeInfo->server_version_str);
 #endif
 
 	PQclear(res);
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
-	exclusive_backup = server_version < 90600 ||
+	exclusive_backup = nodeInfo->server_version < 90600 ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK;
 }
 
@@ -904,6 +896,7 @@ check_system_identifiers(PGconn *conn, char *pgdata)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but connected instance system id is " UINT64_FORMAT,
 			 instance_config.system_identifier, system_id_conn);
+
 	if (system_id_pgdata != instance_config.system_identifier)
 		elog(ERROR, "Backup data directory was initialized for system id " UINT64_FORMAT ", "
 					"but target backup directory system id is " UINT64_FORMAT,
@@ -939,7 +932,7 @@ confirm_block_size(PGconn *conn, const char *name, int blcksz)
  */
 static void
 pg_start_backup(const char *label, bool smooth, pgBackup *backup,
-				PGconn *backup_conn, PGconn *pg_startbackup_conn)
+				PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *pg_startbackup_conn)
 {
 	PGresult   *res;
 	const char *params[2];
@@ -980,11 +973,14 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 	PQclear(res);
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE &&
-			(!(backup->from_replica && !exclusive_backup)))
+		!backup->from_replica &&
+		!(nodeInfo->server_version < 90600 &&
+		  !nodeInfo->is_superuser))
 		/*
 		 * Switch to a new WAL segment. It is necessary to get archived WAL
 		 * segment, which includes start LSN of current backup.
-		 * Don`t do this for replica backups unless it`s PG 9.5
+		 * Don`t do this for replica backups and for PG 9.5 if pguser is not superuser
+		 * (because in 9.5 only superuser can switch WAL)
 		 */
 		pg_switch_wal(conn);
 
@@ -999,16 +995,11 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 	else if (!stream_wal)
 		/* ...for others wait for previous segment */
 		wait_wal_lsn(backup->start_lsn, true, true);
-
-	/* In case of backup from replica for PostgreSQL 9.5
-	 * wait for start_lsn to be replayed by replica
-	 */
-	if (backup->from_replica && exclusive_backup)
-		wait_replica_wal_lsn(backup->start_lsn, true, backup_conn);
 }
 
 /*
  * Switch to a new WAL segment. It should be called only for master.
+ * For PG 9.5 it should be called only if pguser is superuser.
  */
 static void
 pg_switch_wal(PGconn *conn)
@@ -1020,9 +1011,9 @@ pg_switch_wal(PGconn *conn)
 	PQclear(res);
 
 #if PG_VERSION_NUM >= 100000
-	res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_wal()", 0, NULL);
+	res = pgut_execute(conn, "SELECT pg_catalog.pg_switch_wal()", 0, NULL);
 #else
-	res = pgut_execute(conn, "SELECT * FROM pg_catalog.pg_switch_xlog()", 0, NULL);
+	res = pgut_execute(conn, "SELECT pg_catalog.pg_switch_xlog()", 0, NULL);
 #endif
 
 	PQclear(res);
@@ -1151,13 +1142,13 @@ pg_checksum_enable(PGconn *conn)
 
 	res_db = pgut_execute(conn, "SHOW data_checksums", 0, NULL);
 
-	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
+	if (strcmp(PQgetvalue(res_db, 0, 0), "on") == 0)
 	{
 		PQclear(res_db);
-		return false;
+		return true;
 	}
 	PQclear(res_db);
-	return true;
+	return false;
 }
 
 /* Check if target instance is replica */
@@ -1174,6 +1165,24 @@ pg_is_in_recovery(PGconn *conn)
 		return true;
 	}
 	PQclear(res_db);
+	return false;
+}
+
+
+/* Check if current PostgreSQL role is superuser */
+static bool
+pg_is_superuser(PGconn *conn)
+{
+	PGresult   *res;
+
+	res = pgut_execute(conn, "SELECT pg_catalog.current_setting('is_superuser')", 0, NULL);
+
+	if (strcmp(PQgetvalue(res, 0, 0), "on") == 0)
+	{
+		PQclear(res);
+		return true;
+	}
+	PQclear(res);
 	return false;
 }
 
@@ -1410,7 +1419,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 
 	tli = get_current_timeline(false);
 
-	/* Compute the name of the WAL file containig requested LSN */
+	/* Compute the name of the WAL file containing requested LSN */
 	GetXLogSegNo(lsn, targetSegNo, instance_config.xlog_seg_size);
 	if (wait_prev_segment)
 		targetSegNo--;
@@ -1551,79 +1560,11 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 }
 
 /*
- * Wait for target 'lsn' on replica instance from master.
- */
-static void
-wait_replica_wal_lsn(XLogRecPtr lsn, bool is_start_backup,
-					 PGconn *backup_conn)
-{
-	uint32		try_count = 0;
-
-	while (true)
-	{
-		XLogRecPtr	replica_lsn;
-
-		/*
-		 * For lsn from pg_start_backup() we need it to be replayed on replica's
-		 * data.
-		 */
-		if (is_start_backup)
-		{
-			replica_lsn = get_checkpoint_location(backup_conn);
-		}
-		/*
-		 * For lsn from pg_stop_backup() we need it only to be received by
-		 * replica and fsync()'ed on WAL segment.
-		 */
-		else
-		{
-			PGresult   *res;
-			uint32		lsn_hi;
-			uint32		lsn_lo;
-
-#if PG_VERSION_NUM >= 100000
-			res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_wal_receive_lsn()",
-							   0, NULL);
-#else
-			res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_last_xlog_receive_location()",
-							   0, NULL);
-#endif
-
-			/* Extract LSN from result */
-			XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
-			/* Calculate LSN */
-			replica_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
-			PQclear(res);
-		}
-
-		/* target lsn was replicated */
-		if (replica_lsn >= lsn)
-			break;
-
-		sleep(1);
-		if (interrupted)
-			elog(ERROR, "Interrupted during waiting for target LSN");
-		try_count++;
-
-		/* Inform user if target lsn is absent in first attempt */
-		if (try_count == 1)
-			elog(INFO, "Wait for target LSN %X/%X to be received by replica",
-				 (uint32) (lsn >> 32), (uint32) lsn);
-
-		if (instance_config.replica_timeout > 0 &&
-			try_count > instance_config.replica_timeout)
-			elog(ERROR, "Target LSN %X/%X could not be recevied by replica "
-				 "in %d seconds",
-				 (uint32) (lsn >> 32), (uint32) lsn,
-				 instance_config.replica_timeout);
-	}
-}
-
-/*
  * Notify end of backup to PostgreSQL server.
  */
 static void
-pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
+pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
+				PGNodeInfo *nodeInfo)
 {
 	PGconn		*conn;
 	PGresult	*res;
@@ -1659,27 +1600,22 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 	PQclear(res);
 
 	/* Create restore point
-	 * only if it`s backup from master, or exclusive replica(wich connects to master)
+	 * Only if backup is from master.
+	 * For PG 9.5 create restore point only if pguser is superuser.
 	 */
-	if (backup != NULL && (!current.from_replica || (current.from_replica && exclusive_backup)))
+	if (backup != NULL && !current.from_replica &&
+		!(nodeInfo->server_version < 90600 &&
+		  !nodeInfo->is_superuser))
 	{
 		const char *params[1];
 		char		name[1024];
 
-		if (!current.from_replica)
-			snprintf(name, lengthof(name), "pg_probackup, backup_id %s",
-					 base36enc(backup->start_time));
-		else
-			snprintf(name, lengthof(name), "pg_probackup, backup_id %s. Replica Backup",
-					 base36enc(backup->start_time));
+		snprintf(name, lengthof(name), "pg_probackup, backup_id %s",
+					base36enc(backup->start_time));
 		params[0] = name;
 
 		res = pgut_execute(conn, "SELECT pg_catalog.pg_create_restore_point($1)",
 						   1, params);
-		/* Extract timeline and LSN from the result */
-		XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
-		/* Calculate LSN */
-		//restore_lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
 		PQclear(res);
 	}
 
@@ -1760,7 +1696,11 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 
 		while (1)
 		{
-			if (!PQconsumeInput(conn) || PQisBusy(conn))
+			if (!PQconsumeInput(conn))
+				elog(ERROR, "pg_stop backup() failed: %s",
+						PQerrorMessage(conn));
+
+			if (PQisBusy(conn))
 			{
 				pg_stop_backup_timeout++;
 				sleep(1);
@@ -1826,6 +1766,9 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 				char	   *xlog_path,
 							stream_xlog_path[MAXPGPATH];
 
+				elog(WARNING, "Invalid stop_backup_lsn value %X/%X",
+					 (uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
+
 				if (stream_wal)
 				{
 					pgBackupGetPath2(backup, stream_xlog_path,
@@ -1877,7 +1820,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 			 */
 			if (backup_files_list)
 			{
-				file = pgFileNew(backup_label, backup_label, true, 0,
+				file = pgFileNew(backup_label, PG_BACKUP_LABEL_FILE, true, 0,
 								 FIO_BACKUP_HOST);
 				file->crc = pgFileGetCRC(file->path, true, false,
 										 &file->read_size, FIO_BACKUP_HOST);
@@ -1923,7 +1866,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 
 			if (backup_files_list)
 			{
-				file = pgFileNew(tablespace_map, tablespace_map, true, 0,
+				file = pgFileNew(tablespace_map, PG_TABLESPACE_MAP_FILE, true, 0,
 								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 				{
@@ -1956,10 +1899,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 		char	   *xlog_path,
 					stream_xlog_path[MAXPGPATH];
 
-		/* Wait for stop_lsn to be received by replica */
-		/* XXX Do we need this? */
-//		if (current.from_replica)
-//			wait_replica_wal_lsn(stop_backup_lsn, false);
 		/*
 		 * Wait for stop_lsn to be archived or streamed.
 		 * We wait for stop_lsn in stream mode just in case.
@@ -1996,7 +1935,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn)
 }
 
 /*
- * Retreive checkpoint_timeout GUC value in seconds.
+ * Retrieve checkpoint_timeout GUC value in seconds.
  */
 static int
 checkpoint_timeout(PGconn *backup_conn)
@@ -2060,6 +1999,9 @@ backup_files(void *arg)
 	int			i;
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int			n_backup_files_list = parray_num(arguments->files_list);
+	static time_t prev_time;
+
+	prev_time = current.start_time;
 
 	/* backup a file */
 	for (i = 0; i < n_backup_files_list; i++)
@@ -2067,6 +2009,20 @@ backup_files(void *arg)
 		int			ret;
 		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
+
+		if (arguments->thread_num == 1)
+		{
+			/* update backup_content.control every 10 seconds */
+			if ((difftime(time(NULL), prev_time)) > 10)
+			{
+				prev_time = time(NULL);
+
+				write_backup_filelist(&current, arguments->files_list, arguments->from_root,
+									  arguments->external_dirs);
+				/* update backup control file to update size info */
+				write_backup(&current);
+			}
+		}
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
@@ -2206,6 +2162,9 @@ backup_files(void *arg)
 		else
 			elog(WARNING, "unexpected file type %d", buf.st_mode);
 	}
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
 
 	/* Close connection */
 	if (arguments->conn_arg.conn)
@@ -2474,7 +2433,7 @@ make_pagemap_from_ptrack(parray *files, PGconn *backup_conn)
 			if (ptrack_nonparsed != NULL)
 			{
 				/*
-				 * pg_ptrack_get_and_clear() returns ptrack with VARHDR cutted out.
+				 * pg_ptrack_get_and_clear() returns ptrack with VARHDR cut out.
 				 * Compute the beginning of the ptrack map related to this segment
 				 *
 				 * HEAPBLOCKS_PER_BYTE. Number of heap pages one ptrack byte can track: 8
@@ -2624,7 +2583,7 @@ StreamLog(void *arg)
 	/*
 	 * Start the replication
 	 */
-	elog(LOG, _("started streaming WAL at %X/%X (timeline %u)"),
+	elog(LOG, "started streaming WAL at %X/%X (timeline %u)",
 		 (uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
 		  stream_arg->starttli);
 
@@ -2665,13 +2624,13 @@ StreamLog(void *arg)
 #endif
 	}
 #else
-	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli, NULL,
-						 (char *) stream_arg->basedir, stop_streaming,
-						 standby_message_timeout, NULL, false, false) == false)
+	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli,
+						NULL, (char *) stream_arg->basedir, stop_streaming,
+						standby_message_timeout, NULL, false, false) == false)
 		elog(ERROR, "Problem in receivexlog");
 #endif
 
-	elog(LOG, _("finished streaming WAL at %X/%X (timeline %u)"),
+	elog(LOG, "finished streaming WAL at %X/%X (timeline %u)",
 		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, stream_arg->starttli);
 	stream_arg->ret = 0;
 
@@ -2838,4 +2797,63 @@ check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 
 		}
 	}
+}
+
+/*
+ * Run IDENTIFY_SYSTEM through a given connection and
+ * check system identifier and timeline are matching
+ */
+void
+IdentifySystem(StreamThreadArg *stream_thread_arg)
+{
+	PGresult	*res;
+
+	uint64 stream_conn_sysidentifier = 0;
+	char *stream_conn_sysidentifier_str;
+	TimeLineID stream_conn_tli = 0;
+
+	if (!CheckServerVersionForStreaming(stream_thread_arg->conn))
+	{
+		PQfinish(stream_thread_arg->conn);
+		/*
+		 * Error message already written in CheckServerVersionForStreaming().
+		 * There's no hope of recovering from a version mismatch, so don't
+		 * retry.
+		 */
+		elog(ERROR, "Cannot continue backup because stream connect has failed.");
+	}
+
+	/*
+	 * Identify server, obtain server system identifier and timeline
+	 */
+	res = pgut_execute(stream_thread_arg->conn, "IDENTIFY_SYSTEM", 0, NULL);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		elog(WARNING,"Could not send replication command \"%s\": %s",
+						"IDENTIFY_SYSTEM", PQerrorMessage(stream_thread_arg->conn));
+		PQfinish(stream_thread_arg->conn);
+		elog(ERROR, "Cannot continue backup because stream connect has failed.");
+	}
+
+	stream_conn_sysidentifier_str = PQgetvalue(res, 0, 0);
+	stream_conn_tli = atoi(PQgetvalue(res, 0, 1));
+
+	/* Additional sanity, primary for PG 9.5,
+	 * where system id can be obtained only via "IDENTIFY SYSTEM"
+	 */
+	if (!parse_uint64(stream_conn_sysidentifier_str, &stream_conn_sysidentifier, 0))
+		elog(ERROR, "%s is not system_identifier", stream_conn_sysidentifier_str);
+
+	if (stream_conn_sysidentifier != instance_config.system_identifier)
+		elog(ERROR, "System identifier mismatch. Connected PostgreSQL instance has system id: "
+			"" UINT64_FORMAT ". Expected: " UINT64_FORMAT ".",
+					stream_conn_sysidentifier, instance_config.system_identifier);
+
+	if (stream_conn_tli != current.tli)
+		elog(ERROR, "Timeline identifier mismatch. "
+			"Connected PostgreSQL instance has timeline id: %X. Expected: %X.",
+			stream_conn_tli, current.tli);
+
+	PQclear(res);
 }

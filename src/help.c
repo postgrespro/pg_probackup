@@ -97,9 +97,11 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s show-config -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--format=format]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-C]\n"));
@@ -126,6 +128,7 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
@@ -143,6 +146,7 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s validate -B backup-path [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-i backup-id] [--progress] [-j num-threads]\n"));
@@ -151,22 +155,27 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s checkdb [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--amcheck] [--skip-block-validation]\n"));
 	printf(_("                 [--heapallindexed]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
 	printf(_("                 [--format=format]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--wal] [-i backup-id | --expired | --merge-expired]\n"));
 	printf(_("                 [--dry-run]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s merge -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 -i backup-id [--progress] [-j num-threads]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
@@ -174,9 +183,11 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s del-instance -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 --instance=instance_name\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
@@ -188,6 +199,7 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s archive-get -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
@@ -195,6 +207,7 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
@@ -527,7 +540,7 @@ help_show(void)
 	printf(_("                 [--format=format]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("      --instance=instance_name     show info about specific intstance\n"));
+	printf(_("      --instance=instance_name     show info about specific instance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
 	printf(_("      --format=format              show format=PLAIN|JSON\n\n"));
 }

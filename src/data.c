@@ -159,7 +159,7 @@ page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 			return false;
 		}
 #endif
-		/* otherwize let's try to decompress the page */
+		/* otherwise let's try to decompress the page */
 		return true;
 	}
 	return false;
@@ -356,7 +356,7 @@ prepare_page(ConnectionArgs *arguments,
 			((strict && !is_ptrack_support) || !strict))
 		{
 			/* show this message for checkdb or backup without ptrack support */
-			elog(WARNING, "CORRUPTION in file %s, block %u",
+			elog(WARNING, "Corruption detected in file \"%s\", block %u",
 						file->path, blknum);
 		}
 
@@ -396,7 +396,7 @@ prepare_page(ConnectionArgs *arguments,
 		{
 			/*
 			 * We need to copy the page that was successfully
-			 * retreieved from ptrack into our output "page" parameter.
+			 * retrieved from ptrack into our output "page" parameter.
 			 * We must set checksum here, because it is outdated
 			 * in the block recieved from shared buffers.
 			 */
@@ -482,7 +482,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 				   compressed_page, header.compressed_size);
 			write_buffer_size += MAXALIGN(header.compressed_size);
 		}
-		/* Nonpositive value means that compression failed. Write it as is. */
+		/* Non-positive value means that compression failed. Write it as is. */
 		else
 		{
 			header.compressed_size = BLCKSZ;
@@ -585,10 +585,7 @@ backup_data_file(backup_files_arg* arguments,
 	}
 
 	if (file->size % BLCKSZ != 0)
-	{
-		fio_fclose(in);
-		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
-	}
+		elog(WARNING, "File: \"%s\", invalid file size %zu", file->path, file->size);
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -625,7 +622,7 @@ backup_data_file(backup_files_arg* arguments,
 			if (rc == PAGE_CHECKSUM_MISMATCH && is_ptrack_support)
 				goto RetryUsingPtrack;
 			if (rc < 0)
-				elog(ERROR, "Failed to read file %s: %s",
+				elog(ERROR, "Failed to read file \"%s\": %s",
 					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
 			n_blocks_read = rc;
 		}
@@ -757,7 +754,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		DataPage	page;
 		int32		uncompressed_size = 0;
 
-		/* File didn`t changed. Nothig to copy */
+		/* File didn`t changed. Nothing to copy */
 		if (file->write_size == BYTES_INVALID)
 			break;
 
@@ -890,7 +887,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	 * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
 	 * But during DELTA backup we read every file in PGDATA and thus DELTA backup
 	 * knows exact size of every file at the time of backup.
-	 * So when restoring file from DELTA backup we, knowning it`s size at
+	 * So when restoring file from DELTA backup we, knowing it`s size at
 	 * a time of a backup, can truncate file to this size.
 	 */
 	if (allow_truncate && file->n_blocks != BLOCKNUM_INVALID && !need_truncate)
@@ -1245,10 +1242,7 @@ check_data_file(ConnectionArgs *arguments,
 	}
 
 	if (file->size % BLCKSZ != 0)
-	{
-		fclose(in);
-		elog(WARNING, "File: %s, invalid file size %zu", file->path, file->size);
-	}
+		elog(WARNING, "File: \"%s\", invalid file size %zu", file->path, file->size);
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -1433,7 +1427,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	if (crc != file->crc)
 	{
 		elog(WARNING, "Invalid CRC of backup file \"%s\": %X. Expected %X",
-				file->path, file->crc, crc);
+				file->path, crc, file->crc);
 		is_valid = false;
 	}
 

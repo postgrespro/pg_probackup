@@ -142,7 +142,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
             log_file_size)
 
         self.assertNotIn(
-            'WARNING:',
+            'WARNING: cannot read creation timestamp from rotation file',
             output)
 
         self.assertTrue(os.path.isfile(rotation_file_path))
@@ -165,7 +165,6 @@ class LogTest(ProbackupTest, unittest.TestCase):
         self.set_config(
             backup_dir, 'node',
             options=['--log-rotation-age=1d'])
-
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -212,7 +211,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertNotIn(
-            'WARNING:',
+            'WARNING: missing rotation file:',
             output)
 
         # check that log file wasn`t rotated
@@ -291,7 +290,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertNotIn(
-            'WARNING:',
+            'WARNING: rotation file',
             output)
 
         # check that log file wasn`t rotated

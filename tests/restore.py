@@ -494,6 +494,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_restore_full_ptrack_archive(self):
         """recovery to latest from archive full+ptrack backups"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -542,6 +545,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_restore_ptrack(self):
         """recovery to latest from archive full+ptrack+ptrack backups"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -597,6 +603,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_restore_full_ptrack_stream(self):
         """recovery in stream mode to latest from full + ptrack backups"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -649,6 +658,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         recovery to latest from full + ptrack backups
         with loads when ptrack backup do
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -713,6 +725,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         recovery to latest from full + page backups
         with loads when full backup do
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -808,7 +823,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
-                "Expecting Error because restore destionation is not empty.\n "
+                "Expecting Error because restore destination is not empty.\n "
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
@@ -2030,33 +2045,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        # Restore with recovery target lsn
-        node.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node,
-            options=[
-                '--recovery-target-lsn={0}'.format(target_lsn),
-                "--recovery-target-action=promote",
-                '--recovery-target-timeline=1',
-                ])
-
-        with open(recovery_conf, 'r') as f:
-            recovery_conf_content = f.read()
-
-        self.assertIn(
-            "recovery_target_lsn = '{0}'".format(target_lsn),
-            recovery_conf_content)
-
-        self.assertIn(
-            "recovery_target_action = 'promote'",
-            recovery_conf_content)
-
-        self.assertIn(
-            "recovery_target_timeline = '1'",
-            recovery_conf_content)
-
-        node.slow_start()
-
         # Restore with recovery target name
         node.cleanup()
         self.restore_node(
@@ -2083,6 +2071,35 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             recovery_conf_content)
 
         node.slow_start()
+
+        # Restore with recovery target lsn
+        if self.get_version(node) >= 100000:
+
+            node.cleanup()
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    '--recovery-target-lsn={0}'.format(target_lsn),
+                    "--recovery-target-action=promote",
+                    '--recovery-target-timeline=1',
+                    ])
+
+            with open(recovery_conf, 'r') as f:
+                recovery_conf_content = f.read()
+
+            self.assertIn(
+                "recovery_target_lsn = '{0}'".format(target_lsn),
+                recovery_conf_content)
+
+            self.assertIn(
+                "recovery_target_action = 'promote'",
+                recovery_conf_content)
+
+            self.assertIn(
+                "recovery_target_timeline = '1'",
+                recovery_conf_content)
+
+            node.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

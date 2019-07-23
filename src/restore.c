@@ -167,7 +167,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			if (!satisfy_recovery_target(current_backup, rt))
 			{
 				if (target_backup_id != INVALID_BACKUP_ID)
-					elog(ERROR, "target backup %s does not satisfy restore options",
+					elog(ERROR, "Requested backup %s does not satisfy restore options",
 						 base36enc(target_backup_id));
 				else
 					/* Try to find another backup that satisfies target options */
@@ -182,8 +182,16 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		}
 	}
 
+	/* TODO: Show latest possible target */
 	if (dest_backup == NULL)
-		elog(ERROR, "Backup satisfying target options is not found.");
+	{
+		/* Failed to find target backup */
+		if (target_backup_id)
+			elog(ERROR, "Requested backup %s is not found.", base36enc(target_backup_id));
+		else
+			elog(ERROR, "Backup satisfying target options is not found.");
+		/* TODO: check if user asked PITR or just restore of latest backup */
+	}
 
 	/* If we already found dest_backup, look for full backup. */
 	if (dest_backup->backup_mode == BACKUP_MODE_FULL)
@@ -297,7 +305,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	{
 		check_tablespace_mapping(dest_backup);
 
-		/* no point in checking external directories if their restore is not resquested */
+		/* no point in checking external directories if their restore is not requested */
 		if (!skip_external_dirs)
 			check_external_dir_mapping(dest_backup);
 	}
@@ -376,7 +384,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 						 rt->target_xid, rt->target_lsn,
 						 base_full_backup->tli, instance_config.xlog_seg_size);
 		}
-		/* Orphinize every OK descendant of corrupted backup */
+		/* Orphanize every OK descendant of corrupted backup */
 		else
 		{
 			char	   *corrupted_backup_id;
@@ -836,7 +844,7 @@ create_recovery_conf(time_t backup_id,
 	elog(LOG, "creating recovery.conf");
 
 	snprintf(path, lengthof(path), "%s/recovery.conf", instance_config.pgdata);
-	fp = fio_fopen(path, "wt", FIO_DB_HOST);
+	fp = fio_fopen(path, "w", FIO_DB_HOST);
 	if (fp == NULL)
 		elog(ERROR, "cannot open recovery.conf \"%s\": %s", path,
 			strerror(errno));
@@ -1001,6 +1009,7 @@ read_timeline_history(TimeLineID targetTLI)
 	return result;
 }
 
+/* TODO: do not ignore timelines. What if requested target located in different timeline? */
 bool
 satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 {
@@ -1016,6 +1025,7 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 	return true;
 }
 
+/* TODO description */
 bool
 satisfy_timeline(const parray *timelines, const pgBackup *backup)
 {
@@ -1101,7 +1111,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		if (parse_lsn(target_lsn, &dummy_lsn))
 			rt->target_lsn = dummy_lsn;
 		else
-			elog(ERROR, "Invalid value of --ecovery-target-lsn option %s",
+			elog(ERROR, "Invalid value of --recovery-target-lsn option %s",
 				 target_lsn);
 	}
 

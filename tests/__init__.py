@@ -12,8 +12,13 @@ from . import init, merge, option, show, compatibility, \
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
 
-    if os.environ['PG_PROBACKUP_TEST_BASIC'] == 'ON':
-        loader.testMethodPrefix = 'test_basic'
+    if 'PG_PROBACKUP_TEST_BASIC' in os.environ:
+        if os.environ['PG_PROBACKUP_TEST_BASIC'] == 'ON':
+            loader.testMethodPrefix = 'test_basic'
+
+    if 'PG_PROBACKUP_PTRACK' in os.environ:
+        if os.environ['PG_PROBACKUP_PTRACK'] == 'ON':
+            suite.addTests(loader.loadTestsFromModule(ptrack))
 
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
@@ -36,7 +41,6 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(merge))
     suite.addTests(loader.loadTestsFromModule(option))
     suite.addTests(loader.loadTestsFromModule(page))
-#    suite.addTests(loader.loadTestsFromModule(ptrack))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
     suite.addTests(loader.loadTestsFromModule(pgpro589))
     suite.addTests(loader.loadTestsFromModule(pgpro2068))
