@@ -28,7 +28,7 @@
 
 /*
  * Macro needed to parse ptrack.
- * NOTE Keep those values syncronised with definitions in ptrack.h
+ * NOTE Keep those values synchronized with definitions in ptrack.h
  */
 #define PTRACK_BITS_PER_HEAPBLOCK 1
 #define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
@@ -39,7 +39,7 @@ static XLogRecPtr stop_stream_lsn = InvalidXLogRecPtr;
 
 /*
  * How long we should wait for streaming end in seconds.
- * Retreived as checkpoint_timeout + checkpoint_timeout * 0.1
+ * Retrieved as checkpoint_timeout + checkpoint_timeout * 0.1
  */
 static uint32 stream_stop_timeout = 0;
 /* Time in which we started to wait for streaming end */
@@ -451,7 +451,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 
 	/* Run threads */
 	thread_interrupted = false;
-	elog(INFO, "Start transfering data files");
+	elog(INFO, "Start transferring data files");
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
@@ -468,7 +468,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 			backup_isok = false;
 	}
 	if (backup_isok)
-		elog(INFO, "Data files are transfered");
+		elog(INFO, "Data files are transferred");
 	else
 		elog(ERROR, "Data files transferring failed");
 
@@ -686,7 +686,7 @@ do_backup(time_t start_time, bool no_validate)
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(backup_conn))
-		elog(ERROR, "Failed to retreive wal_segment_size");
+		elog(ERROR, "Failed to retrieve wal_segment_size");
 #endif
 
 	is_ptrack_support = pg_ptrack_support(backup_conn);
@@ -1346,7 +1346,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, bool wait_prev_segment)
 
 	tli = get_current_timeline(false);
 
-	/* Compute the name of the WAL file containig requested LSN */
+	/* Compute the name of the WAL file containing requested LSN */
 	GetXLogSegNo(lsn, targetSegNo, instance_config.xlog_seg_size);
 	if (wait_prev_segment)
 		targetSegNo--;
@@ -1862,7 +1862,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 }
 
 /*
- * Retreive checkpoint_timeout GUC value in seconds.
+ * Retrieve checkpoint_timeout GUC value in seconds.
  */
 static int
 checkpoint_timeout(PGconn *backup_conn)
@@ -2360,7 +2360,7 @@ make_pagemap_from_ptrack(parray *files, PGconn *backup_conn)
 			if (ptrack_nonparsed != NULL)
 			{
 				/*
-				 * pg_ptrack_get_and_clear() returns ptrack with VARHDR cutted out.
+				 * pg_ptrack_get_and_clear() returns ptrack with VARHDR cut out.
 				 * Compute the beginning of the ptrack map related to this segment
 				 *
 				 * HEAPBLOCKS_PER_BYTE. Number of heap pages one ptrack byte can track: 8

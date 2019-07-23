@@ -24,9 +24,9 @@ except ImportError:
 class SimpleAuthTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
-    def test_backup_via_unpriviledged_user(self):
+    def test_backup_via_unprivileged_user(self):
         """
-            Make node, create unpriviledged user, try to
+            Make node, create unprivileged user, try to
             run a backups without EXECUTE rights on
             certain functions
         """

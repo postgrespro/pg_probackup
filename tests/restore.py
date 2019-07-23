@@ -821,7 +821,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
-                "Expecting Error because restore destionation is not empty.\n "
+                "Expecting Error because restore destination is not empty.\n "
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:

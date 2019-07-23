@@ -116,7 +116,7 @@ do_delete(time_t backup_id)
  *
  * Invalid backups handled in Oracle style, so invalid backups are ignored
  * for the purpose of retention fulfillment,
- * i.e. CORRUPT full backup do not taken in account when deteremine
+ * i.e. CORRUPT full backup do not taken in account when determine
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
@@ -491,7 +491,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 * 2 PAGE1
 		 * 3 FULL
 		 *
-		 * Сonsequentially merge incremental backups from PAGE1 to PAGE3
+		 * Consequentially merge incremental backups from PAGE1 to PAGE3
 		 * into FULL.
 		 */
 

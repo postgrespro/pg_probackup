@@ -260,7 +260,7 @@ lock_backup(pgBackup *backup)
 
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		errno = save_errno;
-		elog(ERROR, "Culd not write lock file \"%s\": %s",
+		elog(ERROR, "Could not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
 
@@ -1022,7 +1022,7 @@ parse_compress_alg(const char *arg)
 	len = strlen(arg);
 
 	if (len == 0)
-		elog(ERROR, "compress algrorithm is empty");
+		elog(ERROR, "compress algorithm is empty");
 
 	if (pg_strncasecmp("zlib", arg, len) == 0)
 		return ZLIB_COMPRESS;
@@ -1231,7 +1231,7 @@ find_parent_full_backup(pgBackup *current_backup)
 }
 
 /*
- * Interate over parent chain and look for any problems.
+ * Iterate over parent chain and look for any problems.
  * Return 0 if chain is broken.
  *  result_backup must contain oldest existing backup after missing backup.
  *  we have no way to know if there are multiple missing backups.
@@ -1262,7 +1262,7 @@ scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 		target_backup = target_backup->parent_backup_link;
 	}
 
-	/* Prevous loop will skip FULL backup because his parent_backup_link is NULL */
+	/* Previous loop will skip FULL backup because his parent_backup_link is NULL */
 	if (target_backup->backup_mode == BACKUP_MODE_FULL &&
 		(target_backup->status != BACKUP_STATUS_OK &&
 		target_backup->status != BACKUP_STATUS_DONE))

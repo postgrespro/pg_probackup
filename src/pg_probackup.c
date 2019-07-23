@@ -490,7 +490,7 @@ main(int argc, char *argv[])
 
 	/* Usually checkdb for file logging requires log_directory
 	 * to be specified explicitly, but if backup_dir and instance name are provided,
-	 * checkdb can use the tusual default values or values from config
+	 * checkdb can use the usual default values or values from config
 	 */
 	if (backup_subcmd == CHECKDB_CMD &&
 		(instance_config.logger.log_level_file != LOG_OFF &&

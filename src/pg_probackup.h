@@ -66,7 +66,7 @@ extern const char  *PROGRAM_EMAIL;
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
 
-/* Direcotry/File permission */
+/* Directory/File permission */
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
 
@@ -264,7 +264,7 @@ struct pgBackup
 	time_t			backup_id;	 /* Identifier of the backup.
 								  * Currently it's the same as start_time */
 	BackupStatus	status;		/* Status - one of BACKUP_STATUS_xxx above*/
-	TimeLineID		tli; 		/* timeline of start and stop baskup lsns */
+	TimeLineID		tli; 		/* timeline of start and stop backup lsns */
 	XLogRecPtr		start_lsn;	/* backup's starting transaction log location */
 	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
 	time_t			start_time;	/* since this moment backup has status

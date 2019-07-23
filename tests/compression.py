@@ -472,9 +472,9 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_uncompressable_pages(self):
+    def test_incompressible_pages(self):
         """
-        make archive node, create table with uncompressable toast pages,
+        make archive node, create table with incompressible toast pages,
         take backup with compression, make sure that page was not compressed,
         restore backup and check data correctness
         """

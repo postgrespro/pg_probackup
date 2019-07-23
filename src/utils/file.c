@@ -37,7 +37,7 @@ typedef struct
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
-/* Use specified file descriptors as stding/stdout for FIO functions */
+/* Use specified file descriptors as stdin/stdout for FIO functions */
 void fio_redirect(int in, int out)
 {
 	fio_stdin = in;
@@ -726,7 +726,7 @@ int fio_access(char const* path, int mode, fio_location location)
 	}
 }
 
-/* Create symbolink link */
+/* Create symbolic link */
 int fio_symlink(char const* target, char const* link_path, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -822,7 +822,7 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 	}
 }
 
-/* Checnge file mode */
+/* Change file mode */
 int fio_chmod(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -954,7 +954,7 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 
 		while (1)
 		{
-			if (gz->strm.avail_in != 0) /* If there is some data in receiver buffer, then decmpress it */
+			if (gz->strm.avail_in != 0) /* If there is some data in receiver buffer, then decompress it */
 			{
 				rc = inflate(&gz->strm, Z_NO_FLUSH);
 				if (rc == Z_STREAM_END)
@@ -1021,7 +1021,7 @@ fio_gzwrite(gzFile f, void const* buf, unsigned size)
 				{
 					rc = deflate(&gz->strm, Z_NO_FLUSH);
 					Assert(rc == Z_OK);
-					gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of bufer */
+					gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of buffer */
 				}
 				else
 				{
@@ -1429,7 +1429,7 @@ void fio_communicate(int in, int out)
 		  case FIO_UNLINK: /* Remove file or directory (TODO: Win32) */
 			SYS_CHECK(remove_file_or_dir(buf));
 			break;
-		  case FIO_MKDIR:  /* Create direcory */
+		  case FIO_MKDIR:  /* Create directory */
 			hdr.size = 0;
 			hdr.arg = dir_create_dir(buf, hdr.arg);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));

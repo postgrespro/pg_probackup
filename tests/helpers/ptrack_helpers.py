@@ -1418,7 +1418,7 @@ class ProbackupTest(object):
 
             else:
                 error_message += (
-                    '\nFile dissappearance.\n '
+                    '\nFile disappearance.\n '
                     'File: {0}\n').format(
                     os.path.join(restored_pgdata['pgdata'], file)
                     )

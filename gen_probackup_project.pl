@@ -5,7 +5,7 @@ our $pgsrc;
 our $currpath;
 
 BEGIN {
-# path to the pg_pprobackup dir
+# path to the pg_probackup dir
 $currpath = File::Basename::dirname(Cwd::abs_path($0));
 use Cwd;
 use File::Basename;

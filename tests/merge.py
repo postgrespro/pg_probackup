@@ -1345,7 +1345,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
     def test_merge_different_compression_algo(self):
         """
-        Check that backups with different compression algorihtms can be merged
+        Check that backups with different compression algorithms can be merged
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

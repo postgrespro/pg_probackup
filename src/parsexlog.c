@@ -228,7 +228,7 @@ static XLogRecPtr		wal_target_lsn = InvalidXLogRecPtr;
  * Read WAL from the archive directory, from 'startpoint' to 'endpoint' on the
  * given timeline. Collect data blocks touched by the WAL records into a page map.
  *
- * Pagemap extracting is processed using threads. Eeach thread reads single WAL
+ * Pagemap extracting is processed using threads. Each thread reads single WAL
  * file.
  */
 void
@@ -1491,7 +1491,7 @@ extractPageInfo(XLogReaderState *record, XLogReaderData *reader_data,
 		if (!XLogRecGetBlockTag(record, block_id, &rnode, &forknum, &blkno))
 			continue;
 
-		/* We only care about the main fork; others are copied in toto */
+		/* We only care about the main fork; others are copied as is */
 		if (forknum != MAIN_FORKNUM)
 			continue;
 

@@ -371,7 +371,7 @@ do_validate_all(void)
 	/* TODO: Probably we should have different exit code for every condition
 	 * and they combination:
 	 *  0 - all backups are valid
-	 *  1 - some backups are corrup
+	 *  1 - some backups are corrupt
 	 *  2 - some backups where skipped due to concurrent locks
 	 *  3 - some backups are corrupt and some are skipped due to concurrent locks
 	 */
@@ -547,7 +547,7 @@ do_validate_instance(void)
 		/* For every OK backup we try to revalidate all his ORPHAN descendants. */
 		if (current_backup->status == BACKUP_STATUS_OK)
 		{
-			/* revalidate all ORPHAN descendats
+			/* revalidate all ORPHAN descendants
 			 * be very careful not to miss a missing backup
 			 * for every backup we must check that he is descendant of current_backup
 			 */
@@ -592,7 +592,7 @@ do_validate_instance(void)
 								skipped_due_to_lock = true;
 								continue;
 							}
-							/* Revaliate backup files*/
+							/* Revalidate backup files*/
 							pgBackupValidate(backup);
 
 							if (backup->status == BACKUP_STATUS_OK)

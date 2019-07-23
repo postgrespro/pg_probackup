@@ -304,7 +304,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     def test_validate_corrupted_intermediate_backups(self):
         """
         make archive node, take FULL, PAGE1, PAGE2 backups,
-        corrupt file in FULL and PAGE1 backupd, run validate  on PAGE1,
+        corrupt file in FULL and PAGE1 backups, run validate on PAGE1,
         expect FULL and PAGE1 to gain status CORRUPT and
         PAGE2 gain status ORPHAN
         """

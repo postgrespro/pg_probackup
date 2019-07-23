@@ -298,7 +298,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	{
 		check_tablespace_mapping(dest_backup);
 
-		/* no point in checking external directories if their restore is not resquested */
+		/* no point in checking external directories if their restore is not requested */
 		if (!skip_external_dirs)
 			check_external_dir_mapping(dest_backup);
 	}
@@ -377,7 +377,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 						 rt->target_xid, rt->target_lsn,
 						 base_full_backup->tli, instance_config.xlog_seg_size);
 		}
-		/* Orphinize every OK descendant of corrupted backup */
+		/* Orphanize every OK descendant of corrupted backup */
 		else
 		{
 			char	   *corrupted_backup_id;
@@ -1064,7 +1064,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		if (parse_lsn(target_lsn, &dummy_lsn))
 			rt->target_lsn = dummy_lsn;
 		else
-			elog(ERROR, "Invalid value of --ecovery-target-lsn option %s",
+			elog(ERROR, "Invalid value of --recovery-target-lsn option %s",
 				 target_lsn);
 	}
 

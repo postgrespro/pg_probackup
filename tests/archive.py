@@ -47,7 +47,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node)
         node.slow_start()
 
-        # Recreate backup calagoue
+        # Recreate backup catalog
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
 
@@ -350,7 +350,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_arhive_push_file_exists(self):
+    def test_archive_push_file_exists(self):
         """Archive-push if file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -359,8 +359,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s'}
-            )
+                'checkpoint_timeout': '30s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -442,7 +442,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_arhive_push_file_exists_overwrite(self):
+    def test_archive_push_file_exists_overwrite(self):
         """Archive-push if file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -451,8 +451,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s'}
-            )
+                'checkpoint_timeout': '30s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)

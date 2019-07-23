@@ -270,7 +270,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 													 false);
 
 	/*
-	 * Rename external directoties in to_backup (if exists)
+	 * Rename external directories in to_backup (if exists)
 	 * according to numeration of external dirs in from_backup.
 	 */
 	if (to_external)
@@ -593,6 +593,8 @@ merge_files(void *arg)
 				{
 					elog(VERBOSE, "Merge target and source files into the temporary path \"%s\"",
 						 merge_to_file_path);
+
+					// TODO: truncate merge_to_file_path just in case?
 
 					/*
 					 * file->path is relative, to_file_path - is absolute.

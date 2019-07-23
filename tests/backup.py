@@ -643,7 +643,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     path = os.path.join(root, file)
                     list = list + [path]
 
-        # We expect that relfilenode occures only once
+        # We expect that relfilenode can be encountered only once
         if len(list) > 1:
             message = ""
             for string in list:
@@ -2019,7 +2019,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica, datname='backupdb',
             options=['-U', 'backup', '--log-level-file=verbose'])
 
-        # PAGE
+        # PAGE backup from replica
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
             datname='backupdb', options=['-U', 'backup'])
@@ -2027,7 +2027,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica, backup_type='page',
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
-        # DELTA
+        # DELTA backup from replica
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
             datname='backupdb', options=['-U', 'backup'])

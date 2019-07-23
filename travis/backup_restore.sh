@@ -27,7 +27,7 @@ yum install -y postgresql95-devel make gcc readline-devel openssl-devel pam-deve
 make top_srcdir=postgresql-$PGVERSION
 make install top_srcdir=postgresql-$PGVERSION
 
-# initalize cluster and database
+# initialize cluster and database
 yum install -y postgresql95-server
 su postgres -c "/usr/pgsql-9.5/bin/initdb -D $PGDATA -k"
 cat <<EOF > $PGDATA/pg_hba.conf

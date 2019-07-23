@@ -1075,7 +1075,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 }
 
 /*
- * Read names of symbolik names of tablespaces with links to directories from
+ * Read names of symbolic names of tablespaces with links to directories from
  * tablespace_map or tablespace_map.txt.
  */
 void
@@ -1568,7 +1568,7 @@ pgFileSize(const char *path)
 }
 
 /*
- * Construct parray containing remmaped external directories paths
+ * Construct parray containing remapped external directories paths
  * from string like /path1:/path2
  */
 parray *

@@ -540,7 +540,7 @@ help_show(void)
 	printf(_("                 [--format=format]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
-	printf(_("      --instance=instance_name     show info about specific intstance\n"));
+	printf(_("      --instance=instance_name     show info about specific instance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
 	printf(_("      --format=format              show format=PLAIN|JSON\n\n"));
 }

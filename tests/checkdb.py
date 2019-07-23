@@ -330,7 +330,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # corruption of both indexes in db1 and db2 must be detected
         # also the that amcheck is not installed in 'postgres'
-        # musted be logged
+        # should be logged
         with open(log_file_path) as f:
             log_file_content = f.read()
             self.assertIn(

@@ -81,7 +81,7 @@ typedef struct pg_indexEntry
 	char *name;
 	char *namespace;
 	bool heapallindexed_is_supported;
-	/* schema where amcheck extention is located */
+	/* schema where amcheck extension is located */
 	char *amcheck_nspname;
 	/* lock for synchronization of parallel threads  */
 	volatile pg_atomic_flag lock;
@@ -408,7 +408,7 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 				PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 1));
 
 	if (!heapallindexed_is_supported && heapallindexed)
-		elog(WARNING, "Extension '%s' verion %s in schema '%s'"
+		elog(WARNING, "Extension '%s' version %s in schema '%s'"
 					  "do not support 'heapallindexed' option",
 					   PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 2),
 					   PQgetvalue(res, 0, 1));
