@@ -347,7 +347,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 							backup->parent_backup_link,
 							pgBackupCompareIdDesc))
 		{
-			/* make keep list a bit sparse */
+			/* make keep list a bit more compact */
 			parray_append(to_keep_list, backup);
 			continue;
 		}
@@ -445,7 +445,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 			continue;
 		}
 
-		/* FULL backup in purge list, thanks to sparsing of keep_list current backup is
+		/* FULL backup in purge list, thanks to compacting of keep_list current backup is
 		 * final target for merge, but there could be intermediate incremental
 		 * backups from purge_list.
 		 */
