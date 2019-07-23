@@ -1883,3 +1883,157 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_with_less_privileges_role(self):
+        """
+        check permissions correctness from documentation:
+        https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#configuring-the-database-cluster
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s'})
+
+        if self.ptrack:
+            node.append_conf('postgresql.auto.conf', 'ptrack_enable = on')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "BEGIN; "
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
+                "COMMIT;"
+            )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "BEGIN; "
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
+                "COMMIT;"
+            )
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "BEGIN; "
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
+                "COMMIT;"
+            )
+
+        # enable STREAM backup
+        node.safe_psql(
+            'backupdb',
+            'ALTER ROLE backup WITH REPLICATION;')
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            datname='backupdb', options=['-U', 'backup'])
+
+        # PAGE
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page', datname='backupdb',
+            options=['--stream', '-U', 'backup'])
+
+        # DELTA
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # Restore as replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        self.restore_node(backup_dir, 'node', replica)
+        self.set_replica(node, replica)
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        replica.slow_start(replica=True)
+
+        # FULL backup from replica
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        self.backup_node(
+            backup_dir, 'replica', replica, datname='backupdb',
+            options=['-U', 'backup', '--log-level-file=verbose'])
+
+        # PAGE
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='page',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='page',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # DELTA
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='delta',
+            datname='backupdb', options=['-U', 'backup'])
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='delta',
+            datname='backupdb', options=['--stream', '-U', 'backup'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
