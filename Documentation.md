@@ -1051,7 +1051,7 @@ The typical workflow is as follows:
 
 - If you would like to take remote backup in [PAGE](#creating-a-backup) mode, or rely on [ARCHIVE](#archive-mode) WAL delivery method, or use [PITR](#performing-point-in-time-pitr-recovery), then configure continuous WAL archiving from database host to the backup host as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the [archive-push](#archive-push) and [archive-get](#archive-get) commands, you must specify the [remote options](#remote-mode-options) that point to backup host with backup catalog.
 
-- Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) on backup host. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
+- Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) **on backup host**. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
 
 >NOTE: The remote backup mode is currently unavailable for Windows systems.
 
