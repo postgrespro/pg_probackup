@@ -1037,10 +1037,10 @@ class ProbackupTest(object):
             archive_command = archive_command + '--overwrite '
 
         if os.name == 'posix':
-            archive_command = archive_command + '--wal-file-path %p --wal-file-name %f'
+            archive_command = archive_command + '--wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
-            archive_command = archive_command + '--wal-file-path "%p" --wal-file-name "%f"'
+            archive_command = archive_command + '--wal-file-path="%p" --wal-file-name="%f"'
 
         node.append_conf(
                     'postgresql.auto.conf',
