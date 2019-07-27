@@ -150,6 +150,7 @@ pg_probackup currently has the following limitations:
 - On Unix systems backup of PostgreSQL verions =< 10 is possible only by the same OS user PostgreSQL server is running by. For example, if PostgreSQL server is running by user *postgres*, then backup must be run by user *postgres*. If backup is running in [remote mode](#using-pg_probackup-in-the-remote-mode) using `ssh`, then this limitation apply differently: value for `--remote-user` option should be *postgres*.
 - During backup of PostgreSQL 9.5 functions `pg_create_restore_point(text)` and `pg_switch_xlog()` will be executed only if backup role is superuser. Because of that backup of a cluster with low amount of WAL traffic with non-superuser role may take more time than backup of the same cluster with superuser role.
 - The PostgreSQL server from which the backup was taken and the restored server must be compatible by the [block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-BLOCK-SIZE) and [wal_block_size](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number. Also depending on cluster configuration PostgreSQL itself may apply additional restrictions such as CPU architecture platform and libc/libicu versions.
+- Incremental chain can span only within one timeline. So if you have backup incremental chain taken from replica and it gets promoted, you would be forced to take another FULL backup.
 
 ## Installation and Setup
 
@@ -363,7 +364,7 @@ pg_probackup supports the remote mode that allows to perform backup, restore and
 If you are going to use pg_probackup in remote mode via ssh, complete the following steps:
 
 - Install pg_probackup on both systems: `backup_host` and `db_host`.
-- For communication between the hosts setup the passwordless SSH connection between *backup* user on `backup_host` and *postgres* user on 'db_host':
+- For communication between the hosts setup the passwordless SSH connection between *backup* user on `backup_host` and *postgres* user on `db_host`:
 
     [backup@backup_host] ssh-copy-id postgres@db_host
 
