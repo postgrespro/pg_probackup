@@ -622,6 +622,7 @@ do_retention_wal(void)
 	XLogRecPtr oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID oldest_tli = 0;
 	bool backup_list_is_empty = false;
+	int i;
 
 	/* Get list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
@@ -630,14 +631,17 @@ do_retention_wal(void)
 		backup_list_is_empty = true;
 
 	/* Save LSN and Timeline to remove unnecessary WAL segments */
-	if (!backup_list_is_empty)
+	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 	{
-		pgBackup   *backup = NULL;
-		/* Get LSN and TLI of oldest alive backup */
-		backup = (pgBackup *) parray_get(backup_list, parray_num(backup_list) -1);
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, parray_num(backup_list) -1);
 
-		oldest_tli = backup->tli;
-		oldest_lsn = backup->start_lsn;
+		/* Get LSN and TLI of the oldest backup with valid start_lsn and tli */
+		if (backup->tli > 0 && !XLogRecPtrIsInvalid(backup->start_lsn))
+		{
+			oldest_tli = backup->tli;
+			oldest_lsn = backup->start_lsn;
+			break;
+		}
 	}
 
 	/* Be paranoid */
