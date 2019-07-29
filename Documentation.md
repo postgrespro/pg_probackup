@@ -582,6 +582,12 @@ The typical workflow is as follows:
 
 - Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) **on backup host**. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
 
+For example, to create archive full backup using remote mode via ssh, run:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --remote-host=192.168.0.2 --remote-user=postgres
+
+For example, to restore backup on remote system using ssh, run:
+
 >NOTE: The remote backup mode is currently unavailable for Windows systems.
 
 ### Running pg_probackup on Parallel Threads
@@ -953,8 +959,10 @@ Specifies the backup mode to use. Possible values are:
 - PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly.
 
-    -C
-    --smooth-checkpoint
+```
+-C
+--smooth-checkpoint
+```
 Spreads out the checkpoint over a period of time. By default, pg_probackup tries to complete the checkpoint as soon as possible.
 
     --stream
