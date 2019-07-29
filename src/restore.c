@@ -808,10 +808,43 @@ create_recovery_conf(time_t backup_id,
 	if (need_restore_conf)
 	{
 
-		fio_fprintf(fp, "restore_command = '%s archive-get -B %s --instance %s "
-					"--wal-file-path %%p --wal-file-name %%f'\n",
+		char restore_command_guc[16384];
+
+		/* If restore_command is provided, use it */
+		if (rt->restore_command)
+			sprintf(restore_command_guc, "%s", rt->restore_command);
+		/* construct restore_command */
+		else
+		{
+			/* default cmdline, ok for local restore */
+			sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
+					"--wal-file-path=%%p --wal-file-name=%%f",
 					PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
 					backup_path, instance_name);
+
+			/* append --remote-* parameters provided via --archive-* settings */
+			if (instance_config.archive.host)
+			{
+				strcat(restore_command_guc, " --remote-host=");
+				strcat(restore_command_guc, instance_config.archive.host);
+			}
+
+			if (instance_config.archive.port)
+			{
+				strcat(restore_command_guc, " --remote-port=");
+				strcat(restore_command_guc, instance_config.archive.port);
+			}
+
+			if (instance_config.archive.user)
+			{
+				strcat(restore_command_guc, " --remote-user=");
+				strcat(restore_command_guc, instance_config.archive.user);
+			}
+		}
+
+		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
+		fio_fprintf(fp, "restore_command = '%s'\n",
+				restore_command_guc);
 
 		/*
 		 * We've already checked that only one of the four following mutually
@@ -1009,6 +1042,7 @@ parseRecoveryTargetOptions(const char *target_time,
 					const char *target_stop,
 					const char *target_name,
 					const char *target_action,
+					const char *restore_command,
 					bool		no_validate)
 {
 	bool		dummy_bool;
@@ -1113,6 +1147,9 @@ parseRecoveryTargetOptions(const char *target_time,
 		/* Default recovery target action is pause */
 		rt->target_action = "pause";
 	}
+
+	if (restore_command)
+		rt->restore_command = restore_command;
 
 	/* More than one mutually exclusive option was defined. */
 	if (recovery_target_specified > 1)

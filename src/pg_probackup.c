@@ -87,6 +87,7 @@ static char		   *target_stop;
 static bool			target_immediate;
 static char		   *target_name = NULL;
 static char		   *target_action = NULL;
+static char		   *restore_command = NULL;
 
 static pgRecoveryTarget *recovery_target_options = NULL;
 
@@ -171,6 +172,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
+	{ 's', 158, "restore-command",	&restore_command,		SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -589,7 +591,7 @@ main(int argc, char *argv[])
 				target_inclusive, target_tli, target_lsn,
 				(target_stop != NULL) ? target_stop :
 					(target_immediate) ? "immediate" : NULL,
-				target_name, target_action, no_validate);
+				target_name, target_action, restore_command, no_validate);
 	}
 
 	if (num_threads < 1)

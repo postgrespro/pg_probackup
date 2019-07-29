@@ -206,6 +206,13 @@ typedef struct ConnectionArgs
 	PGcancel   *cancel_conn;
 } ConnectionArgs;
 
+typedef struct ArchiveOptions
+{
+	const char *host;
+	const char *port;
+	const char *user;
+} ArchiveOptions;
+
 /*
  * An instance configuration. It can be stored in a configuration file or passed
  * from command line.
@@ -238,6 +245,9 @@ typedef struct InstanceConfig
 
 	CompressAlg	compress_alg;
 	int			compress_level;
+
+	/* Archive description */
+	ArchiveOptions archive;
 } InstanceConfig;
 
 extern ConfigOption instance_options[];
@@ -330,6 +340,7 @@ typedef struct pgRecoveryTarget
 	const char	   *target_name;
 	const char	   *target_action;
 	bool			no_validate;
+	const char	   *restore_command;
 } pgRecoveryTarget;
 
 typedef struct
@@ -495,7 +506,8 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
 	const char *target_stop, const char *target_name,
-	const char *target_action, bool no_validate);
+	const char *target_action, const char *restore_command,
+	bool no_validate);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
