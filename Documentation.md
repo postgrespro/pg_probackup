@@ -33,7 +33,7 @@ Current version - 2.1.5
     * [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode)
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
-    * [Managing the Backup Catalog](#managing-the-backup-Catalog)
+    * [Managing the Backup Catalog](#managing-the-backup-catalog)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
@@ -490,7 +490,7 @@ Physical verification can be skipped if `--skip-block-validation` flag is used. 
 
 Logical verification can be done more thoroughly with flag `--heapallindexed` by checking that all heap tuples that should be indexed are actually indexed, but at the higher cost of CPU, memory and I/O comsumption.
 
-### Validating Backups
+### Validating a Backup
 
 pg_probackup calculates checksums for each file in a backup during backup process. The process of checking  checksumms of backup data files is called `the backup validation`. By default validation is run immediately after backup is taken and right before restore, to detect possible backup corruption.
 
@@ -985,7 +985,7 @@ Skips automatic validation after successfull backup. You can use this flag if yo
 
 Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
 
-For details on usage, see the section (#creating-a-backup).
+For details on usage, see the section [Creating a Backup](#creating-a-backup).
 
 #### restore
 
