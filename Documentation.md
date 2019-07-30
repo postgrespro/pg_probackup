@@ -453,11 +453,15 @@ Redardless of data checksums been enabled or not, pg_probackup always check page
 
 #### External directories
 
-To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons.
+To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons, on Windows system paths must be separated by semicolon instead.
 
 For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory, run:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=/etc/dir1:/etc/dir2
+
+For example, to include 'C:\dir1' and 'C:\dir2' directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory on Windows system, run:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=C:\dir1;C:\dir2
 
 pg_probackup creates a separate subdirectory in the backup directory for each external directory. Since external directories included into different backups do not have to be the same, when you are restoring the cluster from an incremental backup, only those directories that belong to this particular backup will be restored. Any external directories stored in the previous backups will be ignored.
 
