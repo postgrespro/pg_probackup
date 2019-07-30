@@ -582,11 +582,11 @@ The typical workflow is as follows:
 
 - Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) **on backup host**. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
 
-For example, to create archive full backup using remote mode through ssh connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
+For example, to create archive full backup using remote mode through SSH connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
 
-For example, to restore latest backup on remote system using remote mode through ssh connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
+For example, to restore latest backup on remote system using remote mode through SSH connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
 
     pg_probackup restore -B backup_dir --instance instance_name --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
 
