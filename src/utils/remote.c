@@ -70,9 +70,16 @@ static void kill_child(void)
 
 void wait_ssh(void)
 {
+/*
+ * We need to wait termination of SSH process to eliminate zombies.
+ * There is no waitpid() function at Windows but there are no zombie processes caused by lack of wait/waitpid.
+ * So just disable waitpid for Windows.
+ */
+#ifndef WIN32
 	int status;
 	waitpid(child_pid, &status, 0);
 	elog(LOG, "SSH process %d is terminated with status %d",  child_pid, status);
+#endif
 }
 
 #ifdef WIN32

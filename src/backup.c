@@ -678,27 +678,56 @@ do_backup(time_t start_time, bool no_validate)
 		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
+	/* Update backup status and other metainfo. */
+	current.status = BACKUP_STATUS_RUNNING;
+	current.start_time = start_time;
+	StrNCpy(current.program_version, PROGRAM_VERSION,
+			sizeof(current.program_version));
+
 	current.compress_alg = instance_config.compress_alg;
 	current.compress_level = instance_config.compress_level;
+
+	/* Save list of external directories */
+	if (instance_config.external_dir_str &&
+		pg_strcasecmp(instance_config.external_dir_str, "none") != 0)
+	{
+		current.external_dir_str = instance_config.external_dir_str;
+	}
+
+	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
+			"wal-method: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
+			PROGRAM_VERSION, instance_name, base36enc(start_time), pgBackupGetBackupMode(&current),
+			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
+			deparse_compress_alg(current.compress_alg), current.compress_level);
+
+	/* Create backup directory and BACKUP_CONTROL_FILE */
+	if (pgBackupCreateDir(&current))
+		elog(ERROR, "Cannot create backup directory");
+	if (!lock_backup(&current))
+		elog(ERROR, "Cannot lock backup %s directory",
+			 base36enc(current.start_time));
+	write_backup(&current);
+
+	/* set the error processing function for the backup process */
+	pgut_atexit_push(backup_cleanup, NULL);
+
+	elog(LOG, "Backup destination is initialized");
 
 	/*
 	 * setup backup_conn, do some compatibility checks and
 	 * fill basic info about instance
 	 */
 	backup_conn = pgdata_basic_setup(instance_config.conn_opt, &nodeInfo);
+
+	if (current.from_replica)
+		elog(INFO, "Backup %s is going to be taken from standby", base36enc(start_time));
+
 	/*
 	 * Ensure that backup directory was initialized for the same PostgreSQL
 	 * instance we opened connection to. And that target backup database PGDATA
 	 * belogns to the same instance.
 	 */
 	check_system_identifiers(backup_conn, instance_config.pgdata);
-
-	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
-			"wal-method: %s, remote: %s, replica: %s, compress-algorithm: %s, compress-level: %i",
-			PROGRAM_VERSION, instance_name, base36enc(start_time), pgBackupGetBackupMode(&current),
-			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
-			current.from_replica ? "true" : "false", deparse_compress_alg(current.compress_alg),
-			current.compress_level);
 
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
@@ -727,32 +756,6 @@ do_backup(time_t start_time, bool no_validate)
 		/* Check master connection options */
 		if (instance_config.master_conn_opt.pghost == NULL)
 			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
-
-	/* Start backup. Update backup status. */
-	current.status = BACKUP_STATUS_RUNNING;
-	current.start_time = start_time;
-	StrNCpy(current.program_version, PROGRAM_VERSION,
-			sizeof(current.program_version));
-
-	/* Save list of external directories */
-	if (instance_config.external_dir_str &&
-		pg_strcasecmp(instance_config.external_dir_str, "none") != 0)
-	{
-		current.external_dir_str = instance_config.external_dir_str;
-	}
-
-	/* Create backup directory and BACKUP_CONTROL_FILE */
-	if (pgBackupCreateDir(&current))
-		elog(ERROR, "Cannot create backup directory");
-	if (!lock_backup(&current))
-		elog(ERROR, "Cannot lock backup %s directory",
-			 base36enc(current.start_time));
-	write_backup(&current);
-
-	elog(LOG, "Backup destination is initialized");
-
-	/* set the error processing function for the backup process */
-	pgut_atexit_push(backup_cleanup, NULL);
 
 	/* backup data */
 	do_backup_instance(backup_conn, &nodeInfo);
