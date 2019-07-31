@@ -323,11 +323,11 @@ main(int argc, char *argv[])
 				 || strcmp(argv[1], "-V") == 0)
 		{
 #ifdef PGPRO_VERSION
-			fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
+			fprintf(stdout, "%s %s (Postgres Pro %s %s)\n",
 					PROGRAM_NAME, PROGRAM_VERSION,
 					PGPRO_VERSION, PGPRO_EDITION);
 #else
-			fprintf(stderr, "%s %s (PostgreSQL %s)\n",
+			fprintf(stdout, "%s %s (PostgreSQL %s)\n",
 					PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
 #endif
 			exit(0);
