@@ -1264,15 +1264,155 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=3)
-
         # Take FULL BACKUPs
         backup_id_a1 = self.backup_node(backup_dir, 'node', node)
-        page_id_a2 = self.backup_node(
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='page', gdb=True)
+
+        page_id_a3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # Change FULLb backup status to ERROR
         self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_window_error_backups_1(self):
+        """
+        DELTA
+        PAGE ERROR
+        FULL
+        -------window
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL BACKUP
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # Take PAGE BACKUP
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='page', gdb=True)
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+        gdb.remove_all_breakpoints()
+        gdb._execute('signal SIGINT')
+        gdb.continue_execution_until_error()
+
+        page_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        # Take DELTA backup
+        delta_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--retention-window=2', '--delete-expired'])
+
+        # Take FULL BACKUP
+        full2_id = self.backup_node(backup_dir, 'node', node)
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_window_error_backups_2(self):
+        """
+        DELTA
+        PAGE ERROR
+        FULL
+        -------window
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL BACKUP
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # Take PAGE BACKUP
+        gdb = self.backup_node(
+            backup_dir, 'node', node, backup_type='page', gdb=True)
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+        gdb._execute('signal SIGTERM')
+        gdb.continue_execution_until_error()
+
+        page_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        # Take DELTA backup
+        delta_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--retention-window=2', '--delete-expired'])
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
+
+        # Clean after yourself
+        # self.del_test_dir(module_name, fname)
+
+    def test_retention_redundancy_overlapping_chains(self):
+        """"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        if self.get_version(node) < 90600:
+            self.del_test_dir(module_name, fname)
+            return unittest.skip('Skipped because ptrack support is disabled')
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.set_config(
+            backup_dir, 'node', options=['--retention-redundancy=1'])
+
+        # Make backups to be purged
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Make backups to be keeped
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_files')
+        gdb.run_until_break()
+
+        sleep(1)
+
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        gdb.remove_all_breakpoints()
+        gdb.continue_execution_until_exit()
+
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Purge backups
+        log = self.delete_expired(
+            backup_dir, 'node', options=['--expired', '--wal'])
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     def test_retention_redundancy_overlapping_chains(self):
         """"""
