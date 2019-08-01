@@ -638,12 +638,12 @@ main(int argc, char *argv[])
 			return do_show(current.backup_id);
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
-				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
+				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");
 			if (merge_expired && backup_id_string)
-				elog(ERROR, "You cannot specify --merge-expired and --backup-id options together");
+				elog(ERROR, "You cannot specify --merge-expired and (-i, --backup-id) options together");
 			if (!delete_expired && !merge_expired && !delete_wal && !backup_id_string)
 				elog(ERROR, "You must specify at least one of the delete options: "
-								"--delete-expired |--delete-wal |--merge-expired |--backup_id");
+								"--delete-expired |--delete-wal |--merge-expired |(-i, --backup-id)");
 			if (!backup_id_string)
 				return do_retention();
 			else
