@@ -643,7 +643,7 @@ main(int argc, char *argv[])
 				elog(ERROR, "You cannot specify --merge-expired and --backup-id options together");
 			if (!delete_expired && !merge_expired && !delete_wal && !backup_id_string)
 				elog(ERROR, "You must specify at least one of the delete options: "
-								"--expired |--wal |--merge-expired |--delete-invalid |--backup_id");
+								"--delete-expired |--delete-wal |--merge-expired |--backup_id");
 			if (!backup_id_string)
 				return do_retention();
 			else
