@@ -59,7 +59,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 ```shell
 #DEB Ubuntu|Debian Packages
 sudo echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
-sudo wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
+sudo wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
 sudo apt-get install pg-probackup-{11,10,9.6,9.5}
 sudo apt-get install pg-probackup-{11,10,9.6,9.5}-dbg
 
