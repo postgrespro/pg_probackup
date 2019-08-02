@@ -58,15 +58,15 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 ### Linux Installation
 ```shell
 #DEB Ubuntu|Debian Packages
-echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
-wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
-apt-get install pg-probackup-{11,10,9.6,9.5}
-apt-get install pg-probackup-{11,10,9.6,9.5}-dbg
+sudo echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
+sudo wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
+sudo apt-get install pg-probackup-{11,10,9.6,9.5}
+sudo apt-get install pg-probackup-{11,10,9.6,9.5}-dbg
 
 #DEB-SRC Packages
-echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
+sudo echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
   /etc/apt/sources.list.d/pg_probackup.list
-apt-get source pg-probackup-{11,10,9.6,9.5}
+sudo apt-get source pg-probackup-{11,10,9.6,9.5}
 
 #RPM Centos Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
@@ -112,7 +112,7 @@ gen_probackup_project.pl C:\path_to_postgresql_source_tree
 
 ## Documentation
 
-Currently the latest documentation can be found at [github](https://postgrespro.github.io/pg_probackup)
+Currently the latest documentation can be found at [github](https://postgrespro.github.io/pg_probackup).
 Slightly outdated documentation can be found at [Postgres Pro Enterprise documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup).
 
 ## License
