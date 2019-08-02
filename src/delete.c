@@ -259,6 +259,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	{
 
 		bool redundancy_keep = false;
+		time_t backup_time = 0;
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
 
 		/* check if backup`s FULL ancestor is in redundancy list */
@@ -280,10 +281,16 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			cur_full_backup_num++;
 		}
 
-		/* Check if backup in needed by retention policy
-		 * TODO: consider that ERROR backup most likely to have recovery_time == 0
+		/* Invalid and running backups most likely to have recovery_time == 0,
+		 * so in this case use start_time instead.
 		 */
-		if ((days_threshold == 0 || (days_threshold > backup->recovery_time)) &&
+		if (backup->recovery_time)
+			backup_time = backup->recovery_time;
+		else
+			backup_time = backup->start_time;
+
+		/* Check if backup in needed by retention policy */
+		if ((days_threshold == 0 || (days_threshold > backup_time)) &&
 			(instance_config.retention_redundancy == 0 || !redundancy_keep))
 		{
 			/* This backup is not guarded by retention
