@@ -1460,9 +1460,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    def test_agressive_retention_window_purge(self):
+    def test_wal_purge_victim(self):
         """
-        https://github.com/postgrespro/pg_probackup/issues/106
+        https://github.com/postgrespro/pg_probackup/issues/103
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -1472,6 +1472,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
         # Make ERROR incremental backup
@@ -1496,12 +1497,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         sleep(1)
 
         # Make FULL backup
-        self.backup_node(
-            backup_dir, 'node', node,
-            options=['--delete-expired', '--retention-window=1', '--stream'])
-
-        # Check number of backups
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
+        self.backup_node(backup_dir, 'node', node, options=['--delete-wal'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
