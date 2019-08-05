@@ -633,7 +633,7 @@ do_retention_wal(void)
 	/* Save LSN and Timeline to remove unnecessary WAL segments */
 	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(backup_list, parray_num(backup_list) -1);
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* Get LSN and TLI of the oldest backup with valid start_lsn and tli */
 		if (backup->tli > 0 && !XLogRecPtrIsInvalid(backup->start_lsn))
