@@ -453,11 +453,15 @@ Redardless of data checksums been enabled or not, pg_probackup always check page
 
 #### External directories
 
-To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons.
+To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons, on Windows system paths must be separated by semicolon instead.
 
-For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory, run:
+For example, to include `'/etc/dir1/'` and `'/etc/dir2/'` directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory, run:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=/etc/dir1:/etc/dir2
+
+For example, to include `'C:\dir1\'` and `'C:\dir2\'` directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory on Windows system, run:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=C:\dir1;C:\dir2
 
 pg_probackup creates a separate subdirectory in the backup directory for each external directory. Since external directories included into different backups do not have to be the same, when you are restoring the cluster from an incremental backup, only those directories that belong to this particular backup will be restored. Any external directories stored in the previous backups will be ignored.
 
@@ -581,6 +585,14 @@ The typical workflow is as follows:
 - If you would like to take remote backup in [PAGE](#creating-a-backup) mode, or rely on [ARCHIVE](#archive-mode) WAL delivery mode, or use [PITR](#performing-point-in-time-pitr-recovery), then configure continuous WAL archiving from database host to the backup host as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the [archive-push](#archive-push) and [archive-get](#archive-get) commands, you must specify the [remote options](#remote-mode-options) that point to backup host with backup catalog.
 
 - Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) **on backup host**. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
+
+For example, to create archive full backup using remote mode through SSH connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
+
+For example, to restore latest backup on remote system using remote mode through SSH connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
+
+    pg_probackup restore -B backup_dir --instance instance_name --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
 
 >NOTE: The remote backup mode is currently unavailable for Windows systems.
 
@@ -953,8 +965,10 @@ Specifies the backup mode to use. Possible values are:
 - PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly.
 
-    -C
-    --smooth-checkpoint
+```
+-C
+--smooth-checkpoint
+```
 Spreads out the checkpoint over a period of time. By default, pg_probackup tries to complete the checkpoint as soon as possible.
 
     --stream

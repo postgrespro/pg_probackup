@@ -2493,7 +2493,6 @@ StreamLog(void *arg)
 	stream_arg->startpos -= stream_arg->startpos % instance_config.xlog_seg_size;
 
 	/* Initialize timeout */
-	stream_stop_timeout = 0;
 	stream_stop_begin = 0;
 
 #if PG_VERSION_NUM >= 100000
