@@ -1078,7 +1078,7 @@ create_empty_file(fio_location from_location, const char *to_root,
 	char		to_path[MAXPGPATH];
 	FILE	   *out;
 
-	/* open backup file for write  */
+	/* open file for write  */
 	join_path_components(to_path, to_root, file->rel_path);
 	out = fio_fopen(to_path, PG_BINARY_W, to_location);
 	if (out == NULL)

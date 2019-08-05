@@ -249,6 +249,10 @@ delete_file:
 	}
 }
 
+/*
+ * Read the file to compute its CRC.
+ * As a handy side effect, we return filesize via bytes_read parameter.
+ */
 pg_crc32
 pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
 			 size_t *bytes_read, fio_location location)
@@ -442,12 +446,12 @@ BlackListCompare(const void *str1, const void *str2)
 }
 
 void
-db_map_entry_free(void *map)
+db_map_entry_free(void *entry)
 {
-	db_map_entry *m = (db_map_entry *) map;
+	db_map_entry *m = (db_map_entry *) entry;
 
 	free(m->datname);
-	free(map);
+	free(entry);
 }
 
 /*
@@ -1702,14 +1706,12 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 			 database_map_path, strerror(errno));
 	}
 
-	/*  */
+	/* Add metadata to backup_content.control */
 	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
 								 FIO_BACKUP_HOST);
 	file->crc = pgFileGetCRC(file->path, true, false,
 								&file->read_size, FIO_BACKUP_HOST);
 	file->write_size = file->read_size;
-	free(file->path);
-	file->path = strdup(DATABASE_MAP);
 	parray_append(backup_files_list, file);
 }
 

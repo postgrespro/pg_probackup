@@ -457,8 +457,11 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * It is important that we do this after(!) validation so
 		 * database_map can be trusted.
 		 * NOTE: database_map could be missing for legal reasons, e.g. missing
-		 * permissions on pg_database during `backup` and, as long as user do not request
-		 * partial restore, it`s OK
+		 * permissions on pg_database during `backup` and, as long as user
+		 * do not request partial restore, it`s OK.
+		 *
+		 * If partial restore is requested and database map doesn't exist,
+		 * throw an error.
 		 */
 		if (datname_list)
 			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, dest_files, datname_list,
@@ -709,19 +712,22 @@ restore_files(void *arg)
 				 i + 1, (unsigned long) parray_num(arguments->files),
 				 file->rel_path);
 
-		/* only files from pgdata can be skipped by partial restore */
-		if (arguments->dbOid_exclude_list &&
-			file->external_dir_num == 0)
+		/* Only files from pgdata can be skipped by partial restore */
+		if (arguments->dbOid_exclude_list && file->external_dir_num == 0)
 		{
-			/* exclude map is not empty */
+			/* Check if the file belongs to the database we exclude */
 			if (parray_bsearch(arguments->dbOid_exclude_list,
 							   &file->dbOid, pgCompareOid))
 			{
-				/* got a match, destination file will truncated */
+				/*
+				 * We cannot simply skip the file, because it may lead to
+				 * failure during WAL redo; hence, create empty file. 
+				 */
 				create_empty_file(FIO_BACKUP_HOST,
 					  instance_config.pgdata, FIO_DB_HOST, file);
 
-				elog(VERBOSE, "Exclude file due to partial restore: \"%s\"", file->rel_path);
+				elog(VERBOSE, "Exclude file due to partial restore: \"%s\"",
+					 file->rel_path);
 				continue;
 			}
 		}
@@ -1176,7 +1182,8 @@ parseRecoveryTargetOptions(const char *target_time,
 	return rt;
 }
 
-/* Return array of dbOids of databases that should not be restored
+/*
+ * Return array of dbOids of databases that should not be restored
  * Regardless of what option user used, db-include or db-exclude,
  * we always convert it into exclude_list.
  */
@@ -1191,6 +1198,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 	bool found_database_map = false;
 
 	/* make sure that database_map is in backup_content.control */
+	// TODO can't we use parray_bsearch here?
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
@@ -1203,6 +1211,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 		}
 	}
 
+	// TODO rephrase error message
 	if (!found_database_map)
 		elog(ERROR, "Backup %s has missing database_map, partial restore is impossible.",
 			base36enc(backup->start_time));
@@ -1215,7 +1224,8 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 		elog(ERROR, "Backup %s has empty or mangled database_map, partial restore is impossible.",
 			base36enc(backup->start_time));
 
-	/* So we have list of datnames and database_map for it.
+	/*
+	 * So we have a list of datnames and database_map for it.
 	 * We must construct a list of dbOids to exclude.
 	 */
 	if (partial_restore_type)
@@ -1284,7 +1294,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 		}
 	}
 
-	/* extra sanity, we must be totally sure that list is not empty */
+	/* extra sanity: ensure that list is not empty */
 	if (!dbOid_exclude_list || parray_num(dbOid_exclude_list) < 1)
 		elog(ERROR, "Failed to find a match in database_map of backup %s for partial restore",
 					base36enc(backup->start_time));
@@ -1296,6 +1306,8 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 }
 
 /* Compare two Oids */
+// TODO is it overflow safe?
+// TODO move it to dir.c like other compare functions
 int
 pgCompareOid(const void *f1, const void *f2)
 {

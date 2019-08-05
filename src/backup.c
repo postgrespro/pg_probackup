@@ -493,15 +493,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		}
 	}
 
-	/* write database map to file and add it to control file */
-	if (database_map)
-	{
-		write_database_map(&current, database_map, backup_files_list);
-		/* we don`t need it anymore */
-		parray_walk(database_map, db_map_entry_free);
-		parray_free(database_map);
-	}
-
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
 	{
@@ -576,6 +567,15 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		/* Add xlog files into the list of backed up files */
 		parray_concat(backup_files_list, xlog_files_list);
 		parray_free(xlog_files_list);
+	}
+
+	/* write database map to file and add it to control file */
+	if (database_map)
+	{
+		write_database_map(&current, database_map, backup_files_list);
+		/* we don`t need it anymore */
+		parray_walk(database_map, db_map_entry_free);
+		parray_free(database_map);
 	}
 
 	/* Print the list of files to backup catalog */
@@ -1066,7 +1066,7 @@ pg_ptrack_support(PGconn *backup_conn)
 
 /*
  * Create 'datname to Oid' map
- * Return NULL if failed to construct database_map
+ * Return NULL if failed to construct database_map // TODO doesn't look safe. See comment below.
  */
 parray *
 get_database_map(PGconn *conn)
@@ -1075,11 +1075,18 @@ get_database_map(PGconn *conn)
 	parray *database_map = NULL;
 	int i;
 
+	/* TODO add a comment why we exclude template0 and template1 from the map */
 	res = pgut_execute_extended(conn,
 						  "SELECT oid, datname FROM pg_catalog.pg_database "
 						  "WHERE datname NOT IN ('template1', 'template0')",
 						  0, NULL, true, true);
 
+
+	/* TODO How is that possible? Shouldn't instance have at least one database?
+	 * How can we distinguish case when instance only has template databases
+	 * and case of query failure?
+	 * Is it ok to ignore the failure?
+	 */
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
 		PQclear(res);
@@ -1110,6 +1117,7 @@ get_database_map(PGconn *conn)
 	}
 
 	/* extra paranoia */
+	// TODO This code block has no value. Let's delete it.
 	if (database_map && (parray_num(database_map) == 0))
 	{
 		parray_free(database_map);
