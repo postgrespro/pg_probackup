@@ -3443,6 +3443,60 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_validate_target_lsn(self):
+        """
+        Check validation to specific LSN
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.slow_start()
+
+        self.switch_wal_segment(node)
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir)
+
+        target_lsn = self.show_pb(backup_dir, 'node')[1]['stop-lsn']
+        
+        self.delete_pb(backup_dir, 'node', backup_id)
+
+        self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    '--recovery-target-timeline=2',
+                    '--recovery-target-lsn={0}'.format(target_lsn)])
+
 # validate empty backup list
 # page from future during validate
 # page from future during backup
