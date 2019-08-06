@@ -628,7 +628,7 @@ main(int argc, char *argv[])
 						  recovery_target_options,
 						  true);
 		case VALIDATE_CMD:
-			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
+			if (current.backup_id == 0 && target_time == 0 && target_xid == 0 && !target_lsn)
 				return do_validate_all();
 			else
 				return do_restore_or_validate(current.backup_id,
