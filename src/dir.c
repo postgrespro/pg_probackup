@@ -449,13 +449,12 @@ BlackListCompare(const void *str1, const void *str2)
 int
 pgCompareOid(const void *f1, const void *f2)
 {
-	Oid v1 = *(Oid *)f1;
-	Oid v2 = *(Oid *)f2;
+	Oid *v1 = *(Oid **) f1;
+	Oid *v2 = *(Oid **) f2;
 
-	elog(WARNING, "pgCompareOid %u %u", v1, v2);
-	if (v1 > v2)
+	if (*v1 > *v2)
 		return 1;
-	else if (v1 < v2)
+	else if (*v1 < *v2)
 		return -1;
 	else
 		return 0;}
