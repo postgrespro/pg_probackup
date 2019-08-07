@@ -46,6 +46,50 @@ static parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
 									  parray *datname_list, bool partial_restore_type);
 
 static int pgCompareOid(const void *f1, const void *f2);
+static void set_orphan_status(parray *backups, pgBackup *parent_backup);
+
+/*
+ * Iterate over backup list to find all ancestors of the broken parent_backup
+ * and update their status to BACKUP_STATUS_ORPHAN
+ */
+static void
+set_orphan_status(parray *backups, pgBackup *parent_backup)
+{
+	/* chain is intact, but at least one parent is invalid */
+	char	*parent_backup_id;
+	int		j;
+
+	/* parent_backup_id is a human-readable backup ID  */
+	parent_backup_id = base36enc_dup(parent_backup->start_time);
+
+	for (j = 0; j < parray_num(backups); j++)
+	{
+
+		pgBackup *backup = (pgBackup *) parray_get(backups, j);
+
+		if (is_parent(parent_backup->start_time, backup, false))
+		{
+			if (backup->status == BACKUP_STATUS_OK ||
+				backup->status == BACKUP_STATUS_DONE)
+			{
+				write_backup_status(backup, BACKUP_STATUS_ORPHAN);
+
+				elog(WARNING,
+					"Backup %s is orphaned because his parent %s has status: %s",
+					base36enc(backup->start_time),
+					parent_backup_id,
+					status2str(parent_backup->status));
+			}
+			else
+			{
+				elog(WARNING, "Backup %s has parent %s with status: %s",
+						base36enc(backup->start_time), parent_backup_id,
+						status2str(parent_backup->status));
+			}
+		}
+	}
+	pg_free(parent_backup_id);
+}
 
 /*
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
@@ -208,7 +252,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * and orphinize all his descendants
 			 */
 			char	   *missing_backup_id;
-			time_t 		missing_backup_start_time;
+			time_t		missing_backup_start_time;
 
 			missing_backup_start_time = tmp_backup->parent_backup;
 			missing_backup_id = base36enc_dup(tmp_backup->parent_backup);
@@ -244,38 +288,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		else if (result == 1)
 		{
 			/* chain is intact, but at least one parent is invalid */
-			char	   *parent_backup_id;
-
-			/* parent_backup_id contain human-readable backup ID of oldest invalid backup */
-			parent_backup_id = base36enc_dup(tmp_backup->start_time);
-
-			for (j = 0; j < parray_num(backups); j++)
-			{
-
-				pgBackup *backup = (pgBackup *) parray_get(backups, j);
-
-				if (is_parent(tmp_backup->start_time, backup, false))
-				{
-					if (backup->status == BACKUP_STATUS_OK ||
-						backup->status == BACKUP_STATUS_DONE)
-					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
-
-						elog(WARNING,
-							 "Backup %s is orphaned because his parent %s has status: %s",
-							 base36enc(backup->start_time),
-							 parent_backup_id,
-							 status2str(tmp_backup->status));
-					}
-					else
-					{
-						elog(WARNING, "Backup %s has parent %s with status: %s",
-								base36enc(backup->start_time), parent_backup_id,
-								status2str(tmp_backup->status));
-					}
-				}
-			}
-			pg_free(parent_backup_id);
+			set_orphan_status(backups, tmp_backup);
 			tmp_backup = find_parent_full_backup(dest_backup);
 
 			/* sanity */
@@ -386,30 +399,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		}
 		/* Orphanize every OK descendant of corrupted backup */
 		else
-		{
-			char	   *corrupted_backup_id;
-			corrupted_backup_id = base36enc_dup(corrupted_backup->start_time);
-
-			for (j = 0; j < parray_num(backups); j++)
-			{
-				pgBackup   *backup = (pgBackup *) parray_get(backups, j);
-
-				if (is_parent(corrupted_backup->start_time, backup, false))
-				{
-					if (backup->status == BACKUP_STATUS_OK ||
-						backup->status == BACKUP_STATUS_DONE)
-					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
-
-						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
-							 base36enc(backup->start_time),
-							 corrupted_backup_id,
-							 status2str(corrupted_backup->status));
-					}
-				}
-			}
-			free(corrupted_backup_id);
-		}
+			set_orphan_status(backups, corrupted_backup);
 	}
 
 	/*
