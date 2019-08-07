@@ -744,13 +744,15 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
+					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
+					 "\"dbOid\":\"%u\"",
 					path, file->write_size, file->mode,
 					file->is_datafile ? 1 : 0,
 					file->is_cfs ? 1 : 0,
 					file->crc,
 					deparse_compress_alg(file->compress_alg),
-					file->external_dir_num);
+					file->external_dir_num,
+					file->dbOid);
 
 		if (file->is_datafile)
 			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
