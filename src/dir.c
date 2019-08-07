@@ -445,6 +445,22 @@ BlackListCompare(const void *str1, const void *str2)
 	return strcmp(*(char **) str1, *(char **) str2);
 }
 
+/* Compare two Oids */
+int
+pgCompareOid(const void *f1, const void *f2)
+{
+	Oid v1 = *(Oid *)f1;
+	Oid v2 = *(Oid *)f2;
+
+	elog(WARNING, "pgCompareOid %u %u", v1, v2);
+	if (v1 > v2)
+		return 1;
+	else if (v1 < v2)
+		return -1;
+	else
+		return 0;}
+
+
 void
 db_map_entry_free(void *entry)
 {
@@ -1679,7 +1695,7 @@ print_database_map(FILE *out, parray *database_map)
 }
 
 /*
- * Create file 'database_map' and add its meta to backup_content.control
+ * Create file 'database_map' and add its meta to backup_files_list
  * NULL check for database_map must be done by the caller.
  */
 void
@@ -1709,8 +1725,10 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	/* Add metadata to backup_content.control */
 	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
 								 FIO_BACKUP_HOST);
-	file->crc = pgFileGetCRC(file->path, true, false,
-								&file->read_size, FIO_BACKUP_HOST);
+	pfree(file->path);
+	file->path = strdup(DATABASE_MAP);
+	file->crc = pgFileGetCRC(database_map_path, true, false,
+							 &file->read_size, FIO_BACKUP_HOST);
 	file->write_size = file->read_size;
 	parray_append(backup_files_list, file);
 }

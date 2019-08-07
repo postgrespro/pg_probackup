@@ -654,6 +654,7 @@ extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileComparePathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
+extern int pgCompareOid(const void *f1, const void *f2);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs* arguments, pgFile* file, uint32 checksum_version);

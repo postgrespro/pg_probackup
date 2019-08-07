@@ -315,7 +315,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	dir_list_file(backup_files_list, instance_config.pgdata,
 				  true, true, false, 0, FIO_DB_HOST);
 
-	/* create database_map used for partial restore */
+	/*
+	 * Get database_map (name to oid) for use in partial restore feature.
+	 * It's possible that we fail and database_map will be NULL.
+	 */
 	database_map = get_database_map(pg_startbackup_conn);
 
 	/*
@@ -573,7 +576,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	if (database_map)
 	{
 		write_database_map(&current, database_map, backup_files_list);
-		/* we don`t need it anymore */
+		/* cleanup */
 		parray_walk(database_map, db_map_entry_free);
 		parray_free(database_map);
 	}
@@ -1065,8 +1068,15 @@ pg_ptrack_support(PGconn *backup_conn)
 }
 
 /*
- * Create 'datname to Oid' map
- * Return NULL if failed to construct database_map // TODO doesn't look safe. See comment below.
+ * Fill 'datname to Oid' map
+ *
+ * This function can fail to get the map for legal reasons, e.g. missing
+ * permissions on pg_database during `backup`.
+ * As long as user do not use partial restore feature it`s fine.
+ *
+ * To avoid breaking a backward compatibility don't throw an ERROR,
+ * throw a warning instead of an error and return NULL.
+ * Caller is responsible for checking the result.
  */
 parray *
 get_database_map(PGconn *conn)
@@ -1075,18 +1085,16 @@ get_database_map(PGconn *conn)
 	parray *database_map = NULL;
 	int i;
 
-	/* TODO add a comment why we exclude template0 and template1 from the map */
+	/*
+	 * Do not include template0 and template1 to the map
+	 * as default databases that must always be restored.
+	 */
 	res = pgut_execute_extended(conn,
 						  "SELECT oid, datname FROM pg_catalog.pg_database "
 						  "WHERE datname NOT IN ('template1', 'template0')",
 						  0, NULL, true, true);
 
-
-	/* TODO How is that possible? Shouldn't instance have at least one database?
-	 * How can we distinguish case when instance only has template databases
-	 * and case of query failure?
-	 * Is it ok to ignore the failure?
-	 */
+	/* Don't error out, simply return NULL. See comment above. */
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
 		PQclear(res);
@@ -1114,15 +1122,6 @@ get_database_map(PGconn *conn)
 			database_map = parray_new();
 
 		parray_append(database_map, db_entry);
-	}
-
-	/* extra paranoia */
-	// TODO This code block has no value. Let's delete it.
-	if (database_map && (parray_num(database_map) == 0))
-	{
-		parray_free(database_map);
-		elog(WARNING, "Failed to get database map");
-		return NULL;
 	}
 
 	return database_map;

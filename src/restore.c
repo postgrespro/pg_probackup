@@ -44,8 +44,6 @@ static void *restore_files(void *arg);
 
 static parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
 									  parray *datname_list, bool partial_restore_type);
-
-static int pgCompareOid(const void *f1, const void *f2);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
 
 /*
@@ -482,7 +480,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		}
 
 		/*
-		 * At least restore backups files starting from the parent backup.
+		 * Restore backups files starting from the parent backup.
 		 */
 		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
@@ -1185,26 +1183,37 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 	int j;
 	parray *database_map = NULL;
 	parray *dbOid_exclude_list = NULL;
-	bool found_database_map = false;
+	pgFile *database_map_file = NULL;
+	pg_crc32	crc;
+	char		path[MAXPGPATH];
+	char		database_map_path[MAXPGPATH];
 
 	/* make sure that database_map is in backup_content.control */
-	// TODO can't we use parray_bsearch here?
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
 		if ((file->external_dir_num == 0) &&
-			strcmp(DATABASE_MAP, file->rel_path) == 0)
+			strcmp(DATABASE_MAP, file->name) == 0)
 		{
-			found_database_map = true;
+			database_map_file = file;
 			break;
 		}
 	}
 
-	// TODO rephrase error message
-	if (!found_database_map)
-		elog(ERROR, "Backup %s has missing database_map, partial restore is impossible.",
+	if (!database_map_file)
+		elog(ERROR, "Backup %s doesn't contain a database_map, partial restore is impossible.",
 			base36enc(backup->start_time));
+
+	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
+	join_path_components(database_map_path, path, DATABASE_MAP);
+
+	/* check database_map CRC */
+	crc = pgFileGetCRC(database_map_path, true, true, NULL, FIO_LOCAL_HOST);
+
+	if (crc != database_map_file->crc)
+		elog(ERROR, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+				database_map_file->path, crc, database_map_file->crc);
 
 	/* get database_map from file */
 	database_map = read_database_map(backup);
@@ -1215,12 +1224,12 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 			base36enc(backup->start_time));
 
 	/*
-	 * So we have a list of datnames and database_map for it.
+	 * So we have a list of datnames and a database_map for it.
 	 * We must construct a list of dbOids to exclude.
 	 */
 	if (partial_restore_type)
 	{
-		/* For 'include' find dbOid of every datname NOT specified by user */
+		/* For 'include' keep dbOid of every datname NOT specified by user */
 		for (i = 0; i < parray_num(datname_list); i++)
 		{
 			bool found_match = false;
@@ -1293,16 +1302,4 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 	parray_qsort(dbOid_exclude_list, pgCompareOid);
 
 	return dbOid_exclude_list;
-}
-
-/* Compare two Oids */
-// TODO is it overflow safe?
-// TODO move it to dir.c like other compare functions
-int
-pgCompareOid(const void *f1, const void *f2)
-{
-	Oid *f1p = *(Oid **)f1;
-	Oid *f2p = *(Oid **)f2;
-
-	return (*(Oid*)f1p - *(Oid*)f2p);
 }

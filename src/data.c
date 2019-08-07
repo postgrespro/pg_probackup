@@ -1096,7 +1096,7 @@ create_empty_file(fio_location from_location, const char *to_root,
 	}
 
 	if (fio_fclose(out))
-		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
+		elog(ERROR, "cannot close \"%s\": %s", to_path, strerror(errno));
 
 	return true;
 }

@@ -641,7 +641,6 @@ main(int argc, char *argv[])
 				if (datname_exclude_list && datname_include_list)
 					elog(ERROR, "You cannot specify '--db-include' and '--db-exclude' together");
 
-				/* At this point we are sure that user requested partial restore */
 				if (datname_exclude_list)
 					datname_list = datname_exclude_list;
 
@@ -777,7 +776,7 @@ opt_datname_exclude_list(ConfigOption *opt, const char *arg)
 
 	dbname = pgut_malloc(strlen(arg) + 1);
 
-	/* add sanity for database name */
+	/* TODO add sanity for database name */
 	strcpy(dbname, arg);
 
 	parray_append(datname_exclude_list, dbname);
@@ -794,7 +793,7 @@ opt_datname_include_list(ConfigOption *opt, const char *arg)
 
 	dbname = pgut_malloc(strlen(arg) + 1);
 
-	/* add sanity for database name */
+	/* TODO add sanity for database name */
 	strcpy(dbname, arg);
 
 	parray_append(datname_include_list, dbname);
