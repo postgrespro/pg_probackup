@@ -512,6 +512,8 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
 	const char *target_stop, const char *target_name,
 	const char *target_action);
+extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
+							   parray *datname_list, bool partial_restore_type);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
@@ -556,7 +558,7 @@ extern void help_pg_probackup(void);
 extern void help_command(char *command);
 
 /* in validate.c */
-extern void pgBackupValidate(pgBackup* backup);
+extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
 
 /* in catalog.c */

@@ -44,9 +44,6 @@ static void create_recovery_conf(time_t backup_id,
 								 pgRestoreParams *params);
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
-
-static parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
-									  parray *datname_list, bool partial_restore_type);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
 
 /*
@@ -376,7 +373,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				}
 			}
 
-			pgBackupValidate(tmp_backup);
+			pgBackupValidate(tmp_backup, params);
 			/* After pgBackupValidate() only following backup
 			 * states are possible: ERROR, RUNNING, CORRUPT and OK.
 			 * Validate WAL only for OK, because there is no point

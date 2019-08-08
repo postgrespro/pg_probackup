@@ -146,7 +146,7 @@ do_merge(time_t backup_id)
 		merge_backups(full_backup, from_backup);
 	}
 
-	pgBackupValidate(full_backup);
+	pgBackupValidate(full_backup, NULL);
 	if (full_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Merging of backup %s failed", base36enc(backup_id));
 
@@ -198,7 +198,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	if (to_backup->status == BACKUP_STATUS_OK ||
 		to_backup->status == BACKUP_STATUS_DONE)
 	{
-		pgBackupValidate(to_backup);
+		pgBackupValidate(to_backup, NULL);
 		if (to_backup->status == BACKUP_STATUS_CORRUPT)
 			elog(ERROR, "Interrupt merging");
 	}
@@ -211,7 +211,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		   from_backup->status == BACKUP_STATUS_DONE ||
 		   from_backup->status == BACKUP_STATUS_MERGING ||
 		   from_backup->status == BACKUP_STATUS_DELETING);
-	pgBackupValidate(from_backup);
+	pgBackupValidate(from_backup, NULL);
 	if (from_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Interrupt merging");
 

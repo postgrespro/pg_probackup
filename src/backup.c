@@ -778,7 +778,7 @@ do_backup(time_t start_time, bool no_validate)
 	write_backup(&current);
 
 	if (!no_validate)
-		pgBackupValidate(&current);
+		pgBackupValidate(&current, NULL);
 
 	/* Notify user about backup size */
 	pretty_size(current.data_bytes, pretty_data_bytes, lengthof(pretty_data_bytes));
