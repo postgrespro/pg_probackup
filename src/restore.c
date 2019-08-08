@@ -143,10 +143,16 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		/*
 		 * [PGPRO-1164] If BACKUP_ID is not provided for restore command,
 		 *  we must find the first valid(!) backup.
+
+		 * If target_backup_id is not provided, we can be sure that
+		 * PITR for restore or validate is requested.
+		 * So we can assume that user is more interested in recovery to specific point
+		 * in time and NOT interested in revalidation of invalid backups.
+		 * So based on that assumptions we should choose only OK and DONE backups
+		 * as candidates for validate and restore.
 		 */
 
-		if (params->is_restore &&
-			target_backup_id == INVALID_BACKUP_ID &&
+		if (target_backup_id == INVALID_BACKUP_ID &&
 			(current_backup->status != BACKUP_STATUS_OK &&
 			 current_backup->status != BACKUP_STATUS_DONE))
 		{
@@ -1079,7 +1085,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		if (parse_time(target_time, &dummy_time, false))
 			rt->target_time = dummy_time;
 		else
-			elog(ERROR, "Invalid value for --recovery-target-time option %s",
+			elog(ERROR, "Invalid value for '--recovery-target-time' option %s",
 				 target_time);
 	}
 
@@ -1097,7 +1103,7 @@ parseRecoveryTargetOptions(const char *target_time,
 #endif
 			rt->target_xid = dummy_xid;
 		else
-			elog(ERROR, "Invalid value for --recovery-target-xid option %s",
+			elog(ERROR, "Invalid value for '--recovery-target-xid' option %s",
 				 target_xid);
 	}
 
@@ -1110,7 +1116,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		if (parse_lsn(target_lsn, &dummy_lsn))
 			rt->target_lsn = dummy_lsn;
 		else
-			elog(ERROR, "Invalid value of --recovery-target-lsn option %s",
+			elog(ERROR, "Invalid value of '--recovery-target-lsn' option %s",
 				 target_lsn);
 	}
 
@@ -1120,7 +1126,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		if (parse_bool(target_inclusive, &dummy_bool))
 			rt->target_inclusive = dummy_bool;
 		else
-			elog(ERROR, "Invalid value for --recovery-target-inclusive option %s",
+			elog(ERROR, "Invalid value for '--recovery-target-inclusive' option %s",
 				 target_inclusive);
 	}
 
@@ -1129,7 +1135,7 @@ parseRecoveryTargetOptions(const char *target_time,
 	{
 		if ((strcmp(target_stop, "immediate") != 0)
 			&& (strcmp(target_stop, "latest") != 0))
-			elog(ERROR, "Invalid value for --recovery-target option %s",
+			elog(ERROR, "Invalid value for '--recovery-target' option %s",
 				 target_stop);
 
 		recovery_target_specified++;
@@ -1147,7 +1153,7 @@ parseRecoveryTargetOptions(const char *target_time,
 		if ((strcmp(target_action, "pause") != 0)
 			&& (strcmp(target_action, "promote") != 0)
 			&& (strcmp(target_action, "shutdown") != 0))
-			elog(ERROR, "Invalid value for --recovery-target-action option %s",
+			elog(ERROR, "Invalid value for '--recovery-target-action' option %s",
 				 target_action);
 
 		rt->target_action = target_action;

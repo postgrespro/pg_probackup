@@ -259,6 +259,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	{
 
 		bool redundancy_keep = false;
+		time_t backup_time = 0;
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
 
 		/* check if backup`s FULL ancestor is in redundancy list */
@@ -280,10 +281,16 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			cur_full_backup_num++;
 		}
 
-		/* Check if backup in needed by retention policy
-		 * TODO: consider that ERROR backup most likely to have recovery_time == 0
+		/* Invalid and running backups most likely to have recovery_time == 0,
+		 * so in this case use start_time instead.
 		 */
-		if ((days_threshold == 0 || (days_threshold > backup->recovery_time)) &&
+		if (backup->recovery_time)
+			backup_time = backup->recovery_time;
+		else
+			backup_time = backup->start_time;
+
+		/* Check if backup in needed by retention policy */
+		if ((days_threshold == 0 || (days_threshold > backup_time)) &&
 			(instance_config.retention_redundancy == 0 || !redundancy_keep))
 		{
 			/* This backup is not guarded by retention
@@ -622,6 +629,7 @@ do_retention_wal(void)
 	XLogRecPtr oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID oldest_tli = 0;
 	bool backup_list_is_empty = false;
+	int i;
 
 	/* Get list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
@@ -630,14 +638,17 @@ do_retention_wal(void)
 		backup_list_is_empty = true;
 
 	/* Save LSN and Timeline to remove unnecessary WAL segments */
-	if (!backup_list_is_empty)
+	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 	{
-		pgBackup   *backup = NULL;
-		/* Get LSN and TLI of oldest alive backup */
-		backup = (pgBackup *) parray_get(backup_list, parray_num(backup_list) -1);
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-		oldest_tli = backup->tli;
-		oldest_lsn = backup->start_lsn;
+		/* Get LSN and TLI of the oldest backup with valid start_lsn and tli */
+		if (backup->tli > 0 && !XLogRecPtrIsInvalid(backup->start_lsn))
+		{
+			oldest_tli = backup->tli;
+			oldest_lsn = backup->start_lsn;
+			break;
+		}
 	}
 
 	/* Be paranoid */
