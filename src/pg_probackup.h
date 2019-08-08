@@ -336,8 +336,21 @@ typedef struct pgRecoveryTarget
 	const char	   *target_stop;
 	const char	   *target_name;
 	const char	   *target_action;
-	bool			no_validate;
 } pgRecoveryTarget;
+
+/* Options needed for restore and validate commands */
+typedef struct pgRestoreParams
+{
+	bool	is_restore;
+	bool	no_validate;
+	bool	restore_as_replica;
+	bool	skip_external_dirs;
+	bool	skip_block_validation;
+
+	/* options for partial restore */
+	bool is_include_list;
+	parray *partial_db_list;
+} pgRestoreParams;
 
 typedef struct
 {
@@ -444,11 +457,6 @@ extern char* remote_agent;
 extern bool is_ptrack_support;
 extern bool exclusive_backup;
 
-/* restore options */
-extern bool restore_as_replica;
-extern bool skip_block_validation;
-extern bool skip_external_dirs;
-
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
@@ -467,6 +475,7 @@ extern ShowFormat show_format;
 
 /* checkdb options */
 extern bool heapallindexed;
+extern bool skip_block_validation;
 
 /* current settings */
 extern pgBackup current;
@@ -494,9 +503,7 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  pgRecoveryTarget *rt,
-					  bool is_restore,
-					  parray * datname_list,
-					  bool partial_restore_type);
+					  pgRestoreParams *params);
 extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
@@ -504,7 +511,7 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
 	const char *target_stop, const char *target_name,
-	const char *target_action, bool no_validate);
+	const char *target_action);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);

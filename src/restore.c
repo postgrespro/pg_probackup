@@ -26,6 +26,7 @@ typedef struct
 	parray	   *dest_external_dirs;
 	parray	   *dest_files;
 	parray	   *dbOid_exclude_list;
+	bool		skip_external_dirs;
 
 	/*
 	 * Return value from the thread.
@@ -35,10 +36,12 @@ typedef struct
 } restore_files_arg;
 
 static void restore_backup(pgBackup *backup, parray *dest_external_dirs,
-						   parray *dest_files, parray *dbOid_exclude_list);
+						   parray *dest_files, parray *dbOid_exclude_list,
+						   pgRestoreParams *params);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
-								 pgBackup *backup);
+								 pgBackup *backup,
+								 pgRestoreParams *params);
 static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 
@@ -94,7 +97,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
  */
 int
 do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
-					   bool is_restore, parray *datname_list, bool partial_restore_type)
+					   pgRestoreParams *params)
 {
 	int			i = 0;
 	int			j = 0;
@@ -104,11 +107,11 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	pgBackup   *dest_backup = NULL;
 	pgBackup   *base_full_backup = NULL;
 	pgBackup   *corrupted_backup = NULL;
-	char	   *action = is_restore ? "Restore":"Validate";
+	char	   *action = params->is_restore ? "Restore":"Validate";
 	parray	   *parent_chain = NULL;
 	parray	   *dbOid_exclude_list = NULL;
 
-	if (is_restore)
+	if (params->is_restore)
 	{
 		if (instance_config.pgdata == NULL)
 			elog(ERROR,
@@ -142,7 +145,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 *  we must find the first valid(!) backup.
 		 */
 
-		if (is_restore &&
+		if (params->is_restore &&
 			target_backup_id == INVALID_BACKUP_ID &&
 			(current_backup->status != BACKUP_STATUS_OK &&
 			 current_backup->status != BACKUP_STATUS_DONE))
@@ -176,7 +179,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				if ((current_backup->status == BACKUP_STATUS_ORPHAN ||
 					current_backup->status == BACKUP_STATUS_CORRUPT ||
 					current_backup->status == BACKUP_STATUS_RUNNING)
-					&& !rt->no_validate)
+					&& !params->no_validate)
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
 				else
@@ -312,12 +315,12 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 * Ensure that directories provided in tablespace mapping are valid
 	 * i.e. empty or not exist.
 	 */
-	if (is_restore)
+	if (params->is_restore)
 	{
 		check_tablespace_mapping(dest_backup);
 
 		/* no point in checking external directories if their restore is not requested */
-		if (!skip_external_dirs)
+		if (!params->skip_external_dirs)
 			check_external_dir_mapping(dest_backup);
 	}
 
@@ -341,7 +344,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	parray_append(parent_chain, base_full_backup);
 
 	/* for validation or restore with enabled validation */
-	if (!is_restore || !rt->no_validate)
+	if (!params->is_restore || !params->no_validate)
 	{
 		if (dest_backup->backup_mode != BACKUP_MODE_FULL)
 			elog(INFO, "Validating parents for backup %s", base36enc(dest_backup->start_time));
@@ -356,7 +359,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			/* Do not interrupt, validate the next backup */
 			if (!lock_backup(tmp_backup))
 			{
-				if (is_restore)
+				if (params->is_restore)
 					elog(ERROR, "Cannot lock backup %s directory",
 						 base36enc(tmp_backup->start_time));
 				else
@@ -407,7 +410,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	if (dest_backup->status == BACKUP_STATUS_OK ||
 		dest_backup->status == BACKUP_STATUS_DONE)
 	{
-		if (rt->no_validate)
+		if (params->no_validate)
 			elog(WARNING, "Backup %s is used without validation.", base36enc(dest_backup->start_time));
 		else
 			elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
@@ -423,7 +426,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	/* We ensured that all backups are valid, now restore if required
 	 * TODO: before restore - lock entire parent chain
 	 */
-	if (is_restore)
+	if (params->is_restore)
 	{
 		parray	   *dest_external_dirs = NULL;
 		parray	   *dest_files;
@@ -451,9 +454,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * If partial restore is requested and database map doesn't exist,
 		 * throw an error.
 		 */
-		if (datname_list)
-			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, dest_files, datname_list,
-														  partial_restore_type);
+		if (params->partial_db_list)
+			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, dest_files, params->partial_db_list,
+														  params->is_include_list);
 
 		/*
 		 * Restore dest_backup internal directories.
@@ -466,7 +469,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		/*
 		 * Restore dest_backup external directories.
 		 */
-		if (dest_backup->external_dir_str && !skip_external_dirs)
+		if (dest_backup->external_dir_str && !params->skip_external_dirs)
 		{
 			dest_external_dirs = make_external_directory_list(
 												dest_backup->external_dir_str,
@@ -496,10 +499,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * Backup was locked during validation if no-validate wasn't
 			 * specified.
 			 */
-			if (rt->no_validate && !lock_backup(backup))
+			if (params->no_validate && !lock_backup(backup))
 				elog(ERROR, "Cannot lock backup directory");
 
-			restore_backup(backup, dest_external_dirs, dest_files, dbOid_exclude_list);
+			restore_backup(backup, dest_external_dirs, dest_files, dbOid_exclude_list, params);
 		}
 
 		if (dest_external_dirs != NULL)
@@ -509,7 +512,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		parray_free(dest_files);
 
 		/* Create recovery.conf with given recovery target parameters */
-		create_recovery_conf(target_backup_id, rt, dest_backup);
+		create_recovery_conf(target_backup_id, rt, dest_backup, params);
 	}
 
 	/* cleanup */
@@ -527,7 +530,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
  */
 void
 restore_backup(pgBackup *backup, parray *dest_external_dirs,
-				parray *dest_files, parray *dbOid_exclude_list)
+				parray *dest_files, parray *dbOid_exclude_list,
+				pgRestoreParams *params)
 {
 	char		timestamp[100];
 	char		database_path[MAXPGPATH];
@@ -587,7 +591,7 @@ restore_backup(pgBackup *backup, parray *dest_external_dirs,
 		/*
 		 * If the entry was an external directory, create it in the backup.
 		 */
-		if (!skip_external_dirs &&
+		if (!params->skip_external_dirs &&
 			file->external_dir_num && S_ISDIR(file->mode) &&
 			/* Do not create unnecessary external directories */
 			parray_bsearch(dest_files, file, pgFileCompareRelPathWithExternal))
@@ -635,6 +639,7 @@ restore_backup(pgBackup *backup, parray *dest_external_dirs,
 		arg->dest_external_dirs = dest_external_dirs;
 		arg->dest_files = dest_files;
 		arg->dbOid_exclude_list = dbOid_exclude_list;
+		arg->skip_external_dirs = params->skip_external_dirs;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -756,7 +761,7 @@ restore_files(void *arg)
 		}
 
 		/* Do no restore external directory file if a user doesn't want */
-		if (skip_external_dirs && file->external_dir_num > 0)
+		if (arguments->skip_external_dirs && file->external_dir_num > 0)
 			continue;
 
 		/* Skip unnecessary file */
@@ -818,7 +823,8 @@ restore_files(void *arg)
 static void
 create_recovery_conf(time_t backup_id,
 					 pgRecoveryTarget *rt,
-					 pgBackup *backup)
+					 pgBackup *backup,
+					 pgRestoreParams *params)
 {
 	char		path[MAXPGPATH];
 	FILE	   *fp;
@@ -831,7 +837,7 @@ create_recovery_conf(time_t backup_id,
 		(rt->time_string || rt->xid_string || rt->lsn_string) || target_latest;
 
 	/* No need to generate recovery.conf at all. */
-	if (!(need_restore_conf || restore_as_replica))
+	if (!(need_restore_conf || params->restore_as_replica))
 		return;
 
 	elog(LOG, "----------------------------------------");
@@ -884,7 +890,7 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);
 	}
 
-	if (restore_as_replica)
+	if (params->restore_as_replica)
 	{
 		fio_fprintf(fp, "standby_mode = 'on'\n");
 
@@ -1049,8 +1055,7 @@ parseRecoveryTargetOptions(const char *target_time,
 					const char *target_lsn,
 					const char *target_stop,
 					const char *target_name,
-					const char *target_action,
-					bool		no_validate)
+					const char *target_action)
 {
 	bool		dummy_bool;
 	/*
@@ -1131,8 +1136,6 @@ parseRecoveryTargetOptions(const char *target_time,
 		rt->target_stop = target_stop;
 	}
 
-	rt->no_validate = no_validate;
-
 	if (target_name)
 	{
 		recovery_target_specified++;
@@ -1177,7 +1180,7 @@ parseRecoveryTargetOptions(const char *target_time,
  */
 parray *
 get_dbOid_exclude_list(pgBackup *backup, parray *files,
-					   parray *datname_list, bool partial_restore_type)
+					   parray *datname_list, bool is_include_list)
 {
 	int i;
 	int j;
@@ -1227,7 +1230,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 	 * So we have a list of datnames and a database_map for it.
 	 * We must construct a list of dbOids to exclude.
 	 */
-	if (partial_restore_type)
+	if (is_include_list)
 	{
 		/* For 'include' keep dbOid of every datname NOT specified by user */
 		for (i = 0; i < parray_num(datname_list); i++)

@@ -89,6 +89,7 @@ static char		   *target_name = NULL;
 static char		   *target_action = NULL;
 
 static pgRecoveryTarget *recovery_target_options = NULL;
+static pgRestoreParams *restore_params = NULL;
 
 bool restore_as_replica = false;
 bool no_validate = false;
@@ -598,7 +599,32 @@ main(int argc, char *argv[])
 				target_inclusive, target_tli, target_lsn,
 				(target_stop != NULL) ? target_stop :
 					(target_immediate) ? "immediate" : NULL,
-				target_name, target_action, no_validate);
+				target_name, target_action);
+
+		/* keep all params in one structure */
+		restore_params = pgut_new(pgRestoreParams);
+		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
+		restore_params->no_validate = no_validate;
+		restore_params->restore_as_replica = restore_as_replica;
+		restore_params->skip_block_validation = skip_block_validation;
+		restore_params->skip_external_dirs = skip_external_dirs;
+
+		/* handle partial restore parameters */
+		if (datname_exclude_list && datname_include_list)
+			elog(ERROR, "You cannot specify '--db-include' and '--db-exclude' together");
+
+		if (datname_exclude_list)
+		{
+			restore_params->is_include_list = false;
+			restore_params->partial_db_list = datname_exclude_list;
+		}
+		else if (datname_include_list)
+		{
+			restore_params->is_include_list = true;
+			restore_params->partial_db_list = datname_include_list;
+		}
+		
+
 	}
 
 	if (num_threads < 1)
@@ -633,37 +659,16 @@ main(int argc, char *argv[])
 				return do_backup(start_time, no_validate);
 			}
 		case RESTORE_CMD:
-			{
-				parray *datname_list = NULL;
-				/* true for 'include', false for 'exclude' */
-				bool partial_restore_type = false;
-
-				if (datname_exclude_list && datname_include_list)
-					elog(ERROR, "You cannot specify '--db-include' and '--db-exclude' together");
-
-				if (datname_exclude_list)
-					datname_list = datname_exclude_list;
-
-				if (datname_include_list)
-				{
-					partial_restore_type = true;
-					datname_list = datname_include_list;
-				}
-				return do_restore_or_validate(current.backup_id,
+			return do_restore_or_validate(current.backup_id,
 							  recovery_target_options,
-							  true,
-							  datname_list,
-							  partial_restore_type);
-			}
+							 restore_params);
 		case VALIDATE_CMD:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
 				return do_validate_all();
 			else
 				return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
-						  false,
-						  NULL,
-						  false);
+						  restore_params);
 		case SHOW_CMD:
 			return do_show(current.backup_id);
 		case DELETE_CMD:
