@@ -608,6 +608,7 @@ main(int argc, char *argv[])
 		restore_params->restore_as_replica = restore_as_replica;
 		restore_params->skip_block_validation = skip_block_validation;
 		restore_params->skip_external_dirs = skip_external_dirs;
+		restore_params->partial_db_list = NULL;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)
@@ -623,8 +624,6 @@ main(int argc, char *argv[])
 			restore_params->is_include_list = true;
 			restore_params->partial_db_list = datname_include_list;
 		}
-		
-
 	}
 
 	if (num_threads < 1)
