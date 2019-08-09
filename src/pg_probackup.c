@@ -314,7 +314,7 @@ main(int argc, char *argv[])
 				uint32 agent_version = parse_program_version(remote_agent);
 				elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
 					 "Agent version %s doesn't match master pg_probackup version %s",
-					 remote_agent, PROGRAM_VERSION);
+					 PROGRAM_VERSION, remote_agent);
 			}
 			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 			return 0;

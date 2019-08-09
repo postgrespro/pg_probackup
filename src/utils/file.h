@@ -49,7 +49,7 @@ typedef enum
 #define PAGE_CHECKSUM_MISMATCH (-256)
 
 #define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
-#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) { if (remote_agent) { fprintf(stderr, "%s:%d: proceeds %d bytes instead of %d: %s\n", __FILE__, __LINE__, _rc, (int)(size), _rc >= 0 ? "end of data" :  strerror(errno)); exit(EXIT_FAILURE); } else elog(ERROR, "Communication error: %s", _rc >= 0 ? "end of data" :  strerror(errno)); } } while (0)
+#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
 
 typedef struct
 {
@@ -64,7 +64,7 @@ extern fio_location MyLocation;
 /* Check if FILE handle is local or remote (created by FIO) */
 #define fio_is_remote_file(file) ((size_t)(file) <= FIO_FDMAX)
 
-extern void    fio_redirect(int in, int out);
+extern void    fio_redirect(int in, int out, int err);
 extern void    fio_communicate(int in, int out);
 
 extern FILE*   fio_fopen(char const* name, char const* mode, fio_location location);
@@ -77,6 +77,7 @@ extern int     fio_fseek(FILE* f, off_t offs);
 extern int     fio_ftruncate(FILE* f, off_t size);
 extern int     fio_fclose(FILE* f);
 extern int     fio_ffstat(FILE* f, struct stat* st);
+extern void    fio_error(int rc, int size, char const* file, int line);
 
 struct pgFile;
 extern  int    fio_send_pages(FILE* in, FILE* out, struct pgFile *file, XLogRecPtr horizonLsn, 
