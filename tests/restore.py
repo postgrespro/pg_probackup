@@ -2360,49 +2360,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
-    def test_restore_specific_database_proof_of_concept(self):
-        """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off',
-                'shared_buffers': '512MB'})
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        node.pgbench_init(scale=200)
-
-        exit(1)
-
-        # FULL backup
-        backup_id = self.backup_node(backup_dir, 'node', node)
-
-        pgbench = node.pgbench(
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            options=['-T', '100', '-c8', '-j2', '--no-vacuum'])
-
-        pgbench.wait()
-        pgbench.stdout.close()
-
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
-        node_restored.cleanup()
-
-        self.restore_node(backup_dir, 'node', node_restored)
-
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_partial_restore_exclude(self):
         """"""
         fname = self.id().split('.')[3]

@@ -3443,6 +3443,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_validate_target_lsn(self):
@@ -3496,6 +3499,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 options=[
                     '--recovery-target-timeline=2',
                     '--recovery-target-lsn={0}'.format(target_lsn)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -3555,6 +3561,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--recovery-target-time={0}'.format(target_time)])
 
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_recovery_target_lsn_backup_victim(self):
@@ -3610,6 +3619,196 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.validate_pb(
             backup_dir, 'node',
             options=['--recovery-target-lsn={0}'.format(target_lsn)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_partial_validate_empty_and_mangled_database_map(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        # create databases
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup with database_map
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # truncate database_map
+        path = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'database_map')
+        with open(path, "w") as f:
+            f.close()
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=["--db-include=db1", '--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "WARNING: Backup {0} data files are corrupted".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # mangle database_map
+        with open(path, "w") as f:
+            f.write("42")
+            f.close()
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=["--db-include=db1", '--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "WARNING: Backup {0} data files are corrupted".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_partial_validate_exclude(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    "--db-include=db1",
+                    "--db-exclude=db2"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of 'db-exclude' and 'db-include'.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You cannot specify '--db-include' "
+                "and '--db-exclude' together", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        output = self.validate_pb(
+            backup_dir, 'node',
+            options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5",
+                "--log-level-console=verbose"])
+
+        self.assertIn(
+            "VERBOSE: Skip file validation due to partial restore", output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_partial_validate_include(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    "--db-include=db1",
+                    "--db-exclude=db2"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of 'db-exclude' and 'db-include'.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You cannot specify '--db-include' "
+                "and '--db-exclude' together", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        output = self.validate_pb(
+            backup_dir, 'node',
+            options=[
+                "--db-include=db1",
+                "--db-include=db5",
+                "--db-include=postgres",
+                "--log-level-console=verbose"])
+
+        self.assertIn(
+            "VERBOSE: Skip file validation due to partial restore", output)
+
+        output = self.validate_pb(
+            backup_dir, 'node',
+            options=[
+                "--log-level-console=verbose"])
+
+        self.assertNotIn(
+            "VERBOSE: Skip file validation due to partial restore", output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
 # validate empty backup list
 # page from future during validate
