@@ -207,7 +207,11 @@ pgBackupValidateFiles(void *arg)
 		if (arguments->dbOid_exclude_list && file->external_dir_num == 0
 			&& parray_bsearch(arguments->dbOid_exclude_list,
 							   &file->dbOid, pgCompareOid))
+		{
+			elog(VERBOSE, "Skip file validation due to partial restore: \"%s\"",
+				 file->rel_path);
 			continue;
+		}
 
 		/*
 		 * Currently we don't compute checksums for

@@ -462,8 +462,8 @@ help_validate(void)
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
-	printf(_("      --db-include dbname          restore only specified databases\n"));
-	printf(_("      --db-exclude dbname          do not restore specified databases\n"));
+	printf(_("      --db-include dbname          validate only files of specified databases\n"));
+	printf(_("      --db-exclude dbname          do not validate files of specified databases\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
