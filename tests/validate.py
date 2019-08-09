@@ -3499,7 +3499,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
-    def test_recovery_target_backup_victim(self):
+    def test_recovery_target_time_backup_victim(self):
         """
         Check that for validation to recovery target
         probackup chooses valid backup
@@ -3555,6 +3555,61 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--recovery-target-time={0}'.format(target_time)])
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_recovery_target_lsn_backup_victim(self):
+        """
+        Check that for validation to recovery target
+        probackup chooses valid backup
+        https://github.com/postgrespro/pg_probackup/issues/104
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap1 as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100) i")
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+        gdb.remove_all_breakpoints()
+        gdb._execute('signal SIGINT')
+        gdb.continue_execution_until_error()
+
+        backup_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup STATUS should be "ERROR"')
+
+        target_lsn = self.show_pb(backup_dir, 'node', backup_id)['start-lsn']
+
+        self.validate_pb(
+            backup_dir, 'node',
+            options=['--recovery-target-lsn={0}'.format(target_lsn)])
 
 # validate empty backup list
 # page from future during validate

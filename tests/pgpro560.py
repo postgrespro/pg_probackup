@@ -3,6 +3,7 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
+from time import sleep
 
 
 module_name = 'pgpro560'
@@ -97,6 +98,8 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                     e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
+
+        sleep(1)
 
         try:
             self.backup_node(
