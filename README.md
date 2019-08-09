@@ -53,7 +53,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Installation and Setup
 ### Windows Installation
-[Installers download link](https://oc.postgrespro.ru/index.php/s/CGsjXlc5NmhRI0L)
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.5).
 
 ### Linux Installation
 ```shell
