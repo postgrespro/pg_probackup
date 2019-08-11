@@ -459,7 +459,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 */
 		if (params->partial_db_list)
 			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, dest_files, params->partial_db_list,
-														  params->is_include_list);
+														  params->partial_restore_type);
 
 		/*
 		 * Restore dest_backup internal directories.
@@ -1183,7 +1183,7 @@ parseRecoveryTargetOptions(const char *target_time,
  */
 parray *
 get_dbOid_exclude_list(pgBackup *backup, parray *files,
-					   parray *datname_list, bool is_include_list)
+					   parray *datname_list, PartialRestoreType partial_restore_type)
 {
 	int i;
 	int j;
@@ -1233,9 +1233,9 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 	 * So we have a list of datnames and a database_map for it.
 	 * We must construct a list of dbOids to exclude.
 	 */
-	if (is_include_list)
+	if (partial_restore_type == INCLUDE)
 	{
-		/* For 'include' keep dbOid of every datname NOT specified by user */
+		/* For 'include', keep dbOid of every datname NOT specified by user */
 		for (i = 0; i < parray_num(datname_list); i++)
 		{
 			bool found_match = false;
@@ -1270,9 +1270,9 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 			parray_append(dbOid_exclude_list, &db_entry->dbOid);
 		}
 	}
-	else
+	else if (partial_restore_type == EXCLUDE)
 	{
-		/* For exclude job is easier, find dbOid for every specified datname  */
+		/* For exclude, job is easier - find dbOid for every specified datname  */
 		for (i = 0; i < parray_num(datname_list); i++)
 		{
 			bool found_match = false;

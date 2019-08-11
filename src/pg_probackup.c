@@ -609,6 +609,7 @@ main(int argc, char *argv[])
 		restore_params->skip_block_validation = skip_block_validation;
 		restore_params->skip_external_dirs = skip_external_dirs;
 		restore_params->partial_db_list = NULL;
+		restore_params->partial_restore_type = NONE;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)
@@ -616,15 +617,20 @@ main(int argc, char *argv[])
 
 		if (datname_exclude_list)
 		{
-			restore_params->is_include_list = false;
+			restore_params->partial_restore_type = EXCLUDE;
 			restore_params->partial_db_list = datname_exclude_list;
 		}
 		else if (datname_include_list)
 		{
-			restore_params->is_include_list = true;
+			restore_params->partial_restore_type = INCLUDE;
 			restore_params->partial_db_list = datname_include_list;
 		}
 	}
+
+	/* sanity */
+	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
+		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
+			command_name);
 
 	if (num_threads < 1)
 		num_threads = 1;
@@ -663,8 +669,15 @@ main(int argc, char *argv[])
 							 restore_params);
 		case VALIDATE_CMD:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0 && !target_lsn)
+			{
+				/* sanity */
+				if (datname_exclude_list || datname_include_list)
+					elog(ERROR, "You must specify parameter (-i, --backup-id) for partial validation");
+
 				return do_validate_all();
+			}
 			else
+				/* PITR validation and, optionally, partial validation */
 				return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
 						  restore_params);
@@ -797,7 +810,10 @@ opt_datname_include_list(ConfigOption *opt, const char *arg)
 
 	dbname = pgut_malloc(strlen(arg) + 1);
 
-	/* TODO add sanity for database name */
+	if (strcmp(dbname, "tempate0") == 0 ||
+		strcmp(dbname, "tempate1") == 0)
+		elog(ERROR, "Databases 'template0' and 'template1' cannot be used for partial restore or validation");
+
 	strcpy(dbname, arg);
 
 	parray_append(datname_include_list, dbname);

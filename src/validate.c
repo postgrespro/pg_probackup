@@ -109,7 +109,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 
 	if (params && params->partial_db_list)
 		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
-														  params->is_include_list);
+														  params->partial_restore_type);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)

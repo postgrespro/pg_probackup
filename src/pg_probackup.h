@@ -91,6 +91,13 @@ typedef struct db_map_entry
 	char *datname;
 } db_map_entry;
 
+typedef enum PartialRestoreType
+{
+	NONE,
+	INCLUDE,
+	EXCLUDE,
+} PartialRestoreType;
+
 typedef enum CompressAlg
 {
 	NOT_DEFINED_COMPRESS = 0,
@@ -348,7 +355,7 @@ typedef struct pgRestoreParams
 	bool	skip_block_validation;
 
 	/* options for partial restore */
-	bool is_include_list;
+	PartialRestoreType partial_restore_type;
 	parray *partial_db_list;
 } pgRestoreParams;
 
@@ -512,8 +519,9 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
 	const char *target_stop, const char *target_name,
 	const char *target_action);
+
 extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
-							   parray *datname_list, bool partial_restore_type);
+							   parray *datname_list, PartialRestoreType partial_restore_type);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
