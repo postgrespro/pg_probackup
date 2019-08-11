@@ -3659,7 +3659,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(
                 backup_dir, 'node',
-                options=["--db-include=db1", '--no-validate'])
+                options=["--db-include=db1"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because database_map is empty.\n "
@@ -3680,7 +3680,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         try:
             self.validate_pb(
                 backup_dir, 'node',
-                options=["--db-include=db1", '--no-validate'])
+                options=["--db-include=db1"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because database_map is empty.\n "
@@ -3735,8 +3735,27 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    "--db-exclude=db1",
+                    "--db-exclude=db5",
+                    "--log-level-console=verbose"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of missing backup ID.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You must specify parameter (-i, --backup-id) for partial validation",
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
         output = self.validate_pb(
-            backup_dir, 'node',
+            backup_dir, 'node', backup_id,
             options=[
                 "--db-exclude=db1",
                 "--db-exclude=db5",
@@ -3789,7 +3808,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         output = self.validate_pb(
-            backup_dir, 'node',
+            backup_dir, 'node', backup_id,
             options=[
                 "--db-include=db1",
                 "--db-include=db5",
@@ -3800,9 +3819,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "VERBOSE: Skip file validation due to partial restore", output)
 
         output = self.validate_pb(
-            backup_dir, 'node',
-            options=[
-                "--log-level-console=verbose"])
+            backup_dir, 'node', backup_id,
+            options=["--log-level-console=verbose"])
 
         self.assertNotIn(
             "VERBOSE: Skip file validation due to partial restore", output)
