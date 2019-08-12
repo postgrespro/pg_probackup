@@ -33,6 +33,8 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 * `Autonomous backups` streams via replication protocol all the WAL files required to restore the cluster to a consistent state at the time the backup was taken. Even if continuous archiving is not set up, the required WAL segments are included into the backup.
 * `Archive backups` rely on continuous archiving.
 
+## ptrack support
+
 `PTRACK` backup support provided via following options:
 * vanilla PostgreSQL compiled with ptrack patch. Currently there are patches for [PostgreSQL 9.6](https://gist.githubusercontent.com/gsmol/5b615c971dfd461c76ef41a118ff4d97/raw/e471251983f14e980041f43bea7709b8246f4178/ptrack_9.6.6_v1.5.patch) and [PostgreSQL 10](https://gist.githubusercontent.com/gsmol/be8ee2a132b88463821021fd910d960e/raw/de24f9499f4f314a4a3e5fae5ed4edb945964df8/ptrack_10.1_v1.5.patch)
 * Postgres Pro Standard 9.5, 9.6, 10, 11
@@ -45,22 +47,26 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 * Remote mode is in beta stage.
 * Incremental chain can span only within one timeline. So if you have backup incremental chain taken from replica and it gets promoted, you would be forced to take another FULL backup.
 
+## Current release
+
+[2.1.5](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.5)
+
 ## Installation and Setup
 ### Windows Installation
-[Installers download link](https://oc.postgrespro.ru/index.php/s/CGsjXlc5NmhRI0L)
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.5).
 
 ### Linux Installation
 ```shell
 #DEB Ubuntu|Debian Packages
-echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
-wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
-apt-get install pg-probackup-{11,10,9.6,9.5}
-apt-get install pg-probackup-{11,10,9.6,9.5}-dbg
+sudo echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
+sudo wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
+sudo apt-get install pg-probackup-{11,10,9.6,9.5}
+sudo apt-get install pg-probackup-{11,10,9.6,9.5}-dbg
 
 #DEB-SRC Packages
-echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
+sudo echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
   /etc/apt/sources.list.d/pg_probackup.list
-apt-get source pg-probackup-{11,10,9.6,9.5}
+sudo apt-get source pg-probackup-{11,10,9.6,9.5}
 
 #RPM Centos Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
@@ -81,7 +87,7 @@ yum install pg_probackup-{11,10,9.6,9.5}-debuginfo
 yumdownloader --source pg_probackup-{11,10,9.6,9.5}
 ```
 
-Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup.html#pg-probackup-install-and-setup).
+Once you have `pg_probackup` installed, complete [the setup](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#installation-and-setup).
 
 ## Building from source
 ### Linux
@@ -104,17 +110,14 @@ SET PATH=%PATH%;C:\msys64\usr\bin
 gen_probackup_project.pl C:\path_to_postgresql_source_tree
 ```
 
-## Current release
-
-[2.1.3](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.3)
-
 ## Documentation
 
-Currently the latest documentation can be found at [github](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md) and [Postgres Pro Enterprise documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup).
+Currently the latest documentation can be found at [github](https://postgrespro.github.io/pg_probackup).
+Slightly outdated documentation can be found at [Postgres Pro Enterprise documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup).
 
-## Licence
+## License
 
-This module available under the [license](LICENSE) similar to [PostgreSQL](https://www.postgresql.org/about/licence/).
+This module available under the [license](LICENSE) similar to [PostgreSQL](https://www.postgresql.org/about/license/).
 
 ## Feedback
 

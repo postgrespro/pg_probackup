@@ -1078,6 +1078,9 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_delta_corruption_heal_via_ptrack_1(self):
         """make node, corrupt some page, check that backup failed"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1135,6 +1138,9 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_page_corruption_heal_via_ptrack_2(self):
         """make node, corrupt some page, check that backup failed"""
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),

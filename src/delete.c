@@ -116,7 +116,7 @@ do_delete(time_t backup_id)
  *
  * Invalid backups handled in Oracle style, so invalid backups are ignored
  * for the purpose of retention fulfillment,
- * i.e. CORRUPT full backup do not taken in account when deteremine
+ * i.e. CORRUPT full backup do not taken in account when determine
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
@@ -175,6 +175,8 @@ int do_retention(void)
 	if (delete_wal && !dry_run)
 		do_retention_wal();
 
+	/* TODO: consider dry-run flag */
+
 	if (!backup_merged)
 		elog(INFO, "There are no backups to merge by retention policy");
 
@@ -203,6 +205,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	int			i;
 	time_t 		current_time;
 
+	parray *redundancy_full_backup_list = NULL;
+
 	/* For retention calculation */
 	uint32		n_full_backups = 0;
 	int			cur_full_backup_num = 0;
@@ -221,15 +225,27 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-			/* Consider only valid backups for Redundancy */
+			/* Consider only valid FULL backups for Redundancy */
 			if (instance_config.retention_redundancy > 0 &&
 				backup->backup_mode == BACKUP_MODE_FULL &&
 				(backup->status == BACKUP_STATUS_OK ||
 					backup->status == BACKUP_STATUS_DONE))
 			{
 				n_full_backups++;
+
+				/* Add every FULL backup that satisfy Redundancy policy to separate list */
+				if (n_full_backups <= instance_config.retention_redundancy)
+				{
+					if (!redundancy_full_backup_list)
+						redundancy_full_backup_list = parray_new();
+
+					parray_append(redundancy_full_backup_list, backup);
+				}
 			}
 		}
+		/* Sort list of full backups to keep */
+		if (redundancy_full_backup_list)
+			parray_qsort(redundancy_full_backup_list, pgBackupCompareIdDesc);
 	}
 
 	if (instance_config.retention_window > 0)
@@ -242,7 +258,20 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 	{
 
+		bool redundancy_keep = false;
+		time_t backup_time = 0;
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
+
+		/* check if backup`s FULL ancestor is in redundancy list */
+		if (redundancy_full_backup_list)
+		{
+			pgBackup   *full_backup = find_parent_full_backup(backup);
+
+			if (full_backup && parray_bsearch(redundancy_full_backup_list,
+											  full_backup,
+											  pgBackupCompareIdDesc))
+				redundancy_keep = true;
+		}
 
 		/* Remember the serial number of latest valid FULL backup */
 		if (backup->backup_mode == BACKUP_MODE_FULL &&
@@ -252,11 +281,17 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			cur_full_backup_num++;
 		}
 
-		/* Check if backup in needed by retention policy
-		 * TODO: consider that ERROR backup most likely to have recovery_time == 0
+		/* Invalid and running backups most likely to have recovery_time == 0,
+		 * so in this case use start_time instead.
 		 */
-		if ((days_threshold == 0 || (days_threshold > backup->recovery_time)) &&
-			(instance_config.retention_redundancy  <= (n_full_backups - cur_full_backup_num)))
+		if (backup->recovery_time)
+			backup_time = backup->recovery_time;
+		else
+			backup_time = backup->start_time;
+
+		/* Check if backup in needed by retention policy */
+		if ((days_threshold == 0 || (days_threshold > backup_time)) &&
+			(instance_config.retention_redundancy == 0 || !redundancy_keep))
 		{
 			/* This backup is not guarded by retention
 			 *
@@ -319,7 +354,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 							backup->parent_backup_link,
 							pgBackupCompareIdDesc))
 		{
-			/* make keep list a bit sparse */
+			/* make keep list a bit more compact */
 			parray_append(to_keep_list, backup);
 			continue;
 		}
@@ -344,6 +379,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		else
 			actual_window = (current_time - backup->recovery_time)/(60 * 60 * 24);
 
+		/* TODO: add ancestor(chain full backup) ID */
 		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
 				base36enc(backup->start_time),
 				pgBackupGetBackupMode(backup),
@@ -416,7 +452,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 			continue;
 		}
 
-		/* FULL backup in purge list, thanks to sparsing of keep_list current backup is
+		/* FULL backup in purge list, thanks to compacting of keep_list current backup is
 		 * final target for merge, but there could be intermediate incremental
 		 * backups from purge_list.
 		 */
@@ -462,7 +498,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 * 2 PAGE1
 		 * 3 FULL
 		 *
-		 * Сonsequentially merge incremental backups from PAGE1 to PAGE3
+		 * Consequentially merge incremental backups from PAGE1 to PAGE3
 		 * into FULL.
 		 */
 
@@ -593,6 +629,7 @@ do_retention_wal(void)
 	XLogRecPtr oldest_lsn = InvalidXLogRecPtr;
 	TimeLineID oldest_tli = 0;
 	bool backup_list_is_empty = false;
+	int i;
 
 	/* Get list of backups. */
 	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
@@ -601,14 +638,17 @@ do_retention_wal(void)
 		backup_list_is_empty = true;
 
 	/* Save LSN and Timeline to remove unnecessary WAL segments */
-	if (!backup_list_is_empty)
+	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
 	{
-		pgBackup   *backup = NULL;
-		/* Get LSN and TLI of oldest alive backup */
-		backup = (pgBackup *) parray_get(backup_list, parray_num(backup_list) -1);
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-		oldest_tli = backup->tli;
-		oldest_lsn = backup->start_lsn;
+		/* Get LSN and TLI of the oldest backup with valid start_lsn and tli */
+		if (backup->tli > 0 && !XLogRecPtrIsInvalid(backup->start_lsn))
+		{
+			oldest_tli = backup->tli;
+			oldest_lsn = backup->start_lsn;
+			break;
+		}
 	}
 
 	/* Be paranoid */

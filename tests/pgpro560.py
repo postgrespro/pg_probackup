@@ -1,8 +1,9 @@
 import os
 import unittest
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
+from time import sleep
 
 
 module_name = 'pgpro560'
@@ -30,19 +31,22 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        file = os.path.join(node.base_dir,'data', 'global', 'pg_control')
+        file = os.path.join(node.base_dir, 'data', 'global', 'pg_control')
         os.remove(file)
 
         try:
             self.backup_node(backup_dir, 'node', node, options=['--stream'])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because pg_control was deleted.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because pg_control was deleted.\n "
+                "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'ERROR: could not open file' in e.message
-                 and 'pg_control' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+                'ERROR: could not open file' in e.message and
+                'pg_control' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -75,24 +79,52 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(backup_dir, 'node1', node2, options=['--stream'])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because of SYSTEM ID mismatch.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of SYSTEM ID mismatch.\n "
+                "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: Backup data directory was initialized for system id' in e.message
-                 and 'but connected instance system id is' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            if self.get_version(node1) > 90600:
+                self.assertTrue(
+                    'ERROR: Backup data directory was '
+                    'initialized for system id' in e.message and
+                    'but connected instance system id is' in e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    'ERROR: System identifier mismatch. '
+                    'Connected PostgreSQL instance has system id',
+                    e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+
+        sleep(1)
 
         try:
-            self.backup_node(backup_dir, 'node1', node2, data_dir=node1.data_dir, options=['--stream'])
+            self.backup_node(
+                backup_dir, 'node1', node2,
+                data_dir=node1.data_dir, options=['--stream'])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(1, 0, "Expecting Error because of of SYSTEM ID mismatch.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of of SYSTEM ID mismatch.\n "
+                "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: Backup data directory was initialized for system id' in e.message
-                 and 'but connected instance system id is' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+            if self.get_version(node1) > 90600:
+                self.assertTrue(
+                    'ERROR: Backup data directory was initialized '
+                    'for system id' in e.message and
+                    'but connected instance system id is' in e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    'ERROR: System identifier mismatch. '
+                    'Connected PostgreSQL instance has system id',
+                    e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

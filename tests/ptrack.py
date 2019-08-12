@@ -122,8 +122,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_ptrack_uncommited_xact(self):
-        """make ptrack backup while there is uncommited open transaction"""
+    def test_ptrack_uncommitted_xact(self):
+        """make ptrack backup while there is uncommitted open transaction"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

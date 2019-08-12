@@ -159,7 +159,7 @@ page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 			return false;
 		}
 #endif
-		/* otherwize let's try to decompress the page */
+		/* otherwise let's try to decompress the page */
 		return true;
 	}
 	return false;
@@ -396,7 +396,7 @@ prepare_page(ConnectionArgs *arguments,
 		{
 			/*
 			 * We need to copy the page that was successfully
-			 * retreieved from ptrack into our output "page" parameter.
+			 * retrieved from ptrack into our output "page" parameter.
 			 * We must set checksum here, because it is outdated
 			 * in the block recieved from shared buffers.
 			 */
@@ -482,7 +482,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 				   compressed_page, header.compressed_size);
 			write_buffer_size += MAXALIGN(header.compressed_size);
 		}
-		/* Nonpositive value means that compression failed. Write it as is. */
+		/* Non-positive value means that compression failed. Write it as is. */
 		else
 		{
 			header.compressed_size = BLCKSZ;
@@ -754,7 +754,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 		DataPage	page;
 		int32		uncompressed_size = 0;
 
-		/* File didn`t changed. Nothig to copy */
+		/* File didn`t changed. Nothing to copy */
 		if (file->write_size == BYTES_INVALID)
 			break;
 
@@ -887,7 +887,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	 * DELTA backup have no knowledge about truncated blocks as PAGE or PTRACK do
 	 * But during DELTA backup we read every file in PGDATA and thus DELTA backup
 	 * knows exact size of every file at the time of backup.
-	 * So when restoring file from DELTA backup we, knowning it`s size at
+	 * So when restoring file from DELTA backup we, knowing it`s size at
 	 * a time of a backup, can truncate file to this size.
 	 */
 	if (allow_truncate && file->n_blocks != BLOCKNUM_INVALID && !need_truncate)
@@ -1064,6 +1064,39 @@ copy_file(fio_location from_location, const char *to_root,
 		fio_fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fio_fclose(in);
+
+	return true;
+}
+
+/*
+ * Create empty file, used for partial restore
+ */
+bool
+create_empty_file(fio_location from_location, const char *to_root,
+		  fio_location to_location, pgFile *file)
+{
+	char		to_path[MAXPGPATH];
+	FILE	   *out;
+
+	/* open file for write  */
+	join_path_components(to_path, to_root, file->rel_path);
+	out = fio_fopen(to_path, PG_BINARY_W, to_location);
+	if (out == NULL)
+	{
+		elog(ERROR, "cannot open destination file \"%s\": %s",
+			 to_path, strerror(errno));
+	}
+
+	/* update file permission */
+	if (fio_chmod(to_path, file->mode, to_location) == -1)
+	{
+		fio_fclose(out);
+		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
+			 strerror(errno));
+	}
+
+	if (fio_fclose(out))
+		elog(ERROR, "cannot close \"%s\": %s", to_path, strerror(errno));
 
 	return true;
 }

@@ -30,6 +30,7 @@ typedef struct
 	uint32		checksum_version;
 	uint32		backup_version;
 	BackupMode	backup_mode;
+	parray		*dbOid_exclude_list;
 
 	/*
 	 * Return value from the thread.
@@ -42,7 +43,7 @@ typedef struct
  * Validate backup files.
  */
 void
-pgBackupValidate(pgBackup *backup)
+pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 {
 	char		base_path[MAXPGPATH];
 	char		external_prefix[MAXPGPATH];
@@ -54,6 +55,7 @@ pgBackupValidate(pgBackup *backup)
 	pthread_t  *threads;
 	validate_files_arg *threads_args;
 	int			i;
+	parray *dbOid_exclude_list = NULL;
 
 	/* Check backup version */
 	if (parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
@@ -105,6 +107,10 @@ pgBackupValidate(pgBackup *backup)
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
 
+	if (params && params->partial_db_list)
+		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
+														  params->partial_restore_type);
+
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -130,6 +136,7 @@ pgBackupValidate(pgBackup *backup)
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
 		arg->backup_version = parse_program_version(backup->program_version);
+		arg->dbOid_exclude_list = dbOid_exclude_list;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -192,6 +199,19 @@ pgBackupValidateFiles(void *arg)
 		/* Validate only regular files */
 		if (!S_ISREG(file->mode))
 			continue;
+
+		/*
+		 * If in partial validate, check if the file belongs to the database
+		 * we exclude. Only files from pgdata can be skipped.
+		 */
+		if (arguments->dbOid_exclude_list && file->external_dir_num == 0
+			&& parray_bsearch(arguments->dbOid_exclude_list,
+							   &file->dbOid, pgCompareOid))
+		{
+			elog(VERBOSE, "Skip file validation due to partial restore: \"%s\"",
+				 file->rel_path);
+			continue;
+		}
 
 		/*
 		 * Currently we don't compute checksums for
@@ -371,7 +391,7 @@ do_validate_all(void)
 	/* TODO: Probably we should have different exit code for every condition
 	 * and they combination:
 	 *  0 - all backups are valid
-	 *  1 - some backups are corrup
+	 *  1 - some backups are corrupt
 	 *  2 - some backups where skipped due to concurrent locks
 	 *  3 - some backups are corrupt and some are skipped due to concurrent locks
 	 */
@@ -498,7 +518,7 @@ do_validate_instance(void)
 			continue;
 		}
 		/* Valiate backup files*/
-		pgBackupValidate(current_backup);
+		pgBackupValidate(current_backup, NULL);
 
 		/* Validate corresponding WAL files */
 		if (current_backup->status == BACKUP_STATUS_OK)
@@ -547,7 +567,7 @@ do_validate_instance(void)
 		/* For every OK backup we try to revalidate all his ORPHAN descendants. */
 		if (current_backup->status == BACKUP_STATUS_OK)
 		{
-			/* revalidate all ORPHAN descendats
+			/* revalidate all ORPHAN descendants
 			 * be very careful not to miss a missing backup
 			 * for every backup we must check that he is descendant of current_backup
 			 */
@@ -592,8 +612,8 @@ do_validate_instance(void)
 								skipped_due_to_lock = true;
 								continue;
 							}
-							/* Revaliate backup files*/
-							pgBackupValidate(backup);
+							/* Revalidate backup files*/
+							pgBackupValidate(backup, NULL);
 
 							if (backup->status == BACKUP_STATUS_OK)
 							{

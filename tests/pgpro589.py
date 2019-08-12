@@ -27,7 +27,7 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
-        # make erroneus archive_command
+        # make erroneous archive_command
         node.append_conf("postgresql.auto.conf", "archive_command = 'exit 0'")
         node.slow_start()
 

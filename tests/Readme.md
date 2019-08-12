@@ -1,11 +1,11 @@
 [см wiki](https://confluence.postgrespro.ru/display/DEV/pg_probackup)
 
 ```
-Note: For now these are works on Linix and "kinda" works on Windows
+Note: For now these are works on Linux and "kinda" works on Windows
 ```
 
 ```
-Windows Note: For tablespaceses tests to work on Windows, you should explicitly(!) grant current user full access to tmp_dirs
+Windows Note: For tablespaces tests to work on Windows, you should explicitly(!) grant current user full access to tmp_dirs
 ```
 
 
@@ -23,11 +23,14 @@ Enable compatibility tests:
 Specify path to pg_probackup binary file. By default tests use <Path to Git repository>/pg_probackup/
  export PGPROBACKUPBIN=<path to pg_probackup>
 
-Remote backup depends on key authentithication to local machine via ssh as current user.
+Remote backup depends on key authentication to local machine via ssh as current user.
  export PGPROBACKUP_SSH_REMOTE=ON
 
 Run suit of basic simple tests:
  export PG_PROBACKUP_TEST_BASIC=ON
+
+Run ptrack tests:
+ export PG_PROBACKUP_PTRACK=ON
 
 
 Usage:

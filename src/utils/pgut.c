@@ -206,6 +206,9 @@ pgut_get_conninfo_string(PGconn *conn)
 	return connstr;
 }
 
+/* TODO: it is better to use PQconnectdbParams like in psql
+ * It will allow to set application_name for pg_probackup
+ */
 PGconn *
 pgut_connect(const char *host, const char *port,
 			 const char *dbname, const char *username)
@@ -419,7 +422,7 @@ pgut_execute_parallel(PGconn* conn,
 			}
 
 			if (!PQconsumeInput(conn))
-				elog(ERROR, "query failed: %squery was: %s",
+				elog(ERROR, "query failed: %s query was: %s",
 						PQerrorMessage(conn), query);
 
 			/* query is no done */
@@ -754,7 +757,7 @@ on_interrupt(void)
 	interrupted = true;
 
 	/*
-	 * User promts password, call on_cleanup() byhand. Unless we do that we will
+	 * User prompts password, call on_cleanup() byhand. Unless we do that we will
 	 * get stuck forever until a user enters a password.
 	 */
 	if (in_password)

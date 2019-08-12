@@ -217,6 +217,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_backward_compatibility_ptrack(self):
         """Description in jira issue PGPRO-434"""
+
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -224,8 +228,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off'}
-            )
+                'autovacuum': 'off',
+                'ptrack_enable': 'on'})
+
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)
 
@@ -262,7 +267,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Delta BACKUP with old binary
+        # ptrack BACKUP with old binary
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -272,7 +277,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
+            backup_dir, 'node', node, backup_type='ptrack',
             old_binary=True)
 
         if self.paranoia:
@@ -287,7 +292,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Delta BACKUP with new binary
+        # Ptrack BACKUP with new binary
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -297,7 +302,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta')
+            backup_dir, 'node', node, backup_type='ptrack')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)

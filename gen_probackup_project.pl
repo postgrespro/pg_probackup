@@ -5,7 +5,7 @@ our $pgsrc;
 our $currpath;
 
 BEGIN {
-# path to the pg_pprobackup dir
+# path to the pg_probackup dir
 $currpath = File::Basename::dirname(Cwd::abs_path($0));
 use Cwd;
 use File::Basename;
@@ -155,7 +155,8 @@ sub build_pgprobackup
 		'restore.c',
 		'show.c',
 		'util.c',
-		'validate.c'
+		'validate.c',
+		'checkdb.c'
 		);
 	$probackup->AddFiles(
 		"$currpath/src/utils",
@@ -166,7 +167,8 @@ sub build_pgprobackup
 		'logger.c',
 		'parray.c',
 		'pgut.c',
-		'thread.c'
+		'thread.c',
+		'remote.c'
 		);
 	$probackup->AddFile("$pgsrc/src/backend/access/transam/xlogreader.c");
 	$probackup->AddFile("$pgsrc/src/backend/utils/hash/pg_crc.c");

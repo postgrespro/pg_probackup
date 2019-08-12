@@ -20,10 +20,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2',
-                'shared_buffers': '1GB', 'fsync': 'off', 'ptrack_enable': 'on'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -102,7 +99,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
     def test_exclude_unlogged_tables_1(self):
         """
         make node without archiving, create unlogged table, take full backup,
-        alter table to unlogged, take ptrack backup, restore ptrack backup,
+        alter table to unlogged, take delta backup, restore delta backup,
         check that PGDATA`s are physically the same
         """
         fname = self.id().split('.')[3]
@@ -113,8 +110,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'autovacuum': 'off',
-                "shared_buffers": "10MB",
-                'ptrack_enable': 'on'})
+                "shared_buffers": "10MB"})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -138,7 +134,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', "alter table test set logged")
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
+            backup_dir, 'node', node, backup_type='delta',
             options=['--stream']
         )
 

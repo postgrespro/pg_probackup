@@ -89,12 +89,17 @@ static char		   *target_name = NULL;
 static char		   *target_action = NULL;
 
 static pgRecoveryTarget *recovery_target_options = NULL;
+static pgRestoreParams *restore_params = NULL;
 
 bool restore_as_replica = false;
 bool no_validate = false;
 
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
+
+/* array for datnames, provided via db-include and db-exclude */
+static parray *datname_exclude_list = NULL;
+static parray *datname_include_list = NULL;
 
 /* checkdb options */
 bool need_amcheck = false;
@@ -132,6 +137,9 @@ static void opt_backup_mode(ConfigOption *opt, const char *arg);
 static void opt_show_format(ConfigOption *opt, const char *arg);
 
 static void compress_init(void);
+
+static void opt_datname_exclude_list(ConfigOption *opt, const char *arg);
+static void opt_datname_include_list(ConfigOption *opt, const char *arg);
 
 /*
  * Short name should be non-printable ASCII character.
@@ -171,6 +179,8 @@ static ConfigOption cmd_options[] =
 	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
+	{ 'f', 158, "db-include", 		opt_datname_include_list, SOURCE_CMD_STRICT },
+	{ 'f', 159, "db-exclude", 		opt_datname_exclude_list, SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -304,7 +314,7 @@ main(int argc, char *argv[])
 				uint32 agent_version = parse_program_version(remote_agent);
 				elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
 					 "Agent version %s doesn't match master pg_probackup version %s",
-					 remote_agent, PROGRAM_VERSION);
+					 PROGRAM_VERSION, remote_agent);
 			}
 			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 			return 0;
@@ -323,11 +333,11 @@ main(int argc, char *argv[])
 				 || strcmp(argv[1], "-V") == 0)
 		{
 #ifdef PGPRO_VERSION
-			fprintf(stderr, "%s %s (Postgres Pro %s %s)\n",
+			fprintf(stdout, "%s %s (Postgres Pro %s %s)\n",
 					PROGRAM_NAME, PROGRAM_VERSION,
 					PGPRO_VERSION, PGPRO_EDITION);
 #else
-			fprintf(stderr, "%s %s (PostgreSQL %s)\n",
+			fprintf(stdout, "%s %s (PostgreSQL %s)\n",
 					PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
 #endif
 			exit(0);
@@ -490,7 +500,7 @@ main(int argc, char *argv[])
 
 	/* Usually checkdb for file logging requires log_directory
 	 * to be specified explicitly, but if backup_dir and instance name are provided,
-	 * checkdb can use the tusual default values or values from config
+	 * checkdb can use the usual default values or values from config
 	 */
 	if (backup_subcmd == CHECKDB_CMD &&
 		(instance_config.logger.log_level_file != LOG_OFF &&
@@ -589,8 +599,38 @@ main(int argc, char *argv[])
 				target_inclusive, target_tli, target_lsn,
 				(target_stop != NULL) ? target_stop :
 					(target_immediate) ? "immediate" : NULL,
-				target_name, target_action, no_validate);
+				target_name, target_action);
+
+		/* keep all params in one structure */
+		restore_params = pgut_new(pgRestoreParams);
+		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
+		restore_params->no_validate = no_validate;
+		restore_params->restore_as_replica = restore_as_replica;
+		restore_params->skip_block_validation = skip_block_validation;
+		restore_params->skip_external_dirs = skip_external_dirs;
+		restore_params->partial_db_list = NULL;
+		restore_params->partial_restore_type = NONE;
+
+		/* handle partial restore parameters */
+		if (datname_exclude_list && datname_include_list)
+			elog(ERROR, "You cannot specify '--db-include' and '--db-exclude' together");
+
+		if (datname_exclude_list)
+		{
+			restore_params->partial_restore_type = EXCLUDE;
+			restore_params->partial_db_list = datname_exclude_list;
+		}
+		else if (datname_include_list)
+		{
+			restore_params->partial_restore_type = INCLUDE;
+			restore_params->partial_db_list = datname_include_list;
+		}
 	}
+
+	/* sanity */
+	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
+		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
+			command_name);
 
 	if (num_threads < 1)
 		num_threads = 1;
@@ -612,16 +652,9 @@ main(int argc, char *argv[])
 			return do_init();
 		case BACKUP_CMD:
 			{
-				const char *backup_mode;
-				time_t		start_time;
+				time_t	start_time = time(NULL);
 
-				start_time = time(NULL);
-				backup_mode = deparse_backup_mode(current.backup_mode);
 				current.stream = stream_wal;
-
-				elog(INFO, "Backup start, pg_probackup version: %s, backup ID: %s, backup mode: %s, instance: %s, stream: %s, remote %s",
-						  PROGRAM_VERSION, base36enc(start_time), backup_mode, instance_name,
-						  stream_wal ? "true" : "false", IsSshProtocol()  ? "true" : "false");
 
 				/* sanity */
 				if (current.backup_mode == BACKUP_MODE_INVALID)
@@ -632,25 +665,32 @@ main(int argc, char *argv[])
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,
-						  recovery_target_options,
-						  true);
+							  recovery_target_options,
+							 restore_params);
 		case VALIDATE_CMD:
-			if (current.backup_id == 0 && target_time == 0 && target_xid == 0)
+			if (current.backup_id == 0 && target_time == 0 && target_xid == 0 && !target_lsn)
+			{
+				/* sanity */
+				if (datname_exclude_list || datname_include_list)
+					elog(ERROR, "You must specify parameter (-i, --backup-id) for partial validation");
+
 				return do_validate_all();
+			}
 			else
+				/* PITR validation and, optionally, partial validation */
 				return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
-						  false);
+						  restore_params);
 		case SHOW_CMD:
 			return do_show(current.backup_id);
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
-				elog(ERROR, "You cannot specify --delete-expired and --backup-id options together");
+				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");
 			if (merge_expired && backup_id_string)
-				elog(ERROR, "You cannot specify --merge-expired and --backup-id options together");
+				elog(ERROR, "You cannot specify --merge-expired and (-i, --backup-id) options together");
 			if (!delete_expired && !merge_expired && !delete_wal && !backup_id_string)
 				elog(ERROR, "You must specify at least one of the delete options: "
-								"--expired |--wal |--merge-expired |--delete-invalid |--backup_id");
+								"--delete-expired |--delete-wal |--merge-expired |(-i, --backup-id)");
 			if (!backup_id_string)
 				return do_retention();
 			else
@@ -740,4 +780,41 @@ compress_init(void)
 		if (instance_config.compress_alg == PGLZ_COMPRESS && num_threads > 1)
 			elog(ERROR, "Multithread backup does not support pglz compression");
 	}
+}
+
+/* Construct array of datnames, provided by user via db-exclude option */
+void
+opt_datname_exclude_list(ConfigOption *opt, const char *arg)
+{
+	char *dbname = NULL;
+
+	if (!datname_exclude_list)
+		datname_exclude_list =  parray_new();
+
+	dbname = pgut_malloc(strlen(arg) + 1);
+
+	/* TODO add sanity for database name */
+	strcpy(dbname, arg);
+
+	parray_append(datname_exclude_list, dbname);
+}
+
+/* Construct array of datnames, provided by user via db-include option */
+void
+opt_datname_include_list(ConfigOption *opt, const char *arg)
+{
+	char *dbname = NULL;
+
+	if (!datname_include_list)
+		datname_include_list =  parray_new();
+
+	dbname = pgut_malloc(strlen(arg) + 1);
+
+	if (strcmp(dbname, "tempate0") == 0 ||
+		strcmp(dbname, "tempate1") == 0)
+		elog(ERROR, "Databases 'template0' and 'template1' cannot be used for partial restore or validation");
+
+	strcpy(dbname, arg);
+
+	parray_append(datname_include_list, dbname);
 }

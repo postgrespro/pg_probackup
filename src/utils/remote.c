@@ -70,9 +70,16 @@ static void kill_child(void)
 
 void wait_ssh(void)
 {
+/*
+ * We need to wait termination of SSH process to eliminate zombies.
+ * There is no waitpid() function at Windows but there are no zombie processes caused by lack of wait/waitpid.
+ * So just disable waitpid for Windows.
+ */
+#ifndef WIN32
 	int status;
 	waitpid(child_pid, &status, 0);
 	elog(LOG, "SSH process %d is terminated with status %d",  child_pid, status);
+#endif
 }
 
 #ifdef WIN32
@@ -103,6 +110,7 @@ bool launch_agent(void)
 	int ssh_argc;
 	int outfd[2];
 	int infd[2];
+	int errfd[2];
 
 	ssh_argc = 0;
 #ifdef WIN32
@@ -126,11 +134,9 @@ bool launch_agent(void)
 	if (instance_config.remote.ssh_options != NULL) {
 		ssh_argc = split_options(ssh_argc, ssh_argv, MAX_CMDLINE_OPTIONS, pg_strdup(instance_config.remote.ssh_options));
 	}
-	if (num_threads > 1)
-	{
-		ssh_argv[ssh_argc++] = "-o";
-		ssh_argv[ssh_argc++] = "PasswordAuthentication=no";
-	}
+
+	ssh_argv[ssh_argc++] = "-o";
+	ssh_argv[ssh_argc++] = "PasswordAuthentication=no";
 
 	ssh_argv[ssh_argc++] = "-o";
 	ssh_argv[ssh_argc++] = "Compression=no";
@@ -190,20 +196,25 @@ bool launch_agent(void)
 #else
 	SYS_CHECK(pipe(infd));
 	SYS_CHECK(pipe(outfd));
+	SYS_CHECK(pipe(errfd));
 
 	SYS_CHECK(child_pid = fork());
 
 	if (child_pid == 0) { /* child */
 		SYS_CHECK(close(STDIN_FILENO));
 		SYS_CHECK(close(STDOUT_FILENO));
+		SYS_CHECK(close(STDERR_FILENO));
 
 		SYS_CHECK(dup2(outfd[0], STDIN_FILENO));
 		SYS_CHECK(dup2(infd[1],  STDOUT_FILENO));
+		SYS_CHECK(dup2(errfd[1], STDERR_FILENO));
 
 		SYS_CHECK(close(infd[0]));
 		SYS_CHECK(close(infd[1]));
 		SYS_CHECK(close(outfd[0]));
 		SYS_CHECK(close(outfd[1]));
+		SYS_CHECK(close(errfd[0]));
+		SYS_CHECK(close(errfd[1]));
 
 		if (execvp(ssh_argv[0], ssh_argv) < 0)
 			return false;
@@ -212,9 +223,10 @@ bool launch_agent(void)
 		elog(LOG, "Spawn agent %d version %s", child_pid, PROGRAM_VERSION);
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
 		SYS_CHECK(close(outfd[0]));
+		SYS_CHECK(close(errfd[1]));
 		/*atexit(kill_child);*/
 
-		fio_redirect(infd[0], outfd[1]); /* write to stdout */
+		fio_redirect(infd[0], outfd[1], errfd[0]); /* write to stdout */
 	}
 	return true;
 }

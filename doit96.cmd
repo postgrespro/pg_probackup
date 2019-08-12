@@ -1,1 +1,0 @@
-perl win32build96.pl "C:\PgPro96" "C:\PgProject\pg96ee\postgrespro\src"

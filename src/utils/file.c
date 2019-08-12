@@ -20,6 +20,7 @@ static __thread unsigned long fio_fdset = 0;
 static __thread void* fio_stdin_buffer;
 static __thread int fio_stdout = 0;
 static __thread int fio_stdin = 0;
+static __thread int fio_stderr = 0;
 
 fio_location MyLocation;
 
@@ -37,11 +38,30 @@ typedef struct
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
-/* Use specified file descriptors as stding/stdout for FIO functions */
-void fio_redirect(int in, int out)
+/* Use specified file descriptors as stdin/stdout for FIO functions */
+void fio_redirect(int in, int out, int err)
 {
 	fio_stdin = in;
 	fio_stdout = out;
+	fio_stderr = err;
+}
+
+void fio_error(int rc, int size, char const* file, int line)
+{
+	if (remote_agent)
+	{
+		fprintf(stderr, "%s:%d: proceeds %d bytes instead of %d: %s\n", file, line, rc, size, rc >= 0 ? "end of data" :  strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		char buf[PRINTF_BUF_SIZE];
+		int err_size = read(fio_stderr, buf, sizeof(buf));
+		if (err_size > 0)
+			elog(ERROR, "Agent error: %s", buf);
+		else
+			elog(ERROR, "Communication error: %s", rc >= 0 ? "end of data" :  strerror(errno));
+	}
 }
 
 /* Check if file descriptor is local or remote (created by FIO) */
@@ -726,7 +746,7 @@ int fio_access(char const* path, int mode, fio_location location)
 	}
 }
 
-/* Create symbolink link */
+/* Create symbolic link */
 int fio_symlink(char const* target, char const* link_path, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -822,7 +842,7 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 	}
 }
 
-/* Checnge file mode */
+/* Change file mode */
 int fio_chmod(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -954,7 +974,7 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 
 		while (1)
 		{
-			if (gz->strm.avail_in != 0) /* If there is some data in receiver buffer, then decmpress it */
+			if (gz->strm.avail_in != 0) /* If there is some data in receiver buffer, then decompress it */
 			{
 				rc = inflate(&gz->strm, Z_NO_FLUSH);
 				if (rc == Z_STREAM_END)
@@ -1021,7 +1041,7 @@ fio_gzwrite(gzFile f, void const* buf, unsigned size)
 				{
 					rc = deflate(&gz->strm, Z_NO_FLUSH);
 					Assert(rc == Z_OK);
-					gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of bufer */
+					gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of buffer */
 				}
 				else
 				{
@@ -1429,7 +1449,7 @@ void fio_communicate(int in, int out)
 		  case FIO_UNLINK: /* Remove file or directory (TODO: Win32) */
 			SYS_CHECK(remove_file_or_dir(buf));
 			break;
-		  case FIO_MKDIR:  /* Create direcory */
+		  case FIO_MKDIR:  /* Create directory */
 			hdr.size = 0;
 			hdr.arg = dir_create_dir(buf, hdr.arg);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));

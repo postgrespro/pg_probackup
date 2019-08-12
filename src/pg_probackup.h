@@ -61,13 +61,14 @@ extern const char  *PROGRAM_EMAIL;
 #define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 #define EXTERNAL_DIR			"external_directories/externaldir"
+#define DATABASE_MAP			"database_map"
 
 /* Timeout defaults */
 #define PARTIAL_WAL_TIMER			60
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
 
-/* Direcotry/File permission */
+/* Directory/File permission */
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
 
@@ -84,6 +85,19 @@ extern const char  *PROGRAM_EMAIL;
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
+
+typedef struct db_map_entry
+{
+	Oid dbOid;
+	char *datname;
+} db_map_entry;
+
+typedef enum PartialRestoreType
+{
+	NONE,
+	INCLUDE,
+	EXCLUDE,
+} PartialRestoreType;
 
 typedef enum CompressAlg
 {
@@ -189,8 +203,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.1.3"
-#define AGENT_PROTOCOL_VERSION 20103
+#define PROGRAM_VERSION	"2.1.5"
+#define AGENT_PROTOCOL_VERSION 20105
 
 
 typedef struct ConnectionOptions
@@ -249,9 +263,11 @@ typedef struct PGNodeInfo
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
+	bool			is_superuser;
 
-	char			program_version[100];
-	char			server_version[100];
+	int				server_version;
+	char			server_version_str[100];
+
 } PGNodeInfo;
 
 typedef struct pgBackup pgBackup;
@@ -263,7 +279,7 @@ struct pgBackup
 	time_t			backup_id;	 /* Identifier of the backup.
 								  * Currently it's the same as start_time */
 	BackupStatus	status;		/* Status - one of BACKUP_STATUS_xxx above*/
-	TimeLineID		tli; 		/* timeline of start and stop baskup lsns */
+	TimeLineID		tli; 		/* timeline of start and stop backup lsns */
 	XLogRecPtr		start_lsn;	/* backup's starting transaction log location */
 	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
 	time_t			start_time;	/* since this moment backup has status
@@ -291,7 +307,6 @@ struct pgBackup
 	int				compress_level;
 
 	/* Fields needed for compatibility check */
-	PGNodeInfo		nodeInfo;
 	uint32			block_size;
 	uint32			wal_block_size;
 	uint32			checksum_version;
@@ -329,8 +344,21 @@ typedef struct pgRecoveryTarget
 	const char	   *target_stop;
 	const char	   *target_name;
 	const char	   *target_action;
-	bool			no_validate;
 } pgRecoveryTarget;
+
+/* Options needed for restore and validate commands */
+typedef struct pgRestoreParams
+{
+	bool	is_restore;
+	bool	no_validate;
+	bool	restore_as_replica;
+	bool	skip_external_dirs;
+	bool	skip_block_validation;
+
+	/* options for partial restore */
+	PartialRestoreType partial_restore_type;
+	parray *partial_db_list;
+} pgRestoreParams;
 
 typedef struct
 {
@@ -437,11 +465,6 @@ extern char* remote_agent;
 extern bool is_ptrack_support;
 extern bool exclusive_backup;
 
-/* restore options */
-extern bool restore_as_replica;
-extern bool skip_block_validation;
-extern bool skip_external_dirs;
-
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
@@ -460,6 +483,7 @@ extern ShowFormat show_format;
 
 /* checkdb options */
 extern bool heapallindexed;
+extern bool skip_block_validation;
 
 /* current settings */
 extern pgBackup current;
@@ -487,7 +511,7 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  pgRecoveryTarget *rt,
-					  bool is_restore);
+					  pgRestoreParams *params);
 extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
@@ -495,11 +519,16 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
 	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
 	const char *target_stop, const char *target_name,
-	const char *target_action, bool no_validate);
+	const char *target_action);
+
+extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
+							   parray *datname_list, PartialRestoreType partial_restore_type);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
+
+extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
 extern int do_init(void);
@@ -538,7 +567,7 @@ extern void help_pg_probackup(void);
 extern void help_command(char *command);
 
 /* in validate.c */
-extern void pgBackupValidate(pgBackup* backup);
+extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
 
 /* in catalog.c */
@@ -554,7 +583,8 @@ extern parray *catalog_get_backup_list(time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
-											  TimeLineID tli);
+											  TimeLineID tli,
+											  time_t current_start_time);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list);
@@ -564,6 +594,7 @@ extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
+extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
@@ -603,6 +634,11 @@ extern void check_tablespace_mapping(pgBackup *backup);
 extern void check_external_dir_mapping(pgBackup *backup);
 extern char *get_external_remap(char *current_dir);
 
+extern void print_database_map(FILE *out, parray *database_list);
+extern void write_database_map(pgBackup *backup, parray *database_list,
+								   parray *backup_file_list);
+extern void db_map_entry_free(void *map);
+
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
 extern parray *dir_read_file_list(const char *root, const char *external_prefix,
@@ -636,6 +672,7 @@ extern int pgFileComparePathDesc(const void *f1, const void *f2);
 extern int pgFileComparePathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
+extern int pgCompareOid(const void *f1, const void *f2);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs* arguments, pgFile* file, uint32 checksum_version);
@@ -651,6 +688,8 @@ extern void restore_data_file(const char *to_path,
 							  uint32 backup_version);
 extern bool copy_file(fio_location from_location, const char *to_root,
 					  fio_location to_location, pgFile *file, bool missing_ok);
+extern bool create_empty_file(fio_location from_location, const char *to_root,
+							  fio_location to_location, pgFile *file);
 
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
@@ -696,6 +735,8 @@ extern uint32 parse_program_version(const char *program_version);
 extern bool   parse_page(Page page, XLogRecPtr *lsn);
 int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				   CompressAlg alg, int level, const char **errormsg);
+
+extern void pretty_size(int64 size, char *buf, size_t len);
 
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);

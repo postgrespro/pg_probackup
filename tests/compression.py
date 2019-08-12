@@ -23,11 +23,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
-            )
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -59,15 +55,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             options=[
                 '--stream', '--compress-algorithm=zlib'])
 
-        # PTRACK BACKUP
+        # DELTA BACKUP
         node.safe_psql(
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
-        ptrack_result = node.execute("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
+        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
             options=['--stream', '--compress-algorithm=zlib'])
 
         # Drop Node
@@ -105,11 +101,11 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
-        # Check ptrack backup
+        # Check delta backup
         self.assertIn(
-            "INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
+            "INFO: Restore of backup {0} completed.".format(delta_backup_id),
             self.restore_node(
-                backup_dir, 'node', node, backup_id=ptrack_backup_id,
+                backup_dir, 'node', node, backup_id=delta_backup_id,
                 options=[
                     "-j", "4", "--immediate",
                     "--recovery-target-action=promote"]),
@@ -117,8 +113,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
-        self.assertEqual(ptrack_result, ptrack_result_new)
+        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
         # Clean after yourself
@@ -135,11 +131,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
-            )
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -167,14 +159,14 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page',
             options=["--compress-algorithm=zlib"])
 
-        # PTRACK BACKUP
+        # DELTA BACKUP
         node.safe_psql(
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,3) i")
-        ptrack_result = node.execute("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
+        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
             options=['--compress-algorithm=zlib'])
 
         # Drop Node
@@ -212,11 +204,11 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
-        # Check ptrack backup
+        # Check delta backup
         self.assertIn(
-            "INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
+            "INFO: Restore of backup {0} completed.".format(delta_backup_id),
             self.restore_node(
-                backup_dir, 'node', node, backup_id=ptrack_backup_id,
+                backup_dir, 'node', node, backup_id=delta_backup_id,
                 options=[
                     "-j", "4", "--immediate",
                     "--recovery-target-action=promote"]),
@@ -224,8 +216,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
-        self.assertEqual(ptrack_result, ptrack_result_new)
+        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
         # Clean after yourself
@@ -242,11 +234,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
-            )
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -275,15 +263,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page',
             options=['--stream', '--compress-algorithm=pglz'])
 
-        # PTRACK BACKUP
+        # DELTA BACKUP
         node.safe_psql(
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
-        ptrack_result = node.execute("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
+        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
             options=['--stream', '--compress-algorithm=pglz'])
 
         # Drop Node
@@ -321,11 +309,11 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
-        # Check ptrack backup
+        # Check delta backup
         self.assertIn(
-            "INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
+            "INFO: Restore of backup {0} completed.".format(delta_backup_id),
             self.restore_node(
-                backup_dir, 'node', node, backup_id=ptrack_backup_id,
+                backup_dir, 'node', node, backup_id=delta_backup_id,
                 options=[
                     "-j", "4", "--immediate",
                     "--recovery-target-action=promote"]),
@@ -333,8 +321,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
-        self.assertEqual(ptrack_result, ptrack_result_new)
+        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
         # Clean after yourself
@@ -351,11 +339,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
-            )
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -384,15 +368,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page',
             options=['--compress-algorithm=pglz'])
 
-        # PTRACK BACKUP
+        # DELTA BACKUP
         node.safe_psql(
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(200,300) i")
-        ptrack_result = node.execute("postgres", "SELECT * FROM t_heap")
-        ptrack_backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
+        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
             options=['--compress-algorithm=pglz'])
 
         # Drop Node
@@ -430,11 +414,11 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
-        # Check ptrack backup
+        # Check delta backup
         self.assertIn(
-            "INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
+            "INFO: Restore of backup {0} completed.".format(delta_backup_id),
             self.restore_node(
-                backup_dir, 'node', node, backup_id=ptrack_backup_id,
+                backup_dir, 'node', node, backup_id=delta_backup_id,
                 options=[
                     "-j", "4", "--immediate",
                     "--recovery-target-action=promote"]),
@@ -442,8 +426,8 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        ptrack_result_new = node.execute("postgres", "SELECT * FROM t_heap")
-        self.assertEqual(ptrack_result, ptrack_result_new)
+        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
         # Clean after yourself
@@ -460,11 +444,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s',
-                'ptrack_enable': 'on'}
-            )
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -492,9 +472,9 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_uncompressable_pages(self):
+    def test_incompressible_pages(self):
         """
-        make archive node, create table with uncompressable toast pages,
+        make archive node, create table with incompressible toast pages,
         take backup with compression, make sure that page was not compressed,
         restore backup and check data correctness
         """

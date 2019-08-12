@@ -826,6 +826,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         take page backup, merge full and page,
         restore last page backup and check data correctness
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1342,7 +1345,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
     def test_merge_different_compression_algo(self):
         """
-        Check that backups with different compression algorihtms can be merged
+        Check that backups with different compression algorithms can be merged
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1537,8 +1540,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('print_file_list')
-        gdb.continue_execution_until_break()
+        gdb.set_breakpoint('fio_fwrite')
+        gdb.continue_execution_until_break(2)
 
         gdb._execute('signal SIGKILL')
 
@@ -1628,8 +1631,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('print_file_list')
-        gdb.continue_execution_until_break()
+        gdb.set_breakpoint('fio_fwrite')
+        gdb.continue_execution_until_break(2)
 
         gdb._execute('signal SIGKILL')
 
@@ -1651,8 +1654,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         os.remove(file_to_remove)
 
         # Try to continue failed MERGE
-        #print(backup_id)
-        #exit(1)
         self.merge_backup(backup_dir, "node", backup_id)
 
         self.assertEqual(
@@ -1875,15 +1876,28 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
-        node.cleanup()
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored, backup_id=backup_id)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # check that merged backup has the same state as
+        node_restored.cleanup()
         self.merge_backup(backup_dir, 'node', backup_id=backup_id)
-
-        self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
-
-        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored, backup_id=backup_id)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
@@ -1941,15 +1955,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # FULLb  OK
         # FULLa  OK
 
-        # Change PAGEa1 backup status to OK
+        # Change PAGEa1 to OK
         self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
 
-        # Change PAGEb1 backup status to ERROR
+        # Change PAGEb1 and FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a2 = self.backup_node(
@@ -1958,20 +1973,22 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 OK
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEb1 backup status to OK
+        # Change PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
 
-        # Change PAGEa2 backup status to ERROR
+        # Change PAGEa2 and FULL to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
 
         # PAGEa2 ERROR
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -1981,17 +1998,21 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
-        # Change PAGEb2 and PAGEb1  status to ERROR
+        # Change PAGEb2, PAGEb1 and FULLb to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
         self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # Change FULLa to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb2 ERROR
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
         page_id_a3 = self.backup_node(
@@ -2002,14 +2023,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEa2 ERROR
         # PAGEb1 ERROR
         # PAGEa1 OK
-        # FULLb  OK
+        # FULLb  ERROR
         # FULLa  OK
 
-        # Change PAGEa3 status to ERROR
+        # Change PAGEa3 and FULLa to ERROR
         self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
 
-        # Change PAGEb2 status to OK
+        # Change PAGEb2, PAGEb1 and FULLb to OK
         self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         page_id_b3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -2018,15 +2041,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # PAGEa3 ERROR
         # PAGEb2 OK
         # PAGEa2 ERROR
-        # PAGEb1 ERROR
+        # PAGEb1 OK
         # PAGEa1 OK
         # FULLb  OK
-        # FULLa  OK
+        # FULLa  ERROR
 
-        # Change PAGEa3, PAGEa2 and PAGEb1 status to OK
+        # Change PAGEa3, PAGEa2 and FULLa status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a3, 'OK')
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
-        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
 
         # PAGEb3 OK
         # PAGEa3 OK

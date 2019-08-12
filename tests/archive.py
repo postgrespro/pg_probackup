@@ -47,7 +47,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node)
         node.slow_start()
 
-        # Recreate backup calagoue
+        # Recreate backup catalog
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
 
@@ -228,10 +228,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s'}
-            )
+            initdb_params=['--data-checksums'])
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -242,7 +240,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node', node,
                 options=[
                     "--archive-timeout=60",
-                    "--stream",
                     "--log-level-file=info"],
                 gdb=True)
 
@@ -255,27 +252,105 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         gdb.continue_execution_until_exit()
 
-        log_file = os.path.join(backup_dir, 'log/pg_probackup.log')
+        log_file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertNotIn(
-                "ERROR: pg_stop_backup doesn't answer",
-                log_content,
-                "pg_stop_backup timeouted")
+
+        # in PG =< 9.6 pg_stop_backup always wait
+        if self.get_version(node) < 100000:
+            self.assertIn(
+                "ERROR: pg_stop_backup doesn't answer in 60 seconds, cancel it",
+                log_content)
+        else:
+            self.assertIn(
+                "ERROR: Switched WAL segment 000000010000000000000002 "
+                "could not be archived in 60 seconds",
+                log_content)
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertNotIn(
-                'FailedAssertion',
-                log_content,
-                'PostgreSQL crashed because of a failed assert')
+
+        self.assertNotIn(
+            'FailedAssertion',
+            log_content,
+            'PostgreSQL crashed because of a failed assert')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_arhive_push_file_exists(self):
+    def test_pgpro434_4(self):
+        """
+        Check pg_stop_backup_timeout, needed backup_timeout
+        Fixed in commit d84d79668b0c139 and assert fixed by ptrack 1.7
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        gdb = self.backup_node(
+                backup_dir, 'node', node,
+                options=[
+                    "--archive-timeout=60",
+                    "--log-level-file=info"],
+                gdb=True)
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+
+        node.append_conf(
+            'postgresql.auto.conf', "archive_command = 'exit 1'")
+        node.reload()
+
+        os.environ["PGAPPNAME"] = "foo"
+
+        pid = node.safe_psql(
+            "postgres",
+            "SELECT pid "
+            "FROM pg_stat_activity "
+            "WHERE application_name = 'pg_probackup'").rstrip()
+
+        os.environ["PGAPPNAME"] = "pg_probackup"
+
+        postgres_gdb = self.gdb_attach(pid)
+        postgres_gdb.set_breakpoint('do_pg_stop_backup')
+        postgres_gdb.continue_execution_until_running()
+
+        gdb.continue_execution_until_exit()
+        # gdb._execute('detach')
+
+        log_file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+
+        self.assertIn(
+            "ERROR: pg_stop_backup doesn't answer in 60 seconds, cancel it",
+            log_content)
+
+        log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+
+        self.assertNotIn(
+            'FailedAssertion',
+            log_content,
+            'PostgreSQL crashed because of a failed assert')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_archive_push_file_exists(self):
         """Archive-push if file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -284,8 +359,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s'}
-            )
+                'checkpoint_timeout': '30s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -311,17 +386,33 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,100500) i")
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
 
+        self.switch_wal_segment(node)
+        sleep(1)
+
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertTrue(
-                'LOG:  archive command failed with exit code 1' in log_content and
-                'DETAIL:  The failed archive command was:' in log_content and
-                'INFO: pg_probackup archive-push from' in log_content and
-                'ERROR: WAL segment ' in log_content and
-                '{0}" already exists.'.format(filename) in log_content,
-                'Expecting error messages about failed archive_command'
-            )
-            self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
+        self.assertIn(
+            'LOG:  archive command failed with exit code 1',
+            log_content)
+
+        self.assertIn(
+            'DETAIL:  The failed archive command was:',
+            log_content)
+
+        self.assertIn(
+            'INFO: pg_probackup archive-push from',
+            log_content)
+
+        self.assertIn(
+            'ERROR: WAL segment ',
+            log_content)
+
+        self.assertIn(
+            'already exists.',
+            log_content)
+
+        self.assertNotIn(
+            'pg_probackup archive-push completed successfully', log_content)
 
         if self.get_version(node) < 100000:
             wal_src = os.path.join(
@@ -342,15 +433,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertTrue(
-                'pg_probackup archive-push completed successfully' in log_content,
-                'Expecting messages about successfull execution archive_command')
+
+        self.assertIn(
+            'pg_probackup archive-push completed successfully',
+            log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_arhive_push_file_exists_overwrite(self):
+    def test_archive_push_file_exists_overwrite(self):
         """Archive-push if file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -359,8 +451,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s'}
-            )
+                'checkpoint_timeout': '30s'})
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -386,16 +478,23 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,100500) i")
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
 
+        self.switch_wal_segment(node)
+        sleep(1)
+
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertTrue(
-                'LOG:  archive command failed with exit code 1' in log_content and
-                'DETAIL:  The failed archive command was:' in log_content and
-                'INFO: pg_probackup archive-push from' in log_content and
-                '{0}" already exists.'.format(filename) in log_content,
-                'Expecting error messages about failed archive_command'
-            )
-            self.assertFalse('pg_probackup archive-push completed successfully' in log_content)
+
+        self.assertIn(
+            'LOG:  archive command failed with exit code 1', log_content)
+        self.assertIn(
+            'DETAIL:  The failed archive command was:', log_content)
+        self.assertIn(
+            'INFO: pg_probackup archive-push from', log_content)
+        self.assertIn(
+            '{0}" already exists.'.format(filename), log_content)
+
+        self.assertNotIn(
+            'pg_probackup archive-push completed successfully', log_content)
 
         self.set_archiving(backup_dir, 'node', node, overwrite=True)
         node.reload()
@@ -413,7 +512,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_archive_push_partial_file_exists(self):
-        """Archive-push if stale .partial file exists"""
+        """Archive-push if stale '.partial' file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -438,10 +537,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "INSERT INTO t1 VALUES (1) RETURNING (xmin)").rstrip()
 
-        filename_orig = node.safe_psql(
-            "postgres",
-            "SELECT file_name "
-            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+        if self.get_version(node) < 100000:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_xlogfile_name_offset(pg_current_xlog_location());").rstrip()
+        else:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
         # form up path to next .partial WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
@@ -508,10 +613,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t2()")
 
-        filename_orig = node.safe_psql(
-            "postgres",
-            "SELECT file_name "
-            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+        if self.get_version(node) < 100000:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_xlogfile_name_offset(pg_current_xlog_location());").rstrip()
+        else:
+            filename_orig = node.safe_psql(
+                "postgres",
+                "SELECT file_name "
+                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
         # form up path to next .partial WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')

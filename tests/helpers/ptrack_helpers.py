@@ -130,7 +130,7 @@ def slow_start(self, replica=False):
     self.start()
     while True:
         try:
-            if self.safe_psql('postgres', query) == 't\n':
+            if self.safe_psql('template1', query) == 't\n':
                 break
         except testgres.QueryException as e:
             if 'database system is starting up' in e[0]:
@@ -271,7 +271,15 @@ class ProbackupTest(object):
         self.remote_user = None
 
         if 'PGPROBACKUP_SSH_REMOTE' in self.test_env:
-            self.remote = True
+            if self.test_env['PGPROBACKUP_SSH_REMOTE'] == 'ON':
+                self.remote = True
+
+        self.ptrack = False
+        if 'PG_PROBACKUP_PTRACK' in self.test_env:
+            if self.test_env['PG_PROBACKUP_PTRACK'] == 'ON':
+                self.ptrack = True
+
+        os.environ["PGAPPNAME"] = "pg_probackup"
 
     @property
     def pg_config_version(self):
@@ -295,8 +303,6 @@ class ProbackupTest(object):
 #            else
 #                print('PGPROBACKUP_SSH_USER is not set')
 #                exit(1)
-
-
 
     def make_simple_node(
             self,
@@ -341,6 +347,10 @@ class ProbackupTest(object):
             node.append_conf(
                 'postgresql.auto.conf',
                 'max_wal_senders = 10')
+
+        # set major version
+        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
+            node.major_version = f.read().rstrip()
 
         return node
 
@@ -1029,10 +1039,10 @@ class ProbackupTest(object):
             archive_command = archive_command + '--overwrite '
 
         if os.name == 'posix':
-            archive_command = archive_command + '--wal-file-path %p --wal-file-name %f'
+            archive_command = archive_command + '--wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
-            archive_command = archive_command + '--wal-file-path "%p" --wal-file-name "%f"'
+            archive_command = archive_command + '--wal-file-path="%p" --wal-file-name="%f"'
 
         node.append_conf(
                     'postgresql.auto.conf',
@@ -1319,15 +1329,12 @@ class ProbackupTest(object):
                         os.path.join(restored_pgdata['pgdata'], directory),
                         restored_pgdata['dirs'][directory]['mode'])
 
-
-
         for directory in original_pgdata['dirs']:
             if directory not in restored_pgdata['dirs']:
                 fail = True
                 error_message += '\nDirectory dissappeared'
                 error_message += ' in restored PGDATA: {0}\n'.format(
                     os.path.join(restored_pgdata['pgdata'], directory))
-
 
         for file in restored_pgdata['files']:
             # File is present in RESTORED PGDATA
@@ -1410,7 +1417,7 @@ class ProbackupTest(object):
 
             else:
                 error_message += (
-                    '\nFile dissappearance.\n '
+                    '\nFile disappearance.\n '
                     'File: {0}\n').format(
                     os.path.join(restored_pgdata['pgdata'], file)
                     )

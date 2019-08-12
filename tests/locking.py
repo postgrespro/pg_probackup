@@ -15,7 +15,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         make node, take full backup, stop it in the middle
         run validate, expect it to successfully executed,
-        concurrect RUNNING backup with pid file and active process is legal
+        concurrent RUNNING backup with pid file and active process is legal
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -406,7 +406,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    def test_locking_concurrent_vaidate_and_backup(self):
+    def test_locking_concurrent_validate_and_backup(self):
         """
         make node, take full backup, launch validate
         and stop it in the middle, take page backup.
