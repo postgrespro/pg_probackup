@@ -143,6 +143,7 @@ help_pg_probackup(void)
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [--db-include | --db-exclude]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
@@ -155,6 +156,7 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
+	printf(_("                 [--db-include | --db-exclude]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s checkdb [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
@@ -397,6 +399,8 @@ help_restore(void)
 	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
+
+	printf(_("\n  Partial restore options:\n"));
 	printf(_("      --db-include dbname          restore only specified databases\n"));
 	printf(_("      --db-exclude dbname          do not restore specified databases\n"));
 
@@ -462,6 +466,7 @@ help_validate(void)
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
+	printf(_("\n  Partial validation options:\n"));
 	printf(_("      --db-include dbname          validate only files of specified databases\n"));
 	printf(_("      --db-exclude dbname          do not validate files of specified databases\n"));
 
