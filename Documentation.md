@@ -18,6 +18,7 @@ Current version - 2.1.5
     * [Setting up Backup from Standby](#setting-up-backup-from-standby)
     * [Setting up Cluster Verification](#setting-up-cluster-verification)
     * [Setting up PTRACK Backups](#setting-up-ptrack-backups)
+    * [Setting up Partial Restore](#setting-up-partial-restore)
     * [Configuring the Remote Mode](#configuring-the-remote-mode)
 
 5. [Usage](#usage)
@@ -28,7 +29,9 @@ Current version - 2.1.5
         * [External directories](#external-directories)
     * [Verifying a Cluster](#verifying-a-cluster)
     * [Validating a Backup](#validating-a-backup)
+        * [Partial Validation](#partial-validation)
     * [Restoring a Cluster](#restoring-a-cluster)
+        * [Partial Restore](#partial-restore)
     * [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-pitr-recovery)
     * [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode)
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
@@ -125,6 +128,7 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 - Backup from replica: avoid extra load on the master server by taking backups from a standby
 - External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
 - Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
+- Partial Restore: restore the only specified databases or skip the specified databases.
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
 
@@ -518,6 +522,26 @@ If *backup_id* belong to incremental backup, then all its parents starting from 
 
 If you omit all the parameters, all backups are validated.
 
+#### Partial Validation
+
+If you have enabled [partial restore](#setting-up-partial-restore) before taking backups, you can validate or exclude from validation the arbitraty number of specific databases using [partial restore options](#partial-restore-options) with the [validate](#validate) command.
+
+To validate only one or more databases, run the `validate` command with the following options:
+
+    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-include=database_name
+
+The option `--db-include` can be specified multiple times. For example, to validate only databases "db1" and "db2", run the following command:
+
+    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-include=db1 --db-include=db2
+
+To exclude one or more specific databases from validation, run the following options:
+
+    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-exclude=database_name
+
+The option `--db-exclude` can be specified multiple times. For example, to exclude the databases "db1" and "db2" from validation, run the following command:
+
+    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-exclude=db1 --db-exclude=db2
+
 ### Restoring a Cluster
 
 To restore the database cluster from a backup, run the restore command with at least the following options:
@@ -541,6 +565,30 @@ Once the restore command is complete, start the database service.
 If you are restoring an STREAM backup, the restore is complete at once, with the cluster returned to a self-consistent state at the point when the backup was taken. For ARCHIVE backups, PostgreSQL replays all available archived WAL segments, so the cluster is restored to the latest state possible. You can change this behavior by using the [recovery target options](#recovery-target-options) with the `restore` command. Note that using the [recovery target options](#recovery-target-options) when restoring STREAM backup is possible if the WAL archive is available at least starting from the time the STREAM backup was taken.
 
 >NOTE: By default, the [restore](#restore) command validates the specified backup before restoring the cluster. If you run regular backup validations and would like to save time when restoring the cluster, you can specify the `--no-validate` flag to skip validation and speed up the recovery.
+
+#### Partial Restore
+
+If you have enabled [partial restore](#setting-up-partial-restore) before taking backups, you can restore or exclude from restore the arbitraty number of specific databases using [partial restore options](#partial-restore-options) with the [restore](#restore) commands.
+
+To restore only one or more databases, run the restore command with the following options:
+
+    pg_probackup restore -B backup_dir --instance instance_name --db-include=database_name
+
+The option `--db-include` can be specified multiple times. For example, to restore only databases `db1` and `db2`, run the following command:
+
+    pg_probackup restore -B backup_dir --instance instance_name --db-include=db1 --db-include=db2
+
+To exclude one or more specific databases from restore, run the following options:
+
+    pg_probackup restore -B backup_dir --instance instance_name --db-exclude=database_name
+
+The option `--db-exclude` can be specified multiple times. For example, to exclude the databases `db1` and `db2` from restore, run the following command:
+
+    pg_probackup restore -B backup_dir --instance instance_name -i backup_id --db-exclude=db1 --db-exclude=db2
+
+Partial restore rely on lax behaviour of PostgreSQL recovery process toward truncated files. Files of excluded databases restored as null sized files, allowing recovery to work properly. After successfull starting of PostgreSQL cluster, you must drop excluded databases using `DROP DATABASE` command.
+
+>NOTE: The databases `template0` and `template1` are always restored.
 
 ### Performing Point-in-Time (PITR) Recovery
 
@@ -1009,6 +1057,7 @@ For details on usage, see the section [Creating a Backup](#creating-a-backup).
     [-T OLDDIR=NEWDIR] [--external-mapping=OLDDIR=NEWDIR] [--skip-external-dirs]
     [-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
     [recovery_options] [logging_options] [remote_options]
+    [partial_restore_options]
 
 Restores the PostgreSQL instance from a backup copy located in the *backup_dir* backup catalog. If you specify a [recovery target option](#recovery-target-options), pg_probackup will find the closest backup and restores it to the specified recovery target. Otherwise, the most recent backup is used.
 
@@ -1032,7 +1081,7 @@ Disables block-level checksum verification to speed up validation. During automa
     --no-validate
 Skips backup validation. You can use this flag if you validate backups regularly and would like to save time when running restore operations.
 
-Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
+Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options), [Partial Restore](#partial-restore) and [Common Options](#common-options) can be used.
 
 For details on usage, see the section [Restoring a Cluster](#restoring-a-cluster).
 
@@ -1065,9 +1114,12 @@ For details on usage, see the section [Verifying a Cluster](#verifying-a-cluster
     [--help] [--instance instance_name] [-i backup_id]
     [-j num_threads] [--progress]
     [--skip-block-validation]
-    [recovery_options] [logging_options]
+    [recovery_target_options] [logging_options]
+    [partial_restore_options]
 
-Verifies that all the files required to restore the cluster are present and not corrupted. If *instance_name* is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the *instance_name* without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the *instance_name* with a [recovery target option](#recovery-target-options) and/or a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
+Verifies that all the files required to restore the cluster are present and not corrupted. If *instance_name* is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the *instance_name* without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the *instance_name* with a [recovery target options](#recovery-target-options) and/or a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
+
+If you specify the [partial restore options](#partial-restore-options) and a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
 
 For details, see the section [Validating a Backup](#validating-a-backup).
 
@@ -1353,6 +1405,16 @@ Specifies pg_probackup installation directory on the remote system.
 
     --ssh-options=ssh_options
 Specifies a string of SSH command-line options. For example, the following options can used to set keep-alive for ssh connections opened by pg_probackup: `--ssh-options='-o ServerAliveCountMax=5 -o ServerAliveInterval=60'`. Full list of possible options can be found on [ssh_config manual page](https://man.openbsd.org/ssh_config.5).
+
+#### Partial Restore Options
+
+This section describes the options related to partial restore of cluster from backup. These options can be used with [restore](#restore) and [validate](#validate) commands.
+
+    --db-exclude=dbname
+Specifies database name to exclude from restore. All other databases in the cluster will be restored as usual, including `template0` and `template1`. This option can be specified multiple times for multiple databases.
+
+    --db-include=dbname
+Specifies database name to restore from backup. All other databases in the cluster will not be restored, with exception of `template0` and `template1`. This option can be specified multiple times for multiple databases.
 
 #### Replica Options
 
