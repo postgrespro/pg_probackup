@@ -198,10 +198,8 @@ sub build_pgprobackup
         $probackup->AddIncludeDir("$currpath/src");
         $probackup->AddIncludeDir("$currpath/src/utils");
 
-	 # $probackup->AddReference($libpq, $libpgfeutils, $libpgcommon, $libpgport);
-	$probackup->AddReference($libpq, $libpgcommon, $libpgport);
+	$probackup->AddReference($libpq, $libpgfeutils, $libpgcommon, $libpgport);
 	$probackup->AddLibrary('ws2_32.lib');
-	$probackup->AddLibrary('advapi32.lib');
 
 	$probackup->Save();
 	return $solution->{vcver};
