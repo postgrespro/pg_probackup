@@ -63,11 +63,11 @@ my @unlink_on_exit;
 
 if (-d "src/fe_utils")
 {
-	libpgfeutils = 1;
+	$libpgfeutils = 1;
 }
 else
 {
-	libpgfeutils = 0;
+	$libpgfeutils = 0;
 }
 
 
@@ -211,7 +211,7 @@ sub build_pgprobackup
         $probackup->AddIncludeDir("$currpath/src");
         $probackup->AddIncludeDir("$currpath/src/utils");
 
-    if (libpgfeutils)
+    if ($libpgfeutils)
     {
 		$probackup->AddReference($libpq, $libpgfeutils, $libpgcommon, $libpgport);
     }
