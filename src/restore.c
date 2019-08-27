@@ -996,6 +996,9 @@ read_timeline_history(TimeLineID targetTLI)
 		/* we ignore the remainder of each line */
 	}
 
+	if (fd && (ferror(fd)))
+			elog(ERROR, "Failed to read from file: \"%s\"", path);
+
 	if (fd)
 		fclose(fd);
 

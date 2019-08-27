@@ -523,6 +523,9 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 		}
 	}
 
+	if (ferror(fp))
+		elog(ERROR, "Failed to read from file: \"%s\"", path);
+
 	fio_close_stream(fp);
 
 	return parsed_options;

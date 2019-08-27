@@ -514,6 +514,9 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 			parray_append(black_list, pgut_strdup(black_item));
 		}
 
+		if (ferror(black_list_file))
+			elog(ERROR, "Failed to read from file: \"%s\"", path);
+
 		fio_close_stream(black_list_file);
 		parray_qsort(black_list, BlackListCompare);
 	}
@@ -1154,6 +1157,9 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		parray_append(files, file);
 	}
 
+	if (ferror(fp))
+			elog(ERROR, "Failed to read from file: \"%s\"", map_path);
+
 	fio_close_stream(fp);
 }
 
@@ -1529,6 +1535,9 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		parray_append(files, file);
 	}
 
+	if (ferror(fp))
+		elog(ERROR, "Failed to read from file: \"%s\"", file_txt);
+
 	fio_close_stream(fp);
 	return files;
 }
@@ -1774,6 +1783,9 @@ read_database_map(pgBackup *backup)
 
 		parray_append(database_map, db_entry);
 	}
+
+	if (ferror(fp))
+			elog(ERROR, "Failed to read from file: \"%s\"", database_map_path);
 
 	fio_close_stream(fp);
 
