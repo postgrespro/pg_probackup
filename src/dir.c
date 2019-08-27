@@ -187,7 +187,7 @@ pgFile *
 pgFileInit(const char *path, const char *rel_path)
 {
 	pgFile	   *file;
-	char	   *file_name;
+	char	   *file_name = NULL;
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 	MemSet(file, 0, sizeof(pgFile));
@@ -412,6 +412,16 @@ int
 pgFileComparePathWithExternalDesc(const void *f1, const void *f2)
 {
 	return -pgFileComparePathWithExternal(f1, f2);
+}
+
+/*
+ * Compare two pgFile with their rel_path and external_dir_num
+ * in descending order of ASCII code.
+ */
+int
+pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2)
+{
+	return -pgFileCompareRelPathWithExternal(f1, f2);
 }
 
 /* Compare two pgFile with their linked directory path. */

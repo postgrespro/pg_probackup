@@ -236,7 +236,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 					DATABASE_FILE_LIST);
 	to_files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
 	/* To delete from leaf, sort in reversed order */
-	parray_qsort(to_files, pgFileComparePathWithExternalDesc);
+	parray_qsort(to_files, pgFileCompareRelPathWithExternalDesc);
 	/*
 	 * Get list of files which need to be moved.
 	 */
@@ -385,7 +385,7 @@ delete_source_backup:
 	/*
 	 * Delete files which are not in from_backup file list.
 	 */
-	parray_qsort(files, pgFileComparePathWithExternalDesc);
+	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
 	for (i = 0; i < parray_num(to_files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
@@ -398,7 +398,7 @@ delete_source_backup:
 				continue;
 		}
 
-		if (parray_bsearch(files, file, pgFileComparePathWithExternalDesc) == NULL)
+		if (parray_bsearch(files, file, pgFileCompareRelPathWithExternalDesc) == NULL)
 		{
 			char		to_file_path[MAXPGPATH];
 			char	   *prev_path;
@@ -488,7 +488,7 @@ merge_files(void *arg)
 				 i + 1, num_files, file->path);
 
 		res_file = parray_bsearch(argument->to_files, file,
-								  pgFileComparePathWithExternalDesc);
+								  pgFileCompareRelPathWithExternalDesc);
 		to_file = (res_file) ? *res_file : NULL;
 
 		join_path_components(to_file_path, argument->to_root, file->path);
