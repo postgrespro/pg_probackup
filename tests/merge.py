@@ -111,8 +111,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Initialize instance and backup directory
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=["--data-checksums"]
-        )
+            initdb_params=["--data-checksums"])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, "node", node)
@@ -120,8 +119,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Do full compressed backup
-        self.backup_node(backup_dir, "node", node, options=[
-            '--compress-algorithm=zlib'])
+        self.backup_node(backup_dir, "node", node, options=['--compress'])
         show_backup = self.show_pb(backup_dir, "node")[0]
 
         self.assertEqual(show_backup["status"], "OK")
@@ -137,8 +135,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Do compressed page backup
         self.backup_node(
-            backup_dir, "node", node, backup_type="page",
-            options=['--compress-algorithm=zlib'])
+            backup_dir, "node", node, backup_type="page", options=['--compress'])
         show_backup = self.show_pb(backup_dir, "node")[1]
         page_id = show_backup["id"]
 
@@ -146,7 +143,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "PAGE")
 
         # Merge all backups
-        self.merge_backup(backup_dir, "node", page_id)
+        self.merge_backup(backup_dir, "node", page_id, options=['-j2'])
         show_backups = self.show_pb(backup_dir, "node")
 
         self.assertEqual(len(show_backups), 1)
@@ -191,8 +188,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=5)
 
         # Do compressed FULL backup
-        self.backup_node(backup_dir, "node", node, options=[
-            '--compress-algorithm=zlib', '--stream'])
+        self.backup_node(backup_dir, "node", node, options=['--compress', '--stream'])
         show_backup = self.show_pb(backup_dir, "node")[0]
 
         self.assertEqual(show_backup["status"], "OK")
@@ -204,8 +200,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Do compressed DELTA backup
         self.backup_node(
-            backup_dir, "node", node, backup_type="delta",
-            options=['--compress-algorithm=zlib', '--stream'])
+            backup_dir, "node", node,
+            backup_type="delta", options=['--compress', '--stream'])
 
         # Change data
         pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
@@ -213,8 +209,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Do compressed PAGE backup
         self.backup_node(
-            backup_dir, "node", node, backup_type="page",
-            options=['--compress-algorithm=zlib'])
+            backup_dir, "node", node, backup_type="page", options=['--compress'])
 
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -225,7 +220,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "PAGE")
 
         # Merge all backups
-        self.merge_backup(backup_dir, "node", page_id)
+        self.merge_backup(backup_dir, "node", page_id, options=['-j2'])
         show_backups = self.show_pb(backup_dir, "node")
 
         self.assertEqual(len(show_backups), 1)
@@ -282,15 +277,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Do compressed DELTA backup
         self.backup_node(
             backup_dir, "node", node, backup_type="delta",
-            options=['--compress-algorithm=zlib', '--stream'])
+            options=['--compress', '--stream'])
 
         # Change data
         pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
         # Do uncompressed PAGE backup
-        self.backup_node(
-            backup_dir, "node", node, backup_type="page")
+        self.backup_node(backup_dir, "node", node, backup_type="page")
 
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -301,7 +295,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "PAGE")
 
         # Merge all backups
-        self.merge_backup(backup_dir, "node", page_id)
+        self.merge_backup(backup_dir, "node", page_id, options=['-j2'])
         show_backups = self.show_pb(backup_dir, "node")
 
         self.assertEqual(len(show_backups), 1)
