@@ -52,3 +52,23 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
         node.stop()
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_server_date_style(self):
+        """Issue #112"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={"datestyle": "'GERMAN, DMY'"})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream', '-j 2'])
+        
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
