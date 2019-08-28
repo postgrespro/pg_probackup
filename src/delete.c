@@ -332,10 +332,12 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-		/* Do not keep invalid backups by retention */
-		if (backup->status != BACKUP_STATUS_OK &&
-				backup->status != BACKUP_STATUS_DONE)
-			continue;
+		/* Do not keep invalid backups by retention
+		 * Turns out it was not a very good idea - [Issue #114]
+		 */
+		//if (backup->status != BACKUP_STATUS_OK &&
+		//		backup->status != BACKUP_STATUS_DONE)
+		//	continue;
 
 		/* only incremental backups should be in keep list */
 		if (backup->backup_mode == BACKUP_MODE_FULL)
