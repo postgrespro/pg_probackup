@@ -284,6 +284,7 @@ show_backup(time_t requested_backup_id)
 	backup = read_backup(requested_backup_id);
 	if (backup == NULL)
 	{
+		// TODO for 3.0: we should ERROR out here.
 		elog(INFO, "Requested backup \"%s\" is not found.",
 			 /* We do not need free base36enc's result, we exit anyway */
 			 base36enc(requested_backup_id));
