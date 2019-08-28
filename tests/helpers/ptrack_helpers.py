@@ -881,6 +881,10 @@ class ProbackupTest(object):
                             return backup
                     else:
                         backup_list.append(backup)
+
+            if backup_id is not None:
+                self.assertTrue(False, "Failed to find backup with ID: {0}".format(backup_id))
+
             return backup_list
         else:
             show_splitted = self.run_pb(
@@ -935,6 +939,10 @@ class ProbackupTest(object):
                     var = var.strip('"')
                     var = var.strip("'")
                     specific_record[name.strip()] = var
+
+                if not specific_record:
+                    self.assertTrue(False, "Failed to find backup with ID: {0}".format(backup_id))
+
                 return specific_record
 
     def validate_pb(
