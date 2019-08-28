@@ -1501,3 +1501,99 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_failed_merge_redundancy_retention(self):
+        """
+        Check that retention purge works correctly with MERGING backups
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(
+                module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL1 backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # DELTA BACKUP
+        delta_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # FULL2 backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # FULL3 backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # DELTA BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        self.set_config(
+            backup_dir, 'node', options=['--retention-redundancy=2'])
+
+        self.set_config(
+            backup_dir, 'node', options=['--retention-window=2'])
+
+        # create pair of MERGING backup as a result of failed merge 
+        gdb = self.merge_backup(
+            backup_dir, 'node', delta_id, gdb=True)
+        gdb.set_breakpoint('copy_file')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(2)
+        gdb._execute('signal SIGKILL')
+
+        # "expire" first full backup
+        backups = os.path.join(backup_dir, 'backups', 'node')
+        with open(
+                os.path.join(
+                    backups, full_id, "backup.control"), "a") as conf:
+            conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                datetime.now() - timedelta(days=3)))
+
+        # run retention merge
+        self.delete_expired(
+            backup_dir, 'node', options=['--delete-expired'])
+
+        self.assertEqual(
+            'MERGING',
+            self.show_pb(backup_dir, 'node', full_id)['status'],
+            'Backup STATUS should be "MERGING"')
+
+        self.assertEqual(
+            'MERGING',
+            self.show_pb(backup_dir, 'node', delta_id)['status'],
+            'Backup STATUS should be "MERGING"')
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 10)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
