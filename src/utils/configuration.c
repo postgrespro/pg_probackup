@@ -1171,6 +1171,8 @@ parse_time(const char *value, time_t *result, bool utc_default)
 		/* wrong format */
 		else if (!IsSpace(*value))
 			return false;
+		else
+			value++;
 	}
 	tmp[len] = '\0';
 
