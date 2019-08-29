@@ -2930,140 +2930,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata_restored, pgdata_restored_1)
 
-    def test_missing_database_map(self):
-        """
-        """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-
-        node.slow_start()
-
-        # create databases
-        for i in range(1, 10, 1):
-            node.safe_psql(
-                'postgres',
-                'CREATE database db{0}'.format(i))
-
-        node.safe_psql(
-            "postgres",
-            "CREATE DATABASE backupdb")
-
-        if self.get_version(node) > self.version_to_num('10.0'):
-            # bootstrap for 10/11
-            node.safe_psql(
-                "backupdb",
-                "REVOKE ALL on SCHEMA public from public; "
-                "REVOKE ALL on SCHEMA pg_catalog from public; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM public; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM public; "
-                "CREATE ROLE backup WITH LOGIN REPLICATION; "
-                "GRANT CONNECT ON DATABASE postgres to backup; "
-                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
-                # we use it for partial restore and checkdb
-                # "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup; "
-                # "GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, oid) TO backup;"
-            )
-        else:
-            # bootstrap for 9.5/9.6
-            node.safe_psql(
-                "backupdb",
-                "REVOKE ALL on SCHEMA public from public; "
-                "REVOKE ALL on SCHEMA pg_catalog from public; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM public; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM public; "
-                "CREATE ROLE backup WITH LOGIN REPLICATION; "
-                "GRANT CONNECT ON DATABASE postgres to backup; "
-                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
-                # we use it for ptrack
-                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
-                # we use it for partial restore and checkdb
-                # "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup; "
-                # "GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, oid) TO backup;"
-            )
-
-        # FULL backup without database_map
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, datname='backupdb',
-            options=['--stream', "-U", "backup"])
-
-        pgdata = self.pgdata_content(node.data_dir)
-
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
-        node_restored.cleanup()
-
-        # backup has missing database_map and that is legal
-        try:
-            self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=["--db-exclude=db5", "--db-exclude=db9"])
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because user do not have pg_database access.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    self.output, self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Backup {0} has missing database_map, "
-                "partial restore is impossible.".format(
-                    backup_id), e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
-        try:
-            self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=["--db-include=db1"])
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because user do not have pg_database access.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    self.output, self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Backup {0} has missing database_map, "
-                "partial restore is impossible.".format(
-                    backup_id), e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
-        # check that simple restore is still possible
-        self.restore_node(backup_dir, 'node', node_restored)
-
-        pgdata_restored = self.pgdata_content(node_restored.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
-
     def test_empty_and_mangled_database_map(self):
         """
         """
@@ -3176,3 +3042,203 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+    def test_missing_database_map(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        # create databases
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        node.safe_psql(
+            "postgres",
+            "CREATE DATABASE backupdb")
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+
+        if self.ptrack:
+            for fname in [
+                    'pg_catalog.oideq(oid, oid)',
+                    'pg_catalog.ptrack_version()',
+                    'pg_catalog.pg_ptrack_clear()',
+                    'pg_catalog.pg_ptrack_control_lsn()',
+                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
+                    'pg_catalog.pg_stop_backup()']:
+
+                node.safe_psql(
+                    "backupdb",
+                    "GRANT EXECUTE ON FUNCTION {0} "
+                    "TO backup".format(fname))
+
+        # FULL backup without database_map
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, datname='backupdb',
+            options=['--stream', "-U", "backup", '--log-level-file=verbose'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        # backup has missing database_map and that is legal
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-exclude=db5", "--db-exclude=db9"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because user do not have pg_database access.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible.".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-include=db1"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because user do not have pg_database access.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible.".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # check that simple restore is still possible
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
