@@ -521,8 +521,10 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_stop, const char *target_name,
 	const char *target_action);
 
-extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *files,
-							   parray *datname_list, PartialRestoreType partial_restore_type);
+extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
+										PartialRestoreType partial_restore_type);
+
+extern parray *get_backup_filelist(pgBackup *backup);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);

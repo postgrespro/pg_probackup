@@ -41,6 +41,7 @@ typedef struct
 
 /*
  * Validate backup files.
+ * TODO: partial validation.
  */
 void
 pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
@@ -55,7 +56,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	pthread_t  *threads;
 	validate_files_arg *threads_args;
 	int			i;
-	parray *dbOid_exclude_list = NULL;
+//	parray		*dbOid_exclude_list = NULL;
 
 	/* Check backup version */
 	if (parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
@@ -107,9 +108,9 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
 
-	if (params && params->partial_db_list)
-		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
-														  params->partial_restore_type);
+//	if (params && params->partial_db_list)
+//		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
+//														params->partial_restore_type);
 
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
@@ -136,7 +137,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
 		arg->backup_version = parse_program_version(backup->program_version);
-		arg->dbOid_exclude_list = dbOid_exclude_list;
+//		arg->dbOid_exclude_list = dbOid_exclude_list;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -204,14 +205,14 @@ pgBackupValidateFiles(void *arg)
 		 * If in partial validate, check if the file belongs to the database
 		 * we exclude. Only files from pgdata can be skipped.
 		 */
-		if (arguments->dbOid_exclude_list && file->external_dir_num == 0
-			&& parray_bsearch(arguments->dbOid_exclude_list,
-							   &file->dbOid, pgCompareOid))
-		{
-			elog(VERBOSE, "Skip file validation due to partial restore: \"%s\"",
-				 file->rel_path);
-			continue;
-		}
+		//if (arguments->dbOid_exclude_list && file->external_dir_num == 0
+		//	&& parray_bsearch(arguments->dbOid_exclude_list,
+		//					   &file->dbOid, pgCompareOid))
+		//{
+		//	elog(VERBOSE, "Skip file validation due to partial restore: \"%s\"",
+		//		 file->rel_path);
+		//	continue;
+		//}
 
 		/*
 		 * Currently we don't compute checksums for

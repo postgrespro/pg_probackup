@@ -373,7 +373,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				}
 			}
 
+			/* validate datafiles only */
 			pgBackupValidate(tmp_backup, params);
+
 			/* After pgBackupValidate() only following backup
 			 * states are possible: ERROR, RUNNING, CORRUPT and OK.
 			 * Validate WAL only for OK, because there is no point
@@ -390,6 +392,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		}
 
 		/* There is no point in wal validation of corrupted backups */
+		// TODO: there should be a way for a user to request only(!) WAL validation
 		if (!corrupted_backup)
 		{
 			/*
@@ -458,7 +461,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		 * throw an error.
 		 */
 		if (params->partial_db_list)
-			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, dest_files, params->partial_db_list,
+			dbOid_exclude_list = get_dbOid_exclude_list(dest_backup, params->partial_db_list,
 														  params->partial_restore_type);
 
 		/*
@@ -1185,19 +1188,22 @@ parseRecoveryTargetOptions(const char *target_time,
  * we always convert it into exclude_list.
  */
 parray *
-get_dbOid_exclude_list(pgBackup *backup, parray *files,
-					   parray *datname_list, PartialRestoreType partial_restore_type)
+get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
+										PartialRestoreType partial_restore_type)
 {
 	int i;
 	int j;
-	parray *database_map = NULL;
-	parray *dbOid_exclude_list = NULL;
-	pgFile *database_map_file = NULL;
-	pg_crc32	crc;
+//	pg_crc32	crc;
+	parray		*database_map = NULL;
+	parray		*dbOid_exclude_list = NULL;
+	pgFile		*database_map_file = NULL;
 	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
+	parray		*files = NULL;
 
-	/* make sure that database_map is in backup_content.control */
+	files = get_backup_filelist(backup);
+
+	/* look for 'database_map' file in backup_content.control */
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
@@ -1218,11 +1224,11 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 	join_path_components(database_map_path, path, DATABASE_MAP);
 
 	/* check database_map CRC */
-	crc = pgFileGetCRC(database_map_path, true, true, NULL, FIO_LOCAL_HOST);
-
-	if (crc != database_map_file->crc)
-		elog(ERROR, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-				database_map_file->path, crc, database_map_file->crc);
+//	crc = pgFileGetCRC(database_map_path, true, true, NULL, FIO_LOCAL_HOST);
+//
+//	if (crc != database_map_file->crc)
+//		elog(ERROR, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+//				database_map_file->path, crc, database_map_file->crc);
 
 	/* get database_map from file */
 	database_map = read_database_map(backup);
@@ -1306,6 +1312,13 @@ get_dbOid_exclude_list(pgBackup *backup, parray *files,
 	if (!dbOid_exclude_list || parray_num(dbOid_exclude_list) < 1)
 		elog(ERROR, "Failed to find a match in database_map of backup %s for partial restore",
 					base36enc(backup->start_time));
+
+	/* clean backup filelist */
+	if (files)
+	{
+		parray_walk(files, pgFileFree);
+		parray_free(files);
+	}
 
 	/* sort dbOid array in ASC order */
 	parray_qsort(dbOid_exclude_list, pgCompareOid);
