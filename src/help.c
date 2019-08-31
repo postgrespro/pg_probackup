@@ -156,7 +156,6 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n"));
-	printf(_("                 [--db-include | --db-exclude]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s checkdb [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
@@ -447,7 +446,6 @@ help_validate(void)
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--skip-block-validation]\n\n"));
-	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -465,10 +463,6 @@ help_validate(void)
 	printf(_("      --recovery-target-name=target-name\n"));
 	printf(_("                                   the named restore point to which recovery will proceed\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
-
-	printf(_("\n  Partial validation options:\n"));
-	printf(_("      --db-include dbname          validate only files of specified databases\n"));
-	printf(_("      --db-exclude dbname          do not validate files of specified databases\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
