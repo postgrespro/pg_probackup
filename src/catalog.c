@@ -416,6 +416,27 @@ err_proc:
 }
 
 /*
+ * Create list of backup datafiles.
+ * If 'requested_backup_id' is INVALID_BACKUP_ID, exit with error.
+ * If valid backup id is passed only matching backup will be added to the list.
+ */
+parray *
+get_backup_filelist(pgBackup *backup)
+{
+	parray		*files = NULL;
+	char		backup_filelist_path[MAXPGPATH];
+
+	pgBackupGetPath(backup, backup_filelist_path, lengthof(backup_filelist_path), DATABASE_FILE_LIST);
+	files = dir_read_file_list(NULL, NULL, backup_filelist_path, FIO_BACKUP_HOST);
+
+	/* redundant sanity? */
+	if (!files)
+		elog(ERROR, "Failed to get filelist for backup %s", base36enc(backup->start_time));
+
+	return files;
+}
+
+/*
  * Lock list of backups. Function goes in backward direction.
  */
 void

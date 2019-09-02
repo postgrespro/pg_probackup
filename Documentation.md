@@ -29,7 +29,6 @@ Current version - 2.1.5
         * [External directories](#external-directories)
     * [Verifying a Cluster](#verifying-a-cluster)
     * [Validating a Backup](#validating-a-backup)
-        * [Partial Validation](#partial-validation)
     * [Restoring a Cluster](#restoring-a-cluster)
         * [Partial Restore](#partial-restore)
     * [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-pitr-recovery)
@@ -521,26 +520,6 @@ For example, to check that you can restore the database cluster from a backup co
 If *backup_id* belong to incremental backup, then all its parents starting from FULL backup will be validated.
 
 If you omit all the parameters, all backups are validated.
-
-#### Partial Validation
-
-If you have enabled [partial restore](#setting-up-partial-restore) before taking backups, you can validate or exclude from validation the arbitraty number of specific databases using [partial restore options](#partial-restore-options) with the [validate](#validate) command.
-
-To validate only one or more databases, run the `validate` command with the following options:
-
-    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-include=database_name
-
-The option `--db-include` can be specified multiple times. For example, to validate only databases "db1" and "db2", run the following command:
-
-    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-include=db1 --db-include=db2
-
-To exclude one or more specific databases from validation, run the following options:
-
-    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-exclude=database_name
-
-The option `--db-exclude` can be specified multiple times. For example, to exclude the databases "db1" and "db2" from validation, run the following command:
-
-    pg_probackup validate -B backup_dir --instance instance_name -i backup_id --db-exclude=db1 --db-exclude=db2
 
 ### Restoring a Cluster
 
@@ -1115,11 +1094,8 @@ For details on usage, see the section [Verifying a Cluster](#verifying-a-cluster
     [-j num_threads] [--progress]
     [--skip-block-validation]
     [recovery_target_options] [logging_options]
-    [partial_restore_options]
 
 Verifies that all the files required to restore the cluster are present and not corrupted. If *instance_name* is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the *instance_name* without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the *instance_name* with a [recovery target options](#recovery-target-options) and/or a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
-
-If you specify the [partial restore options](#partial-restore-options) and a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
 
 For details, see the section [Validating a Backup](#validating-a-backup).
 
@@ -1408,7 +1384,7 @@ Specifies a string of SSH command-line options. For example, the following optio
 
 #### Partial Restore Options
 
-This section describes the options related to partial restore of cluster from backup. These options can be used with [restore](#restore) and [validate](#validate) commands.
+This section describes the options related to partial restore of cluster from backup. These options can be used with [restore](#restore) command.
 
     --db-exclude=dbname
 Specifies database name to exclude from restore. All other databases in the cluster will be restored as usual, including `template0` and `template1`. This option can be specified multiple times for multiple databases.
