@@ -525,6 +525,7 @@ extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
 extern parray *get_backup_filelist(pgBackup *backup);
+extern parray *read_timeline_history(TimeLineID targetTLI);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
@@ -548,7 +549,7 @@ extern void do_set_config(bool missing_ok);
 extern void init_config(InstanceConfig *config);
 
 /* in show.c */
-extern int do_show(time_t requested_backup_id);
+extern int do_show(time_t requested_backup_id, bool show_archive);
 
 /* in delete.c */
 extern void do_delete(time_t backup_id);

@@ -42,7 +42,6 @@ static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup,
 								 pgRestoreParams *params);
-static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
 

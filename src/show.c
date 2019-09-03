@@ -9,6 +9,7 @@
  */
 
 #include "pg_probackup.h"
+#include "access/timeline.h"
 
 #include <time.h>
 #include <dirent.h>
@@ -33,6 +34,17 @@ typedef struct ShowBackendRow
 } ShowBackendRow;
 
 
+typedef struct ShowArchiveRow
+{
+	const char *instance;
+	char		tli[20];
+	char		parent_tli[20];
+	char		min_segno[20];
+	char		max_segno[20];
+	char		n_files[20];
+
+} ShowArchiveRow;
+
 static void show_instance_start(void);
 static void show_instance_end(void);
 static void show_instance(time_t requested_backup_id, bool show_name);
@@ -41,18 +53,32 @@ static int show_backup(time_t requested_backup_id);
 static void show_instance_plain(parray *backup_list, bool show_name);
 static void show_instance_json(parray *backup_list);
 
+static void show_instance_archive(void);
+static void show_archive_plain(parray *timelines_list, bool show_name);
+
 static PQExpBufferData show_buf;
 static bool first_instance = true;
 static int32 json_level = 0;
 
 int
-do_show(time_t requested_backup_id)
+do_show(time_t requested_backup_id, bool show_archive)
 {
 	if (instance_name == NULL &&
 		requested_backup_id != INVALID_BACKUP_ID)
 		elog(ERROR, "You must specify --instance to use --backup_id option");
 
-	if (instance_name == NULL)
+	if (instance_name == NULL &&
+		show_archive)
+		elog(ERROR, "You must specify --instance to use --archive option");
+
+	if (show_archive)
+	{
+		show_instance_start();
+		show_instance_archive();
+		show_instance_end();
+		return 0;
+	}
+	else if (instance_name == NULL)
 	{
 		/* Show list of instances */
 		char		path[MAXPGPATH];
@@ -659,4 +685,357 @@ show_instance_json(parray *backup_list)
 	json_add(buf, JT_END_OBJECT, &json_level);
 
 	first_instance = false;
+}
+
+typedef struct timelineInfo timelineInfo;
+
+struct timelineInfo {
+
+	TimeLineID tli;
+	TimeLineID parent_tli;
+	timelineInfo *parent_link;
+
+	XLogRecPtr start_lsn;
+	XLogSegNo begin_segno;
+	XLogSegNo end_segno;
+	int		n_xlog_files;
+	parray *backups; /* backups belonging to this timeline */
+	parray *found_files; /* array of intervals of found files */
+	parray *lost_files; /* array of intervals of lost files */
+};
+
+typedef struct xlogInterval
+{
+	XLogSegNo begin_segno;
+	XLogSegNo end_segno;
+} xlogInterval;
+
+static timelineInfo *
+timelineInfoNew(TimeLineID tli)
+{
+	timelineInfo *tlinfo = (timelineInfo *) pgut_malloc(sizeof(timelineInfo));
+	MemSet(tlinfo, 0, sizeof(timelineInfo));
+	tlinfo->tli = tli;
+	return tlinfo;
+}
+
+/*
+ * TODO
+ * - check that files are sequential and none are lost
+ * - save info about backup history files
+ * - verify that such backup truly exist in the instance
+ * - save info about that backup
+ * 
+ *
+ * MAYBE
+ * - make it independend from probackup file structure
+ *   (i.e. no implicit path assumptions)
+ */
+static void
+show_instance_archive()
+{
+	parray *xlog_files_list = parray_new();
+	int n_files = 0;
+	parray *timelineinfos;
+	timelineInfo *tlinfo;
+
+	elog(INFO, "show_instance_archive");
+
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+	parray_qsort(xlog_files_list, pgFileComparePath);
+	n_files = parray_num(xlog_files_list);
+
+	if (n_files == 0)
+	{
+		elog(INFO, "instance archive is empty");
+		return;
+	}
+
+	timelineinfos = parray_new();
+	tlinfo = NULL;
+
+	/* walk through files and collect info about timelines */
+	for (int i = 0; i < n_files; i++)
+	{
+		pgFile *file = (pgFile *) parray_get(xlog_files_list, i);
+		int result = 0;
+		TimeLineID tli;
+		parray *timelines;
+		uint32 log, seg, backup_start_lsn;
+		XLogSegNo segno;
+
+		result = sscanf(file->name, "%08X%08X%08X.%08X.backup", &tli, &log, &seg, &backup_start_lsn);
+		segno = log*instance_config.xlog_seg_size + seg;
+
+		if (result == 3)
+		{
+			elog(LOG, "filename is parsed, regular xlog, tli %u segno %lu", tli, segno);
+
+			/* regular file new file belongs to new timeline */
+			if (!tlinfo || tlinfo->tli != tli)
+			{
+				elog(LOG, "filename belongs to new tli");
+				tlinfo = timelineInfoNew(tli);
+				parray_append(timelineinfos, tlinfo);
+				tlinfo->begin_segno = segno;
+				tlinfo->end_segno = segno;
+				tlinfo->n_xlog_files++;
+			}
+			else
+			{
+				/* check, if segments are consequent */
+				XLogSegNo expected_segno = 0;
+
+				/* NOTE order of checks is essential */
+				if (tlinfo->end_segno)
+					expected_segno = tlinfo->end_segno + 1;
+				else if (tlinfo->start_lsn)
+					expected_segno = tlinfo->start_lsn / instance_config.xlog_seg_size;
+				else
+					elog(ERROR, "no expected segno found...");
+
+				if (segno != expected_segno)
+				{
+					xlogInterval *interval = palloc(sizeof(xlogInterval));;
+					interval->begin_segno = expected_segno;
+					interval->end_segno = segno-1;
+					
+					elog(WARNING, "segno %lu found instead of expected segno %lu at tli %u",
+						 segno, expected_segno, tli);
+
+					if (tlinfo->lost_files == NULL)
+						tlinfo->lost_files = parray_new();
+					
+					parray_append(tlinfo->lost_files, interval);
+				}
+
+				if (tlinfo->begin_segno == 0)
+					tlinfo->begin_segno = segno;
+				/* this file is the last for this timeline so far */
+				tlinfo->end_segno = segno; 
+				tlinfo->n_xlog_files++;
+			}
+		}
+		else if (result == 4)
+		{
+			elog(LOG, "filename is parsed, backup history xlog, tli %u segno %lu", tli, segno);
+			if (tlinfo->tli != tli)
+			{
+				elog(WARNING, "backup history xlog found, that doesn't have corresponding wal file");
+			}
+			else
+			{
+				if (tlinfo->backups == NULL)
+					tlinfo->backups = parray_new();
+
+				parray_append(tlinfo->backups, &backup_start_lsn);
+			}
+		}
+		else if (IsTLHistoryFileName(file->name))
+		{
+			TimeLineHistoryEntry *tln;
+			elog(LOG, "filename is parsed timeline history file %s", file->name);
+
+			sscanf(file->name, "%08X.history", &tli);
+
+			timelines = read_timeline_history(tli);
+
+			if (!tlinfo || tlinfo->tli != tli)
+			{
+				elog(LOG, "filename belongs to new tli");
+				tlinfo = timelineInfoNew(tli);
+				parray_append(timelineinfos, tlinfo);
+				/*
+				 * 1 is the latest timeline in the timelines list.
+				 * 0 - is our timeline, which is of no interest here
+				 */
+				tln = (TimeLineHistoryEntry *) parray_get(timelines, 1);
+				tlinfo->start_lsn = tln->end;
+				tlinfo->parent_tli = tln->tli;
+
+				for (int i = 0; i < parray_num(timelineinfos); i++)
+				{
+					timelineInfo *cur = (timelineInfo *) parray_get(timelineinfos, i);
+					if (cur->tli == tlinfo->parent_tli)
+					{
+						tlinfo->parent_link = cur;
+						break;
+					}
+				}
+			}
+
+			for (int t = 0; t < parray_num(timelines); t++)
+			{
+				TimeLineHistoryEntry *tln = (TimeLineHistoryEntry *) parray_get(timelines,t);
+				elog(LOG, "timeline tli %u, end %X/%X ",
+					 tln->tli, (uint32) (tln->end >> 32), (uint32) tln->end);
+			}
+			parray_walk(timelines, pfree);
+			parray_free(timelines);
+		}
+		else
+			elog(LOG, "filename is parsed, NOT regular xlog");
+	}
+
+	/* print result */
+	for (int i = 0; i < parray_num(timelineinfos); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(timelineinfos, i);
+		elog(INFO, "tlinfo tli %u parent tli %u start_lsn %X/%X n_files %d, first segno %lu, last segno %lu",
+			 tlinfo->tli, tlinfo->parent_tli,
+			 (uint32) (tlinfo->start_lsn >> 32), (uint32) (tlinfo->start_lsn),
+			 tlinfo->n_xlog_files, tlinfo->begin_segno, tlinfo->end_segno);
+
+		if (tlinfo->backups)
+			for (int j = 0; j < parray_num(tlinfo->backups); j++)
+				elog(INFO, "tlinfo tli %u has backup with start_lsn %08X",
+					 tlinfo->tli, *((uint32 *) parray_get(tlinfo->backups, j)));
+
+		if (tlinfo->lost_files)
+		{
+			for (int j = 0; j < parray_num(tlinfo->lost_files); j++)
+			{
+				xlogInterval *lost_files = (xlogInterval *) parray_get(tlinfo->lost_files, j);
+				if (lost_files->begin_segno == lost_files->end_segno)
+					elog(INFO, "tlinfo tli %u lost file %lu",
+							tlinfo->tli, lost_files->begin_segno);
+				else
+					elog(INFO, "tlinfo tli %u lost files from %lu to %lu",
+						tlinfo->tli, lost_files->begin_segno, lost_files->end_segno);
+			}
+		}
+	}
+
+	show_archive_plain(timelineinfos, true);
+
+	parray_walk(xlog_files_list, pfree);
+	parray_free(xlog_files_list);
+}
+
+static void
+show_archive_plain(parray *tli_list, bool show_name)
+{
+#define SHOW_ARCHIVE_FIELDS_COUNT 6
+	int			i;
+	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
+					{ "Instance", "TLI", "Parent TLI", "Min Segno", "Max Segno", "N files"};
+	const char *field_formats[SHOW_ARCHIVE_FIELDS_COUNT] =
+					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "};
+	uint32		widths[SHOW_ARCHIVE_FIELDS_COUNT];
+	uint32		widths_sum = 0;
+	ShowArchiveRow *rows;
+
+	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
+		widths[i] = strlen(names[i]);
+
+	rows = (ShowArchiveRow *) palloc(parray_num(tli_list) *
+									 sizeof(ShowArchiveRow));
+
+	elog(INFO, "parray_num(tli_list) %d", parray_num(tli_list));
+
+	/*
+	 * Fill row values and calculate maximum width of each field.
+	 */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
+		ShowArchiveRow *row = &rows[i];
+		int			cur = 0;
+
+		/* Instance */
+		row->instance = instance_name;
+		widths[cur] = Max(widths[cur], strlen(row->instance));
+		cur++;
+
+		/* TLI */
+		snprintf(row->tli, lengthof(row->tli), "%u",
+				 tlinfo->tli);
+		widths[cur] = Max(widths[cur], strlen(row->tli));
+		cur++;
+
+		/* Parent TLI */
+		snprintf(row->parent_tli, lengthof(row->parent_tli), "%u",
+				 tlinfo->parent_tli);
+		widths[cur] = Max(widths[cur], strlen(row->parent_tli));
+		cur++;
+
+		/* Min Segno */
+		snprintf(row->min_segno, lengthof(row->min_segno), "%08X%08X",
+				 (uint32) tlinfo->begin_segno / instance_config.xlog_seg_size,
+				 (uint32) tlinfo->begin_segno % instance_config.xlog_seg_size);
+		widths[cur] = Max(widths[cur], strlen(row->min_segno));
+		cur++;
+
+		/* Max Segno */
+		snprintf(row->max_segno, lengthof(row->max_segno), "%08X%08X",
+				 (uint32) tlinfo->end_segno / instance_config.xlog_seg_size,
+				 (uint32) tlinfo->end_segno % instance_config.xlog_seg_size);
+		widths[cur] = Max(widths[cur], strlen(row->max_segno));
+		cur++;
+		/* N files */
+		snprintf(row->n_files, lengthof(row->n_files), "%u",
+				 tlinfo->n_xlog_files);
+		widths[cur] = Max(widths[cur], strlen(row->n_files));
+		cur++;
+	}
+
+	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
+		widths_sum += widths[i] + 2 /* two space */;
+
+	if (show_name)
+		appendPQExpBuffer(&show_buf, "\nARCHIVE INSTANCE '%s'\n", instance_name);
+
+	/*
+	 * Print header.
+	 */
+	for (i = 0; i < widths_sum; i++)
+		appendPQExpBufferChar(&show_buf, '=');
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
+	{
+		appendPQExpBuffer(&show_buf, field_formats[i], widths[i], names[i]);
+	}
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	for (i = 0; i < widths_sum; i++)
+		appendPQExpBufferChar(&show_buf, '=');
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	/*
+	 * Print values.
+	 */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		ShowArchiveRow *row = &rows[i];
+		int			cur = 0;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->instance);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->tli);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->parent_tli);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->min_segno);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->max_segno);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->n_files);
+		cur++;
+
+		appendPQExpBufferChar(&show_buf, '\n');
+	}
+
+	pfree(rows);
 }

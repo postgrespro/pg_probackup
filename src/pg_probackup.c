@@ -126,6 +126,7 @@ static bool	file_overwrite = false;
 
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
+bool show_archive = false;
 
 /* current settings */
 pgBackup	current;
@@ -203,6 +204,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	{ 'b', 160, "archive",			&show_archive,		SOURCE_CMD_STRICT },
 
 	/* options for backward compatibility */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
@@ -637,6 +639,8 @@ main(int argc, char *argv[])
 
 	compress_init();
 
+	elog(INFO, "show_archive %s ", show_archive?"on":"off");
+
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
@@ -682,7 +686,7 @@ main(int argc, char *argv[])
 						  recovery_target_options,
 						  restore_params);
 		case SHOW_CMD:
-			return do_show(current.backup_id);
+			return do_show(current.backup_id, show_archive);
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");
