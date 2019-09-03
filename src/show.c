@@ -39,10 +39,12 @@ typedef struct ShowArchiveRow
 	const char *instance;
 	char		tli[20];
 	char		parent_tli[20];
+	char		start_lsn[20];
 	char		min_segno[20];
 	char		max_segno[20];
 	char		n_files[20];
-
+	char		size[20];
+	const char *status;
 } ShowArchiveRow;
 
 static void show_instance_start(void);
@@ -55,6 +57,7 @@ static void show_instance_json(parray *backup_list);
 
 static void show_instance_archive(void);
 static void show_archive_plain(parray *timelines_list, bool show_name);
+static void show_archive_json(parray *tli_list);
 
 static PQExpBufferData show_buf;
 static bool first_instance = true;
@@ -699,6 +702,7 @@ struct timelineInfo {
 	XLogSegNo begin_segno;
 	XLogSegNo end_segno;
 	int		n_xlog_files;
+	size_t	size;
 	parray *backups; /* backups belonging to this timeline */
 	parray *found_files; /* array of intervals of found files */
 	parray *lost_files; /* array of intervals of lost files */
@@ -777,9 +781,6 @@ show_instance_archive()
 				elog(LOG, "filename belongs to new tli");
 				tlinfo = timelineInfoNew(tli);
 				parray_append(timelineinfos, tlinfo);
-				tlinfo->begin_segno = segno;
-				tlinfo->end_segno = segno;
-				tlinfo->n_xlog_files++;
 			}
 			else
 			{
@@ -808,19 +809,22 @@ show_instance_archive()
 					
 					parray_append(tlinfo->lost_files, interval);
 				}
-
-				if (tlinfo->begin_segno == 0)
-					tlinfo->begin_segno = segno;
-				/* this file is the last for this timeline so far */
-				tlinfo->end_segno = segno; 
-				tlinfo->n_xlog_files++;
 			}
+
+			if (tlinfo->begin_segno == 0)
+					tlinfo->begin_segno = segno;
+			/* this file is the last for this timeline so far */
+			tlinfo->end_segno = segno; 
+			/* update counters */
+			tlinfo->n_xlog_files++;
+			tlinfo->size += file->size;
 		}
 		else if (result == 4)
 		{
 			elog(LOG, "filename is parsed, backup history xlog, tli %u segno %lu", tli, segno);
 			if (tlinfo->tli != tli)
 			{
+				/* TODO We still need to count this file's size  */
 				elog(WARNING, "backup history xlog found, that doesn't have corresponding wal file");
 			}
 			else
@@ -906,7 +910,13 @@ show_instance_archive()
 		}
 	}
 
-	show_archive_plain(timelineinfos, true);
+	if (show_format == SHOW_PLAIN)
+		show_archive_plain(timelineinfos, true);
+	else if (show_format == SHOW_JSON)
+		show_archive_json(timelineinfos);
+	else
+		elog(ERROR, "Invalid show format %d", (int) show_format);
+	
 
 	parray_walk(xlog_files_list, pfree);
 	parray_free(xlog_files_list);
@@ -915,12 +925,12 @@ show_instance_archive()
 static void
 show_archive_plain(parray *tli_list, bool show_name)
 {
-#define SHOW_ARCHIVE_FIELDS_COUNT 6
+#define SHOW_ARCHIVE_FIELDS_COUNT 9
 	int			i;
 	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
-					{ "Instance", "TLI", "Parent TLI", "Min Segno", "Max Segno", "N files"};
+					{ "Instance", "TLI", "Parent TLI", "Start LSN", "Min Segno", "Max Segno", "N files", "Size", "Status"};
 	const char *field_formats[SHOW_ARCHIVE_FIELDS_COUNT] =
-					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "};
+					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "};
 	uint32		widths[SHOW_ARCHIVE_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowArchiveRow *rows;
@@ -930,8 +940,6 @@ show_archive_plain(parray *tli_list, bool show_name)
 
 	rows = (ShowArchiveRow *) palloc(parray_num(tli_list) *
 									 sizeof(ShowArchiveRow));
-
-	elog(INFO, "parray_num(tli_list) %d", parray_num(tli_list));
 
 	/*
 	 * Fill row values and calculate maximum width of each field.
@@ -959,6 +967,13 @@ show_archive_plain(parray *tli_list, bool show_name)
 		widths[cur] = Max(widths[cur], strlen(row->parent_tli));
 		cur++;
 
+		/* Start LSN */
+		snprintf(row->start_lsn, lengthof(row->start_lsn), "%X/%X",
+				 (uint32) (tlinfo->start_lsn >> 32),
+				 (uint32) tlinfo->start_lsn);
+		widths[cur] = Max(widths[cur], strlen(row->start_lsn));
+		cur++;
+
 		/* Min Segno */
 		snprintf(row->min_segno, lengthof(row->min_segno), "%08X%08X",
 				 (uint32) tlinfo->begin_segno / instance_config.xlog_seg_size,
@@ -977,6 +992,21 @@ show_archive_plain(parray *tli_list, bool show_name)
 				 tlinfo->n_xlog_files);
 		widths[cur] = Max(widths[cur], strlen(row->n_files));
 		cur++;
+
+		/* Size */
+		pretty_size(tlinfo->size, row->size,
+					lengthof(row->size));
+		widths[cur] = Max(widths[cur], strlen(row->size));
+		cur++;
+
+		/* Status */
+		if (tlinfo->lost_files == NULL)
+			row->status = status2str(BACKUP_STATUS_OK);
+		else
+			row->status = status2str(BACKUP_STATUS_CORRUPT);
+
+		widths[cur] = Max(widths[cur], strlen(row->status));
+
 	}
 
 	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
@@ -1023,6 +1053,10 @@ show_archive_plain(parray *tli_list, bool show_name)
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->start_lsn);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
 						  row->min_segno);
 		cur++;
 
@@ -1034,8 +1068,138 @@ show_archive_plain(parray *tli_list, bool show_name)
 						  row->n_files);
 		cur++;
 
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->size);
+		cur++;
+		
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->status);
+		cur++;
 		appendPQExpBufferChar(&show_buf, '\n');
 	}
 
 	pfree(rows);
+}
+
+static void
+show_archive_json(parray *tli_list)
+{
+	int			i;
+	PQExpBuffer	buf = &show_buf;
+
+	if (!first_instance)
+		appendPQExpBufferChar(buf, ',');
+
+	/* Begin of instance object */
+	json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+	json_add_value(buf, "instance", instance_name, json_level, true);
+	json_add_key(buf, "timelines", json_level);
+
+	/*
+	 * List timelines.
+	 */
+	json_add(buf, JT_BEGIN_ARRAY, &json_level);
+
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(tli_list, i);
+		char		tmp_buf[20];
+
+		if (i != 0)
+			appendPQExpBufferChar(buf, ',');
+
+		json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+		json_add_key(buf, "tli", json_level);
+		appendPQExpBuffer(buf, "%u", tlinfo->tli);
+
+		json_add_key(buf, "parent-tli", json_level);
+		appendPQExpBuffer(buf, "%u", tlinfo->parent_tli);
+		
+		snprintf(tmp_buf, lengthof(tmp_buf), "%X/%X",
+				 (uint32) (tlinfo->start_lsn >> 32), (uint32) tlinfo->start_lsn);
+		json_add_value(buf, "start-lsn", tmp_buf, json_level, true);
+
+		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
+				 (uint32) tlinfo->begin_segno / instance_config.xlog_seg_size,
+				 (uint32) tlinfo->begin_segno % instance_config.xlog_seg_size);		
+		json_add_value(buf, "min-segno", tmp_buf, json_level, true);
+
+		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
+				 (uint32) tlinfo->end_segno / instance_config.xlog_seg_size,
+				 (uint32) tlinfo->end_segno % instance_config.xlog_seg_size);
+		json_add_value(buf, "max-segno", tmp_buf, json_level, true);
+
+		if (tlinfo->lost_files != NULL)
+		{
+			json_add_key(buf, "lost_files", json_level);
+			json_add(buf, JT_BEGIN_ARRAY, &json_level);
+
+			for (int j = 0; j < parray_num(tlinfo->lost_files); j++)
+			{
+				xlogInterval *lost_files = (xlogInterval *) parray_get(tlinfo->lost_files, j);
+
+				if (j != 0)
+					appendPQExpBufferChar(buf, ',');
+		
+				json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
+				 (uint32) lost_files->begin_segno / instance_config.xlog_seg_size,
+				 (uint32) lost_files->begin_segno % instance_config.xlog_seg_size);
+				json_add_value(buf, "begin-segno", tmp_buf, json_level, true);
+
+				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
+				 (uint32) lost_files->end_segno / instance_config.xlog_seg_size,
+				 (uint32) lost_files->end_segno % instance_config.xlog_seg_size);
+				json_add_value(buf, "end-segno", tmp_buf, json_level, true);
+				json_add(buf, JT_END_OBJECT, &json_level);
+			}
+
+			json_add(buf, JT_END_ARRAY, &json_level);
+		}
+		
+		if (tlinfo->backups != NULL)
+		{
+			json_add_key(buf, "backups", json_level);
+			json_add(buf, JT_BEGIN_ARRAY, &json_level);
+			for (int j = 0; j < parray_num(tlinfo->backups); j++)
+			{
+				uint32 *bckp = parray_get(tlinfo->backups, j);
+
+				if (j != 0)
+					appendPQExpBufferChar(buf, ',');
+		
+				snprintf(tmp_buf, lengthof(tmp_buf), "%08X",  *bckp);
+				json_add_value(buf, "start_lsn", tmp_buf, json_level, true);
+			}
+
+			json_add(buf, JT_END_ARRAY, &json_level);
+
+		}
+
+		json_add_key(buf, "n-files", json_level);
+		appendPQExpBuffer(buf, "%d", tlinfo->n_xlog_files);
+
+		json_add_key(buf, "size", json_level);
+		appendPQExpBuffer(buf, "%lu", tlinfo->size);
+
+		if (tlinfo->lost_files == NULL)
+			json_add_value(buf, "status", status2str(BACKUP_STATUS_OK), json_level,
+					   true);
+		else
+			json_add_value(buf, "status", status2str(BACKUP_STATUS_CORRUPT), json_level,
+					   true);
+
+		json_add(buf, JT_END_OBJECT, &json_level);
+	}
+
+	/* End of backups */
+	json_add(buf, JT_END_ARRAY, &json_level);
+
+	/* End of instance object */
+	json_add(buf, JT_END_OBJECT, &json_level);
+
+	first_instance = false;
 }
