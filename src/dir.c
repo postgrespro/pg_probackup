@@ -494,7 +494,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 	parray	   *black_list = NULL;
 	char		path[MAXPGPATH];
 
-	elog(INFO, "dir_list_file %s", backup_instance_path);
 	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
 	/* List files with black list */
 	if (root && instance_config.pgdata &&

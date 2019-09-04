@@ -537,6 +537,7 @@ readInstanceConfigFile(const char *instance_name)
 			backup_path, BACKUPS_DIR, instance_name);
 	join_path_components(path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
+
 	init_config(instance, instance_name);
 
 	if (fio_access(path, F_OK, FIO_BACKUP_HOST) != 0)

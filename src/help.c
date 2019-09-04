@@ -166,7 +166,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
-	printf(_("                 [--format=format]\n"));
+	printf(_("                 [--format=format] [--archive]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
@@ -543,11 +543,12 @@ help_show(void)
 {
 	printf(_("\n%s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
-	printf(_("                 [--format=format]\n\n"));
+	printf(_("                 [--format=format] [--archive]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     show info about specific instance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
+	printf(_("      --archive                    show WAL archive\n"));
 	printf(_("      --format=format              show format=PLAIN|JSON\n\n"));
 }
 
