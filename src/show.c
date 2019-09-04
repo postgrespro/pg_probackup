@@ -44,6 +44,7 @@ typedef struct ShowArchiveRow
 	char		min_segno[20];
 	char		max_segno[20];
 	char		n_files[20];
+	char		wal_seg_size[20];
 	char		size[20];
 	const char *status;
 	char		n_backups[20];
@@ -824,14 +825,14 @@ static void
 show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 				   parray *tli_list, bool show_name)
 {
-#define SHOW_ARCHIVE_FIELDS_COUNT 10
+#define SHOW_ARCHIVE_FIELDS_COUNT 11
 	int			i;
 	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
 					{ "Instance", "TLI", "Parent TLI", "Start LSN",
-					  "Min Segno", "Max Segno", "N files", "Size", "Status", "N backups"};
+					  "Min Segno", "Max Segno", "N files", "WAL seg size", "Size", "Status", "N backups"};
 	const char *field_formats[SHOW_ARCHIVE_FIELDS_COUNT] =
 					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
-					  " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "};
+					  " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "," %-*s ", " %-*s "};
 	uint32		widths[SHOW_ARCHIVE_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowArchiveRow *rows;
@@ -888,10 +889,17 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 				 (uint32) tlinfo->end_segno % xlog_seg_size);
 		widths[cur] = Max(widths[cur], strlen(row->max_segno));
 		cur++;
+
 		/* N files */
 		snprintf(row->n_files, lengthof(row->n_files), "%u",
 				 tlinfo->n_xlog_files);
 		widths[cur] = Max(widths[cur], strlen(row->n_files));
+		cur++;
+
+		/* WAL seg size */
+		pretty_size(xlog_seg_size, row->wal_seg_size,
+					lengthof(row->wal_seg_size));
+		widths[cur] = Max(widths[cur], strlen(row->wal_seg_size));
 		cur++;
 
 		/* Size */
@@ -972,6 +980,10 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
 						  row->n_files);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->wal_seg_size);
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
