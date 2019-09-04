@@ -253,7 +253,7 @@ main(int argc, char *argv[])
 	pgBackupInit(&current);
 
 	/* Initialize current instance configuration */
-	init_config(&instance_config);
+	init_config(&instance_config, instance_name);
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
@@ -639,8 +639,6 @@ main(int argc, char *argv[])
 
 	compress_init();
 
-	elog(INFO, "show_archive %s ", show_archive?"on":"off");
-
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
@@ -686,7 +684,7 @@ main(int argc, char *argv[])
 						  recovery_target_options,
 						  restore_params);
 		case SHOW_CMD:
-			return do_show(current.backup_id, show_archive);
+			return do_show(instance_name, current.backup_id, show_archive);
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");

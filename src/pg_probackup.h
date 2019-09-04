@@ -227,6 +227,7 @@ typedef struct ConnectionArgs
  */
 typedef struct InstanceConfig
 {
+	char		*name;
 	uint64		system_identifier;
 	uint32		xlog_seg_size;
 
@@ -525,7 +526,7 @@ extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
 extern parray *get_backup_filelist(pgBackup *backup);
-extern parray *read_timeline_history(TimeLineID targetTLI);
+extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
@@ -546,10 +547,11 @@ extern int do_archive_get(char *wal_file_path, char *wal_file_name);
 /* in configure.c */
 extern void do_show_config(void);
 extern void do_set_config(bool missing_ok);
-extern void init_config(InstanceConfig *config);
+extern void init_config(InstanceConfig *config, const char *instance_name);
+extern InstanceConfig *readInstanceConfigFile(const char *instance_name);
 
 /* in show.c */
-extern int do_show(time_t requested_backup_id, bool show_archive);
+extern int do_show(const char *instance_name, time_t requested_backup_id, bool show_archive);
 
 /* in delete.c */
 extern void do_delete(time_t backup_id);
@@ -574,7 +576,7 @@ extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
 
 /* in catalog.c */
-extern pgBackup *read_backup(time_t timestamp);
+extern pgBackup *read_backup(const char *instance_name, time_t timestamp);
 extern void write_backup(pgBackup *backup);
 extern void write_backup_status(pgBackup *backup, BackupStatus status);
 extern void write_backup_data_bytes(pgBackup *backup);
@@ -582,7 +584,8 @@ extern bool lock_backup(pgBackup *backup);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
-extern parray *catalog_get_backup_list(time_t requested_backup_id);
+extern parray *catalog_get_instance_list(void);
+extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
@@ -596,6 +599,9 @@ extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
+extern void pgBackupGetPathInInstance(const char *instance_name,
+				 const pgBackup *backup, char *path, size_t len,
+				 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);

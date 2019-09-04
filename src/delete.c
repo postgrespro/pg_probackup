@@ -37,7 +37,7 @@ do_delete(time_t backup_id)
 	TimeLineID	oldest_tli = 0;
 
 	/* Get complete list of backups */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	delete_list = parray_new();
 
@@ -133,7 +133,7 @@ int do_retention(void)
 	backup_merged = false;
 
 	/* Get a complete list of backups. */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
@@ -634,7 +634,7 @@ do_retention_wal(void)
 	int i;
 
 	/* Get list of backups. */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
@@ -853,7 +853,7 @@ do_delete_instance(void)
 
 
 	/* Delete all backups. */
-	backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1);
 

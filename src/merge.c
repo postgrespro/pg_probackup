@@ -66,7 +66,7 @@ do_merge(time_t backup_id)
 	elog(INFO, "Merge started");
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	/* Find destination backup first */
 	for (i = 0; i < parray_num(backups); i++)

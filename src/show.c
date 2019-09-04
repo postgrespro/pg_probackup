@@ -17,6 +17,7 @@
 
 #include "utils/json.h"
 
+/* struct to align fields printed in plain format */
 typedef struct ShowBackendRow
 {
 	const char *instance;
@@ -33,7 +34,7 @@ typedef struct ShowBackendRow
 	const char *status;
 } ShowBackendRow;
 
-
+/* struct to align fields printed in plain format */
 typedef struct ShowArchiveRow
 {
 	const char *instance;
@@ -49,102 +50,86 @@ typedef struct ShowArchiveRow
 
 static void show_instance_start(void);
 static void show_instance_end(void);
-static void show_instance(time_t requested_backup_id, bool show_name);
-static int show_backup(time_t requested_backup_id);
+static void show_instance(const char *instance_name, time_t requested_backup_id, bool show_name);
+static int show_backup(const char *instance_name, time_t requested_backup_id);
 
-static void show_instance_plain(parray *backup_list, bool show_name);
-static void show_instance_json(parray *backup_list);
+static void show_instance_plain(const char *instance_name, parray *backup_list, bool show_name);
+static void show_instance_json(const char *instance_name, parray *backup_list);
 
-static void show_instance_archive(void);
-static void show_archive_plain(parray *timelines_list, bool show_name);
-static void show_archive_json(parray *tli_list);
+static void show_instance_archive(InstanceConfig *instance);
+static void show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
+							   parray *timelines_list, bool show_name);
+static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
+							  parray *tli_list);
 
 static PQExpBufferData show_buf;
 static bool first_instance = true;
 static int32 json_level = 0;
 
+/*
+ * Entry point of pg_probackup SHOW subcommand.
+ */
 int
-do_show(time_t requested_backup_id, bool show_archive)
+do_show(const char *instance_name, time_t requested_backup_id, bool show_archive)
 {
 	if (instance_name == NULL &&
 		requested_backup_id != INVALID_BACKUP_ID)
 		elog(ERROR, "You must specify --instance to use --backup_id option");
 
-	if (instance_name == NULL &&
-		show_archive)
-		elog(ERROR, "You must specify --instance to use --archive option");
-
-	if (show_archive)
+	/*
+	 * if instance_name is not specified,
+	 * show information about all instances in this backup catalog
+	 */
+	if (instance_name == NULL)
 	{
-		show_instance_start();
-		show_instance_archive();
-		show_instance_end();
-		return 0;
-	}
-	else if (instance_name == NULL)
-	{
-		/* Show list of instances */
-		char		path[MAXPGPATH];
-		DIR		   *dir;
-		struct dirent *dent;
-
-		/* open directory and list contents */
-		join_path_components(path, backup_path, BACKUPS_DIR);
-		dir = opendir(path);
-		if (dir == NULL)
-			elog(ERROR, "Cannot open directory \"%s\": %s",
-				 path, strerror(errno));
+		parray *instances = catalog_get_instance_list();
 
 		show_instance_start();
-
-		while (errno = 0, (dent = readdir(dir)) != NULL)
+		for (int i = 0; i < parray_num(instances); i++)
 		{
-			char		child[MAXPGPATH];
-			struct stat	st;
+			InstanceConfig *instance = parray_get(instances, i);
+			char backup_instance_path[MAXPGPATH];
 
-			/* skip entries point current dir or parent dir */
-			if (strcmp(dent->d_name, ".") == 0 ||
-				strcmp(dent->d_name, "..") == 0)
-				continue;
+			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance->name);
 
-			join_path_components(child, path, dent->d_name);
-
-			if (lstat(child, &st) == -1)
-				elog(ERROR, "Cannot stat file \"%s\": %s",
-					 child, strerror(errno));
-
-			if (!S_ISDIR(st.st_mode))
-				continue;
-
-			instance_name = dent->d_name;
-			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
-
-			show_instance(INVALID_BACKUP_ID, true);
+			if (show_archive)
+				show_instance_archive(instance);
+			else 
+				show_instance(instance->name, INVALID_BACKUP_ID, true);
 		}
-
-		if (errno)
-			elog(ERROR, "Cannot read directory \"%s\": %s",
-				 path, strerror(errno));
-
-		if (closedir(dir))
-			elog(ERROR, "Cannot close directory \"%s\": %s",
-				 path, strerror(errno));
-
 		show_instance_end();
-
 		return 0;
 	}
-	else if (requested_backup_id == INVALID_BACKUP_ID ||
-			 show_format == SHOW_JSON)
+	/* always use  */
+	else if (show_format == SHOW_JSON ||
+			 requested_backup_id == INVALID_BACKUP_ID)
 	{
 		show_instance_start();
-		show_instance(requested_backup_id, false);
+
+		if (show_archive)
+		{
+			InstanceConfig *instance = readInstanceConfigFile(instance_name);
+			show_instance_archive(instance);
+		}
+		else
+			show_instance(instance_name, requested_backup_id, false);
+
 		show_instance_end();
 
 		return 0;
 	}
 	else
-		return show_backup(requested_backup_id);
+	{
+		if (show_archive)
+		{
+			InstanceConfig *instance = readInstanceConfigFile(instance_name);
+			show_instance_archive(instance);
+		}
+		else
+			show_backup(instance_name, requested_backup_id);
+
+		return 0;
+	}
 }
 
 void
@@ -192,63 +177,6 @@ pretty_size(int64 size, char *buf, size_t len)
 	}
 }
 
-static TimeLineID
-get_parent_tli(TimeLineID child_tli)
-{
-	TimeLineID	result = 0;
-	char		path[MAXPGPATH];
-	char		fline[MAXPGPATH];
-	FILE	   *fd;
-
-	/* Timeline 1 does not have a history file and parent timeline */
-	if (child_tli == 1)
-		return 0;
-
-	/* Search history file in archives */
-	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path,
-		child_tli);
-	fd = fopen(path, "rt");
-	if (fd == NULL)
-	{
-		if (errno != ENOENT)
-			elog(ERROR, "could not open file \"%s\": %s", path,
-				strerror(errno));
-
-		/* Did not find history file, do not raise the error */
-		return 0;
-	}
-
-	/*
-	 * Parse the file...
-	 */
-	while (fgets(fline, sizeof(fline), fd) != NULL)
-	{
-		/* skip leading whitespace and check for # comment */
-		char	   *ptr;
-		char	   *endptr;
-
-		for (ptr = fline; *ptr; ptr++)
-		{
-			if (!IsSpace(*ptr))
-				break;
-		}
-		if (*ptr == '\0' || *ptr == '#')
-			continue;
-
-		/* expect a numeric timeline ID as first field of line */
-		result = (TimeLineID) strtoul(ptr, &endptr, 0);
-		if (endptr == ptr)
-			elog(ERROR,
-					"syntax error(timeline ID) in history file: %s",
-					fline);
-	}
-
-	fclose(fd);
-
-	/* TLI of the last line is parent TLI */
-	return result;
-}
-
 /*
  * Initialize instance visualization.
  */
@@ -284,16 +212,16 @@ show_instance_end(void)
  * Show brief meta information about all backups in the backup instance.
  */
 static void
-show_instance(time_t requested_backup_id, bool show_name)
+show_instance(const char *instance_name, time_t requested_backup_id, bool show_name)
 {
 	parray	   *backup_list;
 
-	backup_list = catalog_get_backup_list(requested_backup_id);
+	backup_list = catalog_get_backup_list(instance_name, requested_backup_id);
 
 	if (show_format == SHOW_PLAIN)
-		show_instance_plain(backup_list, show_name);
+		show_instance_plain(instance_name, backup_list, show_name);
 	else if (show_format == SHOW_JSON)
-		show_instance_json(backup_list);
+		show_instance_json(instance_name, backup_list);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 
@@ -306,11 +234,12 @@ show_instance(time_t requested_backup_id, bool show_name)
  * Show detailed meta information about specified backup.
  */
 static int
-show_backup(time_t requested_backup_id)
+show_backup(const char *instance_name, time_t requested_backup_id)
 {
 	pgBackup   *backup;
 
-	backup = read_backup(requested_backup_id);
+	//TODO this relies on global variable backup_instance_path
+	backup = read_backup(instance_name, requested_backup_id);
 	if (backup == NULL)
 	{
 		// TODO for 3.0: we should ERROR out here.
@@ -333,14 +262,10 @@ show_backup(time_t requested_backup_id)
 }
 
 /*
- * Plain output.
- */
-
-/*
  * Show instance backups in plain format.
  */
 static void
-show_instance_plain(parray *backup_list, bool show_name)
+show_instance_plain(const char *instance_name, parray *backup_list, bool show_name)
 {
 #define SHOW_FIELDS_COUNT 12
 	int			i;
@@ -356,6 +281,7 @@ show_instance_plain(parray *backup_list, bool show_name)
 	uint32		widths_sum = 0;
 	ShowBackendRow *rows;
 	time_t current_time = time(NULL);
+	TimeLineID parent_tli = 0;
 
 	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
 		widths[i] = strlen(names[i]);
@@ -409,9 +335,13 @@ show_instance_plain(parray *backup_list, bool show_name)
 		cur++;
 
 		/* Current/Parent TLI */
+
+		if (backup->parent_backup_link != NULL)
+			parent_tli = backup->parent_backup_link->tli;
+
 		snprintf(row->tli, lengthof(row->tli), "%u / %u",
 				 backup->tli,
-				 backup->backup_mode == BACKUP_MODE_FULL ? 0 : get_parent_tli(backup->tli));
+				 backup->backup_mode == BACKUP_MODE_FULL ? 0 : parent_tli);
 		widths[cur] = Max(widths[cur], strlen(row->tli));
 		cur++;
 
@@ -541,14 +471,10 @@ show_instance_plain(parray *backup_list, bool show_name)
 }
 
 /*
- * Json output.
- */
-
-/*
  * Show instance backups in json format.
  */
 static void
-show_instance_json(parray *backup_list)
+show_instance_json(const char *instance_name, parray *backup_list)
 {
 	int			i;
 	PQExpBuffer	buf = &show_buf;
@@ -625,8 +551,8 @@ show_instance_json(parray *backup_list)
 		/* Only incremental backup can have Parent TLI */
 		if (backup->backup_mode == BACKUP_MODE_FULL)
 			parent_tli = 0;
-		else
-			parent_tli = get_parent_tli(backup->tli);
+		else if (backup->parent_backup_link)
+			parent_tli = backup->parent_backup_link->tli;
 		appendPQExpBuffer(buf, "%u", parent_tli);
 
 		snprintf(lsn, lengthof(lsn), "%X/%X",
@@ -734,16 +660,20 @@ timelineInfoNew(TimeLineID tli)
  *   (i.e. no implicit path assumptions)
  */
 static void
-show_instance_archive()
+show_instance_archive(InstanceConfig *instance)
 {
 	parray *xlog_files_list = parray_new();
 	int n_files = 0;
 	parray *timelineinfos;
 	timelineInfo *tlinfo;
+	char		arclog_path[MAXPGPATH];
 
-	elog(INFO, "show_instance_archive");
 
+	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
+
+	elog(INFO, "show_instance_archive %s", arclog_path);
 	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+
 	parray_qsort(xlog_files_list, pgFileComparePath);
 	n_files = parray_num(xlog_files_list);
 
@@ -767,7 +697,7 @@ show_instance_archive()
 		XLogSegNo segno;
 
 		result = sscanf(file->name, "%08X%08X%08X.%08X.backup", &tli, &log, &seg, &backup_start_lsn);
-		segno = log*instance_config.xlog_seg_size + seg;
+		segno = log * instance->xlog_seg_size + seg;
 
 		if (result == 3)
 		{
@@ -789,7 +719,7 @@ show_instance_archive()
 				if (tlinfo->end_segno)
 					expected_segno = tlinfo->end_segno + 1;
 				else if (tlinfo->start_lsn)
-					expected_segno = tlinfo->start_lsn / instance_config.xlog_seg_size;
+					expected_segno = tlinfo->start_lsn / instance->xlog_seg_size;
 				else
 					elog(ERROR, "no expected segno found...");
 
@@ -840,7 +770,7 @@ show_instance_archive()
 
 			sscanf(file->name, "%08X.history", &tli);
 
-			timelines = read_timeline_history(tli);
+			timelines = read_timeline_history(arclog_path, tli);
 
 			if (!tlinfo || tlinfo->tli != tli)
 			{
@@ -880,9 +810,9 @@ show_instance_archive()
 	}
 
 	if (show_format == SHOW_PLAIN)
-		show_archive_plain(timelineinfos, true);
+		show_archive_plain(instance->name, instance->xlog_seg_size, timelineinfos, true);
 	else if (show_format == SHOW_JSON)
-		show_archive_json(timelineinfos);
+		show_archive_json(instance->name, instance->xlog_seg_size, timelineinfos);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 	
@@ -892,7 +822,8 @@ show_instance_archive()
 }
 
 static void
-show_archive_plain(parray *tli_list, bool show_name)
+show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
+				   parray *tli_list, bool show_name)
 {
 #define SHOW_ARCHIVE_FIELDS_COUNT 9
 	int			i;
@@ -945,15 +876,15 @@ show_archive_plain(parray *tli_list, bool show_name)
 
 		/* Min Segno */
 		snprintf(row->min_segno, lengthof(row->min_segno), "%08X%08X",
-				 (uint32) tlinfo->begin_segno / instance_config.xlog_seg_size,
-				 (uint32) tlinfo->begin_segno % instance_config.xlog_seg_size);
+				 (uint32) tlinfo->begin_segno / xlog_seg_size,
+				 (uint32) tlinfo->begin_segno % xlog_seg_size);
 		widths[cur] = Max(widths[cur], strlen(row->min_segno));
 		cur++;
 
 		/* Max Segno */
 		snprintf(row->max_segno, lengthof(row->max_segno), "%08X%08X",
-				 (uint32) tlinfo->end_segno / instance_config.xlog_seg_size,
-				 (uint32) tlinfo->end_segno % instance_config.xlog_seg_size);
+				 (uint32) tlinfo->end_segno / xlog_seg_size,
+				 (uint32) tlinfo->end_segno % xlog_seg_size);
 		widths[cur] = Max(widths[cur], strlen(row->max_segno));
 		cur++;
 		/* N files */
@@ -1051,7 +982,8 @@ show_archive_plain(parray *tli_list, bool show_name)
 }
 
 static void
-show_archive_json(parray *tli_list)
+show_archive_json(const char *instance_name, uint32 xlog_seg_size,
+				  parray *tli_list)
 {
 	int			i;
 	PQExpBuffer	buf = &show_buf;
@@ -1091,13 +1023,13 @@ show_archive_json(parray *tli_list)
 		json_add_value(buf, "start-lsn", tmp_buf, json_level, true);
 
 		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
-				 (uint32) tlinfo->begin_segno / instance_config.xlog_seg_size,
-				 (uint32) tlinfo->begin_segno % instance_config.xlog_seg_size);		
+				 (uint32) tlinfo->begin_segno / xlog_seg_size,
+				 (uint32) tlinfo->begin_segno % xlog_seg_size);
 		json_add_value(buf, "min-segno", tmp_buf, json_level, true);
 
 		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
-				 (uint32) tlinfo->end_segno / instance_config.xlog_seg_size,
-				 (uint32) tlinfo->end_segno % instance_config.xlog_seg_size);
+				 (uint32) tlinfo->end_segno / xlog_seg_size,
+				 (uint32) tlinfo->end_segno % xlog_seg_size);
 		json_add_value(buf, "max-segno", tmp_buf, json_level, true);
 
 		if (tlinfo->lost_files != NULL)
@@ -1115,13 +1047,13 @@ show_archive_json(parray *tli_list)
 				json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
 				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
-				 (uint32) lost_files->begin_segno / instance_config.xlog_seg_size,
-				 (uint32) lost_files->begin_segno % instance_config.xlog_seg_size);
+				 (uint32) lost_files->begin_segno / xlog_seg_size,
+				 (uint32) lost_files->begin_segno % xlog_seg_size);
 				json_add_value(buf, "begin-segno", tmp_buf, json_level, true);
 
 				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X", 
-				 (uint32) lost_files->end_segno / instance_config.xlog_seg_size,
-				 (uint32) lost_files->end_segno % instance_config.xlog_seg_size);
+				 (uint32) lost_files->end_segno / xlog_seg_size,
+				 (uint32) lost_files->end_segno % xlog_seg_size);
 				json_add_value(buf, "end-segno", tmp_buf, json_level, true);
 				json_add(buf, JT_END_OBJECT, &json_level);
 			}
