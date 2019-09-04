@@ -725,11 +725,9 @@ timelineInfoNew(TimeLineID tli)
 
 /*
  * TODO
- * - check that files are sequential and none are lost
  * - save info about backup history files
  * - verify that such backup truly exist in the instance
  * - save info about that backup
- * 
  *
  * MAYBE
  * - make it independend from probackup file structure
@@ -879,35 +877,6 @@ show_instance_archive()
 		}
 		else
 			elog(LOG, "filename is parsed, NOT regular xlog");
-	}
-
-	/* print result */
-	for (int i = 0; i < parray_num(timelineinfos); i++)
-	{
-		timelineInfo *tlinfo = (timelineInfo *) parray_get(timelineinfos, i);
-		elog(INFO, "tlinfo tli %u parent tli %u start_lsn %X/%X n_files %d, first segno %lu, last segno %lu",
-			 tlinfo->tli, tlinfo->parent_tli,
-			 (uint32) (tlinfo->start_lsn >> 32), (uint32) (tlinfo->start_lsn),
-			 tlinfo->n_xlog_files, tlinfo->begin_segno, tlinfo->end_segno);
-
-		if (tlinfo->backups)
-			for (int j = 0; j < parray_num(tlinfo->backups); j++)
-				elog(INFO, "tlinfo tli %u has backup with start_lsn %08X",
-					 tlinfo->tli, *((uint32 *) parray_get(tlinfo->backups, j)));
-
-		if (tlinfo->lost_files)
-		{
-			for (int j = 0; j < parray_num(tlinfo->lost_files); j++)
-			{
-				xlogInterval *lost_files = (xlogInterval *) parray_get(tlinfo->lost_files, j);
-				if (lost_files->begin_segno == lost_files->end_segno)
-					elog(INFO, "tlinfo tli %u lost file %lu",
-							tlinfo->tli, lost_files->begin_segno);
-				else
-					elog(INFO, "tlinfo tli %u lost files from %lu to %lu",
-						tlinfo->tli, lost_files->begin_segno, lost_files->end_segno);
-			}
-		}
 	}
 
 	if (show_format == SHOW_PLAIN)
