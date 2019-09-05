@@ -1278,7 +1278,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 "LOG: File: {0} blknum 1, empty page".format(file),
                 content)
             self.assertNotIn(
-                "Skipping blknum: 1 in file: {0}".format(file),
+                "Skipping blknum 1 in file: {0}".format(file),
                 content)
 
         # Restore DELTA backup
