@@ -350,7 +350,6 @@ init_config(InstanceConfig *config, const char *instance_name)
 InstanceConfig *
 readInstanceConfigFile(const char *instance_name)
 {
-	char	backup_instance_path[MAXPGPATH];
 	char	path[MAXPGPATH];
 	InstanceConfig   *instance = pgut_new(InstanceConfig);
 	char	   *log_level_console = NULL;
@@ -534,12 +533,18 @@ readInstanceConfigFile(const char *instance_name)
 	};
 
 
-	sprintf(backup_instance_path, "%s/%s/%s",
-			backup_path, BACKUPS_DIR, instance_name);
-	join_path_components(path, backup_instance_path,
-								 BACKUP_CATALOG_CONF_FILE);
-
 	init_config(instance, instance_name);
+
+	sprintf(instance->backup_instance_path, "%s/%s/%s",
+			backup_path, BACKUPS_DIR, instance_name);
+	canonicalize_path(instance->backup_instance_path);
+
+	sprintf(instance->arclog_path, "%s/%s/%s",
+			backup_path, "wal", instance_name);
+	canonicalize_path(instance->arclog_path);
+
+	join_path_components(path, instance->backup_instance_path,
+						 BACKUP_CATALOG_CONF_FILE);
 
 	if (fio_access(path, F_OK, FIO_BACKUP_HOST) != 0)
 	{

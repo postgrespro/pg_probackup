@@ -69,7 +69,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		elog(WARNING, "Backup %s has status %s, change it to ERROR and skip validation",
 			 base36enc(backup->start_time), status2str(backup->status));
-		write_backup_status(backup, BACKUP_STATUS_ERROR);
+		write_backup_status(backup, BACKUP_STATUS_ERROR, instance_name);
 		corrupted_backup_found = true;
 		return;
 	}
@@ -167,7 +167,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 
 	/* Update backup status */
 	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
-											BACKUP_STATUS_OK);
+											BACKUP_STATUS_OK, instance_name);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -456,7 +456,7 @@ do_validate_instance(void)
 				if (current_backup->status == BACKUP_STATUS_OK ||
 					current_backup->status == BACKUP_STATUS_DONE)
 				{
-					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
+					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 							base36enc(current_backup->start_time),
 							parent_backup_id);
@@ -480,7 +480,7 @@ do_validate_instance(void)
 					if (current_backup->status == BACKUP_STATUS_OK ||
 						current_backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
+						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 								base36enc(current_backup->start_time), backup_id,
 								status2str(tmp_backup->status));
@@ -553,7 +553,7 @@ do_validate_instance(void)
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),

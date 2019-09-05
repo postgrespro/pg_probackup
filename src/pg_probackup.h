@@ -580,7 +580,8 @@ extern int do_validate_all(void);
 /* in catalog.c */
 extern pgBackup *read_backup(const char *instance_name, time_t timestamp);
 extern void write_backup(pgBackup *backup);
-extern void write_backup_status(pgBackup *backup, BackupStatus status);
+extern void write_backup_status(pgBackup *backup, BackupStatus status,
+								const char *instance_name);
 extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup);
 

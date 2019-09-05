@@ -69,7 +69,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
 			if (backup->status == BACKUP_STATUS_OK ||
 				backup->status == BACKUP_STATUS_DONE)
 			{
-				write_backup_status(backup, BACKUP_STATUS_ORPHAN);
+				write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
 
 				elog(WARNING,
 					"Backup %s is orphaned because his parent %s has status: %s",
@@ -272,7 +272,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);

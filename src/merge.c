@@ -253,8 +253,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	if (from_backup->status == BACKUP_STATUS_DELETING)
 		goto delete_source_backup;
 
-	write_backup_status(to_backup, BACKUP_STATUS_MERGING);
-	write_backup_status(from_backup, BACKUP_STATUS_MERGING);
+	write_backup_status(to_backup, BACKUP_STATUS_MERGING, instance_name);
+	write_backup_status(from_backup, BACKUP_STATUS_MERGING, instance_name);
 
 	create_data_directories(files, to_database_path, from_backup_path, false, FIO_BACKUP_HOST);
 

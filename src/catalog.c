@@ -71,7 +71,8 @@ read_backup(const char *instance_name, time_t timestamp)
  * status.
  */
 void
-write_backup_status(pgBackup *backup, BackupStatus status)
+write_backup_status(pgBackup *backup, BackupStatus status,
+					const char *instance_name)
 {
 	pgBackup   *tmp;
 
@@ -303,10 +304,10 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
 }
 
 /*
- * create list of instances in given backup catalog
- * currently only contain instance_name in each entry
- * TODO make list of "InstanceConfig" structures, filled with
- * actual config of each instance. Requires refactoring.
+ * Create list of instances in given backup catalog.
+ *
+ * Returns parray of "InstanceConfig" structures, filled with
+ * actual config of each instance.
  */
 parray *
 catalog_get_instance_list(void)
@@ -484,6 +485,7 @@ err_proc:
  * Create list of backup datafiles.
  * If 'requested_backup_id' is INVALID_BACKUP_ID, exit with error.
  * If valid backup id is passed only matching backup will be added to the list.
+ * TODO this function only used once. Is it really needed?
  */
 parray *
 get_backup_filelist(pgBackup *backup)
