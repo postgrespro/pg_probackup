@@ -529,6 +529,51 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 }
 
 /*
+ * Get LSN of first record within the WAL segment with number 'segno'.
+ *
+ * Returns LSN which points to end+1 of the last WAL record if seek_prev_segment
+ * is true. Otherwise returns LSN of the record prior to stop_lsn.
+ */
+XLogRecPtr
+get_first_wal_lsn(const char *archivedir, XLogSegNo	segno,
+				 TimeLineID tli, uint32 wal_seg_size)
+{
+	XLogReaderState *xlogreader;
+	XLogReaderData reader_data;
+	XLogRecPtr	record = InvalidXLogRecPtr;
+	XLogRecPtr	startpoint;
+	char	wal_segment[MAXFNAMELEN];
+
+	if (segno <= 1)
+		elog(ERROR, "Invalid WAL segment number " UINT64_FORMAT, segno);
+
+	GetXLogFileName(wal_segment, tli, segno, instance_config.xlog_seg_size);
+
+	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
+								  false, false, true);
+	if (xlogreader == NULL)
+			elog(ERROR, "Out of memory");
+	xlogreader->system_identifier = instance_config.system_identifier;
+
+	/* Set startpoint to 0 in segno */
+	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+
+	record = XLogFindNextRecord(xlogreader, startpoint);
+
+	if (XLogRecPtrIsInvalid(record))
+		record = InvalidXLogRecPtr;
+	else
+		elog(LOG, "First record in WAL segment \"%s\": %X/%X", wal_segment,
+				(uint32) (record >> 32), (uint32) (record));
+
+	/* cleanup */
+	CleanupXLogPageRead(xlogreader);
+	XLogReaderFree(xlogreader);
+
+	return record;
+}
+
+/*
  * Get LSN of last or prior record within the WAL segment with number 'segno'.
  * If 'start_lsn'
  * is in the segment with number 'segno' then start from 'start_lsn', otherwise
@@ -596,7 +641,6 @@ get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
 	{
 		XLogRecord *record;
 		char	   *errormsg;
-		XLogSegNo	next_segno = 0;
 
 		if (interrupted)
 			elog(ERROR, "Interrupted during WAL reading");
@@ -619,23 +663,18 @@ get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
 			PrintXLogCorruptionMsg(&reader_data, ERROR);
 		}
 
+		if (xlogreader->EndRecPtr >= stop_lsn)
+		{
+			elog(LOG, "Record %X/%X has endpoint %X/%X which is equal or greater than requested LSN %X/%X",
+				(uint32) (xlogreader->ReadRecPtr >> 32), (uint32) (xlogreader->ReadRecPtr),
+				(uint32) (xlogreader->EndRecPtr >> 32), (uint32) (xlogreader->EndRecPtr),
+				(uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
+			res = xlogreader->ReadRecPtr;
+			break;
+		}
+
 		/* continue reading at next record */
 		startpoint = InvalidXLogRecPtr;
-
-		GetXLogSegNo(xlogreader->EndRecPtr, next_segno, wal_seg_size);
-		if (next_segno > segno)
-			break;
-
-		if (seek_prev_segment)
-		{
-			/* end+1 of last record read */
-			res = xlogreader->EndRecPtr;
-		}
-		else
-			res = xlogreader->ReadRecPtr;
-
-		if (xlogreader->EndRecPtr >= stop_lsn)
-			break;
 	}
 
 	CleanupXLogPageRead(xlogreader);

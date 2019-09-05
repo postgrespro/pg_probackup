@@ -715,6 +715,9 @@ extern XLogRecPtr get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
 								   XLogRecPtr stop_lsn, TimeLineID tli,
 								   bool seek_prev_segment, uint32 seg_size);
 
+extern XLogRecPtr get_first_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
+									TimeLineID tli, uint32 wal_seg_size);
+
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
