@@ -343,9 +343,6 @@ catalog_get_instance_list(void)
 		if (!S_ISDIR(st.st_mode))
 			continue;
 
-		join_path_components(path, backup_instance_path,
-							 BACKUP_CATALOG_CONF_FILE);
-
 		instance = readInstanceConfigFile(dent->d_name);
 
 		if (instances == NULL)

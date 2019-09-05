@@ -678,10 +678,6 @@ show_instance_archive(InstanceConfig *instance)
 	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
 	parray_qsort(xlog_files_list, pgFileComparePath);
 
-	/* Don't throw any message here to keep output clean */
-	if (parray_num(xlog_files_list) == 0)
-		return;
-
 	timelineinfos = parray_new();
 	tlinfo = NULL;
 
@@ -898,8 +894,8 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 
 		/* Zratio (compression ratio) */
 		if (tlinfo->size != 0)
-			snprintf(row->zratio, lengthof(row->n_files), "%u",
-				 (uint32) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size));
+			snprintf(row->zratio, lengthof(row->n_files), "%.2f",
+				 (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size));
 		widths[cur] = Max(widths[cur], strlen(row->zratio));
 		cur++;
 
@@ -1097,6 +1093,9 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 
 		json_add_key(buf, "size", json_level);
 		appendPQExpBuffer(buf, "%lu", tlinfo->size);
+
+		json_add_key(buf, "zratio", json_level);
+		appendPQExpBuffer(buf, "%.2f", (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size));
 
 		if (tlinfo->lost_files == NULL)
 			json_add_value(buf, "status", status2str(BACKUP_STATUS_OK), json_level,
