@@ -58,7 +58,6 @@ extern const char  *PROGRAM_EMAIL;
 #define BACKUP_CATALOG_PID		"backup.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
-#define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 #define EXTERNAL_DIR			"external_directories/externaldir"
 #define DATABASE_MAP			"database_map"
@@ -631,7 +630,8 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool follow_symlink, bool add_root, int external_dir_num, fio_location location);
+						  bool follow_symlink, bool add_root,
+						  int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
