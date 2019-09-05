@@ -578,12 +578,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--recovery-target-xid={0}'.format(xid)])
 
-        # log_file = os.path.join(node.logs_dir, 'postgresql.log')
-        # with open(log_file, 'r') as f:
-        #     log_content = f.read()
-        #     self.assertIn(
-        #         'Reusing stale destination temporary WAL file',
-        #         log_content)
+        log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+            self.assertIn(
+                'Reusing stale destination temporary WAL file',
+                log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
