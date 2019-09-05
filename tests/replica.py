@@ -1003,7 +1003,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'wal', 'master', '000000010000000000000004')
 
         wal_file_partial = os.path.join(
-            backup_dir, 'wal', 'master', '000000010000000000000004.partial')
+            backup_dir, 'wal', 'master', '000000010000000000000004.part')
 
         self.assertFalse(os.path.exists(wal_file))
 

@@ -512,7 +512,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_archive_push_partial_file_exists(self):
-        """Archive-push if stale '.partial' file exists"""
+        """Archive-push if stale '.part' file exists"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -548,16 +548,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
-        # form up path to next .partial WAL segment
+        # form up path to next .part WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
-            filename = filename_orig + '.gz' + '.partial'
+            filename = filename_orig + '.gz' + '.part'
             file = os.path.join(wals_dir, filename)
         else:
-            filename = filename_orig + '.partial'
+            filename = filename_orig + '.part'
             file = os.path.join(wals_dir, filename)
 
-        # emulate stale .partial file
+        # emulate stale .part file
         with open(file, 'a') as f:
             f.write(b"blahblah")
             f.flush()
@@ -590,7 +590,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_archive_push_partial_file_exists_not_stale(self):
-        """Archive-push if .partial file exists and it is not stale"""
+        """Archive-push if .part file exists and it is not stale"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -624,13 +624,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
-        # form up path to next .partial WAL segment
+        # form up path to next .part WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
-            filename = filename_orig + '.gz' + '.partial'
+            filename = filename_orig + '.gz' + '.part'
             file = os.path.join(wals_dir, filename)
         else:
-            filename = filename_orig + '.partial'
+            filename = filename_orig + '.part'
             file = os.path.join(wals_dir, filename)
 
         with open(file, 'a') as f:

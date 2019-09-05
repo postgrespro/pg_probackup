@@ -1760,7 +1760,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
 #        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
 #        wals = map(str, wals)
 #        print(wals)
 
@@ -1768,7 +1768,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
 #        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
 #        wals = map(str, wals)
 #        print(wals)
 

@@ -678,7 +678,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
         wals = map(str, wals)
         file = os.path.join(wals_dir, max(wals))
         os.remove(file)
