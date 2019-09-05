@@ -181,7 +181,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #ifdef HAVE_LIBZ
 	if (is_compress)
 	{
-		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
+		snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", gz_to_path);
 
 		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST);
 		if (gz_out == NULL)
@@ -194,7 +194,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	else
 #endif
 	{
-		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
+		snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", to_path);
 
 		out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
 		if (out < 0)
@@ -416,7 +416,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 
 	/* open backup file for write  */
-	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
+	snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", to_path);
 
 	out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_DB_HOST);
 	if (out < 0)

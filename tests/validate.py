@@ -1760,7 +1760,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
 #        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
 #        wals = map(str, wals)
 #        print(wals)
 
@@ -1768,7 +1768,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
 #        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
 #        wals = map(str, wals)
 #        print(wals)
 
@@ -3623,6 +3623,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_partial_validate_empty_and_mangled_database_map(self):
         """
         """
@@ -3696,6 +3697,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_partial_validate_exclude(self):
         """"""
         fname = self.id().split('.')[3]
@@ -3767,6 +3769,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_partial_validate_include(self):
         """
         """

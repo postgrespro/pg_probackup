@@ -326,7 +326,9 @@ class ProbackupTest(object):
         node.append_conf('postgresql.auto.conf', 'max_connections = 100')
         node.append_conf('postgresql.auto.conf', 'shared_buffers = 10MB')
         node.append_conf('postgresql.auto.conf', 'fsync = off')
-        node.append_conf('postgresql.auto.conf', 'wal_level = logical')
+
+        if 'wal_level' not in pg_options:
+            node.append_conf('postgresql.auto.conf', 'wal_level = logical')
         node.append_conf('postgresql.auto.conf', 'hot_standby = off')
 
         node.append_conf(
