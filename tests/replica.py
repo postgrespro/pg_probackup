@@ -958,6 +958,73 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_replica_promote_1(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        # set replica True, so archive_mode 'always' is used. 
+        self.set_archiving(backup_dir, 'master', master, replica=True)
+        master.slow_start()
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.set_replica(master, replica)
+
+        replica.slow_start(replica=True)
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,10) i')
+
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        wal_file = os.path.join(
+            backup_dir, 'wal', 'master', '000000010000000000000004')
+
+        wal_file_partial = os.path.join(
+            backup_dir, 'wal', 'master', '000000010000000000000004.partial')
+
+        self.assertFalse(os.path.exists(wal_file))
+
+        replica.promote()
+
+        while not os.path.exists(wal_file_partial):
+            sleep(1)
+
+        self.switch_wal_segment(master)
+
+        # sleep to be sure, that any partial timeout is expired
+        sleep(70)
+        
+        self.assertTrue(
+            os.path.exists(wal_file_partial,
+            "File {0} disappeared".format(wal_file_partial)))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+
 # TODO:
 # null offset STOP LSN and latest record in previous segment is conrecord (manual only)
 # archiving from promoted delayed replica
