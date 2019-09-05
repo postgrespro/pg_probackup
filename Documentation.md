@@ -1133,7 +1133,7 @@ Copies WAL files into the corresponding subdirectory of the backup catalog and v
 
 If the files to be copied already exist in the backup catalog, pg_probackup computes and compares their checksums. If the checksums match, archive-push skips the corresponding file and returns successful execution code. Otherwise, archive-push fails with an error. If you would like to replace WAL files in the case of checksum mismatch, run the archive-push command with the `--overwrite` flag.
 
-Copying is done to temporary file with `.partial` suffix or, if [compression](#compression-options) is used, with `.gz.partial` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
+Copying is done to temporary file with `.part` suffix or, if [compression](#compression-options) is used, with `.gz.part` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
 Copied to archive WAL segments are synced to disk.
 
 You can use `archive-push` in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) PostgreSQL parameter to set up [continous WAl archiving](#setting-up-continuous-wal-archiving).
