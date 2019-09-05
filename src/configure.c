@@ -317,6 +317,7 @@ init_config(InstanceConfig *config, const char *instance_name)
 	MemSet(config, 0, sizeof(InstanceConfig));
 
 	config->name = pgut_strdup(instance_name);
+
 	/*
 	 * Starting from PostgreSQL 11 WAL segment size may vary. Prior to
 	 * PostgreSQL 10 xlog_seg_size is equal to XLOG_SEG_SIZE.

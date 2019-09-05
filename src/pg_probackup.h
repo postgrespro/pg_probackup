@@ -228,6 +228,9 @@ typedef struct ConnectionArgs
 typedef struct InstanceConfig
 {
 	char		*name;
+	char		arclog_path[MAXPGPATH];
+	char		backup_instance_path[MAXPGPATH];
+
 	uint64		system_identifier;
 	uint32		xlog_seg_size;
 
@@ -539,10 +542,10 @@ extern int do_init(void);
 extern int do_add_instance(void);
 
 /* in archive.c */
-extern int do_archive_push(char *wal_file_path, char *wal_file_name,
-						   bool overwrite);
-extern int do_archive_get(char *wal_file_path, char *wal_file_name);
-
+extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,
+						   char *wal_file_name, bool overwrite);
+extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
+						  char *wal_file_name);
 
 /* in configure.c */
 extern void do_show_config(void);
