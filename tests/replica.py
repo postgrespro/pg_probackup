@@ -1003,7 +1003,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'wal', 'master', '000000010000000000000004')
 
         wal_file_partial = os.path.join(
-            backup_dir, 'wal', 'master', '000000010000000000000004.part')
+            backup_dir, 'wal', 'master', '000000010000000000000004.partial')
 
         self.assertFalse(os.path.exists(wal_file))
 
@@ -1016,10 +1016,14 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # sleep to be sure, that any partial timeout is expired
         sleep(70)
+
+        self.assertTrue(
+            os.path.exists(wal_file_partial),
+            "File {0} disappeared".format(wal_file))
         
         self.assertTrue(
-            os.path.exists(wal_file_partial,
-            "File {0} disappeared".format(wal_file_partial)))
+            os.path.exists(wal_file_partial),
+            "File {0} disappeared".format(wal_file_partial))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
