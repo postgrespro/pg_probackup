@@ -1506,6 +1506,8 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 
 		if (file_exists)
 		{
+			//TODO is this comment also relates to current segment_only case
+			// and should be updated?
 			/* Do not check LSN for previous WAL segment */
 			if (segment_only)
 				return InvalidXLogRecPtr;
@@ -1805,6 +1807,11 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				XLogSegNo	segno = 0;
 				XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
 
+				/*
+				 * TODO Let's rephrase that to be less scary for a user.
+				 * Even though the value is invalid, it's expected postgres behaviour
+				 * and we're trying to fix it below.
+				 */
 				elog(WARNING, "Invalid stop_backup_lsn value %X/%X",
 					 (uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
 
@@ -1829,27 +1836,36 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				GetXLogSegNo(stop_backup_lsn_tmp, segno, instance_config.xlog_seg_size);
 
 				/*
-				 * Note, that there is no guarantee that corresponding WAL file is even exists.
-				 * Basically replica may return LSN from future and keep staying in present.
-				 * Yeah, it sucks.
+				 * Note, that there is no guarantee that corresponding WAL file even exists.
+				 * Replica may return LSN from future and keep staying in present.
+				 * Or it can return LSN with invalid XRecOff.
 				 *
-				 * So we should try to do the following:
-				 * 1. Wait for current segment and look in it for the LSN >= STOP_LSN. It should
-				 *		solve the problem of occasional 0 offset on write-busy system.
+				 * That's bad, since we want to get real LSN to save it in backup label file
+				 * and to use it in WAL validation.
+				 *
+				 * So we try to do the following:
+				 * 1. Wait for current segment and look in it for the LSN >= STOP_LSN.
+				 * //TODO what is 'current' segment?
+				 * //TODO how long do we wait? is there a timeout?
+				 * 	  It solves the problem of occasional invalid XRecOff
+				 * 	  on write-busy system.
 				 * 2. Failing that, look for record in previous segment with endpoint
 				 *		equal or greater than 0 offset LSN. It may(!) solve the problem of 0 offset
 				 *		on write-idle system.
+				 * //TODO what if if didn't?
+				 * //TODO what kind of record that refers to?
 				 */
 
 				/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
 				wait_wal_lsn(stop_backup_lsn_tmp, false, backup->tli,
 							false, true, WARNING, stream_wal);
 
-				/* Optimistically try to get the first record in segment with current stop_lsn */
+				/* Get the first record in segment with current stop_lsn */
 				lsn_tmp = get_first_wal_lsn(xlog_path, segno, backup->tli,
 										    instance_config.xlog_seg_size);
 
 				/* Check if returned LSN is satisfying our requirements */
+				//TODO what requirements?
 				if (XLogRecPtrIsInvalid(lsn_tmp) ||
 					!XRecOffIsValid(lsn_tmp) ||
 					lsn_tmp < stop_backup_lsn_tmp)
@@ -1877,6 +1893,9 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				stop_backup_lsn = lsn_tmp;
 				stop_lsn_exists = true;
 			}
+			 //TODO is it good to throw an error here? Shouldn't we rather
+			 // save it as is and mark backup as DONE instead of OK
+			 // and check it in validation and restore?
 			else
 				elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
 					 (uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
@@ -1981,6 +2000,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 		/*
 		 * Wait for stop_lsn to be archived or streamed.
+		 * //TODO is the sentence below outdated?
 		 * If replica returned non-existent LSN, look for previous record,
 		 * which endpoint >= stop_lsn
 		 */

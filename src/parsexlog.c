@@ -581,6 +581,10 @@ get_first_wal_lsn(const char *archivedir, XLogSegNo	segno,
  *
  * Returns LSN which points to end+1 of the last WAL record if seek_prev_segment
  * is true. Otherwise returns LSN of the record prior to stop_lsn.
+ *
+ * TODO Let's think of better function name.
+ * it's unclear that "last" in "last_wal_lsn" refers to the
+ * "closest to stop_lsn backward or forward, depending on seek_prev_segment setting".
  */
 XLogRecPtr
 get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
