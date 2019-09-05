@@ -37,15 +37,14 @@ typedef struct ShowBackendRow
 /* struct to align fields printed in plain format */
 typedef struct ShowArchiveRow
 {
-	const char *instance;
 	char		tli[20];
 	char		parent_tli[20];
 	char		start_lsn[20];
 	char		min_segno[20];
 	char		max_segno[20];
 	char		n_files[20];
-	char		wal_seg_size[20];
 	char		size[20];
+	char		zratio[20];
 	const char *status;
 	char		n_backups[20];
 } ShowArchiveRow;
@@ -825,14 +824,14 @@ static void
 show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 				   parray *tli_list, bool show_name)
 {
-#define SHOW_ARCHIVE_FIELDS_COUNT 11
+#define SHOW_ARCHIVE_FIELDS_COUNT 10
 	int			i;
 	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
-					{ "Instance", "TLI", "Parent TLI", "Start LSN",
-					  "Min Segno", "Max Segno", "N files", "WAL seg size", "Size", "Status", "N backups"};
+					{ "TLI", "Parent TLI", "Switchpoint",
+					  "Min Segno", "Max Segno", "N files", "Size", "Zratio", "Status", "N backups"};
 	const char *field_formats[SHOW_ARCHIVE_FIELDS_COUNT] =
 					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
-					  " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "," %-*s ", " %-*s "};
+					  " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "};
 	uint32		widths[SHOW_ARCHIVE_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowArchiveRow *rows;
@@ -851,11 +850,6 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
 		ShowArchiveRow *row = &rows[i];
 		int			cur = 0;
-
-		/* Instance */
-		row->instance = instance_name;
-		widths[cur] = Max(widths[cur], strlen(row->instance));
-		cur++;
 
 		/* TLI */
 		snprintf(row->tli, lengthof(row->tli), "%u",
@@ -896,16 +890,17 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		widths[cur] = Max(widths[cur], strlen(row->n_files));
 		cur++;
 
-		/* WAL seg size */
-		pretty_size(xlog_seg_size, row->wal_seg_size,
-					lengthof(row->wal_seg_size));
-		widths[cur] = Max(widths[cur], strlen(row->wal_seg_size));
-		cur++;
-
 		/* Size */
 		pretty_size(tlinfo->size, row->size,
 					lengthof(row->size));
 		widths[cur] = Max(widths[cur], strlen(row->size));
+		cur++;
+
+		/* Zratio (compression ratio) */
+		if (tlinfo->size != 0)
+			snprintf(row->zratio, lengthof(row->n_files), "%u",
+				 (uint32) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size));
+		widths[cur] = Max(widths[cur], strlen(row->zratio));
 		cur++;
 
 		/* Status */
@@ -955,10 +950,6 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		int			cur = 0;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
-						  row->instance);
-		cur++;
-
-		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
 						  row->tli);
 		cur++;
 
@@ -983,16 +974,17 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
-						  row->wal_seg_size);
+						  row->size);
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
-						  row->size);
+						  row->zratio);
 		cur++;
-		
+
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
 						  row->status);
 		cur++;
+
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
 						  row->n_backups);
 		cur++;
