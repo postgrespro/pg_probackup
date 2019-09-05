@@ -3623,6 +3623,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_partial_validate_empty_and_mangled_database_map(self):
         """
         """
@@ -3696,6 +3697,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_partial_validate_exclude(self):
         """"""
         fname = self.id().split('.')[3]
@@ -3767,6 +3769,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_partial_validate_include(self):
         """
         """

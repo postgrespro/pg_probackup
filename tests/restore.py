@@ -2771,7 +2771,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Backup {0} has missing database_map".format(backup_id),
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible".format(backup_id),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -2823,6 +2824,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 node_restored_1, options=[
                     "--db-exclude=db5",
                     "--db-exclude=db14"])
+
         pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
 
         self.compare_pgdata(pgdata_restored, pgdata_restored_1)
@@ -2871,7 +2873,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Backup {0} has missing database_map".format(backup_id),
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible.".format(backup_id),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
