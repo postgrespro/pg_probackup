@@ -586,7 +586,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'WARNING: Invalid stop_backup_lsn value 0/3000000',
+            'LOG: Null offset in stop_backup_lsn value 0/3000000',
             output)
 
         self.assertIn(
@@ -599,10 +599,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'LOG: Looking for LSN 0/3000000 in segment: 000000010000000000000002',
-            output)
-
-        self.assertIn(
-            'INFO: Wait for LSN 0/3000000 in streamed WAL segment',
             output)
 
         self.assertIn(
@@ -697,7 +693,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn(
-            'WARNING: Invalid stop_backup_lsn value 0/3000000',
+            'LOG: Null offset in stop_backup_lsn value 0/3000000',
             log_content)
 
         self.assertIn(
@@ -766,7 +762,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'WARNING: Invalid stop_backup_lsn value 0/3000000',
+            'LOG: Null offset in stop_backup_lsn value 0/3000000',
             output)
 
         self.assertIn(
@@ -789,6 +785,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'LOG: Found prior LSN: 0/2000160',
             output)
+
+        print(output)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -948,6 +946,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'LOG: Found prior LSN:',
             output)
+
+        print(output)
 
         replica.cleanup()
         self.restore_node(backup_dir, 'replica', replica)

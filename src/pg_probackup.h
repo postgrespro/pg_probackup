@@ -711,9 +711,12 @@ extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   TransactionId *recovery_xid);
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 							 TimeLineID target_tli, uint32 seg_size);
-extern XLogRecPtr get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
+extern XLogRecPtr get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 								   XLogRecPtr stop_lsn, TimeLineID tli,
 								   bool seek_prev_segment, uint32 seg_size);
+
+extern XLogRecPtr get_first_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
+									TimeLineID tli, uint32 wal_seg_size);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(bool safe);
