@@ -1528,14 +1528,18 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			 * If we failed to get target LSN in a reasonable time, try
 			 * to get LSN of last valid record prior to the target LSN. But only
 			 * in case of a backup from a replica.
-
+			 * Note, that with NullOffset target_lsn we do not wait
+			 * for 'timeout / 2' seconds before going for previous record,
+			 * because such LSN cannot be delivered at all.
+			 *
 			 * There are two cases for this:
 			 * 1. Replica returned readpoint LSN which just do not exists. We want to look
 			 *  for previous record in the same(!) WAL segment which endpoint points to this LSN.
 			 * 2. Replica returened endpoint LSN with 0 offset. We want to look
 			 *  for previous record which endpoint points greater or equal LSN in previous WAL segment.
 			 */
-			if (!exclusive_backup && current.from_replica && try_count > timeout / 2)
+			if (current.from_replica &&
+				(XRecOffIsNull(target_lsn) || try_count > timeout / 2))
 			{
 				XLogRecPtr	res;
 
@@ -1641,7 +1645,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 	 * Only if backup is from master.
 	 * For PG 9.5 create restore point only if pguser is superuser.
 	 */
-	if (backup != NULL && !current.from_replica &&
+	if (backup != NULL && !backup->from_replica &&
 		!(nodeInfo->server_version < 90600 &&
 		  !nodeInfo->is_superuser))
 	{
@@ -1677,7 +1681,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			 * In case of backup from replica >= 9.6 we do not trust minRecPoint
 			 * and stop_backup LSN, so we use latest replayed LSN as STOP LSN.
 			 */
-			if (current.from_replica)
+			if (backup->from_replica)
 				stop_backup_query = "SELECT"
 									" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 									" current_timestamp(0)::timestamptz,"
@@ -1799,8 +1803,8 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 		if (!XRecOffIsValid(stop_backup_lsn_tmp))
 		{
-			/* Replica returned STOP LSN with null offset */
-			if (XRecOffIsNull(stop_backup_lsn_tmp))
+			/* It is ok for replica to return STOP LSN with null offset */
+			if (backup->from_replica && XRecOffIsNull(stop_backup_lsn_tmp))
 			{
 				char	   *xlog_path,
 							stream_xlog_path[MAXPGPATH];
@@ -1888,7 +1892,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				stop_backup_lsn = lsn_tmp;
 				stop_lsn_exists = true;
 			}
-			/* Replica returned something very illegal, error out */
+			/* PostgreSQL returned something very illegal as STOP_LSN, error out */
 			else
 				elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
 					 (uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
@@ -1898,7 +1902,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		if (!exclusive_backup)
 		{
 			Assert(PQnfields(res) >= 4);
-			pgBackupGetPath(&current, path, lengthof(path), DATABASE_DIR);
+			pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
