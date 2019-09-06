@@ -667,7 +667,7 @@ main(int argc, char *argv[])
 			return do_archive_get(&instance_config,
 								  wal_file_path, wal_file_name);
 		case ADD_INSTANCE_CMD:
-			return do_add_instance();
+			return do_add_instance(&instance_config);
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance();
 		case INIT_CMD:

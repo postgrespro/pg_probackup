@@ -538,7 +538,7 @@ extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
 extern int do_init(void);
-extern int do_add_instance(void);
+extern int do_add_instance(InstanceConfig *instance);
 
 /* in archive.c */
 extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,

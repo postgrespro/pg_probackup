@@ -49,21 +49,21 @@ do_init(void)
 }
 
 int
-do_add_instance(void)
+do_add_instance(InstanceConfig *instance)
 {
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
 	struct stat st;
 
 	/* PGDATA is always required */
-	if (instance_config.pgdata == NULL)
+	if (instance->pgdata == NULL)
 		elog(ERROR, "Required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
 	/* Read system_identifier from PGDATA */
-	instance_config.system_identifier = get_system_identifier(instance_config.pgdata);
+	instance->system_identifier = get_system_identifier(instance->pgdata);
 	/* Starting from PostgreSQL 11 read WAL segment size from PGDATA */
-	instance_config.xlog_seg_size = get_xlog_seg_size(instance_config.pgdata);
+	instance->xlog_seg_size = get_xlog_seg_size(instance->pgdata);
 
 	/* Ensure that all root directories already exist */
 	if (access(backup_path, F_OK) != 0)
@@ -78,18 +78,18 @@ do_add_instance(void)
 		elog(ERROR, "%s directory does not exist.", arclog_path_dir);
 
 	/* Create directory for data files of this specific instance */
-	if (stat(backup_instance_path, &st) == 0 && S_ISDIR(st.st_mode))
-		elog(ERROR, "instance '%s' already exists", backup_instance_path);
-	dir_create_dir(backup_instance_path, DIR_PERMISSION);
+	if (stat(instance->backup_instance_path, &st) == 0 && S_ISDIR(st.st_mode))
+		elog(ERROR, "instance '%s' already exists", instance->backup_instance_path);
+	dir_create_dir(instance->backup_instance_path, DIR_PERMISSION);
 
 	/*
 	 * Create directory for wal files of this specific instance.
 	 * Existence check is extra paranoid because if we don't have such a
 	 * directory in data dir, we shouldn't have it in wal as well.
 	 */
-	if (stat(arclog_path, &st) == 0 && S_ISDIR(st.st_mode))
-		elog(ERROR, "arclog_path '%s' already exists", arclog_path);
-	dir_create_dir(arclog_path, DIR_PERMISSION);
+	if (stat(instance->arclog_path, &st) == 0 && S_ISDIR(st.st_mode))
+		elog(ERROR, "arclog_path '%s' already exists", instance->arclog_path);
+	dir_create_dir(instance->arclog_path, DIR_PERMISSION);
 
 	/*
 	 * Write initial configuration file.
@@ -99,9 +99,9 @@ do_add_instance(void)
 	 * We need to manually set options source to save them to the configuration
 	 * file.
 	 */
-	config_set_opt(instance_options, &instance_config.system_identifier,
+	config_set_opt(instance_options, &instance->system_identifier,
 				   SOURCE_FILE);
-	config_set_opt(instance_options, &instance_config.xlog_seg_size,
+	config_set_opt(instance_options, &instance->xlog_seg_size,
 				   SOURCE_FILE);
 	/* pgdata was set through command line */
 	do_set_config(true);
