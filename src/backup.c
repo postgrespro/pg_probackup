@@ -1528,14 +1528,14 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			 * If we failed to get target LSN in a reasonable time, try
 			 * to get LSN of last valid record prior to the target LSN. But only
 			 * in case of a backup from a replica.
-			 * Note, that with NullOffset target_lsn we do not wait
+			 * Note, that with NullXRecOff target_lsn we do not wait
 			 * for 'timeout / 2' seconds before going for previous record,
 			 * because such LSN cannot be delivered at all.
 			 *
 			 * There are two cases for this:
 			 * 1. Replica returned readpoint LSN which just do not exists. We want to look
 			 *  for previous record in the same(!) WAL segment which endpoint points to this LSN.
-			 * 2. Replica returened endpoint LSN with 0 offset. We want to look
+			 * 2. Replica returened endpoint LSN with NullXRecOff. We want to look
 			 *  for previous record which endpoint points greater or equal LSN in previous WAL segment.
 			 */
 			if (current.from_replica &&
@@ -1543,7 +1543,7 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			{
 				XLogRecPtr	res;
 
-				res = get_last_wal_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
+				res = get_prior_record_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
 									   in_prev_segment, instance_config.xlog_seg_size);
 
 				if (!XLogRecPtrIsInvalid(res))
@@ -1803,7 +1803,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 		if (!XRecOffIsValid(stop_backup_lsn_tmp))
 		{
-			/* It is ok for replica to return STOP LSN with null offset */
+			/* It is ok for replica to return STOP LSN with NullXRecOff */
 			if (backup->from_replica && XRecOffIsNull(stop_backup_lsn_tmp))
 			{
 				char	   *xlog_path,
@@ -1820,7 +1820,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 				/*
 				 * Note: even with gdb it is very hard to produce automated tests for
-				 * contrecord + null_offset STOP_LSN, so emulate it for manual testing.
+				 * contrecord + NullXRecOff, so emulate it for manual testing.
 				 */
 				//stop_backup_lsn_tmp = stop_backup_lsn_tmp - XLOG_SEG_SIZE;
 				//elog(WARNING, "New Invalid stop_backup_lsn value %X/%X",
@@ -1841,7 +1841,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				/*
 				 * Note, that there is no guarantee that corresponding WAL file even exists.
 				 * Replica may return LSN from future and keep staying in present.
-				 * Or it can return LSN with invalid XRecOff.
+				 * Or it can return LSN with NullXRecOff.
 				 *
 				 * That's bad, since we want to get real LSN to save it in backup label file
 				 * and to use it in WAL validation.
@@ -1851,9 +1851,8 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				 *	  look for the first valid record in it.
 				 * 	  It solves the problem of occasional invalid XRecOff on write-busy system.
 				 * 2. Failing that, look for record in previous segment with endpoint
-				 *	  equal or greater than stop_lsn. It may(!) solve the problem of 0 offset
+				 *	  equal or greater than stop_lsn. It may(!) solve the problem of NullXRecOff
 				 *	  on write-idle system. If that fails too, error out.
-				 * //TODO what kind of record that refers to?
 				 */
 
 				/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
@@ -1861,7 +1860,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 							false, true, WARNING, stream_wal);
 
 				/* Get the first record in segment with current stop_lsn */
-				lsn_tmp = get_first_wal_lsn(xlog_path, segno, backup->tli,
+				lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
 										    instance_config.xlog_seg_size);
 
 				/* Check that returned LSN is valid and greater than stop_lsn */

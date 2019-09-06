@@ -529,13 +529,10 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 }
 
 /*
- * Get LSN of first record within the WAL segment with number 'segno'.
- *
- * Returns LSN which points to end+1 of the last WAL record if seek_prev_segment
- * is true. Otherwise returns LSN of the record prior to stop_lsn.
+ * Get LSN of a first record within the WAL segment with number 'segno'.
  */
 XLogRecPtr
-get_first_wal_lsn(const char *archivedir, XLogSegNo	segno,
+get_first_record_lsn(const char *archivedir, XLogSegNo	segno,
 				 TimeLineID tli, uint32 wal_seg_size)
 {
 	XLogReaderState *xlogreader;
@@ -574,20 +571,18 @@ get_first_wal_lsn(const char *archivedir, XLogSegNo	segno,
 }
 
 /*
- * Get LSN of last or prior record within the WAL segment with number 'segno'.
- * If 'start_lsn'
- * is in the segment with number 'segno' then start from 'start_lsn', otherwise
- * start from offset 0 within the segment.
+ * Get LSN of a record prior to target_lsn.
+ * If 'start_lsn' is in the segment with number 'segno' then start from 'start_lsn',
+ * otherwise start from offset 0 within the segment.
  *
- * Returns LSN which points to end+1 of the last WAL record if seek_prev_segment
- * is true. Otherwise returns LSN of the record prior to stop_lsn.
+ * Returns LSN of a record which EndRecPtr is greater or equal to target_lsn.
+ * If 'seek_prev_segment' is true, then look for prior record in prior WAL segment.
  *
- * TODO Let's think of better function name.
  * it's unclear that "last" in "last_wal_lsn" refers to the
  * "closest to stop_lsn backward or forward, depending on seek_prev_segment setting".
  */
 XLogRecPtr
-get_last_wal_lsn(const char *archivedir, XLogRecPtr start_lsn,
+get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 				 XLogRecPtr stop_lsn, TimeLineID tli, bool seek_prev_segment,
 				 uint32 wal_seg_size)
 {
