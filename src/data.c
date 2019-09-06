@@ -209,7 +209,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
 		{
-			elog(LOG, "File %s, block %u, file was truncated",
+			elog(VERBOSE, "File %s, block %u, file was truncated",
 					file->path, blknum);
 			return 0;
 		}
@@ -238,7 +238,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		/* Page is zeroed. No need to check header and checksum. */
 		if (i == BLCKSZ)
 		{
-			elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
+			elog(VERBOSE, "File: %s blknum %u, empty page", file->path, blknum);
 			return 1;
 		}
 
@@ -422,7 +422,7 @@ prepare_page(ConnectionArgs *arguments,
 		page_lsn &&
 		page_lsn < prev_backup_start_lsn)
 	{
-		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
+		elog(VERBOSE, "Skipping blknum %u in file: %s", blknum, file->path);
 		(*n_skipped)++;
 		return SkipCurrentPage;
 	}

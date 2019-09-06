@@ -371,7 +371,7 @@ If you are going to use pg_probackup in remote mode via ssh, complete the follow
 
     [backup@backup_host] ssh-copy-id postgres@db_host
 
-- If you planning to rely on [continuous WAL archiving](#setting-up-continuous-wal-archiving), then setup passwordless SSH connection between *postgres* user on `db_host` and *backup* user on `backup_host`:
+- If you are planning to rely on [continuous WAL archiving](#setting-up-continuous-wal-archiving), then setup passwordless SSH connection between *postgres* user on `db_host` and *backup* user on `backup_host`:
 
     [postgres@db_host] ssh-copy-id backup@backup_host
 
