@@ -1399,31 +1399,32 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 }
 
 /*
- * Wait for target 'lsn' or WAL segment, containing 'lsn'.
+ * Wait for target LSN or WAL segment, containing target LSN.
  *
- * If current backup started in archive mode wait for 'lsn' to be archived in
- * archive 'wal' directory with WAL segment file.
- * If current backup started in stream mode wait for 'lsn' to be streamed in
- * 'pg_wal' directory.
+ * Depending on value of flag in_stream_dir wait for target LSN to archived or
+ * streamed in 'archive_dir' or 'pg_wal' directory.
  *
- * If 'is_start_lsn' is true then issue warning for first-time users.
+ * If flag 'is_start_lsn' is set then issue warning for first-time users.
+ * If flag 'in_prev_segment' is set, look for LSN in previous segment,
+ *  with EndRecPtr >= Target LSN. It should be used only for solving
+ *  invalid XRecOff problem.
+ * If flag 'segment_only' is set, then, instead of waiting for LSN, wait for segment,
+ *  containing that LSN.
+ * If flags 'in_prev_segment' and 'segment_only' are both set, then wait for
+ *  previous segment.
  *
- * If 'in_prev_segment' is set, look for LSN in previous segment.
- * If 'segment_only' is set, then instead of looking for LSN, look for segment itself.
- * If 'in_prev_segment' and 'segment_only' are both set, then wait for previous segment.
+ * Flag 'in_stream_dir' determine whether we looking for WAL in 'pg_wal' directory or
+ * in archive. Do note, that we cannot rely sorely on global variable 'stream_wal' because,
+ * for example, PAGE backup must(!) look for start_lsn in archive regardless of wal_mode.
  *
- * Flag 'in_stream_dir' determine whether we looking for wal in 'pg_wal' directory or
- * in archive. Do note, that we cannot rely sorely on 'stream_wal' because, for example,
- * PAGE backup must(!) look for start_lsn in archive regardless of wal_mode.
-
  * 'timeout_elevel' determine the elevel for timeout elog message. If elevel lighter than
  * ERROR is used, then return InvalidXLogRecPtr. TODO: return something more concrete, for example 1.
  *
- * Returns LSN of last valid record if wait_prev_segment is not true, otherwise
- * returns InvalidXLogRecPtr.
+ * Returns target LSN if such is found, failing that returns LSN of record prior to target LSN.
+ * Returns InvalidXLogRecPtr if 'segment_only' flag is used.
  */
 static XLogRecPtr
-wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
+wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			 bool in_prev_segment, bool segment_only,
 			 int timeout_elevel, bool in_stream_dir)
 {
@@ -1442,16 +1443,16 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 #endif
 
 	/* Compute the name of the WAL file containing requested LSN */
-	GetXLogSegNo(lsn, targetSegNo, instance_config.xlog_seg_size);
+	GetXLogSegNo(target_lsn, targetSegNo, instance_config.xlog_seg_size);
 	if (in_prev_segment)
 		targetSegNo--;
 	GetXLogFileName(wal_segment, tli, targetSegNo,
 					instance_config.xlog_seg_size);
 
 	/*
-	 * In pg_start_backup we wait for 'lsn' in 'pg_wal' directory if it is
+	 * In pg_start_backup we wait for 'target_lsn' in 'pg_wal' directory if it is
 	 * stream and non-page backup. Page backup needs archived WAL files, so we
-	 * wait for 'lsn' in archive 'wal' directory for page backups.
+	 * wait for 'target_lsn' in archive 'wal' directory for page backups.
 	 *
 	 * In pg_stop_backup it depends only on stream_wal.
 	 */
@@ -1468,6 +1469,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 		wal_segment_dir = arclog_path;
 	}
 
+	/* TODO: remove this in 3.0 (it is a cludge against some old bug with archive_timeout) */
 	if (instance_config.archive_timeout > 0)
 		timeout = instance_config.archive_timeout;
 	else
@@ -1477,7 +1479,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 		elog(LOG, "Looking for segment: %s", wal_segment);
 	else
 		elog(LOG, "Looking for LSN %X/%X in segment: %s",
-			 (uint32) (lsn >> 32), (uint32) lsn, wal_segment);
+			 (uint32) (target_lsn >> 32), (uint32) target_lsn, wal_segment);
 
 #ifdef HAVE_LIBZ
 	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
@@ -1506,26 +1508,24 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 
 		if (file_exists)
 		{
-			//TODO is this comment also relates to current segment_only case
-			// and should be updated?
-			/* Do not check LSN for previous WAL segment */
+			/* Do not check for target LSN */
 			if (segment_only)
 				return InvalidXLogRecPtr;
 
 			/*
-			 * A WAL segment found. Check LSN on it.
+			 * A WAL segment found. Look for target LSN in it.
 			 */
-			if (!XRecOffIsNull(lsn) &&
-				  wal_contains_lsn(wal_segment_dir, lsn, tli,
+			if (!XRecOffIsNull(target_lsn) &&
+				  wal_contains_lsn(wal_segment_dir, target_lsn, tli,
 									instance_config.xlog_seg_size))
 				/* Target LSN was found */
 			{
-				elog(LOG, "Found LSN: %X/%X", (uint32) (lsn >> 32), (uint32) lsn);
-				return lsn;
+				elog(LOG, "Found LSN: %X/%X", (uint32) (target_lsn >> 32), (uint32) target_lsn);
+				return target_lsn;
 			}
 
 			/*
-			 * If we failed to get LSN of valid record in a reasonable time, try
+			 * If we failed to get target LSN in a reasonable time, try
 			 * to get LSN of last valid record prior to the target LSN. But only
 			 * in case of a backup from a replica.
 
@@ -1539,7 +1539,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 			{
 				XLogRecPtr	res;
 
-				res = get_last_wal_lsn(wal_segment_dir, current.start_lsn, lsn, tli,
+				res = get_last_wal_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
 									   in_prev_segment, instance_config.xlog_seg_size);
 
 				if (!XLogRecPtrIsInvalid(res))
@@ -1565,7 +1565,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 					 wal_segment_path, wal_delivery_str);
 			else
 				elog(INFO, "Wait for LSN %X/%X in %s WAL segment %s",
-					 (uint32) (lsn >> 32), (uint32) lsn,
+					 (uint32) (target_lsn >> 32), (uint32) target_lsn,
 					 wal_delivery_str, wal_segment_path);
 		}
 
@@ -1580,7 +1580,7 @@ wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 				elog(timeout_elevel, "WAL segment %s was %s, "
 					 "but target LSN %X/%X could not be archived in %d seconds",
 					 wal_segment, wal_delivery_str,
-					 (uint32) (lsn >> 32), (uint32) lsn, timeout);
+					 (uint32) (target_lsn >> 32), (uint32) target_lsn, timeout);
 			/* If WAL segment doesn't exist or we wait for previous segment */
 			else
 				elog(timeout_elevel,
@@ -1808,11 +1808,10 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
 
 				/*
-				 * TODO Let's rephrase that to be less scary for a user.
 				 * Even though the value is invalid, it's expected postgres behaviour
 				 * and we're trying to fix it below.
 				 */
-				elog(WARNING, "Invalid stop_backup_lsn value %X/%X",
+				elog(LOG, "Null offset in stop_backup_lsn value %X/%X, trying to fix",
 					 (uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
 
 				/*
@@ -1844,15 +1843,12 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				 * and to use it in WAL validation.
 				 *
 				 * So we try to do the following:
-				 * 1. Wait for current segment and look in it for the LSN >= STOP_LSN.
-				 * //TODO what is 'current' segment?
-				 * //TODO how long do we wait? is there a timeout?
-				 * 	  It solves the problem of occasional invalid XRecOff
-				 * 	  on write-busy system.
+				 * 1. Wait 'archive_timeout' seconds for segment containing stop_lsn and
+				 *	  look for the first valid record in it.
+				 * 	  It solves the problem of occasional invalid XRecOff on write-busy system.
 				 * 2. Failing that, look for record in previous segment with endpoint
-				 *		equal or greater than 0 offset LSN. It may(!) solve the problem of 0 offset
-				 *		on write-idle system.
-				 * //TODO what if if didn't?
+				 *	  equal or greater than stop_lsn. It may(!) solve the problem of 0 offset
+				 *	  on write-idle system. If that fails too, error out.
 				 * //TODO what kind of record that refers to?
 				 */
 
@@ -1864,8 +1860,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				lsn_tmp = get_first_wal_lsn(xlog_path, segno, backup->tli,
 										    instance_config.xlog_seg_size);
 
-				/* Check if returned LSN is satisfying our requirements */
-				//TODO what requirements?
+				/* Check that returned LSN is valid and greater than stop_lsn */
 				if (XLogRecPtrIsInvalid(lsn_tmp) ||
 					!XRecOffIsValid(lsn_tmp) ||
 					lsn_tmp < stop_backup_lsn_tmp)
@@ -1893,9 +1888,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				stop_backup_lsn = lsn_tmp;
 				stop_lsn_exists = true;
 			}
-			 //TODO is it good to throw an error here? Shouldn't we rather
-			 // save it as is and mark backup as DONE instead of OK
-			 // and check it in validation and restore?
+			/* Replica returned something very illegal, error out */
 			else
 				elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
 					 (uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
@@ -2000,9 +1993,8 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 		/*
 		 * Wait for stop_lsn to be archived or streamed.
-		 * //TODO is the sentence below outdated?
-		 * If replica returned non-existent LSN, look for previous record,
-		 * which endpoint >= stop_lsn
+		 * If replica returned valid STOP_LSN of not actually existing record,
+		 * look for previous record with endpoint >= STOP_LSN.
 		 */
 		if (!stop_lsn_exists)
 			stop_backup_lsn = wait_wal_lsn(stop_backup_lsn_tmp, false, backup->tli,
