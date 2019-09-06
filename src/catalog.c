@@ -24,6 +24,7 @@ static pgBackup *readBackupControlFile(const char *path);
 static bool exit_hook_registered = false;
 static parray *lock_files = NULL;
 
+/* Iterate over locked backups and delete locks files */
 static void
 unlink_lock_atexit(void)
 {
