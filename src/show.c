@@ -709,11 +709,13 @@ show_instance_archive(InstanceConfig *instance)
 				/* check, if segments are consequent */
 				XLogSegNo expected_segno = 0;
 
-				/* NOTE order of checks is essential */
+				/*
+				 * If end_segno is not set, this is the first segment in the timeline,
+				 * As it is impossible to detect if segments before segno are lost,
+				 * or just do not exist, do not report them as lost.
+				 */
 				if (tlinfo->end_segno)
 					expected_segno = tlinfo->end_segno + 1;
-				else if (tlinfo->start_lsn)
-					expected_segno = tlinfo->start_lsn / instance->xlog_seg_size;
 
 				/* some segments are missing. remember them in lost_files to report */
 				if (segno != expected_segno)
