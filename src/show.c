@@ -739,8 +739,6 @@ show_instance_archive(InstanceConfig *instance)
 				/* check, if segments are consequent */
 				XLogSegNo expected_segno = tlinfo->end_segno + 1;
 
-
-
 				/* some segments are missing. remember them in lost_files to report */
 				if (segno != expected_segno)
 				{
@@ -748,7 +746,6 @@ show_instance_archive(InstanceConfig *instance)
 					interval->begin_segno = expected_segno;
 					interval->end_segno = segno - 1;
 
-					elog(INFO, "segno %u, expected_segno %u", segno, expected_segno);
 					if (tlinfo->lost_files == NULL)
 						tlinfo->lost_files = parray_new();
 					
