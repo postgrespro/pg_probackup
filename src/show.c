@@ -685,37 +685,61 @@ show_instance_archive(InstanceConfig *instance)
 	for (int i = 0; i < parray_num(xlog_files_list); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(xlog_files_list, i);
-		int result = 0;
 		TimeLineID tli;
 		parray *timelines;
-		uint32 log, seg, backup_start_lsn;
-		XLogSegNo segno;
-
-		result = sscanf(file->name, "%08X%08X%08X.%08X.backup",
-						&tli, &log, &seg, &backup_start_lsn);
-		segno = log * instance->xlog_seg_size + seg;
 
 		/* regular WAL file */
-		if (result == 3)
+		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
 		{
+			int result = 0;
+			uint32 log, seg;
+			XLogSegNo segno;
+			char suffix[MAXPGPATH];
+
+			result = sscanf(file->name, "%08X%08X%08X.%s",
+						&tli, &log, &seg, (char *) &suffix);
+
+			if (result < 3)
+			{
+				elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+				continue;
+			}
+
+			segno = log * instance->xlog_seg_size + seg;
+
+			/* regular WAL file with suffix */
+			if (result == 4)
+			{
+				/* backup history file. Currently we don't use them */
+				if (IsBackupHistoryFileName(file->name))
+				{
+					elog(VERBOSE, "backup history file \"%s\". do nothing", file->name);
+					continue;
+				}
+				/* we only expect compressed wal files with .gz suffix */
+				else if (strcmp(suffix, "gz") != 0)
+				{
+					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+					continue;
+				}
+			}
+
 			/* new file belongs to new timeline */
 			if (!tlinfo || tlinfo->tli != tli)
 			{
 				tlinfo = timelineInfoNew(tli);
 				parray_append(timelineinfos, tlinfo);
 			}
-			else
+			/*
+			 * As it is impossible to detect if segments before segno are lost,
+			 * or just do not exist, do not report them as lost.
+			 */
+			else if (tlinfo->n_xlog_files != 0)
 			{
 				/* check, if segments are consequent */
-				XLogSegNo expected_segno = 0;
+				XLogSegNo expected_segno = tlinfo->end_segno + 1;
 
-				/*
-				 * If end_segno is not set, this is the first segment in the timeline,
-				 * As it is impossible to detect if segments before segno are lost,
-				 * or just do not exist, do not report them as lost.
-				 */
-				if (tlinfo->end_segno)
-					expected_segno = tlinfo->end_segno + 1;
+
 
 				/* some segments are missing. remember them in lost_files to report */
 				if (segno != expected_segno)
@@ -724,6 +748,7 @@ show_instance_archive(InstanceConfig *instance)
 					interval->begin_segno = expected_segno;
 					interval->end_segno = segno - 1;
 
+					elog(INFO, "segno %u, expected_segno %u", segno, expected_segno);
 					if (tlinfo->lost_files == NULL)
 						tlinfo->lost_files = parray_new();
 					
@@ -739,15 +764,6 @@ show_instance_archive(InstanceConfig *instance)
 			/* update counters */
 			tlinfo->n_xlog_files++;
 			tlinfo->size += file->size;
-		}
-		/* backup history file. Currently we don't use them */
-		else if (result == 4)
-		{
-			/* first file in this timeline is backup history file. that's strange */
-			if (tlinfo->tli != tli)
-				elog(INFO, "found backup history xlog,"
-						   " that doesn't have corresponding wal file");
-
 		}
 		/* timeline history file */
 		else if (IsTLHistoryFileName(file->name))
@@ -837,7 +853,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
 		widths[i] = strlen(names[i]);
 
-	rows = (ShowArchiveRow *) palloc(parray_num(tli_list) *
+	rows = (ShowArchiveRow *) palloc0(parray_num(tli_list) *
 									 sizeof(ShowArchiveRow));
 
 	/*
@@ -848,6 +864,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
 		ShowArchiveRow *row = &rows[i];
 		int			cur = 0;
+		float		zratio = 0;
 
 		/* TLI */
 		snprintf(row->tli, lengthof(row->tli), "%u",
@@ -896,8 +913,9 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 
 		/* Zratio (compression ratio) */
 		if (tlinfo->size != 0)
-			snprintf(row->zratio, lengthof(row->n_files), "%.2f",
-				 (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size));
+			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
+
+		snprintf(row->zratio, lengthof(row->n_files), "%.2f", zratio);
 		widths[cur] = Max(widths[cur], strlen(row->zratio));
 		cur++;
 
@@ -1017,6 +1035,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	{
 		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(tli_list, i);
 		char		tmp_buf[20];
+		float		zratio = 0;
 
 		if (i != 0)
 			appendPQExpBufferChar(buf, ',');
@@ -1097,7 +1116,9 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		appendPQExpBuffer(buf, "%lu", tlinfo->size);
 
 		json_add_key(buf, "zratio", json_level);
-		appendPQExpBuffer(buf, "%.2f", (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size));
+		if (tlinfo->size != 0)
+			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
+		appendPQExpBuffer(buf, "%.2f", zratio);
 
 		if (tlinfo->lost_files == NULL)
 			json_add_value(buf, "status", status2str(BACKUP_STATUS_OK), json_level,
