@@ -839,7 +839,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 	int			i;
 	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
 					{ "TLI", "Parent TLI", "Switchpoint",
-					  "Min Segno", "Max Segno", "N files", "Size", "Zratio", "Status", "N backups"};
+					  "Min Segno", "Max Segno", "N files", "Size", "Zratio", "N backups", "Status"};
 	const char *field_formats[SHOW_ARCHIVE_FIELDS_COUNT] =
 					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
 					  " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "};
@@ -916,18 +916,18 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		widths[cur] = Max(widths[cur], strlen(row->zratio));
 		cur++;
 
-		/* Status */
-		if (tlinfo->lost_files == NULL)
-			row->status = status2str(BACKUP_STATUS_OK);
-		else
-			row->status = status2str(BACKUP_STATUS_CORRUPT);
-		widths[cur] = Max(widths[cur], strlen(row->status));
-		cur++;
-
 		/* N backups */
 		snprintf(row->n_backups, lengthof(row->n_backups), "%lu",
 				 tlinfo->backups?parray_num(tlinfo->backups):0);
 		widths[cur] = Max(widths[cur], strlen(row->n_backups));
+		cur++;
+
+		/* Status */
+		if (tlinfo->lost_files == NULL)
+			row->status = "OK";
+		else
+			row->status = "DEGRADED";
+		widths[cur] = Max(widths[cur], strlen(row->status));
 		cur++;
 	}
 
@@ -995,11 +995,11 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
-						  row->status);
+						  row->n_backups);
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
-						  row->n_backups);
+						  row->status);
 		cur++;
 		appendPQExpBufferChar(&show_buf, '\n');
 	}
@@ -1118,11 +1118,9 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		appendPQExpBuffer(buf, "%.2f", zratio);
 
 		if (tlinfo->lost_files == NULL)
-			json_add_value(buf, "status", status2str(BACKUP_STATUS_OK), json_level,
-					   true);
+			json_add_value(buf, "status", "OK", json_level, true);
 		else
-			json_add_value(buf, "status", status2str(BACKUP_STATUS_CORRUPT), json_level,
-					   true);
+			json_add_value(buf, "status", "DEGRADED", json_level, true);
 
 		json_add(buf, JT_END_OBJECT, &json_level);
 	}

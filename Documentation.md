@@ -36,6 +36,7 @@ Current version - 2.1.5
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
+    * [Showing WAL Archive Information] (#showing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
@@ -668,6 +669,7 @@ If nothing is given, the default values are taken. By default pg_probackup tries
 With pg_probackup, you can manage backups from the command line:
 
 - View available backups
+- View available WAL Archive Information
 - Validate backups
 - Merge backups
 - Delete backups
@@ -793,6 +795,156 @@ The sample output is as follows:
     }
 ]
 ```
+
+### Showing WAL Archive Information
+
+To view the information about WAL archive for every instance, run the command:
+
+    pg_probackup show -B backup_dir [--instance instance_name] --archive
+
+pg_probackup displays the list of all the available WAL files grouped by timelines. For example:
+
+```
+ARCHIVE INSTANCE 'node'
+==============================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N files  Size  Zratio  N backups  Status   
+==============================================================================================================
+ 1    0           0/0          0000000000000001  0000000000000005  5        83MB  1.00    1          OK       
+ 2    1           0/6000000    0000000000000006  000000000000000A  3        50MB  1.00    1          DEGRADED 
+ 3    1           0/6000000    0000000000000000  0000000000000000  0        0B    0.00    0          OK       
+
+```
+
+For each backup, the following information is provided:
+
+- TLI — timeline identifier
+- Parent TLI — identifier of timeline TLI branched off
+- Switchpoint — LSN of the moment when the timeline branched off from "Parent TLI"
+- Min Segno — number of the first existing WAL segment belonging to the timeline
+- Max Segno — number of the last existing WAL segment belonging to the timeline
+- N files — number of WAL segments belonging to the timeline
+- Size — the size files take on disk.
+- Zratio - compression ratio calculated as "N files" * wal_seg_size / "Size".
+- N backups — number of backups belonging to the timeline. 
+To get details about backups, use json format.
+- Status — archive status for this exact timeline. Possible values:
+	- OK — all WAL segments between Min and Max are present.
+	- DEGRADED — some WAL segments between Min and Max are lost.
+	To get details about lost files, use json format.
+
+To get more detailed information about the WAL archive in json format, run the command:
+
+    pg_probackup show -B backup_dir [--instance instance_name] --archive --format=json
+
+The sample output is as follows:
+
+```
+[
+    {
+        "instance": "node",
+        "timelines": [
+            {
+                "tli": 1,
+                "parent-tli": 0,
+                "start-lsn": "0/0",
+                "min-segno": "0000000000000001",
+                "max-segno": "0000000000000005",
+                "backups": [
+                    {
+                        "id": "PXO4P7",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "11",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/4000028",
+                        "stop-lsn": "0/4000208",
+                        "start-time": "2019-09-11 16:12:43+03",
+                        "end-time": "2019-09-11 16:13:35+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-11 16:13:33+03",
+                        "data-bytes": 68598381,
+                        "wal-bytes": 16777216,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ],
+                "n-files": 5,
+                "size": 83886080,
+                "zratio": 1.00,
+                "status": "OK"
+            },
+            {
+                "tli": 2,
+                "parent-tli": 1,
+                "start-lsn": "0/6000000",
+                "min-segno": "0000000000000006",
+                "max-segno": "000000000000000A",
+                "lost_files": [
+                    {
+                        "begin-segno": "0000000000000007",
+                        "end-segno": "0000000000000008"
+                    }
+                ],
+                "backups": [
+                    {
+                        "id": "PXO4RN",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "11",
+                        "current-tli": 2,
+                        "parent-tli": 0,
+                        "start-lsn": "0/9000028",
+                        "stop-lsn": "0/9000208",
+                        "start-time": "2019-09-11 16:14:11+03",
+                        "end-time": "2019-09-11 16:14:59+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-11 16:14:58+03",
+                        "data-bytes": 69541933,
+                        "wal-bytes": 16777216,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ],
+                "n-files": 3,
+                "size": 50331648,
+                "zratio": 1.00,
+                "status": "DEGRADED"
+            },
+            {
+                "tli": 3,
+                "parent-tli": 1,
+                "start-lsn": "0/6000000",
+                "min-segno": "0000000000000000",
+                "max-segno": "0000000000000000",
+                "n-files": 0,
+                "size": 0,
+                "zratio": 0.00,
+                "status": "OK"
+            }
+        ]
+    }
+]
+```
+
+Most fields are consistent with plain format, with two exceptions:
+
+- size is in bytes
+- DEGRADED timelines contain 'lost_files' array with information about intervals of lost segments.
 
 ### Configuring Backup Retention Policy
 
@@ -963,9 +1115,9 @@ To edit pg_probackup.conf, use the [set-config](#set-config) command.
 #### show
 
     pg_probackup show -B backup_dir
-    [--help] [--instance instance_name [-i backup_id]] [--format=plain|json]
+    [--help] [--instance instance_name [-i backup_id | --archive]] [--format=plain|json]
 
-Shows the contents of the backup catalog. If *instance_name* and *backup_id* are specified, shows detailed information about this backup. You can specify the `--format=json` option to return the result in the JSON format.
+Shows the contents of the backup catalog. If *instance_name* and *backup_id* are specified, shows detailed information about this backup. You can specify the `--format=json` option to return the result in the JSON format. If `--archive` option is specified, shows the content of WAL archive of the backup catalog.
 
 By default, the contents of the backup catalog is shown as plain text.
 
