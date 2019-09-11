@@ -807,11 +807,11 @@ pg_probackup displays the list of all the available WAL files grouped by timelin
 ```
 ARCHIVE INSTANCE 'node'
 ==============================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N files  Size  Zratio  N backups  Status   
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N files  Size  Zratio  N backups  Status
 ==============================================================================================================
- 1    0           0/0          0000000000000001  0000000000000005  5        83MB  1.00    1          OK       
- 2    1           0/6000000    0000000000000006  000000000000000A  3        50MB  1.00    1          DEGRADED 
- 3    1           0/6000000    0000000000000000  0000000000000000  0        0B    0.00    0          OK       
+ 1    0           0/0          0000000000000001  0000000000000005  5        83MB  1.00    1          OK
+ 2    1           0/6000000    0000000000000006  000000000000000A  3        50MB  1.00    1          DEGRADED
+ 3    1           0/6000000    0000000000000000  0000000000000000  0        0B    0.00    0          OK
 
 ```
 
@@ -825,7 +825,7 @@ For each backup, the following information is provided:
 - N files — number of WAL segments belonging to the timeline
 - Size — the size files take on disk.
 - Zratio - compression ratio calculated as "N files" * wal_seg_size / "Size".
-- N backups — number of backups belonging to the timeline. 
+- N backups — number of backups belonging to the timeline.
 To get details about backups, use json format.
 - Status — archive status for this exact timeline. Possible values:
 	- OK — all WAL segments between Min and Max are present.
