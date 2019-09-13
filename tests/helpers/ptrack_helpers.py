@@ -1018,46 +1018,76 @@ class ProbackupTest(object):
             self, backup_dir, instance, node, replica=False,
             overwrite=False, compress=False, old_binary=False):
 
+        # parse postgresql.auto.conf
+        options = {}
         if replica:
-            archive_mode = 'always'
-            node.append_conf('postgresql.auto.conf', 'hot_standby = on')
+            options['archive_mode'] = 'always'
+            options['hot_standby'] = 'on'
         else:
-            archive_mode = 'on'
+            options['archive_mode'] = 'on'
 
-        node.append_conf(
-                'postgresql.auto.conf',
-                'archive_mode = {0}'.format(archive_mode)
-                )
         if os.name == 'posix':
-            archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
+            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
                 self.probackup_path, backup_dir, instance)
 
         elif os.name == 'nt':
-            archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
+            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
                 self.probackup_path.replace("\\","\\\\"),
-                backup_dir.replace("\\","\\\\"),
-                instance)
+                backup_dir.replace("\\","\\\\"), instance)
 
         # don`t forget to kill old_binary after remote ssh release
         if self.remote and not old_binary:
-            archive_command = archive_command + '--remote-proto=ssh --remote-host=localhost '
+            options['archive_command'] += '--remote-proto=ssh '
+            options['archive_command'] += '--remote-host=localhost '
 
         if self.archive_compress or compress:
-            archive_command = archive_command + '--compress '
+            options['archive_command'] += '--compress '
 
         if overwrite:
-            archive_command = archive_command + '--overwrite '
+            options['archive_command'] += '--overwrite '
 
         if os.name == 'posix':
-            archive_command = archive_command + '--wal-file-path=%p --wal-file-name=%f'
+            options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
-            archive_command = archive_command + '--wal-file-path="%p" --wal-file-name="%f"'
+            options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
 
-        node.append_conf(
-                    'postgresql.auto.conf',
-                    "archive_command = '{0}'".format(
-                        archive_command))
+        self.set_auto_conf(node, options)
+
+    def set_auto_conf(self, node, options):
+
+        # parse postgresql.auto.conf
+        path = os.path.join(node.data_dir, 'postgresql.auto.conf')
+
+        with open(path, 'r') as f:
+            raw_content = f.read()
+
+        current_options = {}
+        for line in raw_content.splitlines():
+
+            # ignore comments
+            if line.startswith('#'):
+                continue
+
+            name, var = line.partition('=')[::2]
+            name = name.strip()
+            var = var.strip()
+            var = var.strip('"')
+            var = var.strip("'")
+            current_options[name] = var
+
+        for option in options:
+            current_options[option] = options[option]
+
+        auto_conf = ''
+        for option in current_options:
+            auto_conf += "{0} = '{1}'\n".format(
+                option, current_options[option])
+
+        with open(path, 'wt') as f:
+            f.write(auto_conf)
+            f.flush()
+            f.close()
 
     def set_replica(
             self, master, replica,
