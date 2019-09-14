@@ -36,7 +36,7 @@ Current version - 2.1.5
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
-    * [Showing WAL Archive Information] (#showing-wal-archive-information)
+    * [Showing WAL Archive Information](#showing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
@@ -806,31 +806,29 @@ pg_probackup displays the list of all the available WAL files grouped by timelin
 
 ```
 ARCHIVE INSTANCE 'node'
-==============================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N files  Size  Zratio  N backups  Status
-==============================================================================================================
- 1    0           0/0          0000000000000001  0000000000000005  5        83MB  1.00    1          OK
- 2    1           0/6000000    0000000000000006  000000000000000A  3        50MB  1.00    1          DEGRADED
- 3    1           0/6000000    0000000000000000  0000000000000000  0        0B    0.00    0          OK
+===================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size    Zratio  N backups  Status
+===================================================================================================================
+ 3    2           0/15000000   0000000000000015  0000000000000017  3           648kB   77.00   0          OK
+ 2    1           0/B000108    000000000000000B  0000000000000015  5           892kB   94.00   3          DEGRADED
+ 1    0           0/0          0000000000000001  000000000000000A  10          8774kB  19.00   2          OK
 
 ```
 
 For each backup, the following information is provided:
 
-- TLI — timeline identifier
-- Parent TLI — identifier of timeline TLI branched off
-- Switchpoint — LSN of the moment when the timeline branched off from "Parent TLI"
-- Min Segno — number of the first existing WAL segment belonging to the timeline
-- Max Segno — number of the last existing WAL segment belonging to the timeline
-- N files — number of WAL segments belonging to the timeline
+- TLI — timeline identifier.
+- Parent TLI — identifier of timeline TLI branched off.
+- Switchpoint — LSN of the moment when the timeline branched off from "Parent TLI".
+- Min Segno — number of the first existing WAL segment belonging to the timeline.
+- Max Segno — number of the last existing WAL segment belonging to the timeline.
+- N segments — number of WAL segments belonging to the timeline.
 - Size — the size files take on disk.
-- Zratio - compression ratio calculated as "N files" * wal_seg_size / "Size".
-- N backups — number of backups belonging to the timeline.
-To get details about backups, use json format.
+- Zratio - compression ratio calculated as "N segments" * wal_seg_size / "Size".
+- N backups — number of backups belonging to the timeline. To get details about backups, use json format.
 - Status — archive status for this exact timeline. Possible values:
 	- OK — all WAL segments between Min and Max are present.
-	- DEGRADED — some WAL segments between Min and Max are lost.
-	To get details about lost files, use json format.
+	- DEGRADED — some WAL segments between Min and Max are lost. To get details about lost files, use json format.
 
 To get more detailed information about the WAL archive in json format, run the command:
 
@@ -841,61 +839,44 @@ The sample output is as follows:
 ```
 [
     {
-        "instance": "node",
+        "instance": "replica",
         "timelines": [
             {
-                "tli": 1,
-                "parent-tli": 0,
-                "start-lsn": "0/0",
-                "min-segno": "0000000000000001",
-                "max-segno": "0000000000000005",
-                "backups": [
-                    {
-                        "id": "PXO4P7",
-                        "backup-mode": "FULL",
-                        "wal": "ARCHIVE",
-                        "compress-alg": "none",
-                        "compress-level": 1,
-                        "from-replica": "false",
-                        "block-size": 8192,
-                        "xlog-block-size": 8192,
-                        "checksum-version": 1,
-                        "program-version": "2.1.5",
-                        "server-version": "11",
-                        "current-tli": 1,
-                        "parent-tli": 0,
-                        "start-lsn": "0/4000028",
-                        "stop-lsn": "0/4000208",
-                        "start-time": "2019-09-11 16:12:43+03",
-                        "end-time": "2019-09-11 16:13:35+03",
-                        "recovery-xid": 0,
-                        "recovery-time": "2019-09-11 16:13:33+03",
-                        "data-bytes": 68598381,
-                        "wal-bytes": 16777216,
-                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
-                        "status": "OK"
-                    }
-                ],
-                "n-files": 5,
-                "size": 83886080,
-                "zratio": 1.00,
-                "status": "OK"
+                "tli": 3,
+                "parent-tli": 2,
+                "switchpoint": "0/15000000",
+                "min-segno": "0000000000000015",
+                "max-segno": "0000000000000017",
+                "n-segments": 3,
+                "size": 648911,
+                "zratio": 77.00,
+                "status": "OK",
+                "lost_files": [],
+                "backups": []
             },
             {
                 "tli": 2,
                 "parent-tli": 1,
-                "start-lsn": "0/6000000",
-                "min-segno": "0000000000000006",
-                "max-segno": "000000000000000A",
+                "switchpoint": "0/B000108",
+                "min-segno": "000000000000000B",
+                "max-segno": "0000000000000015",
+                "n-segments": 5,
+                "size": 892173,
+                "zratio": 94.00,
+                "status": "DEGRADED",
                 "lost_files": [
                     {
-                        "begin-segno": "0000000000000007",
-                        "end-segno": "0000000000000008"
+                        "begin-segno": "000000000000000C",
+                        "end-segno": "000000000000000E"
+                    },
+                    {
+                        "begin-segno": "0000000000000010",
+                        "end-segno": "0000000000000012"
                     }
                 ],
                 "backups": [
                     {
-                        "id": "PXO4RN",
+                        "id": "PXS9CE",
                         "backup-mode": "FULL",
                         "wal": "ARCHIVE",
                         "compress-alg": "none",
@@ -905,46 +886,141 @@ The sample output is as follows:
                         "xlog-block-size": 8192,
                         "checksum-version": 1,
                         "program-version": "2.1.5",
-                        "server-version": "11",
+                        "server-version": "10",
                         "current-tli": 2,
                         "parent-tli": 0,
-                        "start-lsn": "0/9000028",
-                        "stop-lsn": "0/9000208",
-                        "start-time": "2019-09-11 16:14:11+03",
-                        "end-time": "2019-09-11 16:14:59+03",
+                        "start-lsn": "0/C000028",
+                        "stop-lsn": "0/C000160",
+                        "start-time": "2019-09-13 21:43:26+03",
+                        "end-time": "2019-09-13 21:43:30+03",
                         "recovery-xid": 0,
-                        "recovery-time": "2019-09-11 16:14:58+03",
-                        "data-bytes": 69541933,
+                        "recovery-time": "2019-09-13 21:43:29+03",
+                        "data-bytes": 104674852,
                         "wal-bytes": 16777216,
                         "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
                         "status": "OK"
                     }
-                ],
-                "n-files": 3,
-                "size": 50331648,
-                "zratio": 1.00,
-                "status": "DEGRADED"
+                ]
             },
             {
-                "tli": 3,
-                "parent-tli": 1,
-                "start-lsn": "0/6000000",
-                "min-segno": "0000000000000000",
-                "max-segno": "0000000000000000",
-                "n-files": 0,
-                "size": 0,
-                "zratio": 0.00,
-                "status": "OK"
+                "tli": 1,
+                "parent-tli": 0,
+                "switchpoint": "0/0",
+                "min-segno": "0000000000000001",
+                "max-segno": "000000000000000A",
+                "n-segments": 10,
+                "size": 8774805,
+                "zratio": 19.00,
+                "status": "OK",
+                "lost_files": [],
+                "backups": [
+                    {
+                        "id": "PXS92O",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "true",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/4000028",
+                        "stop-lsn": "0/6000028",
+                        "start-time": "2019-09-13 21:37:36+03",
+                        "end-time": "2019-09-13 21:38:45+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:30+03",
+                        "data-bytes": 25987319,
+                        "wal-bytes": 50331648,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "instance": "master",
+        "timelines": [
+            {
+                "tli": 1,
+                "parent-tli": 0,
+                "switchpoint": "0/0",
+                "min-segno": "0000000000000001",
+                "max-segno": "000000000000000B",
+                "n-segments": 11,
+                "size": 8860892,
+                "zratio": 20.00,
+                "status": "OK",
+                "lost_files": [],
+                "backups": [
+                    {
+                        "id": "PXS92H",
+                        "parent-backup-id": "PXS92C",
+                        "backup-mode": "PAGE",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 1,
+                        "start-lsn": "0/4000028",
+                        "stop-lsn": "0/50000B8",
+                        "start-time": "2019-09-13 21:37:29+03",
+                        "end-time": "2019-09-13 21:37:31+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:30+03",
+                        "data-bytes": 1328461,
+                        "wal-bytes": 33554432,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    },
+                    {
+                        "id": "PXS92C",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/2000028",
+                        "stop-lsn": "0/2000160",
+                        "start-time": "2019-09-13 21:37:24+03",
+                        "end-time": "2019-09-13 21:37:29+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:28+03",
+                        "data-bytes": 24871902,
+                        "wal-bytes": 16777216,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
             }
         ]
     }
 ]
 ```
 
-Most fields are consistent with plain format, with two exceptions:
+Most fields are consistent with plain format, with some exceptions:
 
-- size is in bytes
+- size is in bytes.
 - DEGRADED timelines contain 'lost_files' array with information about intervals of lost segments.
+- 'N backups' replaced with array of backups belonging to timeline.
 
 ### Configuring Backup Retention Policy
 
