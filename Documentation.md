@@ -36,7 +36,7 @@ Current version - 2.1.5
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
-    * [Showing WAL Archive Information](#showing-wal-archive-information)
+        * [Viewing WAL Archive Information](#viewing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
@@ -127,7 +127,7 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 - Remote operations: backup PostgreSQL instance located on remote machine or restore backup on it
 - Backup from replica: avoid extra load on the master server by taking backups from a standby
 - External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
-- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
+- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats and view WAL Archive information.
 - Partial Restore: restore the only specified databases or skip the specified databases.
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
@@ -301,7 +301,9 @@ Making backups in PAGE backup mode, performing [PITR](#performing-point-in-time-
 
 Where *backup_dir* and *instance_name* refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote host. For details about all possible `archive-push` parameters, see the section [archive-push](#archive-push).
 
-Once these steps are complete, you can start making backups with ARCHIVE WAL mode, backups in PAGE backup mode and perform [PITR](#performing-point-in-time-pitr-recovery).
+Once these steps are complete, you can start making backups with [ARCHIVE](#archive-mode) WAL-mode, backups in PAGE backup mode and perform [PITR](#performing-point-in-time-pitr-recovery).
+
+Current state of WAL Archive can be obtained via [show](#show) command. For details, see the sections [Viewing WAL Archive information](#viewing-wal-archive-information).
 
 If you are planning to make PAGE backups and/or backups with [ARCHIVE](#archive-mode) WAL mode from a standby of a server, that generates small amount of WAL traffic, without long waiting for WAL segment to fill up, consider setting [archive_timeout](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) PostgreSQL parameter **on master**. It is advisable to set the value of this setting slightly lower than pg_probackup parameter `--archive-timeout` (default 5 min), so there should be enough time for rotated segment to be streamed to replica and send to archive before backup is aborted because of `--archive-timeout`.
 
@@ -409,7 +411,7 @@ Where *backup_mode* can take one of the following values:
 
 - FULL — creates a full backup that contains all the data files of the cluster to be restored.
 - DELTA — reads all data files in the data directory and creates an incremental backup for pages that have changed since the previous backup.
-- PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
+- PAGE — creates an incremental PAGE backup based on the WAL files that have generated since the previous full or incremental backup was taken. Only changed blocks are readed from data files.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly.
 
 When restoring a cluster from an incremental backup, pg_probackup relies on the parent full backup and all the incremental backups between them, which is called `the backup chain`. You must create at least one full backup before taking incremental ones.
@@ -796,7 +798,7 @@ The sample output is as follows:
 ]
 ```
 
-### Showing WAL Archive Information
+#### Viewing WAL Archive Information
 
 To view the information about WAL archive for every instance, run the command:
 
@@ -825,7 +827,7 @@ For each backup, the following information is provided:
 - N segments — number of WAL segments belonging to the timeline.
 - Size — the size files take on disk.
 - Zratio - compression ratio calculated as "N segments" * wal_seg_size / "Size".
-- N backups — number of backups belonging to the timeline. To get details about backups, use json format.
+- N backups — number of backups belonging to the timeline. To get the details about backups, use json format.
 - Status — archive status for this exact timeline. Possible values:
 	- OK — all WAL segments between Min and Max are present.
 	- DEGRADED — some WAL segments between Min and Max are lost. To get details about lost files, use json format.
@@ -1020,7 +1022,7 @@ Most fields are consistent with plain format, with some exceptions:
 
 - size is in bytes.
 - DEGRADED timelines contain 'lost_files' array with information about intervals of lost segments.
-- 'N backups' replaced with array of backups belonging to timeline.
+- 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline.
 
 ### Configuring Backup Retention Policy
 
@@ -1196,6 +1198,9 @@ To edit pg_probackup.conf, use the [set-config](#set-config) command.
 Shows the contents of the backup catalog. If *instance_name* and *backup_id* are specified, shows detailed information about this backup. You can specify the `--format=json` option to return the result in the JSON format. If `--archive` option is specified, shows the content of WAL archive of the backup catalog.
 
 By default, the contents of the backup catalog is shown as plain text.
+
+For details on usage, see the sections [Managing the Backup Catalog](#managing-the-backup-catalog) and [Viewing WAL Archive Information](#viewing-wal-archive-information).
+
 
 #### backup
 
