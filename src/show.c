@@ -838,7 +838,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 #define SHOW_ARCHIVE_FIELDS_COUNT 10
 	int			i;
 	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
-					{ "TLI", "Parent TLI", "Switchpoint LSN",
+					{ "TLI", "Parent TLI", "Switchpoint",
 					  "Min Segno", "Max Segno", "N segments", "Size", "Zratio", "N backups", "Status"};
 	const char *field_formats[SHOW_ARCHIVE_FIELDS_COUNT] =
 					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
