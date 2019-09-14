@@ -1034,7 +1034,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		char		tmp_buf[20];
 		float		zratio = 0;
 
-		if (i != 0)
+		if (i != (parray_num(tli_list) - 1))
 			appendPQExpBufferChar(buf, ',');
 
 		json_add(buf, JT_BEGIN_OBJECT, &json_level);
@@ -1125,9 +1125,12 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		}
 		else
 			appendPQExpBuffer(buf, "[]");
+
+		/* End of timeline */
+		json_add(buf, JT_END_OBJECT, &json_level);
 	}
 
-	/* End of backups */
+	/* End of timelines object */
 	json_add(buf, JT_END_ARRAY, &json_level);
 
 	/* End of instance object */
