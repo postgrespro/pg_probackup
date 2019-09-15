@@ -64,6 +64,8 @@ static void show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 							  parray *tli_list);
 
+static pgBackup* get_prior_backup(timelineInfo *tlinfo, parray *backup_list);
+
 static PQExpBufferData show_buf;
 static bool first_instance = true;
 static int32 json_level = 0;
@@ -625,27 +627,6 @@ show_instance_json(const char *instance_name, parray *backup_list)
 	first_instance = false;
 }
 
-typedef struct timelineInfo timelineInfo;
-
-/* struct to collect info about timelines in WAL archive */
-struct timelineInfo {
-
-	TimeLineID tli;			/* this timeline */
-	TimeLineID parent_tli;  /* parent timeline. 0 if none */
-	timelineInfo *parent_link; /* link to parent timeline */
-	XLogRecPtr switchpoint;	   /* if this timeline has a parent
-								* switchpoint contains switchpoint LSN,
-								* otherwise 0 */
-	XLogSegNo begin_segno;	/* first present segment in this timeline */
-	XLogSegNo end_segno;	/* last present segment in this timeline */
-	int		n_xlog_files;	/* number of segments (only really existing)
-							 * does not include lost segments */
-	size_t	size;		/* space on disk taken by regular WAL files */
-	parray *backups; /* array of pgBackup sturctures with info
-					  * about backups belonging to this timeline */
-	parray *lost_files; /* array of intervals of lost files */
-};
-
 typedef struct xlogInterval
 {
 	XLogSegNo begin_segno;
@@ -658,6 +639,7 @@ timelineInfoNew(TimeLineID tli)
 	timelineInfo *tlinfo = (timelineInfo *) pgut_malloc(sizeof(timelineInfo));
 	MemSet(tlinfo, 0, sizeof(timelineInfo));
 	tlinfo->tli = tli;
+	tlinfo->switchpoint = InvalidXLogRecPtr;
 	return tlinfo;
 }
 
@@ -739,17 +721,17 @@ show_instance_archive(InstanceConfig *instance)
 				/* check, if segments are consequent */
 				XLogSegNo expected_segno = tlinfo->end_segno + 1;
 
-				/* some segments are missing. remember them in lost_files to report */
+				/* some segments are missing. remember them in lost_segments to report */
 				if (segno != expected_segno)
 				{
 					xlogInterval *interval = palloc(sizeof(xlogInterval));;
 					interval->begin_segno = expected_segno;
 					interval->end_segno = segno - 1;
 
-					if (tlinfo->lost_files == NULL)
-						tlinfo->lost_files = parray_new();
+					if (tlinfo->lost_segments == NULL)
+						tlinfo->lost_segments = parray_new();
 
-					parray_append(tlinfo->lost_files, interval);
+					parray_append(tlinfo->lost_segments, interval);
 				}
 			}
 
@@ -818,6 +800,22 @@ show_instance_archive(InstanceConfig *instance)
 				parray_append(tlinfo->backups, backup);
 			}
 		}
+	}
+
+	/* determine prior backup for every timeline */
+	for (int i = 0; i < parray_num(timelineinfos); i++)
+	{
+		timelineInfo *tlinfo = parray_get(timelineinfos, i);
+
+		// only timeline with switchpoint can have prior backup
+		if XLogRecPtrIsInvalid(tlinfo->switchpoint)
+			continue;
+
+		// only timeline with parent can have prior backup
+		if (!tlinfo->parent_link)
+			continue;
+
+		tlinfo->prior_backup = get_prior_backup(tlinfo, backups);
 	}
 
 	if (show_format == SHOW_PLAIN)
@@ -923,7 +921,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		cur++;
 
 		/* Status */
-		if (tlinfo->lost_files == NULL)
+		if (tlinfo->lost_segments == NULL)
 			row->status = "OK";
 		else
 			row->status = "DEGRADED";
@@ -1070,20 +1068,28 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
 		appendPQExpBuffer(buf, "%.2f", zratio);
 
-		if (tlinfo->lost_files == NULL)
+		if (tlinfo->prior_backup != NULL)
+			snprintf(tmp_buf, lengthof(tmp_buf), "%s",
+						base36enc(tlinfo->prior_backup->start_time));
+		else
+			snprintf(tmp_buf, lengthof(tmp_buf), "%s", "");
+
+		json_add_value(buf, "prior-backup-id", tmp_buf, json_level, true);
+
+		if (tlinfo->lost_segments == NULL)
 			json_add_value(buf, "status", "OK", json_level, true);
 		else
 			json_add_value(buf, "status", "DEGRADED", json_level, true);
 
-		json_add_key(buf, "lost_files", json_level);
+		json_add_key(buf, "lost-segments", json_level);
 
-		if (tlinfo->lost_files != NULL)
+		if (tlinfo->lost_segments != NULL)
 		{
 			json_add(buf, JT_BEGIN_ARRAY, &json_level);
 
-			for (int j = 0; j < parray_num(tlinfo->lost_files); j++)
+			for (int j = 0; j < parray_num(tlinfo->lost_segments); j++)
 			{
-				xlogInterval *lost_files = (xlogInterval *) parray_get(tlinfo->lost_files, j);
+				xlogInterval *lost_segments = (xlogInterval *) parray_get(tlinfo->lost_segments, j);
 
 				if (j != 0)
 					appendPQExpBufferChar(buf, ',');
@@ -1091,13 +1097,13 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 				json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
 				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
-				 (uint32) lost_files->begin_segno / xlog_seg_size,
-				 (uint32) lost_files->begin_segno % xlog_seg_size);
+				 (uint32) lost_segments->begin_segno / xlog_seg_size,
+				 (uint32) lost_segments->begin_segno % xlog_seg_size);
 				json_add_value(buf, "begin-segno", tmp_buf, json_level, true);
 
 				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
-				 (uint32) lost_files->end_segno / xlog_seg_size,
-				 (uint32) lost_files->end_segno % xlog_seg_size);
+				 (uint32) lost_segments->end_segno / xlog_seg_size,
+				 (uint32) lost_segments->end_segno % xlog_seg_size);
 				json_add_value(buf, "end-segno", tmp_buf, json_level, true);
 				json_add(buf, JT_END_OBJECT, &json_level);
 			}
@@ -1137,4 +1143,53 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	json_add(buf, JT_END_OBJECT, &json_level);
 
 	first_instance = false;
+}
+
+pgBackup*
+get_prior_backup(timelineInfo *tlinfo, parray *backup_list)
+{
+	pgBackup *prior_backup = NULL;
+	int i;
+
+	timelineInfo *cur_tliInfo;
+
+	cur_tliInfo = tlinfo;
+
+	while (cur_tliInfo->parent_link)
+	{
+		/* iterate over backups of current timeline */
+		for (i = 0; i < parray_num(backup_list); i++)
+		{
+			pgBackup   *backup = parray_get(backup_list, i);
+
+			/* backups in future can be safely skipped */
+			if (backup->stop_lsn > cur_tliInfo->switchpoint)
+				continue;
+
+			if (backup->stop_lsn < cur_tliInfo->switchpoint &&
+				(backup->status != BACKUP_STATUS_OK ||
+				 backup->status != BACKUP_STATUS_DONE))
+			{
+				/* 
+				 * We have found first candidate, satisfying our conditions
+				 * Now we should determine backup closest to switchpoint
+				 */
+
+				if (!prior_backup)
+					prior_backup = backup;
+
+				/* Check if backup is closer to switchpoint than current candidate */
+				if (backup->stop_lsn > prior_backup->stop_lsn)
+					prior_backup = backup;
+
+			}
+		}
+
+		if (prior_backup)
+			break;
+
+		cur_tliInfo = cur_tliInfo->parent_link;
+	}
+
+	return prior_backup;
 }

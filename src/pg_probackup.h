@@ -385,6 +385,29 @@ typedef struct
 } backup_files_arg;
 
 
+typedef struct timelineInfo timelineInfo;
+
+/* struct to collect info about timelines in WAL archive */
+struct timelineInfo {
+
+	TimeLineID tli;			/* this timeline */
+	TimeLineID parent_tli;  /* parent timeline. 0 if none */
+	timelineInfo *parent_link; /* link to parent timeline */
+	XLogRecPtr switchpoint;	   /* if this timeline has a parent
+								* switchpoint contains switchpoint LSN,
+								* otherwise 0 */
+	XLogSegNo begin_segno;	/* first present segment in this timeline */
+	XLogSegNo end_segno;	/* last present segment in this timeline */
+	int		n_xlog_files;	/* number of segments (only really existing)
+							 * does not include lost segments */
+	size_t	size;			/* space on disk taken by regular WAL files */
+	parray *backups;		/* array of pgBackup sturctures with info
+							 * about backups belonging to this timeline */
+	parray *lost_segments;	/* array of intervals of lost segments */
+	pgBackup *prior_backup; /* link to backup, closest to timeline */
+};
+
+
 /*
  * When copying datafiles to backup we validate and compress them block
  * by block. Thus special header is required for each data block.
