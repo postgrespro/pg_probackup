@@ -640,6 +640,7 @@ timelineInfoNew(TimeLineID tli)
 	MemSet(tlinfo, 0, sizeof(timelineInfo));
 	tlinfo->tli = tli;
 	tlinfo->switchpoint = InvalidXLogRecPtr;
+	tlinfo->parent_link = NULL;
 	return tlinfo;
 }
 
@@ -807,11 +808,11 @@ show_instance_archive(InstanceConfig *instance)
 	{
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
 
-		// only timeline with switchpoint can have prior backup
+		/* only timeline with switchpoint can possibly have prior backup */
 		if XLogRecPtrIsInvalid(tlinfo->switchpoint)
 			continue;
 
-		// only timeline with parent can have prior backup
+		/* only timeline with parent timeline can possibly have prior backup */
 		if (!tlinfo->parent_link)
 			continue;
 
@@ -1145,34 +1146,44 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	first_instance = false;
 }
 
+/*
+ * Iterate over parent timelines of a given timeline and look
+ * for valid backup closest to given timeline switchpoint.
+ *
+ * Returns NULL if such backup is not found.
+ */
 pgBackup*
 get_prior_backup(timelineInfo *tlinfo, parray *backup_list)
 {
 	pgBackup *prior_backup = NULL;
 	int i;
 
-	timelineInfo *cur_tliInfo;
-
-	cur_tliInfo = tlinfo;
-
-	while (cur_tliInfo->parent_link)
+	while (tlinfo->parent_link)
 	{
-		/* iterate over backups of current timeline */
+		/*
+		 * Iterate over backups belonging to parent timeline and look
+		 * for candidates.
+		 */
 		for (i = 0; i < parray_num(backup_list); i++)
 		{
 			pgBackup   *backup = parray_get(backup_list, i);
 
-			/* backups in future can be safely skipped */
-			if (backup->stop_lsn > cur_tliInfo->switchpoint)
+			/* Backups belonging to timelines other than parent timeline can be safely skipped */
+			if (backup->tli != tlinfo->parent_tli)
 				continue;
 
-			if (backup->stop_lsn < cur_tliInfo->switchpoint &&
-				(backup->status != BACKUP_STATUS_OK ||
-				 backup->status != BACKUP_STATUS_DONE))
+			/* Backups in future can be safely skipped */
+			if (backup->stop_lsn > tlinfo->switchpoint)
+				continue;
+
+			/* Only valid backups prior to switchpoint should be considered */
+			if (backup->stop_lsn < tlinfo->switchpoint &&
+				(backup->status == BACKUP_STATUS_OK ||
+				 backup->status == BACKUP_STATUS_DONE))
 			{
-				/* 
-				 * We have found first candidate, satisfying our conditions
-				 * Now we should determine backup closest to switchpoint
+				/*
+				 * We have found first candidate.
+				 * Now we should determine whether it`s closest to switchpoint or nor.
 				 */
 
 				if (!prior_backup)
@@ -1181,14 +1192,15 @@ get_prior_backup(timelineInfo *tlinfo, parray *backup_list)
 				/* Check if backup is closer to switchpoint than current candidate */
 				if (backup->stop_lsn > prior_backup->stop_lsn)
 					prior_backup = backup;
-
 			}
 		}
 
+		/* Prior backup is found */
 		if (prior_backup)
 			break;
 
-		cur_tliInfo = cur_tliInfo->parent_link;
+		/* Switch to parent */
+		tlinfo = tlinfo->parent_link;
 	}
 
 	return prior_backup;
