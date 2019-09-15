@@ -811,9 +811,11 @@ ARCHIVE INSTANCE 'node'
 ===================================================================================================================
  TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size    Zratio  N backups  Status
 ===================================================================================================================
+ 5    1           0/B000000    000000000000000B  000000000000000C  2           685kB   48.00   0          OK
+ 4    3           0/18000000   0000000000000018  000000000000001A  3           648kB   77.00   0          OK
  3    2           0/15000000   0000000000000015  0000000000000017  3           648kB   77.00   0          OK
- 2    1           0/B000108    000000000000000B  0000000000000015  5           892kB   94.00   3          DEGRADED
- 1    0           0/0          0000000000000001  000000000000000A  10          8774kB  19.00   2          OK
+ 2    1           0/B000108    000000000000000B  0000000000000015  5           892kB   94.00   1          DEGRADED
+ 1    0           0/0          0000000000000001  000000000000000A  10          8774kB  19.00   1          OK
 
 ```
 
@@ -844,6 +846,34 @@ The sample output is as follows:
         "instance": "replica",
         "timelines": [
             {
+                "tli": 5,
+                "parent-tli": 1,
+                "switchpoint": "0/B000000",
+                "min-segno": "000000000000000B",
+                "max-segno": "000000000000000C",
+                "n-segments": 2,
+                "size": 685320,
+                "zratio": 48.00,
+                "prior-backup-id": "PXS92O",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
+                "tli": 4,
+                "parent-tli": 3,
+                "switchpoint": "0/18000000",
+                "min-segno": "0000000000000018",
+                "max-segno": "000000000000001A",
+                "n-segments": 3,
+                "size": 648625,
+                "zratio": 77.00,
+                "prior-backup-id": "PXS9CE",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
                 "tli": 3,
                 "parent-tli": 2,
                 "switchpoint": "0/15000000",
@@ -852,8 +882,9 @@ The sample output is as follows:
                 "n-segments": 3,
                 "size": 648911,
                 "zratio": 77.00,
+                "prior-backup-id": "PXS9CE",
                 "status": "OK",
-                "lost_files": [],
+                "lost-segments": [],
                 "backups": []
             },
             {
@@ -865,10 +896,11 @@ The sample output is as follows:
                 "n-segments": 5,
                 "size": 892173,
                 "zratio": 94.00,
+                "prior-backup-id": "PXS92O",
                 "status": "DEGRADED",
-                "lost_files": [
+                "lost-segments": [
                     {
-                        "begin-segno": "000000000000000C",
+                        "begin-segno": "000000000000000D",
                         "end-segno": "000000000000000E"
                     },
                     {
@@ -913,8 +945,9 @@ The sample output is as follows:
                 "n-segments": 10,
                 "size": 8774805,
                 "zratio": 19.00,
+                "prior-backup-id": "",
                 "status": "OK",
-                "lost_files": [],
+                "lost-segments": [],
                 "backups": [
                     {
                         "id": "PXS92O",
@@ -958,7 +991,7 @@ The sample output is as follows:
                 "size": 8860892,
                 "zratio": 20.00,
                 "status": "OK",
-                "lost_files": [],
+                "lost-segments": [],
                 "backups": [
                     {
                         "id": "PXS92H",
@@ -1021,8 +1054,9 @@ The sample output is as follows:
 Most fields are consistent with plain format, with some exceptions:
 
 - size is in bytes.
-- DEGRADED timelines contain 'lost_files' array with information about intervals of lost segments.
-- 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline.
+- 'prior-backup-id' attribute contain ID of valid backup closest to timeline, located on some of the previous timelines. If such backup do not exists, then string is empty.
+- DEGRADED timelines contain 'lost-segments' array with information about intervals of missing segments. In OK timelines 'lost-segments' array is empty.
+- 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline. If timeline has no backups, then 'backups' array is empty.
 
 ### Configuring Backup Retention Policy
 
