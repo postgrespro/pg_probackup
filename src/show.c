@@ -874,7 +874,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		widths[cur] = Max(widths[cur], strlen(row->parent_tli));
 		cur++;
 
-		/* Start LSN */
+		/* Switchpoint LSN */
 		snprintf(row->switchpoint, lengthof(row->switchpoint), "%X/%X",
 				 (uint32) (tlinfo->switchpoint >> 32),
 				 (uint32) tlinfo->switchpoint);
@@ -1177,7 +1177,7 @@ get_prior_backup(timelineInfo *tlinfo, parray *backup_list)
 				continue;
 
 			/* Only valid backups prior to switchpoint should be considered */
-			if (backup->stop_lsn < tlinfo->switchpoint &&
+			if (backup->stop_lsn <= tlinfo->switchpoint &&
 				(backup->status == BACKUP_STATUS_OK ||
 				 backup->status == BACKUP_STATUS_DONE))
 			{
