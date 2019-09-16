@@ -425,7 +425,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 bool
 read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 				   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
-				   time_t *recovery_time, TransactionId *recovery_xid)
+				   time_t *recovery_time)
 {
 	XLogRecPtr	startpoint = stop_lsn;
 	XLogReaderState *xlogreader;
@@ -472,7 +472,6 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 		if (getRecordTimestamp(xlogreader, &last_time))
 		{
 			*recovery_time = timestamptz_to_time_t(last_time);
-			*recovery_xid = XLogRecGetXid(xlogreader);
 
 			/* Found timestamp in WAL record 'record' */
 			res = true;

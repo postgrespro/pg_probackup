@@ -2019,6 +2019,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			xlog_path = arclog_path;
 
 		backup->stop_lsn = stop_backup_lsn;
+		backup->recovery_xid = recovery_xid;
 
 		elog(LOG, "Getting the Recovery Time from WAL");
 
@@ -2026,11 +2027,10 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		if (!read_recovery_info(xlog_path, backup->tli,
 								instance_config.xlog_seg_size,
 								backup->start_lsn, backup->stop_lsn,
-								&backup->recovery_time, &backup->recovery_xid))
+								&backup->recovery_time))
 		{
 			elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
 			backup->recovery_time = recovery_time;
-			backup->recovery_xid = recovery_xid;
 		}
 	}
 }
