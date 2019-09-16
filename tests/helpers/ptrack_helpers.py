@@ -947,6 +947,39 @@ class ProbackupTest(object):
 
                 return specific_record
 
+    def show_archive(
+            self, backup_dir, instance=None, options=[],
+            as_text=False, as_json=True, old_binary=False
+            ):
+
+        cmd_list = [
+            'show',
+            '--archive',
+            '-B', backup_dir,
+        ]
+        if instance:
+            cmd_list += ['--instance={0}'.format(instance)]
+
+        # AHTUNG, WARNING will break json parsing
+        if as_json:
+            cmd_list += ['--format=json', '--log-level-console=error']
+
+        if as_text:
+            # You should print it when calling as_text=true
+            return self.run_pb(cmd_list + options, old_binary=old_binary)
+
+        if as_json:
+            if as_text:
+                data = self.run_pb(cmd_list + options, old_binary=old_binary)
+            else:
+                data = json.loads(self.run_pb(cmd_list + options, old_binary=old_binary))
+            return data
+        else:
+            show_splitted = self.run_pb(
+                cmd_list + options, old_binary=old_binary).splitlines()
+            print(show_splitted)
+            exit(1)
+
     def validate_pb(
             self, backup_dir, instance=None,
             backup_id=None, options=[], old_binary=False, gdb=False
