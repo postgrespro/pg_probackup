@@ -707,8 +707,7 @@ extern void validate_wal(pgBackup *backup, const char *archivedir,
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
-							   time_t *recovery_time,
-							   TransactionId *recovery_xid);
+							   time_t *recovery_time);
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 							 TimeLineID target_tli, uint32 seg_size);
 extern XLogRecPtr get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
