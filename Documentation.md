@@ -1054,7 +1054,7 @@ The sample output is as follows:
 Most fields are consistent with plain format, with some exceptions:
 
 - size is in bytes.
-- 'prior-backup-id' attribute contain ID of valid backup closest to timeline, located on some of the previous timelines. If such backup do not exists, then string is empty.
+- 'prior-backup-id' attribute contain ID of valid backup closest to timeline, located on some of the previous timelines. Prior backup is the closest starting point to reach the timeline from other timelines by PITR. If such backup do not exists, then string is empty.
 - DEGRADED timelines contain 'lost-segments' array with information about intervals of missing segments. In OK timelines 'lost-segments' array is empty.
 - 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline. If timeline has no backups, then 'backups' array is empty.
 
