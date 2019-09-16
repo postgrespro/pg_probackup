@@ -404,7 +404,7 @@ struct timelineInfo {
 	parray *backups;		/* array of pgBackup sturctures with info
 							 * about backups belonging to this timeline */
 	parray *lost_segments;	/* array of intervals of lost segments */
-	pgBackup *prior_backup; /* link to backup, closest to timeline */
+	pgBackup *closest_backup; /* link to backup, closest to timeline */
 };
 
 

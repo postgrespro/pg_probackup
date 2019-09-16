@@ -264,8 +264,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 log_content)
         else:
             self.assertIn(
-                "ERROR: Switched WAL segment 000000010000000000000002 "
-                "could not be archived in 60 seconds",
+                "ERROR: WAL segment 000000010000000000000002 could not be archived in 60 seconds",
                 log_content)
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
@@ -1423,12 +1422,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(timeline_2['backups']), 2)
         self.assertEqual(len(timeline_1['backups']), 2)
 
-        # check prior backup correctness
-        self.assertEqual(timeline_6['prior-backup-id'], A1)
-        self.assertEqual(timeline_5['prior-backup-id'], B2)
-        self.assertEqual(timeline_4['prior-backup-id'], B2)
-        self.assertEqual(timeline_3['prior-backup-id'], A1)
-        self.assertEqual(timeline_2['prior-backup-id'], Y2)
+        # check closest backup correctness
+        self.assertEqual(timeline_6['closest-backup-id'], A1)
+        self.assertEqual(timeline_5['closest-backup-id'], B2)
+        self.assertEqual(timeline_4['closest-backup-id'], B2)
+        self.assertEqual(timeline_3['closest-backup-id'], A1)
+        self.assertEqual(timeline_2['closest-backup-id'], Y2)
 
         # check parent tli correctness
         self.assertEqual(timeline_6['parent-tli'], 2)
@@ -1440,11 +1439,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
 
         self.del_test_dir(module_name, fname)
-
-    def test_archive_catalog_1(self):
-
-        backup_dir = '/home/gsmol/git/postgres/contrib/pg_probackup/tests/tmp_dirs/archive/test_archive_catalog/backup'
-        self.show_archive(backup_dir)
 
 # important - switchpoint may be NullOffset LSN and not actually existing in archive to boot.
 # so write validation code accordingly

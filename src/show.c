@@ -64,7 +64,7 @@ static void show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 							  parray *tli_list);
 
-static pgBackup* get_prior_backup(timelineInfo *tlinfo, parray *backup_list);
+static pgBackup* get_closest_backup(timelineInfo *tlinfo, parray *backup_list);
 
 static PQExpBufferData show_buf;
 static bool first_instance = true;
@@ -803,20 +803,20 @@ show_instance_archive(InstanceConfig *instance)
 		}
 	}
 
-	/* determine prior backup for every timeline */
+	/* determine closest backup for every timeline */
 	for (int i = 0; i < parray_num(timelineinfos); i++)
 	{
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
 
-		/* only timeline with switchpoint can possibly have prior backup */
+		/* only timeline with switchpoint can possibly have closest backup */
 		if XLogRecPtrIsInvalid(tlinfo->switchpoint)
 			continue;
 
-		/* only timeline with parent timeline can possibly have prior backup */
+		/* only timeline with parent timeline can possibly have closest backup */
 		if (!tlinfo->parent_link)
 			continue;
 
-		tlinfo->prior_backup = get_prior_backup(tlinfo, backups);
+		tlinfo->closest_backup = get_closest_backup(tlinfo, backups);
 	}
 
 	if (show_format == SHOW_PLAIN)
@@ -1069,13 +1069,13 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
 		appendPQExpBuffer(buf, "%.2f", zratio);
 
-		if (tlinfo->prior_backup != NULL)
+		if (tlinfo->closest_backup != NULL)
 			snprintf(tmp_buf, lengthof(tmp_buf), "%s",
-						base36enc(tlinfo->prior_backup->start_time));
+						base36enc(tlinfo->closest_backup->start_time));
 		else
 			snprintf(tmp_buf, lengthof(tmp_buf), "%s", "");
 
-		json_add_value(buf, "prior-backup-id", tmp_buf, json_level, true);
+		json_add_value(buf, "closest-backup-id", tmp_buf, json_level, true);
 
 		if (tlinfo->lost_segments == NULL)
 			json_add_value(buf, "status", "OK", json_level, true);
@@ -1153,9 +1153,9 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
  * Returns NULL if such backup is not found.
  */
 pgBackup*
-get_prior_backup(timelineInfo *tlinfo, parray *backup_list)
+get_closest_backup(timelineInfo *tlinfo, parray *backup_list)
 {
-	pgBackup *prior_backup = NULL;
+	pgBackup *closest_backup = NULL;
 	int i;
 
 	while (tlinfo->parent_link)
@@ -1176,7 +1176,7 @@ get_prior_backup(timelineInfo *tlinfo, parray *backup_list)
 			if (backup->stop_lsn > tlinfo->switchpoint)
 				continue;
 
-			/* Only valid backups prior to switchpoint should be considered */
+			/* Only valid backups closest to switchpoint should be considered */
 			if (backup->stop_lsn <= tlinfo->switchpoint &&
 				(backup->status == BACKUP_STATUS_OK ||
 				 backup->status == BACKUP_STATUS_DONE))
@@ -1186,22 +1186,22 @@ get_prior_backup(timelineInfo *tlinfo, parray *backup_list)
 				 * Now we should determine whether it`s closest to switchpoint or nor.
 				 */
 
-				if (!prior_backup)
-					prior_backup = backup;
+				if (!closest_backup)
+					closest_backup = backup;
 
 				/* Check if backup is closer to switchpoint than current candidate */
-				if (backup->stop_lsn > prior_backup->stop_lsn)
-					prior_backup = backup;
+				if (backup->stop_lsn > closest_backup->stop_lsn)
+					closest_backup = backup;
 			}
 		}
 
-		/* Prior backup is found */
-		if (prior_backup)
+		/* Closest backup is found */
+		if (closest_backup)
 			break;
 
 		/* Switch to parent */
 		tlinfo = tlinfo->parent_link;
 	}
 
-	return prior_backup;
+	return closest_backup;
 }

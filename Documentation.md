@@ -854,7 +854,7 @@ The sample output is as follows:
                 "n-segments": 2,
                 "size": 685320,
                 "zratio": 48.00,
-                "prior-backup-id": "PXS92O",
+                "closest-backup-id": "PXS92O",
                 "status": "OK",
                 "lost-segments": [],
                 "backups": []
@@ -868,7 +868,7 @@ The sample output is as follows:
                 "n-segments": 3,
                 "size": 648625,
                 "zratio": 77.00,
-                "prior-backup-id": "PXS9CE",
+                "closest-backup-id": "PXS9CE",
                 "status": "OK",
                 "lost-segments": [],
                 "backups": []
@@ -882,7 +882,7 @@ The sample output is as follows:
                 "n-segments": 3,
                 "size": 648911,
                 "zratio": 77.00,
-                "prior-backup-id": "PXS9CE",
+                "closest-backup-id": "PXS9CE",
                 "status": "OK",
                 "lost-segments": [],
                 "backups": []
@@ -896,7 +896,7 @@ The sample output is as follows:
                 "n-segments": 5,
                 "size": 892173,
                 "zratio": 94.00,
-                "prior-backup-id": "PXS92O",
+                "closest-backup-id": "PXS92O",
                 "status": "DEGRADED",
                 "lost-segments": [
                     {
@@ -945,7 +945,7 @@ The sample output is as follows:
                 "n-segments": 10,
                 "size": 8774805,
                 "zratio": 19.00,
-                "prior-backup-id": "",
+                "closest-backup-id": "",
                 "status": "OK",
                 "lost-segments": [],
                 "backups": [
@@ -1054,7 +1054,7 @@ The sample output is as follows:
 Most fields are consistent with plain format, with some exceptions:
 
 - size is in bytes.
-- 'prior-backup-id' attribute contain ID of valid backup closest to timeline, located on some of the previous timelines. Prior backup is the closest starting point to reach the timeline from other timelines by PITR. If such backup do not exists, then string is empty.
+- 'closest-backup-id' attribute contain ID of valid backup closest to the timeline, located on some of the previous timelines. This backup is the closest starting point to reach the timeline from other timelines by PITR. If such backup do not exists, then string is empty.
 - DEGRADED timelines contain 'lost-segments' array with information about intervals of missing segments. In OK timelines 'lost-segments' array is empty.
 - 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline. If timeline has no backups, then 'backups' array is empty.
 
