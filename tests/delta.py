@@ -1275,7 +1275,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 content = f.read()
 
             self.assertIn(
-                "LOG: File: {0} blknum 1, empty page".format(file),
+                "VERBOSE: File: {0} blknum 1, empty page".format(file),
                 content)
             self.assertNotIn(
                 "Skipping blknum 1 in file: {0}".format(file),

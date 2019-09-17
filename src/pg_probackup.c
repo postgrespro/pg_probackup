@@ -126,6 +126,7 @@ static bool	file_overwrite = false;
 
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
+bool show_archive = false;
 
 /* current settings */
 pgBackup	current;
@@ -203,6 +204,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	{ 'b', 160, "archive",			&show_archive,		SOURCE_CMD_STRICT },
 
 	/* options for backward compatibility */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
@@ -251,7 +253,7 @@ main(int argc, char *argv[])
 	pgBackupInit(&current);
 
 	/* Initialize current instance configuration */
-	init_config(&instance_config);
+	init_config(&instance_config, instance_name);
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
@@ -445,9 +447,27 @@ main(int argc, char *argv[])
 	 */
 	if ((backup_path != NULL) && instance_name)
 	{
+		/*
+		 * Fill global variables used to generate pathes inside the instance's
+		 * backup catalog.
+		 * TODO replace global variables with InstanceConfig structure fields
+		 */
 		sprintf(backup_instance_path, "%s/%s/%s",
 				backup_path, BACKUPS_DIR, instance_name);
 		sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
+
+		/*
+		 * Fill InstanceConfig structure fields used to generate pathes inside
+		 * the instance's backup catalog.
+		 * TODO continue refactoring to use these fields instead of global vars
+		 */
+		sprintf(instance_config.backup_instance_path, "%s/%s/%s",
+				backup_path, BACKUPS_DIR, instance_name);
+		canonicalize_path(instance_config.backup_instance_path);
+
+		sprintf(instance_config.arclog_path, "%s/%s/%s",
+				backup_path, "wal", instance_name);
+		canonicalize_path(instance_config.arclog_path);
 
 		/*
 		 * Ensure that requested backup instance exists.
@@ -641,11 +661,13 @@ main(int argc, char *argv[])
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			return do_archive_push(wal_file_path, wal_file_name, file_overwrite);
+			return do_archive_push(&instance_config, wal_file_path,
+								   wal_file_name, file_overwrite);
 		case ARCHIVE_GET_CMD:
-			return do_archive_get(wal_file_path, wal_file_name);
+			return do_archive_get(&instance_config,
+								  wal_file_path, wal_file_name);
 		case ADD_INSTANCE_CMD:
-			return do_add_instance();
+			return do_add_instance(&instance_config);
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance();
 		case INIT_CMD:
@@ -682,7 +704,7 @@ main(int argc, char *argv[])
 						  recovery_target_options,
 						  restore_params);
 		case SHOW_CMD:
-			return do_show(current.backup_id);
+			return do_show(instance_name, current.backup_id, show_archive);
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");

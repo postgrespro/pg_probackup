@@ -42,7 +42,6 @@ static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup,
 								 pgRestoreParams *params);
-static parray *read_timeline_history(TimeLineID targetTLI);
 static void *restore_files(void *arg);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
 
@@ -70,7 +69,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
 			if (backup->status == BACKUP_STATUS_OK ||
 				backup->status == BACKUP_STATUS_DONE)
 			{
-				write_backup_status(backup, BACKUP_STATUS_ORPHAN);
+				write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
 
 				elog(WARNING,
 					"Backup %s is orphaned because his parent %s has status: %s",
@@ -125,7 +124,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	elog(LOG, "%s begin.", action);
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	/* Find backup range we should restore or validate. */
 	while ((i < parray_num(backups)) && !dest_backup)
@@ -196,7 +195,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 				elog(LOG, "target timeline ID = %u", rt->target_tli);
 				/* Read timeline history files from archives */
-				timelines = read_timeline_history(rt->target_tli);
+				timelines = read_timeline_history(arclog_path, rt->target_tli);
 
 				if (!satisfy_timeline(timelines, current_backup))
 				{
@@ -273,7 +272,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -920,7 +919,7 @@ create_recovery_conf(time_t backup_id,
  * based on readTimeLineHistory() in timeline.c
  */
 parray *
-read_timeline_history(TimeLineID targetTLI)
+read_timeline_history(const char *arclog_path, TimeLineID targetTLI)
 {
 	parray	   *result;
 	char		path[MAXPGPATH];

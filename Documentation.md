@@ -36,6 +36,7 @@ Current version - 2.1.5
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
+        * [Viewing WAL Archive Information](#viewing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
@@ -126,7 +127,7 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 - Remote operations: backup PostgreSQL instance located on remote machine or restore backup on it
 - Backup from replica: avoid extra load on the master server by taking backups from a standby
 - External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
-- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
+- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats and view WAL Archive information.
 - Partial Restore: restore the only specified databases or skip the specified databases.
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
@@ -300,7 +301,9 @@ Making backups in PAGE backup mode, performing [PITR](#performing-point-in-time-
 
 Where *backup_dir* and *instance_name* refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote host. For details about all possible `archive-push` parameters, see the section [archive-push](#archive-push).
 
-Once these steps are complete, you can start making backups with ARCHIVE WAL mode, backups in PAGE backup mode and perform [PITR](#performing-point-in-time-pitr-recovery).
+Once these steps are complete, you can start making backups with [ARCHIVE](#archive-mode) WAL-mode, backups in PAGE backup mode and perform [PITR](#performing-point-in-time-pitr-recovery).
+
+Current state of WAL Archive can be obtained via [show](#show) command. For details, see the sections [Viewing WAL Archive information](#viewing-wal-archive-information).
 
 If you are planning to make PAGE backups and/or backups with [ARCHIVE](#archive-mode) WAL mode from a standby of a server, that generates small amount of WAL traffic, without long waiting for WAL segment to fill up, consider setting [archive_timeout](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) PostgreSQL parameter **on master**. It is advisable to set the value of this setting slightly lower than pg_probackup parameter `--archive-timeout` (default 5 min), so there should be enough time for rotated segment to be streamed to replica and send to archive before backup is aborted because of `--archive-timeout`.
 
@@ -408,7 +411,7 @@ Where *backup_mode* can take one of the following values:
 
 - FULL — creates a full backup that contains all the data files of the cluster to be restored.
 - DELTA — reads all data files in the data directory and creates an incremental backup for pages that have changed since the previous backup.
-- PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
+- PAGE — creates an incremental PAGE backup based on the WAL files that have generated since the previous full or incremental backup was taken. Only changed blocks are readed from data files.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly.
 
 When restoring a cluster from an incremental backup, pg_probackup relies on the parent full backup and all the incremental backups between them, which is called `the backup chain`. You must create at least one full backup before taking incremental ones.
@@ -668,6 +671,7 @@ If nothing is given, the default values are taken. By default pg_probackup tries
 With pg_probackup, you can manage backups from the command line:
 
 - View available backups
+- View available WAL Archive Information
 - Validate backups
 - Merge backups
 - Delete backups
@@ -793,6 +797,266 @@ The sample output is as follows:
     }
 ]
 ```
+
+#### Viewing WAL Archive Information
+
+To view the information about WAL archive for every instance, run the command:
+
+    pg_probackup show -B backup_dir [--instance instance_name] --archive
+
+pg_probackup displays the list of all the available WAL files grouped by timelines. For example:
+
+```
+ARCHIVE INSTANCE 'node'
+===================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size    Zratio  N backups  Status
+===================================================================================================================
+ 5    1           0/B000000    000000000000000B  000000000000000C  2           685kB   48.00   0          OK
+ 4    3           0/18000000   0000000000000018  000000000000001A  3           648kB   77.00   0          OK
+ 3    2           0/15000000   0000000000000015  0000000000000017  3           648kB   77.00   0          OK
+ 2    1           0/B000108    000000000000000B  0000000000000015  5           892kB   94.00   1          DEGRADED
+ 1    0           0/0          0000000000000001  000000000000000A  10          8774kB  19.00   1          OK
+
+```
+
+For each backup, the following information is provided:
+
+- TLI — timeline identifier.
+- Parent TLI — identifier of timeline TLI branched off.
+- Switchpoint — LSN of the moment when the timeline branched off from "Parent TLI".
+- Min Segno — number of the first existing WAL segment belonging to the timeline.
+- Max Segno — number of the last existing WAL segment belonging to the timeline.
+- N segments — number of WAL segments belonging to the timeline.
+- Size — the size files take on disk.
+- Zratio - compression ratio calculated as "N segments" * wal_seg_size / "Size".
+- N backups — number of backups belonging to the timeline. To get the details about backups, use json format.
+- Status — archive status for this exact timeline. Possible values:
+	- OK — all WAL segments between Min and Max are present.
+	- DEGRADED — some WAL segments between Min and Max are lost. To get details about lost files, use json format.
+
+To get more detailed information about the WAL archive in json format, run the command:
+
+    pg_probackup show -B backup_dir [--instance instance_name] --archive --format=json
+
+The sample output is as follows:
+
+```
+[
+    {
+        "instance": "replica",
+        "timelines": [
+            {
+                "tli": 5,
+                "parent-tli": 1,
+                "switchpoint": "0/B000000",
+                "min-segno": "000000000000000B",
+                "max-segno": "000000000000000C",
+                "n-segments": 2,
+                "size": 685320,
+                "zratio": 48.00,
+                "closest-backup-id": "PXS92O",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
+                "tli": 4,
+                "parent-tli": 3,
+                "switchpoint": "0/18000000",
+                "min-segno": "0000000000000018",
+                "max-segno": "000000000000001A",
+                "n-segments": 3,
+                "size": 648625,
+                "zratio": 77.00,
+                "closest-backup-id": "PXS9CE",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
+                "tli": 3,
+                "parent-tli": 2,
+                "switchpoint": "0/15000000",
+                "min-segno": "0000000000000015",
+                "max-segno": "0000000000000017",
+                "n-segments": 3,
+                "size": 648911,
+                "zratio": 77.00,
+                "closest-backup-id": "PXS9CE",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
+                "tli": 2,
+                "parent-tli": 1,
+                "switchpoint": "0/B000108",
+                "min-segno": "000000000000000B",
+                "max-segno": "0000000000000015",
+                "n-segments": 5,
+                "size": 892173,
+                "zratio": 94.00,
+                "closest-backup-id": "PXS92O",
+                "status": "DEGRADED",
+                "lost-segments": [
+                    {
+                        "begin-segno": "000000000000000D",
+                        "end-segno": "000000000000000E"
+                    },
+                    {
+                        "begin-segno": "0000000000000010",
+                        "end-segno": "0000000000000012"
+                    }
+                ],
+                "backups": [
+                    {
+                        "id": "PXS9CE",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 2,
+                        "parent-tli": 0,
+                        "start-lsn": "0/C000028",
+                        "stop-lsn": "0/C000160",
+                        "start-time": "2019-09-13 21:43:26+03",
+                        "end-time": "2019-09-13 21:43:30+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:43:29+03",
+                        "data-bytes": 104674852,
+                        "wal-bytes": 16777216,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
+            },
+            {
+                "tli": 1,
+                "parent-tli": 0,
+                "switchpoint": "0/0",
+                "min-segno": "0000000000000001",
+                "max-segno": "000000000000000A",
+                "n-segments": 10,
+                "size": 8774805,
+                "zratio": 19.00,
+                "closest-backup-id": "",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": [
+                    {
+                        "id": "PXS92O",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "true",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/4000028",
+                        "stop-lsn": "0/6000028",
+                        "start-time": "2019-09-13 21:37:36+03",
+                        "end-time": "2019-09-13 21:38:45+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:30+03",
+                        "data-bytes": 25987319,
+                        "wal-bytes": 50331648,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "instance": "master",
+        "timelines": [
+            {
+                "tli": 1,
+                "parent-tli": 0,
+                "switchpoint": "0/0",
+                "min-segno": "0000000000000001",
+                "max-segno": "000000000000000B",
+                "n-segments": 11,
+                "size": 8860892,
+                "zratio": 20.00,
+                "status": "OK",
+                "lost-segments": [],
+                "backups": [
+                    {
+                        "id": "PXS92H",
+                        "parent-backup-id": "PXS92C",
+                        "backup-mode": "PAGE",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 1,
+                        "start-lsn": "0/4000028",
+                        "stop-lsn": "0/50000B8",
+                        "start-time": "2019-09-13 21:37:29+03",
+                        "end-time": "2019-09-13 21:37:31+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:30+03",
+                        "data-bytes": 1328461,
+                        "wal-bytes": 33554432,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    },
+                    {
+                        "id": "PXS92C",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/2000028",
+                        "stop-lsn": "0/2000160",
+                        "start-time": "2019-09-13 21:37:24+03",
+                        "end-time": "2019-09-13 21:37:29+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:28+03",
+                        "data-bytes": 24871902,
+                        "wal-bytes": 16777216,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
+            }
+        ]
+    }
+]
+```
+
+Most fields are consistent with plain format, with some exceptions:
+
+- size is in bytes.
+- 'closest-backup-id' attribute contain ID of valid backup closest to the timeline, located on some of the previous timelines. This backup is the closest starting point to reach the timeline from other timelines by PITR. If such backup do not exists, then string is empty.
+- DEGRADED timelines contain 'lost-segments' array with information about intervals of missing segments. In OK timelines 'lost-segments' array is empty.
+- 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline. If timeline has no backups, then 'backups' array is empty.
 
 ### Configuring Backup Retention Policy
 
@@ -963,11 +1227,14 @@ To edit pg_probackup.conf, use the [set-config](#set-config) command.
 #### show
 
     pg_probackup show -B backup_dir
-    [--help] [--instance instance_name [-i backup_id]] [--format=plain|json]
+    [--help] [--instance instance_name [-i backup_id | --archive]] [--format=plain|json]
 
-Shows the contents of the backup catalog. If *instance_name* and *backup_id* are specified, shows detailed information about this backup. You can specify the `--format=json` option to return the result in the JSON format.
+Shows the contents of the backup catalog. If *instance_name* and *backup_id* are specified, shows detailed information about this backup. You can specify the `--format=json` option to return the result in the JSON format. If `--archive` option is specified, shows the content of WAL archive of the backup catalog.
 
 By default, the contents of the backup catalog is shown as plain text.
+
+For details on usage, see the sections [Managing the Backup Catalog](#managing-the-backup-catalog) and [Viewing WAL Archive Information](#viewing-wal-archive-information).
+
 
 #### backup
 

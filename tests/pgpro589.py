@@ -57,8 +57,8 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 'INFO: Wait for WAL segment' in e.message and
-                'ERROR: Switched WAL segment' in e.message and
-                'could not be archived' in e.message,
+                'ERROR: WAL segment' in e.message and
+                'could not be archived in 10 seconds' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

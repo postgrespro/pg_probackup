@@ -312,9 +312,11 @@ do_set_config(bool missing_ok)
 }
 
 void
-init_config(InstanceConfig *config)
+init_config(InstanceConfig *config, const char *instance_name)
 {
 	MemSet(config, 0, sizeof(InstanceConfig));
+
+	config->name = pgut_strdup(instance_name);
 
 	/*
 	 * Starting from PostgreSQL 11 WAL segment size may vary. Prior to
@@ -340,6 +342,236 @@ init_config(InstanceConfig *config)
 	config->compress_level = COMPRESS_LEVEL_DEFAULT;
 
 	config->remote.proto = (char*)"ssh";
+}
+
+/*
+ * read instance config from file
+ */
+InstanceConfig *
+readInstanceConfigFile(const char *instance_name)
+{
+	char	path[MAXPGPATH];
+	InstanceConfig   *instance = pgut_new(InstanceConfig);
+	char	   *log_level_console = NULL;
+	char	   *log_level_file = NULL;
+	char	   *compress_alg = NULL;
+	int			parsed_options;
+
+	ConfigOption instance_options[] =
+	{
+		/* Instance options */
+		{
+			's', 'D', "pgdata",
+			&instance->pgdata, SOURCE_CMD, 0,
+			OPTION_INSTANCE_GROUP, 0, option_get_value
+		},
+		{
+			'U', 200, "system-identifier",
+			&instance->system_identifier, SOURCE_FILE_STRICT, 0,
+			OPTION_INSTANCE_GROUP, 0, option_get_value
+		},
+	#if PG_VERSION_NUM >= 110000
+		{
+			'u', 201, "xlog-seg-size",
+			&instance->xlog_seg_size, SOURCE_FILE_STRICT, 0,
+			OPTION_INSTANCE_GROUP, 0, option_get_value
+		},
+	#endif
+		{
+			's', 'E', "external-dirs",
+			&instance->external_dir_str, SOURCE_CMD, 0,
+			OPTION_INSTANCE_GROUP, 0, option_get_value
+		},
+		/* Connection options */
+		{
+			's', 'd', "pgdatabase",
+			&instance->conn_opt.pgdatabase, SOURCE_CMD, 0,
+			OPTION_CONN_GROUP, 0, option_get_value
+		},
+		{
+			's', 'h', "pghost",
+			&instance->conn_opt.pghost, SOURCE_CMD, 0,
+			OPTION_CONN_GROUP, 0, option_get_value
+		},
+		{
+			's', 'p', "pgport",
+			&instance->conn_opt.pgport, SOURCE_CMD, 0,
+			OPTION_CONN_GROUP, 0, option_get_value
+		},
+		{
+			's', 'U', "pguser",
+			&instance->conn_opt.pguser, SOURCE_CMD, 0,
+			OPTION_CONN_GROUP, 0, option_get_value
+		},
+		/* Replica options */
+		{
+			's', 202, "master-db",
+			&instance->master_conn_opt.pgdatabase, SOURCE_CMD, 0,
+			OPTION_REPLICA_GROUP, 0, option_get_value
+		},
+		{
+			's', 203, "master-host",
+			&instance->master_conn_opt.pghost, SOURCE_CMD, 0,
+			OPTION_REPLICA_GROUP, 0, option_get_value
+		},
+		{
+			's', 204, "master-port",
+			&instance->master_conn_opt.pgport, SOURCE_CMD, 0,
+			OPTION_REPLICA_GROUP, 0, option_get_value
+		},
+		{
+			's', 205, "master-user",
+			&instance->master_conn_opt.pguser, SOURCE_CMD, 0,
+			OPTION_REPLICA_GROUP, 0, option_get_value
+		},
+		{
+			'u', 206, "replica-timeout",
+			&instance->replica_timeout, SOURCE_CMD, SOURCE_DEFAULT,
+			OPTION_REPLICA_GROUP, OPTION_UNIT_S, option_get_value
+		},
+		/* Archive options */
+		{
+			'u', 207, "archive-timeout",
+			&instance->archive_timeout, SOURCE_CMD, SOURCE_DEFAULT,
+			OPTION_ARCHIVE_GROUP, OPTION_UNIT_S, option_get_value
+		},
+		/* Logging options */
+		{
+			's', 208, "log-level-console",
+			&log_level_console, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			's', 209, "log-level-file",
+			&log_level_file, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			's', 210, "log-filename",
+			&instance->logger.log_filename, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			's', 211, "error-log-filename",
+			&instance->logger.error_log_filename, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			's', 212, "log-directory",
+			&instance->logger.log_directory, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			'U', 213, "log-rotation-size",
+			&instance->logger.log_rotation_size, SOURCE_CMD, SOURCE_DEFAULT,
+			OPTION_LOG_GROUP, OPTION_UNIT_KB, option_get_value
+		},
+		{
+			'U', 214, "log-rotation-age",
+			&instance->logger.log_rotation_age, SOURCE_CMD, SOURCE_DEFAULT,
+			OPTION_LOG_GROUP, OPTION_UNIT_MS, option_get_value
+		},
+		/* Retention options */
+		{
+			'u', 215, "retention-redundancy",
+			&instance->retention_redundancy, SOURCE_CMD, 0,
+			OPTION_RETENTION_GROUP, 0, option_get_value
+		},
+		{
+			'u', 216, "retention-window",
+			&instance->retention_window, SOURCE_CMD, 0,
+			OPTION_RETENTION_GROUP, 0, option_get_value
+		},
+		/* Compression options */
+		{
+			's', 217, "compress-algorithm",
+			&compress_alg, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			'u', 218, "compress-level",
+			&instance->compress_level, SOURCE_CMD, 0,
+			OPTION_COMPRESS_GROUP, 0, option_get_value
+		},
+		/* Remote backup options */
+		{
+			's', 219, "remote-proto",
+			&instance->remote.proto, SOURCE_CMD, 0,
+			OPTION_REMOTE_GROUP, 0, option_get_value
+		},
+		{
+			's', 220, "remote-host",
+			&instance->remote.host, SOURCE_CMD, 0,
+			OPTION_REMOTE_GROUP, 0, option_get_value
+		},
+		{
+			's', 221, "remote-port",
+			&instance->remote.port, SOURCE_CMD, 0,
+			OPTION_REMOTE_GROUP, 0, option_get_value
+		},
+		{
+			's', 222, "remote-path",
+			&instance->remote.path, SOURCE_CMD, 0,
+			OPTION_REMOTE_GROUP, 0, option_get_value
+		},
+		{
+			's', 223, "remote-user",
+			&instance->remote.user, SOURCE_CMD, 0,
+			OPTION_REMOTE_GROUP, 0, option_get_value
+		},
+		{
+			's', 224, "ssh-options",
+			&instance->remote.ssh_options, SOURCE_CMD, 0,
+			OPTION_REMOTE_GROUP, 0, option_get_value
+		},
+		{
+			's', 225, "ssh-config",
+			&instance->remote.ssh_config, SOURCE_CMD, 0,
+			OPTION_REMOTE_GROUP, 0, option_get_value
+		},
+		{ 0 }
+	};
+
+
+	init_config(instance, instance_name);
+
+	sprintf(instance->backup_instance_path, "%s/%s/%s",
+			backup_path, BACKUPS_DIR, instance_name);
+	canonicalize_path(instance->backup_instance_path);
+
+	sprintf(instance->arclog_path, "%s/%s/%s",
+			backup_path, "wal", instance_name);
+	canonicalize_path(instance->arclog_path);
+
+	join_path_components(path, instance->backup_instance_path,
+						 BACKUP_CATALOG_CONF_FILE);
+
+	if (fio_access(path, F_OK, FIO_BACKUP_HOST) != 0)
+	{
+		elog(WARNING, "Control file \"%s\" doesn't exist", path);
+		pfree(instance);
+		return NULL;
+	}
+
+	parsed_options = config_read_opt(path, instance_options, WARNING, true, true);
+
+	if (parsed_options == 0)
+	{
+		elog(WARNING, "Control file \"%s\" is empty", path);
+		pfree(instance);
+		return NULL;
+	}
+
+	if (log_level_console)
+		instance->logger.log_level_console = parse_log_level(log_level_console);
+
+	if (log_level_file)
+		instance->logger.log_level_file = parse_log_level(log_level_file);
+
+	if (compress_alg)
+		instance->compress_alg = parse_compress_alg(compress_alg);
+
+	return instance;
 }
 
 static void

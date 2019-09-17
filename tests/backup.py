@@ -3,6 +3,8 @@ import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import shutil
+from distutils.dir_util import copy_tree
+from testgres import ProcessType
 
 
 module_name = 'backup'
@@ -2014,21 +2016,32 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
+        copy_tree(
+            os.path.join(backup_dir, 'wal', 'node'),
+            os.path.join(backup_dir, 'wal', 'replica'))
+
         replica.slow_start(replica=True)
+
+        # freeze bgwriter to get rid of RUNNING XACTS records
+        bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
         # FULL backup from replica
         self.backup_node(
             backup_dir, 'replica', replica,
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
+        self.switch_wal_segment(node)
+
         self.backup_node(
             backup_dir, 'replica', replica, datname='backupdb',
-            options=['-U', 'backup', '--log-level-file=verbose'])
+            options=['-U', 'backup', '--log-level-file=verbose', '--archive-timeout=100s'])
 
         # PAGE backup from replica
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
-            datname='backupdb', options=['-U', 'backup'])
+            datname='backupdb', options=['-U', 'backup', '--archive-timeout=100s'])
+
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
             datname='backupdb', options=['--stream', '-U', 'backup'])
@@ -2036,7 +2049,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # DELTA backup from replica
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
-            datname='backupdb', options=['-U', 'backup'])
+            datname='backupdb', options=['-U', 'backup', '--archive-timeout=100s'])
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
             datname='backupdb', options=['--stream', '-U', 'backup'])

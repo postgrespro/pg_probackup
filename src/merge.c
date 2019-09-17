@@ -66,7 +66,7 @@ do_merge(time_t backup_id)
 	elog(INFO, "Merge started");
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	/* Find destination backup first */
 	for (i = 0; i < parray_num(backups); i++)
@@ -253,8 +253,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	if (from_backup->status == BACKUP_STATUS_DELETING)
 		goto delete_source_backup;
 
-	write_backup_status(to_backup, BACKUP_STATUS_MERGING);
-	write_backup_status(from_backup, BACKUP_STATUS_MERGING);
+	write_backup_status(to_backup, BACKUP_STATUS_MERGING, instance_name);
+	write_backup_status(from_backup, BACKUP_STATUS_MERGING, instance_name);
 
 	create_data_directories(files, to_database_path, from_backup_path, false, FIO_BACKUP_HOST);
 

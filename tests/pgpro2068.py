@@ -126,7 +126,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
             'recovery.conf', "recovery_target = 'immediate'")
         replica.append_conf(
             'recovery.conf', "recovery_target_action = 'promote'")
-        replica.slow_start()
+        replica.slow_start(replica=True)
 
         if self.get_version(node) < 100000:
             script = '''

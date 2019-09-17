@@ -100,7 +100,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: You must specify at least one of the delete options: --expired |--wal |--merge-expired |--delete-invalid |--backup_id',
+                'ERROR: You must specify at least one of the delete options: '
+                '--delete-expired |--delete-wal |--merge-expired |(-i, --backup-id)',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 

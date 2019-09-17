@@ -118,11 +118,11 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
-static int BlackListCompare(const void *str1, const void *str2);
+static int pgCompareString(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file);
 static void dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-								   bool follow_symlink, parray *black_list,
+								   bool follow_symlink,
 								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -450,7 +450,7 @@ pgFileCompareSize(const void *f1, const void *f2)
 }
 
 static int
-BlackListCompare(const void *str1, const void *str2)
+pgCompareString(const void *str1, const void *str2)
 {
 	return strcmp(*(char **) str1, *(char **) str2);
 }
@@ -491,45 +491,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 			  bool add_root, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
-	parray	   *black_list = NULL;
-	char		path[MAXPGPATH];
-
-	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
-	/* List files with black list */
-	if (root && instance_config.pgdata &&
-		strcmp(root, instance_config.pgdata) == 0 &&
-		fileExists(path, FIO_BACKUP_HOST))
-	{
-		FILE	   *black_list_file = NULL;
-		char		buf[MAXPGPATH * 2];
-		char		black_item[MAXPGPATH * 2];
-
-		black_list = parray_new();
-		black_list_file = fio_open_stream(path, FIO_BACKUP_HOST);
-
-		if (black_list_file == NULL)
-			elog(ERROR, "cannot open black_list: %s", strerror(errno));
-
-		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
-		{
-			black_item[0] = '\0';
-			join_path_components(black_item, instance_config.pgdata, buf);
-
-			if (black_item[strlen(black_item) - 1] == '\n')
-				black_item[strlen(black_item) - 1] = '\0';
-
-			if (black_item[0] == '#' || black_item[0] == '\0')
-				continue;
-
-			parray_append(black_list, pgut_strdup(black_item));
-		}
-
-		if (ferror(black_list_file))
-			elog(ERROR, "Failed to read from file: \"%s\"", path);
-
-		fio_close_stream(black_list_file);
-		parray_qsort(black_list, BlackListCompare);
-	}
 
 	file = pgFileNew(root, "", follow_symlink, external_dir_num, location);
 	if (file == NULL)
@@ -553,17 +514,11 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, file, exclude, follow_symlink, black_list,
+	dir_list_file_internal(files, file, exclude, follow_symlink,
 						   external_dir_num, location);
 
 	if (!add_root)
 		pgFileFree(file);
-
-	if (black_list)
-	{
-		parray_walk(black_list, pfree);
-		parray_free(black_list);
-	}
 }
 
 #define CHECK_FALSE				0
@@ -772,7 +727,7 @@ dir_check_file(pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-					   bool follow_symlink, parray *black_list,
+					   bool follow_symlink,
 					   int external_dir_num, fio_location location)
 {
 	DIR		    *dir;
@@ -829,15 +784,6 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 			continue;
 		}
 
-		/* Skip if the directory is in black_list defined by user */
-		if (black_list && parray_bsearch(black_list, file->path,
-										 BlackListCompare))
-		{
-			elog(LOG, "Skip \"%s\": it is in the user's black list", file->path);
-			pgFileFree(file);
-			continue;
-		}
-
 		if (exclude)
 		{
 			check_res = dir_check_file(file);
@@ -863,7 +809,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, file, exclude, follow_symlink,
-								   black_list, external_dir_num, location);
+								   external_dir_num, location);
 	}
 
 	if (errno && errno != ENOENT)
@@ -1662,7 +1608,7 @@ make_external_directory_list(const char *colon_separated_dirs, bool remap)
 		p = strtok(NULL, EXTERNAL_DIRECTORY_DELIMITER);
 	}
 	pfree(tmp);
-	parray_qsort(list, BlackListCompare);
+	parray_qsort(list, pgCompareString);
 	return list;
 }
 
@@ -1690,7 +1636,7 @@ backup_contains_external(const char *dir, parray *dirs_list)
 
 	if (!dirs_list) /* There is no external dirs in backup */
 		return false;
-	search_result = parray_bsearch(dirs_list, dir, BlackListCompare);
+	search_result = parray_bsearch(dirs_list, dir, pgCompareString);
 	return search_result != NULL;
 }
 

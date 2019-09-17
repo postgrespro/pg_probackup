@@ -196,7 +196,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		char		prev_backup_filelist_path[MAXPGPATH];
 
 		/* get list of backups already taken */
-		backup_list = catalog_get_backup_list(INVALID_BACKUP_ID);
+		backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli, current.start_time);
 		if (prev_backup == NULL)
@@ -1681,7 +1681,9 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			 * In case of backup from replica >= 9.6 we do not trust minRecPoint
 			 * and stop_backup LSN, so we use latest replayed LSN as STOP LSN.
 			 */
-			if (backup->from_replica)
+
+			/* current is used here because of cleanup */
+			if (current.from_replica)
 				stop_backup_query = "SELECT"
 									" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
 									" current_timestamp(0)::timestamptz,"

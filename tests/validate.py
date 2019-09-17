@@ -15,6 +15,36 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    def test_validate_all_empty_catalog(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup_dir is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: This backup catalog contains no backup instances',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_basic_validate_nullified_heap_page_backup(self):
         """
         make node with nullified heap block
@@ -843,11 +873,18 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page')
 
         # PAGE4
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(20000,30000) i")
+
         target_xid = node.safe_psql(
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(20000,30000) i  RETURNING (xmin)")[0][0]
+            "from generate_series(30001, 30001) i  RETURNING (xmin)").rstrip()
+
         backup_id_5 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -899,8 +936,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.validate_pb(
                 backup_dir, 'node',
                 options=[
-                    '-i', backup_id_4, '--xid={0}'.format(target_xid),
-                    "-j", "4"])
+                    '-i', backup_id_4, '--xid={0}'.format(target_xid), "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -3599,7 +3635,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,100) i")
 
-        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--log-level-console=LOG'], gdb=True)
 
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
@@ -3613,6 +3651,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'ERROR',
             self.show_pb(backup_dir, 'node', backup_id)['status'],
             'Backup STATUS should be "ERROR"')
+
+        self.switch_wal_segment(node)
 
         target_lsn = self.show_pb(backup_dir, 'node', backup_id)['start-lsn']
 

@@ -58,7 +58,6 @@ extern const char  *PROGRAM_EMAIL;
 #define BACKUP_CATALOG_PID		"backup.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
-#define PG_BLACK_LIST			"black_list"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 #define EXTERNAL_DIR			"external_directories/externaldir"
 #define DATABASE_MAP			"database_map"
@@ -227,6 +226,10 @@ typedef struct ConnectionArgs
  */
 typedef struct InstanceConfig
 {
+	char		*name;
+	char		arclog_path[MAXPGPATH];
+	char		backup_instance_path[MAXPGPATH];
+
 	uint64		system_identifier;
 	uint32		xlog_seg_size;
 
@@ -382,6 +385,29 @@ typedef struct
 } backup_files_arg;
 
 
+typedef struct timelineInfo timelineInfo;
+
+/* struct to collect info about timelines in WAL archive */
+struct timelineInfo {
+
+	TimeLineID tli;			/* this timeline */
+	TimeLineID parent_tli;  /* parent timeline. 0 if none */
+	timelineInfo *parent_link; /* link to parent timeline */
+	XLogRecPtr switchpoint;	   /* if this timeline has a parent
+								* switchpoint contains switchpoint LSN,
+								* otherwise 0 */
+	XLogSegNo begin_segno;	/* first present segment in this timeline */
+	XLogSegNo end_segno;	/* last present segment in this timeline */
+	int		n_xlog_files;	/* number of segments (only really existing)
+							 * does not include lost segments */
+	size_t	size;			/* space on disk taken by regular WAL files */
+	parray *backups;		/* array of pgBackup sturctures with info
+							 * about backups belonging to this timeline */
+	parray *lost_segments;	/* array of intervals of lost segments */
+	pgBackup *closest_backup; /* link to backup, closest to timeline */
+};
+
+
 /*
  * When copying datafiles to backup we validate and compress them block
  * by block. Thus special header is required for each data block.
@@ -525,6 +551,7 @@ extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
 extern parray *get_backup_filelist(pgBackup *backup);
+extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
@@ -534,21 +561,22 @@ extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
 extern int do_init(void);
-extern int do_add_instance(void);
+extern int do_add_instance(InstanceConfig *instance);
 
 /* in archive.c */
-extern int do_archive_push(char *wal_file_path, char *wal_file_name,
-						   bool overwrite);
-extern int do_archive_get(char *wal_file_path, char *wal_file_name);
-
+extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,
+						   char *wal_file_name, bool overwrite);
+extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
+						  char *wal_file_name);
 
 /* in configure.c */
 extern void do_show_config(void);
 extern void do_set_config(bool missing_ok);
-extern void init_config(InstanceConfig *config);
+extern void init_config(InstanceConfig *config, const char *instance_name);
+extern InstanceConfig *readInstanceConfigFile(const char *instance_name);
 
 /* in show.c */
-extern int do_show(time_t requested_backup_id);
+extern int do_show(const char *instance_name, time_t requested_backup_id, bool show_archive);
 
 /* in delete.c */
 extern void do_delete(time_t backup_id);
@@ -573,15 +601,17 @@ extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
 
 /* in catalog.c */
-extern pgBackup *read_backup(time_t timestamp);
+extern pgBackup *read_backup(const char *instance_name, time_t timestamp);
 extern void write_backup(pgBackup *backup);
-extern void write_backup_status(pgBackup *backup, BackupStatus status);
+extern void write_backup_status(pgBackup *backup, BackupStatus status,
+								const char *instance_name);
 extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
-extern parray *catalog_get_backup_list(time_t requested_backup_id);
+extern parray *catalog_get_instance_list(void);
+extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
@@ -595,6 +625,9 @@ extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
+extern void pgBackupGetPathInInstance(const char *instance_name,
+				 const pgBackup *backup, char *path, size_t len,
+				 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
@@ -621,7 +654,8 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool follow_symlink, bool add_root, int external_dir_num, fio_location location);
+						  bool follow_symlink, bool add_root,
+						  int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,

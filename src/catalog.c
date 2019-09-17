@@ -53,13 +53,14 @@ unlink_lock_atexit(void)
  * If no backup matches, return NULL.
  */
 pgBackup *
-read_backup(time_t timestamp)
+read_backup(const char *instance_name, time_t timestamp)
 {
 	pgBackup	tmp;
 	char		conf_path[MAXPGPATH];
 
 	tmp.start_time = timestamp;
-	pgBackupGetPath(&tmp, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
+	pgBackupGetPathInInstance(instance_name, &tmp, conf_path,
+					 lengthof(conf_path), BACKUP_CONTROL_FILE, NULL);
 
 	return readBackupControlFile(conf_path);
 }
@@ -71,11 +72,12 @@ read_backup(time_t timestamp)
  * status.
  */
 void
-write_backup_status(pgBackup *backup, BackupStatus status)
+write_backup_status(pgBackup *backup, BackupStatus status,
+					const char *instance_name)
 {
 	pgBackup   *tmp;
 
-	tmp = read_backup(backup->start_time);
+	tmp = read_backup(instance_name, backup->start_time);
 	if (!tmp)
 	{
 		/*
@@ -303,18 +305,85 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
 }
 
 /*
+ * Create list of instances in given backup catalog.
+ *
+ * Returns parray of "InstanceConfig" structures, filled with
+ * actual config of each instance.
+ */
+parray *
+catalog_get_instance_list(void)
+{
+	char		path[MAXPGPATH];
+	DIR		   *dir;
+	struct dirent *dent;
+	parray		*instances;
+
+	instances = parray_new();
+
+	/* open directory and list contents */
+	join_path_components(path, backup_path, BACKUPS_DIR);
+	dir = opendir(path);
+	if (dir == NULL)
+		elog(ERROR, "Cannot open directory \"%s\": %s",
+			 path, strerror(errno));
+
+	while (errno = 0, (dent = readdir(dir)) != NULL)
+	{
+		char		child[MAXPGPATH];
+		struct stat	st;
+		InstanceConfig *instance;
+
+		/* skip entries point current dir or parent dir */
+		if (strcmp(dent->d_name, ".") == 0 ||
+			strcmp(dent->d_name, "..") == 0)
+			continue;
+
+		join_path_components(child, path, dent->d_name);
+
+		if (lstat(child, &st) == -1)
+			elog(ERROR, "Cannot stat file \"%s\": %s",
+					child, strerror(errno));
+
+		if (!S_ISDIR(st.st_mode))
+			continue;
+
+		instance = readInstanceConfigFile(dent->d_name);
+
+		parray_append(instances, instance);
+	}
+
+	/* TODO 3.0: switch to ERROR */
+	if (parray_num(instances) == 0)
+		elog(WARNING, "This backup catalog contains no backup instances. Backup instance can be added via 'add-instance' command.");
+
+	if (errno)
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+				path, strerror(errno));
+
+	if (closedir(dir))
+		elog(ERROR, "Cannot close directory \"%s\": %s",
+				path, strerror(errno));
+
+	return instances;
+}
+
+/*
  * Create list of backups.
  * If 'requested_backup_id' is INVALID_BACKUP_ID, return list of all backups.
  * The list is sorted in order of descending start time.
  * If valid backup id is passed only matching backup will be added to the list.
  */
 parray *
-catalog_get_backup_list(time_t requested_backup_id)
+catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 {
 	DIR		   *data_dir = NULL;
 	struct dirent *data_ent = NULL;
 	parray	   *backups = NULL;
 	int			i;
+	char backup_instance_path[MAXPGPATH];
+
+	sprintf(backup_instance_path, "%s/%s/%s",
+			backup_path, BACKUPS_DIR, instance_name);
 
 	/* open backup instance backups directory */
 	data_dir = fio_opendir(backup_instance_path, FIO_BACKUP_HOST);
@@ -420,6 +489,7 @@ err_proc:
  * Create list of backup datafiles.
  * If 'requested_backup_id' is INVALID_BACKUP_ID, exit with error.
  * If valid backup id is passed only matching backup will be added to the list.
+ * TODO this function only used once. Is it really needed?
  */
 parray *
 get_backup_filelist(pgBackup *backup)
@@ -1182,6 +1252,33 @@ void
 pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 				 const char *subdir1, const char *subdir2)
 {
+	/* If "subdir1" is NULL do not check "subdir2" */
+	if (!subdir1)
+		snprintf(path, len, "%s/%s", backup_instance_path,
+				 base36enc(backup->start_time));
+	else if (!subdir2)
+		snprintf(path, len, "%s/%s/%s", backup_instance_path,
+				 base36enc(backup->start_time), subdir1);
+	/* "subdir1" and "subdir2" is not NULL */
+	else
+		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
+				 base36enc(backup->start_time), subdir1, subdir2);
+}
+
+/*
+ * independent from global variable backup_instance_path
+ * Still depends from backup_path
+ */
+void
+pgBackupGetPathInInstance(const char *instance_name,
+				 const pgBackup *backup, char *path, size_t len,
+				 const char *subdir1, const char *subdir2)
+{
+	char		backup_instance_path[MAXPGPATH];
+
+	sprintf(backup_instance_path, "%s/%s/%s",
+				backup_path, BACKUPS_DIR, instance_name);
+
 	/* If "subdir1" is NULL do not check "subdir2" */
 	if (!subdir1)
 		snprintf(path, len, "%s/%s", backup_instance_path,
