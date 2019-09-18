@@ -78,7 +78,11 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 {
 	if (instance_name == NULL &&
 		requested_backup_id != INVALID_BACKUP_ID)
-		elog(ERROR, "You must specify --instance to use --backup_id option");
+		elog(ERROR, "You must specify --instance to use (-i, --backup-id) option");
+
+	if (show_archive &&
+		requested_backup_id != INVALID_BACKUP_ID)
+		elog(ERROR, "You cannot specify --archive and (-i, --backup-id) options together");
 
 	/*
 	 * if instance_name is not specified,
@@ -105,7 +109,7 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 
 		return 0;
 	}
-	/* always use  */
+	/* always use */
 	else if (show_format == SHOW_JSON ||
 			 requested_backup_id == INVALID_BACKUP_ID)
 	{

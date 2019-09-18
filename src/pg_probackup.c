@@ -564,10 +564,18 @@ main(int argc, char *argv[])
 #if PG_VERSION_NUM >= 110000
 	/* Check xlog-seg-size option */
 	if (instance_name &&
-		backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
+		backup_subcmd != INIT_CMD &&
 		backup_subcmd != ADD_INSTANCE_CMD && backup_subcmd != SET_CONFIG_CMD &&
 		!IsValidWalSegSize(instance_config.xlog_seg_size))
-		elog(ERROR, "Invalid WAL segment size %u", instance_config.xlog_seg_size);
+	{
+		/* If we are working with instance of PG<11 using PG11 binary,
+		 * then xlog_seg_size is equal to zero. Manually set it to 16MB.
+		 */
+		if (instance_config.xlog_seg_size == 0)
+			instance_config.xlog_seg_size = DEFAULT_XLOG_SEG_SIZE;
+		else
+			elog(ERROR, "Invalid WAL segment size %u", instance_config.xlog_seg_size);
+	}
 #endif
 
 	/* Sanity check of --backup-id option */

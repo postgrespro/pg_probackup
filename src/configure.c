@@ -571,7 +571,14 @@ readInstanceConfigFile(const char *instance_name)
 	if (compress_alg)
 		instance->compress_alg = parse_compress_alg(compress_alg);
 
+#if PG_VERSION_NUM >= 110000
+	/* If for some reason xlog-seg-size is missing, then set it to 16MB */
+	if (!instance->xlog_seg_size)
+		instance->xlog_seg_size = DEFAULT_XLOG_SEG_SIZE;
+#endif
+
 	return instance;
+
 }
 
 static void
