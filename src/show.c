@@ -9,7 +9,6 @@
  */
 
 #include "pg_probackup.h"
-#include "access/timeline.h"
 
 #include <time.h>
 #include <dirent.h>
@@ -63,8 +62,6 @@ static void show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 							   parray *timelines_list, bool show_name);
 static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 							  parray *tli_list);
-
-static pgBackup* get_closest_backup(timelineInfo *tlinfo, parray *backup_list);
 
 static PQExpBufferData show_buf;
 static bool first_instance = true;
@@ -632,197 +629,15 @@ show_instance_json(const char *instance_name, parray *backup_list)
 	first_instance = false;
 }
 
-typedef struct xlogInterval
-{
-	XLogSegNo begin_segno;
-	XLogSegNo end_segno;
-} xlogInterval;
-
-static timelineInfo *
-timelineInfoNew(TimeLineID tli)
-{
-	timelineInfo *tlinfo = (timelineInfo *) pgut_malloc(sizeof(timelineInfo));
-	MemSet(tlinfo, 0, sizeof(timelineInfo));
-	tlinfo->tli = tli;
-	tlinfo->switchpoint = InvalidXLogRecPtr;
-	tlinfo->parent_link = NULL;
-	return tlinfo;
-}
-
 /*
  * show information about WAL archive of the instance
  */
 static void
 show_instance_archive(InstanceConfig *instance)
 {
-	parray *xlog_files_list = parray_new();
 	parray *timelineinfos;
-	parray *backups;
-	timelineInfo *tlinfo;
-	char		arclog_path[MAXPGPATH];
 
-	/* read all xlog files that belong to this archive */
-	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
-	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
-	parray_qsort(xlog_files_list, pgFileComparePath);
-
-	timelineinfos = parray_new();
-	tlinfo = NULL;
-
-	/* walk through files and collect info about timelines */
-	for (int i = 0; i < parray_num(xlog_files_list); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(xlog_files_list, i);
-		TimeLineID tli;
-		parray *timelines;
-
-		/* regular WAL file */
-		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
-		{
-			int result = 0;
-			uint32 log, seg;
-			XLogSegNo segno;
-			char suffix[MAXPGPATH];
-
-			result = sscanf(file->name, "%08X%08X%08X.%s",
-						&tli, &log, &seg, (char *) &suffix);
-
-			if (result < 3)
-			{
-				elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
-				continue;
-			}
-
-			segno = log * instance->xlog_seg_size + seg;
-
-			/* regular WAL file with suffix */
-			if (result == 4)
-			{
-				/* backup history file. Currently we don't use them */
-				if (IsBackupHistoryFileName(file->name))
-				{
-					elog(VERBOSE, "backup history file \"%s\". do nothing", file->name);
-					continue;
-				}
-				/* we only expect compressed wal files with .gz suffix */
-				else if (strcmp(suffix, "gz") != 0)
-				{
-					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
-					continue;
-				}
-			}
-
-			/* new file belongs to new timeline */
-			if (!tlinfo || tlinfo->tli != tli)
-			{
-				tlinfo = timelineInfoNew(tli);
-				parray_append(timelineinfos, tlinfo);
-			}
-			/*
-			 * As it is impossible to detect if segments before segno are lost,
-			 * or just do not exist, do not report them as lost.
-			 */
-			else if (tlinfo->n_xlog_files != 0)
-			{
-				/* check, if segments are consequent */
-				XLogSegNo expected_segno = tlinfo->end_segno + 1;
-
-				/* some segments are missing. remember them in lost_segments to report */
-				if (segno != expected_segno)
-				{
-					xlogInterval *interval = palloc(sizeof(xlogInterval));;
-					interval->begin_segno = expected_segno;
-					interval->end_segno = segno - 1;
-
-					if (tlinfo->lost_segments == NULL)
-						tlinfo->lost_segments = parray_new();
-
-					parray_append(tlinfo->lost_segments, interval);
-				}
-			}
-
-			if (tlinfo->begin_segno == 0)
-				tlinfo->begin_segno = segno;
-
-			/* this file is the last for this timeline so far */
-			tlinfo->end_segno = segno;
-			/* update counters */
-			tlinfo->n_xlog_files++;
-			tlinfo->size += file->size;
-		}
-		/* timeline history file */
-		else if (IsTLHistoryFileName(file->name))
-		{
-			TimeLineHistoryEntry *tln;
-
-			sscanf(file->name, "%08X.history", &tli);
-			timelines = read_timeline_history(arclog_path, tli);
-
-			if (!tlinfo || tlinfo->tli != tli)
-			{
-				tlinfo = timelineInfoNew(tli);
-				parray_append(timelineinfos, tlinfo);
-				/*
-				 * 1 is the latest timeline in the timelines list.
-				 * 0 - is our timeline, which is of no interest here
-				 */
-				tln = (TimeLineHistoryEntry *) parray_get(timelines, 1);
-				tlinfo->switchpoint = tln->end;
-				tlinfo->parent_tli = tln->tli;
-
-				/* find parent timeline to link it with this one */
-				for (int i = 0; i < parray_num(timelineinfos); i++)
-				{
-					timelineInfo *cur = (timelineInfo *) parray_get(timelineinfos, i);
-					if (cur->tli == tlinfo->parent_tli)
-					{
-						tlinfo->parent_link = cur;
-						break;
-					}
-				}
-			}
-
-			parray_walk(timelines, pfree);
-			parray_free(timelines);
-		}
-		else
-			elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
-	}
-
-	/* save information about backups belonging to each timeline */
-	backups = catalog_get_backup_list(instance->name, INVALID_BACKUP_ID);
-
-	for (int i = 0; i < parray_num(timelineinfos); i++)
-	{
-		timelineInfo *tlinfo = parray_get(timelineinfos, i);
-		for (int j = 0; j < parray_num(backups); j++)
-		{
-			pgBackup *backup = parray_get(backups, j);
-			if (tlinfo->tli == backup->tli)
-			{
-				if (tlinfo->backups == NULL)
-					tlinfo->backups = parray_new();
-
-				parray_append(tlinfo->backups, backup);
-			}
-		}
-	}
-
-	/* determine closest backup for every timeline */
-	for (int i = 0; i < parray_num(timelineinfos); i++)
-	{
-		timelineInfo *tlinfo = parray_get(timelineinfos, i);
-
-		/* only timeline with switchpoint can possibly have closest backup */
-		if XLogRecPtrIsInvalid(tlinfo->switchpoint)
-			continue;
-
-		/* only timeline with parent timeline can possibly have closest backup */
-		if (!tlinfo->parent_link)
-			continue;
-
-		tlinfo->closest_backup = get_closest_backup(tlinfo, backups);
-	}
+	timelineinfos = catalog_get_timelines(instance);
 
 	if (show_format == SHOW_PLAIN)
 		show_archive_plain(instance->name, instance->xlog_seg_size, timelineinfos, true);
@@ -830,9 +645,6 @@ show_instance_archive(InstanceConfig *instance)
 		show_archive_json(instance->name, instance->xlog_seg_size, timelineinfos);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
-
-	parray_walk(xlog_files_list, pfree);
-	parray_free(xlog_files_list);
 }
 
 static void
@@ -1149,64 +961,4 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	json_add(buf, JT_END_OBJECT, &json_level);
 
 	first_instance = false;
-}
-
-/*
- * Iterate over parent timelines of a given timeline and look
- * for valid backup closest to given timeline switchpoint.
- *
- * Returns NULL if such backup is not found.
- */
-pgBackup*
-get_closest_backup(timelineInfo *tlinfo, parray *backup_list)
-{
-	pgBackup *closest_backup = NULL;
-	int i;
-
-	while (tlinfo->parent_link)
-	{
-		/*
-		 * Iterate over backups belonging to parent timeline and look
-		 * for candidates.
-		 */
-		for (i = 0; i < parray_num(backup_list); i++)
-		{
-			pgBackup   *backup = parray_get(backup_list, i);
-
-			/* Backups belonging to timelines other than parent timeline can be safely skipped */
-			if (backup->tli != tlinfo->parent_tli)
-				continue;
-
-			/* Backups in future can be safely skipped */
-			if (backup->stop_lsn > tlinfo->switchpoint)
-				continue;
-
-			/* Only valid backups closest to switchpoint should be considered */
-			if (backup->stop_lsn <= tlinfo->switchpoint &&
-				(backup->status == BACKUP_STATUS_OK ||
-				 backup->status == BACKUP_STATUS_DONE))
-			{
-				/*
-				 * We have found first candidate.
-				 * Now we should determine whether it`s closest to switchpoint or nor.
-				 */
-
-				if (!closest_backup)
-					closest_backup = backup;
-
-				/* Check if backup is closer to switchpoint than current candidate */
-				if (backup->stop_lsn > closest_backup->stop_lsn)
-					closest_backup = backup;
-			}
-		}
-
-		/* Closest backup is found */
-		if (closest_backup)
-			break;
-
-		/* Switch to parent */
-		tlinfo = tlinfo->parent_link;
-	}
-
-	return closest_backup;
 }

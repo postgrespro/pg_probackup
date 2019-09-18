@@ -440,6 +440,9 @@ main(int argc, char *argv[])
 			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
 			elog(ERROR, "required parameter not specified: --instance");
 	}
+	else
+		/* Set instance name */
+		instance_config.name = pgut_strdup(instance_name);
 
 	/*
 	 * If --instance option was passed, construct paths for backup data and

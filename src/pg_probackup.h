@@ -405,7 +405,14 @@ struct timelineInfo {
 							 * about backups belonging to this timeline */
 	parray *lost_segments;	/* array of intervals of lost segments */
 	pgBackup *closest_backup; /* link to backup, closest to timeline */
+	pgBackup *oldest_backup; /* link to oldest backup on timeline */
 };
+
+typedef struct xlogInterval
+{
+	XLogSegNo begin_segno;
+	XLogSegNo end_segno;
+} xlogInterval;
 
 
 /*
@@ -617,6 +624,7 @@ extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli,
 											  time_t current_start_time);
+extern parray *catalog_get_timelines(InstanceConfig *instance);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list);
