@@ -83,7 +83,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
             options=["-c", "4", "-j 4", "-T", "100"])
 
         # wait for shared buffer on replica to be filled with dirty data
-        sleep(10)
+        sleep(20)
 
         # get pids of replica background workers
         startup_pid = replica.auxiliary_pids[ProcessType.Startup][0]
@@ -121,11 +121,13 @@ class BugTest(ProbackupTest, unittest.TestCase):
         except:
             pass
 
+        # MinRecLSN = replica.get_control_data()['Minimum recovery ending location']
+
         # Promote replica with 'immediate' target action
         replica.append_conf(
             'recovery.conf', "recovery_target = 'immediate'")
         replica.append_conf(
-            'recovery.conf', "recovery_target_action = 'promote'")
+            'recovery.conf', "recovery_target_action = 'pause'")
         replica.slow_start(replica=True)
 
         if self.get_version(node) < 100000:
@@ -133,7 +135,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
 DO
 $$
 relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")
-current_xlog_lsn = plpy.execute("select pg_last_xlog_replay_location() as lsn")[0]['lsn']
+current_xlog_lsn = plpy.execute("SELECT min_recovery_end_lsn as lsn FROM pg_control_recovery()")[0]['lsn']
 plpy.notice('CURRENT LSN: {0}'.format(current_xlog_lsn))
 found_corruption = False
 for relation in relations:
