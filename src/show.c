@@ -16,6 +16,8 @@
 
 #include "utils/json.h"
 
+#define half_rounded(x)   (((x) + ((x) < 0 ? 0 : 1)) / 2)
+
 /* struct to align fields printed in plain format */
 typedef struct ShowBackendRow
 {
@@ -141,7 +143,8 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 void
 pretty_size(int64 size, char *buf, size_t len)
 {
-	int			exp = 0;
+	int64 	limit = 10 * 1024;
+	int64 	limit2 = limit * 2 - 1;
 
 	/* minus means the size is invalid */
 	if (size < 0)
@@ -150,36 +153,30 @@ pretty_size(int64 size, char *buf, size_t len)
 		return;
 	}
 
-	/* determine postfix */
-	while (size > 9999)
+	if (Abs(size) < limit)
+		snprintf(buf, len, "%dB", (int) size);
+	else
 	{
-		++exp;
-		size /= 1000;
-	}
-
-	switch (exp)
-	{
-		case 0:
-			snprintf(buf, len, "%dB", (int) size);
-			break;
-		case 1:
-			snprintf(buf, len, "%dkB", (int) size);
-			break;
-		case 2:
-			snprintf(buf, len, "%dMB", (int) size);
-			break;
-		case 3:
-			snprintf(buf, len, "%dGB", (int) size);
-			break;
-		case 4:
-			snprintf(buf, len, "%dTB", (int) size);
-			break;
-		case 5:
-			snprintf(buf, len, "%dPB", (int) size);
-			break;
-		default:
-			strncpy(buf, "***", len);
-			break;
+		size >>= 9;
+		if (Abs(size) < limit2)
+				snprintf(buf, len, "%dkB", (int) half_rounded(size));
+		else
+		{
+			size >>= 10;
+			if (Abs(size) < limit2)
+				snprintf(buf, len, "%dMB", (int) half_rounded(size));
+			else
+			{
+				size >>= 10;
+				if (Abs(size) < limit2)
+					snprintf(buf, len, "%dGB", (int) half_rounded(size));
+				else
+				{
+					size >>= 10;
+					snprintf(buf, len, "%dTB", (int) half_rounded(size));
+				}
+			}
+		}
 	}
 }
 
