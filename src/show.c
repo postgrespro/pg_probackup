@@ -648,6 +648,7 @@ static void
 show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 				   parray *tli_list, bool show_name)
 {
+	parray *actual_tli_list = parray_new();
 #define SHOW_ARCHIVE_FIELDS_COUNT 10
 	int			i;
 	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
@@ -663,15 +664,24 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
 		widths[i] = strlen(names[i]);
 
-	rows = (ShowArchiveRow *) palloc0(parray_num(tli_list) *
+	/* Ignore empty timelines */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
+
+		if (tlinfo->n_xlog_files > 0)
+			parray_append(actual_tli_list, tlinfo);
+	}
+
+	rows = (ShowArchiveRow *) palloc0(parray_num(actual_tli_list) *
 									 sizeof(ShowArchiveRow));
 
 	/*
 	 * Fill row values and calculate maximum width of each field.
 	 */
-	for (i = 0; i < parray_num(tli_list); i++)
+	for (i = 0; i < parray_num(actual_tli_list); i++)
 	{
-		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(actual_tli_list, i);
 		ShowArchiveRow *row = &rows[i];
 		int			cur = 0;
 		float		zratio = 0;
@@ -770,7 +780,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 	/*
 	 * Print values.
 	 */
-	for (i = parray_num(tli_list) - 1; i >= 0; i--)
+	for (i = parray_num(actual_tli_list) - 1; i >= 0; i--)
 	{
 		ShowArchiveRow *row = &rows[i];
 		int			cur = 0;
@@ -818,6 +828,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 	}
 
 	pfree(rows);
+	//TODO: free timelines
 }
 
 static void
@@ -826,6 +837,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 {
 	int			i;
 	PQExpBuffer	buf = &show_buf;
+	parray *actual_tli_list = parray_new();
 
 	if (!first_instance)
 		appendPQExpBufferChar(buf, ',');
@@ -836,18 +848,28 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	json_add_value(buf, "instance", instance_name, json_level, true);
 	json_add_key(buf, "timelines", json_level);
 
+	/* Ignore empty timelines */
+
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
+
+		if (tlinfo->n_xlog_files > 0)
+			parray_append(actual_tli_list, tlinfo);
+	}
+
 	/*
 	 * List timelines.
 	 */
 	json_add(buf, JT_BEGIN_ARRAY, &json_level);
 
-	for (i = parray_num(tli_list) - 1; i >= 0; i--)
+	for (i = parray_num(actual_tli_list) - 1; i >= 0; i--)
 	{
-		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(tli_list, i);
+		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(actual_tli_list, i);
 		char		tmp_buf[20];
 		float		zratio = 0;
 
-		if (i != (parray_num(tli_list) - 1))
+		if (i != (parray_num(actual_tli_list) - 1))
 			appendPQExpBufferChar(buf, ',');
 
 		json_add(buf, JT_BEGIN_OBJECT, &json_level);
