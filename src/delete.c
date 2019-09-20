@@ -14,9 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
-static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
-						uint32 xlog_seg_size);
-static void delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tli,
+static void delete_walfiles(XLogRecPtr keep_lsn, timelineInfo *tli,
 						uint32 xlog_seg_size, bool dry_run);
 static void do_retention_internal(parray *backup_list, parray *to_keep_list,
 									parray *to_purge_list);
@@ -641,10 +639,10 @@ do_retention_wal(bool dry_run)
 		 * can be safely purged.
 		 */
 		if (tlinfo->oldest_backup)
-			delete_walfiles_internal(tlinfo->oldest_backup->start_lsn,
+			delete_walfiles(tlinfo->oldest_backup->start_lsn,
 							tlinfo, instance_config.xlog_seg_size, dry_run);
 		else
-			delete_walfiles_internal(InvalidXLogRecPtr,
+			delete_walfiles(InvalidXLogRecPtr,
 							tlinfo, instance_config.xlog_seg_size, dry_run);
 	}
 }
@@ -732,7 +730,7 @@ delete_backup_files(pgBackup *backup)
  * Q: Maybe we should stop treating partial WAL segments as second-class citizens?
  */
 static void
-delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
+delete_walfiles(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 								uint32 xlog_seg_size, bool dry_run)
 {
 	XLogSegNo   StartSegNo;		/* First segment to delete */
@@ -864,118 +862,6 @@ delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 			wal_deleted = true;
 		}
 	}
-}
-
-/*
- * Deletes WAL segments up to oldest_lsn or all WAL segments (if all backups
- * was deleted and so oldest_lsn is invalid).
- *
- *  oldest_lsn - if valid, function deletes WAL segments, which contain lsn
- *    older than oldest_lsn. If it is invalid function deletes all WAL segments.
- *  oldest_tli - is used to construct oldest WAL segment in addition to
- *    oldest_lsn.
- */
-static void
-delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
-										uint32 xlog_seg_size)
-{
-	XLogSegNo   targetSegNo;
-	char		oldestSegmentNeeded[MAXFNAMELEN];
-	DIR		   *arcdir;
-	struct dirent *arcde;
-	char		wal_file[MAXPGPATH];
-	char		max_wal_file[MAXPGPATH];
-	char		min_wal_file[MAXPGPATH];
-	int			rc;
-
-	max_wal_file[0] = '\0';
-	min_wal_file[0] = '\0';
-
-	if (!XLogRecPtrIsInvalid(oldest_lsn))
-	{
-		GetXLogSegNo(oldest_lsn, targetSegNo, xlog_seg_size);
-		GetXLogFileName(oldestSegmentNeeded, oldest_tli, targetSegNo,
-						xlog_seg_size);
-
-		elog(LOG, "removing WAL segments older than %s", oldestSegmentNeeded);
-	}
-	else
-		elog(LOG, "removing all WAL segments");
-
-	/*
-	 * Now it is time to do the actual work and to remove all the segments
-	 * not needed anymore.
-	 */
-	if ((arcdir = opendir(arclog_path)) != NULL)
-	{
-		while (errno = 0, (arcde = readdir(arcdir)) != NULL)
-		{
-			/*
-			 * We ignore the timeline part of the WAL segment identifiers in
-			 * deciding whether a segment is still needed.  This ensures that
-			 * we won't prematurely remove a segment from a parent timeline.
-			 * We could probably be a little more proactive about removing
-			 * segments of non-parent timelines, but that would be a whole lot
-			 * more complicated.
-			 *
-			 * We use the alphanumeric sorting property of the filenames to
-			 * decide which ones are earlier than the exclusiveCleanupFileName
-			 * file. Note that this means files are not removed in the order
-			 * they were originally written, in case this worries you.
-			 *
-			 * We also should not forget that WAL segment can be compressed.
-			 */
-			if (IsXLogFileName(arcde->d_name) ||
-				IsPartialXLogFileName(arcde->d_name) ||
-				IsBackupHistoryFileName(arcde->d_name) ||
-				IsCompressedXLogFileName(arcde->d_name))
-			{
-				if (XLogRecPtrIsInvalid(oldest_lsn) ||
-					strncmp(arcde->d_name + 8, oldestSegmentNeeded + 8, 16) < 0)
-				{
-					/*
-					 * Use the original file name again now, including any
-					 * extension that might have been chopped off before testing
-					 * the sequence.
-					 */
-					snprintf(wal_file, MAXPGPATH, "%s/%s",
-							 arclog_path, arcde->d_name);
-
-					rc = unlink(wal_file);
-					if (rc != 0)
-					{
-						elog(WARNING, "could not remove file \"%s\": %s",
-							 wal_file, strerror(errno));
-						break;
-					}
-					elog(LOG, "removed WAL segment \"%s\"", wal_file);
-
-					if (max_wal_file[0] == '\0' ||
-						strcmp(max_wal_file + 8, arcde->d_name + 8) < 0)
-						strcpy(max_wal_file, arcde->d_name);
-
-					if (min_wal_file[0] == '\0' ||
-						strcmp(min_wal_file + 8, arcde->d_name + 8) > 0)
-						strcpy(min_wal_file, arcde->d_name);
-				}
-			}
-		}
-
-		if (min_wal_file[0] != '\0')
-			elog(INFO, "removed min WAL segment \"%s\"", min_wal_file);
-		if (max_wal_file[0] != '\0')
-			elog(INFO, "removed max WAL segment \"%s\"", max_wal_file);
-
-		if (errno)
-			elog(WARNING, "could not read archive location \"%s\": %s",
-				 arclog_path, strerror(errno));
-		if (closedir(arcdir))
-			elog(WARNING, "could not close archive location \"%s\": %s",
-				 arclog_path, strerror(errno));
-	}
-	else
-		elog(WARNING, "could not open archive location \"%s\": %s",
-			 arclog_path, strerror(errno));
 }
 
 
