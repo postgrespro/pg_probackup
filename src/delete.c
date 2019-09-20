@@ -753,7 +753,7 @@ delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 
 	if (XLogRecPtrIsInvalid(keep_lsn))
 	{
-		/* Drop all segments in timeline */
+		/* Drop all files in timeline */
 		elog(INFO, "All files on timeline %i will be removed", tlinfo->tli);
 		StartSegNo = tlinfo->begin_segno;
 		EndSegNo = tlinfo->end_segno;
@@ -769,9 +769,11 @@ delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	if (EndSegNo > 0 && EndSegNo > StartSegNo)
 		elog(INFO, "WAL segments between %08X%08X and %08X%08X on timeline %i will be removed",
 					 (uint32) StartSegNo / xlog_seg_size, (uint32) StartSegNo % xlog_seg_size,
-					 (uint32) EndSegNo / xlog_seg_size, (uint32) EndSegNo % xlog_seg_size,
+					 (uint32) (EndSegNo - 1) / xlog_seg_size,
+					 (uint32) (EndSegNo - 1) % xlog_seg_size,
 					 tlinfo->tli);
 
+	/* sanity */
 	if (EndSegNo > StartSegNo)
 		/* typical scenario */
 		wal_size_logical = (EndSegNo-StartSegNo) * xlog_seg_size;
@@ -787,7 +789,7 @@ delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		 */
 		if (StartSegNo > 0 && EndSegNo > 0)
 			elog(WARNING, "On timeline %i first segment %08X%08X is greater than "
-				"oldest segment to keep %08X%08X. Possible WAL archive corruption.",
+				"oldest segment to keep %08X%08X. Possible WAL archive corruption!",
 				tlinfo->tli,
 				(uint32) StartSegNo / xlog_seg_size,  (uint32) StartSegNo % xlog_seg_size,
 				(uint32) EndSegNo / xlog_seg_size, (uint32) EndSegNo % xlog_seg_size);
