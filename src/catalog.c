@@ -791,8 +791,15 @@ catalog_get_timelines(InstanceConfig *instance)
 				/* check, if segments are consequent */
 				XLogSegNo expected_segno = tlinfo->end_segno + 1;
 
-				/* some segments are missing. remember them in lost_segments to report */
-				if (segno != expected_segno)
+				/*
+				 * Some segments are missing. remember them in lost_segments to report.
+				 * Normally we expect that segment numbers form an increasing sequence,
+				 * though it's legal to find two files with equal segno in case there
+				 * are both compressed and non-compessed versions. For example
+				 * 000000010000000000000002 and 000000010000000000000002.gz
+				 *
+				 */
+				if (segno != expected_segno && segno != tlinfo->end_segno)
 				{
 					xlogInterval *interval = palloc(sizeof(xlogInterval));;
 					interval->begin_segno = expected_segno;
