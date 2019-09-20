@@ -4,6 +4,9 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrac
 from datetime import datetime, timedelta
 import subprocess
 import time
+from distutils.dir_util import copy_tree
+from testgres import ProcessType
+from time import sleep
 
 
 module_name = 'replica'
@@ -351,8 +354,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'archive_timeout': '10s'})
+            pg_options={'archive_timeout': '10s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
@@ -528,3 +530,505 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_stop_lsn_null_offset(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+        master.slow_start()
+
+        # freeze bgwriter to get rid of RUNNING XACTS records
+        bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(master, replica, synchronous=True)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        copy_tree(
+            os.path.join(backup_dir, 'wal', 'master'),
+            os.path.join(backup_dir, 'wal', 'replica'))
+
+        replica.slow_start(replica=True)
+
+        self.switch_wal_segment(master)
+        self.switch_wal_segment(master)
+
+        output = self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--archive-timeout=30',
+                '--log-level-console=verbose',
+                '--no-validate',
+                '--stream'],
+            return_id=False)
+
+        self.assertIn(
+            'LOG: Null offset in stop_backup_lsn value 0/3000000',
+            output)
+
+        self.assertIn(
+            'WARNING: WAL segment 000000010000000000000003 could not be streamed in 30 seconds',
+            output)
+
+        self.assertIn(
+            'WARNING: Failed to get next WAL record after 0/3000000, looking for previous WAL record',
+            output)
+
+        self.assertIn(
+            'LOG: Looking for LSN 0/3000000 in segment: 000000010000000000000002',
+            output)
+
+        self.assertIn(
+            'LOG: Record 0/2000160 has endpoint 0/3000000 which is '
+            'equal or greater than requested LSN 0/3000000',
+            output)
+
+        self.assertIn(
+            'LOG: Found prior LSN: 0/2000160',
+            output)
+
+        self.assertIn(
+            'LOG: current.stop_lsn: 0/2000160',
+            output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_stop_lsn_null_offset_next_record(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+        master.slow_start()
+
+        # freeze bgwriter to get rid of RUNNING XACTS records
+        bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(master, replica, synchronous=True)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        copy_tree(
+            os.path.join(backup_dir, 'wal', 'master'),
+            os.path.join(backup_dir, 'wal', 'replica'))
+
+        replica.slow_start(replica=True)
+
+        self.switch_wal_segment(master)
+        self.switch_wal_segment(master)
+
+        # open connection to master
+        conn = master.connect()
+
+        gdb = self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--archive-timeout=40',
+                '--log-level-file=verbose',
+                '--no-validate',
+                '--stream'],
+            gdb=True)
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+        gdb.remove_all_breakpoints()
+        gdb.continue_execution_until_running()
+
+        sleep(5)
+
+        conn.execute("create table t1()")
+        conn.commit()
+
+        while 'RUNNING' in self.show_pb(backup_dir, 'replica')[0]['status']:
+            sleep(5)
+
+        file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+
+        with open(file) as f:
+            log_content = f.read()
+
+        self.assertIn(
+            'LOG: Null offset in stop_backup_lsn value 0/3000000',
+            log_content)
+
+        self.assertIn(
+            'LOG: Looking for segment: 000000010000000000000003',
+            log_content)
+
+        self.assertIn(
+            'LOG: First record in WAL segment "000000010000000000000003": 0/3000028',
+            log_content)
+
+        self.assertIn(
+            'LOG: current.stop_lsn: 0/3000028',
+            log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_archive_replica_null_offset(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+        master.slow_start()
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(master, replica, synchronous=True)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        copy_tree(
+            os.path.join(backup_dir, 'wal', 'master'),
+            os.path.join(backup_dir, 'wal', 'replica'))
+
+        replica.slow_start(replica=True)
+
+        self.switch_wal_segment(master)
+        self.switch_wal_segment(master)
+
+        # take backup from replica
+        output = self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--archive-timeout=30',
+                '--log-level-console=verbose',
+                '--no-validate'],
+            return_id=False)
+
+        self.assertIn(
+            'LOG: Null offset in stop_backup_lsn value 0/3000000',
+            output)
+
+        self.assertIn(
+            'WARNING: WAL segment 000000010000000000000003 could not be archived in 30 seconds',
+            output)
+
+        self.assertIn(
+            'WARNING: Failed to get next WAL record after 0/3000000, looking for previous WAL record',
+            output)
+
+        self.assertIn(
+            'LOG: Looking for LSN 0/3000000 in segment: 000000010000000000000002',
+            output)
+
+        self.assertIn(
+            'LOG: Record 0/2000160 has endpoint 0/3000000 which is '
+            'equal or greater than requested LSN 0/3000000',
+            output)
+
+        self.assertIn(
+            'LOG: Found prior LSN: 0/2000160',
+            output)
+
+        print(output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_archive_replica_not_null_offset(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+        master.slow_start()
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(master, replica, synchronous=True)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        copy_tree(
+            os.path.join(backup_dir, 'wal', 'master'),
+            os.path.join(backup_dir, 'wal', 'replica'))
+
+        replica.slow_start(replica=True)
+
+        # take backup from replica
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--archive-timeout=30',
+                '--log-level-console=verbose',
+                '--no-validate'],
+            return_id=False)
+
+        try:
+            self.backup_node(
+                backup_dir, 'replica', replica,
+                options=[
+                    '--archive-timeout=30',
+                    '--log-level-console=verbose',
+                    '--no-validate'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of archive timeout. "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'LOG: Looking for LSN 0/3000060 in segment: 000000010000000000000003',
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn(
+                'INFO: Wait for LSN 0/3000060 in archived WAL segment',
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn(
+                'ERROR: WAL segment 000000010000000000000003 could not be archived in 30 seconds',
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_toast(self):
+        """
+        make archive master, take full and page archive backups from master,
+        set replica, make archive backup from replica
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+        master.slow_start()
+
+        # freeze bgwriter to get rid of RUNNING XACTS records
+        bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(master, replica, synchronous=True)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        copy_tree(
+            os.path.join(backup_dir, 'wal', 'master'),
+            os.path.join(backup_dir, 'wal', 'replica'))
+
+        replica.slow_start(replica=True)
+
+        self.switch_wal_segment(master)
+        self.switch_wal_segment(master)
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,10) i')
+
+        # open connection to master
+        output = self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--archive-timeout=30',
+                '--log-level-console=verbose',
+                '--log-level-file=verbose',
+                '--no-validate',
+                '--stream'],
+            return_id=False)
+
+        pgdata = self.pgdata_content(replica.data_dir)
+
+        self.assertIn(
+            'WARNING: Could not read WAL record at',
+            output)
+
+        self.assertIn(
+            'LOG: Found prior LSN:',
+            output)
+
+        print(output)
+
+        replica.cleanup()
+        self.restore_node(backup_dir, 'replica', replica)
+
+        pgdata_restored = self.pgdata_content(replica.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_promote_1(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        # set replica True, so archive_mode 'always' is used. 
+        self.set_archiving(backup_dir, 'master', master, replica=True)
+        master.slow_start()
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.set_replica(master, replica)
+
+        replica.slow_start(replica=True)
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,10) i')
+
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        wal_file = os.path.join(
+            backup_dir, 'wal', 'master', '000000010000000000000004')
+
+        wal_file_partial = os.path.join(
+            backup_dir, 'wal', 'master', '000000010000000000000004.partial')
+
+        self.assertFalse(os.path.exists(wal_file))
+
+        replica.promote()
+
+        while not os.path.exists(wal_file_partial):
+            sleep(1)
+
+        self.switch_wal_segment(master)
+
+        # sleep to be sure, that any partial timeout is expired
+        sleep(70)
+
+        self.assertTrue(
+            os.path.exists(wal_file_partial),
+            "File {0} disappeared".format(wal_file))
+        
+        self.assertTrue(
+            os.path.exists(wal_file_partial),
+            "File {0} disappeared".format(wal_file_partial))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+
+# TODO:
+# null offset STOP LSN and latest record in previous segment is conrecord (manual only)
+# archiving from promoted delayed replica

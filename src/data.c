@@ -209,7 +209,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
 		{
-			elog(LOG, "File %s, block %u, file was truncated",
+			elog(VERBOSE, "File %s, block %u, file was truncated",
 					file->path, blknum);
 			return 0;
 		}
@@ -238,7 +238,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		/* Page is zeroed. No need to check header and checksum. */
 		if (i == BLCKSZ)
 		{
-			elog(LOG, "File: %s blknum %u, empty page", file->path, blknum);
+			elog(VERBOSE, "File: %s blknum %u, empty page", file->path, blknum);
 			return 1;
 		}
 
@@ -422,7 +422,7 @@ prepare_page(ConnectionArgs *arguments,
 		page_lsn &&
 		page_lsn < prev_backup_start_lsn)
 	{
-		elog(VERBOSE, "Skipping blknum: %u in file: %s", blknum, file->path);
+		elog(VERBOSE, "Skipping blknum %u in file: %s", blknum, file->path);
 		(*n_skipped)++;
 		return SkipCurrentPage;
 	}
@@ -1064,6 +1064,39 @@ copy_file(fio_location from_location, const char *to_root,
 		fio_fclose(out))
 		elog(ERROR, "cannot write \"%s\": %s", to_path, strerror(errno));
 	fio_fclose(in);
+
+	return true;
+}
+
+/*
+ * Create empty file, used for partial restore
+ */
+bool
+create_empty_file(fio_location from_location, const char *to_root,
+		  fio_location to_location, pgFile *file)
+{
+	char		to_path[MAXPGPATH];
+	FILE	   *out;
+
+	/* open file for write  */
+	join_path_components(to_path, to_root, file->rel_path);
+	out = fio_fopen(to_path, PG_BINARY_W, to_location);
+	if (out == NULL)
+	{
+		elog(ERROR, "cannot open destination file \"%s\": %s",
+			 to_path, strerror(errno));
+	}
+
+	/* update file permission */
+	if (fio_chmod(to_path, file->mode, to_location) == -1)
+	{
+		fio_fclose(out);
+		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
+			 strerror(errno));
+	}
+
+	if (fio_fclose(out))
+		elog(ERROR, "cannot close \"%s\": %s", to_path, strerror(errno));
 
 	return true;
 }

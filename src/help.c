@@ -143,6 +143,7 @@ help_pg_probackup(void)
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [--db-include | --db-exclude]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
@@ -165,7 +166,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
-	printf(_("                 [--format=format]\n"));
+	printf(_("                 [--format=format] [--archive]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
@@ -359,6 +360,7 @@ help_restore(void)
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n\n"));
@@ -396,6 +398,10 @@ help_restore(void)
 	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
+
+	printf(_("\n  Partial restore options:\n"));
+	printf(_("      --db-include dbname          restore only specified databases\n"));
+	printf(_("      --db-exclude dbname          do not restore specified databases\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -537,11 +543,12 @@ help_show(void)
 {
 	printf(_("\n%s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
-	printf(_("                 [--format=format]\n\n"));
+	printf(_("                 [--format=format] [--archive]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     show info about specific instance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
+	printf(_("      --archive                    show WAL archive information\n"));
 	printf(_("      --format=format              show format=PLAIN|JSON\n\n"));
 }
 

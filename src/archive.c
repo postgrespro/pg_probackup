@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 static void push_wal_file(const char *from_path, const char *to_path,
-						  bool is_compress, bool overwrite);
+						  bool is_compress, bool overwrite, int compress_level);
 static void get_wal_file(const char *from_path, const char *to_path);
 #ifdef HAVE_LIBZ
 static const char *get_gz_error(gzFile gzf, int errnum);
@@ -31,11 +31,10 @@ static void copy_file_attributes(const char *from_path,
  * --wal-file-path %p --wal-file-name %f', to move backups into arclog_path.
  * Where archlog_path is $BACKUP_PATH/wal/system_id.
  * Currently it just copies wal files to the new location.
- * TODO: Planned options: list the arclog content,
- * compute and validate checksums.
  */
 int
-do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
+do_archive_push(InstanceConfig *instance,
+				char *wal_file_path, char *wal_file_name, bool overwrite)
 {
 	char		backup_wal_file_path[MAXPGPATH];
 	char		absolute_wal_file_path[MAXPGPATH];
@@ -60,33 +59,33 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
 	/* verify that archive-push --instance parameter is valid */
 	system_id = get_system_identifier(current_dir);
 
-	if (instance_config.pgdata == NULL)
+	if (instance->pgdata == NULL)
 		elog(ERROR, "cannot read pg_probackup.conf for this instance");
 
-	if(system_id != instance_config.system_identifier)
+	if(system_id != instance->system_identifier)
 		elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
 					"Instance '%s' should have SYSTEM_ID = " UINT64_FORMAT " instead of " UINT64_FORMAT,
-			 wal_file_name, instance_name, instance_config.system_identifier,
+			 wal_file_name, instance->name, instance->system_identifier,
 			 system_id);
 
 	/* Create 'archlog_path' directory. Do nothing if it already exists. */
-	fio_mkdir(arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	fio_mkdir(instance->arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
-	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
+	join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
 
 	elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
 
-	if (instance_config.compress_alg == PGLZ_COMPRESS)
+	if (instance->compress_alg == PGLZ_COMPRESS)
 		elog(ERROR, "pglz compression is not supported");
 
 #ifdef HAVE_LIBZ
-	if (instance_config.compress_alg == ZLIB_COMPRESS)
+	if (instance->compress_alg == ZLIB_COMPRESS)
 		is_compress = IsXLogFileName(wal_file_name);
 #endif
 
 	push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress,
-				  overwrite);
+				  overwrite, instance->compress_level);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
 	return 0;
@@ -97,7 +96,8 @@ do_archive_push(char *wal_file_path, char *wal_file_name, bool overwrite)
  * Move files from arclog_path to pgdata/wal_file_path.
  */
 int
-do_archive_get(char *wal_file_path, char *wal_file_name)
+do_archive_get(InstanceConfig *instance,
+			   char *wal_file_path, char *wal_file_name)
 {
 	char		backup_wal_file_path[MAXPGPATH];
 	char		absolute_wal_file_path[MAXPGPATH];
@@ -118,7 +118,7 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
 		elog(ERROR, "getcwd() error");
 
 	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
-	join_path_components(backup_wal_file_path, arclog_path, wal_file_name);
+	join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
 
 	elog(INFO, "pg_probackup archive-get from %s to %s",
 		 backup_wal_file_path, absolute_wal_file_path);
@@ -134,7 +134,7 @@ do_archive_get(char *wal_file_path, char *wal_file_name)
  */
 void
 push_wal_file(const char *from_path, const char *to_path, bool is_compress,
-			  bool overwrite)
+			  bool overwrite, int compress_level)
 {
 	FILE	   *in = NULL;
 	int			out = -1;
@@ -142,6 +142,11 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	const char *to_path_p;
 	char		to_path_temp[MAXPGPATH];
 	int			errno_temp;
+	/* partial handling */
+	struct stat		st;
+	int			partial_try_count = 0;
+	int			partial_file_size = 0;
+	bool		partial_file_exists = false;
 
 #ifdef HAVE_LIBZ
 	char		gz_to_path[MAXPGPATH];
@@ -176,22 +181,84 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #ifdef HAVE_LIBZ
 	if (is_compress)
 	{
-		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", gz_to_path);
+		snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", gz_to_path);
 
-		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, instance_config.compress_level, FIO_BACKUP_HOST);
+		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, compress_level, FIO_BACKUP_HOST);
 		if (gz_out == NULL)
-			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+		{
+			partial_file_exists = true;
+			elog(WARNING, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
+		}
 	}
 	else
 #endif
 	{
-		snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
+		snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", to_path);
 
 		out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
 		if (out < 0)
-			elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+		{
+			partial_file_exists = true;
+			elog(WARNING, "Cannot open destination temporary WAL file \"%s\": %s",
 				 to_path_temp, strerror(errno));
+		}
+	}
+
+	/* Partial file is already exists, it could have happened due to failed archive-push,
+	 * in this case partial file can be discarded, or due to concurrent archiving.
+	 *
+	 * Our main goal here is to try to handle partial file to prevent stalling of
+	 * continious archiving.
+	 * To ensure that ecncountered partial file is actually a stale "orphaned" file,
+	 * check its size every second.
+	 * If the size has not changed in PARTIAL_WAL_TIMER seconds, we can consider
+	 * the file stale and reuse it.
+	 * If file size is changing, it means that another archiver works at the same
+	 * directory with the same files. Such partial files cannot be reused.
+	 */
+	if (partial_file_exists)
+	{
+		while (partial_try_count < PARTIAL_WAL_TIMER)
+		{
+
+			if (fio_stat(to_path_temp, &st, false, FIO_BACKUP_HOST) < 0)
+				/* It is ok if partial is gone, we can safely error out */
+				elog(ERROR, "Cannot stat destination temporary WAL file \"%s\": %s", to_path_temp,
+					strerror(errno));
+
+			/* first round */
+			if (!partial_try_count)
+				partial_file_size = st.st_size;
+
+			/* file size is changing */
+			if (st.st_size > partial_file_size)
+				elog(ERROR, "Destination temporary WAL file \"%s\" is not stale", to_path_temp);
+
+			sleep(1);
+			partial_try_count++;
+		}
+
+		/* Partial segment is considered stale, so reuse it */
+		elog(WARNING, "Reusing stale destination temporary WAL file \"%s\"", to_path_temp);
+		fio_unlink(to_path_temp, FIO_BACKUP_HOST);
+
+#ifdef HAVE_LIBZ
+		if (is_compress)
+		{
+			gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, compress_level, FIO_BACKUP_HOST);
+			if (gz_out == NULL)
+				elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+					to_path_temp, strerror(errno));
+		}
+		else
+#endif
+		{
+			out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
+			if (out < 0)
+				elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
+					to_path_temp, strerror(errno));
+		}
 	}
 
 	/* copy content */
@@ -349,7 +416,7 @@ get_wal_file(const char *from_path, const char *to_path)
 #endif
 
 	/* open backup file for write  */
-	snprintf(to_path_temp, sizeof(to_path_temp), "%s.partial", to_path);
+	snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", to_path);
 
 	out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_DB_HOST);
 	if (out < 0)

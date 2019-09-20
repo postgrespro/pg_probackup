@@ -61,6 +61,16 @@ my $postgres;
 my $libpq;
 my @unlink_on_exit;
 
+if (-d "src/fe_utils")
+{
+	$libpgfeutils = 1;
+}
+else
+{
+	$libpgfeutils = 0;
+}
+
+
 
 use lib "src/tools/msvc";
 
@@ -129,7 +139,10 @@ sub build_pgprobackup
 
 	$libpq = $solution->AddProject('libpq', 'dll', 'interfaces',
 		'src/interfaces/libpq');
-	$libpgfeutils = $solution->AddProject('libpgfeutils', 'lib', 'misc');
+	if ($libpgfeutils)
+	{
+		$libpgfeutils = $solution->AddProject('libpgfeutils', 'lib', 'misc');
+	}
 	$libpgcommon = $solution->AddProject('libpgcommon', 'lib', 'misc');
 	$libpgport = $solution->AddProject('libpgport', 'lib', 'misc');
 
@@ -198,10 +211,15 @@ sub build_pgprobackup
         $probackup->AddIncludeDir("$currpath/src");
         $probackup->AddIncludeDir("$currpath/src/utils");
 
-	 # $probackup->AddReference($libpq, $libpgfeutils, $libpgcommon, $libpgport);
-	$probackup->AddReference($libpq, $libpgcommon, $libpgport);
+    if ($libpgfeutils)
+    {
+		$probackup->AddReference($libpq, $libpgfeutils, $libpgcommon, $libpgport);
+    }
+	else
+	{
+		$probackup->AddReference($libpq, $libpgcommon, $libpgport);
+	}
 	$probackup->AddLibrary('ws2_32.lib');
-	$probackup->AddLibrary('advapi32.lib');
 
 	$probackup->Save();
 	return $solution->{vcver};

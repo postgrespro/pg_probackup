@@ -16,6 +16,9 @@
 
 #include "utils/json.h"
 
+#define half_rounded(x)   (((x) + ((x) < 0 ? 0 : 1)) / 2)
+
+/* struct to align fields printed in plain format */
 typedef struct ShowBackendRow
 {
 	const char *instance;
@@ -32,96 +35,116 @@ typedef struct ShowBackendRow
 	const char *status;
 } ShowBackendRow;
 
+/* struct to align fields printed in plain format */
+typedef struct ShowArchiveRow
+{
+	char		tli[20];
+	char		parent_tli[20];
+	char		switchpoint[20];
+	char		min_segno[20];
+	char		max_segno[20];
+	char		n_segments[20];
+	char		size[20];
+	char		zratio[20];
+	const char *status;
+	char		n_backups[20];
+} ShowArchiveRow;
 
 static void show_instance_start(void);
 static void show_instance_end(void);
-static void show_instance(time_t requested_backup_id, bool show_name);
-static int show_backup(time_t requested_backup_id);
+static void show_instance(const char *instance_name, time_t requested_backup_id, bool show_name);
+static void print_backup_json_object(PQExpBuffer buf, pgBackup *backup);
+static int show_backup(const char *instance_name, time_t requested_backup_id);
 
-static void show_instance_plain(parray *backup_list, bool show_name);
-static void show_instance_json(parray *backup_list);
+static void show_instance_plain(const char *instance_name, parray *backup_list, bool show_name);
+static void show_instance_json(const char *instance_name, parray *backup_list);
+
+static void show_instance_archive(InstanceConfig *instance);
+static void show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
+							   parray *timelines_list, bool show_name);
+static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
+							  parray *tli_list);
 
 static PQExpBufferData show_buf;
 static bool first_instance = true;
 static int32 json_level = 0;
 
+/*
+ * Entry point of pg_probackup SHOW subcommand.
+ */
 int
-do_show(time_t requested_backup_id)
+do_show(const char *instance_name, time_t requested_backup_id, bool show_archive)
 {
 	if (instance_name == NULL &&
 		requested_backup_id != INVALID_BACKUP_ID)
-		elog(ERROR, "You must specify --instance to use --backup_id option");
+		elog(ERROR, "You must specify --instance to use (-i, --backup-id) option");
 
+	if (show_archive &&
+		requested_backup_id != INVALID_BACKUP_ID)
+		elog(ERROR, "You cannot specify --archive and (-i, --backup-id) options together");
+
+	/*
+	 * if instance_name is not specified,
+	 * show information about all instances in this backup catalog
+	 */
 	if (instance_name == NULL)
 	{
-		/* Show list of instances */
-		char		path[MAXPGPATH];
-		DIR		   *dir;
-		struct dirent *dent;
-
-		/* open directory and list contents */
-		join_path_components(path, backup_path, BACKUPS_DIR);
-		dir = opendir(path);
-		if (dir == NULL)
-			elog(ERROR, "Cannot open directory \"%s\": %s",
-				 path, strerror(errno));
+		parray *instances = catalog_get_instance_list();
 
 		show_instance_start();
-
-		while (errno = 0, (dent = readdir(dir)) != NULL)
+		for (int i = 0; i < parray_num(instances); i++)
 		{
-			char		child[MAXPGPATH];
-			struct stat	st;
+			InstanceConfig *instance = parray_get(instances, i);
+			char backup_instance_path[MAXPGPATH];
 
-			/* skip entries point current dir or parent dir */
-			if (strcmp(dent->d_name, ".") == 0 ||
-				strcmp(dent->d_name, "..") == 0)
-				continue;
+			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance->name);
 
-			join_path_components(child, path, dent->d_name);
-
-			if (lstat(child, &st) == -1)
-				elog(ERROR, "Cannot stat file \"%s\": %s",
-					 child, strerror(errno));
-
-			if (!S_ISDIR(st.st_mode))
-				continue;
-
-			instance_name = dent->d_name;
-			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance_name);
-
-			show_instance(INVALID_BACKUP_ID, true);
+			if (show_archive)
+				show_instance_archive(instance);
+			else
+				show_instance(instance->name, INVALID_BACKUP_ID, true);
 		}
-
-		if (errno)
-			elog(ERROR, "Cannot read directory \"%s\": %s",
-				 path, strerror(errno));
-
-		if (closedir(dir))
-			elog(ERROR, "Cannot close directory \"%s\": %s",
-				 path, strerror(errno));
-
 		show_instance_end();
 
 		return 0;
 	}
-	else if (requested_backup_id == INVALID_BACKUP_ID ||
-			 show_format == SHOW_JSON)
+	/* always use */
+	else if (show_format == SHOW_JSON ||
+			 requested_backup_id == INVALID_BACKUP_ID)
 	{
 		show_instance_start();
-		show_instance(requested_backup_id, false);
+
+		if (show_archive)
+		{
+			InstanceConfig *instance = readInstanceConfigFile(instance_name);
+			show_instance_archive(instance);
+		}
+		else
+			show_instance(instance_name, requested_backup_id, false);
+
 		show_instance_end();
 
 		return 0;
 	}
 	else
-		return show_backup(requested_backup_id);
+	{
+		if (show_archive)
+		{
+			InstanceConfig *instance = readInstanceConfigFile(instance_name);
+			show_instance_archive(instance);
+		}
+		else
+			show_backup(instance_name, requested_backup_id);
+
+		return 0;
+	}
 }
 
 void
 pretty_size(int64 size, char *buf, size_t len)
 {
-	int			exp = 0;
+	int64 	limit = 10 * 1024;
+	int64 	limit2 = limit * 2 - 1;
 
 	/* minus means the size is invalid */
 	if (size < 0)
@@ -130,94 +153,31 @@ pretty_size(int64 size, char *buf, size_t len)
 		return;
 	}
 
-	/* determine postfix */
-	while (size > 9999)
+	if (Abs(size) < limit)
+		snprintf(buf, len, "%dB", (int) size);
+	else
 	{
-		++exp;
-		size /= 1000;
-	}
-
-	switch (exp)
-	{
-		case 0:
-			snprintf(buf, len, "%dB", (int) size);
-			break;
-		case 1:
-			snprintf(buf, len, "%dkB", (int) size);
-			break;
-		case 2:
-			snprintf(buf, len, "%dMB", (int) size);
-			break;
-		case 3:
-			snprintf(buf, len, "%dGB", (int) size);
-			break;
-		case 4:
-			snprintf(buf, len, "%dTB", (int) size);
-			break;
-		case 5:
-			snprintf(buf, len, "%dPB", (int) size);
-			break;
-		default:
-			strncpy(buf, "***", len);
-			break;
-	}
-}
-
-static TimeLineID
-get_parent_tli(TimeLineID child_tli)
-{
-	TimeLineID	result = 0;
-	char		path[MAXPGPATH];
-	char		fline[MAXPGPATH];
-	FILE	   *fd;
-
-	/* Timeline 1 does not have a history file and parent timeline */
-	if (child_tli == 1)
-		return 0;
-
-	/* Search history file in archives */
-	snprintf(path, lengthof(path), "%s/%08X.history", arclog_path,
-		child_tli);
-	fd = fopen(path, "rt");
-	if (fd == NULL)
-	{
-		if (errno != ENOENT)
-			elog(ERROR, "could not open file \"%s\": %s", path,
-				strerror(errno));
-
-		/* Did not find history file, do not raise the error */
-		return 0;
-	}
-
-	/*
-	 * Parse the file...
-	 */
-	while (fgets(fline, sizeof(fline), fd) != NULL)
-	{
-		/* skip leading whitespace and check for # comment */
-		char	   *ptr;
-		char	   *endptr;
-
-		for (ptr = fline; *ptr; ptr++)
+		size >>= 9;
+		if (Abs(size) < limit2)
+				snprintf(buf, len, "%dkB", (int) half_rounded(size));
+		else
 		{
-			if (!IsSpace(*ptr))
-				break;
+			size >>= 10;
+			if (Abs(size) < limit2)
+				snprintf(buf, len, "%dMB", (int) half_rounded(size));
+			else
+			{
+				size >>= 10;
+				if (Abs(size) < limit2)
+					snprintf(buf, len, "%dGB", (int) half_rounded(size));
+				else
+				{
+					size >>= 10;
+					snprintf(buf, len, "%dTB", (int) half_rounded(size));
+				}
+			}
 		}
-		if (*ptr == '\0' || *ptr == '#')
-			continue;
-
-		/* expect a numeric timeline ID as first field of line */
-		result = (TimeLineID) strtoul(ptr, &endptr, 0);
-		if (endptr == ptr)
-			elog(ERROR,
-					"syntax error(timeline ID) in history file: %s",
-					fline);
 	}
-
-	fclose(fd);
-
-	/* TLI of the last line is parent TLI */
-	return result;
 }
 
 /*
@@ -255,16 +215,16 @@ show_instance_end(void)
  * Show brief meta information about all backups in the backup instance.
  */
 static void
-show_instance(time_t requested_backup_id, bool show_name)
+show_instance(const char *instance_name, time_t requested_backup_id, bool show_name)
 {
 	parray	   *backup_list;
 
-	backup_list = catalog_get_backup_list(requested_backup_id);
+	backup_list = catalog_get_backup_list(instance_name, requested_backup_id);
 
 	if (show_format == SHOW_PLAIN)
-		show_instance_plain(backup_list, show_name);
+		show_instance_plain(instance_name, backup_list, show_name);
 	else if (show_format == SHOW_JSON)
-		show_instance_json(backup_list);
+		show_instance_json(instance_name, backup_list);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 
@@ -273,17 +233,130 @@ show_instance(time_t requested_backup_id, bool show_name)
 	parray_free(backup_list);
 }
 
+/* helper routine to print backup info as json object */
+static void
+print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
+{
+	TimeLineID	parent_tli;
+	char		timestamp[100] = "----";
+	char		lsn[20];
+
+	json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+	json_add_value(buf, "id", base36enc(backup->start_time), json_level,
+					true);
+
+	if (backup->parent_backup != 0)
+		json_add_value(buf, "parent-backup-id",
+						base36enc(backup->parent_backup), json_level, true);
+
+	json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup),
+					json_level, true);
+
+	json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE",
+					json_level, true);
+
+	json_add_value(buf, "compress-alg",
+					deparse_compress_alg(backup->compress_alg), json_level,
+					true);
+
+	json_add_key(buf, "compress-level", json_level);
+	appendPQExpBuffer(buf, "%d", backup->compress_level);
+
+	json_add_value(buf, "from-replica",
+					backup->from_replica ? "true" : "false", json_level,
+					true);
+
+	json_add_key(buf, "block-size", json_level);
+	appendPQExpBuffer(buf, "%u", backup->block_size);
+
+	json_add_key(buf, "xlog-block-size", json_level);
+	appendPQExpBuffer(buf, "%u", backup->wal_block_size);
+
+	json_add_key(buf, "checksum-version", json_level);
+	appendPQExpBuffer(buf, "%u", backup->checksum_version);
+
+	json_add_value(buf, "program-version", backup->program_version,
+					json_level, true);
+	json_add_value(buf, "server-version", backup->server_version,
+					json_level, true);
+
+	json_add_key(buf, "current-tli", json_level);
+	appendPQExpBuffer(buf, "%d", backup->tli);
+
+	json_add_key(buf, "parent-tli", json_level);
+
+	/* Only incremental backup can have Parent TLI */
+	if (backup->backup_mode == BACKUP_MODE_FULL)
+		parent_tli = 0;
+	else if (backup->parent_backup_link)
+		parent_tli = backup->parent_backup_link->tli;
+	appendPQExpBuffer(buf, "%u", parent_tli);
+
+	snprintf(lsn, lengthof(lsn), "%X/%X",
+				(uint32) (backup->start_lsn >> 32), (uint32) backup->start_lsn);
+	json_add_value(buf, "start-lsn", lsn, json_level, true);
+
+	snprintf(lsn, lengthof(lsn), "%X/%X",
+				(uint32) (backup->stop_lsn >> 32), (uint32) backup->stop_lsn);
+	json_add_value(buf, "stop-lsn", lsn, json_level, true);
+
+	time2iso(timestamp, lengthof(timestamp), backup->start_time);
+	json_add_value(buf, "start-time", timestamp, json_level, true);
+
+	if (backup->end_time)
+	{
+		time2iso(timestamp, lengthof(timestamp), backup->end_time);
+		json_add_value(buf, "end-time", timestamp, json_level, true);
+	}
+
+	json_add_key(buf, "recovery-xid", json_level);
+	appendPQExpBuffer(buf, XID_FMT, backup->recovery_xid);
+
+	if (backup->recovery_time > 0)
+	{
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		json_add_value(buf, "recovery-time", timestamp, json_level, true);
+	}
+
+	if (backup->data_bytes != BYTES_INVALID)
+	{
+		json_add_key(buf, "data-bytes", json_level);
+		appendPQExpBuffer(buf, INT64_FORMAT, backup->data_bytes);
+	}
+
+	if (backup->wal_bytes != BYTES_INVALID)
+	{
+		json_add_key(buf, "wal-bytes", json_level);
+		appendPQExpBuffer(buf, INT64_FORMAT, backup->wal_bytes);
+	}
+
+	if (backup->primary_conninfo)
+		json_add_value(buf, "primary_conninfo", backup->primary_conninfo,
+						json_level, true);
+
+	if (backup->external_dir_str)
+		json_add_value(buf, "external-dirs", backup->external_dir_str,
+						json_level, true);
+
+	json_add_value(buf, "status", status2str(backup->status), json_level,
+					true);
+
+	json_add(buf, JT_END_OBJECT, &json_level);
+}
+
 /*
  * Show detailed meta information about specified backup.
  */
 static int
-show_backup(time_t requested_backup_id)
+show_backup(const char *instance_name, time_t requested_backup_id)
 {
 	pgBackup   *backup;
 
-	backup = read_backup(requested_backup_id);
+	backup = read_backup(instance_name, requested_backup_id);
 	if (backup == NULL)
 	{
+		// TODO for 3.0: we should ERROR out here.
 		elog(INFO, "Requested backup \"%s\" is not found.",
 			 /* We do not need free base36enc's result, we exit anyway */
 			 base36enc(requested_backup_id));
@@ -303,14 +376,10 @@ show_backup(time_t requested_backup_id)
 }
 
 /*
- * Plain output.
- */
-
-/*
  * Show instance backups in plain format.
  */
 static void
-show_instance_plain(parray *backup_list, bool show_name)
+show_instance_plain(const char *instance_name, parray *backup_list, bool show_name)
 {
 #define SHOW_FIELDS_COUNT 12
 	int			i;
@@ -326,6 +395,7 @@ show_instance_plain(parray *backup_list, bool show_name)
 	uint32		widths_sum = 0;
 	ShowBackendRow *rows;
 	time_t current_time = time(NULL);
+	TimeLineID parent_tli = 0;
 
 	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
 		widths[i] = strlen(names[i]);
@@ -379,9 +449,13 @@ show_instance_plain(parray *backup_list, bool show_name)
 		cur++;
 
 		/* Current/Parent TLI */
+
+		if (backup->parent_backup_link != NULL)
+			parent_tli = backup->parent_backup_link->tli;
+
 		snprintf(row->tli, lengthof(row->tli), "%u / %u",
 				 backup->tli,
-				 backup->backup_mode == BACKUP_MODE_FULL ? 0 : get_parent_tli(backup->tli));
+				 backup->backup_mode == BACKUP_MODE_FULL ? 0 : parent_tli);
 		widths[cur] = Max(widths[cur], strlen(row->tli));
 		cur++;
 
@@ -511,14 +585,10 @@ show_instance_plain(parray *backup_list, bool show_name)
 }
 
 /*
- * Json output.
- */
-
-/*
  * Show instance backups in json format.
  */
 static void
-show_instance_json(parray *backup_list)
+show_instance_json(const char *instance_name, parray *backup_list)
 {
 	int			i;
 	PQExpBuffer	buf = &show_buf;
@@ -540,118 +610,370 @@ show_instance_json(parray *backup_list)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = parray_get(backup_list, i);
-		TimeLineID	parent_tli;
-		char		timestamp[100] = "----";
-		char		lsn[20];
 
 		if (i != 0)
 			appendPQExpBufferChar(buf, ',');
 
-		json_add(buf, JT_BEGIN_OBJECT, &json_level);
-
-		json_add_value(buf, "id", base36enc(backup->start_time), json_level,
-					   true);
-
-		if (backup->parent_backup != 0)
-			json_add_value(buf, "parent-backup-id",
-						   base36enc(backup->parent_backup), json_level, true);
-
-		json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup),
-					   json_level, true);
-
-		json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE",
-					   json_level, true);
-
-		json_add_value(buf, "compress-alg",
-					   deparse_compress_alg(backup->compress_alg), json_level,
-					   true);
-
-		json_add_key(buf, "compress-level", json_level);
-		appendPQExpBuffer(buf, "%d", backup->compress_level);
-
-		json_add_value(buf, "from-replica",
-					   backup->from_replica ? "true" : "false", json_level,
-					   true);
-
-		json_add_key(buf, "block-size", json_level);
-		appendPQExpBuffer(buf, "%u", backup->block_size);
-
-		json_add_key(buf, "xlog-block-size", json_level);
-		appendPQExpBuffer(buf, "%u", backup->wal_block_size);
-
-		json_add_key(buf, "checksum-version", json_level);
-		appendPQExpBuffer(buf, "%u", backup->checksum_version);
-
-		json_add_value(buf, "program-version", backup->program_version,
-					   json_level, true);
-		json_add_value(buf, "server-version", backup->server_version,
-					   json_level, true);
-
-		json_add_key(buf, "current-tli", json_level);
-		appendPQExpBuffer(buf, "%d", backup->tli);
-
-		json_add_key(buf, "parent-tli", json_level);
-
-		/* Only incremental backup can have Parent TLI */
-		if (backup->backup_mode == BACKUP_MODE_FULL)
-			parent_tli = 0;
-		else
-			parent_tli = get_parent_tli(backup->tli);
-		appendPQExpBuffer(buf, "%u", parent_tli);
-
-		snprintf(lsn, lengthof(lsn), "%X/%X",
-				 (uint32) (backup->start_lsn >> 32), (uint32) backup->start_lsn);
-		json_add_value(buf, "start-lsn", lsn, json_level, true);
-
-		snprintf(lsn, lengthof(lsn), "%X/%X",
-				 (uint32) (backup->stop_lsn >> 32), (uint32) backup->stop_lsn);
-		json_add_value(buf, "stop-lsn", lsn, json_level, true);
-
-		time2iso(timestamp, lengthof(timestamp), backup->start_time);
-		json_add_value(buf, "start-time", timestamp, json_level, true);
-
-		if (backup->end_time)
-		{
-			time2iso(timestamp, lengthof(timestamp), backup->end_time);
-			json_add_value(buf, "end-time", timestamp, json_level, true);
-		}
-
-		json_add_key(buf, "recovery-xid", json_level);
-		appendPQExpBuffer(buf, XID_FMT, backup->recovery_xid);
-
-		if (backup->recovery_time > 0)
-		{
-			time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
-			json_add_value(buf, "recovery-time", timestamp, json_level, true);
-		}
-
-		if (backup->data_bytes != BYTES_INVALID)
-		{
-			json_add_key(buf, "data-bytes", json_level);
-			appendPQExpBuffer(buf, INT64_FORMAT, backup->data_bytes);
-		}
-
-		if (backup->wal_bytes != BYTES_INVALID)
-		{
-			json_add_key(buf, "wal-bytes", json_level);
-			appendPQExpBuffer(buf, INT64_FORMAT, backup->wal_bytes);
-		}
-
-		if (backup->primary_conninfo)
-			json_add_value(buf, "primary_conninfo", backup->primary_conninfo,
-						   json_level, true);
-
-		if (backup->external_dir_str)
-			json_add_value(buf, "external-dirs", backup->external_dir_str,
-						   json_level, true);
-
-		json_add_value(buf, "status", status2str(backup->status), json_level,
-					   true);
-
-		json_add(buf, JT_END_OBJECT, &json_level);
+		print_backup_json_object(buf, backup);
 	}
 
 	/* End of backups */
+	json_add(buf, JT_END_ARRAY, &json_level);
+
+	/* End of instance object */
+	json_add(buf, JT_END_OBJECT, &json_level);
+
+	first_instance = false;
+}
+
+/*
+ * show information about WAL archive of the instance
+ */
+static void
+show_instance_archive(InstanceConfig *instance)
+{
+	parray *timelineinfos;
+
+	timelineinfos = catalog_get_timelines(instance);
+
+	if (show_format == SHOW_PLAIN)
+		show_archive_plain(instance->name, instance->xlog_seg_size, timelineinfos, true);
+	else if (show_format == SHOW_JSON)
+		show_archive_json(instance->name, instance->xlog_seg_size, timelineinfos);
+	else
+		elog(ERROR, "Invalid show format %d", (int) show_format);
+}
+
+static void
+show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
+				   parray *tli_list, bool show_name)
+{
+	parray *actual_tli_list = parray_new();
+#define SHOW_ARCHIVE_FIELDS_COUNT 10
+	int			i;
+	const char *names[SHOW_ARCHIVE_FIELDS_COUNT] =
+					{ "TLI", "Parent TLI", "Switchpoint",
+					  "Min Segno", "Max Segno", "N segments", "Size", "Zratio", "N backups", "Status"};
+	const char *field_formats[SHOW_ARCHIVE_FIELDS_COUNT] =
+					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
+					  " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s ", " %-*s "};
+	uint32		widths[SHOW_ARCHIVE_FIELDS_COUNT];
+	uint32		widths_sum = 0;
+	ShowArchiveRow *rows;
+
+	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
+		widths[i] = strlen(names[i]);
+
+	/* Ignore empty timelines */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
+
+		if (tlinfo->n_xlog_files > 0)
+			parray_append(actual_tli_list, tlinfo);
+	}
+
+	rows = (ShowArchiveRow *) palloc0(parray_num(actual_tli_list) *
+									 sizeof(ShowArchiveRow));
+
+	/*
+	 * Fill row values and calculate maximum width of each field.
+	 */
+	for (i = 0; i < parray_num(actual_tli_list); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(actual_tli_list, i);
+		ShowArchiveRow *row = &rows[i];
+		int			cur = 0;
+		float		zratio = 0;
+
+		/* TLI */
+		snprintf(row->tli, lengthof(row->tli), "%u",
+				 tlinfo->tli);
+		widths[cur] = Max(widths[cur], strlen(row->tli));
+		cur++;
+
+		/* Parent TLI */
+		snprintf(row->parent_tli, lengthof(row->parent_tli), "%u",
+				 tlinfo->parent_tli);
+		widths[cur] = Max(widths[cur], strlen(row->parent_tli));
+		cur++;
+
+		/* Switchpoint LSN */
+		snprintf(row->switchpoint, lengthof(row->switchpoint), "%X/%X",
+				 (uint32) (tlinfo->switchpoint >> 32),
+				 (uint32) tlinfo->switchpoint);
+		widths[cur] = Max(widths[cur], strlen(row->switchpoint));
+		cur++;
+
+		/* Min Segno */
+		snprintf(row->min_segno, lengthof(row->min_segno), "%08X%08X",
+				 (uint32) tlinfo->begin_segno / xlog_seg_size,
+				 (uint32) tlinfo->begin_segno % xlog_seg_size);
+		widths[cur] = Max(widths[cur], strlen(row->min_segno));
+		cur++;
+
+		/* Max Segno */
+		snprintf(row->max_segno, lengthof(row->max_segno), "%08X%08X",
+				 (uint32) tlinfo->end_segno / xlog_seg_size,
+				 (uint32) tlinfo->end_segno % xlog_seg_size);
+		widths[cur] = Max(widths[cur], strlen(row->max_segno));
+		cur++;
+
+		/* N files */
+		snprintf(row->n_segments, lengthof(row->n_segments), "%u",
+				 tlinfo->n_xlog_files);
+		widths[cur] = Max(widths[cur], strlen(row->n_segments));
+		cur++;
+
+		/* Size */
+		pretty_size(tlinfo->size, row->size,
+					lengthof(row->size));
+		widths[cur] = Max(widths[cur], strlen(row->size));
+		cur++;
+
+		/* Zratio (compression ratio) */
+		if (tlinfo->size != 0)
+			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
+
+		snprintf(row->zratio, lengthof(row->n_segments), "%.2f", zratio);
+		widths[cur] = Max(widths[cur], strlen(row->zratio));
+		cur++;
+
+		/* N backups */
+		snprintf(row->n_backups, lengthof(row->n_backups), "%lu",
+				 tlinfo->backups?parray_num(tlinfo->backups):0);
+		widths[cur] = Max(widths[cur], strlen(row->n_backups));
+		cur++;
+
+		/* Status */
+		if (tlinfo->lost_segments == NULL)
+			row->status = "OK";
+		else
+			row->status = "DEGRADED";
+		widths[cur] = Max(widths[cur], strlen(row->status));
+		cur++;
+	}
+
+	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
+		widths_sum += widths[i] + 2 /* two space */;
+
+	if (show_name)
+		appendPQExpBuffer(&show_buf, "\nARCHIVE INSTANCE '%s'\n", instance_name);
+
+	/*
+	 * Print header.
+	 */
+	for (i = 0; i < widths_sum; i++)
+		appendPQExpBufferChar(&show_buf, '=');
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
+	{
+		appendPQExpBuffer(&show_buf, field_formats[i], widths[i], names[i]);
+	}
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	for (i = 0; i < widths_sum; i++)
+		appendPQExpBufferChar(&show_buf, '=');
+	appendPQExpBufferChar(&show_buf, '\n');
+
+	/*
+	 * Print values.
+	 */
+	for (i = parray_num(actual_tli_list) - 1; i >= 0; i--)
+	{
+		ShowArchiveRow *row = &rows[i];
+		int			cur = 0;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->tli);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->parent_tli);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->switchpoint);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->min_segno);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->max_segno);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->n_segments);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->size);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->zratio);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->n_backups);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->status);
+		cur++;
+		appendPQExpBufferChar(&show_buf, '\n');
+	}
+
+	pfree(rows);
+	//TODO: free timelines
+}
+
+static void
+show_archive_json(const char *instance_name, uint32 xlog_seg_size,
+				  parray *tli_list)
+{
+	int			i;
+	PQExpBuffer	buf = &show_buf;
+	parray *actual_tli_list = parray_new();
+
+	if (!first_instance)
+		appendPQExpBufferChar(buf, ',');
+
+	/* Begin of instance object */
+	json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+	json_add_value(buf, "instance", instance_name, json_level, true);
+	json_add_key(buf, "timelines", json_level);
+
+	/* Ignore empty timelines */
+
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
+
+		if (tlinfo->n_xlog_files > 0)
+			parray_append(actual_tli_list, tlinfo);
+	}
+
+	/*
+	 * List timelines.
+	 */
+	json_add(buf, JT_BEGIN_ARRAY, &json_level);
+
+	for (i = parray_num(actual_tli_list) - 1; i >= 0; i--)
+	{
+		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(actual_tli_list, i);
+		char		tmp_buf[20];
+		float		zratio = 0;
+
+		if (i != (parray_num(actual_tli_list) - 1))
+			appendPQExpBufferChar(buf, ',');
+
+		json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+		json_add_key(buf, "tli", json_level);
+		appendPQExpBuffer(buf, "%u", tlinfo->tli);
+
+		json_add_key(buf, "parent-tli", json_level);
+		appendPQExpBuffer(buf, "%u", tlinfo->parent_tli);
+
+		snprintf(tmp_buf, lengthof(tmp_buf), "%X/%X",
+				 (uint32) (tlinfo->switchpoint >> 32), (uint32) tlinfo->switchpoint);
+		json_add_value(buf, "switchpoint", tmp_buf, json_level, true);
+
+		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
+				 (uint32) tlinfo->begin_segno / xlog_seg_size,
+				 (uint32) tlinfo->begin_segno % xlog_seg_size);
+		json_add_value(buf, "min-segno", tmp_buf, json_level, true);
+
+		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
+				 (uint32) tlinfo->end_segno / xlog_seg_size,
+				 (uint32) tlinfo->end_segno % xlog_seg_size);
+		json_add_value(buf, "max-segno", tmp_buf, json_level, true);
+
+		json_add_key(buf, "n-segments", json_level);
+		appendPQExpBuffer(buf, "%d", tlinfo->n_xlog_files);
+
+		json_add_key(buf, "size", json_level);
+		appendPQExpBuffer(buf, "%lu", tlinfo->size);
+
+		json_add_key(buf, "zratio", json_level);
+		if (tlinfo->size != 0)
+			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
+		appendPQExpBuffer(buf, "%.2f", zratio);
+
+		if (tlinfo->closest_backup != NULL)
+			snprintf(tmp_buf, lengthof(tmp_buf), "%s",
+						base36enc(tlinfo->closest_backup->start_time));
+		else
+			snprintf(tmp_buf, lengthof(tmp_buf), "%s", "");
+
+		json_add_value(buf, "closest-backup-id", tmp_buf, json_level, true);
+
+		if (tlinfo->lost_segments == NULL)
+			json_add_value(buf, "status", "OK", json_level, true);
+		else
+			json_add_value(buf, "status", "DEGRADED", json_level, true);
+
+		json_add_key(buf, "lost-segments", json_level);
+
+		if (tlinfo->lost_segments != NULL)
+		{
+			json_add(buf, JT_BEGIN_ARRAY, &json_level);
+
+			for (int j = 0; j < parray_num(tlinfo->lost_segments); j++)
+			{
+				xlogInterval *lost_segments = (xlogInterval *) parray_get(tlinfo->lost_segments, j);
+
+				if (j != 0)
+					appendPQExpBufferChar(buf, ',');
+
+				json_add(buf, JT_BEGIN_OBJECT, &json_level);
+
+				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
+				 (uint32) lost_segments->begin_segno / xlog_seg_size,
+				 (uint32) lost_segments->begin_segno % xlog_seg_size);
+				json_add_value(buf, "begin-segno", tmp_buf, json_level, true);
+
+				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
+				 (uint32) lost_segments->end_segno / xlog_seg_size,
+				 (uint32) lost_segments->end_segno % xlog_seg_size);
+				json_add_value(buf, "end-segno", tmp_buf, json_level, true);
+				json_add(buf, JT_END_OBJECT, &json_level);
+			}
+			json_add(buf, JT_END_ARRAY, &json_level);
+		}
+		else
+			appendPQExpBuffer(buf, "[]");
+
+		json_add_key(buf, "backups", json_level);
+
+		if (tlinfo->backups != NULL)
+		{
+			json_add(buf, JT_BEGIN_ARRAY, &json_level);
+			for (int j = 0; j < parray_num(tlinfo->backups); j++)
+			{
+				pgBackup *backup = parray_get(tlinfo->backups, j);
+
+				if (j != 0)
+					appendPQExpBufferChar(buf, ',');
+
+				print_backup_json_object(buf, backup);
+			}
+
+			json_add(buf, JT_END_ARRAY, &json_level);
+		}
+		else
+			appendPQExpBuffer(buf, "[]");
+
+		/* End of timeline */
+		json_add(buf, JT_END_OBJECT, &json_level);
+	}
+
+	/* End of timelines object */
 	json_add(buf, JT_END_ARRAY, &json_level);
 
 	/* End of instance object */

@@ -20,6 +20,7 @@ static __thread unsigned long fio_fdset = 0;
 static __thread void* fio_stdin_buffer;
 static __thread int fio_stdout = 0;
 static __thread int fio_stdin = 0;
+static __thread int fio_stderr = 0;
 
 fio_location MyLocation;
 
@@ -38,10 +39,29 @@ typedef struct
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
 /* Use specified file descriptors as stdin/stdout for FIO functions */
-void fio_redirect(int in, int out)
+void fio_redirect(int in, int out, int err)
 {
 	fio_stdin = in;
 	fio_stdout = out;
+	fio_stderr = err;
+}
+
+void fio_error(int rc, int size, char const* file, int line)
+{
+	if (remote_agent)
+	{
+		fprintf(stderr, "%s:%d: proceeds %d bytes instead of %d: %s\n", file, line, rc, size, rc >= 0 ? "end of data" :  strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		char buf[PRINTF_BUF_SIZE];
+		int err_size = read(fio_stderr, buf, sizeof(buf));
+		if (err_size > 0)
+			elog(ERROR, "Agent error: %s", buf);
+		else
+			elog(ERROR, "Communication error: %s", rc >= 0 ? "end of data" :  strerror(errno));
+	}
 }
 
 /* Check if file descriptor is local or remote (created by FIO) */

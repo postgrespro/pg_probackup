@@ -523,6 +523,9 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 		}
 	}
 
+	if (ferror(fp))
+		elog(ERROR, "Failed to read from file: \"%s\"", path);
+
 	fio_close_stream(fp);
 
 	return parsed_options;
@@ -1168,6 +1171,8 @@ parse_time(const char *value, time_t *result, bool utc_default)
 		/* wrong format */
 		else if (!IsSpace(*value))
 			return false;
+		else
+			value++;
 	}
 	tmp[len] = '\0';
 

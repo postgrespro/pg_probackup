@@ -678,7 +678,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
         wals = map(str, wals)
         file = os.path.join(wals_dir, max(wals))
         os.remove(file)
@@ -696,8 +696,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for LSN' in e.message and
-                'in archived WAL segment' in e.message and
+                'INFO: Wait for WAL segment' in e.message and
+                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'is absent' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -721,8 +721,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for LSN' in e.message and
-                'in archived WAL segment' in e.message and
+                'INFO: Wait for WAL segment' in e.message and
+                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'is absent' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -811,8 +811,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for LSN' in e.message and
-                'in archived WAL segment' in e.message and
+                'INFO: Wait for WAL segment' in e.message and
+                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
@@ -836,8 +836,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for LSN' in e.message and
-                'in archived WAL segment' in e.message and
+                'INFO: Wait for WAL segment' in e.message and
+                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
@@ -933,8 +933,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for LSN' in e.message and
-                'in archived WAL segment' in e.message and
+                'INFO: Wait for WAL segment' in e.message and
+                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'WAL file is from different database system: WAL file database system identifier is' in e.message and
                 'pg_control database system identifier is' in e.message and

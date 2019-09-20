@@ -15,6 +15,36 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    def test_validate_all_empty_catalog(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup_dir is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: This backup catalog contains no backup instances',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_basic_validate_nullified_heap_page_backup(self):
         """
         make node with nullified heap block
@@ -843,11 +873,18 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page')
 
         # PAGE4
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(20000,30000) i")
+
         target_xid = node.safe_psql(
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(20000,30000) i  RETURNING (xmin)")[0][0]
+            "from generate_series(30001, 30001) i  RETURNING (xmin)").rstrip()
+
         backup_id_5 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -899,8 +936,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.validate_pb(
                 backup_dir, 'node',
                 options=[
-                    '-i', backup_id_4, '--xid={0}'.format(target_xid),
-                    "-j", "4"])
+                    '-i', backup_id_4, '--xid={0}'.format(target_xid), "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of data files corruption.\n "
@@ -1760,7 +1796,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
 #        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
 #        wals = map(str, wals)
 #        print(wals)
 
@@ -1768,7 +1804,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
 #        wals_dir = os.path.join(backup_dir, 'wal', 'node1')
 #        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(
-#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.partial')]
+#            wals_dir, f)) and not f.endswith('.backup') and not f.endswith('.part')]
 #        wals = map(str, wals)
 #        print(wals)
 
@@ -3442,6 +3478,398 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_validate_target_lsn(self):
+        """
+        Check validation to specific LSN
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        node_restored.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+
+        node_restored.slow_start()
+
+        self.switch_wal_segment(node)
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir)
+
+        target_lsn = self.show_pb(backup_dir, 'node')[1]['stop-lsn']
+        
+        self.delete_pb(backup_dir, 'node', backup_id)
+
+        self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    '--recovery-target-timeline=2',
+                    '--recovery-target-lsn={0}'.format(target_lsn)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_recovery_target_time_backup_victim(self):
+        """
+        Check that for validation to recovery target
+        probackup chooses valid backup
+        https://github.com/postgrespro/pg_probackup/issues/104
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        target_time = node.safe_psql(
+            "postgres",
+            "select now()").rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap1 as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100) i")
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+        gdb.remove_all_breakpoints()
+        gdb._execute('signal SIGINT')
+        gdb.continue_execution_until_error()
+
+        backup_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup STATUS should be "ERROR"')
+
+        self.validate_pb(
+            backup_dir, 'node',
+            options=['--recovery-target-time={0}'.format(target_time)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_recovery_target_lsn_backup_victim(self):
+        """
+        Check that for validation to recovery target
+        probackup chooses valid backup
+        https://github.com/postgrespro/pg_probackup/issues/104
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap1 as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,100) i")
+
+        gdb = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--log-level-console=LOG'], gdb=True)
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+        gdb.remove_all_breakpoints()
+        gdb._execute('signal SIGINT')
+        gdb.continue_execution_until_error()
+
+        backup_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        self.assertEqual(
+            'ERROR',
+            self.show_pb(backup_dir, 'node', backup_id)['status'],
+            'Backup STATUS should be "ERROR"')
+
+        self.switch_wal_segment(node)
+
+        target_lsn = self.show_pb(backup_dir, 'node', backup_id)['start-lsn']
+
+        self.validate_pb(
+            backup_dir, 'node',
+            options=['--recovery-target-lsn={0}'.format(target_lsn)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    def test_partial_validate_empty_and_mangled_database_map(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        # create databases
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup with database_map
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # truncate database_map
+        path = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'database_map')
+        with open(path, "w") as f:
+            f.close()
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=["--db-include=db1"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "WARNING: Backup {0} data files are corrupted".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # mangle database_map
+        with open(path, "w") as f:
+            f.write("42")
+            f.close()
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=["--db-include=db1"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "WARNING: Backup {0} data files are corrupted".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    def test_partial_validate_exclude(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    "--db-include=db1",
+                    "--db-exclude=db2"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of 'db-exclude' and 'db-include'.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You cannot specify '--db-include' "
+                "and '--db-exclude' together", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    "--db-exclude=db1",
+                    "--db-exclude=db5",
+                    "--log-level-console=verbose"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of missing backup ID.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You must specify parameter (-i, --backup-id) for partial validation",
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        output = self.validate_pb(
+            backup_dir, 'node', backup_id,
+            options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5",
+                "--log-level-console=verbose"])
+
+        self.assertIn(
+            "VERBOSE: Skip file validation due to partial restore", output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    def test_partial_validate_include(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        try:
+            self.validate_pb(
+                backup_dir, 'node',
+                options=[
+                    "--db-include=db1",
+                    "--db-exclude=db2"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of 'db-exclude' and 'db-include'.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You cannot specify '--db-include' "
+                "and '--db-exclude' together", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        output = self.validate_pb(
+            backup_dir, 'node', backup_id,
+            options=[
+                "--db-include=db1",
+                "--db-include=db5",
+                "--db-include=postgres",
+                "--log-level-console=verbose"])
+
+        self.assertIn(
+            "VERBOSE: Skip file validation due to partial restore", output)
+
+        output = self.validate_pb(
+            backup_dir, 'node', backup_id,
+            options=["--log-level-console=verbose"])
+
+        self.assertNotIn(
+            "VERBOSE: Skip file validation due to partial restore", output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
 # validate empty backup list
 # page from future during validate

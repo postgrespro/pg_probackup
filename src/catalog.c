@@ -9,6 +9,7 @@
  */
 
 #include "pg_probackup.h"
+#include "access/timeline.h"
 
 #include <dirent.h>
 #include <signal.h>
@@ -18,12 +19,27 @@
 #include "utils/file.h"
 #include "utils/configuration.h"
 
+static pgBackup* get_closest_backup(timelineInfo *tlinfo, parray *backup_list);
+static pgBackup* get_oldest_backup(timelineInfo *tlinfo, parray *backup_list);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
 
 static bool exit_hook_registered = false;
 static parray *lock_files = NULL;
 
+static timelineInfo *
+timelineInfoNew(TimeLineID tli)
+{
+	timelineInfo *tlinfo = (timelineInfo *) pgut_malloc(sizeof(timelineInfo));
+	MemSet(tlinfo, 0, sizeof(timelineInfo));
+	tlinfo->tli = tli;
+	tlinfo->switchpoint = InvalidXLogRecPtr;
+	tlinfo->parent_link = NULL;
+	tlinfo->xlog_filelist = parray_new();
+	return tlinfo;
+}
+
+/* Iterate over locked backups and delete locks files */
 static void
 unlink_lock_atexit(void)
 {
@@ -52,13 +68,14 @@ unlink_lock_atexit(void)
  * If no backup matches, return NULL.
  */
 pgBackup *
-read_backup(time_t timestamp)
+read_backup(const char *instance_name, time_t timestamp)
 {
 	pgBackup	tmp;
 	char		conf_path[MAXPGPATH];
 
 	tmp.start_time = timestamp;
-	pgBackupGetPath(&tmp, conf_path, lengthof(conf_path), BACKUP_CONTROL_FILE);
+	pgBackupGetPathInInstance(instance_name, &tmp, conf_path,
+					 lengthof(conf_path), BACKUP_CONTROL_FILE, NULL);
 
 	return readBackupControlFile(conf_path);
 }
@@ -70,11 +87,12 @@ read_backup(time_t timestamp)
  * status.
  */
 void
-write_backup_status(pgBackup *backup, BackupStatus status)
+write_backup_status(pgBackup *backup, BackupStatus status,
+					const char *instance_name)
 {
 	pgBackup   *tmp;
 
-	tmp = read_backup(backup->start_time);
+	tmp = read_backup(instance_name, backup->start_time);
 	if (!tmp)
 	{
 		/*
@@ -302,18 +320,85 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
 }
 
 /*
+ * Create list of instances in given backup catalog.
+ *
+ * Returns parray of "InstanceConfig" structures, filled with
+ * actual config of each instance.
+ */
+parray *
+catalog_get_instance_list(void)
+{
+	char		path[MAXPGPATH];
+	DIR		   *dir;
+	struct dirent *dent;
+	parray		*instances;
+
+	instances = parray_new();
+
+	/* open directory and list contents */
+	join_path_components(path, backup_path, BACKUPS_DIR);
+	dir = opendir(path);
+	if (dir == NULL)
+		elog(ERROR, "Cannot open directory \"%s\": %s",
+			 path, strerror(errno));
+
+	while (errno = 0, (dent = readdir(dir)) != NULL)
+	{
+		char		child[MAXPGPATH];
+		struct stat	st;
+		InstanceConfig *instance;
+
+		/* skip entries point current dir or parent dir */
+		if (strcmp(dent->d_name, ".") == 0 ||
+			strcmp(dent->d_name, "..") == 0)
+			continue;
+
+		join_path_components(child, path, dent->d_name);
+
+		if (lstat(child, &st) == -1)
+			elog(ERROR, "Cannot stat file \"%s\": %s",
+					child, strerror(errno));
+
+		if (!S_ISDIR(st.st_mode))
+			continue;
+
+		instance = readInstanceConfigFile(dent->d_name);
+
+		parray_append(instances, instance);
+	}
+
+	/* TODO 3.0: switch to ERROR */
+	if (parray_num(instances) == 0)
+		elog(WARNING, "This backup catalog contains no backup instances. Backup instance can be added via 'add-instance' command.");
+
+	if (errno)
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+				path, strerror(errno));
+
+	if (closedir(dir))
+		elog(ERROR, "Cannot close directory \"%s\": %s",
+				path, strerror(errno));
+
+	return instances;
+}
+
+/*
  * Create list of backups.
  * If 'requested_backup_id' is INVALID_BACKUP_ID, return list of all backups.
  * The list is sorted in order of descending start time.
  * If valid backup id is passed only matching backup will be added to the list.
  */
 parray *
-catalog_get_backup_list(time_t requested_backup_id)
+catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 {
 	DIR		   *data_dir = NULL;
 	struct dirent *data_ent = NULL;
 	parray	   *backups = NULL;
 	int			i;
+	char backup_instance_path[MAXPGPATH];
+
+	sprintf(backup_instance_path, "%s/%s/%s",
+			backup_path, BACKUPS_DIR, instance_name);
 
 	/* open backup instance backups directory */
 	data_dir = fio_opendir(backup_instance_path, FIO_BACKUP_HOST);
@@ -413,6 +498,28 @@ err_proc:
 	elog(ERROR, "Failed to get backup list");
 
 	return NULL;
+}
+
+/*
+ * Create list of backup datafiles.
+ * If 'requested_backup_id' is INVALID_BACKUP_ID, exit with error.
+ * If valid backup id is passed only matching backup will be added to the list.
+ * TODO this function only used once. Is it really needed?
+ */
+parray *
+get_backup_filelist(pgBackup *backup)
+{
+	parray		*files = NULL;
+	char		backup_filelist_path[MAXPGPATH];
+
+	pgBackupGetPath(backup, backup_filelist_path, lengthof(backup_filelist_path), DATABASE_FILE_LIST);
+	files = dir_read_file_list(NULL, NULL, backup_filelist_path, FIO_BACKUP_HOST);
+
+	/* redundant sanity? */
+	if (!files)
+		elog(ERROR, "Failed to get filelist for backup %s", base36enc(backup->start_time));
+
+	return files;
 }
 
 /*
@@ -571,6 +678,327 @@ pgBackupCreateDir(pgBackup *backup)
 
 	free_dir_list(subdirs);
 	return 0;
+}
+
+/*
+ * Create list of timelines
+ */
+parray *
+catalog_get_timelines(InstanceConfig *instance)
+{
+	parray *xlog_files_list = parray_new();
+	parray *timelineinfos;
+	parray *backups;
+	timelineInfo *tlinfo;
+	char		arclog_path[MAXPGPATH];
+
+	/* read all xlog files that belong to this archive */
+	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+	parray_qsort(xlog_files_list, pgFileComparePath);
+
+	timelineinfos = parray_new();
+	tlinfo = NULL;
+
+	/* walk through files and collect info about timelines */
+	for (int i = 0; i < parray_num(xlog_files_list); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(xlog_files_list, i);
+		TimeLineID tli;
+		parray *timelines;
+		xlogFile *wal_file = NULL;
+
+		/* regular WAL file */
+		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
+		{
+			int result = 0;
+			uint32 log, seg;
+			XLogSegNo segno;
+			char suffix[MAXPGPATH];
+
+			result = sscanf(file->name, "%08X%08X%08X.%s",
+						&tli, &log, &seg, (char *) &suffix);
+
+			if (result < 3)
+			{
+				elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+				continue;
+			}
+
+			segno = log * instance->xlog_seg_size + seg;
+
+			/* regular WAL file with suffix */
+			if (result == 4)
+			{
+				/* backup history file. Currently we don't use them */
+				if (IsBackupHistoryFileName(file->name))
+				{
+					elog(VERBOSE, "backup history file \"%s\"", file->name);
+
+					if (!tlinfo || tlinfo->tli != tli)
+					{
+						tlinfo = timelineInfoNew(tli);
+						parray_append(timelineinfos, tlinfo);
+					}
+
+					/* append file to xlog file list */
+					wal_file = palloc(sizeof(xlogFile));
+					wal_file->file = *file;
+					wal_file->segno = segno;
+					wal_file->type = BACKUP_HISTORY_FILE;
+					parray_append(tlinfo->xlog_filelist, wal_file);
+					continue;
+				}
+				/* partial WAL segment */
+				else if (IsPartialXLogFileName(file->name))
+				{
+					elog(VERBOSE, "partial WAL file \"%s\"", file->name);
+
+					if (!tlinfo || tlinfo->tli != tli)
+					{
+						tlinfo = timelineInfoNew(tli);
+						parray_append(timelineinfos, tlinfo);
+					}
+
+					/* append file to xlog file list */
+					wal_file = palloc(sizeof(xlogFile));
+					wal_file->file = *file;
+					wal_file->segno = segno;
+					wal_file->type = PARTIAL_SEGMENT;
+					parray_append(tlinfo->xlog_filelist, wal_file);
+					continue;
+				}
+				/* we only expect compressed wal files with .gz suffix */
+				else if (strcmp(suffix, "gz") != 0)
+				{
+					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+					continue;
+				}
+			}
+
+			/* new file belongs to new timeline */
+			if (!tlinfo || tlinfo->tli != tli)
+			{
+				tlinfo = timelineInfoNew(tli);
+				parray_append(timelineinfos, tlinfo);
+			}
+			/*
+			 * As it is impossible to detect if segments before segno are lost,
+			 * or just do not exist, do not report them as lost.
+			 */
+			else if (tlinfo->n_xlog_files != 0)
+			{
+				/* check, if segments are consequent */
+				XLogSegNo expected_segno = tlinfo->end_segno + 1;
+
+				/*
+				 * Some segments are missing. remember them in lost_segments to report.
+				 * Normally we expect that segment numbers form an increasing sequence,
+				 * though it's legal to find two files with equal segno in case there
+				 * are both compressed and non-compessed versions. For example
+				 * 000000010000000000000002 and 000000010000000000000002.gz
+				 *
+				 */
+				if (segno != expected_segno && segno != tlinfo->end_segno)
+				{
+					xlogInterval *interval = palloc(sizeof(xlogInterval));;
+					interval->begin_segno = expected_segno;
+					interval->end_segno = segno - 1;
+
+					if (tlinfo->lost_segments == NULL)
+						tlinfo->lost_segments = parray_new();
+
+					parray_append(tlinfo->lost_segments, interval);
+				}
+			}
+
+			if (tlinfo->begin_segno == 0)
+				tlinfo->begin_segno = segno;
+
+			/* this file is the last for this timeline so far */
+			tlinfo->end_segno = segno;
+			/* update counters */
+			tlinfo->n_xlog_files++;
+			tlinfo->size += file->size;
+
+			/* append file to xlog file list */
+			wal_file = palloc(sizeof(xlogFile));
+			wal_file->file = *file;
+			wal_file->segno = segno;
+			wal_file->type = SEGMENT;
+			parray_append(tlinfo->xlog_filelist, wal_file);
+		}
+		/* timeline history file */
+		else if (IsTLHistoryFileName(file->name))
+		{
+			TimeLineHistoryEntry *tln;
+
+			sscanf(file->name, "%08X.history", &tli);
+			timelines = read_timeline_history(arclog_path, tli);
+
+			if (!tlinfo || tlinfo->tli != tli)
+			{
+				tlinfo = timelineInfoNew(tli);
+				parray_append(timelineinfos, tlinfo);
+				/*
+				 * 1 is the latest timeline in the timelines list.
+				 * 0 - is our timeline, which is of no interest here
+				 */
+				tln = (TimeLineHistoryEntry *) parray_get(timelines, 1);
+				tlinfo->switchpoint = tln->end;
+				tlinfo->parent_tli = tln->tli;
+
+				/* find parent timeline to link it with this one */
+				for (int i = 0; i < parray_num(timelineinfos); i++)
+				{
+					timelineInfo *cur = (timelineInfo *) parray_get(timelineinfos, i);
+					if (cur->tli == tlinfo->parent_tli)
+					{
+						tlinfo->parent_link = cur;
+						break;
+					}
+				}
+			}
+
+			parray_walk(timelines, pfree);
+			parray_free(timelines);
+		}
+		else
+			elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+	}
+
+	/* save information about backups belonging to each timeline */
+	backups = catalog_get_backup_list(instance->name, INVALID_BACKUP_ID);
+
+	for (int i = 0; i < parray_num(timelineinfos); i++)
+	{
+		timelineInfo *tlinfo = parray_get(timelineinfos, i);
+		for (int j = 0; j < parray_num(backups); j++)
+		{
+			pgBackup *backup = parray_get(backups, j);
+			if (tlinfo->tli == backup->tli)
+			{
+				if (tlinfo->backups == NULL)
+					tlinfo->backups = parray_new();
+
+				parray_append(tlinfo->backups, backup);
+			}
+		}
+	}
+
+	/* determine oldest backup and closest backup for every timeline */
+	for (int i = 0; i < parray_num(timelineinfos); i++)
+	{
+		timelineInfo *tlinfo = parray_get(timelineinfos, i);
+
+		tlinfo->oldest_backup = get_oldest_backup(tlinfo, backups);
+		tlinfo->closest_backup = get_closest_backup(tlinfo, backups);
+	}
+
+	//parray_walk(xlog_files_list, pfree);
+	//parray_free(xlog_files_list);
+
+	return timelineinfos;
+}
+
+/*
+ * Iterate over parent timelines of a given timeline and look
+ * for valid backup closest to given timeline switchpoint.
+ *
+ * Returns NULL if such backup is not found.
+ */
+pgBackup*
+get_closest_backup(timelineInfo *tlinfo, parray *backup_list)
+{
+	pgBackup *closest_backup = NULL;
+	int i;
+
+	/* Only timeline with switchpoint can possibly have closest backup */
+	if (XLogRecPtrIsInvalid(tlinfo->switchpoint))
+		return NULL;
+
+	/* Only timeline with parent timeline can possibly have closest backup */
+	if (!tlinfo->parent_link)
+		return NULL;
+
+	while (tlinfo->parent_link)
+	{
+		/*
+		 * Iterate over backups belonging to parent timeline and look
+		 * for candidates.
+		 */
+		for (i = 0; i < parray_num(backup_list); i++)
+		{
+			pgBackup   *backup = parray_get(backup_list, i);
+
+			/* Backups belonging to timelines other than parent timeline can be safely skipped */
+			if (backup->tli != tlinfo->parent_tli)
+				continue;
+
+			/* Backups in future can be safely skipped */
+			if (backup->stop_lsn > tlinfo->switchpoint)
+				continue;
+
+			/* Backups with invalid STOP LSN can be safely skipped */
+			if (XLogRecPtrIsInvalid(backup->stop_lsn) ||
+				!XRecOffIsValid(backup->stop_lsn))
+				continue;
+
+			/* Only valid backups closest to switchpoint should be considered */
+			if (backup->stop_lsn <= tlinfo->switchpoint &&
+				(backup->status == BACKUP_STATUS_OK ||
+				 backup->status == BACKUP_STATUS_DONE))
+			{
+				/* Check if backup is closer to switchpoint than current candidate */
+				if (!closest_backup || backup->stop_lsn > closest_backup->stop_lsn)
+					closest_backup = backup;
+			}
+		}
+
+		/* Closest backup is found */
+		if (closest_backup)
+			break;
+
+		/* Switch to parent */
+		tlinfo = tlinfo->parent_link;
+	}
+
+	return closest_backup;
+}
+
+/*
+ * Iterate over timelines and look for oldest backup on each timeline
+ * Returns NULL if such backup is not found.
+ */
+pgBackup*
+get_oldest_backup(timelineInfo *tlinfo, parray *backup_list)
+{
+	pgBackup *oldest_backup = NULL;
+	int i;
+
+	/*
+	 * Iterate over backups belonging to timeline and look
+	 * for candidates.
+	 */
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *backup = parray_get(backup_list, i);
+
+		/* Backups belonging to other timelines can be safely skipped */
+		if (backup->tli != tlinfo->tli)
+			continue;
+
+		/* Backups with invalid START LSN can be safely skipped */
+		if (XLogRecPtrIsInvalid(backup->start_lsn) ||
+			!XRecOffIsValid(backup->start_lsn))
+			continue;
+
+		/* Check if backup is older than current candidate */
+		if (!oldest_backup || backup->start_lsn < oldest_backup->start_lsn)
+			oldest_backup = backup;
+	}
+
+	return oldest_backup;
 }
 
 /*
@@ -744,13 +1172,15 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
-					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\"",
+					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
+					 "\"dbOid\":\"%u\"",
 					path, file->write_size, file->mode,
 					file->is_datafile ? 1 : 0,
 					file->is_cfs ? 1 : 0,
 					file->crc,
 					deparse_compress_alg(file->compress_alg),
-					file->external_dir_num);
+					file->external_dir_num,
+					file->dbOid);
 
 		if (file->is_datafile)
 			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
@@ -1158,6 +1588,33 @@ void
 pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 				 const char *subdir1, const char *subdir2)
 {
+	/* If "subdir1" is NULL do not check "subdir2" */
+	if (!subdir1)
+		snprintf(path, len, "%s/%s", backup_instance_path,
+				 base36enc(backup->start_time));
+	else if (!subdir2)
+		snprintf(path, len, "%s/%s/%s", backup_instance_path,
+				 base36enc(backup->start_time), subdir1);
+	/* "subdir1" and "subdir2" is not NULL */
+	else
+		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
+				 base36enc(backup->start_time), subdir1, subdir2);
+}
+
+/*
+ * independent from global variable backup_instance_path
+ * Still depends from backup_path
+ */
+void
+pgBackupGetPathInInstance(const char *instance_name,
+				 const pgBackup *backup, char *path, size_t len,
+				 const char *subdir1, const char *subdir2)
+{
+	char		backup_instance_path[MAXPGPATH];
+
+	sprintf(backup_instance_path, "%s/%s/%s",
+				backup_path, BACKUPS_DIR, instance_name);
+
 	/* If "subdir1" is NULL do not check "subdir2" */
 	if (!subdir1)
 		snprintf(path, len, "%s/%s", backup_instance_path,

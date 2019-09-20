@@ -30,6 +30,7 @@ typedef struct
 	uint32		checksum_version;
 	uint32		backup_version;
 	BackupMode	backup_mode;
+	parray		*dbOid_exclude_list;
 
 	/*
 	 * Return value from the thread.
@@ -40,9 +41,10 @@ typedef struct
 
 /*
  * Validate backup files.
+ * TODO: partial validation.
  */
 void
-pgBackupValidate(pgBackup *backup)
+pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 {
 	char		base_path[MAXPGPATH];
 	char		external_prefix[MAXPGPATH];
@@ -54,6 +56,7 @@ pgBackupValidate(pgBackup *backup)
 	pthread_t  *threads;
 	validate_files_arg *threads_args;
 	int			i;
+//	parray		*dbOid_exclude_list = NULL;
 
 	/* Check backup version */
 	if (parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
@@ -66,7 +69,7 @@ pgBackupValidate(pgBackup *backup)
 	{
 		elog(WARNING, "Backup %s has status %s, change it to ERROR and skip validation",
 			 base36enc(backup->start_time), status2str(backup->status));
-		write_backup_status(backup, BACKUP_STATUS_ERROR);
+		write_backup_status(backup, BACKUP_STATUS_ERROR, instance_name);
 		corrupted_backup_found = true;
 		return;
 	}
@@ -105,6 +108,10 @@ pgBackupValidate(pgBackup *backup)
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
 
+//	if (params && params->partial_db_list)
+//		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
+//														params->partial_restore_type);
+
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -130,6 +137,7 @@ pgBackupValidate(pgBackup *backup)
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
 		arg->backup_version = parse_program_version(backup->program_version);
+//		arg->dbOid_exclude_list = dbOid_exclude_list;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -159,7 +167,7 @@ pgBackupValidate(pgBackup *backup)
 
 	/* Update backup status */
 	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
-											BACKUP_STATUS_OK);
+											BACKUP_STATUS_OK, instance_name);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -192,6 +200,19 @@ pgBackupValidateFiles(void *arg)
 		/* Validate only regular files */
 		if (!S_ISREG(file->mode))
 			continue;
+
+		/*
+		 * If in partial validate, check if the file belongs to the database
+		 * we exclude. Only files from pgdata can be skipped.
+		 */
+		//if (arguments->dbOid_exclude_list && file->external_dir_num == 0
+		//	&& parray_bsearch(arguments->dbOid_exclude_list,
+		//					   &file->dbOid, pgCompareOid))
+		//{
+		//	elog(VERBOSE, "Skip file validation due to partial restore: \"%s\"",
+		//		 file->rel_path);
+		//	continue;
+		//}
 
 		/*
 		 * Currently we don't compute checksums for
@@ -405,7 +426,7 @@ do_validate_instance(void)
 	elog(INFO, "Validate backups of the instance '%s'", instance_name);
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	/* Examine backups one by one and validate them */
 	for (i = 0; i < parray_num(backups); i++)
@@ -435,7 +456,7 @@ do_validate_instance(void)
 				if (current_backup->status == BACKUP_STATUS_OK ||
 					current_backup->status == BACKUP_STATUS_DONE)
 				{
-					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
+					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 							base36enc(current_backup->start_time),
 							parent_backup_id);
@@ -459,7 +480,7 @@ do_validate_instance(void)
 					if (current_backup->status == BACKUP_STATUS_OK ||
 						current_backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN);
+						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 								base36enc(current_backup->start_time), backup_id,
 								status2str(tmp_backup->status));
@@ -498,7 +519,7 @@ do_validate_instance(void)
 			continue;
 		}
 		/* Valiate backup files*/
-		pgBackupValidate(current_backup);
+		pgBackupValidate(current_backup, NULL);
 
 		/* Validate corresponding WAL files */
 		if (current_backup->status == BACKUP_STATUS_OK)
@@ -532,7 +553,7 @@ do_validate_instance(void)
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),
@@ -593,7 +614,7 @@ do_validate_instance(void)
 								continue;
 							}
 							/* Revalidate backup files*/
-							pgBackupValidate(backup);
+							pgBackupValidate(backup, NULL);
 
 							if (backup->status == BACKUP_STATUS_OK)
 							{

@@ -72,6 +72,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [-T OLDDIR=NEWDIR] [--progress]
                  [--external-mapping=OLDDIR=NEWDIR]
                  [--skip-external-dirs]
+                 [--db-include | --db-exclude]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
@@ -94,7 +95,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup show -B backup-path
                  [--instance=instance_name [-i backup-id]]
-                 [--format=format]
+                 [--format=format] [--archive]
                  [--help]
 
   pg_probackup delete -B backup-path --instance=instance_name

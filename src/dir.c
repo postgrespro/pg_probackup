@@ -118,11 +118,11 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
-static int BlackListCompare(const void *str1, const void *str2);
+static int pgCompareString(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file);
 static void dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-								   bool follow_symlink, parray *black_list,
+								   bool follow_symlink,
 								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -187,7 +187,7 @@ pgFile *
 pgFileInit(const char *path, const char *rel_path)
 {
 	pgFile	   *file;
-	char	   *file_name;
+	char	   *file_name = NULL;
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 	MemSet(file, 0, sizeof(pgFile));
@@ -249,6 +249,10 @@ delete_file:
 	}
 }
 
+/*
+ * Read the file to compute its CRC.
+ * As a handy side effect, we return filesize via bytes_read parameter.
+ */
 pg_crc32
 pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
 			 size_t *bytes_read, fio_location location)
@@ -410,6 +414,16 @@ pgFileComparePathWithExternalDesc(const void *f1, const void *f2)
 	return -pgFileComparePathWithExternal(f1, f2);
 }
 
+/*
+ * Compare two pgFile with their rel_path and external_dir_num
+ * in descending order of ASCII code.
+ */
+int
+pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2)
+{
+	return -pgFileCompareRelPathWithExternal(f1, f2);
+}
+
 /* Compare two pgFile with their linked directory path. */
 int
 pgFileCompareLinked(const void *f1, const void *f2)
@@ -436,9 +450,33 @@ pgFileCompareSize(const void *f1, const void *f2)
 }
 
 static int
-BlackListCompare(const void *str1, const void *str2)
+pgCompareString(const void *str1, const void *str2)
 {
 	return strcmp(*(char **) str1, *(char **) str2);
+}
+
+/* Compare two Oids */
+int
+pgCompareOid(const void *f1, const void *f2)
+{
+	Oid *v1 = *(Oid **) f1;
+	Oid *v2 = *(Oid **) f2;
+
+	if (*v1 > *v2)
+		return 1;
+	else if (*v1 < *v2)
+		return -1;
+	else
+		return 0;}
+
+
+void
+db_map_entry_free(void *entry)
+{
+	db_map_entry *m = (db_map_entry *) entry;
+
+	free(m->datname);
+	free(entry);
 }
 
 /*
@@ -453,42 +491,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 			  bool add_root, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
-	parray	   *black_list = NULL;
-	char		path[MAXPGPATH];
-
-	join_path_components(path, backup_instance_path, PG_BLACK_LIST);
-	/* List files with black list */
-	if (root && instance_config.pgdata &&
-		strcmp(root, instance_config.pgdata) == 0 &&
-		fileExists(path, FIO_BACKUP_HOST))
-	{
-		FILE	   *black_list_file = NULL;
-		char		buf[MAXPGPATH * 2];
-		char		black_item[MAXPGPATH * 2];
-
-		black_list = parray_new();
-		black_list_file = fio_open_stream(path, FIO_BACKUP_HOST);
-
-		if (black_list_file == NULL)
-			elog(ERROR, "cannot open black_list: %s", strerror(errno));
-
-		while (fgets(buf, lengthof(buf), black_list_file) != NULL)
-		{
-			black_item[0] = '\0';
-			join_path_components(black_item, instance_config.pgdata, buf);
-
-			if (black_item[strlen(black_item) - 1] == '\n')
-				black_item[strlen(black_item) - 1] = '\0';
-
-			if (black_item[0] == '#' || black_item[0] == '\0')
-				continue;
-
-			parray_append(black_list, pgut_strdup(black_item));
-		}
-
-		fio_close_stream(black_list_file);
-		parray_qsort(black_list, BlackListCompare);
-	}
 
 	file = pgFileNew(root, "", follow_symlink, external_dir_num, location);
 	if (file == NULL)
@@ -512,17 +514,11 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, file, exclude, follow_symlink, black_list,
+	dir_list_file_internal(files, file, exclude, follow_symlink,
 						   external_dir_num, location);
 
 	if (!add_root)
 		pgFileFree(file);
-
-	if (black_list)
-	{
-		parray_walk(black_list, pfree);
-		parray_free(black_list);
-	}
 }
 
 #define CHECK_FALSE				0
@@ -731,7 +727,7 @@ dir_check_file(pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-					   bool follow_symlink, parray *black_list,
+					   bool follow_symlink,
 					   int external_dir_num, fio_location location)
 {
 	DIR		    *dir;
@@ -788,15 +784,6 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 			continue;
 		}
 
-		/* Skip if the directory is in black_list defined by user */
-		if (black_list && parray_bsearch(black_list, file->path,
-										 BlackListCompare))
-		{
-			elog(LOG, "Skip \"%s\": it is in the user's black list", file->path);
-			pgFileFree(file);
-			continue;
-		}
-
 		if (exclude)
 		{
 			check_res = dir_check_file(file);
@@ -822,7 +809,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, file, exclude, follow_symlink,
-								   black_list, external_dir_num, location);
+								   external_dir_num, location);
 	}
 
 	if (errno && errno != ENOENT)
@@ -1125,6 +1112,9 @@ read_tablespace_map(parray *files, const char *backup_dir)
 
 		parray_append(files, file);
 	}
+
+	if (ferror(fp))
+			elog(ERROR, "Failed to read from file: \"%s\"", map_path);
 
 	fio_close_stream(fp);
 }
@@ -1445,7 +1435,8 @@ dir_read_file_list(const char *root, const char *external_prefix,
 					external_dir_num,
 					crc,
 					segno,
-					n_blocks;
+					n_blocks,
+					dbOid;		/* used for partial restore */
 		pgFile	   *file;
 
 		get_control_value(buf, "path", path, NULL, true);
@@ -1456,6 +1447,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		get_control_value(buf, "crc", NULL, &crc, true);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
+		get_control_value(buf, "dbOid", NULL, &dbOid, false);
 
 		if (external_dir_num && external_prefix)
 		{
@@ -1478,6 +1470,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		file->crc = (pg_crc32) crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
 		file->external_dir_num = external_dir_num;
+		file->dbOid = dbOid ? dbOid : 0;
 
 		/*
 		 * Optional fields
@@ -1497,6 +1490,9 @@ dir_read_file_list(const char *root, const char *external_prefix,
 
 		parray_append(files, file);
 	}
+
+	if (ferror(fp))
+		elog(ERROR, "Failed to read from file: \"%s\"", file_txt);
 
 	fio_close_stream(fp);
 	return files;
@@ -1612,7 +1608,7 @@ make_external_directory_list(const char *colon_separated_dirs, bool remap)
 		p = strtok(NULL, EXTERNAL_DIRECTORY_DELIMITER);
 	}
 	pfree(tmp);
-	parray_qsort(list, BlackListCompare);
+	parray_qsort(list, pgCompareString);
 	return list;
 }
 
@@ -1640,6 +1636,121 @@ backup_contains_external(const char *dir, parray *dirs_list)
 
 	if (!dirs_list) /* There is no external dirs in backup */
 		return false;
-	search_result = parray_bsearch(dirs_list, dir, BlackListCompare);
+	search_result = parray_bsearch(dirs_list, dir, pgCompareString);
 	return search_result != NULL;
+}
+
+/*
+ * Print database_map
+ */
+void
+print_database_map(FILE *out, parray *database_map)
+{
+	int i;
+
+	for (i = 0; i < parray_num(database_map); i++)
+	{
+		db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, i);
+
+		fio_fprintf(out, "{\"dbOid\":\"%u\", \"datname\":\"%s\"}\n",
+				db_entry->dbOid, db_entry->datname);
+	}
+
+}
+
+/*
+ * Create file 'database_map' and add its meta to backup_files_list
+ * NULL check for database_map must be done by the caller.
+ */
+void
+write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_list)
+{
+	FILE		*fp;
+	pgFile		*file;
+	char		path[MAXPGPATH];
+	char		database_map_path[MAXPGPATH];
+
+	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
+	join_path_components(database_map_path, path, DATABASE_MAP);
+
+	fp = fio_fopen(database_map_path, PG_BINARY_W, FIO_BACKUP_HOST);
+	if (fp == NULL)
+		elog(ERROR, "Cannot open file list \"%s\": %s", path,
+			 strerror(errno));
+
+	print_database_map(fp, database_map);
+	if (fio_fflush(fp) || fio_fclose(fp))
+	{
+		fio_unlink(database_map_path, FIO_BACKUP_HOST);
+		elog(ERROR, "Cannot write file list \"%s\": %s",
+			 database_map_path, strerror(errno));
+	}
+
+	/* Add metadata to backup_content.control */
+	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
+								 FIO_BACKUP_HOST);
+	pfree(file->path);
+	file->path = strdup(DATABASE_MAP);
+	file->crc = pgFileGetCRC(database_map_path, true, false,
+							 &file->read_size, FIO_BACKUP_HOST);
+	file->write_size = file->read_size;
+	parray_append(backup_files_list, file);
+}
+
+/*
+ * read database map, return NULL if database_map in empty or missing
+ */
+parray *
+read_database_map(pgBackup *backup)
+{
+	FILE		*fp;
+	parray 		*database_map;
+	char		buf[MAXPGPATH];
+	char		path[MAXPGPATH];
+	char		database_map_path[MAXPGPATH];
+
+	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
+	join_path_components(database_map_path, path, DATABASE_MAP);
+
+	fp = fio_open_stream(database_map_path, FIO_BACKUP_HOST);
+	if (fp == NULL)
+	{
+		/* It is NOT ok for database_map to be missing at this point, so
+		 * we should error here.
+		 * It`s a job of the caller to error if database_map is not empty.
+		 */
+		elog(ERROR, "Cannot open \"%s\": %s", database_map_path, strerror(errno));
+	}
+
+	database_map = parray_new();
+
+	while (fgets(buf, lengthof(buf), fp))
+	{
+		char datname[MAXPGPATH];
+		int64 dbOid;
+
+		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
+
+		get_control_value(buf, "dbOid", NULL, &dbOid, true);
+		get_control_value(buf, "datname", datname, NULL, true);
+
+		db_entry->dbOid = dbOid;
+		db_entry->datname = pgut_strdup(datname);
+
+		parray_append(database_map, db_entry);
+	}
+
+	if (ferror(fp))
+			elog(ERROR, "Failed to read from file: \"%s\"", database_map_path);
+
+	fio_close_stream(fp);
+
+	/* Return NULL if file is empty */
+	if (parray_num(database_map) == 0)
+	{
+		parray_free(database_map);
+		return NULL;
+	}
+
+	return database_map;
 }

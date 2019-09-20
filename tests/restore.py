@@ -8,6 +8,8 @@ from time import sleep
 from datetime import datetime, timedelta
 import hashlib
 import shutil
+import json
+from testgres import QueryException
 
 
 module_name = 'restore'
@@ -2354,6 +2356,892 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 'ERROR: Data files restoring failed', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_partial_restore_exclude(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+
+        db_list_splitted = db_list_raw.splitlines()
+
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # restore FULL backup
+        node_restored_1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+        node_restored_1.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node',
+                node_restored_1, options=[
+                    "--db-include=db1",
+                    "--db-exclude=db2"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of 'db-exclude' and 'db-include'.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You cannot specify '--db-include' "
+                "and '--db-exclude' together", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.restore_node(
+            backup_dir, 'node', node_restored_1)
+
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored_1)
+
+        db1_path = os.path.join(
+            node_restored_1.data_dir, 'base', db_list['db1'])
+        db5_path = os.path.join(
+            node_restored_1.data_dir, 'base', db_list['db5'])
+
+        self.truncate_every_file_in_dir(db1_path)
+        self.truncate_every_file_in_dir(db5_path)
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+
+        node_restored_2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_2'))
+        node_restored_2.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored_2, options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5"])
+
+        pgdata_restored_2 = self.pgdata_content(node_restored_2.data_dir)
+        self.compare_pgdata(pgdata_restored_1, pgdata_restored_2)
+
+        node_restored_2.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored_2.port))
+
+        node_restored_2.slow_start()
+
+        node_restored_2.safe_psql(
+            'postgres',
+            'select 1')
+
+        try:
+            node_restored_2.safe_psql(
+                'db1',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        try:
+            node_restored_2.safe_psql(
+                'db5',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        with open(node_restored_2.pg_log_file, 'r') as f:
+            output = f.read()
+
+        self.assertNotIn('PANIC', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_partial_restore_exclude_tablespace(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        cat_version = node.get_control_data()["Catalog version number"]
+        version_specific_dir = 'PG_' + node.major_version + '_' + cat_version
+
+        # PG_10_201707211
+        # pg_tblspc/33172/PG_9.5_201510051/16386/
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        node_tablespace = self.get_tblspace_path(node, 'somedata')
+
+        tbl_oid = node.safe_psql(
+            'postgres',
+            "SELECT oid "
+            "FROM pg_tablespace "
+            "WHERE spcname = 'somedata'").rstrip()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0} tablespace somedata'.format(i))
+
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+
+        db_list_splitted = db_list_raw.splitlines()
+
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # restore FULL backup
+        node_restored_1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+        node_restored_1.cleanup()
+
+        node1_tablespace = self.get_tblspace_path(node_restored_1, 'somedata')
+
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored_1, options=[
+                "-T", "{0}={1}".format(
+                    node_tablespace, node1_tablespace)])
+
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored_1)
+
+        # truncate every db
+        for db in db_list:
+            # with exception below
+            if db in ['db1', 'db5']:
+                self.truncate_every_file_in_dir(
+                    os.path.join(
+                        node_restored_1.data_dir, 'pg_tblspc',
+                        tbl_oid, version_specific_dir, db_list[db]))
+
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+
+        node_restored_2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_2'))
+        node_restored_2.cleanup()
+        node2_tablespace = self.get_tblspace_path(node_restored_2, 'somedata')
+
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored_2, options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5",
+                "-T", "{0}={1}".format(
+                    node_tablespace, node2_tablespace)])
+
+        pgdata_restored_2 = self.pgdata_content(node_restored_2.data_dir)
+        self.compare_pgdata(pgdata_restored_1, pgdata_restored_2)
+
+        node_restored_2.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored_2.port))
+
+        node_restored_2.slow_start()
+
+        node_restored_2.safe_psql(
+            'postgres',
+            'select 1')
+
+        try:
+            node_restored_2.safe_psql(
+                'db1',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        try:
+            node_restored_2.safe_psql(
+                'db5',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        with open(node_restored_2.pg_log_file, 'r') as f:
+            output = f.read()
+
+        self.assertNotIn('PANIC', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_partial_restore_include(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+
+        db_list_splitted = db_list_raw.splitlines()
+
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # restore FULL backup
+        node_restored_1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+        node_restored_1.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node',
+                node_restored_1, options=[
+                    "--db-include=db1",
+                    "--db-exclude=db2"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of 'db-exclude' and 'db-include'.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: You cannot specify '--db-include' "
+                "and '--db-exclude' together", e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.restore_node(
+            backup_dir, 'node', node_restored_1)
+
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored_1)
+
+        # truncate every db
+        for db in db_list:
+            # with exception below
+            if db in ['template0', 'template1', 'postgres', 'db1', 'db5']:
+                continue
+            self.truncate_every_file_in_dir(
+                os.path.join(
+                    node_restored_1.data_dir, 'base', db_list[db]))
+
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+
+        node_restored_2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_2'))
+        node_restored_2.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored_2, options=[
+                "--db-include=db1",
+                "--db-include=db5",
+                "--db-include=postgres"])
+
+        pgdata_restored_2 = self.pgdata_content(node_restored_2.data_dir)
+        self.compare_pgdata(pgdata_restored_1, pgdata_restored_2)
+
+        node_restored_2.append_conf(
+            "postgresql.auto.conf", "port = {0}".format(node_restored_2.port))
+        node_restored_2.slow_start()
+
+        node_restored_2.safe_psql(
+            'db1',
+            'select 1')
+
+        node_restored_2.safe_psql(
+            'db5',
+            'select 1')
+
+        node_restored_2.safe_psql(
+            'template1',
+            'select 1')
+
+        try:
+            node_restored_2.safe_psql(
+                'db2',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        try:
+            node_restored_2.safe_psql(
+                'db10',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        with open(node_restored_2.pg_log_file, 'r') as f:
+            output = f.read()
+
+        self.assertNotIn('PANIC', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_partial_restore_backward_compatibility_1(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+
+        node.slow_start()
+
+        # create databases
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup with old binary, without partial restore support
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            old_binary=True, options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node',
+                node_restored, options=[
+                    "--db-exclude=db5"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup do not support partial restore.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible".format(backup_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # incremental backup with partial restore support
+        for i in range(11, 15, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # get db list
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+        db_list_splitted = db_list_raw.splitlines()
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        # get etalon
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored)
+        self.truncate_every_file_in_dir(
+                os.path.join(
+                    node_restored.data_dir, 'base', db_list['db5']))
+        self.truncate_every_file_in_dir(
+                os.path.join(
+                    node_restored.data_dir, 'base', db_list['db14']))
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+
+        # get new node
+        node_restored_1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+        node_restored_1.cleanup()
+
+        self.restore_node(
+                backup_dir, 'node',
+                node_restored_1, options=[
+                    "--db-exclude=db5",
+                    "--db-exclude=db14"])
+
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+
+        self.compare_pgdata(pgdata_restored, pgdata_restored_1)
+
+    def test_partial_restore_backward_compatibility_merge(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+
+        node.slow_start()
+
+        # create databases
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup with old binary, without partial restore support
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            old_binary=True, options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node',
+                node_restored, options=[
+                    "--db-exclude=db5"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup do not support partial restore.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible.".format(backup_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # incremental backup with partial restore support
+        for i in range(11, 15, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # get db list
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+        db_list_splitted = db_list_raw.splitlines()
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        # get etalon
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored)
+        self.truncate_every_file_in_dir(
+                os.path.join(
+                    node_restored.data_dir, 'base', db_list['db5']))
+        self.truncate_every_file_in_dir(
+                os.path.join(
+                    node_restored.data_dir, 'base', db_list['db14']))
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+
+        # get new node
+        node_restored_1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+        node_restored_1.cleanup()
+
+        # merge
+        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+
+        self.restore_node(
+                backup_dir, 'node',
+                node_restored_1, options=[
+                    "--db-exclude=db5",
+                    "--db-exclude=db14"])
+        pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
+
+        self.compare_pgdata(pgdata_restored, pgdata_restored_1)
+
+    def test_empty_and_mangled_database_map(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        # create databases
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        # FULL backup with database_map
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # truncate database_map
+        path = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'database_map')
+        with open(path, "w") as f:
+            f.close()
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-include=db1", '--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} has empty or mangled database_map, "
+                "partial restore is impossible".format(backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-exclude=db1", '--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} has empty or mangled database_map, "
+                "partial restore is impossible".format(backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # mangle database_map
+        with open(path, "w") as f:
+            f.write("42")
+            f.close()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-include=db1", '--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: field "dbOid" is not found in the line 42 of '
+                'the file backup_content.control', e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-exclude=db1", '--no-validate'])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because database_map is empty.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: field "dbOid" is not found in the line 42 of '
+                'the file backup_content.control', e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # check that simple restore is still possible
+        self.restore_node(
+            backup_dir, 'node', node_restored, options=['--no-validate'])
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+    def test_missing_database_map(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        # create databases
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        node.safe_psql(
+            "postgres",
+            "CREATE DATABASE backupdb")
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+
+        if self.ptrack:
+            for fname in [
+                    'pg_catalog.oideq(oid, oid)',
+                    'pg_catalog.ptrack_version()',
+                    'pg_catalog.pg_ptrack_clear()',
+                    'pg_catalog.pg_ptrack_control_lsn()',
+                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
+                    'pg_catalog.pg_stop_backup()']:
+
+                node.safe_psql(
+                    "backupdb",
+                    "GRANT EXECUTE ON FUNCTION {0} "
+                    "TO backup".format(fname))
+
+        # FULL backup without database_map
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, datname='backupdb',
+            options=['--stream', "-U", "backup", '--log-level-file=verbose'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        # backup has missing database_map and that is legal
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-exclude=db5", "--db-exclude=db9"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because user do not have pg_database access.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible.".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node_restored,
+                options=["--db-include=db1"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because user do not have pg_database access.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} doesn't contain a database_map, "
+                "partial restore is impossible.".format(
+                    backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # check that simple restore is still possible
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

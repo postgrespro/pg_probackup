@@ -66,7 +66,7 @@ do_merge(time_t backup_id)
 	elog(INFO, "Merge started");
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 	/* Find destination backup first */
 	for (i = 0; i < parray_num(backups); i++)
@@ -146,7 +146,7 @@ do_merge(time_t backup_id)
 		merge_backups(full_backup, from_backup);
 	}
 
-	pgBackupValidate(full_backup);
+	pgBackupValidate(full_backup, NULL);
 	if (full_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Merging of backup %s failed", base36enc(backup_id));
 
@@ -198,7 +198,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	if (to_backup->status == BACKUP_STATUS_OK ||
 		to_backup->status == BACKUP_STATUS_DONE)
 	{
-		pgBackupValidate(to_backup);
+		pgBackupValidate(to_backup, NULL);
 		if (to_backup->status == BACKUP_STATUS_CORRUPT)
 			elog(ERROR, "Interrupt merging");
 	}
@@ -211,7 +211,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 		   from_backup->status == BACKUP_STATUS_DONE ||
 		   from_backup->status == BACKUP_STATUS_MERGING ||
 		   from_backup->status == BACKUP_STATUS_DELETING);
-	pgBackupValidate(from_backup);
+	pgBackupValidate(from_backup, NULL);
 	if (from_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Interrupt merging");
 
@@ -236,7 +236,7 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 					DATABASE_FILE_LIST);
 	to_files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
 	/* To delete from leaf, sort in reversed order */
-	parray_qsort(to_files, pgFileComparePathWithExternalDesc);
+	parray_qsort(to_files, pgFileCompareRelPathWithExternalDesc);
 	/*
 	 * Get list of files which need to be moved.
 	 */
@@ -253,8 +253,8 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	if (from_backup->status == BACKUP_STATUS_DELETING)
 		goto delete_source_backup;
 
-	write_backup_status(to_backup, BACKUP_STATUS_MERGING);
-	write_backup_status(from_backup, BACKUP_STATUS_MERGING);
+	write_backup_status(to_backup, BACKUP_STATUS_MERGING, instance_name);
+	write_backup_status(from_backup, BACKUP_STATUS_MERGING, instance_name);
 
 	create_data_directories(files, to_database_path, from_backup_path, false, FIO_BACKUP_HOST);
 
@@ -385,7 +385,7 @@ delete_source_backup:
 	/*
 	 * Delete files which are not in from_backup file list.
 	 */
-	parray_qsort(files, pgFileComparePathWithExternalDesc);
+	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
 	for (i = 0; i < parray_num(to_files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(to_files, i);
@@ -398,7 +398,7 @@ delete_source_backup:
 				continue;
 		}
 
-		if (parray_bsearch(files, file, pgFileComparePathWithExternalDesc) == NULL)
+		if (parray_bsearch(files, file, pgFileCompareRelPathWithExternalDesc) == NULL)
 		{
 			char		to_file_path[MAXPGPATH];
 			char	   *prev_path;
@@ -488,7 +488,7 @@ merge_files(void *arg)
 				 i + 1, num_files, file->path);
 
 		res_file = parray_bsearch(argument->to_files, file,
-								  pgFileComparePathWithExternalDesc);
+								  pgFileCompareRelPathWithExternalDesc);
 		to_file = (res_file) ? *res_file : NULL;
 
 		join_path_components(to_file_path, argument->to_root, file->path);

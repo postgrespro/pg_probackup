@@ -18,6 +18,7 @@ Current version - 2.1.5
     * [Setting up Backup from Standby](#setting-up-backup-from-standby)
     * [Setting up Cluster Verification](#setting-up-cluster-verification)
     * [Setting up PTRACK Backups](#setting-up-ptrack-backups)
+    * [Setting up Partial Restore](#setting-up-partial-restore)
     * [Configuring the Remote Mode](#configuring-the-remote-mode)
 
 5. [Usage](#usage)
@@ -29,11 +30,13 @@ Current version - 2.1.5
     * [Verifying a Cluster](#verifying-a-cluster)
     * [Validating a Backup](#validating-a-backup)
     * [Restoring a Cluster](#restoring-a-cluster)
+        * [Partial Restore](#partial-restore)
     * [Performing Point-in-Time (PITR) Recovery](#performing-point-in-time-pitr-recovery)
     * [Using pg_probackup in the Remote Mode](#using-pg_probackup-in-the-remote-mode)
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
+        * [Viewing WAL Archive Information](#viewing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
@@ -124,7 +127,8 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 - Remote operations: backup PostgreSQL instance located on remote machine or restore backup on it
 - Backup from replica: avoid extra load on the master server by taking backups from a standby
 - External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
-- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
+- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats and view WAL Archive information.
+- Partial Restore: restore the only specified databases or skip the specified databases.
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
 
@@ -297,7 +301,9 @@ Making backups in PAGE backup mode, performing [PITR](#performing-point-in-time-
 
 Where *backup_dir* and *instance_name* refer to the already initialized backup catalog instance for this database cluster and optional parameters [remote_options](#remote-mode-options) should be used to archive WAL to the remote host. For details about all possible `archive-push` parameters, see the section [archive-push](#archive-push).
 
-Once these steps are complete, you can start making backups with ARCHIVE WAL mode, backups in PAGE backup mode and perform [PITR](#performing-point-in-time-pitr-recovery).
+Once these steps are complete, you can start making backups with [ARCHIVE](#archive-mode) WAL-mode, backups in PAGE backup mode and perform [PITR](#performing-point-in-time-pitr-recovery).
+
+Current state of WAL Archive can be obtained via [show](#show) command. For details, see the sections [Viewing WAL Archive information](#viewing-wal-archive-information).
 
 If you are planning to make PAGE backups and/or backups with [ARCHIVE](#archive-mode) WAL mode from a standby of a server, that generates small amount of WAL traffic, without long waiting for WAL segment to fill up, consider setting [archive_timeout](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-TIMEOUT) PostgreSQL parameter **on master**. It is advisable to set the value of this setting slightly lower than pg_probackup parameter `--archive-timeout` (default 5 min), so there should be enough time for rotated segment to be streamed to replica and send to archive before backup is aborted because of `--archive-timeout`.
 
@@ -368,7 +374,7 @@ If you are going to use pg_probackup in remote mode via ssh, complete the follow
 
     [backup@backup_host] ssh-copy-id postgres@db_host
 
-- If you planning to rely on [continuous WAL archiving](#setting-up-continuous-wal-archiving), then setup passwordless SSH connection between *postgres* user on `db_host` and *backup* user on `backup_host`:
+- If you are planning to rely on [continuous WAL archiving](#setting-up-continuous-wal-archiving), then setup passwordless SSH connection between *postgres* user on `db_host` and *backup* user on `backup_host`:
 
     [postgres@db_host] ssh-copy-id backup@backup_host
 
@@ -405,7 +411,7 @@ Where *backup_mode* can take one of the following values:
 
 - FULL — creates a full backup that contains all the data files of the cluster to be restored.
 - DELTA — reads all data files in the data directory and creates an incremental backup for pages that have changed since the previous backup.
-- PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
+- PAGE — creates an incremental PAGE backup based on the WAL files that have generated since the previous full or incremental backup was taken. Only changed blocks are readed from data files.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly.
 
 When restoring a cluster from an incremental backup, pg_probackup relies on the parent full backup and all the incremental backups between them, which is called `the backup chain`. You must create at least one full backup before taking incremental ones.
@@ -453,11 +459,15 @@ Redardless of data checksums been enabled or not, pg_probackup always check page
 
 #### External directories
 
-To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons.
+To back up a directory located outside of the data directory, use the optional `--external-dirs` parameter that specifies the path to this directory. If you would like to add more than one external directory, provide several paths separated by colons, on Windows system paths must be separated by semicolon instead.
 
-For example, to include '/etc/dir1/' and '/etc/dir2/' directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory, run:
+For example, to include `'/etc/dir1/'` and `'/etc/dir2/'` directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory, run:
 
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=/etc/dir1:/etc/dir2
+
+For example, to include `'C:\dir1\'` and `'C:\dir2\'` directories into the full backup of your *instance_name* instance that will be stored under the *backup_dir* directory on Windows system, run:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=C:\dir1;C:\dir2
 
 pg_probackup creates a separate subdirectory in the backup directory for each external directory. Since external directories included into different backups do not have to be the same, when you are restoring the cluster from an incremental backup, only those directories that belong to this particular backup will be restored. Any external directories stored in the previous backups will be ignored.
 
@@ -538,6 +548,30 @@ If you are restoring an STREAM backup, the restore is complete at once, with the
 
 >NOTE: By default, the [restore](#restore) command validates the specified backup before restoring the cluster. If you run regular backup validations and would like to save time when restoring the cluster, you can specify the `--no-validate` flag to skip validation and speed up the recovery.
 
+#### Partial Restore
+
+If you have enabled [partial restore](#setting-up-partial-restore) before taking backups, you can restore or exclude from restore the arbitraty number of specific databases using [partial restore options](#partial-restore-options) with the [restore](#restore) commands.
+
+To restore only one or more databases, run the restore command with the following options:
+
+    pg_probackup restore -B backup_dir --instance instance_name --db-include=database_name
+
+The option `--db-include` can be specified multiple times. For example, to restore only databases `db1` and `db2`, run the following command:
+
+    pg_probackup restore -B backup_dir --instance instance_name --db-include=db1 --db-include=db2
+
+To exclude one or more specific databases from restore, run the following options:
+
+    pg_probackup restore -B backup_dir --instance instance_name --db-exclude=database_name
+
+The option `--db-exclude` can be specified multiple times. For example, to exclude the databases `db1` and `db2` from restore, run the following command:
+
+    pg_probackup restore -B backup_dir --instance instance_name -i backup_id --db-exclude=db1 --db-exclude=db2
+
+Partial restore rely on lax behaviour of PostgreSQL recovery process toward truncated files. Files of excluded databases restored as null sized files, allowing recovery to work properly. After successfull starting of PostgreSQL cluster, you must drop excluded databases using `DROP DATABASE` command.
+
+>NOTE: The databases `template0` and `template1` are always restored.
+
 ### Performing Point-in-Time (PITR) Recovery
 
 If you have enabled [continuous WAL archiving](#setting-up-continuous-wal-archiving) before taking backups, you can restore the cluster to its state at an arbitrary point in time (recovery target) using [recovery target options](#recovery-target-options) with the [restore](#restore) and [validate](#validate) commands.
@@ -581,6 +615,14 @@ The typical workflow is as follows:
 - If you would like to take remote backup in [PAGE](#creating-a-backup) mode, or rely on [ARCHIVE](#archive-mode) WAL delivery mode, or use [PITR](#performing-point-in-time-pitr-recovery), then configure continuous WAL archiving from database host to the backup host as explained in the section [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving). For the [archive-push](#archive-push) and [archive-get](#archive-get) commands, you must specify the [remote options](#remote-mode-options) that point to backup host with backup catalog.
 
 - Run [backup](#backup) or [restore](#restore) commands with [remote options](#remote-mode-options) **on backup host**. pg_probackup connects to the remote system via SSH and creates a backup locally or restores the previously taken backup on the remote system, respectively.
+
+For example, to create archive full backup using remote mode through SSH connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
+
+For example, to restore latest backup on remote system using remote mode through SSH connection to user `postgres` on host with address `192.168.0.2` via port `2302`, run:
+
+    pg_probackup restore -B backup_dir --instance instance_name --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
 
 >NOTE: The remote backup mode is currently unavailable for Windows systems.
 
@@ -629,6 +671,7 @@ If nothing is given, the default values are taken. By default pg_probackup tries
 With pg_probackup, you can manage backups from the command line:
 
 - View available backups
+- View available WAL Archive Information
 - Validate backups
 - Merge backups
 - Delete backups
@@ -754,6 +797,266 @@ The sample output is as follows:
     }
 ]
 ```
+
+#### Viewing WAL Archive Information
+
+To view the information about WAL archive for every instance, run the command:
+
+    pg_probackup show -B backup_dir [--instance instance_name] --archive
+
+pg_probackup displays the list of all the available WAL files grouped by timelines. For example:
+
+```
+ARCHIVE INSTANCE 'node'
+===================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size    Zratio  N backups  Status
+===================================================================================================================
+ 5    1           0/B000000    000000000000000B  000000000000000C  2           685kB   48.00   0          OK
+ 4    3           0/18000000   0000000000000018  000000000000001A  3           648kB   77.00   0          OK
+ 3    2           0/15000000   0000000000000015  0000000000000017  3           648kB   77.00   0          OK
+ 2    1           0/B000108    000000000000000B  0000000000000015  5           892kB   94.00   1          DEGRADED
+ 1    0           0/0          0000000000000001  000000000000000A  10          8774kB  19.00   1          OK
+
+```
+
+For each backup, the following information is provided:
+
+- TLI — timeline identifier.
+- Parent TLI — identifier of timeline TLI branched off.
+- Switchpoint — LSN of the moment when the timeline branched off from "Parent TLI".
+- Min Segno — number of the first existing WAL segment belonging to the timeline.
+- Max Segno — number of the last existing WAL segment belonging to the timeline.
+- N segments — number of WAL segments belonging to the timeline.
+- Size — the size files take on disk.
+- Zratio - compression ratio calculated as "N segments" * wal_seg_size / "Size".
+- N backups — number of backups belonging to the timeline. To get the details about backups, use json format.
+- Status — archive status for this exact timeline. Possible values:
+	- OK — all WAL segments between Min and Max are present.
+	- DEGRADED — some WAL segments between Min and Max are lost. To get details about lost files, use json format.
+
+To get more detailed information about the WAL archive in json format, run the command:
+
+    pg_probackup show -B backup_dir [--instance instance_name] --archive --format=json
+
+The sample output is as follows:
+
+```
+[
+    {
+        "instance": "replica",
+        "timelines": [
+            {
+                "tli": 5,
+                "parent-tli": 1,
+                "switchpoint": "0/B000000",
+                "min-segno": "000000000000000B",
+                "max-segno": "000000000000000C",
+                "n-segments": 2,
+                "size": 685320,
+                "zratio": 48.00,
+                "closest-backup-id": "PXS92O",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
+                "tli": 4,
+                "parent-tli": 3,
+                "switchpoint": "0/18000000",
+                "min-segno": "0000000000000018",
+                "max-segno": "000000000000001A",
+                "n-segments": 3,
+                "size": 648625,
+                "zratio": 77.00,
+                "closest-backup-id": "PXS9CE",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
+                "tli": 3,
+                "parent-tli": 2,
+                "switchpoint": "0/15000000",
+                "min-segno": "0000000000000015",
+                "max-segno": "0000000000000017",
+                "n-segments": 3,
+                "size": 648911,
+                "zratio": 77.00,
+                "closest-backup-id": "PXS9CE",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": []
+            },
+            {
+                "tli": 2,
+                "parent-tli": 1,
+                "switchpoint": "0/B000108",
+                "min-segno": "000000000000000B",
+                "max-segno": "0000000000000015",
+                "n-segments": 5,
+                "size": 892173,
+                "zratio": 94.00,
+                "closest-backup-id": "PXS92O",
+                "status": "DEGRADED",
+                "lost-segments": [
+                    {
+                        "begin-segno": "000000000000000D",
+                        "end-segno": "000000000000000E"
+                    },
+                    {
+                        "begin-segno": "0000000000000010",
+                        "end-segno": "0000000000000012"
+                    }
+                ],
+                "backups": [
+                    {
+                        "id": "PXS9CE",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 2,
+                        "parent-tli": 0,
+                        "start-lsn": "0/C000028",
+                        "stop-lsn": "0/C000160",
+                        "start-time": "2019-09-13 21:43:26+03",
+                        "end-time": "2019-09-13 21:43:30+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:43:29+03",
+                        "data-bytes": 104674852,
+                        "wal-bytes": 16777216,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
+            },
+            {
+                "tli": 1,
+                "parent-tli": 0,
+                "switchpoint": "0/0",
+                "min-segno": "0000000000000001",
+                "max-segno": "000000000000000A",
+                "n-segments": 10,
+                "size": 8774805,
+                "zratio": 19.00,
+                "closest-backup-id": "",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": [
+                    {
+                        "id": "PXS92O",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "true",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/4000028",
+                        "stop-lsn": "0/6000028",
+                        "start-time": "2019-09-13 21:37:36+03",
+                        "end-time": "2019-09-13 21:38:45+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:30+03",
+                        "data-bytes": 25987319,
+                        "wal-bytes": 50331648,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "instance": "master",
+        "timelines": [
+            {
+                "tli": 1,
+                "parent-tli": 0,
+                "switchpoint": "0/0",
+                "min-segno": "0000000000000001",
+                "max-segno": "000000000000000B",
+                "n-segments": 11,
+                "size": 8860892,
+                "zratio": 20.00,
+                "status": "OK",
+                "lost-segments": [],
+                "backups": [
+                    {
+                        "id": "PXS92H",
+                        "parent-backup-id": "PXS92C",
+                        "backup-mode": "PAGE",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 1,
+                        "start-lsn": "0/4000028",
+                        "stop-lsn": "0/50000B8",
+                        "start-time": "2019-09-13 21:37:29+03",
+                        "end-time": "2019-09-13 21:37:31+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:30+03",
+                        "data-bytes": 1328461,
+                        "wal-bytes": 33554432,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    },
+                    {
+                        "id": "PXS92C",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "none",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.1.5",
+                        "server-version": "10",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/2000028",
+                        "stop-lsn": "0/2000160",
+                        "start-time": "2019-09-13 21:37:24+03",
+                        "end-time": "2019-09-13 21:37:29+03",
+                        "recovery-xid": 0,
+                        "recovery-time": "2019-09-13 21:37:28+03",
+                        "data-bytes": 24871902,
+                        "wal-bytes": 16777216,
+                        "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
+                        "status": "OK"
+                    }
+                ]
+            }
+        ]
+    }
+]
+```
+
+Most fields are consistent with plain format, with some exceptions:
+
+- size is in bytes.
+- 'closest-backup-id' attribute contain ID of valid backup closest to the timeline, located on some of the previous timelines. This backup is the closest starting point to reach the timeline from other timelines by PITR. If such backup do not exists, then string is empty.
+- DEGRADED timelines contain 'lost-segments' array with information about intervals of missing segments. In OK timelines 'lost-segments' array is empty.
+- 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline. If timeline has no backups, then 'backups' array is empty.
 
 ### Configuring Backup Retention Policy
 
@@ -924,11 +1227,14 @@ To edit pg_probackup.conf, use the [set-config](#set-config) command.
 #### show
 
     pg_probackup show -B backup_dir
-    [--help] [--instance instance_name [-i backup_id]] [--format=plain|json]
+    [--help] [--instance instance_name [-i backup_id | --archive]] [--format=plain|json]
 
-Shows the contents of the backup catalog. If *instance_name* and *backup_id* are specified, shows detailed information about this backup. You can specify the `--format=json` option to return the result in the JSON format.
+Shows the contents of the backup catalog. If *instance_name* and *backup_id* are specified, shows detailed information about this backup. You can specify the `--format=json` option to return the result in the JSON format. If `--archive` option is specified, shows the content of WAL archive of the backup catalog.
 
 By default, the contents of the backup catalog is shown as plain text.
+
+For details on usage, see the sections [Managing the Backup Catalog](#managing-the-backup-catalog) and [Viewing WAL Archive Information](#viewing-wal-archive-information).
+
 
 #### backup
 
@@ -953,8 +1259,10 @@ Specifies the backup mode to use. Possible values are:
 - PAGE — creates an incremental PAGE backup based on the WAL files that have changed since the previous full or incremental backup was taken.
 - PTRACK — creates an incremental PTRACK backup tracking page changes on the fly.
 
-    -C
-    --smooth-checkpoint
+```
+-C
+--smooth-checkpoint
+```
 Spreads out the checkpoint over a period of time. By default, pg_probackup tries to complete the checkpoint as soon as possible.
 
     --stream
@@ -995,6 +1303,7 @@ For details on usage, see the section [Creating a Backup](#creating-a-backup).
     [-T OLDDIR=NEWDIR] [--external-mapping=OLDDIR=NEWDIR] [--skip-external-dirs]
     [-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
     [recovery_options] [logging_options] [remote_options]
+    [partial_restore_options]
 
 Restores the PostgreSQL instance from a backup copy located in the *backup_dir* backup catalog. If you specify a [recovery target option](#recovery-target-options), pg_probackup will find the closest backup and restores it to the specified recovery target. Otherwise, the most recent backup is used.
 
@@ -1018,7 +1327,7 @@ Disables block-level checksum verification to speed up validation. During automa
     --no-validate
 Skips backup validation. You can use this flag if you validate backups regularly and would like to save time when running restore operations.
 
-Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
+Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options), [Partial Restore](#partial-restore) and [Common Options](#common-options) can be used.
 
 For details on usage, see the section [Restoring a Cluster](#restoring-a-cluster).
 
@@ -1051,9 +1360,9 @@ For details on usage, see the section [Verifying a Cluster](#verifying-a-cluster
     [--help] [--instance instance_name] [-i backup_id]
     [-j num_threads] [--progress]
     [--skip-block-validation]
-    [recovery_options] [logging_options]
+    [recovery_target_options] [logging_options]
 
-Verifies that all the files required to restore the cluster are present and not corrupted. If *instance_name* is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the *instance_name* without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the *instance_name* with a [recovery target option](#recovery-target-options) and/or a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
+Verifies that all the files required to restore the cluster are present and not corrupted. If *instance_name* is not specified, pg_probackup validates all backups available in the backup catalog. If you specify the *instance_name* without any additional options, pg_probackup validates all the backups available for this backup instance. If you specify the *instance_name* with a [recovery target options](#recovery-target-options) and/or a *backup_id*, pg_probackup checks whether it is possible to restore the cluster using these options.
 
 For details, see the section [Validating a Backup](#validating-a-backup).
 
@@ -1091,7 +1400,7 @@ Copies WAL files into the corresponding subdirectory of the backup catalog and v
 
 If the files to be copied already exist in the backup catalog, pg_probackup computes and compares their checksums. If the checksums match, archive-push skips the corresponding file and returns successful execution code. Otherwise, archive-push fails with an error. If you would like to replace WAL files in the case of checksum mismatch, run the archive-push command with the `--overwrite` flag.
 
-Copying is done to temporary file with `.partial` suffix or, if [compression](#compression-options) is used, with `.gz.partial` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
+Copying is done to temporary file with `.part` suffix or, if [compression](#compression-options) is used, with `.gz.part` suffix. After copy is done, atomic rename is performed. This algorihtm ensures that failed archive-push will not stall continuous archiving and that concurrent archiving from multiple sources into single WAL archive has no risk of archive corruption.
 Copied to archive WAL segments are synced to disk.
 
 You can use `archive-push` in [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) PostgreSQL parameter to set up [continous WAl archiving](#setting-up-continuous-wal-archiving).
@@ -1339,6 +1648,16 @@ Specifies pg_probackup installation directory on the remote system.
 
     --ssh-options=ssh_options
 Specifies a string of SSH command-line options. For example, the following options can used to set keep-alive for ssh connections opened by pg_probackup: `--ssh-options='-o ServerAliveCountMax=5 -o ServerAliveInterval=60'`. Full list of possible options can be found on [ssh_config manual page](https://man.openbsd.org/ssh_config.5).
+
+#### Partial Restore Options
+
+This section describes the options related to partial restore of cluster from backup. These options can be used with [restore](#restore) command.
+
+    --db-exclude=dbname
+Specifies database name to exclude from restore. All other databases in the cluster will be restored as usual, including `template0` and `template1`. This option can be specified multiple times for multiple databases.
+
+    --db-include=dbname
+Specifies database name to restore from backup. All other databases in the cluster will not be restored, with exception of `template0` and `template1`. This option can be specified multiple times for multiple databases.
 
 #### Replica Options
 

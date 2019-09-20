@@ -130,7 +130,7 @@ def slow_start(self, replica=False):
     self.start()
     while True:
         try:
-            if self.safe_psql('postgres', query) == 't\n':
+            if self.safe_psql('template1', query) == 't\n':
                 break
         except testgres.QueryException as e:
             if 'database system is starting up' in e[0]:
@@ -304,8 +304,6 @@ class ProbackupTest(object):
 #                print('PGPROBACKUP_SSH_USER is not set')
 #                exit(1)
 
-
-
     def make_simple_node(
             self,
             base_dir=None,
@@ -328,7 +326,9 @@ class ProbackupTest(object):
         node.append_conf('postgresql.auto.conf', 'max_connections = 100')
         node.append_conf('postgresql.auto.conf', 'shared_buffers = 10MB')
         node.append_conf('postgresql.auto.conf', 'fsync = off')
-        node.append_conf('postgresql.auto.conf', 'wal_level = logical')
+
+        if 'wal_level' not in pg_options:
+            node.append_conf('postgresql.auto.conf', 'wal_level = logical')
         node.append_conf('postgresql.auto.conf', 'hot_standby = off')
 
         node.append_conf(
@@ -349,6 +349,10 @@ class ProbackupTest(object):
             node.append_conf(
                 'postgresql.auto.conf',
                 'max_wal_senders = 10')
+
+        # set major version
+        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
+            node.major_version = f.read().rstrip()
 
         return node
 
@@ -879,6 +883,10 @@ class ProbackupTest(object):
                             return backup
                     else:
                         backup_list.append(backup)
+
+            if backup_id is not None:
+                self.assertTrue(False, "Failed to find backup with ID: {0}".format(backup_id))
+
             return backup_list
         else:
             show_splitted = self.run_pb(
@@ -933,7 +941,44 @@ class ProbackupTest(object):
                     var = var.strip('"')
                     var = var.strip("'")
                     specific_record[name.strip()] = var
+
+                if not specific_record:
+                    self.assertTrue(False, "Failed to find backup with ID: {0}".format(backup_id))
+
                 return specific_record
+
+    def show_archive(
+            self, backup_dir, instance=None, options=[],
+            as_text=False, as_json=True, old_binary=False
+            ):
+
+        cmd_list = [
+            'show',
+            '--archive',
+            '-B', backup_dir,
+        ]
+        if instance:
+            cmd_list += ['--instance={0}'.format(instance)]
+
+        # AHTUNG, WARNING will break json parsing
+        if as_json:
+            cmd_list += ['--format=json', '--log-level-console=error']
+
+        if as_text:
+            # You should print it when calling as_text=true
+            return self.run_pb(cmd_list + options, old_binary=old_binary)
+
+        if as_json:
+            if as_text:
+                data = self.run_pb(cmd_list + options, old_binary=old_binary)
+            else:
+                data = json.loads(self.run_pb(cmd_list + options, old_binary=old_binary))
+            return data
+        else:
+            show_splitted = self.run_pb(
+                cmd_list + options, old_binary=old_binary).splitlines()
+            print(show_splitted)
+            exit(1)
 
     def validate_pb(
             self, backup_dir, instance=None,
@@ -1006,46 +1051,76 @@ class ProbackupTest(object):
             self, backup_dir, instance, node, replica=False,
             overwrite=False, compress=False, old_binary=False):
 
+        # parse postgresql.auto.conf
+        options = {}
         if replica:
-            archive_mode = 'always'
-            node.append_conf('postgresql.auto.conf', 'hot_standby = on')
+            options['archive_mode'] = 'always'
+            options['hot_standby'] = 'on'
         else:
-            archive_mode = 'on'
+            options['archive_mode'] = 'on'
 
-        node.append_conf(
-                'postgresql.auto.conf',
-                'archive_mode = {0}'.format(archive_mode)
-                )
         if os.name == 'posix':
-            archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
+            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
                 self.probackup_path, backup_dir, instance)
 
         elif os.name == 'nt':
-            archive_command = '"{0}" archive-push -B {1} --instance={2} '.format(
+            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
                 self.probackup_path.replace("\\","\\\\"),
-                backup_dir.replace("\\","\\\\"),
-                instance)
+                backup_dir.replace("\\","\\\\"), instance)
 
         # don`t forget to kill old_binary after remote ssh release
         if self.remote and not old_binary:
-            archive_command = archive_command + '--remote-proto=ssh --remote-host=localhost '
+            options['archive_command'] += '--remote-proto=ssh '
+            options['archive_command'] += '--remote-host=localhost '
 
         if self.archive_compress or compress:
-            archive_command = archive_command + '--compress '
+            options['archive_command'] += '--compress '
 
         if overwrite:
-            archive_command = archive_command + '--overwrite '
+            options['archive_command'] += '--overwrite '
 
         if os.name == 'posix':
-            archive_command = archive_command + '--wal-file-path=%p --wal-file-name=%f'
+            options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
-            archive_command = archive_command + '--wal-file-path="%p" --wal-file-name="%f"'
+            options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
 
-        node.append_conf(
-                    'postgresql.auto.conf',
-                    "archive_command = '{0}'".format(
-                        archive_command))
+        self.set_auto_conf(node, options)
+
+    def set_auto_conf(self, node, options):
+
+        # parse postgresql.auto.conf
+        path = os.path.join(node.data_dir, 'postgresql.auto.conf')
+
+        with open(path, 'r') as f:
+            raw_content = f.read()
+
+        current_options = {}
+        for line in raw_content.splitlines():
+
+            # ignore comments
+            if line.startswith('#'):
+                continue
+
+            name, var = line.partition('=')[::2]
+            name = name.strip()
+            var = var.strip()
+            var = var.strip('"')
+            var = var.strip("'")
+            current_options[name] = var
+
+        for option in options:
+            current_options[option] = options[option]
+
+        auto_conf = ''
+        for option in current_options:
+            auto_conf += "{0} = '{1}'\n".format(
+                option, current_options[option])
+
+        with open(path, 'wt') as f:
+            f.write(auto_conf)
+            f.flush()
+            f.close()
 
     def set_replica(
             self, master, replica,
@@ -1327,15 +1402,12 @@ class ProbackupTest(object):
                         os.path.join(restored_pgdata['pgdata'], directory),
                         restored_pgdata['dirs'][directory]['mode'])
 
-
-
         for directory in original_pgdata['dirs']:
             if directory not in restored_pgdata['dirs']:
                 fail = True
                 error_message += '\nDirectory dissappeared'
                 error_message += ' in restored PGDATA: {0}\n'.format(
                     os.path.join(restored_pgdata['pgdata'], directory))
-
 
         for file in restored_pgdata['files']:
             # File is present in RESTORED PGDATA
