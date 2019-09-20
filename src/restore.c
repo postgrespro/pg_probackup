@@ -863,8 +863,8 @@ create_recovery_conf(time_t backup_id,
 		char restore_command_guc[16384];
 
 		/* If restore_command is provided, use it */
-		if (rt->restore_command)
-			sprintf(restore_command_guc, "%s", rt->restore_command);
+		if (params->restore_command)
+			sprintf(restore_command_guc, "%s", params->restore_command);
 		/* construct restore_command */
 		else
 		{
@@ -1198,9 +1198,6 @@ parseRecoveryTargetOptions(const char *target_time,
 		/* Default recovery target action is pause */
 		rt->target_action = "pause";
 	}
-
-	if (restore_command)
-		rt->restore_command = restore_command;
 
 	/* More than one mutually exclusive option was defined. */
 	if (recovery_target_specified > 1)
