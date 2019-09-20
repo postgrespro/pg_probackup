@@ -15,16 +15,20 @@
 #include <unistd.h>
 
 static void delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
-							uint32 xlog_seg_size);
+						uint32 xlog_seg_size);
+static void delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tli,
+						uint32 xlog_seg_size, bool dry_run);
 static void do_retention_internal(parray *backup_list, parray *to_keep_list,
 									parray *to_purge_list);
 static void do_retention_merge(parray *backup_list, parray *to_keep_list,
 									parray *to_purge_list);
 static void do_retention_purge(parray *to_keep_list, parray *to_purge_list);
-static void do_retention_wal(void);
+static void do_retention_wal(bool dry_run);
 
+// TODO: more useful messages for dry run.
 static bool backup_deleted = false;   /* At least one backup was deleted */
 static bool backup_merged = false;    /* At least one merge was enacted */
+static bool wal_deleted = false;      /* At least one WAL segments was deleted */
 
 void
 do_delete(time_t backup_id)
@@ -33,8 +37,8 @@ do_delete(time_t backup_id)
 	parray	   *backup_list,
 			   *delete_list;
 	pgBackup   *target_backup = NULL;
-	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
-	TimeLineID	oldest_tli = 0;
+//	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
+//	TimeLineID	oldest_tli = 0;
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
@@ -86,24 +90,7 @@ do_delete(time_t backup_id)
 
 	/* Clean WAL segments */
 	if (delete_wal)
-	{
-		Assert(target_backup);
-
-		/* Find oldest LSN, used by backups */
-		for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
-		{
-			pgBackup   *backup = (pgBackup *) parray_get(backup_list, (size_t) i);
-
-			if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE)
-			{
-				oldest_lsn = backup->start_lsn;
-				oldest_tli = backup->tli;
-				break;
-			}
-		}
-
-		delete_walfiles(oldest_lsn, oldest_tli, instance_config.xlog_seg_size);
-	}
+		do_retention_wal(false);
 
 	/* cleanup */
 	parray_walk(backup_list, pgBackupFree);
@@ -172,8 +159,8 @@ int do_retention(void)
 		do_retention_purge(to_keep_list, to_purge_list);
 
 	/* TODO: some sort of dry run for delete_wal */
-	if (delete_wal && !dry_run)
-		do_retention_wal();
+	if (delete_wal)
+		do_retention_wal(dry_run);
 
 	/* TODO: consider dry-run flag */
 
@@ -622,47 +609,44 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 	}
 }
 
-/* Purge WAL */
+/* Purge WAL
+ * Iterate over timelines
+ * Look for closest_backup, if exists, goto next timelime
+ * if not exists, look for oldest backup on timeline
+ */
 static void
-do_retention_wal(void)
+do_retention_wal(bool dry_run)
 {
-	parray	   *backup_list = NULL;
-
-	XLogRecPtr oldest_lsn = InvalidXLogRecPtr;
-	TimeLineID oldest_tli = 0;
-	bool backup_list_is_empty = false;
+	parray 		*tli_list;
 	int i;
 
-	/* Get list of backups. */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	tli_list = catalog_get_timelines(&instance_config);
 
-	if (parray_num(backup_list) == 0)
-		backup_list_is_empty = true;
-
-	/* Save LSN and Timeline to remove unnecessary WAL segments */
-	for (i = (int) parray_num(backup_list) - 1; i >= 0; i--)
+	for (i = 0; i < parray_num(tli_list); i++)
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(tli_list, i);
 
-		/* Get LSN and TLI of the oldest backup with valid start_lsn and tli */
-		if (backup->tli > 0 && !XLogRecPtrIsInvalid(backup->start_lsn))
-		{
-			oldest_tli = backup->tli;
-			oldest_lsn = backup->start_lsn;
-			break;
-		}
+		/* Empty timeline can be safely skipped */
+		if (tlinfo->n_xlog_files == 0 &&
+			parray_num(tlinfo->xlog_filelist) == 0)
+			continue;
+
+		/* If closest backup is exists, then timeline can be safely skipped */
+		if (tlinfo->closest_backup)
+			continue;
+
+		/*
+		 * Purge all WAL segments before START LSN of oldest backup.
+		 * If there is no backups on timeline, then whole timeline
+		 * can be safely purged.
+		 */
+		if (tlinfo->oldest_backup)
+			delete_walfiles_internal(tlinfo->oldest_backup->start_lsn,
+							tlinfo, instance_config.xlog_seg_size, dry_run);
+		else
+			delete_walfiles_internal(InvalidXLogRecPtr,
+							tlinfo, instance_config.xlog_seg_size, dry_run);
 	}
-
-	/* Be paranoid */
-	if (!backup_list_is_empty && XLogRecPtrIsInvalid(oldest_lsn))
-		elog(ERROR, "Not going to purge WAL because LSN is invalid");
-
-	/* Purge WAL files */
-	delete_walfiles(oldest_lsn, oldest_tli, instance_config.xlog_seg_size);
-
-	/* Cleanup */
-	parray_walk(backup_list, pgBackupFree);
-	parray_free(backup_list);
 }
 
 /*
@@ -728,6 +712,158 @@ delete_backup_files(pgBackup *backup)
 	return;
 }
 
+/* Purge WAL archive.
+ * If 'keep_lsn' is InvalidXLogRecPtr, then whole timeline can be purged
+ * If 'keep_lsn' is valid LSN, then every lesser segment can be purged.
+ * If 'dry_run' is set, then don`t actually delete anything.
+ *
+ * Case 1:
+ *	archive is not empty, 'keep_lsn' is valid and we can delete something.
+ * Case 2:
+ *	archive is not empty, 'keep_lsn' is valid and prevening us from deleting anything.
+ * Case 3:
+ * 	archive is not empty, 'keep_lsn' is invalid, drop everyhing in archive.
+ * Case 4:
+ * 	archive is empty, 'keep_lsn' is valid, assume corruption of WAL archive.
+ * Case 5:
+ * 	archive is empty, 'keep_lsn' is invalid, drop backup history files
+ *  and partial WAL segments in archive.
+ *
+ * Q: Maybe we should stop treating partial WAL segments as second-class citizens?
+ */
+static void
+delete_walfiles_internal(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
+								uint32 xlog_seg_size, bool dry_run)
+{
+	XLogSegNo   StartSegNo;		/* First segment to delete */
+	XLogSegNo   EndSegNo = 0;	/* Oldest segment to keep */
+	int			rc;
+	int			i;
+	int			wal_size_logical = 0;
+	int			wal_size_actual = 0;
+	char		wal_pretty_size[20];
+	bool		purge_all = false;
+
+	/* Timeline is completely empty */
+	if (parray_num(tlinfo->xlog_filelist) == 0)
+	{
+		elog(INFO, "Timeline %i is empty, nothing to remove", tlinfo->tli);
+		return;
+	}
+
+	if (XLogRecPtrIsInvalid(keep_lsn))
+	{
+		/* Drop all segments in timeline */
+		elog(INFO, "All files on timeline %i will be removed", tlinfo->tli);
+		StartSegNo = tlinfo->begin_segno;
+		EndSegNo = tlinfo->end_segno;
+		purge_all = true;
+	}
+	else
+	{
+		/* Drop all segments between begin_segno and segment with keep_lsn (excluding) */
+		StartSegNo = tlinfo->begin_segno;
+		GetXLogSegNo(keep_lsn, EndSegNo, xlog_seg_size);
+	}
+
+	if (EndSegNo > 0 && EndSegNo > StartSegNo)
+		elog(INFO, "WAL segments between %08X%08X and %08X%08X on timeline %i will be removed",
+					 (uint32) StartSegNo / xlog_seg_size, (uint32) StartSegNo % xlog_seg_size,
+					 (uint32) EndSegNo / xlog_seg_size, (uint32) EndSegNo % xlog_seg_size,
+					 tlinfo->tli);
+
+	if (EndSegNo > StartSegNo)
+		/* typical scenario */
+		wal_size_logical = (EndSegNo-StartSegNo) * xlog_seg_size;
+	else if (EndSegNo < StartSegNo)
+	{
+		/* It is actually possible for EndSegNo to be less than StartSegNo
+		 * in case of :
+		 * 1. WAL archive corruption.
+		 * 2. There is no actual WAL archive to speak of and
+		 *	  'keep_lsn' is coming from STREAM backup.
+		 *
+		 * Assume the worst.
+		 */
+		if (StartSegNo > 0 && EndSegNo > 0)
+			elog(WARNING, "On timeline %i first segment %08X%08X is greater than "
+				"oldest segment to keep %08X%08X. Possible WAL archive corruption.",
+				tlinfo->tli,
+				(uint32) StartSegNo / xlog_seg_size,  (uint32) StartSegNo % xlog_seg_size,
+				(uint32) EndSegNo / xlog_seg_size, (uint32) EndSegNo % xlog_seg_size);
+	}
+	else if (EndSegNo == StartSegNo && !purge_all)
+	{
+		/* 'Nothing to delete' scenario because of 'keep_lsn'
+		 * with possible exception of partial and backup history files.
+		 */
+		elog(INFO, "Nothing to remove on timeline %i", tlinfo->tli);
+	}
+
+	/* Report the logical size to delete */
+	if (wal_size_logical > 0)
+	{
+		pretty_size(wal_size_logical, wal_pretty_size, lengthof(wal_pretty_size));
+		elog(INFO, "WAL size to remove on timeline %i: %s",
+			tlinfo->tli, wal_pretty_size);
+	}
+
+	/* Calculate the actual size to delete */
+	for (i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
+	{
+		xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
+
+		if (purge_all || wal_file->segno < EndSegNo)
+			wal_size_actual += wal_file->file.size;
+	}
+
+	/* Report the actual size to delete */
+	if (wal_size_actual > 0)
+	{
+		pretty_size(wal_size_actual, wal_pretty_size, lengthof(wal_pretty_size));
+		elog(INFO, "Resident data size to free on timeline %i: %s",
+			tlinfo->tli, wal_pretty_size);
+	}
+
+	if (dry_run)
+		return;
+
+	for (i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
+	{
+		xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
+
+		if (interrupted)
+			elog(ERROR, "interrupted during WAL archive purge");
+
+		/* Any segment equal or greater than EndSegNo must be kept
+		 * unless it`s a 'purge all' scenario.
+		 */
+		if (purge_all || wal_file->segno < EndSegNo)
+		{
+			/* unlink segment */
+			rc = unlink(wal_file->file.path);
+			if (rc < 0)
+			{
+				/* Missing file is not considered as error condition */
+				if (errno != ENOENT)
+					elog(ERROR, "Could not remove file \"%s\": %s",
+								 wal_file->file.path, strerror(errno));
+			}
+			else
+			{
+				if (wal_file->type == SEGMENT)
+					elog(VERBOSE, "Removed WAL segment \"%s\"", wal_file->file.path);
+				else if (wal_file->type == PARTIAL_SEGMENT)
+					elog(VERBOSE, "Removed partial WAL segment \"%s\"", wal_file->file.path);
+				else if (wal_file->type == BACKUP_HISTORY_FILE)
+					elog(VERBOSE, "Removed backup history file \"%s\"", wal_file->file.path);
+			}
+
+			wal_deleted = true;
+		}
+	}
+}
+
 /*
  * Deletes WAL segments up to oldest_lsn or all WAL segments (if all backups
  * was deleted and so oldest_lsn is invalid).
@@ -739,7 +875,7 @@ delete_backup_files(pgBackup *backup)
  */
 static void
 delete_walfiles(XLogRecPtr oldest_lsn, TimeLineID oldest_tli,
-				uint32 xlog_seg_size)
+										uint32 xlog_seg_size)
 {
 	XLogSegNo   targetSegNo;
 	char		oldestSegmentNeeded[MAXFNAMELEN];
