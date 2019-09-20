@@ -35,6 +35,7 @@ timelineInfoNew(TimeLineID tli)
 	tlinfo->tli = tli;
 	tlinfo->switchpoint = InvalidXLogRecPtr;
 	tlinfo->parent_link = NULL;
+	tlinfo->xlog_filelist = parray_new();
 	return tlinfo;
 }
 
@@ -705,6 +706,7 @@ catalog_get_timelines(InstanceConfig *instance)
 		pgFile *file = (pgFile *) parray_get(xlog_files_list, i);
 		TimeLineID tli;
 		parray *timelines;
+		xlogFile *wal_file = NULL;
 
 		/* regular WAL file */
 		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
@@ -731,7 +733,39 @@ catalog_get_timelines(InstanceConfig *instance)
 				/* backup history file. Currently we don't use them */
 				if (IsBackupHistoryFileName(file->name))
 				{
-					elog(VERBOSE, "backup history file \"%s\". do nothing", file->name);
+					elog(VERBOSE, "backup history file \"%s\"", file->name);
+
+					if (!tlinfo || tlinfo->tli != tli)
+					{
+						tlinfo = timelineInfoNew(tli);
+						parray_append(timelineinfos, tlinfo);
+					}
+
+					/* append file to xlog file list */
+					wal_file = palloc(sizeof(xlogFile));
+					wal_file->file = *file;
+					wal_file->segno = segno;
+					wal_file->type = BACKUP_HISTORY_FILE;
+					parray_append(tlinfo->xlog_filelist, wal_file);
+					continue;
+				}
+				/* partial WAL segment */
+				else if (IsPartialXLogFileName(file->name))
+				{
+					elog(VERBOSE, "partial WAL file \"%s\"", file->name);
+
+					if (!tlinfo || tlinfo->tli != tli)
+					{
+						tlinfo = timelineInfoNew(tli);
+						parray_append(timelineinfos, tlinfo);
+					}
+
+					/* append file to xlog file list */
+					wal_file = palloc(sizeof(xlogFile));
+					wal_file->file = *file;
+					wal_file->segno = segno;
+					wal_file->type = PARTIAL_SEGMENT;
+					parray_append(tlinfo->xlog_filelist, wal_file);
 					continue;
 				}
 				/* we only expect compressed wal files with .gz suffix */
@@ -779,6 +813,13 @@ catalog_get_timelines(InstanceConfig *instance)
 			/* update counters */
 			tlinfo->n_xlog_files++;
 			tlinfo->size += file->size;
+
+			/* append file to xlog file list */
+			wal_file = palloc(sizeof(xlogFile));
+			wal_file->file = *file;
+			wal_file->segno = segno;
+			wal_file->type = SEGMENT;
+			parray_append(tlinfo->xlog_filelist, wal_file);
 		}
 		/* timeline history file */
 		else if (IsTLHistoryFileName(file->name))
@@ -847,8 +888,8 @@ catalog_get_timelines(InstanceConfig *instance)
 		tlinfo->closest_backup = get_closest_backup(tlinfo, backups);
 	}
 
-	parray_walk(xlog_files_list, pfree);
-	parray_free(xlog_files_list);
+	//parray_walk(xlog_files_list, pfree);
+	//parray_free(xlog_files_list);
 
 	return timelineinfos;
 }

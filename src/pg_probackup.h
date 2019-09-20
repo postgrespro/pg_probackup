@@ -403,6 +403,8 @@ struct timelineInfo {
 	size_t	size;			/* space on disk taken by regular WAL files */
 	parray *backups;		/* array of pgBackup sturctures with info
 							 * about backups belonging to this timeline */
+	parray *xlog_filelist;	/* array of ordinary WAL segments, '.partial'
+							 * and '.backup' files belonging to this timeline */
 	parray *lost_segments;	/* array of intervals of lost segments */
 	pgBackup *closest_backup; /* link to backup, closest to timeline */
 	pgBackup *oldest_backup; /* link to oldest backup on timeline */
@@ -413,6 +415,20 @@ typedef struct xlogInterval
 	XLogSegNo begin_segno;
 	XLogSegNo end_segno;
 } xlogInterval;
+
+typedef enum xlogFileType
+{
+	SEGMENT,
+	PARTIAL_SEGMENT,
+	BACKUP_HISTORY_FILE
+} xlogFileType;
+
+typedef struct xlogFile
+{
+	pgFile file;
+	XLogSegNo segno;
+	xlogFileType type;
+} xlogFile;
 
 
 /*
