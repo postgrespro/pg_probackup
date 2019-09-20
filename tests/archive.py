@@ -1437,6 +1437,107 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(timeline_2['parent-tli'], 1)
         self.assertEqual(timeline_1['parent-tli'], 0)
 
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_archive_catalog_1(self):
+        """
+        double segment - compressed and not
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, compress=True)
+
+        node.slow_start()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=2)
+
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        original_file = os.path.join(wals_dir, '000000010000000000000001.gz')
+        tmp_file = os.path.join(wals_dir, '000000010000000000000001')
+
+        with gzip.open(original_file, 'rb') as f_in, open(tmp_file, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+        os.rename(
+            os.path.join(wals_dir, '000000010000000000000001'),
+            os.path.join(wals_dir, '000000010000000000000002'))
+
+        show = self.show_archive(backup_dir)
+
+        for instance in show:
+            timelines = instance['timelines']
+
+        # sanity
+        for timeline in timelines:
+            self.assertEqual(timeline['min-segno'], '0000000000000001')
+            self.assertEqual(timeline['status'], 'OK')
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_archive_catalog_2(self):
+        """
+        double segment - compressed and not
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, compress=True)
+
+        node.slow_start()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=2)
+
+        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        original_file = os.path.join(wals_dir, '000000010000000000000001.gz')
+        tmp_file = os.path.join(wals_dir, '000000010000000000000001')
+
+        with gzip.open(original_file, 'rb') as f_in, open(tmp_file, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+        os.rename(
+            os.path.join(wals_dir, '000000010000000000000001'),
+            os.path.join(wals_dir, '000000010000000000000002'))
+
+        os.remove(original_file)
+
+        show = self.show_archive(backup_dir)
+
+        for instance in show:
+            timelines = instance['timelines']
+
+        # sanity
+        for timeline in timelines:
+            self.assertEqual(timeline['min-segno'], '0000000000000002')
+            self.assertEqual(timeline['status'], 'OK')
 
         self.del_test_dir(module_name, fname)
 
