@@ -220,6 +220,7 @@ typedef struct ConnectionArgs
 	PGcancel   *cancel_conn;
 } ConnectionArgs;
 
+/* Store values for --remote-* option for 'restore_command' constructor */
 typedef struct ArchiveOptions
 {
 	const char *host;
