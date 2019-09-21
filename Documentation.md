@@ -102,11 +102,11 @@ Current version - 2.1.5
 
 `pg_probackup merge -B backup_dir --instance instance_name -i backup_id [option...]`
 
-`pg_probackup delete -B backup_dir --instance instance_name { -i backup_id | --delete-wal | --delete-expired | --merge-expired }`
+`pg_probackup delete -B backup_dir --instance instance_name { -i backup_id | --delete-wal | --delete-expired | --merge-expired } [option...]`
 
 `pg_probackup archive-push -B backup_dir --instance instance_name --wal-file-path=wal_file_path --wal-file-name=wal_file_name [option...]`
 
-`pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path=wal_file_path --wal-file-name=wal_file_name`
+`pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path=wal_file_path --wal-file-name=wal_file_name [option...]`
 
 
 ## Versioning
@@ -1070,7 +1070,9 @@ Specifies **the number of full backup copies** to keep in the backup catalog.
     --retention-window=window
 Defines the earliest point in time for which pg_probackup can complete the recovery. This option is set in **the number of days** from the current moment. For example, if `retention-window=7`, pg_probackup must delete all backup copies that are older than seven days, with all the corresponding WAL files.
 
-If both `--retention-redundancy` and `--retention-window` options are set, pg_probackup keeps backup copies that satisfy at least one condition. For example, if you set `--retention-redundancy=2` and `--retention-window=7`, pg_probackup purges the backup catalog to keep only two full backup copies and all backups that are newer than seven days.
+If both `--retention-redundancy` and `--retention-window` options are set, pg_probackup keeps backup copies that satisfy at least one condition. For example, if you set `--retention-redundancy=2` and `--retention-window=7`, pg_probackup purges the backup catalog to keep only two full backup copies and all backups that are newer than seven days:
+
+    pg_probackup set-config -B backup_dir --instance instance_name --retention-redundancy=2 --retention-window=7
 
 To clean up the backup catalog in accordance with retention policy, run:
 
@@ -1083,6 +1085,10 @@ If you would like to also remove the WAL files that are no longer required for a
     pg_probackup delete -B backup_dir --instance instance_name --delete-expired --delete-wal
 
 >NOTE: Alternatively, you can use the `--delete-expired`, `--merge-expired`, `--delete-wal` flags and the `--retention-window` and `--retention-redundancy` options together with the [backup](#backup) command to remove and merge the outdated backup copies once the new backup is created.
+
+You can set or override the current retention policy by specifying `--retention-redundancy` and `--retention-window` options directly when running `delete` or `backup` commands:
+
+    pg_probackup delete -B backup_dir --instance instance_name --delete-expired --retention-window=7 --retention-redundancy=2
 
 Since incremental backups require that their parent full backup and all the preceding incremental backups are available, if any of such backups expire, they still cannot be removed while at least one incremental backup in this chain satisfies the retention policy. To avoid keeping expired backups that are still required to restore an active incremental one, you can merge them with this backup using the `--merge-expired` flag when running [backup](#backup) or [delete](#delete) commands.
 
@@ -1380,6 +1386,7 @@ For details, see the section [Merging Backups](#merging-backups).
 
     pg_probackup delete -B backup_dir --instance instance_name
     [--help] [-j num_threads] [--progress]
+    [--retention-redundancy=redundancy][--retention-window=window]
     [--delete-wal] {-i backup_id | --delete-expired [--merge-expired] | --merge-expired}
     [--dry-run]
     [logging_options]
