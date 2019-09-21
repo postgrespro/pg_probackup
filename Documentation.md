@@ -68,6 +68,7 @@ Current version - 2.1.5
         * [Compression Options](#compression-options)
         * [Archiving Options](#archiving-options)
         * [Remote Mode Options](#remote-mode-options)
+        * [Remote WAL Archive Options](#remote-wal-archive-options)
         * [Replica Options](#replica-options)
 
 7. [Authors](#authors)
@@ -1054,7 +1055,7 @@ The sample output is as follows:
 Most fields are consistent with plain format, with some exceptions:
 
 - size is in bytes.
-- 'closest-backup-id' attribute contain ID of valid backup closest to the timeline, located on some of the previous timelines. This backup is the closest starting point to reach the timeline from other timelines by PITR. If such backup do not exists, then string is empty.
+- 'closest-backup-id' attribute contain ID of valid backup closest to the timeline, located on some of the previous timelines. This backup is the closest starting point to reach the timeline from other timelines by PITR. Closest backup always has a valid status, either OK or DONE. If such backup do not exists, then string is empty.
 - DEGRADED timelines contain 'lost-segments' array with information about intervals of missing segments. In OK timelines 'lost-segments' array is empty.
 - 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline. If timeline has no backups, then 'backups' array is empty.
 
@@ -1208,7 +1209,8 @@ Deletes all backups and WAL files associated with the specified instance.
     [--compress-algorithm=compression_algorithm] [--compress-level=compression_level]
     [-d dbname] [-h host] [-p port] [-U username]
     [--archive-timeout=timeout] [--external-dirs=external_directory_path]
-    [remote_options] [logging_options]
+    [--restore-command=cmdline]
+    [remote_options] [remote_archive_options] [logging_options]
 
 Adds the specified connection, compression, retention, logging and external directory settings into the pg_probackup.conf configuration file, or modifies the previously defined values.
 
@@ -1302,8 +1304,9 @@ For details on usage, see the section [Creating a Backup](#creating-a-backup).
     [-j num_threads] [--progress]
     [-T OLDDIR=NEWDIR] [--external-mapping=OLDDIR=NEWDIR] [--skip-external-dirs]
     [-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
+    [--restore-command=cmdline]
     [recovery_options] [logging_options] [remote_options]
-    [partial_restore_options]
+    [partial_restore_options] [remote_archive_options]
 
 Restores the PostgreSQL instance from a backup copy located in the *backup_dir* backup catalog. If you specify a [recovery target option](#recovery-target-options), pg_probackup will find the closest backup and restores it to the specified recovery target. Otherwise, the most recent backup is used.
 
@@ -1327,7 +1330,10 @@ Disables block-level checksum verification to speed up validation. During automa
     --no-validate
 Skips backup validation. You can use this flag if you validate backups regularly and would like to save time when running restore operations.
 
-Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Logging Options](#logging-options), [Partial Restore](#partial-restore) and [Common Options](#common-options) can be used.
+    --restore-command=cmdline
+Set the [restore_command](https://www.postgresql.org/docs/current/archive-recovery-settings.html#RESTORE-COMMAND) parameter to specified command. Example: `--restore-command='cp /mnt/server/archivedir/%f "%p"'`
+
+Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Remote WAL Archive Options](#remote-wal-archive-options), [Logging Options](#logging-options), [Partial Restore](#partial-restore) and [Common Options](#common-options) can be used.
 
 For details on usage, see the section [Restoring a Cluster](#restoring-a-cluster).
 
@@ -1649,9 +1655,24 @@ Specifies pg_probackup installation directory on the remote system.
     --ssh-options=ssh_options
 Specifies a string of SSH command-line options. For example, the following options can used to set keep-alive for ssh connections opened by pg_probackup: `--ssh-options='-o ServerAliveCountMax=5 -o ServerAliveInterval=60'`. Full list of possible options can be found on [ssh_config manual page](https://man.openbsd.org/ssh_config.5).
 
+#### Remote WAL Archive Options
+
+This section describes the options used to provide the values for [Remote Mode Options](#remote-mode-options) for [archive-get](#archive-get) command when restoring ARCHIVE backup or performing PITR.
+
+    --archive-host=destination
+Provides the value for `--remote-host` option of `archive-get` command.
+
+    --archive-port=port
+    Default: 22
+Provides the value for `--remote-port` option of `archive-get` command.
+
+    --archive-user=username
+    Default: PostgreSQL user
+Provides the value for `--remote-user` option of `archive-get` command. If you omit this option, the the user running PostgreSQL cluster is used.
+
 #### Partial Restore Options
 
-This section describes the options related to partial restore of cluster from backup. These options can be used with [restore](#restore) command.
+This section describes the options related to partial restore of a cluster from backup. These options can be used with [restore](#restore) command.
 
     --db-exclude=dbname
 Specifies database name to exclude from restore. All other databases in the cluster will be restored as usual, including `template0` and `template1`. This option can be specified multiple times for multiple databases.
