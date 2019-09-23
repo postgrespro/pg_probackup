@@ -170,7 +170,10 @@ help_pg_probackup(void)
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [--wal] [-i backup-id | --expired | --merge-expired]\n"));
+	printf(_("                 [-j num-threads] [--progress]\n"));
+	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
+	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--delete-wal] [-i backup-id | --delete-expired | --merge-expired]\n"));
 	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n"));
 
@@ -300,7 +303,7 @@ help_backup(void)
 	printf(_("                                   retention policy after successful backup completion\n"));
 	printf(_("      --merge-expired              merge backups expired according to current\n"));
 	printf(_("                                   retention policy after successful backup completion\n"));
-	printf(_("      --delete-wal                 remove redundant archived wal files\n"));
+	printf(_("      --delete-wal                 remove redundant wal files in WAL archive\n"));
 	printf(_("      --retention-redundancy=retention-redundancy\n"));
 	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
@@ -556,18 +559,27 @@ static void
 help_delete(void)
 {
 	printf(_("\n%s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 [-i backup-id | --expired | --merge-expired] [--wal]\n"));
-	printf(_("                 [-j num-threads] [--dry-run]\n\n"));
+	printf(_("                 [-i backup-id | --delete-expired | --merge-expired] [--delete-wal]\n"));
+	printf(_("                 [-j num-threads] [--progress]\n"));
+	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
+	printf(_("                 [--retention-window=retention-window]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to delete\n"));
-	printf(_("      --expired                    delete backups expired according to current\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --progress                   show progress\n"));
+
+	printf(_("\n  Retention options:\n"));
+	printf(_("      --delete-expired             delete backups expired according to current\n"));
 	printf(_("                                   retention policy\n"));
 	printf(_("      --merge-expired              merge backups expired according to current\n"));
 	printf(_("                                   retention policy\n"));
-	printf(_("      --wal                        remove unnecessary wal files in WAL ARCHIVE\n"));
-	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --delete-wal                 remove redundant wal files in WAL archive\n"));
+	printf(_("      --retention-redundancy=retention-redundancy\n"));
+	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
+	printf(_("      --retention-window=retention-window\n"));
+	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
 
 	printf(_("\n  Logging options:\n"));
