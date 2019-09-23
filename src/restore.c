@@ -860,10 +860,43 @@ create_recovery_conf(time_t backup_id,
 	if (need_restore_conf)
 	{
 
-		fio_fprintf(fp, "restore_command = '%s archive-get -B %s --instance %s "
-					"--wal-file-path %%p --wal-file-name %%f'\n",
+		char restore_command_guc[16384];
+
+		/* If restore_command is provided, use it */
+		if (params->restore_command)
+			sprintf(restore_command_guc, "%s", params->restore_command);
+		/* construct restore_command */
+		else
+		{
+			/* default cmdline, ok for local restore */
+			sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
+					"--wal-file-path=%%p --wal-file-name=%%f",
 					PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
 					backup_path, instance_name);
+
+			/* append --remote-* parameters provided via --archive-* settings */
+			if (instance_config.archive.host)
+			{
+				strcat(restore_command_guc, " --remote-host=");
+				strcat(restore_command_guc, instance_config.archive.host);
+			}
+
+			if (instance_config.archive.port)
+			{
+				strcat(restore_command_guc, " --remote-port=");
+				strcat(restore_command_guc, instance_config.archive.port);
+			}
+
+			if (instance_config.archive.user)
+			{
+				strcat(restore_command_guc, " --remote-user=");
+				strcat(restore_command_guc, instance_config.archive.user);
+			}
+		}
+
+		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
+		fio_fprintf(fp, "restore_command = '%s'\n",
+				restore_command_guc);
 
 		/*
 		 * We've already checked that only one of the four following mutually

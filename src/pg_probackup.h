@@ -220,6 +220,14 @@ typedef struct ConnectionArgs
 	PGcancel   *cancel_conn;
 } ConnectionArgs;
 
+/* Store values for --remote-* option for 'restore_command' constructor */
+typedef struct ArchiveOptions
+{
+	const char *host;
+	const char *port;
+	const char *user;
+} ArchiveOptions;
+
 /*
  * An instance configuration. It can be stored in a configuration file or passed
  * from command line.
@@ -256,6 +264,9 @@ typedef struct InstanceConfig
 
 	CompressAlg	compress_alg;
 	int			compress_level;
+
+	/* Archive description */
+	ArchiveOptions archive;
 } InstanceConfig;
 
 extern ConfigOption instance_options[];
@@ -357,6 +368,7 @@ typedef struct pgRestoreParams
 	bool	restore_as_replica;
 	bool	skip_external_dirs;
 	bool	skip_block_validation;
+	const char *restore_command;
 
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
