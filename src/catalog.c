@@ -929,7 +929,7 @@ get_closest_backup(timelineInfo *tlinfo)
 				 * should be considered.
 				 */
 				if (!XLogRecPtrIsInvalid(backup->stop_lsn) &&
-					!XRecOffIsValid(backup->stop_lsn) &&
+					XRecOffIsValid(backup->stop_lsn) &&
 					backup->stop_lsn <= tlinfo->switchpoint &&
 					(backup->status == BACKUP_STATUS_OK ||
 					backup->status == BACKUP_STATUS_DONE))
@@ -950,10 +950,11 @@ get_closest_backup(timelineInfo *tlinfo)
 
 /*
  * Find oldest backup in given timeline
- * to determine what WAL segments belonging to this timeline,
- * are not reachable from any backup.
+ * to determine what WAL segments of this timeline
+ * are reachable from backups belonging to it.
  *
- * Returns NULL if such backup is not found.
+ * If such backup doesn't exist, it means that
+ * there is no backups on this timeline. Return NULL.
  */
 pgBackup*
 get_oldest_backup(timelineInfo *tlinfo)

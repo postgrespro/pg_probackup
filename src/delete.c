@@ -634,7 +634,7 @@ do_retention_wal(bool dry_run)
 
 		/*
 		 * If closest backup exists, then timeline is reachable from
-		 * at least one backup and none files should not be removed.
+		 * at least one backup and no file should be removed.
 		 */
 		if (tlinfo->closest_backup)
 			continue;
