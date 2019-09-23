@@ -627,7 +627,7 @@ For example, to restore latest backup on remote system using remote mode through
 
     pg_probackup restore -B backup_dir --instance instance_name --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
 
-Restore of ARCHIVE backups or performing PITR in remote mode requiare additional information: destination address, port and username for establishing ssh connection **from** a host with database **to** a host with backup catalog. This information will be used by `restore_command` to copy via ssh WAL segments from archive to PostgreSQL 'pg_wal' directory.
+Restoring of ARCHIVE backup or performing PITR in remote mode require additional information: destination address, port and username for establishing ssh connection **from** a host with database **to** a host with backup catalog. This information will be used by `restore_command` to copy via ssh WAL segments from archive to PostgreSQL 'pg_wal' directory.
 
 To solve this problem yo can use [remote-wal archive options](#remote-mode-options).
 
@@ -641,7 +641,7 @@ Provided arguments will be used to construct 'restore_command' in recovery.conf:
 restore_command = 'pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
 ```
 
-Alternatively you can use `--restore-command` option to provide an entire 'restore_command'. Example:
+Alternatively you can use `--restore-command` option to provide an entire 'restore_command':
 
     pg_probackup restore -B backup_dir --instance instance_name --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --restore-command='pg_probackup archive-get -B backup_dir --instance instance_name --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
 
