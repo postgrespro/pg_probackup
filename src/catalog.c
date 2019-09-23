@@ -19,8 +19,8 @@
 #include "utils/file.h"
 #include "utils/configuration.h"
 
-static pgBackup* get_closest_backup(timelineInfo *tlinfo, parray *backup_list);
-static pgBackup* get_oldest_backup(timelineInfo *tlinfo, parray *backup_list);
+static pgBackup* get_closest_backup(timelineInfo *tlinfo);
+static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
 
@@ -891,75 +891,57 @@ catalog_get_timelines(InstanceConfig *instance)
 	{
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
 
-		tlinfo->oldest_backup = get_oldest_backup(tlinfo, backups);
-		tlinfo->closest_backup = get_closest_backup(tlinfo, backups);
+		tlinfo->oldest_backup = get_oldest_backup(tlinfo);
+		tlinfo->closest_backup = get_closest_backup(tlinfo);
 	}
-
-	//parray_walk(xlog_files_list, pfree);
-	//parray_free(xlog_files_list);
 
 	return timelineinfos;
 }
 
 /*
- * Iterate over parent timelines of a given timeline and look
- * for valid backup closest to given timeline switchpoint.
+ * Iterate over parent timelines and look for valid backup
+ * closest to given timeline switchpoint.
  *
- * Returns NULL if such backup is not found.
+ * If such backup doesn't exist, it means that
+ * timeline is unreachable. Return NULL.
  */
 pgBackup*
-get_closest_backup(timelineInfo *tlinfo, parray *backup_list)
+get_closest_backup(timelineInfo *tlinfo)
 {
 	pgBackup *closest_backup = NULL;
 	int i;
 
-	/* Only timeline with switchpoint can possibly have closest backup */
-	if (XLogRecPtrIsInvalid(tlinfo->switchpoint))
-		return NULL;
-
-	/* Only timeline with parent timeline can possibly have closest backup */
-	if (!tlinfo->parent_link)
-		return NULL;
-
-	while (tlinfo->parent_link)
+	/*
+	 * Iterate over backups belonging to parent timelines
+	 * and look for candidates.
+	 */
+	while (tlinfo->parent_link && !closest_backup)
 	{
-		/*
-		 * Iterate over backups belonging to parent timeline and look
-		 * for candidates.
-		 */
-		for (i = 0; i < parray_num(backup_list); i++)
+		parray *backup_list = tlinfo->parent_link->backups;
+		if (backup_list != NULL)
 		{
-			pgBackup   *backup = parray_get(backup_list, i);
-
-			/* Backups belonging to timelines other than parent timeline can be safely skipped */
-			if (backup->tli != tlinfo->parent_tli)
-				continue;
-
-			/* Backups in future can be safely skipped */
-			if (backup->stop_lsn > tlinfo->switchpoint)
-				continue;
-
-			/* Backups with invalid STOP LSN can be safely skipped */
-			if (XLogRecPtrIsInvalid(backup->stop_lsn) ||
-				!XRecOffIsValid(backup->stop_lsn))
-				continue;
-
-			/* Only valid backups closest to switchpoint should be considered */
-			if (backup->stop_lsn <= tlinfo->switchpoint &&
-				(backup->status == BACKUP_STATUS_OK ||
-				 backup->status == BACKUP_STATUS_DONE))
+			for (i = 0; i < parray_num(backup_list); i++)
 			{
-				/* Check if backup is closer to switchpoint than current candidate */
-				if (!closest_backup || backup->stop_lsn > closest_backup->stop_lsn)
-					closest_backup = backup;
+				pgBackup   *backup = parray_get(backup_list, i);
+
+				/*
+				 * Only valid backups made before switchpoint
+				 * should be considered.
+				 */
+				if (!XLogRecPtrIsInvalid(backup->stop_lsn) &&
+					!XRecOffIsValid(backup->stop_lsn) &&
+					backup->stop_lsn <= tlinfo->switchpoint &&
+					(backup->status == BACKUP_STATUS_OK ||
+					backup->status == BACKUP_STATUS_DONE))
+				{
+					/* Check if backup is closer to switchpoint than current candidate */
+					if (!closest_backup || backup->stop_lsn > closest_backup->stop_lsn)
+						closest_backup = backup;
+				}
 			}
 		}
 
-		/* Closest backup is found */
-		if (closest_backup)
-			break;
-
-		/* Switch to parent */
+		/* Continue with parent */
 		tlinfo = tlinfo->parent_link;
 	}
 
@@ -967,35 +949,38 @@ get_closest_backup(timelineInfo *tlinfo, parray *backup_list)
 }
 
 /*
- * Iterate over timelines and look for oldest backup on each timeline
+ * Find oldest backup in given timeline
+ * to determine what WAL segments belonging to this timeline,
+ * are not reachable from any backup.
+ *
  * Returns NULL if such backup is not found.
  */
 pgBackup*
-get_oldest_backup(timelineInfo *tlinfo, parray *backup_list)
+get_oldest_backup(timelineInfo *tlinfo)
 {
 	pgBackup *oldest_backup = NULL;
 	int i;
+	parray *backup_list = tlinfo->backups;
 
-	/*
-	 * Iterate over backups belonging to timeline and look
-	 * for candidates.
-	 */
-	for (i = 0; i < parray_num(backup_list); i++)
+	if (backup_list != NULL)
 	{
-		pgBackup   *backup = parray_get(backup_list, i);
+		for (i = 0; i < parray_num(backup_list); i++)
+		{
+			pgBackup   *backup = parray_get(backup_list, i);
 
-		/* Backups belonging to other timelines can be safely skipped */
-		if (backup->tli != tlinfo->tli)
-			continue;
+			/* Backups with invalid START LSN can be safely skipped */
+			if (XLogRecPtrIsInvalid(backup->start_lsn) ||
+				!XRecOffIsValid(backup->start_lsn))
+				continue;
 
-		/* Backups with invalid START LSN can be safely skipped */
-		if (XLogRecPtrIsInvalid(backup->start_lsn) ||
-			!XRecOffIsValid(backup->start_lsn))
-			continue;
-
-		/* Check if backup is older than current candidate */
-		if (!oldest_backup || backup->start_lsn < oldest_backup->start_lsn)
-			oldest_backup = backup;
+			/*
+			 * Check if backup is older than current candidate.
+			 * Here we use start_lsn for comparison, because backup that
+			 * started earlier needs more WAL.
+			 */
+			if (!oldest_backup || backup->start_lsn < oldest_backup->start_lsn)
+				oldest_backup = backup;
+		}
 	}
 
 	return oldest_backup;
