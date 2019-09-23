@@ -629,7 +629,7 @@ For example, to restore latest backup on remote system using remote mode through
 
 Restoring of ARCHIVE backup or performing PITR in remote mode require additional information: destination address, port and username for establishing ssh connection **from** a host with database **to** a host with backup catalog. This information will be used by `restore_command` to copy via ssh WAL segments from archive to PostgreSQL 'pg_wal' directory.
 
-To solve this problem yo can use [remote-wal archive options](#remote-mode-options).
+To solve this problem you can use [Remote Wal Archive Options](#remote-wal-archive-options).
 
 For example, to restore latest backup on remote system using remote mode through SSH connection to user `postgres` on host with address `192.168.0.2` via port `2302` and user `backup` on backup catalog host with address `192.168.0.3` via port `2303`, run:
 
