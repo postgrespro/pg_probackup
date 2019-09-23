@@ -1684,18 +1684,18 @@ Specifies a string of SSH command-line options. For example, the following optio
 
 #### Remote WAL Archive Options
 
-This section describes the options used to provide the values for [Remote Mode Options](#remote-mode-options) for [archive-get](#archive-get) command when restoring ARCHIVE backup or performing PITR.
+This section describes the options used to provide the arguments for [Remote Mode Options](#remote-mode-options) in [archive-get](#archive-get) used in [restore_command](https://www.postgresql.org/docs/current/archive-recovery-settings.html#RESTORE-COMMAND) command when restoring ARCHIVE backup or performing PITR.
 
     --archive-host=destination
-Provides the value for `--remote-host` option of `archive-get` command.
+Provides the argument for `--remote-host` option in `archive-get` command.
 
     --archive-port=port
     Default: 22
-Provides the value for `--remote-port` option of `archive-get` command.
+Provides the argument for `--remote-port` option in `archive-get` command.
 
     --archive-user=username
     Default: PostgreSQL user
-Provides the value for `--remote-user` option of `archive-get` command. If you omit this option, the the user running PostgreSQL cluster is used.
+Provides the argument for `--remote-user` option in `archive-get` command. If you omit this option, the the user running PostgreSQL cluster is used.
 
 #### Partial Restore Options
 
