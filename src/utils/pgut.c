@@ -674,7 +674,7 @@ on_before_exec(PGconn *conn, PGcancel *thread_cancel_conn)
 		//elog(WARNING, "Handle tread_cancel_conn. on_before_exec");
 		old = thread_cancel_conn;
 
-		/* be sure handle_sigint doesn't use pointer while freeing */
+		/* be sure handle_interrupt doesn't use pointer while freeing */
 		thread_cancel_conn = NULL;
 
 		if (old != NULL)
@@ -687,7 +687,7 @@ on_before_exec(PGconn *conn, PGcancel *thread_cancel_conn)
 		/* Free the old one if we have one */
 		old = cancel_conn;
 
-		/* be sure handle_sigint doesn't use pointer while freeing */
+		/* be sure handle_interrupt doesn't use pointer while freeing */
 		cancel_conn = NULL;
 
 		if (old != NULL)
@@ -723,7 +723,7 @@ on_after_exec(PGcancel *thread_cancel_conn)
 		//elog(WARNING, "Handle tread_cancel_conn. on_after_exec");
 		old = thread_cancel_conn;
 
-		/* be sure handle_sigint doesn't use pointer while freeing */
+		/* be sure handle_interrupt doesn't use pointer while freeing */
 		thread_cancel_conn = NULL;
 
 		if (old != NULL)
@@ -733,7 +733,7 @@ on_after_exec(PGcancel *thread_cancel_conn)
 	{
 		old = cancel_conn;
 
-		/* be sure handle_sigint doesn't use pointer while freeing */
+		/* be sure handle_interrupt doesn't use pointer while freeing */
 		cancel_conn = NULL;
 
 		if (old != NULL)
@@ -937,15 +937,18 @@ wait_for_sockets(int nfds, fd_set *fds, struct timeval *timeout)
 
 #ifndef WIN32
 static void
-handle_sigint(SIGNAL_ARGS)
+handle_interrupt(SIGNAL_ARGS)
 {
 	on_interrupt();
 }
 
+/* Handle various inrerruptions in the same way */
 static void
 init_cancel_handler(void)
 {
-	oldhandler = pqsignal(SIGINT, handle_sigint);
+	oldhandler = pqsignal(SIGINT, handle_interrupt);
+	pqsignal(SIGQUIT, handle_interrupt);
+	pqsignal(SIGTERM, handle_interrupt);
 }
 #else							/* WIN32 */
 
