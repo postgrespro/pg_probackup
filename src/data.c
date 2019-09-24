@@ -209,13 +209,13 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
 		{
-			elog(VERBOSE, "File %s, block %u, file was truncated",
+			elog(VERBOSE, "File \"%s\", block %u, file was truncated",
 					file->path, blknum);
 			return 0;
 		}
 		else
 		{
-			elog(WARNING, "File: %s, block %u, expected block size %u,"
+			elog(WARNING, "File: \"%s\", block %u, expected block size %u,"
 					  "but read %zu, try again",
 					   file->path, blknum, BLCKSZ, read_len);
 			return -1;
@@ -238,7 +238,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		/* Page is zeroed. No need to check header and checksum. */
 		if (i == BLCKSZ)
 		{
-			elog(VERBOSE, "File: %s blknum %u, empty page", file->path, blknum);
+			elog(VERBOSE, "File: \"%s\" blknum %u, empty page", file->path, blknum);
 			return 1;
 		}
 
@@ -246,7 +246,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		 * If page is not completely empty and we couldn't parse it,
 		 * try again several times. If it didn't help, throw error
 		 */
-		elog(LOG, "File: %s blknum %u have wrong page header, try again",
+		elog(LOG, "File: \"%s\" blknum %u have wrong page header, try again",
 					   file->path, blknum);
 		return -1;
 	}
@@ -261,7 +261,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 		 */
 		if (pg_checksum_page(page, blkno) != ((PageHeader) page)->pd_checksum)
 		{
-			elog(LOG, "File: %s blknum %u have wrong checksum, try again",
+			elog(LOG, "File: \"%s\" blknum %u have wrong checksum, try again",
 						   file->path, blknum);
 			return -1;
 		}
@@ -342,7 +342,7 @@ prepare_page(ConnectionArgs *arguments,
 
 			if (result == -1 && is_ptrack_support && strict)
 			{
-				elog(WARNING, "File %s, block %u, try to fetch via SQL",
+				elog(WARNING, "File \"%s\", block %u, try to fetch via SQL",
 					file->path, blknum);
 				break;
 			}
@@ -389,7 +389,7 @@ prepare_page(ConnectionArgs *arguments,
 		else if (page_size != BLCKSZ)
 		{
 			free(ptrack_page);
-			elog(ERROR, "File: %s, block %u, expected block size %d, but read %zu",
+			elog(ERROR, "File: \"%s\", block %u, expected block size %d, but read %zu",
 					   file->path, absolute_blknum, BLCKSZ, page_size);
 		}
 		else
@@ -422,7 +422,7 @@ prepare_page(ConnectionArgs *arguments,
 		page_lsn &&
 		page_lsn < prev_backup_start_lsn)
 	{
-		elog(VERBOSE, "Skipping blknum %u in file: %s", blknum, file->path);
+		elog(VERBOSE, "Skipping blknum %u in file: \"%s\"", blknum, file->path);
 		(*n_skipped)++;
 		return SkipCurrentPage;
 	}
@@ -505,7 +505,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 
 		fclose(in);
 		fio_fclose(out);
-		elog(ERROR, "File: %s, cannot write backup at block %u: %s",
+		elog(ERROR, "File: \"%s\", cannot write backup at block %u: %s",
 			 file->path, blknum, strerror(errno_tmp));
 	}
 
@@ -549,7 +549,7 @@ backup_data_file(backup_files_arg* arguments,
 		 * There are no changed blocks since last backup. We want make
 		 * incremental backup, so we should exit.
 		 */
-		elog(VERBOSE, "Skipping the unchanged file: %s", file->path);
+		elog(VERBOSE, "Skipping the unchanged file: \"%s\"", file->path);
 		return false;
 	}
 
@@ -1298,7 +1298,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	pg_crc32	crc;
 	bool		use_crc32c = backup_version <= 20021 || backup_version >= 20025;
 
-	elog(VERBOSE, "Validate relation blocks for file %s", file->path);
+	elog(VERBOSE, "Validate relation blocks for file \"%s\"", file->path);
 
 	in = fopen(file->path, PG_BINARY_R);
 	if (in == NULL)
