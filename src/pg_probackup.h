@@ -314,7 +314,7 @@ struct pgBackup
 	 * BYTES_INVALID means nothing was backed up.
 	 */
 	int64			data_bytes;
-	/* Size of WAL files in archive needed to restore this backup */
+	/* Size of WAL files needed to restore this backup */
 	int64			wal_bytes;
 
 	CompressAlg		compress_alg;
@@ -812,7 +812,7 @@ int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				   CompressAlg alg, int level, const char **errormsg);
 
 extern void pretty_size(int64 size, char *buf, size_t len);
-
+extern void pretty_time_interval(int64 num_seconds, char *buf, size_t len);
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
 extern void check_system_identifiers(PGconn *conn, char *pgdata);

@@ -553,6 +553,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0,
 					  FIO_BACKUP_HOST);
 
+		/* TODO: Drop streamed WAL segments greater than stop_lsn */
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
@@ -702,7 +703,7 @@ do_backup(time_t start_time, bool no_validate)
 	}
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
-			"wal-method: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
+			"wal mode: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
 			PROGRAM_VERSION, instance_name, base36enc(start_time), pgBackupGetBackupMode(&current),
 			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
 			deparse_compress_alg(current.compress_alg), current.compress_level);

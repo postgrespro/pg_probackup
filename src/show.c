@@ -30,6 +30,7 @@ typedef struct ShowBackendRow
 	char		tli[20];
 	char		duration[20];
 	char		data_bytes[20];
+	char		wal_bytes[20];
 	char		start_lsn[20];
 	char		stop_lsn[20];
 	const char *status;
@@ -147,9 +148,15 @@ pretty_size(int64 size, char *buf, size_t len)
 	int64 	limit2 = limit * 2 - 1;
 
 	/* minus means the size is invalid */
-	if (size < 0)
+//	if (size < 0)
+//	{
+//		strncpy(buf, "----", len);
+//		return;
+//	}
+
+	if (size <= 0)
 	{
-		strncpy(buf, "----", len);
+		strncpy(buf, "0", len);
 		return;
 	}
 
@@ -178,6 +185,53 @@ pretty_size(int64 size, char *buf, size_t len)
 			}
 		}
 	}
+}
+
+void
+pretty_time_interval(int64 num_seconds, char *buf, size_t len)
+{
+	int 	seconds = 0;
+	int 	minutes = 0;
+	int 	hours = 0;
+	int 	days = 0;
+
+	if (num_seconds <= 0)
+	{
+		strncpy(buf, "0", len);
+		return;
+	}
+
+	days = num_seconds / (24 * 3600);
+	num_seconds %= (24 * 3600);
+
+	hours = num_seconds / 3600;
+	num_seconds %= 3600;
+
+	minutes = num_seconds / 60;
+	num_seconds %= 60;
+
+	seconds = num_seconds;
+
+	if (days > 0)
+	{
+		snprintf(buf, len, "%dd:%dh", days, hours);
+		return;
+	}
+
+	if (hours > 0)
+	{
+		snprintf(buf, len, "%dh:%dm", hours, minutes);
+		return;
+	}
+
+	if (minutes > 0)
+	{
+		snprintf(buf, len, "%dm:%ds", minutes, seconds);
+		return;
+	}
+
+	snprintf(buf, len, "%ds", seconds);
+	return;
 }
 
 /*
@@ -381,16 +435,16 @@ show_backup(const char *instance_name, time_t requested_backup_id)
 static void
 show_instance_plain(const char *instance_name, parray *backup_list, bool show_name)
 {
-#define SHOW_FIELDS_COUNT 12
+#define SHOW_FIELDS_COUNT 13
 	int			i;
 	const char *names[SHOW_FIELDS_COUNT] =
 					{ "Instance", "Version", "ID", "Recovery Time",
-					  "Mode", "WAL", "Current/Parent TLI", "Time", "Data",
+					  "Mode", "WAL Mode", "TLI", "Time", "Data", "WAL",
 					  "Start LSN", "Stop LSN", "Status" };
 	const char *field_formats[SHOW_FIELDS_COUNT] =
 					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
-					  " %-*s ", " %-*s ", " %-*s ", " %*s ", " %*s ",
-					  " %*s ", " %*s ", " %-*s "};
+					  " %-*s ", " %-*s ", " %-*s ", " %*s ", " %-*s ", " %-*s ",
+					  " %-*s ", " %-*s ", " %-*s "};
 	uint32		widths[SHOW_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowBackendRow *rows;
@@ -443,7 +497,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		widths[cur] = Max(widths[cur], strlen(row->mode));
 		cur++;
 
-		/* WAL */
+		/* WAL mode*/
 		row->wal_mode = backup->stream ? "STREAM": "ARCHIVE";
 		widths[cur] = Max(widths[cur], strlen(row->wal_mode));
 		cur++;
@@ -453,7 +507,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		if (backup->parent_backup_link != NULL)
 			parent_tli = backup->parent_backup_link->tli;
 
-		snprintf(row->tli, lengthof(row->tli), "%u / %u",
+		snprintf(row->tli, lengthof(row->tli), "%u/%u",
 				 backup->tli,
 				 backup->backup_mode == BACKUP_MODE_FULL ? 0 : parent_tli);
 		widths[cur] = Max(widths[cur], strlen(row->tli));
@@ -461,14 +515,14 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 
 		/* Time */
 		if (backup->status == BACKUP_STATUS_RUNNING)
-			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
-					 difftime(current_time, backup->start_time));
+			pretty_time_interval(difftime(current_time, backup->start_time),
+							row->duration, lengthof(row->duration));
 		else if (backup->merge_time != (time_t) 0)
-			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
-					 difftime(backup->end_time, backup->merge_time));
+			pretty_time_interval(difftime(backup->end_time, backup->merge_time),
+							row->duration, lengthof(row->duration));
 		else if (backup->end_time != (time_t) 0)
-			snprintf(row->duration, lengthof(row->duration), "%.*lfs", 0,
-					 difftime(backup->end_time, backup->start_time));
+			pretty_time_interval(difftime(backup->end_time, backup->start_time),
+							row->duration, lengthof(row->duration));
 		else
 			StrNCpy(row->duration, "----", sizeof(row->duration));
 		widths[cur] = Max(widths[cur], strlen(row->duration));
@@ -478,6 +532,12 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		pretty_size(backup->data_bytes, row->data_bytes,
 					lengthof(row->data_bytes));
 		widths[cur] = Max(widths[cur], strlen(row->data_bytes));
+		cur++;
+
+		/* WAL */
+		pretty_size(backup->wal_bytes, row->wal_bytes,
+					lengthof(row->wal_bytes));
+		widths[cur] = Max(widths[cur], strlen(row->wal_bytes));
 		cur++;
 
 		/* Start LSN */
@@ -564,6 +624,10 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
 						  row->data_bytes);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->wal_bytes);
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],

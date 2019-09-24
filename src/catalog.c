@@ -1121,6 +1121,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	char		buf[BUFFERSZ];
 	size_t		write_len = 0;
 	int64 		backup_size_on_disk = 0;
+	int64 		wal_size_on_disk = 0;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
@@ -1145,7 +1146,13 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 		/* Count the amount of the data actually copied */
 		if (S_ISREG(file->mode) && file->write_size > 0)
-			backup_size_on_disk += file->write_size;
+		{
+			/* TODO: in 3.0 add attribute is_walfile */
+			if (IsXLogFileName(file->name) && (file->external_dir_num == 0))
+				wal_size_on_disk += file->write_size;
+			else
+				backup_size_on_disk += file->write_size;
+		}
 
 		/* for files from PGDATA and external files use rel_path
 		 * streamed WAL files has rel_path relative not to "database/"
@@ -1227,6 +1234,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
+	backup->wal_bytes = wal_size_on_disk;
 }
 
 /*

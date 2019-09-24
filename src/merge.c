@@ -345,32 +345,12 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	to_backup->merge_time = merge_time;
 	to_backup->end_time = time(NULL);
 
-	/*
-	 * Target backup must inherit wal mode too.
-	 */
+	/* Target backup must inherit wal mode too. */
 	to_backup->stream = from_backup->stream;
-	/* Compute summary of size of regular files in the backup */
-	to_backup->data_bytes = 0;
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
 
-		if (S_ISDIR(file->mode))
-		{
-			to_backup->data_bytes += 4096;
-			continue;
-		}
-		/* Count the amount of the data actually copied */
-		if (file->write_size > 0)
-			to_backup->data_bytes += file->write_size;
-	}
-	/* compute size of wal files of this backup stored in the archive */
+	/* ARCHIVE backup must inherit wal_bytes. */
 	if (!to_backup->stream)
-		to_backup->wal_bytes = instance_config.xlog_seg_size *
-			(to_backup->stop_lsn / instance_config.xlog_seg_size -
-			 to_backup->start_lsn / instance_config.xlog_seg_size + 1);
-	else
-		to_backup->wal_bytes = BYTES_INVALID;
+		to_backup->wal_bytes = from_backup->wal_bytes;
 
 	write_backup_filelist(to_backup, files, from_database_path, NULL);
 	write_backup(to_backup);
