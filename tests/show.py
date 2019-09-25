@@ -207,3 +207,301 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_corrupt_correctness(self):
+        """backup.control contains invalid option"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=1)
+
+        # FULL
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node, options=['--remote-proto=none'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--remote-proto=ssh', '--remote-host=localhost'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # DELTA
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--remote-proto=none'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+        self.delete_pb(backup_dir, 'node', backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--remote-proto=ssh', '--remote-host=localhost'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+        self.delete_pb(backup_dir, 'node', backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # PAGE
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--remote-proto=none'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+        self.delete_pb(backup_dir, 'node', backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--remote-proto=ssh', '--remote-host=localhost'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+        self.delete_pb(backup_dir, 'node', backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_corrupt_correctness_1(self):
+        """backup.control contains invalid option"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=1)
+
+        # FULL
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node, options=['--remote-proto=none'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--remote-proto=ssh', '--remote-host=localhost'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # change data
+        pgbench = node.pgbench(options=['-T', '10', '--no-vacuum'])
+        pgbench.wait()
+
+        # DELTA
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--remote-proto=none'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+        self.delete_pb(backup_dir, 'node', backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--remote-proto=ssh', '--remote-host=localhost'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+        self.delete_pb(backup_dir, 'node', backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # PAGE
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--remote-proto=none'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+        self.delete_pb(backup_dir, 'node', backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--remote-proto=ssh', '--remote-host=localhost'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+        self.delete_pb(backup_dir, 'node', backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_corrupt_correctness_2(self):
+        """backup.control contains invalid option"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=1)
+
+        # FULL
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--remote-proto=none', '--compress'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # change data
+        pgbench = node.pgbench(options=['-T', '10', '--no-vacuum'])
+        pgbench.wait()
+
+        # DELTA
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--remote-proto=none', '--compress'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+        self.delete_pb(backup_dir, 'node', backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+        self.delete_pb(backup_dir, 'node', backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # PAGE
+        backup_local_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--remote-proto=none', '--compress'])
+
+        output_local = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_local_id)
+        self.delete_pb(backup_dir, 'node', backup_local_id)
+
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
+
+        output_remote = self.show_pb(
+            backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
+        self.delete_pb(backup_dir, 'node', backup_remote_id)
+
+        # check correctness
+        self.assertEqual(
+            output_local['data-bytes'],
+            output_remote['data-bytes'])
+
+        self.assertEqual(
+            output_local['uncompress-bytes'],
+            output_remote['uncompress-bytes'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
