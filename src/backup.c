@@ -1931,6 +1931,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				file->crc = pgFileGetCRC(file->path, true, false,
 										 &file->read_size, FIO_BACKUP_HOST);
 				file->write_size = file->read_size;
+				file->uncompressed_size = file->read_size;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -2116,8 +2117,8 @@ backup_files(void *arg)
 
 		if (arguments->thread_num == 1)
 		{
-			/* update backup_content.control every 10 seconds */
-			if ((difftime(time(NULL), prev_time)) > 10)
+			/* update backup_content.control every 15 seconds */
+			if ((difftime(time(NULL), prev_time)) > 15)
 			{
 				prev_time = time(NULL);
 

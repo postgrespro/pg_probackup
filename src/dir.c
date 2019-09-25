@@ -1694,6 +1694,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	file->crc = pgFileGetCRC(database_map_path, true, false,
 							 &file->read_size, FIO_BACKUP_HOST);
 	file->write_size = file->read_size;
+	file->uncompressed_size = file->read_size;
 	parray_append(backup_files_list, file);
 }
 

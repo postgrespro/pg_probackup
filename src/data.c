@@ -510,6 +510,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	}
 
 	file->write_size += write_buffer_size;
+	file->uncompressed_size += BLCKSZ;
 }
 
 /*
@@ -556,6 +557,7 @@ backup_data_file(backup_files_arg* arguments,
 	/* reset size summary */
 	file->read_size = 0;
 	file->write_size = 0;
+	file->uncompressed_size = 0;
 	INIT_FILE_CRC32(true, file->crc);
 
 	/* open backup mode file for read */
@@ -625,6 +627,8 @@ backup_data_file(backup_files_arg* arguments,
 				elog(ERROR, "Failed to read file \"%s\": %s",
 					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
 			n_blocks_read = rc;
+
+			file->uncompressed_size = (n_blocks_read - n_blocks_skipped)*BLCKSZ;
 		}
 		else
 		{
@@ -959,6 +963,7 @@ copy_file(fio_location from_location, const char *to_root,
 	/* reset size summary */
 	file->read_size = 0;
 	file->write_size = 0;
+	file->uncompressed_size = 0;
 
 	/* open backup mode file for read */
 	in = fio_fopen(file->path, PG_BINARY_R, from_location);
@@ -1046,6 +1051,9 @@ copy_file(fio_location from_location, const char *to_root,
 	}
 
 	file->write_size = (int64) file->read_size;
+
+	if (file->write_size > 0)
+		file->uncompressed_size = file->write_size;
 	/* finish CRC calculation and store into pgFile */
 	FIN_FILE_CRC32(true, crc);
 	file->crc = crc;
