@@ -1055,6 +1055,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->uncompressed_bytes >= 0)
 		fio_fprintf(out, "uncompressed-bytes = " INT64_FORMAT "\n", backup->uncompressed_bytes);
 
+	if (backup->pgdata_bytes >= 0)
+		fio_fprintf(out, "pgdata-bytes = " INT64_FORMAT "\n", backup->pgdata_bytes);
+
 	fio_fprintf(out, "status = %s\n", status2str(backup->status));
 
 	/* 'parent_backup' is set if it is incremental backup */
@@ -1284,6 +1287,7 @@ readBackupControlFile(const char *path)
 		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
 		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
 		{'I', 0, "uncompressed-bytes",	&backup->uncompressed_bytes, SOURCE_FILE_STRICT},
+		{'I', 0, "pgdata-bytes",		&backup->pgdata_bytes, SOURCE_FILE_STRICT},
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum-version",	&backup->checksum_version, SOURCE_FILE_STRICT},
@@ -1529,6 +1533,7 @@ pgBackupInit(pgBackup *backup)
 	backup->data_bytes = BYTES_INVALID;
 	backup->wal_bytes = BYTES_INVALID;
 	backup->uncompressed_bytes = 0;
+	backup->pgdata_bytes = 0;
 
 	backup->compress_alg = COMPRESS_ALG_DEFAULT;
 	backup->compress_level = COMPRESS_LEVEL_DEFAULT;

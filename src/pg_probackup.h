@@ -318,13 +318,16 @@ struct pgBackup
 	 */
 	int64			data_bytes;
 	/* Size of WAL files needed to replay on top of this
-	 * backup to reach the consistency
+	 * backup to reach the consistency.
 	 */
 	int64			wal_bytes;
 	/* Size of data files before applying compression and block header,
-	 * WAL files are not included
+	 * WAL files are not included.
 	 */
 	int64			uncompressed_bytes;
+
+	/* Size of data files in PGDATA at the moment of backup. */
+	int64			pgdata_bytes;
 
 	CompressAlg		compress_alg;
 	int				compress_level;

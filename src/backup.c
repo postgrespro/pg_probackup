@@ -541,6 +541,22 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	/* close ssh session in main thread */
 	fio_disconnect();
 
+	/* Calculate pgdata_bytes */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+
+		/* In case of FULL or DELTA backup we can trust read_size.
+		 * In case of PAGE or PTRACK we are forced to trust datafile size,
+		 * taken at the start of backup.
+		 */
+		if (current.backup_mode == BACKUP_MODE_FULL ||
+			current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+			current.pgdata_bytes += file->read_size;
+		else
+			current.pgdata_bytes += file->size;
+	}
+
 	/* Add archived xlog files into the list of files of this backup */
 	if (stream_wal)
 	{
