@@ -388,7 +388,7 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 
 	if (backup->uncompressed_bytes != BYTES_INVALID)
 	{
-		json_add_key(buf, "uncompress-bytes", json_level);
+		json_add_key(buf, "uncompressed-bytes", json_level);
 		appendPQExpBuffer(buf, INT64_FORMAT, backup->uncompressed_bytes);
 	}
 

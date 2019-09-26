@@ -246,8 +246,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # DELTA
         backup_local_id = self.backup_node(
@@ -272,8 +272,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # PAGE
         backup_local_id = self.backup_node(
@@ -298,8 +298,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -342,8 +342,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # change data
         pgbench = node.pgbench(options=['-T', '10', '--no-vacuum'])
@@ -372,8 +372,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # PAGE
         backup_local_id = self.backup_node(
@@ -398,8 +398,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -443,8 +443,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # change data
         pgbench = node.pgbench(options=['-T', '10', '--no-vacuum'])
@@ -473,8 +473,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # PAGE
         backup_local_id = self.backup_node(
@@ -499,8 +499,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             output_remote['data-bytes'])
 
         self.assertEqual(
-            output_local['uncompress-bytes'],
-            output_remote['uncompress-bytes'])
+            output_local['uncompressed-bytes'],
+            output_remote['uncompressed-bytes'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
