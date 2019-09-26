@@ -1052,8 +1052,8 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->wal_bytes != BYTES_INVALID)
 		fio_fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
-	if (backup->uncompress_bytes != BYTES_INVALID)
-		fio_fprintf(out, "uncompress-bytes = " INT64_FORMAT "\n", backup->uncompress_bytes);
+	if (backup->uncompressed_bytes >= 0)
+		fio_fprintf(out, "uncompress-bytes = " INT64_FORMAT "\n", backup->uncompressed_bytes);
 
 	fio_fprintf(out, "status = %s\n", status2str(backup->status));
 
@@ -1248,7 +1248,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
 	backup->wal_bytes = wal_size_on_disk;
-	backup->uncompress_bytes = uncompressed_size_on_disk;
+	backup->uncompressed_bytes = uncompressed_size_on_disk;
 }
 
 /*
@@ -1283,7 +1283,7 @@ readBackupControlFile(const char *path)
 		{'t', 0, "recovery-time",		&backup->recovery_time, SOURCE_FILE_STRICT},
 		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
 		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
-		{'I', 0, "uncompress-bytes",	&backup->uncompress_bytes, SOURCE_FILE_STRICT},
+		{'I', 0, "uncompress-bytes",	&backup->uncompressed_bytes, SOURCE_FILE_STRICT},
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum-version",	&backup->checksum_version, SOURCE_FILE_STRICT},
@@ -1528,7 +1528,7 @@ pgBackupInit(pgBackup *backup)
 
 	backup->data_bytes = BYTES_INVALID;
 	backup->wal_bytes = BYTES_INVALID;
-	backup->uncompress_bytes = 0;
+	backup->uncompressed_bytes = 0;
 
 	backup->compress_alg = COMPRESS_ALG_DEFAULT;
 	backup->compress_level = COMPRESS_LEVEL_DEFAULT;

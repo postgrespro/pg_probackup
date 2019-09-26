@@ -324,7 +324,7 @@ struct pgBackup
 	/* Size of data files before applying compression and block header,
 	 * WAL files are not included
 	 */
-	int64			uncompress_bytes;
+	int64			uncompressed_bytes;
 
 	CompressAlg		compress_alg;
 	int				compress_level;

@@ -386,10 +386,10 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		appendPQExpBuffer(buf, INT64_FORMAT, backup->wal_bytes);
 	}
 
-	if (backup->uncompress_bytes != BYTES_INVALID)
+	if (backup->uncompressed_bytes != BYTES_INVALID)
 	{
 		json_add_key(buf, "uncompress-bytes", json_level);
-		appendPQExpBuffer(buf, INT64_FORMAT, backup->uncompress_bytes);
+		appendPQExpBuffer(buf, INT64_FORMAT, backup->uncompressed_bytes);
 	}
 
 	if (backup->primary_conninfo)
@@ -548,10 +548,10 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		cur++;
 
 		/* Zratio (compression ratio) */
-		if (backup->uncompress_bytes != BYTES_INVALID &&
-			(backup->uncompress_bytes > 0 && backup->data_bytes > 0))
+		if (backup->uncompressed_bytes != BYTES_INVALID &&
+			(backup->uncompressed_bytes > 0 && backup->data_bytes > 0))
 		{
-			zratio = (float)backup->uncompress_bytes / (backup->data_bytes);
+			zratio = (float)backup->uncompressed_bytes / (backup->data_bytes);
 			snprintf(row->zratio, lengthof(row->zratio), "%.2f", zratio);
 		}
 		else
