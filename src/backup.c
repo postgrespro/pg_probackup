@@ -673,7 +673,8 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int
-do_backup(time_t start_time, bool no_validate)
+do_backup(time_t start_time, bool no_validate,
+			pgSetBackupParams *set_backup_params)
 {
 	PGconn *backup_conn = NULL;
 	PGNodeInfo nodeInfo;
@@ -781,6 +782,13 @@ do_backup(time_t start_time, bool no_validate)
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
 	write_backup(&current);
+
+	/* Pin backup if requested */
+	if (set_backup_params)
+	{
+		if (!pin_backup(&current, set_backup_params))
+			elog(WARNING, "Failed to pin backup");
+	}
 
 	if (!no_validate)
 		pgBackupValidate(&current, NULL);

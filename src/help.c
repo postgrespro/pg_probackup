@@ -16,6 +16,7 @@ static void help_validate(void);
 static void help_show(void);
 static void help_delete(void);
 static void help_merge(void);
+static void help_set_backup(void);
 static void help_set_config(void);
 static void help_show_config(void);
 static void help_add_instance(void);
@@ -41,6 +42,8 @@ help_command(char *command)
 		help_delete();
 	else if (strcmp(command, "merge") == 0)
 		help_merge();
+	else if (strcmp(command, "set-backup") == 0)
+		help_set_backup();
 	else if (strcmp(command, "set-config") == 0)
 		help_set_config();
 	else if (strcmp(command, "show-config") == 0)
@@ -101,6 +104,10 @@ help_pg_probackup(void)
 	printf(_("                 [--archive-port=port] [--archive-user=username]\n"));
 	printf(_("                 [--help]\n"));
 
+	printf(_("\n  %s set-backup -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 -i backup-id [--ttl] [--expire-time]\n"));
+	printf(_("                 [--help]\n"));
+
 	printf(_("\n  %s show-config -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [--format=format]\n"));
 	printf(_("                 [--help]\n"));
@@ -130,7 +137,9 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--ttl] [--expire-time]\n"));
 	printf(_("                 [--help]\n"));
+
 
 	printf(_("\n  %s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
@@ -262,7 +271,8 @@ help_backup(void)
 	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
-	printf(_("                 [--ssh-options]\n\n"));
+	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--ttl] [--expire-time]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -313,6 +323,12 @@ help_backup(void)
 	printf(_("      --retention-window=retention-window\n"));
 	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
+
+	printf(_("\n  Pinning options:\n"));
+	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin; \n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("      --expire=time                pin backup until specified time stamp\n"));
+	printf(_("                                   (example: --expire-time='2024-01-01 00:00:00+03')\n"));
 
 	printf(_("\n  Compression options:\n"));
 	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
@@ -657,6 +673,19 @@ help_merge(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n\n"));
+}
+
+static void
+help_set_backup(void)
+{
+	printf(_("\n%s set-backup -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
+	printf(_("                 -i backup-id\n"));
+	printf(_("                 [--ttl] [--expire-time]\n\n"));
+
+	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin; \n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("      --expire=time                pin backup until specified time stamp\n"));
+	printf(_("                                   (example: --expire-time='2024-01-01 00:00:00+03')\n"));
 }
 
 static void

@@ -1082,6 +1082,8 @@ parse_uint64(const char *value, uint64 *result, int flags)
  *
  * If utc_default is true, then if timezone offset isn't specified tz will be
  * +00:00.
+ *
+ * TODO: '0' converted into '2000-01-01 00:00:00'. Example: set-backup --expire-time=0
  */
 bool
 parse_time(const char *value, time_t *result, bool utc_default)
