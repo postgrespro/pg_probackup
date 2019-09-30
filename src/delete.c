@@ -636,7 +636,11 @@ do_retention_wal(bool dry_run)
 		 * If closest backup exists, then timeline is reachable from
 		 * at least one backup and no file should be removed.
 		 */
-		if (tlinfo->closest_backup)
+		if ((tlinfo->closest_backup) && instance_config.wal_depth <= 0)
+			continue;
+
+		/* WAL retention keeps this timeline from purge */
+		if (instance_config.wal_depth >= 0 && tlinfo->anchor_tli != tlinfo->tli)
 			continue;
 
 		/*
@@ -647,11 +651,27 @@ do_retention_wal(bool dry_run)
 		 * but still we keep wal for it.
 		 */
 		if (tlinfo->oldest_backup)
-			delete_walfiles_in_tli(tlinfo->oldest_backup->start_lsn,
-							tlinfo, instance_config.xlog_seg_size, dry_run);
+		{
+			if (instance_config.wal_depth >= 0 && XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
+			{
+				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+			}
+			else
+			{
+				delete_walfiles_in_tli(tlinfo->oldest_backup->start_lsn,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+			}
+		}
 		else
-			delete_walfiles_in_tli(InvalidXLogRecPtr,
-							tlinfo, instance_config.xlog_seg_size, dry_run);
+		{
+			if (instance_config.wal_depth >= 0 && XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
+				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+			else
+				delete_walfiles_in_tli(InvalidXLogRecPtr,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+		}
 	}
 }
 
@@ -752,6 +772,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	char		wal_pretty_size[20];
 	bool		purge_all = false;
 
+
 	/* Timeline is completely empty */
 	if (parray_num(tlinfo->xlog_filelist) == 0)
 	{
@@ -850,6 +871,13 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		 */
 		if (purge_all || wal_file->segno < OldestToKeepSegNo)
 		{
+			/* save segment from purging */
+			if (!purge_all && instance_config.wal_depth >= 0 && wal_file->keep)
+			{
+				elog(VERBOSE, "Save WAL segment \"%s\"", wal_file->file.path);
+				continue;
+			}
+
 			/* unlink segment */
 			rc = unlink(wal_file->file.path);
 			if (rc < 0)

@@ -261,6 +261,7 @@ typedef struct InstanceConfig
 	/* Retention options. 0 disables the option. */
 	uint32		retention_redundancy;
 	uint32		retention_window;
+	uint32		wal_depth;
 
 	CompressAlg	compress_alg;
 	int			compress_level;
@@ -418,8 +419,12 @@ struct timelineInfo {
 	parray *xlog_filelist;	/* array of ordinary WAL segments, '.partial'
 							 * and '.backup' files belonging to this timeline */
 	parray *lost_segments;	/* array of intervals of lost segments */
-	pgBackup *closest_backup; /* link to backup, closest to timeline */
+	parray *keep_segments;	/* array of intervals of segments used by WAL retention */
+	pgBackup *closest_backup; /* link to valid backup, closest to timeline */
 	pgBackup *oldest_backup; /* link to oldest backup on timeline */
+	pgBackup *anchor_backup; /* link to oldest backup on timeline */
+	XLogRecPtr anchor_lsn; /* LSN marking the oldest segno to keep for 'wal-depth' */
+	TimeLineID anchor_tli;	/* timeline of anchor_lsn */
 };
 
 typedef struct xlogInterval
@@ -440,6 +445,9 @@ typedef struct xlogFile
 	pgFile file;
 	XLogSegNo segno;
 	xlogFileType type;
+	bool keep; /* Used to prevent removal of WAL segments
+				* required by ARCHIVE backups.
+				*/
 } xlogFile;
 
 
