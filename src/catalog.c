@@ -900,7 +900,7 @@ catalog_get_timelines(InstanceConfig *instance)
 		tlinfo->closest_backup = get_closest_backup(tlinfo);
 	}
 
-	/* determine which WAL segments we must be kept because of wal retention */
+	/* determine which WAL segments must be kept because of wal retention */
 	if (instance->wal_depth <= 0)
 		return timelineinfos;
 
@@ -925,15 +925,19 @@ catalog_get_timelines(InstanceConfig *instance)
 	 * then WAL purge should produce the following result:
 	 *    B       B1-------B2-------B3--------> WAL timeline1
 	 *
-	 * Complicated cases, such as brached timelines are taken into account:
+	 * Complicated cases, such as brached timelines are taken into account.
+	 * wal-depth is applied to each timeline independently:
 	 *
 	 *        |--------->                       WAL timeline2
 	 * ---B---|---B1-------B2-------B3--------> WAL timeline1
 	 *
 	 * after WAL purge with wal-depth=2:
+	 * TODO implement this in the code
 	 *
 	 *        |--------->                       WAL timeline2
-	 *    B-------B1-------B2-------B3--------> WAL timeline1
+	 *    B----   B1       B2-------B3--------> WAL timeline1
+	 *
+	 * In this example timeline2 prevents purge of WAL reachable from B backup.
 	 *
 	 * To determine the segno that should be protected by WAL retention
 	 * we set anchor_backup, which START LSN is used to calculate this segno.
@@ -944,15 +948,20 @@ catalog_get_timelines(InstanceConfig *instance)
  	 * between start_lsn and stop_lsn for each of them.
 	 *
 	 * For this we store this intervals in keep_segments array and
-	 * must consult them durig retention purge.
+	 * must consult them during retention purge.
 	 */
 
-	/* determine anchor_lsn for every timeline */
+	/* determine anchor_lsn and keep_segments for every timeline */
 	for (int i = 0; i < parray_num(timelineinfos); i++)
 	{
 		int count = 0;
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
 
+		/*
+		 * Iterate backward on backups belonging to this timeline to find
+		 * anchor_backup. NOTE Here we rely on the fact that backups list
+		 * is ordered by start_lsn DESC.
+		 */
 		if (tlinfo->backups)
 		{
 			for (int j = 0; j < parray_num(tlinfo->backups); j++)
@@ -969,15 +978,15 @@ catalog_get_timelines(InstanceConfig *instance)
 					backup->tli <= 0)
 					continue;
 
-//				elog(INFO, "Timeline %i: backup %s",
-//						tlinfo->tli, base36enc(backup->start_time));
+				elog(VERBOSE, "Timeline %i: backup %s",
+						tlinfo->tli, base36enc(backup->start_time));
 
 				count++;
 
 				if (count == instance->wal_depth)
 				{
-//					elog(INFO, "Timeline %i: ANCHOR %s, TLI %i",
-//						tlinfo->tli, base36enc(backup->start_time), backup->tli);
+					elog(VERBOSE, "Timeline %i: ANCHOR %s, TLI %i",
+						 tlinfo->tli, base36enc(backup->start_time), backup->tli);
 					tlinfo->anchor_lsn = backup->start_lsn;
 					tlinfo->anchor_tli = backup->tli;
 					break;
@@ -985,7 +994,8 @@ catalog_get_timelines(InstanceConfig *instance)
 			}
 		}
 
-		/* Failed to find anchor backup for this timeline.
+		/*
+		 * Failed to find anchor backup for this timeline.
 		 * We cannot just thrown it to the wolves, because by
 		 * doing that we will violate our own guarantees.
 		 * So check the existence of closest_backup for
@@ -1076,10 +1086,10 @@ catalog_get_timelines(InstanceConfig *instance)
 			 * older than anchor backup.
 			 */
 
+			/* only ARCHIVE backup can contribute to keep_segments */
 			if (backup->stream)
 				continue;
 
-			/* only ARCHIVE backup can contribute to keep_segments */
 			interval = palloc(sizeof(xlogInterval));
 
 			GetXLogSegNo(backup->start_lsn, segno, instance->xlog_seg_size);
@@ -1087,6 +1097,7 @@ catalog_get_timelines(InstanceConfig *instance)
 
 			GetXLogSegNo(backup->stop_lsn, segno, instance->xlog_seg_size);
 
+			//TODO Add a comment
 			if (backup->from_replica)
 				interval->end_segno = segno + 1;
 			else
@@ -1099,9 +1110,11 @@ catalog_get_timelines(InstanceConfig *instance)
 		}
 	}
 
-	/* Calculate what segments less than anchor_lsn
-	 * must be kept because of ARCHIVE backups.
-	 * Based on keep_segments.
+	/*
+	 * Protect WAL segments from deletion by setting 'keep' flag.
+	 * We must keep all WAL segments after anchor_backup. And also segments
+	 * needed by ARCHIVE backups - the ones that contain WAL
+	 * between (start_lsn, stop_lsn).
 	 */
 	for (int i = 0; i < parray_num(timelineinfos); i++)
 	{
@@ -1119,7 +1132,7 @@ catalog_get_timelines(InstanceConfig *instance)
 		{
 			xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
 
-			/* anchor exists in other timeline */
+			/* anchor exists in other timeline, so keep all segments of this tli */
 			if (anchor_in_other_tli)
 			{
 				wal_file->keep = true;
@@ -1133,11 +1146,11 @@ catalog_get_timelines(InstanceConfig *instance)
 				continue;
 			}
 
-			/* no keep segments,  */
+			/* no keep segments */
 			if (!tlinfo->keep_segments)
 				continue;
 
-			/* check if segment belong to one of the keep invervals */
+			/* protect segments belonging to one of the keep invervals */
 			for (int j = 0; j < parray_num(tlinfo->keep_segments); j++)
 			{
 				xlogInterval *keep_segments = (xlogInterval *) parray_get(tlinfo->keep_segments, j);

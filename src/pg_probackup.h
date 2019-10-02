@@ -422,8 +422,7 @@ struct timelineInfo {
 	parray *keep_segments;	/* array of intervals of segments used by WAL retention */
 	pgBackup *closest_backup; /* link to valid backup, closest to timeline */
 	pgBackup *oldest_backup; /* link to oldest backup on timeline */
-	pgBackup *anchor_backup; /* link to oldest backup on timeline */
-	XLogRecPtr anchor_lsn; /* LSN marking the oldest segno to keep for 'wal-depth' */
+	XLogRecPtr anchor_lsn; /* LSN belonging to the oldest segno to keep for 'wal-depth' */
 	TimeLineID anchor_tli;	/* timeline of anchor_lsn */
 };
 
