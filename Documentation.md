@@ -92,7 +92,7 @@ Current version - 2.1.5
 
 `pg_probackup set-config -B backup_dir --instance instance_name [option...]`
 
-`pg_probackup set-backup -B backup_dir --instance instance_name [option...]`
+`pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id [option...]`
 
 `pg_probackup show-config -B backup_dir --instance instance_name [--format=format]`
 
@@ -1156,7 +1156,7 @@ BACKUP INSTANCE 'node'
 
 #### Pinning a Backup
 
-If you have an necessity to exclude certain backups from general retention policy then it is possible to pin backup for an arbitrary amount of time. Example:
+If you have a necessity to exclude certain backups from general retention policy then it is possible to pin a backup for an arbitrary amount of time. Example:
 
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=30d
 
@@ -1291,7 +1291,7 @@ It is **not recommended** to edit pg_probackup.conf manually.
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id
     {--ttl=ttl | --expire-time=time} [--help]
 
-Sets the provided backup-specific settings into the backup.control configuration file, or modifies the previously defined values.
+Sets the provided backup-specific settings into the backup.control configuration file, or modifies previously defined values.
 
 For all available settings, see the [Pinning Options](#pinning-options) section.
 
@@ -1597,7 +1597,7 @@ Displays the current status of all the available backups, without deleting or me
 
 You can use these options together with [backup](#backup) and [set-delete](#set-backup) commands.
 
-For details on backup pinning, see the sections [Pinning a Backup](#pinning-a-backup).
+For details on backup pinning, see the [Pinning a Backup](#pinning-a-backup) section.
 
     --ttl=ttl
 Specifies the amount of time the backup should be pinned. Must be a positive integer. The zero value unpin already pinned backup. Supported units: ms, s, min, h, d (s by default). Example: `--ttl=30d`.

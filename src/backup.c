@@ -787,7 +787,7 @@ do_backup(time_t start_time, bool no_validate,
 	if (set_backup_params)
 	{
 		if (!pin_backup(&current, set_backup_params))
-			elog(WARNING, "Failed to pin backup");
+			elog(ERROR, "Failed to pin the backup %s", base36enc(current.backup_id));
 	}
 
 	if (!no_validate)

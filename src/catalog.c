@@ -991,7 +991,8 @@ get_oldest_backup(timelineInfo *tlinfo)
  * Overwrite backup metadata.
  */
 void
-do_set_backup(const char *instance_name, time_t backup_id, pgSetBackupParams *set_backup_params)
+do_set_backup(const char *instance_name, time_t backup_id,
+			  pgSetBackupParams *set_backup_params)
 {
 	pgBackup	*target_backup = NULL;
 	parray 		*backup_list = NULL;
@@ -1005,20 +1006,21 @@ do_set_backup(const char *instance_name, time_t backup_id, pgSetBackupParams *se
 
 	target_backup = (pgBackup *) parray_get(backup_list, 0);
 
-	if (target_backup->recovery_time <= 0)
-		elog(ERROR, "Failed to set 'expire-time' for backup %s: invalid 'recovery-time'",
-						base36enc(backup_id));
-
 	if (!pin_backup(target_backup, set_backup_params))
-		elog(ERROR, "Nothing to set by 'set-backup' command");
+		elog(ERROR, "Failed to pin the backup %s", base36enc(backup_id));
 }
 
-/* Set 'expire-time' attribute based on set_backup_params, or unpin backup
+/*
+ * Set 'expire-time' attribute based on set_backup_params, or unpin backup
  * if ttl is equal to zero.
  */
 bool
 pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 {
+
+	if (target_backup->recovery_time <= 0)
+		elog(ERROR, "Failed to set 'expire-time' for backup %s: invalid 'recovery-time'",
+						base36enc(target_backup->backup_id));
 
 	/* Pin comes from ttl */
 	if (set_backup_params->ttl > 0)
@@ -1345,7 +1347,7 @@ readBackupControlFile(const char *path)
 		{'t', 0, "end-time",			&backup->end_time, SOURCE_FILE_STRICT},
 		{'U', 0, "recovery-xid",		&backup->recovery_xid, SOURCE_FILE_STRICT},
 		{'t', 0, "recovery-time",		&backup->recovery_time, SOURCE_FILE_STRICT},
-		{'t', 0, "expire-time",			&backup->expire_time, SOURCE_FILE_STRICT}, // default value ??
+		{'t', 0, "expire-time",			&backup->expire_time, SOURCE_FILE_STRICT},
 		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
 		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},

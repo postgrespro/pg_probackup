@@ -688,11 +688,7 @@ main(int argc, char *argv[])
 		/* Parse string to seconds */
 		if (expire_time_string)
 		{
-			time_t		dummy_time;
-
-			if (parse_time(expire_time_string, &dummy_time, false))
-				expire_time = dummy_time;
-			else
+			if (!parse_time(expire_time_string, &expire_time, false))
 				elog(ERROR, "Invalid value for '--expire-time' option: '%s'",
 					 expire_time_string);
 		}
