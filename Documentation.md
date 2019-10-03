@@ -872,7 +872,7 @@ For each backup, the following information is provided:
 - Max Segno — number of the last existing WAL segment belonging to the timeline.
 - N segments — number of WAL segments belonging to the timeline.
 - Size — the size files take on disk.
-- Zratio - compression ratio calculated as "N segments" * wal_seg_size / "Size".
+- Zratio — compression ratio calculated as "N segments" * wal_seg_size / "Size".
 - N backups — number of backups belonging to the timeline. To get the details about backups, use json format.
 - Status — archive status for this exact timeline. Possible values:
 	- OK — all WAL segments between Min and Max are present.
