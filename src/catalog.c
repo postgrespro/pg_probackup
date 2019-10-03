@@ -1013,17 +1013,34 @@ catalog_get_timelines(InstanceConfig *instance)
 		 * from purge. To do so, we must set anchor_backup for timeline1 to B1,
 		 * even though wal-depth setting point to B3.
 		 */
-
-		/* Failed to find anchor_lsn in our own timeline */
 		if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
 		{
+			/*
+			 * Failed to find anchor_lsn in our own timeline.
+			 * Consider the case:
+			 * -------------------------------------> tli3
+			 *                     S3`--------------> tli2
+			 *      S1`------------S3------B3-------> tli2
+			 * B1---S1-------------B2---------------> tli1
+			 *
+			 * B* - backups
+			 * S* - switchpoints
+			 * wal-depth=1
+			 *
+			 * Expected result:
+			 *                     S2`--------------> tli2
+			 *      S1`------------S2      B3-------> tli2
+			 * B1---S1             B2---------------> tli1
+			 */
 			pgBackup *closest_backup = NULL;
 			xlogInterval *interval = NULL;
 			/* check if tli has closest_backup */
 			if (!tlinfo->closest_backup)
 				/* timeline has no closest_backup, wal retention cannot be
 				 * applied to this timeline.
-				 * Timeline will be purged up to oldest_backup if any.
+				 * Timeline will be purged up to oldest_backup if any or
+				 * purge entirely if there is none.
+				 * In example above: tli3.
 				 */
 				continue;
 
@@ -1032,7 +1049,9 @@ catalog_get_timelines(InstanceConfig *instance)
 				tlinfo->closest_backup->tli <= 0)
 				continue;
 
-			/* set anchor_lsn and anchor_tli to protect current timeline from purge */
+			/* Set anchor_lsn and anchor_tli to protect current timeline from purge
+			 * In the example above tli2 will be protected.
+			 */
 			tlinfo->anchor_lsn = tlinfo->closest_backup->start_lsn;
 			tlinfo->anchor_tli = tlinfo->closest_backup->tli;
 
@@ -1041,12 +1060,7 @@ catalog_get_timelines(InstanceConfig *instance)
 
 			/*
 			 * Iterate over parent timeline chain and
-			 * look for timeline where closest_backup is
-			 * located.
-			 *
-			 *                     S4---------------> tli2
-			 *      S2-------------S3------B3-------> tli2
-			 * B1---S1        B2--------------------> tli1
+			 * look for timeline where closest_backup belong
 			 */
 			while (tlinfo->parent_link)
 			{
@@ -1063,11 +1077,9 @@ catalog_get_timelines(InstanceConfig *instance)
 				GetXLogSegNo(switchpoint, switch_segno, instance->xlog_seg_size);
 				interval->end_segno = switch_segno;
 
-				/* check, maybe this interval is already here */
+				/* TODO: check, maybe this interval is already here */
 
-				//elog(INFO, "TLI: %i, switch segno %li", tlinfo->tli, switch_segno);
-
-				/* Save [S2, S3] to keep_segments */
+				/* Save [S1`, S2] to keep_segments */
 				if (tlinfo->tli != closest_backup->tli)
 				{
 					interval->begin_segno = tlinfo->begin_segno;
