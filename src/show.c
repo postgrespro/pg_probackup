@@ -457,7 +457,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 	const char *field_formats[SHOW_FIELDS_COUNT] =
 					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
 					  " %-*s ", " %-*s ", " %-*s ", " %*s ", " %*s ", " %*s ",
-					  " %*s ", " %*s ", " %*s ", " %-*s "};
+					  " %*s ", " %-*s ", " %-*s ", " %-*s "};
 	uint32		widths[SHOW_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowBackendRow *rows;
