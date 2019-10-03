@@ -146,7 +146,36 @@ writeControlFile(ControlFileData *ControlFile, char *path, fio_location location
  * used by a node.
  */
 TimeLineID
-get_current_timeline(bool safe)
+get_current_timeline(PGconn *conn)
+{
+
+	PGresult   *res;
+	TimeLineID tli = 0;
+	char	   *val;
+
+	res = pgut_execute_extended(conn,
+				   "SELECT timeline_id FROM pg_control_checkpoint()", 0, NULL, true, true);
+
+	if (PQresultStatus(res) == PGRES_TUPLES_OK)
+		val = PQgetvalue(res, 0, 0);
+	else
+		return get_current_timeline_from_control(false);
+
+	if (!parse_uint32(val, &tli, 0))
+	{
+		PQclear(res);
+		elog(WARNING, "Invalid value of timeline_id %s", val);
+
+		/* TODO 3.0 remove it and just error out */
+		return get_current_timeline_from_control(false);
+	}
+
+	return tli;
+}
+
+/* Get timeline from pg_control file */
+TimeLineID
+get_current_timeline_from_control(bool safe)
 {
 	ControlFileData ControlFile;
 	char       *buffer;
@@ -163,6 +192,8 @@ get_current_timeline(bool safe)
 
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
+
+
 
 /*
  * Get last check point record ptr from pg_tonrol.
