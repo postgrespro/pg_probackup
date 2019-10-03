@@ -252,6 +252,9 @@ typedef struct InstanceConfig
 	/* Wait timeout for WAL segment archiving */
 	uint32		archive_timeout;
 
+	/* cmdline to be used as restore_command */
+	char	   *restore_command;
+
 	/* Logger parameters */
 	LoggerConfig logger;
 
