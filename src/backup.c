@@ -2139,8 +2139,8 @@ backup_files(void *arg)
 
 		if (arguments->thread_num == 1)
 		{
-			/* update backup_content.control every 15 seconds */
-			if ((difftime(time(NULL), prev_time)) > 15)
+			/* update backup_content.control every 10 seconds */
+			if ((difftime(time(NULL), prev_time)) > 10)
 			{
 				prev_time = time(NULL);
 
