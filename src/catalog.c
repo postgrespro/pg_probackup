@@ -1045,8 +1045,8 @@ catalog_get_timelines(InstanceConfig *instance)
 			 * located.
 			 *
 			 *                     S4---------------> tli2
-		 	 *      S2-------------S3------B3-------> tli2
-		 	 * B1---S1        B2--------------------> tli1
+			 *      S2-------------S3------B3-------> tli2
+			 * B1---S1        B2--------------------> tli1
 			 */
 			while (tlinfo->parent_link)
 			{

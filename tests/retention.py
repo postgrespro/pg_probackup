@@ -1605,18 +1605,18 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """
         ARCHIVE replica:
 
-        t6                     |-----------------------
-        t5                     |                           |-------
+        t6                     |---------------------->
+        t5                     |                           |------>
                                |                           |
-        t4                     |                      |--------------
+        t4                     |                      |----|------>
                                |                      |
-        t3                     |      |--B1--|/|--B2-|/|-B3---
+        t3                     |      |--B1--|/|--B2-|/|-B3-->
                                |      |
-        t2                  |--A1--------A2--- 
-        t1  ---------Y1--Y2--
+        t2                  |--A1-----|--A2--->
+        t1  ---------Y1--Y2-|
 
         ARCHIVE master:
-        t1  -Z1--Z2---
+        t1  -Z1--Z2-->
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1937,7 +1937,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                         |-------------B5----------> WAL timeline3
                   |-----|-------------------------> WAL timeline2
         B1   B2---|        B3     B4-------B6-----> WAL timeline1
-          
+
         wal-depth=2
         """
         fname = self.id().split('.')[3]
