@@ -935,7 +935,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	 * TODO implement this in the code
 	 *
 	 *        |--------->                       WAL timeline2
-	 *    B----   B1       B2-------B3--------> WAL timeline1
+	 *    B---|   B1       B2-------B3--------> WAL timeline1
 	 *
 	 * In this example timeline2 prevents purge of WAL reachable from B backup.
 	 *
@@ -1003,7 +1003,7 @@ catalog_get_timelines(InstanceConfig *instance)
 		 * set the anchor_backup to closest_backup.
 		 *                      |-------------B4----------> WAL timeline3
 		 *                |-----|-------------------------> WAL timeline2
-		 * -----B----B1---|-------B2------B3-------B5-----> WAL timeline1
+		 *      B    B1---|        B2     B3-------B5-----> WAL timeline1
 		 *
 		 * wal-depth=2
 		 *
@@ -1018,10 +1018,12 @@ catalog_get_timelines(InstanceConfig *instance)
 		if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
 		{
 			pgBackup *closest_backup = NULL;
+			xlogInterval *interval = NULL;
 			/* check if tli has closest_backup */
 			if (!tlinfo->closest_backup)
-				/* timeline has no closest_backup, wal-depth cannot be
+				/* timeline has no closest_backup, wal retention cannot be
 				 * applied to this timeline.
+				 * Timeline will be purged up to oldest_backup if any.
 				 */
 				continue;
 
@@ -1030,52 +1032,64 @@ catalog_get_timelines(InstanceConfig *instance)
 				tlinfo->closest_backup->tli <= 0)
 				continue;
 
+			/* set anchor_lsn and anchor_tli to protect current timeline from purge */
+			tlinfo->anchor_lsn = tlinfo->closest_backup->start_lsn;
+			tlinfo->anchor_tli = tlinfo->closest_backup->tli;
+
 			/* closest backup may be located not in parent timeline */
 			closest_backup = tlinfo->closest_backup;
 
-			/* iterate over parent timeline chain and
+			/*
+			 * Iterate over parent timeline chain and
 			 * look for timeline where closest_backup is
 			 * located.
+			 *
+			 *                     S4---------------> tli2
+		 	 *      S2-------------S3------B3-------> tli2
+		 	 * B1---S1        B2--------------------> tli1
 			 */
 			while (tlinfo->parent_link)
 			{
+				/* save branch_tli for savepoint */
+				XLogSegNo switch_segno = 0;
+				XLogRecPtr switchpoint = tlinfo->switchpoint;
 
 				tlinfo = tlinfo->parent_link;
 
+				if (tlinfo->keep_segments == NULL)
+					tlinfo->keep_segments = parray_new();
+
+				interval = palloc(sizeof(xlogInterval));
+				GetXLogSegNo(switchpoint, switch_segno, instance->xlog_seg_size);
+				interval->end_segno = switch_segno;
+
+				/* check, maybe this interval is already here */
+
+				//elog(INFO, "TLI: %i, switch segno %li", tlinfo->tli, switch_segno);
+
+				/* Save [S2, S3] to keep_segments */
 				if (tlinfo->tli != closest_backup->tli)
+				{
+					interval->begin_segno = tlinfo->begin_segno;
+					parray_append(tlinfo->keep_segments, interval);
 					continue;
+				}
+				/* Save [B1, S1] to keep_segments */
 				else
 				{
-					/* check if anchor_backup in parent tli is already set */
-					if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
-					{
-						/* if none, just set anchor_backup to closest_backup */
-						tlinfo->anchor_lsn = closest_backup->start_lsn;
-						tlinfo->anchor_tli = closest_backup->tli;
-					}
-					else
-					{
-						/* if set, then compare it to closest_backup known to us
-						 * maybe it is younger.
-						 */
-						if (tlinfo->anchor_lsn > closest_backup->start_lsn)
-						{
-							tlinfo->anchor_lsn = closest_backup->start_lsn;
-							tlinfo->anchor_tli = closest_backup->tli;
-						}
-					}
+					XLogSegNo begin_segno = 0;
+					GetXLogSegNo(closest_backup->start_lsn, begin_segno, instance->xlog_seg_size);
+					interval->begin_segno = begin_segno;
+					parray_append(tlinfo->keep_segments, interval);
 					break;
 				}
 			}
+			/* This timeline wholly saved. */
 			continue;
 		}
 
-		/* nothing we can do at this point */
-		if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
-			continue;
-
 		/* Iterate over backups left */
-		for (int j = count + 1; j < parray_num(tlinfo->backups); j++)
+		for (int j = count; j < parray_num(tlinfo->backups); j++)
 		{
 			XLogSegNo   segno = 0;
 			xlogInterval *interval = NULL;
@@ -1086,18 +1100,29 @@ catalog_get_timelines(InstanceConfig *instance)
 			 * older than anchor backup.
 			 */
 
-			/* only ARCHIVE backup can contribute to keep_segments */
+			/* STREAM backups cannot contribute to keep_segments */
 			if (backup->stream)
 				continue;
 
-			interval = palloc(sizeof(xlogInterval));
+			/* sanity */
+			if (XLogRecPtrIsInvalid(backup->start_lsn) ||
+				backup->tli <= 0)
+				continue;
 
+			/* no point in clogging keep_segments by backups protected by anchor_lsn */
+			if (backup->start_lsn >= tlinfo->anchor_lsn)
+				continue;
+
+			/* append interval to keep_segments */
+			interval = palloc(sizeof(xlogInterval));
 			GetXLogSegNo(backup->start_lsn, segno, instance->xlog_seg_size);
 			interval->begin_segno = segno;
-
 			GetXLogSegNo(backup->stop_lsn, segno, instance->xlog_seg_size);
 
-			//TODO Add a comment
+			/*
+			 * On replica it is possible to get STOP_LSN pointing to contrecord,
+			 * so set end_segno to the next segment after STOP_LSN just to be safe.
+			 */
 			if (backup->from_replica)
 				interval->end_segno = segno + 1;
 			else
@@ -1112,36 +1137,34 @@ catalog_get_timelines(InstanceConfig *instance)
 
 	/*
 	 * Protect WAL segments from deletion by setting 'keep' flag.
-	 * We must keep all WAL segments after anchor_backup. And also segments
-	 * needed by ARCHIVE backups - the ones that contain WAL
-	 * between (start_lsn, stop_lsn).
+	 * We must keep all WAL segments after anchor_lsn (including), and also segments
+	 * required by ARCHIVE backups for consistency - WAL between [start_lsn, stop_lsn].
 	 */
 	for (int i = 0; i < parray_num(timelineinfos); i++)
 	{
 		XLogSegNo   anchor_segno = 0;
-		bool anchor_in_other_tli = false;
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
 
-		/* anchor exists in other timeline */
-		if (tlinfo->tli != 0 && tlinfo->tli != tlinfo->anchor_tli)
-			anchor_in_other_tli = true;
-		else
-			GetXLogSegNo(tlinfo->anchor_lsn, anchor_segno, instance->xlog_seg_size);
+		/* At this point invalid anchor_lsn can be only in one case:
+		 * timeline is going to be purged by regular WAL purge rules.
+		 */
+		if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
+			continue;
+
+		/* anchor_lsn located in another timeline, it means that the timeline
+		 * will be protected from purge entirely.
+		 */
+		if (tlinfo->anchor_tli > 0 && tlinfo->anchor_tli != tlinfo->tli)
+			continue;
+
+		GetXLogSegNo(tlinfo->anchor_lsn, anchor_segno, instance->xlog_seg_size);
 
 		for (int i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
 		{
 			xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
 
-			/* anchor exists in other timeline, so keep all segments of this tli */
-			if (anchor_in_other_tli)
-			{
-				wal_file->keep = true;
-				continue;
-			}
-
 			if (wal_file->segno >= anchor_segno)
 			{
-			//	elog(INFO, "WAL file1 %s", wal_file->file.path);
 				wal_file->keep = true;
 				continue;
 			}

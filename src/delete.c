@@ -640,7 +640,8 @@ do_retention_wal(bool dry_run)
 			continue;
 
 		/* WAL retention keeps this timeline from purge */
-		if (instance_config.wal_depth >= 0 && tlinfo->anchor_tli != tlinfo->tli)
+		if (instance_config.wal_depth >= 0 && tlinfo->anchor_tli > 0 &&
+			tlinfo->anchor_tli != tlinfo->tli)
 			continue;
 
 		/*
@@ -652,7 +653,7 @@ do_retention_wal(bool dry_run)
 		 */
 		if (tlinfo->oldest_backup)
 		{
-			if (instance_config.wal_depth >= 0 && XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
+			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
 			{
 				delete_walfiles_in_tli(tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
@@ -665,7 +666,7 @@ do_retention_wal(bool dry_run)
 		}
 		else
 		{
-			if (instance_config.wal_depth >= 0 && XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
+			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
 				delete_walfiles_in_tli(tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			else
@@ -872,7 +873,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		if (purge_all || wal_file->segno < OldestToKeepSegNo)
 		{
 			/* save segment from purging */
-			if (!purge_all && instance_config.wal_depth >= 0 && wal_file->keep)
+			if (instance_config.wal_depth >= 0 && wal_file->keep)
 			{
 				elog(VERBOSE, "Save WAL segment \"%s\"", wal_file->file.path);
 				continue;

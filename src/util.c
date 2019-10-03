@@ -193,8 +193,6 @@ get_current_timeline_from_control(bool safe)
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
 
-
-
 /*
  * Get last check point record ptr from pg_tonrol.
  */

@@ -1612,7 +1612,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                                |                      |
         t3                     |      |--B1--|/|--B2-|/|-B3---
                                |      |
-        t2                  |--A1--------A2---
+        t2                  |--A1--------A2--- 
         t1  ---------Y1--Y2--
 
         ARCHIVE master:
@@ -1927,6 +1927,123 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             options=['--delete-wal', '--log-level-console=verbose'])
 
         print(output)
+
+        exit(1)
+
+        self.del_test_dir(module_name, fname)
+
+    def test_wal_depth_1(self):
+        """
+                        |-------------B5----------> WAL timeline3
+                  |-----|-------------------------> WAL timeline2
+        B1   B2---|        B3     B4-------B6-----> WAL timeline1
+          
+        wal-depth=2
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
+
+        node.slow_start()
+
+        # FULL
+        node.pgbench_init(scale=1)
+        B1 = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE
+        node.pgbench_init(scale=1)
+        B2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # generate_some more data
+        node.pgbench_init(scale=1)
+
+        target_xid = node.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+
+        node.pgbench_init(scale=1)
+
+        B3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        node.pgbench_init(scale=1)
+
+        B4 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Timeline 2
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        node_restored.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'Restore of backup {0} completed'.format(B2),
+            output)
+
+        self.set_auto_conf(node_restored, options={'port': node_restored.port})
+
+        node_restored.slow_start()
+
+        node_restored.pgbench_init(scale=1)
+
+        target_xid = node_restored.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+
+        node_restored.pgbench_init(scale=2)
+
+        # Timeline 3
+        node_restored.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=2',
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'Restore of backup {0} completed'.format(B2),
+            output)
+
+        self.set_auto_conf(node_restored, options={'port': node_restored.port})
+
+        node_restored.slow_start()
+
+        node_restored.pgbench_init(scale=1)
+        B5 = self.backup_node(
+            backup_dir, 'node', node_restored, data_dir=node_restored.data_dir)
+
+        node.pgbench_init(scale=1)
+        B6 = self.backup_node(backup_dir, 'node', node)
+
+        show = self.show_archive(backup_node, 'node')
+        print(show)
+
+        self.validate_pb(
+            backup_dir, 'node', backup_id=B2,
+            options=['--recovery-target-lsn={0}'])
 
         exit(1)
 

@@ -183,8 +183,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	}
 
 	/* Obtain current timeline */
-	current.tli = get_current_timeline(backup_conn);
-
 #if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(backup_conn);
 #else
