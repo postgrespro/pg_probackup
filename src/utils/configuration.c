@@ -1204,7 +1204,7 @@ parse_time(const char *value, time_t *result, bool utc_default)
 		&tm.tm_hour, &tm.tm_min, &tm.tm_sec, junk);
 	free(tmp);
 
-	if (i < 1 || 6 < i)
+	if (i < 3 || i > 6)
 		return false;
 
 	/* adjust year */

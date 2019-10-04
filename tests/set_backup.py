@@ -114,6 +114,9 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn('expire-time', attr_list)
 
+        self.set_backup(
+            backup_dir, 'node', backup_id, options=["--expire-time={0}".format(recovery_time)])
+
         # parse string to datetime object
         #new_expire_time = datetime.strptime(new_expire_time, '%Y-%m-%d %H:%M:%S%z')
 

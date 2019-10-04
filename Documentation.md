@@ -1177,7 +1177,7 @@ You can determine the fact that backup is pinned and check due expire time by lo
 
     pg_probackup show --instance instance_name -i backup_id
 
-Pinned backup will have `expire-time` attribute:
+Pinned backup has `expire-time` attribute:
 ```
 ...
 recovery-time = '2017-05-16 12:57:31'
@@ -1190,7 +1190,7 @@ You can unpin a backup by setting `--ttl` option to zero using `set-backup` comm
 
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=0
 
-Note, that only pinned backups have `expire-time` attribute in backup metadata.
+Only pinned backups have `expire-time` attribute in backup metadata.
 
 ### Merging Backups
 
@@ -1599,7 +1599,7 @@ Displays the current status of all the available backups, without deleting or me
 
 You can use these options together with [backup](#backup) and [set-delete](#set-backup) commands.
 
-For details on backup pinning, see the [Pinning a Backup](#pinning-a-backup) section.
+For details on backup pinning, see the section [Pinning a Backup](#pinning-a-backup).
 
     --ttl=ttl
 Specifies the amount of time the backup should be pinned. Must be a positive integer. The zero value unpin already pinned backup. Supported units: ms, s, min, h, d (s by default). Example: `--ttl=30d`.
