@@ -183,7 +183,13 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	}
 
 	/* Obtain current timeline */
-	current.tli = get_current_timeline(false);
+	current.tli = get_current_timeline(backup_conn);
+
+#if PG_VERSION_NUM >= 90600
+	current.tli = get_current_timeline(backup_conn);
+#else
+	current.tli = get_current_timeline_from_control(false);
+#endif
 
 	/*
 	 * In incremental backup mode ensure that already-validated
@@ -697,11 +703,8 @@ do_backup(time_t start_time, bool no_validate,
 	current.compress_level = instance_config.compress_level;
 
 	/* Save list of external directories */
-	if (instance_config.external_dir_str &&
-		pg_strcasecmp(instance_config.external_dir_str, "none") != 0)
-	{
+	if (instance_config.external_dir_str)
 		current.external_dir_str = instance_config.external_dir_str;
-	}
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
 			"wal mode: %s, remote: %s, compress-algorithm: %s, compress-level: %i",

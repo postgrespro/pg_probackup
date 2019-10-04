@@ -965,7 +965,8 @@ class ProbackupTest(object):
 
     def show_archive(
             self, backup_dir, instance=None, options=[],
-            as_text=False, as_json=True, old_binary=False
+            as_text=False, as_json=True, old_binary=False,
+            tli=0
             ):
 
         cmd_list = [
@@ -989,6 +990,23 @@ class ProbackupTest(object):
                 data = self.run_pb(cmd_list + options, old_binary=old_binary)
             else:
                 data = json.loads(self.run_pb(cmd_list + options, old_binary=old_binary))
+
+            if instance:
+                instance_timelines = None
+                for instance_name in data:
+                    if instance_name['instance'] == instance:
+                        instance_timelines = instance_name['timelines']
+                        break
+
+                if tli > 0:
+                    timeline_data = None
+                    for timeline in instance_timelines:
+                        if timeline['tli'] == tli:
+                            return timeline
+
+                if instance_timelines:
+                    return instance_timelines
+
             return data
         else:
             show_splitted = self.run_pb(

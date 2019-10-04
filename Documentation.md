@@ -250,6 +250,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
 COMMIT;
 ```
 
@@ -268,6 +269,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
 COMMIT;
 ```
 

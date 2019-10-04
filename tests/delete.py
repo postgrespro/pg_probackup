@@ -411,7 +411,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Take FULL BACKUPs
-
         backup_id_a = self.backup_node(backup_dir, 'node', node)
         backup_id_b = self.backup_node(backup_dir, 'node', node)
 

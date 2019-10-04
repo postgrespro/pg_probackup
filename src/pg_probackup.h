@@ -252,6 +252,9 @@ typedef struct InstanceConfig
 	/* Wait timeout for WAL segment archiving */
 	uint32		archive_timeout;
 
+	/* cmdline to be used as restore_command */
+	char	   *restore_command;
+
 	/* Logger parameters */
 	LoggerConfig logger;
 
@@ -806,7 +809,8 @@ extern XLogRecPtr get_first_record_lsn(const char *archivedir, XLogRecPtr start_
 									TimeLineID tli, uint32 wal_seg_size);
 
 /* in util.c */
-extern TimeLineID get_current_timeline(bool safe);
+extern TimeLineID get_current_timeline(PGconn *conn);
+extern TimeLineID get_current_timeline_from_control(bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
 extern uint64 get_system_identifier(const char *pgdata_path);
 extern uint64 get_remote_system_identifier(PGconn *conn);
