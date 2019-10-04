@@ -1179,11 +1179,11 @@ BACKUP INSTANCE 'node'
 
 #### Pinning a Backup
 
-If you have a necessity to exclude certain backups from general retention policy then it is possible to pin a backup for an arbitrary amount of time. Example:
+If you have the necessity to exclude certain backups from established retention policy then it is possible to pin a backup for an arbitrary amount of time. Example:
 
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=30d
 
-This command will set `expire-time` of specified backup to 30 days starting from backup `recovery-time` attribute. Basically 'expire-time = Recovery Time + ttl'.
+This command will set `expire-time` of specified backup to 30 days starting from backup `recovery-time` attribute. Basically 'expire-time = recovery-time + ttl'.
 
 You can set `expire-time` explicitly using `--expire-time` option. Example:
 
@@ -1316,7 +1316,7 @@ It is **not recommended** to edit pg_probackup.conf manually.
 
 Sets the provided backup-specific settings into the backup.control configuration file, or modifies previously defined values.
 
-For all available settings, see the [Pinning Options](#pinning-options) section.
+For all available settings, see the section [Pinning Options](#pinning-options).
 
 #### show-config
 

@@ -325,9 +325,9 @@ help_backup(void)
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
 
 	printf(_("\n  Pinning options:\n"));
-	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin; \n"));
+	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
-	printf(_("      --expire=time                pin backup until specified time stamp\n"));
+	printf(_("      --expire-time=time           pin backup until specified time stamp\n"));
 	printf(_("                                   (example: --expire-time='2024-01-01 00:00:00+03')\n"));
 
 	printf(_("\n  Compression options:\n"));
@@ -682,9 +682,9 @@ help_set_backup(void)
 	printf(_("                 -i backup-id\n"));
 	printf(_("                 [--ttl] [--expire-time]\n\n"));
 
-	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin; \n"));
+	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
-	printf(_("      --expire=time                pin backup until specified time stamp\n"));
+	printf(_("      --expire-time=time           pin backup until specified time stamp\n"));
 	printf(_("                                   (example: --expire-time='2024-01-01 00:00:00+03')\n"));
 }
 
