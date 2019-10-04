@@ -260,7 +260,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Check wals
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
-        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))]
         original_wal_quantity = len(wals)
 
         # delete second full backup
@@ -283,18 +283,18 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         result = self.delete_pb(backup_dir, 'node', options=['--wal'])
         # delete useless wals
-        self.assertTrue('INFO: removed min WAL segment' in result
-            and 'INFO: removed max WAL segment' in result)
+        self.assertTrue('WAL segments between ' in result
+            and 'on timeline 1 will be removed' in result)
         self.validate_pb(backup_dir)
         self.assertEqual(self.show_pb(backup_dir, 'node', backup_3_id)['status'], "OK")
 
         # Check quantity, it should be lower than original
-        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))]
         self.assertTrue(original_wal_quantity > len(wals), "Number of wals not changed after 'delete --wal' which is illegal")
 
         # Delete last backup
         self.delete_pb(backup_dir, 'node', backup_3_id, options=['--wal'])
-        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
+        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))]
         self.assertEqual (0, len(wals), "Number of wals should be equal to 0")
 
         # Clean after yourself
