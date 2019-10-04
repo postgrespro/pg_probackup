@@ -728,9 +728,9 @@ For each backup, the following information is provided:
 - WAL Mode — the WAL delivery mode. Possible values: STREAM and ARCHIVE.
 - TLI — timeline identifiers of current backup and its parent.
 - Time — the time it took to perform the backup.
-- Data — the size of the data files in this backup. This value does not include the size of WAL files.  In case of STREAM backup the total size of backup can be calculated as 'Data' + 'WAL'.
-- WAL — the size of WAL files required to reply by PostgreSQL to reach consistency.
-- Zratio — compression ratio calculated as "uncompressed-bytes" / "data-bytes".
+- Data — the size of the data files in this backup. This value does not include the size of WAL files. In case of STREAM backup the total size of backup can be calculated as 'Data' + 'WAL'.
+- WAL — the uncompressed size of WAL files required to apply by PostgreSQL recovery process to reach consistency.
+- Zratio — compression ratio calculated as 'uncompressed-bytes' / 'data-bytes'.
 - Start LSN — WAL log sequence number corresponding to the start of the backup process. REDO point for PostgreSQL recovery process to start from.
 - Stop LSN — WAL log sequence number corresponding to the end of the backup process. Consistency point for PostgreSQL recovery process.
 - Status — backup status. Possible values:
@@ -784,7 +784,7 @@ parent-backup-id = 'PT8XFX'
 primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any'
 ```
 
-Detailed output has some additional attributes:
+Detailed output has additional attributes:
 - compress-alg — compression algorithm used during backup. Possible values: 'zlib', 'pglz', 'none'.
 - compress-level — compression level used during backup.
 - from-replica — the fact that backup was taken from standby server. Possible values: '1', '0'.
@@ -798,7 +798,7 @@ Detailed output has some additional attributes:
 - pgdata-bytes — size of the PostgreSQL cluster data files at the time of backup. You can evaluate the effectiveness of incremental backup by comparing 'pgdata-bytes' to 'uncompressed-bytes'.
 - recovery-xid — current transaction id at the moment of backup ending.
 - parent-backup-id — backup ID of parent backup. Available only for incremental backups.
-- primary_conninfo — libpq conninfo used for connection to PostgreSQL cluster during backup. Password is not included.
+- primary_conninfo — libpq conninfo used for connection to PostgreSQL cluster during backup. The password is not included.
 
 To get more detailed information about the backup in json format, run the show with the backup ID:
 
@@ -872,7 +872,7 @@ For each backup, the following information is provided:
 - Max Segno — number of the last existing WAL segment belonging to the timeline.
 - N segments — number of WAL segments belonging to the timeline.
 - Size — the size files take on disk.
-- Zratio — compression ratio calculated as "N segments" * wal_seg_size / "Size".
+- Zratio — compression ratio calculated as 'N segments' * wal_seg_size / 'Size'.
 - N backups — number of backups belonging to the timeline. To get the details about backups, use json format.
 - Status — archive status for this exact timeline. Possible values:
 	- OK — all WAL segments between Min and Max are present.
