@@ -713,13 +713,14 @@ pg_probackup displays the list of all the available backups. For example:
 
 ```
 BACKUP INSTANCE 'node'
-============================================================================================================================================
- Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI    Time    Data   Start LSN    Stop LSN    Status 
-============================================================================================================================================
- node        10       P7XDQV  2018-04-29 05:32:59+03  DELTA   STREAM     1 / 1                11s    19MB   0/15000060   0/15000198  OK
- node        10       P7XDJA  2018-04-29 05:28:36+03  PTRACK  STREAM     1 / 1                21s    32MB   0/13000028   0/13000198  OK
- node        10       P7XDHU  2018-04-29 05:27:59+03  PAGE    STREAM     1 / 1                31s    33MB   0/11000028   0/110001D0  OK
- node        10       P7XDHB  2018-04-29 05:27:15+03  FULL    STREAM     1 / 0                11s    39MB   0/F000028    0/F000198   OK
+======================================================================================================================================
+ Instance  Version  ID      Recovery time           Mode    WAL Mode  TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
+======================================================================================================================================
+ node      10       PYSUE8  2019-10-03 15:51:48+03  FULL    ARCHIVE   1/0   16s  9047kB  16MB    4.31  0/12000028  0/12000160  OK
+ node      10       P7XDQV  2018-04-29 05:32:59+03  DELTA   STREAM    1/1   11s    19MB  16MB    1.00  0/15000060  0/15000198  OK
+ node      10       P7XDJA  2018-04-29 05:28:36+03  PTRACK  STREAM    1/1   21s    32MB  32MB    1.00  0/13000028  0/13000198  OK
+ node      10       P7XDHU  2018-04-29 05:27:59+03  PAGE    STREAM    1/1   15s    33MB  16MB    1.00  0/11000028  0/110001D0  OK
+ node      10       P7XDHB  2018-04-29 05:27:15+03  FULL    STREAM    1/0   11s    39MB  16MB    1.00  0/F000028   0/F000198   OK
 ```
 
 For each backup, the following information is provided:
@@ -729,12 +730,14 @@ For each backup, the following information is provided:
 - ID — the backup identifier.
 - Recovery time — the earliest moment for which you can restore the state of the database cluster.
 - Mode — the method used to take this backup. Possible values: FULL, PAGE, DELTA, PTRACK.
-- WAL — the WAL delivery mode. Possible values: STREAM and ARCHIVE.
-- Current/Parent TLI — timeline identifiers of current backup and its parent.
+- WAL Mode — the WAL delivery mode. Possible values: STREAM and ARCHIVE.
+- TLI — timeline identifiers of current backup and its parent.
 - Time — the time it took to perform the backup.
-- Data — the size of the data files in this backup. This value does not include the size of WAL files.
-- Start LSN — WAL log sequence number corresponding to the start of the backup process.
-- Stop LSN — WAL log sequence number corresponding to the end of the backup process.
+- Data — the size of the data files in this backup. This value does not include the size of WAL files. In case of STREAM backup the total size of backup can be calculated as 'Data' + 'WAL'.
+- WAL — the uncompressed size of WAL files required to apply by PostgreSQL recovery process to reach consistency.
+- Zratio — compression ratio calculated as 'uncompressed-bytes' / 'data-bytes'.
+- Start LSN — WAL log sequence number corresponding to the start of the backup process. REDO point for PostgreSQL recovery process to start from.
+- Stop LSN — WAL log sequence number corresponding to the end of the backup process. Consistency point for PostgreSQL recovery process.
 - Status — backup status. Possible values:
 
     - OK — the backup is complete and valid.
@@ -780,10 +783,28 @@ recovery-time = '2017-05-16 12:57:31'
 expire-time = '2020-05-16 12:57:31'
 data-bytes = 22288792
 wal-bytes = 16777216
+uncompressed-bytes = 39961833
+pgdata-bytes = 39859393
 status = OK
 parent-backup-id = 'PT8XFX'
 primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any'
 ```
+
+Detailed output has additional attributes:
+- compress-alg — compression algorithm used during backup. Possible values: 'zlib', 'pglz', 'none'.
+- compress-level — compression level used during backup.
+- from-replica — the fact that backup was taken from standby server. Possible values: '1', '0'.
+- block-size — (block_size)[https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-BLOCK-SIZE] setting of PostgreSQL cluster at the moment of backup start.
+- wal-block-size — (wal_block_size)[https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-WAL-BLOCK-SIZE] setting of PostgreSQL cluster at the moment of backup start.
+- checksum-version — the fact that PostgreSQL cluster, from which backup is taken, has enabled [data block checksumms](https://www.postgresql.org/docs/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS). Possible values: '1', '0'.
+- program-version — full version of pg_probackup binary used to create backup.
+- start-time — the backup starting time.
+- end-time — the backup ending time.
+- uncompressed-bytes — size of the data files before adding page headers and applying compression. You can evaluate the effectiveness of compression by comparing 'uncompressed-bytes' to 'data-bytes' if compression if used.
+- pgdata-bytes — size of the PostgreSQL cluster data files at the time of backup. You can evaluate the effectiveness of incremental backup by comparing 'pgdata-bytes' to 'uncompressed-bytes'.
+- recovery-xid — current transaction id at the moment of backup ending.
+- parent-backup-id — backup ID of parent backup. Available only for incremental backups.
+- primary_conninfo — libpq conninfo used for connection to PostgreSQL cluster during backup. The password is not included.
 
 To get more detailed information about the backup in json format, run the show with the backup ID:
 
@@ -857,7 +878,7 @@ For each backup, the following information is provided:
 - Max Segno — number of the last existing WAL segment belonging to the timeline.
 - N segments — number of WAL segments belonging to the timeline.
 - Size — the size files take on disk.
-- Zratio - compression ratio calculated as "N segments" * wal_seg_size / "Size".
+- Zratio — compression ratio calculated as 'N segments' * wal_seg_size / 'Size'.
 - N backups — number of backups belonging to the timeline. To get the details about backups, use json format.
 - Status — archive status for this exact timeline. Possible values:
 	- OK — all WAL segments between Min and Max are present.

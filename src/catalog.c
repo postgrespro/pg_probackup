@@ -1132,6 +1132,12 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->wal_bytes != BYTES_INVALID)
 		fio_fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
+	if (backup->uncompressed_bytes >= 0)
+		fio_fprintf(out, "uncompressed-bytes = " INT64_FORMAT "\n", backup->uncompressed_bytes);
+
+	if (backup->pgdata_bytes >= 0)
+		fio_fprintf(out, "pgdata-bytes = " INT64_FORMAT "\n", backup->pgdata_bytes);
+
 	fio_fprintf(out, "status = %s\n", status2str(backup->status));
 
 	/* 'parent_backup' is set if it is incremental backup */
@@ -1201,6 +1207,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	char		buf[BUFFERSZ];
 	size_t		write_len = 0;
 	int64 		backup_size_on_disk = 0;
+	int64 		uncompressed_size_on_disk = 0;
 	int64 		wal_size_on_disk = 0;
 
 	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
@@ -1222,16 +1229,25 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		i++;
 
 		if (S_ISDIR(file->mode))
+		{
 			backup_size_on_disk += 4096;
+			uncompressed_size_on_disk += 4096;
+		}
 
 		/* Count the amount of the data actually copied */
 		if (S_ISREG(file->mode) && file->write_size > 0)
 		{
-			/* TODO: in 3.0 add attribute is_walfile */
+			/*
+			 * Size of WAL files in 'pg_wal' is counted separately
+			 * TODO: in 3.0 add attribute is_walfile
+			 */
 			if (IsXLogFileName(file->name) && (file->external_dir_num == 0))
 				wal_size_on_disk += file->write_size;
 			else
+			{
 				backup_size_on_disk += file->write_size;
+				uncompressed_size_on_disk += file->uncompressed_size;
+			}
 		}
 
 		/* for files from PGDATA and external files use rel_path
@@ -1315,6 +1331,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
 	backup->wal_bytes = wal_size_on_disk;
+	backup->uncompressed_bytes = uncompressed_size_on_disk;
 }
 
 /*
@@ -1350,6 +1367,8 @@ readBackupControlFile(const char *path)
 		{'t', 0, "expire-time",			&backup->expire_time, SOURCE_FILE_STRICT},
 		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
 		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
+		{'I', 0, "uncompressed-bytes",	&backup->uncompressed_bytes, SOURCE_FILE_STRICT},
+		{'I', 0, "pgdata-bytes",		&backup->pgdata_bytes, SOURCE_FILE_STRICT},
 		{'u', 0, "block-size",			&backup->block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "xlog-block-size",		&backup->wal_block_size, SOURCE_FILE_STRICT},
 		{'u', 0, "checksum-version",	&backup->checksum_version, SOURCE_FILE_STRICT},
@@ -1595,6 +1614,8 @@ pgBackupInit(pgBackup *backup)
 
 	backup->data_bytes = BYTES_INVALID;
 	backup->wal_bytes = BYTES_INVALID;
+	backup->uncompressed_bytes = 0;
+	backup->pgdata_bytes = 0;
 
 	backup->compress_alg = COMPRESS_ALG_DEFAULT;
 	backup->compress_level = COMPRESS_LEVEL_DEFAULT;

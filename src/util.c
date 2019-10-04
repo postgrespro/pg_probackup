@@ -400,6 +400,7 @@ copy_pgcontrol_file(const char *from_root, fio_location from_location,
 	file->crc = ControlFile.crc;
 	file->read_size = size;
 	file->write_size = size;
+	file->uncompressed_size = size;
 
 	join_path_components(to_path, to_root, file->rel_path);
 	writeControlFile(&ControlFile, to_path, to_location);

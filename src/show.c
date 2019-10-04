@@ -31,6 +31,7 @@ typedef struct ShowBackendRow
 	char		duration[20];
 	char		data_bytes[20];
 	char		wal_bytes[20];
+	char		zratio[20];
 	char		start_lsn[20];
 	char		stop_lsn[20];
 	const char *status;
@@ -391,6 +392,18 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		appendPQExpBuffer(buf, INT64_FORMAT, backup->wal_bytes);
 	}
 
+	if (backup->uncompressed_bytes >= 0)
+	{
+		json_add_key(buf, "uncompressed-bytes", json_level);
+		appendPQExpBuffer(buf, INT64_FORMAT, backup->uncompressed_bytes);
+	}
+
+	if (backup->uncompressed_bytes >= 0)
+	{
+		json_add_key(buf, "pgdata-bytes", json_level);
+		appendPQExpBuffer(buf, INT64_FORMAT, backup->pgdata_bytes);
+	}
+
 	if (backup->primary_conninfo)
 		json_add_value(buf, "primary_conninfo", backup->primary_conninfo,
 						json_level, true);
@@ -441,16 +454,16 @@ show_backup(const char *instance_name, time_t requested_backup_id)
 static void
 show_instance_plain(const char *instance_name, parray *backup_list, bool show_name)
 {
-#define SHOW_FIELDS_COUNT 13
+#define SHOW_FIELDS_COUNT 14
 	int			i;
 	const char *names[SHOW_FIELDS_COUNT] =
 					{ "Instance", "Version", "ID", "Recovery Time",
 					  "Mode", "WAL Mode", "TLI", "Time", "Data", "WAL",
-					  "Start LSN", "Stop LSN", "Status" };
+					  "Zratio", "Start LSN", "Stop LSN", "Status" };
 	const char *field_formats[SHOW_FIELDS_COUNT] =
 					{ " %-*s ", " %-*s ", " %-*s ", " %-*s ",
-					  " %-*s ", " %-*s ", " %-*s ", " %*s ", " %-*s ", " %-*s ",
-					  " %-*s ", " %-*s ", " %-*s "};
+					  " %-*s ", " %-*s ", " %-*s ", " %*s ", " %*s ", " %*s ",
+					  " %*s ", " %-*s ", " %-*s ", " %-*s "};
 	uint32		widths[SHOW_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowBackendRow *rows;
@@ -471,6 +484,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		pgBackup   *backup = parray_get(backup_list, i);
 		ShowBackendRow *row = &rows[i];
 		int			cur = 0;
+		float		zratio = 1;
 
 		/* Instance */
 		row->instance = instance_name;
@@ -509,7 +523,6 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		cur++;
 
 		/* Current/Parent TLI */
-
 		if (backup->parent_backup_link != NULL)
 			parent_tli = backup->parent_backup_link->tli;
 
@@ -544,6 +557,19 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		pretty_size(backup->wal_bytes, row->wal_bytes,
 					lengthof(row->wal_bytes));
 		widths[cur] = Max(widths[cur], strlen(row->wal_bytes));
+		cur++;
+
+		/* Zratio (compression ratio) */
+		if (backup->uncompressed_bytes != BYTES_INVALID &&
+			(backup->uncompressed_bytes > 0 && backup->data_bytes > 0))
+		{
+			zratio = (float)backup->uncompressed_bytes / (backup->data_bytes);
+			snprintf(row->zratio, lengthof(row->zratio), "%.2f", zratio);
+		}
+		else
+			snprintf(row->zratio, lengthof(row->zratio), "%.2f", zratio);
+
+		widths[cur] = Max(widths[cur], strlen(row->zratio));
 		cur++;
 
 		/* Start LSN */
@@ -634,6 +660,10 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
 						  row->wal_bytes);
+		cur++;
+
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+						  row->zratio);
 		cur++;
 
 		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
