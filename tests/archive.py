@@ -49,12 +49,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Recreate backup catalog
+        self.clean_pb(backup_dir)
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
 
         # Make backup
-        self.backup_node(
-            backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
         node.cleanup()
 
         # Restore Database
