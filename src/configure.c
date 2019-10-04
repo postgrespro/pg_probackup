@@ -137,50 +137,55 @@ ConfigOption instance_options[] =
 		&instance_config.archive.user, SOURCE_CMD, 0,
 		OPTION_ARCHIVE_GROUP, 0, option_get_value
 	},
+	{
+		's', 211, "restore-command",
+		&instance_config.restore_command, SOURCE_CMD, SOURCE_DEFAULT,
+		OPTION_ARCHIVE_GROUP, 0, option_get_value
+	},
 	/* Logging options */
 	{
-		'f', 211, "log-level-console",
+		'f', 212, "log-level-console",
 		assign_log_level_console, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, get_log_level_console
 	},
 	{
-		'f', 212, "log-level-file",
+		'f', 213, "log-level-file",
 		assign_log_level_file, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, get_log_level_file
 	},
 	{
-		's', 213, "log-filename",
+		's', 214, "log-filename",
 		&instance_config.logger.log_filename, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
-		's', 214, "error-log-filename",
+		's', 215, "error-log-filename",
 		&instance_config.logger.error_log_filename, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
-		's', 215, "log-directory",
+		's', 216, "log-directory",
 		&instance_config.logger.log_directory, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
-		'U', 216, "log-rotation-size",
+		'U', 217, "log-rotation-size",
 		&instance_config.logger.log_rotation_size, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, OPTION_UNIT_KB, option_get_value
 	},
 	{
-		'U', 217, "log-rotation-age",
+		'U', 218, "log-rotation-age",
 		&instance_config.logger.log_rotation_age, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, OPTION_UNIT_MS, option_get_value
 	},
 	/* Retention options */
 	{
-		'u', 218, "retention-redundancy",
+		'u', 219, "retention-redundancy",
 		&instance_config.retention_redundancy, SOURCE_CMD, 0,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	{
-		'u', 219, "retention-window",
+		'u', 220, "retention-window",
 		&instance_config.retention_window, SOURCE_CMD, 0,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
@@ -456,102 +461,130 @@ readInstanceConfigFile(const char *instance_name)
 			&instance->archive_timeout, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_ARCHIVE_GROUP, OPTION_UNIT_S, option_get_value
 		},
+		{
+			's', 208, "archive-host",
+			&instance_config.archive.host, SOURCE_CMD, 0,
+			OPTION_ARCHIVE_GROUP, 0, option_get_value
+		},
+		{
+			's', 209, "archive-port",
+			&instance_config.archive.port, SOURCE_CMD, 0,
+			OPTION_ARCHIVE_GROUP, 0, option_get_value
+		},
+		{
+			's', 210, "archive-user",
+			&instance_config.archive.user, SOURCE_CMD, 0,
+			OPTION_ARCHIVE_GROUP, 0, option_get_value
+		},
+		{
+			's', 211, "restore-command",
+			&instance->restore_command, SOURCE_CMD, 0,
+			OPTION_ARCHIVE_GROUP, 0, option_get_value
+		},
+
+		/* Instance options */
+		{
+			's', 'D', "pgdata",
+			&instance->pgdata, SOURCE_CMD, 0,
+			OPTION_INSTANCE_GROUP, 0, option_get_value
+		},
+
 		/* Logging options */
 		{
-			's', 208, "log-level-console",
+			's', 212, "log-level-console",
 			&log_level_console, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			's', 209, "log-level-file",
+			's', 213, "log-level-file",
 			&log_level_file, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			's', 210, "log-filename",
+			's', 214, "log-filename",
 			&instance->logger.log_filename, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			's', 211, "error-log-filename",
+			's', 215, "error-log-filename",
 			&instance->logger.error_log_filename, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			's', 212, "log-directory",
+			's', 216, "log-directory",
 			&instance->logger.log_directory, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			'U', 213, "log-rotation-size",
+			'U', 217, "log-rotation-size",
 			&instance->logger.log_rotation_size, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, OPTION_UNIT_KB, option_get_value
 		},
 		{
-			'U', 214, "log-rotation-age",
+			'U', 218, "log-rotation-age",
 			&instance->logger.log_rotation_age, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, OPTION_UNIT_MS, option_get_value
 		},
 		/* Retention options */
 		{
-			'u', 215, "retention-redundancy",
+			'u', 219, "retention-redundancy",
 			&instance->retention_redundancy, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		{
-			'u', 216, "retention-window",
+			'u', 220, "retention-window",
 			&instance->retention_window, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		{
-			'u', 217, "wal-depth",
+			'u', 221, "wal-depth",
 			&instance_config.wal_depth, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		/* Compression options */
 		{
-			's', 218, "compress-algorithm",
+			's', 222, "compress-algorithm",
 			&compress_alg, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			'u', 219, "compress-level",
+			'u', 223, "compress-level",
 			&instance->compress_level, SOURCE_CMD, 0,
 			OPTION_COMPRESS_GROUP, 0, option_get_value
 		},
 		/* Remote backup options */
 		{
-			's', 220, "remote-proto",
+			's', 224, "remote-proto",
 			&instance->remote.proto, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 221, "remote-host",
+			's', 225, "remote-host",
 			&instance->remote.host, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 222, "remote-port",
+			's', 226, "remote-port",
 			&instance->remote.port, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 223, "remote-path",
+			's', 227, "remote-path",
 			&instance->remote.path, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 224, "remote-user",
+			's', 228, "remote-user",
 			&instance->remote.user, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 225, "ssh-options",
+			's', 229, "ssh-options",
 			&instance->remote.ssh_options, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 226, "ssh-config",
+			's', 230, "ssh-config",
 			&instance->remote.ssh_config, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},

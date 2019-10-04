@@ -250,6 +250,15 @@ assign_option(ConfigOption *opt, const char *optarg, OptionSource src)
 			case 's':
 				if (orig_source != SOURCE_DEFAULT)
 					free(*(char **) opt->var);
+
+				/* 'none' and 'off' are always disable the string parameter */
+				if ((pg_strcasecmp(optarg, "none") == 0) ||
+					(pg_strcasecmp(optarg, "off") == 0))
+				{
+					opt->var = NULL;
+					return;
+				}
+
 				*(char **) opt->var = pgut_strdup(optarg);
 				if (strcmp(optarg,"") != 0)
 					return;
@@ -655,6 +664,10 @@ option_get_value(ConfigOption *opt)
 				return psprintf(UINT64_FORMAT, *((uint64 *) opt->var));
 		case 's':
 			if (*((char **) opt->var) == NULL)
+				return NULL;
+			/* 'none' and 'off' are always disable the string parameter */
+			if ((pg_strcasecmp(*((char **) opt->var), "none") == 0) ||
+				(pg_strcasecmp(*((char **) opt->var), "off") == 0))
 				return NULL;
 			return pstrdup(*((char **) opt->var));
 		case 't':

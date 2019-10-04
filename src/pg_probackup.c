@@ -87,7 +87,6 @@ static char		   *target_stop;
 static bool			target_immediate;
 static char		   *target_name = NULL;
 static char		   *target_action = NULL;
-static char		   *restore_command = NULL;
 
 static pgRecoveryTarget *recovery_target_options = NULL;
 static pgRestoreParams *restore_params = NULL;
@@ -183,7 +182,6 @@ static ConfigOption cmd_options[] =
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	{ 'f', 158, "db-include", 		opt_datname_include_list, SOURCE_CMD_STRICT },
 	{ 'f', 159, "db-exclude", 		opt_datname_exclude_list, SOURCE_CMD_STRICT },
-	{ 's', 160, "restore-command",	&restore_command,		SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -643,7 +641,6 @@ main(int argc, char *argv[])
 		restore_params->skip_external_dirs = skip_external_dirs;
 		restore_params->partial_db_list = NULL;
 		restore_params->partial_restore_type = NONE;
-		restore_params->restore_command = restore_command;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)

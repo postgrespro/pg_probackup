@@ -26,10 +26,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        with open(os.path.join(
-                backup_dir, 'backups', 'node',
-                "pg_probackup.conf"), "a") as conf:
-            conf.write("retention-redundancy = 1\n")
+        self.set_config(
+            backup_dir, 'node', options=['--retention-redundancy=1'])
 
         # Make backups to be purged
         self.backup_node(backup_dir, 'node', node)
@@ -40,31 +38,31 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
 
+        output_before = self.show_archive(backup_dir, 'node', tli=1)
+
         # Purge backups
         log = self.delete_expired(
             backup_dir, 'node', options=['--expired', '--wal'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
+        output_after = self.show_archive(backup_dir, 'node', tli=1)
+
+        self.assertEqual(
+            output_before['max-segno'],
+            output_after['max-segno'])
+
+        self.assertNotEqual(
+            output_before['min-segno'],
+            output_after['min-segno'])
+
         # Check that WAL segments were deleted
-        min_wal = None
-        max_wal = None
-        for line in log.splitlines():
-            if line.startswith("INFO: removed min WAL segment"):
-                min_wal = line[31:-1]
-            elif line.startswith("INFO: removed max WAL segment"):
-                max_wal = line[31:-1]
-
-        if not min_wal:
-            self.assertTrue(False, "min_wal is empty")
-
-        if not max_wal:
-            self.assertTrue(False, "max_wal is not set")
+        min_wal = output_after['min-segno']
+        max_wal = output_after['max-segno']
 
         for wal_name in os.listdir(os.path.join(backup_dir, 'wal', 'node')):
             if not wal_name.endswith(".backup"):
-                # wal_name_b = wal_name.encode('ascii')
-                self.assertEqual(wal_name[8:] > min_wal[8:], True)
-                self.assertEqual(wal_name[8:] > max_wal[8:], True)
+                self.assertTrue(wal_name[8:] >= min_wal)
+                self.assertTrue(wal_name[8:] <= max_wal)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1354,7 +1352,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
-        gdb._execute('signal SIGTERM')
+        gdb._execute('signal SIGKILL')
         gdb.continue_execution_until_error()
 
         page_id = self.show_pb(backup_dir, 'node')[1]['id']
