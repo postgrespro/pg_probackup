@@ -728,7 +728,7 @@ For each backup, the following information is provided:
 - WAL Mode — the WAL delivery mode. Possible values: STREAM and ARCHIVE.
 - TLI — timeline identifiers of current backup and its parent.
 - Time — the time it took to perform the backup.
-- Data — the size of the data files in this backup. This value does not include the size of WAL files.
+- Data — the size of the data files in this backup. This value does not include the size of WAL files.  In case of STREAM backup the total size of backup can be calculated as 'Data' + 'WAL'.
 - WAL — the size of WAL files required to reply by PostgreSQL to reach consistency.
 - Zratio — compression ratio calculated as "uncompressed-bytes" / "data-bytes".
 - Start LSN — WAL log sequence number corresponding to the start of the backup process. REDO point for PostgreSQL recovery process to start from.
