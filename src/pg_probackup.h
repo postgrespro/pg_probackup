@@ -140,6 +140,9 @@ typedef struct pgFile
 	int64	write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
+	int64	uncompressed_size;	/* size of the backed-up file before compression
+								 * and adding block headers.
+								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char	*linked;		/* path of the linked file */
@@ -317,8 +320,17 @@ struct pgBackup
 	 * BYTES_INVALID means nothing was backed up.
 	 */
 	int64			data_bytes;
-	/* Size of WAL files needed to restore this backup */
+	/* Size of WAL files needed to replay on top of this
+	 * backup to reach the consistency.
+	 */
 	int64			wal_bytes;
+	/* Size of data files before applying compression and block header,
+	 * WAL files are not included.
+	 */
+	int64			uncompressed_bytes;
+
+	/* Size of data files in PGDATA at the moment of backup. */
+	int64			pgdata_bytes;
 
 	CompressAlg		compress_alg;
 	int				compress_level;
