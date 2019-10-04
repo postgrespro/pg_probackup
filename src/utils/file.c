@@ -55,10 +55,13 @@ void fio_error(int rc, int size, char const* file, int line)
 	}
 	else
 	{
-		char buf[PRINTF_BUF_SIZE];
-		int err_size = read(fio_stderr, buf, sizeof(buf));
+		char buf[PRINTF_BUF_SIZE+1];
+		int err_size = read(fio_stderr, buf, PRINTF_BUF_SIZE);
 		if (err_size > 0)
+		{
+			buf[err_size] = '\0';
 			elog(ERROR, "Agent error: %s", buf);
+		}
 		else
 			elog(ERROR, "Communication error: %s", rc >= 0 ? "end of data" :  strerror(errno));
 	}
