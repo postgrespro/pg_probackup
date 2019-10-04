@@ -1614,6 +1614,73 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_archive_options_1(self):
+        """
+        check that '--archive-host', '--archive-user', '--archiver-port'
+        and '--restore-command' are working as expected with set-config
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, compress=True)
+
+        node.slow_start()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=1)
+
+        node.cleanup()
+
+        wal_dir = os.path.join(backup_dir, 'wal', 'node')
+        self.set_config(
+            backup_dir, 'node',
+            options=[
+                '--restore-command="cp {0}/%f %p"'.format(wal_dir),
+                '--archive-host=localhost',
+                '--archive-port=22',
+                '--archive-user={0}'.format(self.user)])
+        self.restore_node(backup_dir, 'node', node)
+
+        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        with open(recovery_conf, 'r') as f:
+            recovery_content = f.read()
+
+        self.assertIn(
+            'restore_command = \'"cp {0}/%f %p"\''.format(wal_dir),
+            recovery_content)
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--restore-command=none'.format(wal_dir),
+                '--archive-host=localhost1',
+                '--archive-port=23',
+                '--archive-user={0}'.format(self.user)
+                ])
+
+        with open(recovery_conf, 'r') as f:
+            recovery_content = f.read()
+
+        self.assertIn(
+            "restore_command = '{0} archive-get -B {1} --instance {2} "
+            "--wal-file-path=%p --wal-file-name=%f --remote-host=localhost1 "
+            "--remote-port=23 --remote-user={3}'".format(
+                self.probackup_path, backup_dir, 'node', self.user),
+            recovery_content)
+
+        self.del_test_dir(module_name, fname)
+
 # important - switchpoint may be NullOffset LSN and not actually existing in archive to boot.
 # so write validation code accordingly
 

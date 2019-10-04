@@ -408,7 +408,7 @@ help_restore(void)
 	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
-	printf(_("      --restore-command=cmdline    command to use as 'restore_command' in recovery.conf\n"));
+	printf(_("      --restore-command=cmdline    command to use as 'restore_command' in recovery.conf; 'none' disables\n"));
 
 	printf(_("\n  Partial restore options:\n"));
 	printf(_("      --db-include dbname          restore only specified databases\n"));
@@ -689,7 +689,7 @@ help_set_config(void)
 	printf(_("  -E  --external-dirs=external-directories-paths\n"));
 	printf(_("                                   backup some directories not from pgdata \n"));
 	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
-	printf(_("      --restore-command=cmdline    command to use as 'restore_command' in recovery.conf\n"));
+	printf(_("      --restore-command=cmdline    command to use as 'restore_command' in recovery.conf; 'none' disables\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
