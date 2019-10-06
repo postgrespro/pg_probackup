@@ -995,7 +995,10 @@ catalog_get_timelines(InstanceConfig *instance)
 				if (count == instance->wal_depth)
 				{
 					elog(VERBOSE, "On timeline %i WAL is protected from purge at %X/%X",
-						 tlinfo->tli, base36enc(backup->start_time), backup->tli);
+						 tlinfo->tli,
+						 (uint32) (backup->start_lsn >> 32),
+						 (uint32) (backup->start_lsn));
+
 					tlinfo->anchor_lsn = backup->start_lsn;
 					tlinfo->anchor_tli = backup->tli;
 					break;
@@ -1019,6 +1022,8 @@ catalog_get_timelines(InstanceConfig *instance)
 		 *
 		 * If number of valid backups on timelines is less than 'wal-depth'
 		 * then timeline must(!) stay reachable via parent timelines if any.
+		 * If closest_backup is not available, then general WAL purge rules
+		 * are applied.
 		 */
 		if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
 		{
@@ -1044,6 +1049,7 @@ catalog_get_timelines(InstanceConfig *instance)
 			 */
 			pgBackup *closest_backup = NULL;
 			xlogInterval *interval = NULL;
+			TimeLineID tli = 0;
 			/* check if tli has closest_backup */
 			if (!tlinfo->closest_backup)
 				/* timeline has no closest_backup, wal retention cannot be
@@ -1060,14 +1066,16 @@ catalog_get_timelines(InstanceConfig *instance)
 				continue;
 
 			/*
-			 * Set anchor_lsn and anchor_tli to protect current timeline from purge
-			 * In the example above - tli1 and tli2 will be protected.
+			 * Set anchor_lsn and anchor_tli to protect whole timeline from purge
+			 * In the example above: tli3.
 			 */
 			tlinfo->anchor_lsn = tlinfo->closest_backup->start_lsn;
 			tlinfo->anchor_tli = tlinfo->closest_backup->tli;
 
 			/* closest backup may be located not in parent timeline */
 			closest_backup = tlinfo->closest_backup;
+
+			tli = tlinfo->tli;
 
 			/*
 			 * Iterate over parent timeline chain and
@@ -1080,7 +1088,6 @@ catalog_get_timelines(InstanceConfig *instance)
 				 * In case of final timelines save to keep_segments
 				 * closest_backup start_lsn segment and switchpoint segment.
 				 */
-				XLogSegNo switch_segno = 0;
 				XLogRecPtr switchpoint = tlinfo->switchpoint;
 
 				tlinfo = tlinfo->parent_link;
@@ -1090,30 +1097,31 @@ catalog_get_timelines(InstanceConfig *instance)
 
 				/* in any case, switchpoint segment must be added to interval */
 				interval = palloc(sizeof(xlogInterval));
-				GetXLogSegNo(switchpoint, switch_segno, instance->xlog_seg_size);
-				interval->end_segno = switch_segno;
+				GetXLogSegNo(switchpoint, interval->end_segno, instance->xlog_seg_size);
+
+				/* Save [S1`, S2] to keep_segments */
+				if (tlinfo->tli != closest_backup->tli)
+					interval->begin_segno = tlinfo->begin_segno;
+				/* Save [B1, S1] to keep_segments */
+				else
+					GetXLogSegNo(closest_backup->start_lsn, interval->begin_segno, instance->xlog_seg_size);
 
 				/*
 				 * TODO: check, maybe this interval is already here or
 				 * covered by other larger interval.
 				 */
 
-				/* Save [S1`, S2] to keep_segments */
-				if (tlinfo->tli != closest_backup->tli)
-				{
-					interval->begin_segno = tlinfo->begin_segno;
-					parray_append(tlinfo->keep_segments, interval);
-					continue;
-				}
-				/* Save [B1, S1] to keep_segments */
-				else
-				{
-					XLogSegNo begin_segno = 0;
-					GetXLogSegNo(closest_backup->start_lsn, begin_segno, instance->xlog_seg_size);
-					interval->begin_segno = begin_segno;
-					parray_append(tlinfo->keep_segments, interval);
-					break;
-				}
+				elog(VERBOSE, "Timeline %i to stay reachable from timeline %i "
+								"protect from purge WAL interval between "
+								"%08X%08X and %08X%08X on timeline %i",
+						tli, closest_backup->tli,
+						(uint32) interval->begin_segno / instance->xlog_seg_size,
+						(uint32) interval->begin_segno % instance->xlog_seg_size,
+						(uint32) interval->end_segno / instance->xlog_seg_size,
+						(uint32) interval->end_segno % instance->xlog_seg_size,
+						tlinfo->tli);
+				parray_append(tlinfo->keep_segments, interval);
+				continue;
 			}
 			continue;
 		}
@@ -1157,6 +1165,16 @@ catalog_get_timelines(InstanceConfig *instance)
 				interval->end_segno = segno + 1;
 			else
 				interval->end_segno = segno;
+
+			elog(VERBOSE, "Archive backup %s to stay consistent "
+							"protect from purge WAL interval "
+							"between %08X%08X and %08X%08X on timeline %i",
+						base36enc(backup->start_time),
+						(uint32) interval->begin_segno / instance->xlog_seg_size,
+						(uint32) interval->begin_segno % instance->xlog_seg_size,
+						(uint32) interval->end_segno / instance->xlog_seg_size,
+						(uint32) interval->end_segno % instance->xlog_seg_size,
+						backup->tli);
 
 			if (tlinfo->keep_segments == NULL)
 				tlinfo->keep_segments = parray_new();

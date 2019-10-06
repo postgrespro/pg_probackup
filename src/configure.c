@@ -190,54 +190,54 @@ ConfigOption instance_options[] =
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	{
-		'u', 220, "wal-depth",
+		'u', 221, "wal-depth",
 		&instance_config.wal_depth, SOURCE_CMD, 0,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	/* Compression options */
 	{
-		'f', 221, "compress-algorithm",
+		'f', 222, "compress-algorithm",
 		assign_compress_alg, SOURCE_CMD, 0,
 		OPTION_COMPRESS_GROUP, 0, get_compress_alg
 	},
 	{
-		'u', 222, "compress-level",
+		'u', 223, "compress-level",
 		&instance_config.compress_level, SOURCE_CMD, 0,
 		OPTION_COMPRESS_GROUP, 0, option_get_value
 	},
 	/* Remote backup options */
 	{
-		's', 223, "remote-proto",
+		's', 224, "remote-proto",
 		&instance_config.remote.proto, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 224, "remote-host",
+		's', 225, "remote-host",
 		&instance_config.remote.host, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 225, "remote-port",
+		's', 226, "remote-port",
 		&instance_config.remote.port, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 226, "remote-path",
+		's', 227, "remote-path",
 		&instance_config.remote.path, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 227, "remote-user",
+		's', 228, "remote-user",
 		&instance_config.remote.user, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 228, "ssh-options",
+		's', 229, "ssh-options",
 		&instance_config.remote.ssh_options, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 229, "ssh-config",
+		's', 230, "ssh-config",
 		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
@@ -538,7 +538,7 @@ readInstanceConfigFile(const char *instance_name)
 		},
 		{
 			'u', 221, "wal-depth",
-			&instance_config.wal_depth, SOURCE_CMD, 0,
+			&instance->wal_depth, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		/* Compression options */
