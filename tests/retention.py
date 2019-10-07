@@ -1598,7 +1598,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_wal_depth(self):
         """
         ARCHIVE replica:
@@ -1918,8 +1918,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(timeline_2['parent-tli'], 1)
         self.assertEqual(timeline_1['parent-tli'], 0)
 
-        exit(1)
-
         output = self.delete_pb(
             backup_dir, 'replica',
             options=['--delete-wal', '--log-level-console=verbose'])
@@ -2036,12 +2034,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=1)
         B6 = self.backup_node(backup_dir, 'node', node)
 
-        show = self.show_archive(backup_node, 'node')
-        print(show)
+        lsn = self.show_archive(backup_dir, 'node', tli=2)['switchpoint']
 
         self.validate_pb(
             backup_dir, 'node', backup_id=B2,
-            options=['--recovery-target-lsn={0}'])
+            options=['--recovery-target-lsn={0}'.format(lsn)])
 
         self.del_test_dir(module_name, fname)
 
