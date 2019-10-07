@@ -636,6 +636,7 @@ do_retention_wal(bool dry_run)
 		/*
 		 * If closest backup exists, then timeline is reachable from
 		 * at least one backup and no file should be removed.
+		 * Unless wal-depth is enabled.
 		 */
 		if ((tlinfo->closest_backup) && instance_config.wal_depth <= 0)
 			continue;
@@ -651,6 +652,8 @@ do_retention_wal(bool dry_run)
 		 * can be safely purged.
 		 * Note, that oldest_backup is not necessarily valid here,
 		 * but still we keep wal for it.
+		 * If wal-depth is enabled then use anchor_lsn instead
+		 * of oldest_backup.
 		 */
 		if (tlinfo->oldest_backup)
 		{
@@ -812,7 +815,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	{
 		wal_size_logical = (OldestToKeepSegNo - FirstToDeleteSegNo) * xlog_seg_size;
 
-		/* In case of purge all scenario OldestToKeepSegNo will be deleted too */
+		/* In case of 'purge all' scenario OldestToKeepSegNo will be deleted too */
 		if (purge_all)
 			wal_size_logical += xlog_seg_size;
 	}
@@ -884,7 +887,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 			/* save segment from purging */
 			if (instance_config.wal_depth >= 0 && wal_file->keep)
 			{
-				elog(VERBOSE, "Save WAL segment \"%s\"", wal_file->file.path);
+				elog(VERBOSE, "Retain WAL segment \"%s\"", wal_file->file.path);
 				continue;
 			}
 
