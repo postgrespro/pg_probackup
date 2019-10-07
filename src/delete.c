@@ -292,6 +292,20 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			 * FULL CORRUPT out of retention
 			 */
 
+			/* Save backup from purge if backup is pinned and
+			 * expire date is not yet due.
+			 */
+			if ((backup->expire_time > 0) &&
+				(backup->expire_time > current_time))
+			{
+				char		expire_timestamp[100];
+				time2iso(expire_timestamp, lengthof(expire_timestamp), backup->expire_time);
+
+				elog(LOG, "Backup %s is pinned until '%s', retain",
+					base36enc(backup->start_time), expire_timestamp);
+				continue;
+			}
+
 			/* Add backup to purge_list */
 			elog(VERBOSE, "Mark backup %s for purge.", base36enc(backup->start_time));
 			parray_append(to_purge_list, backup);
@@ -355,6 +369,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		char		*action = "Active";
+		uint32		pinning_window = 0;
 
 		pgBackup	*backup = (pgBackup *) parray_get(backup_list, i);
 
@@ -364,7 +379,11 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		if (backup->recovery_time == 0)
 			actual_window = 0;
 		else
-			actual_window = (current_time - backup->recovery_time)/(60 * 60 * 24);
+			actual_window = (current_time - backup->recovery_time)/(3600 * 24);
+
+		/* For pinned backups show expire date */
+		if (backup->expire_time > 0 && backup->expire_time > backup->recovery_time)
+			pinning_window = (backup->expire_time - backup->recovery_time)/(3600 * 24);
 
 		/* TODO: add ancestor(chain full backup) ID */
 		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
@@ -373,7 +392,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				status2str(backup->status),
 				cur_full_backup_num,
 				instance_config.retention_redundancy,
-				actual_window, instance_config.retention_window,
+				actual_window,
+				pinning_window ? pinning_window : instance_config.retention_window,
 				action);
 
 		if (backup->backup_mode == BACKUP_MODE_FULL)
@@ -576,7 +596,7 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 			{
 
 				/* We must not delete this backup, evict it from purge list */
-				elog(LOG, "Retain backup %s from purge because his "
+				elog(LOG, "Retain backup %s because his "
 					"descendant %s is guarded by retention",
 						base36enc(delete_backup->start_time), keeped_backup_id);
 

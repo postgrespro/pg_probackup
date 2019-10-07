@@ -988,6 +988,81 @@ get_oldest_backup(timelineInfo *tlinfo)
 }
 
 /*
+ * Overwrite backup metadata.
+ */
+void
+do_set_backup(const char *instance_name, time_t backup_id,
+			  pgSetBackupParams *set_backup_params)
+{
+	pgBackup	*target_backup = NULL;
+	parray 		*backup_list = NULL;
+
+	if (!set_backup_params)
+		elog(ERROR, "Nothing to set by 'set-backup' command");
+
+	backup_list = catalog_get_backup_list(instance_name, backup_id);
+	if (parray_num(backup_list) != 1)
+		elog(ERROR, "Failed to find backup %s", base36enc(backup_id));
+
+	target_backup = (pgBackup *) parray_get(backup_list, 0);
+
+	if (!pin_backup(target_backup, set_backup_params))
+		elog(ERROR, "Failed to pin the backup %s", base36enc(backup_id));
+}
+
+/*
+ * Set 'expire-time' attribute based on set_backup_params, or unpin backup
+ * if ttl is equal to zero.
+ */
+bool
+pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
+{
+
+	if (target_backup->recovery_time <= 0)
+		elog(ERROR, "Failed to set 'expire-time' for backup %s: invalid 'recovery-time'",
+						base36enc(target_backup->backup_id));
+
+	/* Pin comes from ttl */
+	if (set_backup_params->ttl > 0)
+		target_backup->expire_time = target_backup->recovery_time + set_backup_params->ttl;
+	/* Unpin backup */
+	else if (set_backup_params->ttl == 0)
+	{
+		/* If backup was not pinned in the first place,
+		 * then there is nothing to unpin.
+		 */
+		if (target_backup->expire_time == 0)
+		{
+			elog(WARNING, "Backup %s is not pinned, nothing to unpin",
+									base36enc(target_backup->start_time));
+			return false;
+		}
+		target_backup->expire_time = 0;
+	}
+	/* Pin comes from expire-time */
+	else if (set_backup_params->expire_time > 0)
+		target_backup->expire_time = set_backup_params->expire_time;
+	else
+		return false;
+
+	/* Update backup.control */
+	write_backup(target_backup);
+
+	if (set_backup_params->ttl > 0 || set_backup_params->expire_time > 0)
+	{
+		char	expire_timestamp[100];
+
+		time2iso(expire_timestamp, lengthof(expire_timestamp), target_backup->expire_time);
+		elog(INFO, "Backup %s is pinned until '%s'", base36enc(target_backup->start_time),
+														expire_timestamp);
+	}
+	else
+		elog(INFO, "Backup %s is unpinned", base36enc(target_backup->start_time));
+
+	return true;
+}
+
+/*
  * Write information about backup.in to stream "out".
  */
 void
@@ -1040,6 +1115,11 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
 		fio_fprintf(out, "recovery-time = '%s'\n", timestamp);
+	}
+	if (backup->expire_time > 0)
+	{
+		time2iso(timestamp, lengthof(timestamp), backup->expire_time);
+		fio_fprintf(out, "expire-time = '%s'\n", timestamp);
 	}
 
 	/*
@@ -1284,6 +1364,7 @@ readBackupControlFile(const char *path)
 		{'t', 0, "end-time",			&backup->end_time, SOURCE_FILE_STRICT},
 		{'U', 0, "recovery-xid",		&backup->recovery_xid, SOURCE_FILE_STRICT},
 		{'t', 0, "recovery-time",		&backup->recovery_time, SOURCE_FILE_STRICT},
+		{'t', 0, "expire-time",			&backup->expire_time, SOURCE_FILE_STRICT},
 		{'I', 0, "data-bytes",			&backup->data_bytes, SOURCE_FILE_STRICT},
 		{'I', 0, "wal-bytes",			&backup->wal_bytes, SOURCE_FILE_STRICT},
 		{'I', 0, "uncompressed-bytes",	&backup->uncompressed_bytes, SOURCE_FILE_STRICT},
@@ -1529,6 +1610,7 @@ pgBackupInit(pgBackup *backup)
 	backup->end_time = (time_t) 0;
 	backup->recovery_xid = 0;
 	backup->recovery_time = (time_t) 0;
+	backup->expire_time = (time_t) 0;
 
 	backup->data_bytes = BYTES_INVALID;
 	backup->wal_bytes = BYTES_INVALID;

@@ -374,6 +374,12 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		json_add_value(buf, "recovery-time", timestamp, json_level, true);
 	}
 
+	if (backup->expire_time > 0)
+	{
+		time2iso(timestamp, lengthof(timestamp), backup->expire_time);
+		json_add_value(buf, "expire-time", timestamp, json_level, true);
+	}
+
 	if (backup->data_bytes != BYTES_INVALID)
 	{
 		json_add_key(buf, "data-bytes", json_level);

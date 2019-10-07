@@ -310,6 +310,7 @@ struct pgBackup
 	time_t			recovery_time;	/* Earliest moment for which you can restore
 									 * the state of the database cluster using
 									 * this backup */
+	time_t			expire_time;	/* Backup expiration date */
 	TransactionId	recovery_xid;	/* Earliest xid for which you can restore
 									 * the state of the database cluster using
 									 * this backup */
@@ -389,6 +390,18 @@ typedef struct pgRestoreParams
 	PartialRestoreType partial_restore_type;
 	parray *partial_db_list;
 } pgRestoreParams;
+
+/* Options needed for set-backup command */
+typedef struct pgSetBackupParams
+{
+	int64	ttl; /* amount of time backup must be pinned
+				  * -1 - do nothing
+				  * 0 - disable pinning
+				  */
+	time_t	expire_time; /* Point in time before which backup
+						  * must be pinned.
+						  */
+} pgSetBackupParams;
 
 typedef struct
 {
@@ -572,7 +585,8 @@ extern char** commands_args;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(time_t start_time, bool no_validate);
+extern int do_backup(time_t start_time, bool no_validate,
+										pgSetBackupParams *set_backup_params);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
@@ -668,6 +682,10 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli,
 											  time_t current_start_time);
 extern parray *catalog_get_timelines(InstanceConfig *instance);
+extern void do_set_backup(const char *instance_name, time_t backup_id,
+							pgSetBackupParams *set_backup_params);
+extern bool pin_backup(pgBackup	*target_backup,
+							pgSetBackupParams *set_backup_params);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list);
