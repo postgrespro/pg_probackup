@@ -815,8 +815,11 @@ do_backup(time_t start_time, bool no_validate,
 		pgBackupValidate(&current, NULL);
 
 	/* Notify user about backup size */
-	pretty_size(current.data_bytes, pretty_data_bytes, lengthof(pretty_data_bytes));
-	elog(INFO, "Backup %s real size: %s", base36enc(current.start_time), pretty_data_bytes);
+	if (current.stream)
+		pretty_size(current.data_bytes + current.wal_bytes, pretty_data_bytes, lengthof(pretty_data_bytes));
+	else
+		pretty_size(current.data_bytes, pretty_data_bytes, lengthof(pretty_data_bytes));
+	elog(INFO, "Backup %s resident size: %s", base36enc(current.start_time), pretty_data_bytes);
 
 	if (current.status == BACKUP_STATUS_OK ||
 		current.status == BACKUP_STATUS_DONE)
@@ -1827,6 +1830,9 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		}
 
 		backup_in_progress = false;
+
+//		char *target_lsn = "2/F578A000";
+//		XLogDataFromLSN(target_lsn, &lsn_hi, &lsn_lo);
 
 		/* Extract timeline and LSN from results of pg_stop_backup() */
 		XLogDataFromLSN(PQgetvalue(res, 0, 2), &lsn_hi, &lsn_lo);
