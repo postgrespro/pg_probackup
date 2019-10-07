@@ -170,7 +170,7 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             'LOG: Backup {0} is pinned until'.format(page_id),
             log)
         self.assertIn(
-            'LOG: Retain backup {0} from purge because his descendant '
+            'LOG: Retain backup {0} because his descendant '
             '{1} is guarded by retention'.format(full_id, page_id),
             log)
 
@@ -233,7 +233,7 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             'LOG: Backup {0} is pinned until'.format(page1), out)
 
         self.assertIn(
-            'LOG: Retain backup {0} from purge because his descendant '
+            'LOG: Retain backup {0} because his descendant '
             '{1} is guarded by retention'.format(backup_id_1, page1),
             out)
 

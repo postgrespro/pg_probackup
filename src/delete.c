@@ -301,7 +301,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				char		expire_timestamp[100];
 				time2iso(expire_timestamp, lengthof(expire_timestamp), backup->expire_time);
 
-				elog(LOG, "Backup %s is pinned until '%s'. Save from retention purge",
+				elog(LOG, "Backup %s is pinned until '%s', retain",
 					base36enc(backup->start_time), expire_timestamp);
 				continue;
 			}
@@ -596,7 +596,7 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 			{
 
 				/* We must not delete this backup, evict it from purge list */
-				elog(LOG, "Retain backup %s from purge because his "
+				elog(LOG, "Retain backup %s because his "
 					"descendant %s is guarded by retention",
 						base36enc(delete_backup->start_time), keeped_backup_id);
 
