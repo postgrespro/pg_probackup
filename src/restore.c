@@ -933,6 +933,9 @@ create_recovery_conf(time_t backup_id,
 
 		if (rt->target_action)
 			fio_fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);
+		else
+			/* default recovery_target_action is 'pause' */
+			fio_fprintf(fp, "recovery_target_action = '%s'\n", "pause");
 	}
 
 	if (params->restore_as_replica)
@@ -1199,11 +1202,6 @@ parseRecoveryTargetOptions(const char *target_time,
 				 target_action);
 
 		rt->target_action = target_action;
-	}
-	else
-	{
-		/* Default recovery target action is pause */
-		rt->target_action = "pause";
 	}
 
 	/* More than one mutually exclusive option was defined. */

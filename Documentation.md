@@ -38,6 +38,7 @@ Current version - 2.1.5
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
         * [Viewing WAL Archive Information](#viewing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
+        * [Pinning a Backup]
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
 
@@ -49,6 +50,7 @@ Current version - 2.1.5
         * [add-instance](#add-instance)
         * [del-instance](#del-instance)
         * [set-config](#set-config)
+        * [set-backup](#set-backup)
         * [show-config](#show-config)
         * [show](#show)
         * [backup](#backup)
@@ -63,6 +65,7 @@ Current version - 2.1.5
         * [Common Options](#common-options)
         * [Recovery Target Options](#recovery-target-options)
         * [Retention Options](#retention-options)
+            * [Pinning Options](#pinning-options)
         * [Logging Options](#logging-options)
         * [Connection Options](#connection-options)
         * [Compression Options](#compression-options)
@@ -88,6 +91,8 @@ Current version - 2.1.5
 `pg_probackup del-instance -B backup_dir --instance instance_name`
 
 `pg_probackup set-config -B backup_dir --instance instance_name [option...]`
+
+`pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id [option...]`
 
 `pg_probackup show-config -B backup_dir --instance instance_name [--format=format]`
 
@@ -775,6 +780,7 @@ start-time = '2017-05-16 12:57:29'
 end-time = '2017-05-16 12:57:31'
 recovery-xid = 597
 recovery-time = '2017-05-16 12:57:31'
+expire-time = '2020-05-16 12:57:31'
 data-bytes = 22288792
 wal-bytes = 16777216
 uncompressed-bytes = 39961833
@@ -794,6 +800,7 @@ Detailed output has additional attributes:
 - program-version — full version of pg_probackup binary used to create backup.
 - start-time — the backup starting time.
 - end-time — the backup ending time.
+- expire-time — if the backup was pinned, then until this point in time the backup cannot be removed by retention purge.
 - uncompressed-bytes — size of the data files before adding page headers and applying compression. You can evaluate the effectiveness of compression by comparing 'uncompressed-bytes' to 'data-bytes' if compression if used.
 - pgdata-bytes — size of the PostgreSQL cluster data files at the time of backup. You can evaluate the effectiveness of incremental backup by comparing 'pgdata-bytes' to 'uncompressed-bytes'.
 - recovery-xid — current transaction id at the moment of backup ending.
@@ -1171,6 +1178,42 @@ BACKUP INSTANCE 'node'
 
 >NOTE: The Time field for the merged backup displays the time required for the merge.
 
+#### Pinning a Backup
+
+If you have the necessity to exclude certain backups from established retention policy then it is possible to pin a backup for an arbitrary amount of time. Example:
+
+    pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=30d
+
+This command will set `expire-time` of specified backup to 30 days starting from backup `recovery-time` attribute. Basically 'expire-time = recovery-time + ttl'.
+
+You can set `expire-time` explicitly using `--expire-time` option. Example:
+
+    pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --expire-time='2020-01-01 00:00:00+03'
+
+Alternatively you can use the `--ttl` and `--expire-time` options with the [backup](#backup) command to pin newly created backup:
+
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --ttl=30d
+    pg_probackup backup -B backup_dir --instance instance_name -b FULL --expire-time='2020-01-01 00:00:00+03'
+
+You can determine the fact that backup is pinned and check due expire time by looking up 'expire-time' attribute in backup metadata via (show)[#show] command:
+
+    pg_probackup show --instance instance_name -i backup_id
+
+Pinned backup has `expire-time` attribute:
+```
+...
+recovery-time = '2017-05-16 12:57:31'
+expire-time = '2020-01-01 00:00:00+03'
+data-bytes = 22288792
+...
+```
+
+You can unpin a backup by setting `--ttl` option to zero using `set-backup` command. Example:
+
+    pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=0
+
+Only pinned backups have `expire-time` attribute in backup metadata.
+
 ### Merging Backups
 
 As you take more and more incremental backups, the total size of the backup catalog can substantially grow. To save disk space, you can merge incremental backups to their parent full backup by running the merge command, specifying the backup ID of the most recent incremental backup you would like to merge:
@@ -1267,6 +1310,15 @@ For all available settings, see the [Options](#options) section.
 
 It is **not recommended** to edit pg_probackup.conf manually.
 
+#### set-backup
+
+    pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id
+    {--ttl=ttl | --expire-time=time} [--help]
+
+Sets the provided backup-specific settings into the backup.control configuration file, or modifies previously defined values.
+
+For all available settings, see the section [Pinning Options](#pinning-options).
+
 #### show-config
 
     pg_probackup show-config -B backup_dir --instance instance_name [--format=plain|json]
@@ -1296,7 +1348,7 @@ For details on usage, see the sections [Managing the Backup Catalog](#managing-t
     [-w --no-password] [-W --password]
     [--archive-timeout=timeout] [--external-dirs=external_directory_path]
     [connection_options] [compression_options] [remote_options]
-    [retention_options] [logging_options]
+    [retention_options] [pinning_options] [logging_options]
 
 Creates a backup copy of the PostgreSQL instance. The *backup_mode* option specifies the backup mode to use.
 
@@ -1342,7 +1394,7 @@ Disables block-level checksum verification to speed up backup.
     --no-validate
 Skips automatic validation after successfull backup. You can use this flag if you validate backups regularly and would like to save time when running backup operations.
 
-Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
+Additionally [Connection Options](#connection-options), [Retention Options](#retention-options), [Pinning Options](#pinning-options), [Remote Mode Options](#remote-mode-options), [Compression Options](#compression-options), [Logging Options](#logging-options) and [Common Options](#common-options) can be used.
 
 For details on usage, see the section [Creating a Backup](#creating-a-backup).
 
@@ -1564,6 +1616,18 @@ Merges the oldest incremental backup that satisfies the requirements of retentio
 
     --dry-run
 Displays the current status of all the available backups, without deleting or merging expired backups, if any.
+
+##### Pinning Options
+
+You can use these options together with [backup](#backup) and [set-delete](#set-backup) commands.
+
+For details on backup pinning, see the section [Pinning a Backup](#pinning-a-backup).
+
+    --ttl=ttl
+Specifies the amount of time the backup should be pinned. Must be a positive integer. The zero value unpin already pinned backup. Supported units: ms, s, min, h, d (s by default). Example: `--ttl=30d`.
+
+    --expire-time=time
+Specifies the timestamp up to which the backup will stay pinned. Must be a ISO-8601 complaint timestamp. Example: `--expire-time='2020-01-01 00:00:00+03'`
 
 #### Logging Options
 

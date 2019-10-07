@@ -694,7 +694,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         page_id_b3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
-
         pgdata_b3 = self.pgdata_content(node.data_dir)
 
         pgbench = node.pgbench(options=['-t', '10', '-c', '2'])

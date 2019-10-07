@@ -42,6 +42,7 @@ typedef enum ProbackupSubcmd
 	MERGE_CMD,
 	SHOW_CMD,
 	SET_CONFIG_CMD,
+	SET_BACKUP_CMD,
 	SHOW_CONFIG_CMD,
 	CHECKDB_CMD
 } ProbackupSubcmd;
@@ -128,6 +129,11 @@ static bool	file_overwrite = false;
 ShowFormat show_format = SHOW_PLAIN;
 bool show_archive = false;
 
+/* set-backup options */
+int64 ttl = -1;
+static char *expire_time_string = NULL;
+static pgSetBackupParams *set_backup_params = NULL;
+
 /* current settings */
 pgBackup	current;
 static ProbackupSubcmd backup_subcmd = NO_CMD;
@@ -205,6 +211,9 @@ static ConfigOption cmd_options[] =
 	/* show options */
 	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
 	{ 'b', 161, "archive",			&show_archive,		SOURCE_CMD_STRICT },
+	/* set-backup options */
+	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
+	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
 
 	/* options for backward compatibility */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
@@ -300,6 +309,8 @@ main(int argc, char *argv[])
 			backup_subcmd = SHOW_CMD;
 		else if (strcmp(argv[1], "set-config") == 0)
 			backup_subcmd = SET_CONFIG_CMD;
+		else if (strcmp(argv[1], "set-backup") == 0)
+			backup_subcmd = SET_BACKUP_CMD;
 		else if (strcmp(argv[1], "show-config") == 0)
 			backup_subcmd = SHOW_CONFIG_CMD;
 		else if (strcmp(argv[1], "checkdb") == 0)
@@ -361,7 +372,9 @@ main(int argc, char *argv[])
 		backup_subcmd == RESTORE_CMD ||
 		backup_subcmd == VALIDATE_CMD ||
 		backup_subcmd == DELETE_CMD ||
-		backup_subcmd == MERGE_CMD)
+		backup_subcmd == MERGE_CMD ||
+		backup_subcmd == SET_CONFIG_CMD ||
+		backup_subcmd == SET_BACKUP_CMD)
 	{
 		int			i,
 					len = 0,
@@ -588,6 +601,7 @@ main(int argc, char *argv[])
 			backup_subcmd != VALIDATE_CMD &&
 			backup_subcmd != DELETE_CMD &&
 			backup_subcmd != MERGE_CMD &&
+			backup_subcmd != SET_BACKUP_CMD &&
 			backup_subcmd != SHOW_CMD)
 			elog(ERROR, "Cannot use -i (--backup-id) option together with the \"%s\" command",
 				 command_name);
@@ -658,6 +672,32 @@ main(int argc, char *argv[])
 		}
 	}
 
+	/*
+	 * Parse set-backup options into set_backup_params structure.
+	 */
+	if (backup_subcmd == SET_BACKUP_CMD || backup_subcmd == BACKUP_CMD)
+	{
+		time_t expire_time = 0;
+
+		if (expire_time_string && ttl >= 0)
+			elog(ERROR, "You cannot specify '--expire-time' and '--ttl' options together");
+
+		/* Parse string to seconds */
+		if (expire_time_string)
+		{
+			if (!parse_time(expire_time_string, &expire_time, false))
+				elog(ERROR, "Invalid value for '--expire-time' option: '%s'",
+					 expire_time_string);
+		}
+
+		if (expire_time > 0 || ttl >= 0)
+		{
+			set_backup_params = pgut_new(pgSetBackupParams);
+			set_backup_params->ttl = ttl;
+			set_backup_params->expire_time = expire_time;
+		}
+	}
+
 	/* sanity */
 	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
 		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
@@ -694,7 +734,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time, no_validate);
+				return do_backup(start_time, no_validate, set_backup_params);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,
@@ -737,6 +777,11 @@ main(int argc, char *argv[])
 			break;
 		case SET_CONFIG_CMD:
 			do_set_config(false);
+			break;
+		case SET_BACKUP_CMD:
+			if (!backup_id_string)
+				elog(ERROR, "You must specify parameter (-i, --backup-id) for 'set-backup' command");
+			do_set_backup(instance_name, current.backup_id, set_backup_params);
 			break;
 		case CHECKDB_CMD:
 			do_checkdb(need_amcheck,
