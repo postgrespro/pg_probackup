@@ -750,6 +750,9 @@ do_backup(time_t start_time, bool no_validate,
 	if (current.from_replica)
 		elog(INFO, "Backup %s is going to be taken from standby", base36enc(start_time));
 
+	/* TODO, print PostgreSQL full version */
+	//elog(INFO, "PostgreSQL version: %s", nodeInfo.server_version_str);
+
 	/*
 	 * Ensure that backup directory was initialized for the same PostgreSQL
 	 * instance we opened connection to. And that target backup database PGDATA
