@@ -19,6 +19,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--log-rotation-age=log-rotation-age]
                  [--retention-redundancy=retention-redundancy]
                  [--retention-window=retention-window]
+                 [--wal-depth=wal-depth]
                  [--compress-algorithm=compress-algorithm]
                  [--compress-level=compress-level]
                  [--archive-timeout=timeout]
@@ -26,6 +27,12 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
+                 [--restore-command=cmdline] [--archive-host=destination]
+                 [--archive-port=port] [--archive-user=username]
+                 [--help]
+
+  pg_probackup set-backup -B backup-path --instance=instance_name
+                 -i backup-id [--ttl] [--expire-time]
                  [--help]
 
   pg_probackup show-config -B backup-path --instance=instance_name
@@ -48,6 +55,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--delete-expired] [--delete-wal] [--merge-expired]
                  [--retention-redundancy=retention-redundancy]
                  [--retention-window=retention-window]
+                 [--wal-depth=wal-depth]
                  [--compress]
                  [--compress-algorithm=compress-algorithm]
                  [--compress-level=compress-level]
@@ -57,6 +65,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
+                 [--ttl] [--expire-time]
                  [--help]
 
   pg_probackup restore -B backup-path --instance=instance_name
@@ -71,11 +80,13 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--no-validate] [--skip-block-validation]
                  [-T OLDDIR=NEWDIR] [--progress]
                  [--external-mapping=OLDDIR=NEWDIR]
-                 [--skip-external-dirs]
+                 [--skip-external-dirs] [--restore-command=cmdline]
                  [--db-include | --db-exclude]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
+                 [--archive-host=hostname]
+                 [--archive-port=port] [--archive-user=username]
                  [--help]
 
   pg_probackup validate -B backup-path [--instance=instance_name]
@@ -99,7 +110,11 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--help]
 
   pg_probackup delete -B backup-path --instance=instance_name
-                 [--wal] [-i backup-id | --expired | --merge-expired]
+                 [-j num-threads] [--progress]
+                 [--retention-redundancy=retention-redundancy]
+                 [--retention-window=retention-window]
+                 [--wal-depth=wal-depth]
+                 [--delete-wal] [-i backup-id | --delete-expired | --merge-expired]
                  [--dry-run]
                  [--help]
 

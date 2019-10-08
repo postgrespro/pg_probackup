@@ -93,6 +93,7 @@ help_pg_probackup(void)
 	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--wal-depth=wal-depth]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--archive-timeout=timeout]\n"));
@@ -128,6 +129,7 @@ help_pg_probackup(void)
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--wal-depth=wal-depth]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
@@ -186,6 +188,7 @@ help_pg_probackup(void)
 	printf(_("                 [-j num-threads] [--progress]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--wal-depth=wal-depth]\n"));
 	printf(_("                 [--delete-wal] [-i backup-id | --delete-expired | --merge-expired]\n"));
 	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n"));
@@ -263,6 +266,7 @@ help_backup(void)
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--wal-depth=wal-depth]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
@@ -322,6 +326,8 @@ help_backup(void)
 	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
 	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
+	printf(_("      --wal-depth=wal-depth        number of latest valid backups per timeline that must\n"));
+	printf(_("                                   retain the ability to perform PITR; 0 disables; (default: 0)\n"));
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
 
 	printf(_("\n  Pinning options:\n"));
@@ -591,7 +597,8 @@ help_delete(void)
 	printf(_("                 [-i backup-id | --delete-expired | --merge-expired] [--delete-wal]\n"));
 	printf(_("                 [-j num-threads] [--progress]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
-	printf(_("                 [--retention-window=retention-window]\n\n"));
+	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--wal-depth=wal-depth]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -609,6 +616,8 @@ help_delete(void)
 	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
 	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
+	printf(_("      --wal-depth=wal-depth        number of latest valid backups per timeline that must\n"));
+	printf(_("                                   retain the ability to perform PITR; 0 disables; (default: 0)\n"));
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
 
 	printf(_("\n  Logging options:\n"));
@@ -704,6 +713,7 @@ help_set_config(void)
 	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
+	printf(_("                 [--wal-depth=wal-depth]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--archive-timeout=timeout]\n"));
@@ -746,6 +756,8 @@ help_set_config(void)
 	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
 	printf(_("                                   number of days of recoverability; 0 disables; (default: 0)\n"));
+	printf(_("      --wal-depth=wal-depth        number of latest valid backups with ability to perform\n"));
+	printf(_("                                   the point in time recovery;  disables; (default: 0)\n"));
 
 	printf(_("\n  Compression options:\n"));
 	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
