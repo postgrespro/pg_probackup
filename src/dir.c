@@ -202,7 +202,8 @@ pgFileInit(const char *path, const char *rel_path)
 	canonicalize_path(file->rel_path);
 
 	/* Get file name from the path */
-	file_name = last_dir_separator(file->path);
+	file_name = pgut_strdup(last_dir_separator(file->path));
+
 	if (file_name == NULL)
 		file->name = file->path;
 	else
@@ -1675,14 +1676,14 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 
 	fp = fio_fopen(database_map_path, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
-		elog(ERROR, "Cannot open file list \"%s\": %s", path,
+		elog(ERROR, "Cannot open database map \"%s\": %s", path,
 			 strerror(errno));
 
 	print_database_map(fp, database_map);
 	if (fio_fflush(fp) || fio_fclose(fp))
 	{
 		fio_unlink(database_map_path, FIO_BACKUP_HOST);
-		elog(ERROR, "Cannot write file list \"%s\": %s",
+		elog(ERROR, "Cannot write database map \"%s\": %s",
 			 database_map_path, strerror(errno));
 	}
 

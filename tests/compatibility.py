@@ -20,8 +20,8 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off'}
-            )
+                'autovacuum': 'off'})
+
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)
 
@@ -51,8 +51,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
 
         self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=["-j", "4", "--recovery-target-action=promote"])
+                backup_dir, 'node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -76,8 +75,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         node_restored.cleanup()
         self.restore_node(
-            backup_dir, 'node', node_restored,
-            options=["-j", "4", "--recovery-target-action=promote"])
+            backup_dir, 'node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -101,8 +99,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
 
         self.restore_node(
-            backup_dir, 'node', node_restored,
-            options=["-j", "4", "--recovery-target-action=promote"])
+            backup_dir, 'node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -122,8 +119,8 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off'}
-            )
+                'autovacuum': 'off'})
+
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)
 
@@ -153,8 +150,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
 
         self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=["-j", "4", "--recovery-target-action=promote"])
+            backup_dir, 'node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -178,8 +174,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         node_restored.cleanup()
         self.restore_node(
-            backup_dir, 'node', node_restored,
-            options=["-j", "4", "--recovery-target-action=promote"])
+            backup_dir, 'node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -203,8 +198,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
 
         self.restore_node(
-            backup_dir, 'node', node_restored,
-            options=["-j", "4", "--recovery-target-action=promote"])
+            backup_dir, 'node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)

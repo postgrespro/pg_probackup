@@ -465,9 +465,9 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         tblspc_path_new = self.get_tblspace_path(
             restored_node, 'somedata_restored')
 
-        self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
-            "--recovery-target-action=promote"])
+        self.restore_node(
+            backup_dir, 'node', restored_node, options=[
+            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
@@ -835,8 +835,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap tablespace somedata as select i as id,"
             " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
-            " from generate_series(0,100) i"
-        )
+            " from generate_series(0,100) i")
+
         # FULL backup
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
@@ -844,8 +844,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.create_tblspace_in_node(node, 'somedata_new')
         node.safe_psql(
             "postgres",
-            "alter table t_heap set tablespace somedata_new"
-        )
+            "alter table t_heap set tablespace somedata_new")
 
         # DELTA BACKUP
         result = node.safe_psql(
@@ -853,15 +852,14 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             backup_type='delta',
-            options=["--stream"]
-        )
+            options=["--stream"])
+
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -875,8 +873,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 "-T", "{0}={1}".format(
                     self.get_tblspace_path(node, 'somedata_new'),
                     self.get_tblspace_path(node_restored, 'somedata_new')
-                ),
-                "--recovery-target-action=promote"
+                )
             ]
         )
 
@@ -1275,7 +1272,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 content = f.read()
 
             self.assertIn(
-                "VERBOSE: File: {0} blknum 1, empty page".format(file),
+                'VERBOSE: File: "{0}" blknum 1, empty page'.format(file),
                 content)
             self.assertNotIn(
                 "Skipping blknum 1 in file: {0}".format(file),

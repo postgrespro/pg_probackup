@@ -28,9 +28,8 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '300s',
-                'autovacuum': 'off'
-            }
-        )
+                'autovacuum': 'off'})
+
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
 
@@ -78,8 +77,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored,
             options=[
                 "-j", "4",
-                "-T", "{0}={1}".format(old_tablespace, new_tablespace),
-                "--recovery-target-action=promote"])
+                "-T", "{0}={1}".format(old_tablespace, new_tablespace)])
 
         # Physical comparison
         if self.paranoia:
@@ -302,9 +300,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 'shared_buffers': '1GB',
                 'maintenance_work_mem': '1GB',
                 'autovacuum': 'off',
-                'full_page_writes': 'off'
-                }
-            )
+                'full_page_writes': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -343,7 +339,6 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', restored_node,
             options=[
                 "-j", "4",
-                "--recovery-target-action=promote",
                 "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
@@ -958,15 +953,14 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     self.output, self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'INFO: Wait for LSN' in e.message and
-                'in archived WAL segment' in e.message and
-                'Could not read WAL record at' in e.message and
-                'WAL file is from different database system: WAL file database system identifier is' in e.message and
-                'pg_control database system identifier is' in e.message and
-                'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+            self.assertIn('INFO: Wait for WAL segment', e.message)
+            self.assertIn('to be archived', e.message)
+            self.assertIn('Could not read WAL record at', e.message)
+            self.assertIn('WAL file is from different database system: '
+                'WAL file database system identifier is', e.message)
+            self.assertIn('pg_control database system identifier is', e.message)
+            self.assertIn('Possible WAL corruption. Error has occured '
+                'during reading WAL segment', e.message)
 
         self.assertEqual(
             'ERROR',

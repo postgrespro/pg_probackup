@@ -642,9 +642,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '300s',
-                'autovacuum': 'off'
-            }
-        )
+                'autovacuum': 'off'})
+
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
 
@@ -694,8 +693,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored,
             options=[
                 "-j", "4",
-                "-T", "{0}={1}".format(old_tablespace, new_tablespace),
-                "--recovery-target-action=promote"])
+                "-T", "{0}={1}".format(old_tablespace, new_tablespace)])
 
         # Physical comparison
         if self.paranoia:
@@ -735,9 +733,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '300s',
-                'autovacuum': 'off'
-            }
-        )
+                'autovacuum': 'off'})
+
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
 
@@ -787,8 +784,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored,
             options=[
                 "-j", "4",
-                "-T", "{0}={1}".format(old_tablespace, new_tablespace),
-                "--recovery-target-action=promote"])
+                "-T", "{0}={1}".format(old_tablespace, new_tablespace)])
 
         # Physical comparison
         if self.paranoia:
