@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime, timedelta
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from time import sleep
+from distutils.dir_util import copy_tree
 
 
 module_name = 'retention'
@@ -1415,6 +1416,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', options=['--expired', '--wal'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
+        self.validate_pb(backup_dir, 'node')
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
@@ -1461,6 +1464,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', options=['--expired', '--wal'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
+        self.validate_pb(backup_dir, 'node')
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
@@ -1501,7 +1506,23 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         sleep(1)
 
         # Make FULL backup
-        self.backup_node(backup_dir, 'node', node, options=['--delete-wal'])
+        full_id = self.backup_node(backup_dir, 'node', node, options=['--delete-wal'])
+
+        try:
+            self.validate_pb(backup_dir, 'node')
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page backup should not be possible "
+                "without valid full backup.\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "INFO: Backup {0} WAL segments are valid".format(full_id),
+                e.message)
+            self.assertIn(
+                "WARNING: Backup {0} has missing parent 0".format(page_id),
+                e.message)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1600,4 +1621,922 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 10)
 
         # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    @unittest.skip("skip")
+    def test_wal_depth(self):
+        """
+        ARCHIVE replica:
+
+        t6                     |---------------------->
+        t5                     |                           |------>
+                               |                           |
+        t4                     |                      |----|------>
+                               |                      |
+        t3                     |      |--B1--|/|--B2-|/|-B3-->
+                               |      |
+        t2                  |--A1-----|--A2--->
+        t1  ---------Y1--Y2-|
+
+        ARCHIVE master:
+        t1  -Z1--Z2-->
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        self.set_archiving(backup_dir, 'master', master)
+
+        master.slow_start()
+
+        # FULL
+        master.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # PAGE
+        master.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(10000,20000) i")
+
+        self.backup_node(
+            backup_dir, 'master', master, backup_type='page')
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+        self.set_replica(master, replica)
+
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        copy_tree(
+            os.path.join(backup_dir, 'wal', 'master'),
+            os.path.join(backup_dir, 'wal', 'replica'))
+
+        # Check data correctness on replica
+        replica.slow_start(replica=True)
+
+        # FULL backup replica
+        Y1 = self.backup_node(
+            backup_dir, 'replica', replica,
+            options=['--stream', '--archive-timeout=60s'])
+
+        master.pgbench_init(scale=5)
+
+        # PAGE backup replica
+        Y2 = self.backup_node(
+            backup_dir, 'replica', replica,
+            backup_type='page', options=['--stream', '--archive-timeout=60s'])
+
+        # create timeline t2
+        replica.promote()
+
+        # do checkpoint to increment timeline ID in pg_control
+        replica.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        # FULL backup replica
+        A1 = self.backup_node(
+            backup_dir, 'replica', replica)
+
+        replica.pgbench_init(scale=5)
+
+        replica.safe_psql(
+            'postgres',
+            "CREATE TABLE t1 (a text)")
+
+        target_xid = None
+        with replica.connect("postgres") as con:
+            res = con.execute(
+                "INSERT INTO t1 VALUES ('inserted') RETURNING (xmin)")
+            con.commit()
+            target_xid = res[0][0]
+
+        # DELTA backup replica
+        A2 = self.backup_node(
+            backup_dir, 'replica', replica, backup_type='delta')
+
+        # create timeline t3
+        replica.cleanup()
+        self.restore_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=2',
+                '--recovery-target-action=promote'])
+
+        replica.slow_start()
+
+        B1 = self.backup_node(
+            backup_dir, 'replica', replica)
+
+        replica.pgbench_init(scale=2)
+
+        B2 = self.backup_node(
+            backup_dir, 'replica', replica, backup_type='page')
+
+        replica.pgbench_init(scale=2)
+
+        target_xid = None
+        with replica.connect("postgres") as con:
+            res = con.execute(
+                "INSERT INTO t1 VALUES ('inserted') RETURNING (xmin)")
+            con.commit()
+            target_xid = res[0][0]
+
+        B3 = self.backup_node(
+            backup_dir, 'replica', replica, backup_type='page')
+
+        replica.pgbench_init(scale=2)
+
+        # create timeline t4
+        replica.cleanup()
+        self.restore_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=3',
+                '--recovery-target-action=promote'])
+
+        replica.slow_start()
+
+        replica.safe_psql(
+            'postgres',
+            'CREATE TABLE '
+            't2 as select i, '
+            'repeat(md5(i::text),5006056) as fat_attr '
+            'from generate_series(0,6) i')
+
+        target_xid = None
+        with replica.connect("postgres") as con:
+            res = con.execute(
+                "INSERT INTO t1 VALUES ('inserted') RETURNING (xmin)")
+            con.commit()
+            target_xid = res[0][0]
+
+        replica.safe_psql(
+            'postgres',
+            'CREATE TABLE '
+            't3 as select i, '
+            'repeat(md5(i::text),5006056) as fat_attr '
+            'from generate_series(0,10) i')
+
+        # create timeline t5
+        replica.cleanup()
+        self.restore_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=4',
+                '--recovery-target-action=promote'])
+
+        replica.slow_start()
+
+        replica.safe_psql(
+            'postgres',
+            'CREATE TABLE '
+            't4 as select i, '
+            'repeat(md5(i::text),5006056) as fat_attr '
+            'from generate_series(0,6) i')
+
+        # create timeline t6
+        replica.cleanup()
+
+        self.restore_node(
+            backup_dir, 'replica', replica, backup_id=A1,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+        replica.slow_start()
+
+        replica.pgbench_init(scale=2)
+
+        show = self.show_archive(backup_dir, as_text=True)
+        show = self.show_archive(backup_dir)
+
+        for instance in show:
+            if instance['instance'] == 'replica':
+                replica_timelines = instance['timelines']
+
+            if instance['instance'] == 'master':
+                master_timelines = instance['timelines']
+
+        # check that all timelines are ok
+        for timeline in replica_timelines:
+            self.assertTrue(timeline['status'], 'OK')
+
+        # check that all timelines are ok
+        for timeline in master_timelines:
+            self.assertTrue(timeline['status'], 'OK')
+
+        # create holes in t3
+        wals_dir = os.path.join(backup_dir, 'wal', 'replica')
+        wals = [
+                f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))
+                and not f.endswith('.backup') and not f.endswith('.history') and f.startswith('00000003')
+            ]
+        wals.sort()
+
+        # check that t3 is ok
+        self.show_archive(backup_dir)
+
+        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000017')
+        if self.archive_compress:
+            file = file + '.gz'
+        os.remove(file)
+
+        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000012')
+        if self.archive_compress:
+            file = file + '.gz'
+        os.remove(file)
+
+        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000013')
+        if self.archive_compress:
+            file = file + '.gz'
+        os.remove(file)
+
+        # check that t3 is not OK
+        show = self.show_archive(backup_dir)
+
+        show = self.show_archive(backup_dir)
+
+        for instance in show:
+            if instance['instance'] == 'replica':
+                replica_timelines = instance['timelines']
+
+        # sanity
+        for timeline in replica_timelines:
+            if timeline['tli'] == 1:
+                timeline_1 = timeline
+                continue
+
+            if timeline['tli'] == 2:
+                timeline_2 = timeline
+                continue
+
+            if timeline['tli'] == 3:
+                timeline_3 = timeline
+                continue
+
+            if timeline['tli'] == 4:
+                timeline_4 = timeline
+                continue
+
+            if timeline['tli'] == 5:
+                timeline_5 = timeline
+                continue
+
+            if timeline['tli'] == 6:
+                timeline_6 = timeline
+                continue
+
+        self.assertEqual(timeline_6['status'], "OK")
+        self.assertEqual(timeline_5['status'], "OK")
+        self.assertEqual(timeline_4['status'], "OK")
+        self.assertEqual(timeline_3['status'], "DEGRADED")
+        self.assertEqual(timeline_2['status'], "OK")
+        self.assertEqual(timeline_1['status'], "OK")
+
+        self.assertEqual(len(timeline_3['lost-segments']), 2)
+        self.assertEqual(timeline_3['lost-segments'][0]['begin-segno'], '0000000000000012')
+        self.assertEqual(timeline_3['lost-segments'][0]['end-segno'], '0000000000000013')
+        self.assertEqual(timeline_3['lost-segments'][1]['begin-segno'], '0000000000000017')
+        self.assertEqual(timeline_3['lost-segments'][1]['end-segno'], '0000000000000017')
+
+        self.assertEqual(len(timeline_6['backups']), 0)
+        self.assertEqual(len(timeline_5['backups']), 0)
+        self.assertEqual(len(timeline_4['backups']), 0)
+        self.assertEqual(len(timeline_3['backups']), 3)
+        self.assertEqual(len(timeline_2['backups']), 2)
+        self.assertEqual(len(timeline_1['backups']), 2)
+
+        # check closest backup correctness
+        self.assertEqual(timeline_6['closest-backup-id'], A1)
+        self.assertEqual(timeline_5['closest-backup-id'], B2)
+        self.assertEqual(timeline_4['closest-backup-id'], B2)
+        self.assertEqual(timeline_3['closest-backup-id'], A1)
+        self.assertEqual(timeline_2['closest-backup-id'], Y2)
+
+        # check parent tli correctness
+        self.assertEqual(timeline_6['parent-tli'], 2)
+        self.assertEqual(timeline_5['parent-tli'], 4)
+        self.assertEqual(timeline_4['parent-tli'], 3)
+        self.assertEqual(timeline_3['parent-tli'], 2)
+        self.assertEqual(timeline_2['parent-tli'], 1)
+        self.assertEqual(timeline_1['parent-tli'], 0)
+
+        output = self.delete_pb(
+            backup_dir, 'replica',
+            options=['--delete-wal', '--log-level-console=verbose'])
+
+        self.validate_pb(backup_dir, 'node')
+
+        self.del_test_dir(module_name, fname)
+
+    def test_wal_depth_1(self):
+        """
+                        |-------------B5----------> WAL timeline3
+                  |-----|-------------------------> WAL timeline2
+        B1   B2---|        B3     B4-------B6-----> WAL timeline1
+
+        wal-depth=2
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
+
+        node.slow_start()
+
+        # FULL
+        node.pgbench_init(scale=1)
+        B1 = self.backup_node(backup_dir, 'node', node)
+
+        # PAGE
+        node.pgbench_init(scale=1)
+        B2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # generate_some more data
+        node.pgbench_init(scale=1)
+
+        target_xid = node.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+
+        node.pgbench_init(scale=1)
+
+        B3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        node.pgbench_init(scale=1)
+
+        B4 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Timeline 2
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        node_restored.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'Restore of backup {0} completed'.format(B2),
+            output)
+
+        self.set_auto_conf(node_restored, options={'port': node_restored.port})
+
+        node_restored.slow_start()
+
+        node_restored.pgbench_init(scale=1)
+
+        target_xid = node_restored.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+
+        node_restored.pgbench_init(scale=2)
+
+        # Timeline 3
+        node_restored.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node_restored,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=2',
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'Restore of backup {0} completed'.format(B2),
+            output)
+
+        self.set_auto_conf(node_restored, options={'port': node_restored.port})
+
+        node_restored.slow_start()
+
+        node_restored.pgbench_init(scale=1)
+        B5 = self.backup_node(
+            backup_dir, 'node', node_restored, data_dir=node_restored.data_dir)
+
+        node.pgbench_init(scale=1)
+        B6 = self.backup_node(backup_dir, 'node', node)
+
+        lsn = self.show_archive(backup_dir, 'node', tli=2)['switchpoint']
+
+        self.validate_pb(
+            backup_dir, 'node', backup_id=B2,
+            options=['--recovery-target-lsn={0}'.format(lsn)])
+
+        self.validate_pb(backup_dir, 'node')
+
+        self.del_test_dir(module_name, fname)
+
+    def test_wal_purge(self):
+        """
+         -------------------------------------> tli5
+         ---------------------------B6--------> tli4
+                            S2`---------------> tli3
+             S1`------------S2---B4-------B5--> tli2
+        B1---S1-------------B2--------B3------> tli1
+
+        B* - backups
+        S* - switchpoints
+
+        Expected result:
+                    TLI5 will be purged entirely
+                                    B6--------> tli4
+                            S2`---------------> tli3
+             S1`------------S2---B4-------B5--> tli2
+        B1---S1-------------B2--------B3------> tli1
+
+        wal-depth=2
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
+
+        node.slow_start()
+
+        # STREAM FULL
+        stream_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        node.stop()
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        B1 = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=1)
+
+        target_xid = node.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+        node.pgbench_init(scale=5)
+
+        # B2 FULL on TLI1
+        B2 = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=4)
+        B3 = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=4)
+
+        # TLI 2
+        node_tli2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli2'))
+        node_tli2.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node_tli2,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=1'.format(target_xid),
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'INFO: Restore of backup {0} completed'.format(B1),
+            output)
+
+        self.set_auto_conf(node_tli2, options={'port': node_tli2.port})
+        node_tli2.slow_start()
+        node_tli2.pgbench_init(scale=4)
+
+        target_xid = node_tli2.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+        node_tli2.pgbench_init(scale=1)
+
+        B4 = self.backup_node(
+            backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
+        node_tli2.pgbench_init(scale=3)
+
+        B5 = self.backup_node(
+            backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
+        node_tli2.pgbench_init(scale=1)
+        node_tli2.cleanup()
+
+        # TLI3
+        node_tli3 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli3'))
+        node_tli3.cleanup()
+
+        # Note, that successful validation here is a happy coincidence 
+        output = self.restore_node(
+            backup_dir, 'node', node_tli3,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=2',
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'INFO: Restore of backup {0} completed'.format(B1),
+            output)
+        self.set_auto_conf(node_tli3, options={'port': node_tli3.port})
+        node_tli3.slow_start()
+        node_tli3.pgbench_init(scale=5)
+        node_tli3.cleanup()
+
+        # TLI4
+        node_tli4 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli4'))
+        node_tli4.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_tli4, backup_id=stream_id,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+
+        self.set_auto_conf(node_tli4, options={'port': node_tli4.port})
+        self.set_archiving(backup_dir, 'node', node_tli4)
+        node_tli4.slow_start()
+
+        node_tli4.pgbench_init(scale=5)
+
+        B6 = self.backup_node(
+            backup_dir, 'node', node_tli4, data_dir=node_tli4.data_dir)
+        node_tli4.pgbench_init(scale=5)
+        node_tli4.cleanup()
+
+        # TLI5
+        node_tli5 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli5'))
+        node_tli5.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_tli5, backup_id=stream_id,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+
+        self.set_auto_conf(node_tli5, options={'port': node_tli5.port})
+        self.set_archiving(backup_dir, 'node', node_tli5)
+        node_tli5.slow_start()
+        node_tli5.pgbench_init(scale=10)
+
+        # delete '.history' file of TLI4
+        os.remove(os.path.join(backup_dir, 'wal', 'node', '00000004.history'))
+        # delete '.history' file of TLI5
+        os.remove(os.path.join(backup_dir, 'wal', 'node', '00000005.history'))
+
+        output = self.delete_pb(
+            backup_dir, 'node',
+            options=[
+                '--delete-wal', '--dry-run',
+                '--log-level-console=verbose'])
+
+        self.assertIn(
+            'INFO: On timeline 4 WAL segments between 0000000000000002 '
+            'and 0000000000000005 can be removed',
+            output)
+
+        self.assertIn(
+            'INFO: On timeline 5 all files can be removed',
+            output)
+
+        show_tli1_before = self.show_archive(backup_dir, 'node', tli=1)
+        show_tli2_before = self.show_archive(backup_dir, 'node', tli=2)
+        show_tli3_before = self.show_archive(backup_dir, 'node', tli=3)
+        show_tli4_before = self.show_archive(backup_dir, 'node', tli=4)
+        show_tli5_before = self.show_archive(backup_dir, 'node', tli=5)
+
+        self.assertTrue(show_tli1_before)
+        self.assertTrue(show_tli2_before)
+        self.assertTrue(show_tli3_before)
+        self.assertTrue(show_tli4_before)
+        self.assertTrue(show_tli5_before)
+
+        output = self.delete_pb(
+            backup_dir, 'node',
+            options=['--delete-wal', '--log-level-console=verbose'])
+
+        self.assertIn(
+            'INFO: On timeline 4 WAL segments between 0000000000000002 '
+            'and 0000000000000005 will be removed',
+            output)
+
+        self.assertIn(
+            'INFO: On timeline 5 all files will be removed',
+            output)
+
+        show_tli1_after = self.show_archive(backup_dir, 'node', tli=1)
+        show_tli2_after = self.show_archive(backup_dir, 'node', tli=2)
+        show_tli3_after = self.show_archive(backup_dir, 'node', tli=3)
+        show_tli4_after = self.show_archive(backup_dir, 'node', tli=4)
+        show_tli5_after = self.show_archive(backup_dir, 'node', tli=5)
+
+        self.assertEqual(show_tli1_before, show_tli1_after)
+        self.assertEqual(show_tli2_before, show_tli2_after)
+        self.assertEqual(show_tli3_before, show_tli3_after)
+        self.assertNotEqual(show_tli4_before, show_tli4_after)
+        self.assertNotEqual(show_tli5_before, show_tli5_after)
+
+        self.assertEqual(
+            show_tli4_before['min-segno'],
+            '0000000000000002')
+
+        self.assertEqual(
+            show_tli4_after['min-segno'],
+            '0000000000000006')
+
+        self.assertFalse(show_tli5_after)
+
+        self.validate_pb(backup_dir, 'node')
+
+        self.del_test_dir(module_name, fname)
+
+    def test_wal_depth_2(self):
+        """
+         -------------------------------------> tli5
+         ---------------------------B6--------> tli4
+                            S2`---------------> tli3
+             S1`------------S2---B4-------B5--> tli2
+        B1---S1-------------B2--------B3------> tli1
+
+        B* - backups
+        S* - switchpoints
+        wal-depth=2
+
+        Expected result:
+                    TLI5 will be purged entirely
+                                    B6--------> tli4
+                            S2`---------------> tli3
+             S1`------------S2   B4-------B5--> tli2
+        B1---S1             B2--------B3------> tli1
+
+        wal-depth=2
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
+
+        node.slow_start()
+
+        # STREAM FULL
+        stream_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        node.stop()
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        B1 = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=1)
+
+        target_xid = node.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+        node.pgbench_init(scale=5)
+
+        # B2 FULL on TLI1
+        B2 = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=4)
+        B3 = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=4)
+
+        # TLI 2
+        node_tli2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli2'))
+        node_tli2.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node_tli2,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=1'.format(target_xid),
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'INFO: Restore of backup {0} completed'.format(B1),
+            output)
+
+        self.set_auto_conf(node_tli2, options={'port': node_tli2.port})
+        node_tli2.slow_start()
+        node_tli2.pgbench_init(scale=4)
+
+        target_xid = node_tli2.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+        node_tli2.pgbench_init(scale=1)
+
+        B4 = self.backup_node(
+            backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
+        node_tli2.pgbench_init(scale=3)
+
+        B5 = self.backup_node(
+            backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
+        node_tli2.pgbench_init(scale=1)
+        node_tli2.cleanup()
+
+        # TLI3
+        node_tli3 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli3'))
+        node_tli3.cleanup()
+
+        # Note, that successful validation here is a happy coincidence 
+        output = self.restore_node(
+            backup_dir, 'node', node_tli3,
+            options=[
+                '--recovery-target-xid={0}'.format(target_xid),
+                '--recovery-target-timeline=2',
+                '--recovery-target-action=promote'])
+
+        self.assertIn(
+            'INFO: Restore of backup {0} completed'.format(B1),
+            output)
+        self.set_auto_conf(node_tli3, options={'port': node_tli3.port})
+        node_tli3.slow_start()
+        node_tli3.pgbench_init(scale=5)
+        node_tli3.cleanup()
+
+        # TLI4
+        node_tli4 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli4'))
+        node_tli4.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_tli4, backup_id=stream_id,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+
+        self.set_auto_conf(node_tli4, options={'port': node_tli4.port})
+        self.set_archiving(backup_dir, 'node', node_tli4)
+        node_tli4.slow_start()
+
+        node_tli4.pgbench_init(scale=5)
+
+        B6 = self.backup_node(
+            backup_dir, 'node', node_tli4, data_dir=node_tli4.data_dir)
+        node_tli4.pgbench_init(scale=5)
+        node_tli4.cleanup()
+
+        # TLI5
+        node_tli5 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_tli5'))
+        node_tli5.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_tli5, backup_id=stream_id,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+
+        self.set_auto_conf(node_tli5, options={'port': node_tli5.port})
+        self.set_archiving(backup_dir, 'node', node_tli5)
+        node_tli5.slow_start()
+        node_tli5.pgbench_init(scale=10)
+
+        # delete '.history' file of TLI4
+        os.remove(os.path.join(backup_dir, 'wal', 'node', '00000004.history'))
+        # delete '.history' file of TLI5
+        os.remove(os.path.join(backup_dir, 'wal', 'node', '00000005.history'))
+
+        output = self.delete_pb(
+            backup_dir, 'node',
+            options=[
+                '--delete-wal', '--dry-run',
+                '--wal-depth=2', '--log-level-console=verbose'])
+
+        start_lsn_B2 = self.show_pb(backup_dir, 'node', B2)['start-lsn']
+        self.assertIn(
+            'On timeline 1 WAL is protected from purge at {0}'.format(start_lsn_B2),
+            output)
+
+        self.assertIn(
+            'VERBOSE: Archive backup {0} to stay consistent protect from '
+            'purge WAL interval between 0000000000000004 and 0000000000000004 '
+            'on timeline 1'.format(B1), output)
+
+        start_lsn_B4 = self.show_pb(backup_dir, 'node', B4)['start-lsn']
+        self.assertIn(
+            'On timeline 2 WAL is protected from purge at {0}'.format(start_lsn_B4),
+            output)
+
+        self.assertIn(
+            'VERBOSE: Timeline 3 to stay reachable from timeline 1 protect '
+            'from purge WAL interval between 0000000000000005 and '
+            '0000000000000008 on timeline 2', output)
+
+        self.assertIn(
+            'VERBOSE: Timeline 3 to stay reachable from timeline 1 protect '
+            'from purge WAL interval between 0000000000000004 and '
+            '0000000000000005 on timeline 1', output)
+
+        show_tli1_before = self.show_archive(backup_dir, 'node', tli=1)
+        show_tli2_before = self.show_archive(backup_dir, 'node', tli=2)
+        show_tli3_before = self.show_archive(backup_dir, 'node', tli=3)
+        show_tli4_before = self.show_archive(backup_dir, 'node', tli=4)
+        show_tli5_before = self.show_archive(backup_dir, 'node', tli=5)
+
+        self.assertTrue(show_tli1_before)
+        self.assertTrue(show_tli2_before)
+        self.assertTrue(show_tli3_before)
+        self.assertTrue(show_tli4_before)
+        self.assertTrue(show_tli5_before)
+
+        output = self.delete_pb(
+            backup_dir, 'node',
+            options=['--delete-wal', '--wal-depth=2', '--log-level-console=verbose'])
+
+        show_tli1_after = self.show_archive(backup_dir, 'node', tli=1)
+        show_tli2_after = self.show_archive(backup_dir, 'node', tli=2)
+        show_tli3_after = self.show_archive(backup_dir, 'node', tli=3)
+        show_tli4_after = self.show_archive(backup_dir, 'node', tli=4)
+        show_tli5_after = self.show_archive(backup_dir, 'node', tli=5)
+
+        self.assertNotEqual(show_tli1_before, show_tli1_after)
+        self.assertNotEqual(show_tli2_before, show_tli2_after)
+        self.assertEqual(show_tli3_before, show_tli3_after)
+        self.assertNotEqual(show_tli4_before, show_tli4_after)
+        self.assertNotEqual(show_tli5_before, show_tli5_after)
+
+        self.assertEqual(
+            show_tli4_before['min-segno'],
+            '0000000000000002')
+
+        self.assertEqual(
+            show_tli4_after['min-segno'],
+            '0000000000000006')
+
+        self.assertFalse(show_tli5_after)
+
+        self.assertTrue(show_tli1_after['lost-segments'])
+        self.assertTrue(show_tli2_after['lost-segments'])
+        self.assertFalse(show_tli3_after['lost-segments'])
+        self.assertFalse(show_tli4_after['lost-segments'])
+        self.assertFalse(show_tli5_after)
+
+        self.assertEqual(len(show_tli1_after['lost-segments']), 1)
+        self.assertEqual(len(show_tli2_after['lost-segments']), 1)
+
+        self.assertEqual(
+            show_tli1_after['lost-segments'][0]['begin-segno'],
+            '0000000000000006')
+
+        self.assertEqual(
+            show_tli1_after['lost-segments'][0]['end-segno'],
+            '0000000000000009')
+
+        self.assertEqual(
+            show_tli2_after['lost-segments'][0]['begin-segno'],
+            '0000000000000009')
+
+        self.assertEqual(
+            show_tli2_after['lost-segments'][0]['end-segno'],
+            '0000000000000009')
+
+        self.validate_pb(backup_dir, 'node')
+
         self.del_test_dir(module_name, fname)

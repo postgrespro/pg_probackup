@@ -1004,6 +1004,8 @@ class ProbackupTest(object):
                         if timeline['tli'] == tli:
                             return timeline
 
+                    return {}
+
                 if instance_timelines:
                     return instance_timelines
 

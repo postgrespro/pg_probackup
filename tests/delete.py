@@ -283,8 +283,9 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         result = self.delete_pb(backup_dir, 'node', options=['--wal'])
         # delete useless wals
-        self.assertTrue('WAL segments between ' in result
-            and 'on timeline 1 will be removed' in result)
+        self.assertTrue('On timeline 1 WAL segments between ' in result
+            and 'will be removed' in result)
+
         self.validate_pb(backup_dir)
         self.assertEqual(self.show_pb(backup_dir, 'node', backup_3_id)['status'], "OK")
 

@@ -35,8 +35,6 @@ do_delete(time_t backup_id)
 	parray	   *backup_list,
 			   *delete_list;
 	pgBackup   *target_backup = NULL;
-//	XLogRecPtr	oldest_lsn = InvalidXLogRecPtr;
-//	TimeLineID	oldest_tli = 0;
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
@@ -169,6 +167,9 @@ int do_retention(void)
 		elog(INFO, "Purging finished");
 	else
 		elog(INFO, "There are no backups to delete by retention policy");
+
+	if (!wal_deleted)
+		elog(INFO, "There is no WAL to purge by retention policy");
 
 	/* Cleanup */
 	parray_walk(backup_list, pgBackupFree);
@@ -655,8 +656,14 @@ do_retention_wal(bool dry_run)
 		/*
 		 * If closest backup exists, then timeline is reachable from
 		 * at least one backup and no file should be removed.
+		 * Unless wal-depth is enabled.
 		 */
-		if (tlinfo->closest_backup)
+		if ((tlinfo->closest_backup) && instance_config.wal_depth <= 0)
+			continue;
+
+		/* WAL retention keeps this timeline from purge */
+		if (instance_config.wal_depth >= 0 && tlinfo->anchor_tli > 0 &&
+			tlinfo->anchor_tli != tlinfo->tli)
 			continue;
 
 		/*
@@ -665,13 +672,31 @@ do_retention_wal(bool dry_run)
 		 * can be safely purged.
 		 * Note, that oldest_backup is not necessarily valid here,
 		 * but still we keep wal for it.
+		 * If wal-depth is enabled then use anchor_lsn instead
+		 * of oldest_backup.
 		 */
 		if (tlinfo->oldest_backup)
-			delete_walfiles_in_tli(tlinfo->oldest_backup->start_lsn,
-							tlinfo, instance_config.xlog_seg_size, dry_run);
+		{
+			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
+			{
+				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+			}
+			else
+			{
+				delete_walfiles_in_tli(tlinfo->oldest_backup->start_lsn,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+			}
+		}
 		else
-			delete_walfiles_in_tli(InvalidXLogRecPtr,
-							tlinfo, instance_config.xlog_seg_size, dry_run);
+		{
+			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
+				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+			else
+				delete_walfiles_in_tli(InvalidXLogRecPtr,
+								tlinfo, instance_config.xlog_seg_size, dry_run);
+		}
 	}
 }
 
@@ -772,6 +797,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	char		wal_pretty_size[20];
 	bool		purge_all = false;
 
+
 	/* Timeline is completely empty */
 	if (parray_num(tlinfo->xlog_filelist) == 0)
 	{
@@ -782,8 +808,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	if (XLogRecPtrIsInvalid(keep_lsn))
 	{
 		/* Drop all files in timeline */
-		elog(INFO, "All files on timeline %i %s be removed", tlinfo->tli,
-								dry_run?"can":"will");
+		elog(INFO, "On timeline %i all files %s be removed",
+						tlinfo->tli, dry_run?"can":"will");
 		FirstToDeleteSegNo = tlinfo->begin_segno;
 		OldestToKeepSegNo = tlinfo->end_segno;
 		purge_all = true;
@@ -796,15 +822,23 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	}
 
 	if (OldestToKeepSegNo > 0 && OldestToKeepSegNo > FirstToDeleteSegNo)
-		elog(INFO, "WAL segments between %08X%08X and %08X%08X on timeline %i %s be removed",
-					 (uint32) FirstToDeleteSegNo / xlog_seg_size, (uint32) FirstToDeleteSegNo % xlog_seg_size,
+		elog(INFO, "On timeline %i WAL segments between %08X%08X and %08X%08X %s be removed",
+					 tlinfo->tli,
+					 (uint32) FirstToDeleteSegNo / xlog_seg_size,
+					 (uint32) FirstToDeleteSegNo % xlog_seg_size,
 					 (uint32) (OldestToKeepSegNo - 1) / xlog_seg_size,
 					 (uint32) (OldestToKeepSegNo - 1) % xlog_seg_size,
-					 tlinfo->tli, dry_run?"can":"will");
+					 dry_run?"can":"will");
 
 	/* sanity */
 	if (OldestToKeepSegNo > FirstToDeleteSegNo)
+	{
 		wal_size_logical = (OldestToKeepSegNo - FirstToDeleteSegNo) * xlog_seg_size;
+
+		/* In case of 'purge all' scenario OldestToKeepSegNo will be deleted too */
+		if (purge_all)
+			wal_size_logical += xlog_seg_size;
+	}
 	else if (OldestToKeepSegNo < FirstToDeleteSegNo)
 	{
 		/* It is actually possible for OldestToKeepSegNo to be less than FirstToDeleteSegNo
@@ -851,7 +885,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	if (wal_size_actual > 0)
 	{
 		pretty_size(wal_size_actual, wal_pretty_size, lengthof(wal_pretty_size));
-		elog(INFO, "Resident data size to free on timeline %i : %s",
+		elog(INFO, "Resident WAL size to free on timeline %i : %s",
 			tlinfo->tli, wal_pretty_size);
 	}
 
@@ -870,6 +904,13 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		 */
 		if (purge_all || wal_file->segno < OldestToKeepSegNo)
 		{
+			/* save segment from purging */
+			if (instance_config.wal_depth >= 0 && wal_file->keep)
+			{
+				elog(VERBOSE, "Retain WAL segment \"%s\"", wal_file->file.path);
+				continue;
+			}
+
 			/* unlink segment */
 			rc = unlink(wal_file->file.path);
 			if (rc < 0)

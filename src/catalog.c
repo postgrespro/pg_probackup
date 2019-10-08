@@ -36,6 +36,8 @@ timelineInfoNew(TimeLineID tli)
 	tlinfo->switchpoint = InvalidXLogRecPtr;
 	tlinfo->parent_link = NULL;
 	tlinfo->xlog_filelist = parray_new();
+	tlinfo->anchor_lsn = InvalidXLogRecPtr;
+	tlinfo->anchor_tli = 0;
 	return tlinfo;
 }
 
@@ -746,6 +748,7 @@ catalog_get_timelines(InstanceConfig *instance)
 					wal_file->file = *file;
 					wal_file->segno = segno;
 					wal_file->type = BACKUP_HISTORY_FILE;
+					wal_file->keep = false;
 					parray_append(tlinfo->xlog_filelist, wal_file);
 					continue;
 				}
@@ -765,6 +768,7 @@ catalog_get_timelines(InstanceConfig *instance)
 					wal_file->file = *file;
 					wal_file->segno = segno;
 					wal_file->type = PARTIAL_SEGMENT;
+					wal_file->keep = false;
 					parray_append(tlinfo->xlog_filelist, wal_file);
 					continue;
 				}
@@ -826,6 +830,7 @@ catalog_get_timelines(InstanceConfig *instance)
 			wal_file->file = *file;
 			wal_file->segno = segno;
 			wal_file->type = SEGMENT;
+			wal_file->keep = false;
 			parray_append(tlinfo->xlog_filelist, wal_file);
 		}
 		/* timeline history file */
@@ -893,6 +898,344 @@ catalog_get_timelines(InstanceConfig *instance)
 
 		tlinfo->oldest_backup = get_oldest_backup(tlinfo);
 		tlinfo->closest_backup = get_closest_backup(tlinfo);
+	}
+
+	/* determine which WAL segments must be kept because of wal retention */
+	if (instance->wal_depth <= 0)
+		return timelineinfos;
+
+	/*
+	 * WAL retention for now is fairly simple.
+	 * User can set only one parameter - 'wal-depth'.
+	 * It determines how many latest valid(!) backups on timeline
+	 * must have an ability to perform PITR:
+	 * Consider the example:
+	 *
+	 * ---B1-------B2-------B3-------B4--------> WAL timeline1
+	 *
+	 * If 'wal-depth' is set to 2, then WAL purge should produce the following result:
+	 *
+	 *    B1       B2       B3-------B4--------> WAL timeline1
+	 *
+	 * Only valid backup can satisfy 'wal-depth' condition, so if B3 is not OK or DONE,
+	 * then WAL purge should produce the following result:
+	 *    B1       B2-------B3-------B4--------> WAL timeline1
+	 *
+	 * Complicated cases, such as branched timelines are taken into account.
+	 * wal-depth is applied to each timeline independently:
+	 *
+	 *         |--------->                       WAL timeline2
+	 * ---B1---|---B2-------B3-------B4--------> WAL timeline1
+	 *
+	 * after WAL purge with wal-depth=2:
+	 *
+	 *         |--------->                       WAL timeline2
+	 *    B1---|   B2       B3-------B4--------> WAL timeline1
+	 *
+	 * In this example WAL retention prevents purge of WAL required by tli2
+	 * to stay reachable from backup B on tli1.
+	 *
+	 * To protect WAL from purge we try to set 'anchor_lsn' and 'anchor_tli' in every timeline.
+	 * They are usually comes from 'start-lsn' and 'tli' attributes of backup
+	 * calculated by 'wal-depth' parameter.
+	 * With 'wal-depth=2' anchor_backup in tli1 is B3.
+
+	 * If timeline has not enough valid backups to satisfy 'wal-depth' condition,
+	 * then 'anchor_lsn' and 'anchor_tli' taken from from 'start-lsn' and 'tli
+	 * attribute of closest_backup.
+	 * The interval of WAL starting from closest_backup to switchpoint is
+	 * saved into 'keep_segments' attribute.
+	 * If there is several intermediate timelines between timeline and its closest_backup
+	 * then on every intermediate timeline WAL interval between switchpoint
+	 * and starting segment is placed in 'keep_segments' attributes:
+	 *
+	 *                |--------->                       WAL timeline3
+	 *         |------|                 B5-----B6-->    WAL timeline2
+	 *    B1---|   B2       B3-------B4------------>    WAL timeline1
+	 *
+	 * On timeline where closest_backup is located the WAL interval between
+	 * closest_backup and switchpoint is placed into 'keep_segments'.
+	 * If timeline has no 'closest_backup', then 'wal-depth' rules cannot be applied
+	 * to this timeline and its WAL must be purged by following the basic rules of WAL purging.
+	 *
+	 * Third part is handling of ARCHIVE backups.
+	 * If B1 and B2 have ARCHIVE wal-mode, then we must preserve WAL intervals
+	 * between start_lsn and stop_lsn for each of them in 'keep_segments'.
+	 */
+
+	/* determine anchor_lsn and keep_segments for every timeline */
+	for (int i = 0; i < parray_num(timelineinfos); i++)
+	{
+		int count = 0;
+		timelineInfo *tlinfo = parray_get(timelineinfos, i);
+
+		/*
+		 * Iterate backward on backups belonging to this timeline to find
+		 * anchor_backup. NOTE Here we rely on the fact that backups list
+		 * is ordered by start_lsn DESC.
+		 */
+		if (tlinfo->backups)
+		{
+			for (int j = 0; j < parray_num(tlinfo->backups); j++)
+			{
+				pgBackup *backup = parray_get(tlinfo->backups, j);
+
+				/* skip invalid backups */
+				if (backup->status != BACKUP_STATUS_OK &&
+					backup->status != BACKUP_STATUS_DONE)
+					continue;
+
+				/* sanity */
+				if (XLogRecPtrIsInvalid(backup->start_lsn) ||
+					backup->tli <= 0)
+					continue;
+
+				count++;
+
+				if (count == instance->wal_depth)
+				{
+					elog(LOG, "On timeline %i WAL is protected from purge at %X/%X",
+						 tlinfo->tli,
+						 (uint32) (backup->start_lsn >> 32),
+						 (uint32) (backup->start_lsn));
+
+					tlinfo->anchor_lsn = backup->start_lsn;
+					tlinfo->anchor_tli = backup->tli;
+					break;
+				}
+			}
+		}
+
+		/*
+		 * Failed to find anchor backup for this timeline.
+		 * We cannot just thrown it to the wolves, because by
+		 * doing that we will violate our own guarantees.
+		 * So check the existence of closest_backup for
+		 * this timeline. If there is one, then
+		 * set the 'anchor_lsn' and 'anchor_tli' to closest_backup
+		 * 'start-lsn' and 'tli' respectively.
+		 *                      |-------------B5----------> WAL timeline3
+		 *                |-----|-------------------------> WAL timeline2
+		 *     B1    B2---|        B3     B4-------B6-----> WAL timeline1
+		 *
+		 * wal-depth=2
+		 *
+		 * If number of valid backups on timelines is less than 'wal-depth'
+		 * then timeline must(!) stay reachable via parent timelines if any.
+		 * If closest_backup is not available, then general WAL purge rules
+		 * are applied.
+		 */
+		if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
+		{
+			/*
+			 * Failed to find anchor_lsn in our own timeline.
+			 * Consider the case:
+			 * -------------------------------------> tli5
+			 * ----------------------------B4-------> tli4
+			 *                     S3`--------------> tli3
+			 *      S1`------------S3---B3-------B6-> tli2
+			 * B1---S1-------------B2--------B5-----> tli1
+			 *
+			 * B* - backups
+			 * S* - switchpoints
+			 * wal-depth=2
+			 *
+			 * Expected result:
+			 *            TLI5 will be purged entirely
+			 *                             B4-------> tli4
+			 *                     S2`--------------> tli3
+			 *      S1`------------S2   B3-------B6-> tli2
+			 * B1---S1             B2--------B5-----> tli1
+			 */
+			pgBackup *closest_backup = NULL;
+			xlogInterval *interval = NULL;
+			TimeLineID tli = 0;
+			/* check if tli has closest_backup */
+			if (!tlinfo->closest_backup)
+				/* timeline has no closest_backup, wal retention cannot be
+				 * applied to this timeline.
+				 * Timeline will be purged up to oldest_backup if any or
+				 * purge entirely if there is none.
+				 * In example above: tli5 and tli4.
+				 */
+				continue;
+
+			/* sanity for closest_backup */
+			if (XLogRecPtrIsInvalid(tlinfo->closest_backup->start_lsn) ||
+				tlinfo->closest_backup->tli <= 0)
+				continue;
+
+			/*
+			 * Set anchor_lsn and anchor_tli to protect whole timeline from purge
+			 * In the example above: tli3.
+			 */
+			tlinfo->anchor_lsn = tlinfo->closest_backup->start_lsn;
+			tlinfo->anchor_tli = tlinfo->closest_backup->tli;
+
+			/* closest backup may be located not in parent timeline */
+			closest_backup = tlinfo->closest_backup;
+
+			tli = tlinfo->tli;
+
+			/*
+			 * Iterate over parent timeline chain and
+			 * look for timeline where closest_backup belong
+			 */
+			while (tlinfo->parent_link)
+			{
+				/* In case of intermediate timeline save to keep_segments
+				 * begin_segno and switchpoint segment.
+				 * In case of final timelines save to keep_segments
+				 * closest_backup start_lsn segment and switchpoint segment.
+				 */
+				XLogRecPtr switchpoint = tlinfo->switchpoint;
+
+				tlinfo = tlinfo->parent_link;
+
+				if (tlinfo->keep_segments == NULL)
+					tlinfo->keep_segments = parray_new();
+
+				/* in any case, switchpoint segment must be added to interval */
+				interval = palloc(sizeof(xlogInterval));
+				GetXLogSegNo(switchpoint, interval->end_segno, instance->xlog_seg_size);
+
+				/* Save [S1`, S2] to keep_segments */
+				if (tlinfo->tli != closest_backup->tli)
+					interval->begin_segno = tlinfo->begin_segno;
+				/* Save [B1, S1] to keep_segments */
+				else
+					GetXLogSegNo(closest_backup->start_lsn, interval->begin_segno, instance->xlog_seg_size);
+
+				/*
+				 * TODO: check, maybe this interval is already here or
+				 * covered by other larger interval.
+				 */
+
+				elog(LOG, "Timeline %i to stay reachable from timeline %i "
+								"protect from purge WAL interval between "
+								"%08X%08X and %08X%08X on timeline %i",
+						tli, closest_backup->tli,
+						(uint32) interval->begin_segno / instance->xlog_seg_size,
+						(uint32) interval->begin_segno % instance->xlog_seg_size,
+						(uint32) interval->end_segno / instance->xlog_seg_size,
+						(uint32) interval->end_segno % instance->xlog_seg_size,
+						tlinfo->tli);
+				parray_append(tlinfo->keep_segments, interval);
+				continue;
+			}
+			continue;
+		}
+
+		/* Iterate over backups left */
+		for (int j = count; j < parray_num(tlinfo->backups); j++)
+		{
+			XLogSegNo   segno = 0;
+			xlogInterval *interval = NULL;
+			pgBackup *backup = parray_get(tlinfo->backups, j);
+
+			/*
+			 * We must calculate keep_segments intervals for ARCHIVE backups
+			 * with start_lsn less than anchor_lsn.
+			 */
+
+			/* STREAM backups cannot contribute to keep_segments */
+			if (backup->stream)
+				continue;
+
+			/* sanity */
+			if (XLogRecPtrIsInvalid(backup->start_lsn) ||
+				backup->tli <= 0)
+				continue;
+
+			/* no point in clogging keep_segments by backups protected by anchor_lsn */
+			if (backup->start_lsn >= tlinfo->anchor_lsn)
+				continue;
+
+			/* append interval to keep_segments */
+			interval = palloc(sizeof(xlogInterval));
+			GetXLogSegNo(backup->start_lsn, segno, instance->xlog_seg_size);
+			interval->begin_segno = segno;
+			GetXLogSegNo(backup->stop_lsn, segno, instance->xlog_seg_size);
+
+			/*
+			 * On replica it is possible to get STOP_LSN pointing to contrecord,
+			 * so set end_segno to the next segment after STOP_LSN just to be safe.
+			 */
+			if (backup->from_replica)
+				interval->end_segno = segno + 1;
+			else
+				interval->end_segno = segno;
+
+			elog(LOG, "Archive backup %s to stay consistent "
+							"protect from purge WAL interval "
+							"between %08X%08X and %08X%08X on timeline %i",
+						base36enc(backup->start_time),
+						(uint32) interval->begin_segno / instance->xlog_seg_size,
+						(uint32) interval->begin_segno % instance->xlog_seg_size,
+						(uint32) interval->end_segno / instance->xlog_seg_size,
+						(uint32) interval->end_segno % instance->xlog_seg_size,
+						backup->tli);
+
+			if (tlinfo->keep_segments == NULL)
+				tlinfo->keep_segments = parray_new();
+
+			parray_append(tlinfo->keep_segments, interval);
+		}
+	}
+
+	/*
+	 * Protect WAL segments from deletion by setting 'keep' flag.
+	 * We must keep all WAL segments after anchor_lsn (including), and also segments
+	 * required by ARCHIVE backups for consistency - WAL between [start_lsn, stop_lsn].
+	 */
+	for (int i = 0; i < parray_num(timelineinfos); i++)
+	{
+		XLogSegNo   anchor_segno = 0;
+		timelineInfo *tlinfo = parray_get(timelineinfos, i);
+
+		/*
+		 * At this point invalid anchor_lsn can be only in one case:
+		 * timeline is going to be purged by regular WAL purge rules.
+		 */
+		if (XLogRecPtrIsInvalid(tlinfo->anchor_lsn))
+			continue;
+
+		/*
+		 * anchor_lsn is located in another timeline, it means that the timeline
+		 * will be protected from purge entirely.
+		 */
+		if (tlinfo->anchor_tli > 0 && tlinfo->anchor_tli != tlinfo->tli)
+			continue;
+
+		GetXLogSegNo(tlinfo->anchor_lsn, anchor_segno, instance->xlog_seg_size);
+
+		for (int i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
+		{
+			xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
+
+			if (wal_file->segno >= anchor_segno)
+			{
+				wal_file->keep = true;
+				continue;
+			}
+
+			/* no keep segments */
+			if (!tlinfo->keep_segments)
+				continue;
+
+			/* Protect segments belonging to one of the keep invervals */
+			for (int j = 0; j < parray_num(tlinfo->keep_segments); j++)
+			{
+				xlogInterval *keep_segments = (xlogInterval *) parray_get(tlinfo->keep_segments, j);
+
+				if ((wal_file->segno >= keep_segments->begin_segno) &&
+					wal_file->segno <= keep_segments->end_segno)
+				{
+					wal_file->keep = true;
+					break;
+				}
+			}
+		}
 	}
 
 	return timelineinfos;
