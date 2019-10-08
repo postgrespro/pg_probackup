@@ -47,8 +47,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -98,8 +97,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -139,8 +137,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -162,8 +159,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 options=[
-                    "-j", "4", "--timeline={0}".format(target_tli),
-                    "--recovery-target-action=promote"]
+                    "-j", "4", "--timeline={0}".format(target_tli)]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
@@ -883,8 +879,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 options=[
-                    "-T", "%s=%s" % (tblspc_path, tblspc_path_new),
-                    "--recovery-target-action=promote"]
+                    "-T", "%s=%s" % (tblspc_path, tblspc_path_new)]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
@@ -915,8 +910,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 options=[
-                    "-T", "%s=%s" % (tblspc_path_new, tblspc_path_page),
-                    "--recovery-target-action=promote"]),
+                    "-T", "%s=%s" % (tblspc_path_new, tblspc_path_page)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -991,8 +985,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.restore_node(
                 backup_dir, 'node', node,
                 options=[
-                    "-T", "%s=%s" % (tblspc_path, tblspc_path_new),
-                    "--recovery-target-action=promote"]),
+                    "-T", "%s=%s" % (tblspc_path, tblspc_path_new)]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.slow_start()
@@ -1804,25 +1797,23 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
-        # restore page backup
+        # restore delta backup
         node.cleanup()
         self.restore_node(
             backup_dir, 'node', node, options=['--immediate'])
 
-        # For stream backup with immediate recovery target there is no need to
-        # create recovery.conf. Is it wise?
-        self.assertFalse(
-            os.path.isfile(recovery_conf))
+        self.assertTrue(
+            os.path.isfile(recovery_conf),
+            "File {0} do not exists".format(recovery_conf))
 
-        # restore page backup
+        # restore delta backup
         node.cleanup()
         self.restore_node(
             backup_dir, 'node', node, options=['--recovery-target=immediate'])
 
-        # For stream backup with immediate recovery target there is no need to
-        # create recovery.conf. Is it wise?
-        self.assertFalse(
-            os.path.isfile(recovery_conf))
+        self.assertTrue(
+            os.path.isfile(recovery_conf),
+            "File {0} do not exists".format(recovery_conf))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

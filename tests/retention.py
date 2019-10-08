@@ -60,8 +60,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         for wal_name in os.listdir(os.path.join(backup_dir, 'wal', 'node')):
             if not wal_name.endswith(".backup"):
-                self.assertTrue(wal_name[8:] >= min_wal)
-                self.assertTrue(wal_name[8:] <= max_wal)
+
+                if self.archive_compress:
+                    wal_name = wal_name[-19:]
+                    wal_name = wal_name[:-3]
+                else:
+                    wal_name = wal_name[-16:]
+
+                self.assertTrue(wal_name >= min_wal)
+                self.assertTrue(wal_name <= max_wal)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

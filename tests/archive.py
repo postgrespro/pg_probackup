@@ -58,9 +58,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
 
         # Restore Database
-        self.restore_node(
-            backup_dir, 'node', node,
-            options=["--recovery-target-action=promote"])
+        self.restore_node(backup_dir, 'node', node)
         node.slow_start()
 
         self.assertEqual(
@@ -1590,11 +1588,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=[
-                '--recovery-target-action=promote',
                 '--archive-host=localhost',
                 '--archive-port=22',
-                '--archive-user={0}'.format(self.user)
-                ])
+                '--archive-user={0}'.format(self.user)])
 
         with open(recovery_conf, 'r') as f:
             recovery_content = f.read()
