@@ -228,14 +228,17 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
         # FULL
         backup_local_id = self.backup_node(
-            backup_dir, 'node', node, options=['--remote-proto=none'])
+            backup_dir, 'node', node, no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node,
-            options=['--remote-proto=ssh', '--remote-host=localhost'])
+        if self.remote:
+            backup_remote_id = self.backup_node(backup_dir, 'node', node)
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node,
+                options=['--remote-proto=ssh', '--remote-host=localhost'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -252,15 +255,19 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # DELTA
         backup_local_id = self.backup_node(
             backup_dir, 'node', node,
-            backup_type='delta', options=['--remote-proto=none'])
+            backup_type='delta', no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--remote-proto=ssh', '--remote-host=localhost'])
+        if self.remote:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='delta')
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='delta',
+                options=['--remote-proto=ssh', '--remote-host=localhost'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -278,15 +285,19 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # PAGE
         backup_local_id = self.backup_node(
             backup_dir, 'node', node,
-            backup_type='page', options=['--remote-proto=none'])
+            backup_type='page', no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=['--remote-proto=ssh', '--remote-host=localhost'])
+        if self.remote:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='page')
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='page',
+                options=['--remote-proto=ssh', '--remote-host=localhost'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -324,14 +335,17 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
         # FULL
         backup_local_id = self.backup_node(
-            backup_dir, 'node', node, options=['--remote-proto=none'])
+            backup_dir, 'node', node, no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node,
-            options=['--remote-proto=ssh', '--remote-host=localhost'])
+        if self.remote:
+            backup_remote_id = self.backup_node(backup_dir, 'node', node)
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node,
+                options=['--remote-proto=ssh', '--remote-host=localhost'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -352,15 +366,19 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # DELTA
         backup_local_id = self.backup_node(
             backup_dir, 'node', node,
-            backup_type='delta', options=['--remote-proto=none'])
+            backup_type='delta', no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--remote-proto=ssh', '--remote-host=localhost'])
+        if self.remote:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='delta')
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='delta',
+                options=['--remote-proto=ssh', '--remote-host=localhost'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -378,15 +396,19 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # PAGE
         backup_local_id = self.backup_node(
             backup_dir, 'node', node,
-            backup_type='page', options=['--remote-proto=none'])
+            backup_type='page', no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=['--remote-proto=ssh', '--remote-host=localhost'])
+        if self.remote:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='page')
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='page',
+                options=['--remote-proto=ssh', '--remote-host=localhost'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -425,14 +447,18 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # FULL
         backup_local_id = self.backup_node(
             backup_dir, 'node', node,
-            options=['--remote-proto=none', '--compress'])
+            options=['--compress'], no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node,
-            options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
+        if self.remote:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, options=['--compress'])
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node,
+                options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -453,15 +479,19 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # DELTA
         backup_local_id = self.backup_node(
             backup_dir, 'node', node,
-            backup_type='delta', options=['--remote-proto=none', '--compress'])
+            backup_type='delta', options=['--compress'], no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
+        if self.remote:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='delta', options=['--compress'])
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='delta',
+                options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -479,15 +509,19 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # PAGE
         backup_local_id = self.backup_node(
             backup_dir, 'node', node,
-            backup_type='page', options=['--remote-proto=none', '--compress'])
+            backup_type='page', options=['--compress'], no_remote=True)
 
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        backup_remote_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
-            options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
+        if self.remote:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='page', options=['--compress'])
+        else:
+            backup_remote_id = self.backup_node(
+                backup_dir, 'node', node, backup_type='page',
+                options=['--remote-proto=ssh', '--remote-host=localhost', '--compress'])
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)

@@ -770,7 +770,7 @@ class ProbackupTest(object):
             self, backup_dir, instance, node, data_dir=False,
             backup_type='full', datname=False, options=[],
             asynchronous=False, gdb=False,
-            old_binary=False, return_id=True
+            old_binary=False, return_id=True, no_remote=False
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -792,7 +792,7 @@ class ProbackupTest(object):
             cmd_list += ['-D', data_dir]
 
         # don`t forget to kill old_binary after remote ssh release
-        if self.remote and not old_binary:
+        if self.remote and not old_binary and not no_remote:
             options = options + [
                 '--remote-proto=ssh',
                 '--remote-host=localhost']

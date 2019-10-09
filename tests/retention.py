@@ -2455,7 +2455,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'VERBOSE: Archive backup {0} to stay consistent protect from '
+            'LOG: Archive backup {0} to stay consistent protect from '
             'purge WAL interval between 0000000000000004 and 0000000000000004 '
             'on timeline 1'.format(B1), output)
 
@@ -2465,12 +2465,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'VERBOSE: Timeline 3 to stay reachable from timeline 1 protect '
+            'LOG: Timeline 3 to stay reachable from timeline 1 protect '
             'from purge WAL interval between 0000000000000005 and '
             '0000000000000008 on timeline 2', output)
 
         self.assertIn(
-            'VERBOSE: Timeline 3 to stay reachable from timeline 1 protect '
+            'LOG: Timeline 3 to stay reachable from timeline 1 protect '
             'from purge WAL interval between 0000000000000004 and '
             '0000000000000005 on timeline 1', output)
 
@@ -2536,6 +2536,109 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             show_tli2_after['lost-segments'][0]['end-segno'],
             '0000000000000009')
+
+        self.validate_pb(backup_dir, 'node')
+
+        self.del_test_dir(module_name, fname)
+
+    def test_basic_wal_depth(self):
+        """
+        B1---B1----B3-----B4----B5------> tli1
+
+        Expected result with wal-depth=1:
+        B1   B1    B3     B4    B5------> tli1
+
+        wal-depth=1
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        node.pgbench_init(scale=1)
+        B1 = self.backup_node(backup_dir, 'node', node)
+
+
+        # B2
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+        B2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # B3
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+        B3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # B4
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+        B4 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # B5
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+        B5 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--wal-depth=1', '--delete-wal'])
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+
+        target_xid = node.safe_psql(
+            "postgres",
+            "select txid_current()").rstrip()
+
+        self.switch_wal_segment(node)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+
+        tli1 = self.show_archive(backup_dir, 'node', tli=1)
+
+        # check that there are 4 lost_segments intervals
+        self.assertEqual(len(tli1['lost-segments']), 4)
+
+        output = self.validate_pb(
+            backup_dir, 'node', B5,
+            options=['--recovery-target-xid={0}'.format(target_xid)])
+
+        print(output)
+
+        self.assertIn(
+            'INFO: Backup validation completed successfully on time',
+            output)
+
+        self.assertIn(
+            'xid {0} and LSN'.format(target_xid),
+            output)
+
+        for backup_id in [B1, B2, B3, B4]:
+            try:
+                self.validate_pb(
+                    backup_dir, 'node', backup_id,
+                    options=['--recovery-target-xid={0}'.format(target_xid)])
+                # we should die here because exception is what we expect to happen
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because page backup should not be possible "
+                    "without valid full backup.\n Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+            except ProbackupException as e:
+                self.assertIn(
+                    "ERROR: Not enough WAL records to xid {0}".format(target_xid),
+                    e.message)
 
         self.validate_pb(backup_dir, 'node')
 
