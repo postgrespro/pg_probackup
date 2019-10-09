@@ -2,7 +2,7 @@
 
 pg_probackup is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure. pg_probackup supports PostgreSQL 9.5 or higher.
 
-Current version - 2.1.5
+Current version - 2.2.0
 
 1. [Synopsis](#synopsis)
 2. [Versioning](#versioning)
@@ -36,9 +36,10 @@ Current version - 2.1.5
     * [Running pg_probackup on Parallel Threads](#running-pg_probackup-on-parallel-threads)
     * [Configuring pg_probackup](#configuring-pg_probackup)
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
+        * [Viewing Backup Information](#viewing-backup-information)
         * [Viewing WAL Archive Information](#viewing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
-        * [Pinning a Backup]
+        * [Pinning a Backup](#pinning-a-backup)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
 
@@ -698,12 +699,13 @@ If nothing is given, the default values are taken. By default pg_probackup tries
 
 With pg_probackup, you can manage backups from the command line:
 
-- View available backups
-- View available WAL Archive Information
-- Validate backups
-- Merge backups
-- Delete backups
-- Viewing Backup Information
+- [View backup information](#viewing-backup-information)
+- [View WAL Archive Information](#viewing-wal-archive-information)
+- [Validate backups](#validating-a-backup)
+- [Merge backups](#merging-backups)
+- [Delete backups](#deleting-backups)
+
+#### Viewing Backup Information
 
 To view the list of existing backups for every instance, run the command:
 
