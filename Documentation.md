@@ -76,7 +76,7 @@ Current version - 2.2.1
         * [Partial Restore Options](#partial-restore-options)
         * [Replica Options](#replica-options)
 
-7. [HOWTO](#howto)
+7. [Howto](#howto)
     * [Minimal setup](#minimal-setup)
 8. [Authors](#authors)
 9. [Credits](#credits)
@@ -1691,24 +1691,24 @@ You can use these options together with [backup](#backup) and [checkdb](#checkdb
 All [libpq environment variables](https://www.postgresql.org/docs/current/libpq-envars.html) are supported.
 
     -d dbname
-    --dbname=dbname
+    --pgdatabase=dbname
     PGDATABASE
 Specifies the name of the database to connect to. The connection is used only for managing backup process, so you can connect to any existing database. If this option is not provided on the command line, PGDATABASE environment variable, or the pg_probackup.conf configuration file, pg_probackup tries to take this value from the PGUSER environment variable, or from the current user name if PGUSER variable is not set.
 
     -h host
-    --host=host
+    --pghost=host
     PGHOST
     Default: local socket 
 Specifies the host name of the system on which the server is running. If the value begins with a slash, it is used as a directory for the Unix domain socket.
 
     -p port
-    --port=port
+    --pgport=port
     PGPORT
     Default: 5432 
 Specifies the TCP port or the local Unix domain socket file extension on which the server is listening for connections.
 
     -U username
-    --username=username
+    --pguser=username
     PGUSER
 User name to connect as.
 
@@ -1839,31 +1839,37 @@ All examples below assume the remote mode of operations via `ssh`. If you are pl
 Examples are based on Ubuntu 18.04, PostgreSQL 11 and pg_probackup 2.2.0.
 
 backup_host - host with backup catalog.
+
 backupman - user on `backup_host` running all pg_probackup operations.
+
 /mnt/backups - directory on `backup_host` where backup catalog is stored.
 
-postgres-host - host with PostgreSQL cluster.
+postgres_host - host with PostgreSQL cluster.
+
 postgres - user on `postgres_host` which run PostgreSQL cluster.
+
 /var/lib/postgresql/11/main - directory on `postgres_host` where PGDATA of PostgreSQL cluster is located.
-backup_db - database used for connection to PostgreSQL cluster.
+
+backupdb - database used for connection to PostgreSQL cluster.
 
 ### Minimal Setup
 
 This setup is relying on autonomous FULL and DELTA backups.
 
-1. Setup passwordless SSH connection from `backup_host` to `postgres_host`:
+#### Setup passwordless SSH connection from `backup_host` to `postgres_host`
 ```
 [backupman@backup_host] ssh-copy-id postgres@postgres_host
 ```
 
-2. Setup PostgreSQL cluster.
-2.1. It is recommended from security purposes to use separate database for backup operations.
+#### Setup PostgreSQL cluster
+
+It is recommended from security purposes to use separate database for backup operations.
 ```
 postgres=#
 CREATE DATABASE backupdb;
 ```
 
-2.2. Connect to `backupdb` database, create role `probackup` and grant to it the following permissions:
+Connect to `backupdb` database, create role `probackup` and grant to it the following permissions:
 ```
 backupdb=#
 BEGIN;
@@ -1882,19 +1888,19 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO probac
 COMMIT;
 ```
 
-3. Init the backup catalog:
+#### Init the backup catalog
 ```
 [backupman@backup_host]$ pg_probackup-11 init -B /mnt/backups
 INFO: Backup catalog '/mnt/backups' successfully inited
 ```
 
-4. Add instance 'pg-11' to backup catalog:
+#### Add instance 'pg-11' to backup catalog
 ```
 [backupman@backup_host]$ pg_probackup-11 add-instance -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -D /var/lib/postgresql/11/main
 INFO: Instance 'node' successfully inited
 ```
 
-5. Take FULL backup:
+#### Take FULL backup
 ```
 [backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YK2, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
@@ -1908,7 +1914,7 @@ INFO: Backup PZ7YK2 resident size: 196MB
 INFO: Backup PZ7YK2 completed
 ```
 
-6. Lets take a look at the backup catalog:
+#### Lets take a look at the backup catalog
 ```
 [backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
 
@@ -1917,10 +1923,9 @@ BACKUP INSTANCE 'pg-11'
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN  Stop LSN   Status
 ==================================================================================================================================
  node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL  STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
-
 ```
 
-7. Take incremental backup in DELTA mode:
+#### Take incremental backup in DELTA mode
 ```
 [backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YMP, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
@@ -1935,12 +1940,12 @@ INFO: Backup PZ7YMP resident size: 32MB
 INFO: Backup PZ7YMP completed
 ```
 
-8. Lets hide some parameters into config, so cmdline can looks less crodwy: 
+#### Lets hide some parameters into config, so cmdline can be less crodwy
 ```
 [backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
 ```
 
-9. Take another incremental backup in DELTA mode, omitting the `--remote-host`, `--remote-user`, `-U` and `-d` options:
+#### Take another incremental backup in DELTA mode, omitting some of the previous parameters:
 ```
 [backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YR5, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
@@ -1955,7 +1960,7 @@ INFO: Backup PZ7YR5 resident size: 32MB
 INFO: Backup PZ7YR5 completed
 ```
 
-10. Lets take a look at instance config:
+#### Lets take a look at instance config
 ```
 [backupman@backup_host] pg_probackup-11 show-config -B /mnt/backups --instance 'pg-11'
 
@@ -1992,15 +1997,15 @@ remote-host = postgres_host
 Note, that we are getting default values for other options, that were not overwritten by set-config command.
 
 
-10. Lets take a look at the backup catalog:
+#### Lets take a look at the backup catalog
 ```
 [backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
 
 ====================================================================================================================================
- Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status 
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status
 ====================================================================================================================================
- node      11       PZ7YR5  2019-10-11 19:49:56+03  DELTA  STREAM    1/1   10s  112kB  32MB    1.00  0/41000028  0/41000160  OK     
- node      11       PZ7YMP  2019-10-11 19:47:16+03  DELTA  STREAM    1/1   10s  376kB  32MB    1.00  0/3E000028  0/3F0000B8  OK     
+ node      11       PZ7YR5  2019-10-11 19:49:56+03  DELTA  STREAM    1/1   10s  112kB  32MB    1.00  0/41000028  0/41000160  OK
+ node      11       PZ7YMP  2019-10-11 19:47:16+03  DELTA  STREAM    1/1   10s  376kB  32MB    1.00  0/3E000028  0/3F0000B8  OK
  node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL   STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
 ```
 
