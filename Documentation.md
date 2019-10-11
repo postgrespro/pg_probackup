@@ -1838,19 +1838,13 @@ All examples below assume the remote mode of operations via `ssh`. If you are pl
 
 Examples are based on Ubuntu 18.04, PostgreSQL 11 and pg_probackup 2.2.0.
 
-backup_host - host with backup catalog.
-
-backupman - user on `backup_host` running all pg_probackup operations.
-
-/mnt/backups - directory on `backup_host` where backup catalog is stored.
-
-postgres_host - host with PostgreSQL cluster.
-
-postgres - user on `postgres_host` which run PostgreSQL cluster.
-
-/var/lib/postgresql/11/main - directory on `postgres_host` where PGDATA of PostgreSQL cluster is located.
-
-backupdb - database used for connection to PostgreSQL cluster.
+- *backup_host* - host with backup catalog.
+- *backupman* - user on `backup_host` running all pg_probackup operations.
+- */mnt/backups* - directory on `backup_host` where backup catalog is stored.
+- *postgres_host* - host with PostgreSQL cluster.
+- *postgres* - user on `postgres_host` which run PostgreSQL cluster.
+- */var/lib/postgresql/11/main* - directory on `postgres_host` where PGDATA of PostgreSQL cluster is located.
+- *backupdb* - database used for connection to PostgreSQL cluster.
 
 ### Minimal Setup
 
