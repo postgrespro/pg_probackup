@@ -717,7 +717,8 @@ do_backup(time_t start_time, bool no_validate,
 	current.compress_level = instance_config.compress_level;
 
 	/* Save list of external directories */
-	if (instance_config.external_dir_str)
+	if (instance_config.external_dir_str &&
+		(pg_strcasecmp(instance_config.external_dir_str, "none") != 0))
 		current.external_dir_str = instance_config.external_dir_str;
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
