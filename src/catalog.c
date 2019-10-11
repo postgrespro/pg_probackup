@@ -688,6 +688,7 @@ pgBackupCreateDir(pgBackup *backup)
 parray *
 catalog_get_timelines(InstanceConfig *instance)
 {
+	int i,j;
 	parray *xlog_files_list = parray_new();
 	parray *timelineinfos;
 	parray *backups;
@@ -703,7 +704,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	tlinfo = NULL;
 
 	/* walk through files and collect info about timelines */
-	for (int i = 0; i < parray_num(xlog_files_list); i++)
+	for (i = 0; i < parray_num(xlog_files_list); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(xlog_files_list, i);
 		TimeLineID tli;
@@ -854,9 +855,9 @@ catalog_get_timelines(InstanceConfig *instance)
 				tlinfo->parent_tli = tln->tli;
 
 				/* find parent timeline to link it with this one */
-				for (int i = 0; i < parray_num(timelineinfos); i++)
+				for (j = 0; j < parray_num(timelineinfos); j++)
 				{
-					timelineInfo *cur = (timelineInfo *) parray_get(timelineinfos, i);
+					timelineInfo *cur = (timelineInfo *) parray_get(timelineinfos, j);
 					if (cur->tli == tlinfo->parent_tli)
 					{
 						tlinfo->parent_link = cur;
@@ -875,10 +876,10 @@ catalog_get_timelines(InstanceConfig *instance)
 	/* save information about backups belonging to each timeline */
 	backups = catalog_get_backup_list(instance->name, INVALID_BACKUP_ID);
 
-	for (int i = 0; i < parray_num(timelineinfos); i++)
+	for (i = 0; i < parray_num(timelineinfos); i++)
 	{
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
-		for (int j = 0; j < parray_num(backups); j++)
+		for (j = 0; j < parray_num(backups); j++)
 		{
 			pgBackup *backup = parray_get(backups, j);
 			if (tlinfo->tli == backup->tli)
@@ -892,7 +893,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	}
 
 	/* determine oldest backup and closest backup for every timeline */
-	for (int i = 0; i < parray_num(timelineinfos); i++)
+	for (i = 0; i < parray_num(timelineinfos); i++)
 	{
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
 
@@ -964,7 +965,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	 */
 
 	/* determine anchor_lsn and keep_segments for every timeline */
-	for (int i = 0; i < parray_num(timelineinfos); i++)
+	for (i = 0; i < parray_num(timelineinfos); i++)
 	{
 		int count = 0;
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
@@ -976,7 +977,7 @@ catalog_get_timelines(InstanceConfig *instance)
 		 */
 		if (tlinfo->backups)
 		{
-			for (int j = 0; j < parray_num(tlinfo->backups); j++)
+			for (j = 0; j < parray_num(tlinfo->backups); j++)
 			{
 				pgBackup *backup = parray_get(tlinfo->backups, j);
 
@@ -1127,7 +1128,7 @@ catalog_get_timelines(InstanceConfig *instance)
 		}
 
 		/* Iterate over backups left */
-		for (int j = count; j < parray_num(tlinfo->backups); j++)
+		for (j = count; j < parray_num(tlinfo->backups); j++)
 		{
 			XLogSegNo   segno = 0;
 			xlogInterval *interval = NULL;
@@ -1188,7 +1189,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	 * We must keep all WAL segments after anchor_lsn (including), and also segments
 	 * required by ARCHIVE backups for consistency - WAL between [start_lsn, stop_lsn].
 	 */
-	for (int i = 0; i < parray_num(timelineinfos); i++)
+	for (i = 0; i < parray_num(timelineinfos); i++)
 	{
 		XLogSegNo   anchor_segno = 0;
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
@@ -1209,7 +1210,7 @@ catalog_get_timelines(InstanceConfig *instance)
 
 		GetXLogSegNo(tlinfo->anchor_lsn, anchor_segno, instance->xlog_seg_size);
 
-		for (int i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
+		for (i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
 		{
 			xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
 
@@ -1224,7 +1225,7 @@ catalog_get_timelines(InstanceConfig *instance)
 				continue;
 
 			/* Protect segments belonging to one of the keep invervals */
-			for (int j = 0; j < parray_num(tlinfo->keep_segments); j++)
+			for (j = 0; j < parray_num(tlinfo->keep_segments); j++)
 			{
 				xlogInterval *keep_segments = (xlogInterval *) parray_get(tlinfo->keep_segments, j);
 

@@ -77,6 +77,8 @@ static int32 json_level = 0;
 int
 do_show(const char *instance_name, time_t requested_backup_id, bool show_archive)
 {
+	int i;
+
 	if (instance_name == NULL &&
 		requested_backup_id != INVALID_BACKUP_ID)
 		elog(ERROR, "You must specify --instance to use (-i, --backup-id) option");
@@ -94,7 +96,7 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 		parray *instances = catalog_get_instance_list();
 
 		show_instance_start();
-		for (int i = 0; i < parray_num(instances); i++)
+		for (i = 0; i < parray_num(instances); i++)
 		{
 			InstanceConfig *instance = parray_get(instances, i);
 			char backup_instance_path[MAXPGPATH];
