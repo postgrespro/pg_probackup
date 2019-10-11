@@ -294,7 +294,7 @@ show_instance(const char *instance_name, time_t requested_backup_id, bool show_n
 static void
 print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 {
-	TimeLineID	parent_tli;
+	TimeLineID	parent_tli = 0;
 	char		timestamp[100] = "----";
 	char		lsn[20];
 
@@ -344,10 +344,9 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 	json_add_key(buf, "parent-tli", json_level);
 
 	/* Only incremental backup can have Parent TLI */
-	if (backup->backup_mode == BACKUP_MODE_FULL)
-		parent_tli = 0;
-	else if (backup->parent_backup_link)
+	if (backup->parent_backup_link)
 		parent_tli = backup->parent_backup_link->tli;
+
 	appendPQExpBuffer(buf, "%u", parent_tli);
 
 	snprintf(lsn, lengthof(lsn), "%X/%X",
