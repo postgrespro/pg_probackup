@@ -35,6 +35,8 @@ do_delete(time_t backup_id)
 	parray	   *backup_list,
 			   *delete_list;
 	pgBackup   *target_backup = NULL;
+	int			size_to_delete = 0;
+	char		size_to_delete_pretty[20];
 
 	/* Get complete list of backups */
 	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
@@ -63,32 +65,50 @@ do_delete(time_t backup_id)
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
 		/* check if backup is descendant of delete target */
-		if (is_parent(target_backup->start_time, backup, false))
+		if (is_parent(target_backup->start_time, backup, true))
+		{
 			parray_append(delete_list, backup);
+
+			elog(LOG, "Backup %s %s be deleted",
+				base36enc(backup->start_time), dry_run? "can":"will");
+
+			size_to_delete += backup->data_bytes;
+			if (backup->stream)
+				size_to_delete += backup->wal_bytes;
+		}
 	}
-	parray_append(delete_list, target_backup);
 
-	/* Lock marked for delete backups */
-	catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0);
-
-	/* Delete backups from the end of list */
-	for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
+	/* Report the resident size to delete */
+	if (size_to_delete >= 0)
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(delete_list, (size_t) i);
-
-		if (interrupted)
-			elog(ERROR, "interrupted during delete backup");
-
-		delete_backup_files(backup);
+		pretty_size(size_to_delete, size_to_delete_pretty, lengthof(size_to_delete_pretty));
+		elog(INFO, "Resident data size to free by delete of backup %s : %s",
+			base36enc(target_backup->start_time), size_to_delete_pretty);
 	}
 
-	parray_free(delete_list);
+	if (!dry_run)
+	{
+		/* Lock marked for delete backups */
+		catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0);
+
+		/* Delete backups from the end of list */
+		for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
+		{
+			pgBackup   *backup = (pgBackup *) parray_get(delete_list, (size_t) i);
+
+			if (interrupted)
+				elog(ERROR, "interrupted during delete backup");
+
+			delete_backup_files(backup);
+		}
+	}
 
 	/* Clean WAL segments */
 	if (delete_wal)
-		do_retention_wal(false);
+		do_retention_wal(dry_run);
 
 	/* cleanup */
+	parray_free(delete_list);
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
 }
