@@ -1906,7 +1906,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '30s'})
+                'checkpoint_timeout': '1h'})
 
         if self.ptrack:
             node.append_conf('postgresql.auto.conf', 'ptrack_enable = on')
@@ -2016,16 +2016,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
+        # freeze bgwriter to get rid of RUNNING XACTS records
+        bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+
         copy_tree(
             os.path.join(backup_dir, 'wal', 'node'),
             os.path.join(backup_dir, 'wal', 'replica'))
 
         replica.slow_start(replica=True)
 
-        # freeze bgwriter to get rid of RUNNING XACTS records
-        bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
-        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
-
+        self.switch_wal_segment(node)
         self.switch_wal_segment(node)
 
         # FULL backup from replica
@@ -2037,12 +2038,12 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'replica', replica, datname='backupdb',
-            options=['-U', 'backup', '--log-level-file=verbose', '--archive-timeout=100s'])
+            options=['-U', 'backup', '--log-level-file=verbose', '--archive-timeout=30s'])
 
         # PAGE backup from replica
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
-            datname='backupdb', options=['-U', 'backup', '--archive-timeout=100s'])
+            datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
 
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
@@ -2051,7 +2052,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # DELTA backup from replica
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
-            datname='backupdb', options=['-U', 'backup', '--archive-timeout=100s'])
+            datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
             datname='backupdb', options=['--stream', '-U', 'backup'])
