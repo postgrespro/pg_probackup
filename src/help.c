@@ -321,7 +321,7 @@ help_backup(void)
 	printf(_("                                   retention policy after successful backup completion\n"));
 	printf(_("      --merge-expired              merge backups expired according to current\n"));
 	printf(_("                                   retention policy after successful backup completion\n"));
-	printf(_("      --delete-wal                 remove redundant wal files in WAL archive\n"));
+	printf(_("      --delete-wal                 remove redundant files in WAL archive\n"));
 	printf(_("      --retention-redundancy=retention-redundancy\n"));
 	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
@@ -344,13 +344,13 @@ help_backup(void)
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
 	printf(_("\n  Archive options:\n"));
-	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));
+	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 
 	printf(_("\n  Connection options:\n"));
-	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
-	printf(_("  -d, --dbname=DBNAME              database to connect (default: username)\n"));
-	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
-	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
+	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --pgdatabase=DBNAME          database to connect (default: username)\n"));
+	printf(_("  -h, --pghost=HOSTNAME            database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --pgport=PORT                database server port (default: 5432)\n"));
 	printf(_("  -w, --no-password                never prompt for password\n"));
 	printf(_("  -W, --password                   force password prompt\n"));
 
@@ -568,10 +568,10 @@ help_checkdb(void)
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 
 	printf(_("\n  Connection options:\n"));
-	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
-	printf(_("  -d, --dbname=DBNAME              database to connect (default: username)\n"));
-	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
-	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
+	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --pgdatabase=DBNAME          database to connect (default: username)\n"));
+	printf(_("  -h, --pghost=HOSTNAME            database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --pgport=PORT                database server port (default: 5432)\n"));
 	printf(_("  -w, --no-password                never prompt for password\n"));
 	printf(_("  -W, --password                   force password prompt\n\n"));
 }
@@ -611,7 +611,7 @@ help_delete(void)
 	printf(_("                                   retention policy\n"));
 	printf(_("      --merge-expired              merge backups expired according to current\n"));
 	printf(_("                                   retention policy\n"));
-	printf(_("      --delete-wal                 remove redundant wal files in WAL archive\n"));
+	printf(_("      --delete-wal                 remove redundant files in WAL archive\n"));
 	printf(_("      --retention-redundancy=retention-redundancy\n"));
 	printf(_("                                   number of full backups to keep; 0 disables; (default: 0)\n"));
 	printf(_("      --retention-window=retention-window\n"));
@@ -767,13 +767,13 @@ help_set_config(void)
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
 	printf(_("\n  Archive options:\n"));
-	printf(_("      --archive-timeout=timeout   wait timeout for WAL segment archiving (default: 5min)\n"));
+	printf(_("      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"));
 
 	printf(_("\n  Connection options:\n"));
-	printf(_("  -U, --username=USERNAME          user name to connect as (default: current local user)\n"));
-	printf(_("  -d, --dbname=DBNAME              database to connect (default: username)\n"));
-	printf(_("  -h, --host=HOSTNAME              database server host or socket directory(default: 'local socket')\n"));
-	printf(_("  -p, --port=PORT                  database server port (default: 5432)\n"));
+	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --pgdatabase=DBNAME          database to connect (default: username)\n"));
+	printf(_("  -h, --pghost=HOSTNAME            database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --pgport=PORT                database server port (default: 5432)\n"));
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));

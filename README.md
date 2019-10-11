@@ -114,7 +114,7 @@ gen_probackup_project.pl C:\path_to_postgresql_source_tree
 
 Currently the latest documentation can be found at [github](https://postgrespro.github.io/pg_probackup).
 Slightly outdated documentation can be found at [Postgres Pro Enterprise documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup).
-Documentation for current devel can also be found at [github](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md)
+Documentation for current devel can also be found at [github](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md).
 
 ## License
 

@@ -17,9 +17,9 @@ Current version - 2.2.0
     * [Setting up Continuous WAL Archiving](#setting-up-continuous-wal-archiving)
     * [Setting up Backup from Standby](#setting-up-backup-from-standby)
     * [Setting up Cluster Verification](#setting-up-cluster-verification)
-    * [Setting up PTRACK Backups](#setting-up-ptrack-backups)
     * [Setting up Partial Restore](#setting-up-partial-restore)
     * [Configuring the Remote Mode](#configuring-the-remote-mode)
+    * [Setting up PTRACK Backups](#setting-up-ptrack-backups)
 
 5. [Usage](#usage)
     * [Creating a Backup](#creating-a-backup)
@@ -73,10 +73,13 @@ Current version - 2.2.0
         * [Archiving Options](#archiving-options)
         * [Remote Mode Options](#remote-mode-options)
         * [Remote WAL Archive Options](#remote-wal-archive-options)
+        * [Partial Restore Options](#partial-restore-options)
         * [Replica Options](#replica-options)
 
-7. [Authors](#authors)
-8. [Credits](#credits)
+7. [HOWTO](#howto)
+    * [Minimal setup](#minimal-setup)
+8. [Authors](#authors)
+9. [Credits](#credits)
 
 
 ## Synopsis
@@ -135,7 +138,7 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 - Backup from replica: avoid extra load on the master server by taking backups from a standby
 - External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
 - Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats and view WAL Archive information.
-- Partial Restore: restore the only specified databases or skip the specified databases.
+- Partial Restore: restore only the specified databases or skip the specified databases.
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
 
@@ -280,7 +283,7 @@ Since pg_probackup needs to read cluster files directly, pg_probackup must be st
 
 Depending on whether you are plan to take [autonomous](#stream-mode) and/or [archive](#archive-mode) backups, PostgreSQL cluster configuration will differ, as specified in the sections below. To back up the database cluster from a standby server, run pg_probackup in remote mode or create PTRACK backups, additional setup is required.
 
-For details, see the sections [Setting up STREAM Backups](#setting-up-stream-backups), [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving), [Setting up Backup from Standby](#setting-up-backup-from-standby), [Configuring the Remote Mode](#configuring-the-remote-mode) and [Setting up PTRACK Backups](#setting-up-ptrack-backups).
+For details, see the sections [Setting up STREAM Backups](#setting-up-stream-backups), [Setting up continuous WAL archiving](#setting-up-continuous-wal-archiving), [Setting up Backup from Standby](#setting-up-backup-from-standby), [Configuring the Remote Mode](#configuring-the-remote-mode), [Setting up Partial Restore](#setting-up-partial-restore) and [Setting up PTRACK Backups](#setting-up-ptrack-backups).
 
 ### Setting up STREAM Backups
 
@@ -356,19 +359,13 @@ GRANT EXECUTE ON FUNCTION bt_index_check(oid) TO backup;
 GRANT EXECUTE ON FUNCTION bt_index_check(oid, bool) TO backup;
 ```
 
-### Setting up PTRACK Backups
+### Setting up Partial Restore
 
-Backup mode PTACK can be used only on Postgrespro Standart and Postgrespro Enterprise installations or patched vanilla PostgreSQL. Links to ptrack patches can be found [here](https://github.com/postgrespro/pg_probackup#ptrack-support).
+If you are plalling to use partial restore, complete the following additional step:
 
-If you are going to use PTRACK backups, complete the following additional steps:
+- Grant the read-only acces to 'pg_catalog.pg_database' to the *backup* role only in database **used for connection** to PostgreSQL server:
 
-- Set the parameter `ptrack_enable` to `on`.
-- Grant the rights to execute `ptrack` functions to the *backup* role **in every database** of the cluster:
-
-        GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
-        GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
-
-- The *backup* role must have access to all the databases of the cluster.
+        GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
 
 ### Configuring the Remote Mode
 
@@ -407,6 +404,20 @@ pg_probackup in remote mode via `ssh` works as follows:
 - decompression is always done on *backup_host*.
 
 >NOTE: You can improse [additional restrictions](https://man.openbsd.org/OpenBSD-current/man8/sshd.8#AUTHORIZED_KEYS_FILE_FORMAT) on ssh settings to protect the system in the event of account compromise.
+
+### Setting up PTRACK Backups
+
+Backup mode PTACK can be used only on Postgrespro Standart and Postgrespro Enterprise installations or patched vanilla PostgreSQL. Links to ptrack patches can be found [here](https://github.com/postgrespro/pg_probackup#ptrack-support).
+
+If you are going to use PTRACK backups, complete the following additional steps:
+
+- Set the parameter `ptrack_enable` to `on`.
+- Grant the rights to execute `ptrack` functions to the *backup* role **in every database** of the cluster:
+
+        GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
+        GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
+
+- The *backup* role must have access to all the databases of the cluster.
 
 ## Usage
 
@@ -1820,6 +1831,111 @@ Deprecated. User name to connect as.
     --replica-timeout=timeout
     Default: 300 sec
 Deprecated. Wait time for WAL segment streaming via replication, in seconds. By default, pg_probackup waits 300 seconds. You can also define this parameter in the pg_probackup.conf configuration file using the [set-config](#set-config) command.
+
+## Howto
+
+All exaples below assume the remote mode of operations via `ssh`. If you are planning to run backup and restore operation locally then step `Setup passwordless SSH connection` can be skipped and all `--remote-*` options can be ommited.
+
+Examples are based on Ubuntu 18.04, PostgreSQL 11 and pg_probackup 2.2.0.
+
+backup_host - host with backup catalog.
+backupman - user on `backup_host` running all pg_probackup operations.
+/mnt/backups - directory on `backup_host` where backup catalog is stored.
+
+postgres_host - host with PostgreSQL cluster.
+postgres - user on `postgres_host` which run PostgreSQL cluster.
+/var/lib/postgresql/11/main - directory on `postgres_host` where PGDATA of PostgreSQL cluster is located.
+backup_db - database used for connection to PostgreSQL cluster.
+
+### Minimal Setup
+
+This setup is relying on autonomous FULL and DELTA backups.
+
+1. Setup passwordless SSH connection from `backup_host` to `postgres_host`:
+```
+[backupman@backup_host] ssh-copy-id postgres@postgres_host
+```
+
+2. Setup PostgreSQL cluster.
+2.1. It is recommended from security purposes to use separate database for backup operations.
+```
+postgres=#
+CREATE DATABASE backupdb;
+```
+
+2.2. Connect to `backupdb` database, create role `probackup` and grant to it the following permissions:
+```
+backupdb=#
+BEGIN;
+CREATE ROLE probackup WITH LOGIN REPLICATION;
+GRANT USAGE ON SCHEMA pg_catalog TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO probackup;
+COMMIT;
+```
+
+3. Init backup catalog:
+```
+[backupman@backup_host]$ pg_probackup-11 init -B /mnt/backups
+INFO: Backup catalog '/mnt/backups' successfully inited
+```
+
+4. Add instance 'pg-11' to backup catalog:
+```
+[backupman@backup_host]$ pg_probackup-11 add-instance -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -D /var/lib/postgresql/11/main
+INFO: Instance 'node' successfully inited
+```
+
+5. Take FULL backup:
+```
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
+INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ4LFC, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Start transferring data files
+INFO: Data files are transferred
+INFO: wait for pg_stop_backup()
+INFO: pg_stop backup() successfully executed
+INFO: Validating backup PZ4LFC
+INFO: Backup PZ4LFC data files are valid
+INFO: Backup PZ4LFC resident size: 62MB
+INFO: Backup PZ4LFC completed
+```
+
+6. Lets take a look at the backup catalog:
+```
+BACKUP INSTANCE 'pg-11'
+==================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN  Stop LSN   Status
+==================================================================================================================================
+ node      11       PZ4LFC  2019-10-10 00:09:17+03  FULL   STREAM    1/0    7s   30MB  32MB    1.00  0/C000028  0/C000160  OK
+
+```
+
+7. Lets hide some options into config, so cmdline can be less crowdy:
+```
+[backupman@backup_host]$ pg_probackup-11 set-config -B /mnt/backups --instance pg-11 --remote-host=postgres_host --remote-user=postgres --pguser=probackup --pgdatabase=backupdb
+```
+
+8. Take incremental backup in DELTA mode:
+```
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream
+```
+
+
+
+#### 
+
+### Setup with WAL archive
+
+The fact of having an WAL archive dramatically improve you scope of options toward backup and restore operations.
+
 
 ## Authors
 Postgres Professional, Moscow, Russia.
