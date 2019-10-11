@@ -937,7 +937,7 @@ static void
 show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 				  parray *tli_list)
 {
-	int			i;
+	int			i,j;
 	PQExpBuffer	buf = &show_buf;
 	parray *actual_tli_list = parray_new();
 
@@ -1026,7 +1026,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		{
 			json_add(buf, JT_BEGIN_ARRAY, &json_level);
 
-			for (int j = 0; j < parray_num(tlinfo->lost_segments); j++)
+			for (j = 0; j < parray_num(tlinfo->lost_segments); j++)
 			{
 				xlogInterval *lost_segments = (xlogInterval *) parray_get(tlinfo->lost_segments, j);
 
@@ -1056,7 +1056,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		if (tlinfo->backups != NULL)
 		{
 			json_add(buf, JT_BEGIN_ARRAY, &json_level);
-			for (int j = 0; j < parray_num(tlinfo->backups); j++)
+			for (j = 0; j < parray_num(tlinfo->backups); j++)
 			{
 				pgBackup *backup = parray_get(tlinfo->backups, j);
 
