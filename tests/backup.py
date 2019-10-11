@@ -2026,6 +2026,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
         gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
+        self.switch_wal_segment(node)
+
         # FULL backup from replica
         self.backup_node(
             backup_dir, 'replica', replica,
