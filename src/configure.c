@@ -255,9 +255,12 @@ static const char *current_group = NULL;
  * Show configure options including default values.
  */
 void
-do_show_config(void)
+do_show_config(const char *instance_name)
 {
 	int			i;
+	InstanceConfig *instance = NULL;
+
+	instance = readInstanceConfigFile(instance_name, true);
 
 	show_configure_start();
 
@@ -337,7 +340,7 @@ do_set_config(bool missing_ok)
 }
 
 void
-init_config(InstanceConfig *config, const char *instance_name)
+init_config(InstanceConfig *config, const char *instance_name, bool conf_only)
 {
 	MemSet(config, 0, sizeof(InstanceConfig));
 
@@ -358,7 +361,10 @@ init_config(InstanceConfig *config, const char *instance_name)
 	config->archive_timeout = ARCHIVE_TIMEOUT_DEFAULT;
 
 	/* Copy logger defaults */
-	config->logger = logger_config;
+	if (conf_only)
+		config->logger = NULL;
+	else
+		config->logger = logger_config;
 
 	config->retention_redundancy = RETENTION_REDUNDANCY_DEFAULT;
 	config->retention_window = RETENTION_WINDOW_DEFAULT;
@@ -367,14 +373,14 @@ init_config(InstanceConfig *config, const char *instance_name)
 	config->compress_alg = COMPRESS_ALG_DEFAULT;
 	config->compress_level = COMPRESS_LEVEL_DEFAULT;
 
-	config->remote.proto = (char*)"ssh";
+	config->remote.proto = (char*)"none";
 }
 
 /*
  * read instance config from file
  */
 InstanceConfig *
-readInstanceConfigFile(const char *instance_name)
+readInstanceConfigFile(const char *instance_name, bool conf_only)
 {
 	char	path[MAXPGPATH];
 	InstanceConfig   *instance = pgut_new(InstanceConfig);
@@ -592,7 +598,7 @@ readInstanceConfigFile(const char *instance_name)
 	};
 
 
-	init_config(instance, instance_name);
+	init_config(instance, instance_name, conf_only);
 
 	sprintf(instance->backup_instance_path, "%s/%s/%s",
 			backup_path, BACKUPS_DIR, instance_name);
@@ -629,6 +635,14 @@ readInstanceConfigFile(const char *instance_name)
 
 	if (compress_alg)
 		instance->compress_alg = parse_compress_alg(compress_alg);
+
+	if (instance->remote.proto)
+	{
+		if ((pg_strcasecmp(instance->remote.proto, "ssh") != 0) &&
+			pg_strcasecmp(instance->remote.proto, "none") != 0)
+			elog(ERROR, "invalid remote protocol value \"%s\"", instance->remote.proto);
+	}
+
 
 #if PG_VERSION_NUM >= 110000
 	/* If for some reason xlog-seg-size is missing, then set it to 16MB */

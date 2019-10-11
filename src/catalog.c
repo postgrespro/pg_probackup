@@ -364,7 +364,7 @@ catalog_get_instance_list(void)
 		if (!S_ISDIR(st.st_mode))
 			continue;
 
-		instance = readInstanceConfigFile(dent->d_name);
+		instance = readInstanceConfigFile(dent->d_name, false);
 
 		parray_append(instances, instance);
 	}

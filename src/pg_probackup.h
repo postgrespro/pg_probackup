@@ -641,10 +641,10 @@ extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
 						  char *wal_file_name);
 
 /* in configure.c */
-extern void do_show_config(void);
+extern void do_show_config(const char *instance_name);
 extern void do_set_config(bool missing_ok);
-extern void init_config(InstanceConfig *config, const char *instance_name);
-extern InstanceConfig *readInstanceConfigFile(const char *instance_name);
+extern void init_config(InstanceConfig *config, const char *instance_name, bool conf_only);
+extern InstanceConfig *readInstanceConfigFile(const char *instance_name, bool conf_only);
 
 /* in show.c */
 extern int do_show(const char *instance_name, time_t requested_backup_id, bool show_archive);

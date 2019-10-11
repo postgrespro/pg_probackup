@@ -118,7 +118,7 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 
 		if (show_archive)
 		{
-			InstanceConfig *instance = readInstanceConfigFile(instance_name);
+			InstanceConfig *instance = readInstanceConfigFile(instance_name, false);
 			show_instance_archive(instance);
 		}
 		else
@@ -132,7 +132,7 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 	{
 		if (show_archive)
 		{
-			InstanceConfig *instance = readInstanceConfigFile(instance_name);
+			InstanceConfig *instance = readInstanceConfigFile(instance_name, false);
 			show_instance_archive(instance);
 		}
 		else

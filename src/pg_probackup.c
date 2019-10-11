@@ -262,7 +262,7 @@ main(int argc, char *argv[])
 	pgBackupInit(&current);
 
 	/* Initialize current instance configuration */
-	init_config(&instance_config, instance_name);
+	init_config(&instance_config, instance_name, false);
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
@@ -611,8 +611,14 @@ main(int argc, char *argv[])
 			elog(ERROR, "Invalid backup-id \"%s\"", backup_id_string);
 	}
 
-	if (!instance_config.conn_opt.pghost && instance_config.remote.host)
+	elog(INFO, "PROTO %s", instance_config.remote.proto);
+
+	if (!instance_config.conn_opt.pghost &&
+		 instance_config.remote.host &&
+		 (strcmp(instance_config.remote.proto, "ssh") == 0))
+	{
 		instance_config.conn_opt.pghost = instance_config.remote.host;
+	}
 
 		/* Setup stream options. They are used in streamutil.c. */
 	if (instance_config.conn_opt.pghost != NULL)
@@ -773,7 +779,7 @@ main(int argc, char *argv[])
 			do_merge(current.backup_id);
 			break;
 		case SHOW_CONFIG_CMD:
-			do_show_config();
+			do_show_config(instance_name);
 			break;
 		case SET_CONFIG_CMD:
 			do_set_config(false);
