@@ -2,7 +2,7 @@
 
 pg_probackup is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure. pg_probackup supports PostgreSQL 9.5 or higher.
 
-Current version - 2.2.0
+Current version - 2.2.1
 
 1. [Synopsis](#synopsis)
 2. [Versioning](#versioning)
@@ -572,7 +572,7 @@ To restore cluster on remote host see the section [Using pg_probackup in the Rem
 
 #### Partial Restore
 
-If you have enabled [partial restore](#setting-up-partial-restore) before taking backups, you can restore or exclude from restore the arbitraty number of specific databases using [partial restore options](#partial-restore-options) with the [restore](#restore) commands.
+If you have enabled [partial restore](#setting-up-partial-restore) before taking backups, you can restore or exclude from restore the arbitrary number of specific databases using [partial restore options](#partial-restore-options) with the [restore](#restore) commands.
 
 To restore only one or more databases, run the restore command with the following options:
 
