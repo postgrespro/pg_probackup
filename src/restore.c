@@ -871,7 +871,8 @@ create_recovery_conf(time_t backup_id,
 		char restore_command_guc[16384];
 
 		/* If restore_command is provided, use it */
-		if (instance_config.restore_command)
+		if (instance_config.restore_command &&
+			(pg_strcasecmp(instance_config.restore_command, "none") != 0))
 			sprintf(restore_command_guc, "%s", instance_config.restore_command);
 		else
 		{
