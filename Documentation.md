@@ -1834,7 +1834,7 @@ Deprecated. Wait time for WAL segment streaming via replication, in seconds. By 
 
 ## Howto
 
-All exaples below assume the remote mode of operations via `ssh`. If you are planning to run backup and restore operation locally then step `Setup passwordless SSH connection` can be skipped and all `--remote-*` options can be ommited.
+All examples below assume the remote mode of operations via `ssh`. If you are planning to run backup and restore operation locally then step `Setup passwordless SSH connection` can be skipped and all `--remote-*` options can be ommited.
 
 Examples are based on Ubuntu 18.04, PostgreSQL 11 and pg_probackup 2.2.0.
 
@@ -1842,7 +1842,7 @@ backup_host - host with backup catalog.
 backupman - user on `backup_host` running all pg_probackup operations.
 /mnt/backups - directory on `backup_host` where backup catalog is stored.
 
-postgres_host - host with PostgreSQL cluster.
+postgres-host - host with PostgreSQL cluster.
 postgres - user on `postgres_host` which run PostgreSQL cluster.
 /var/lib/postgresql/11/main - directory on `postgres_host` where PGDATA of PostgreSQL cluster is located.
 backup_db - database used for connection to PostgreSQL cluster.
@@ -1882,7 +1882,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO probac
 COMMIT;
 ```
 
-3. Init backup catalog:
+3. Init the backup catalog:
 ```
 [backupman@backup_host]$ pg_probackup-11 init -B /mnt/backups
 INFO: Backup catalog '/mnt/backups' successfully inited
@@ -1897,45 +1897,112 @@ INFO: Instance 'node' successfully inited
 5. Take FULL backup:
 ```
 [backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
-INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ4LFC, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YK2, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
 INFO: Start transferring data files
 INFO: Data files are transferred
 INFO: wait for pg_stop_backup()
 INFO: pg_stop backup() successfully executed
-INFO: Validating backup PZ4LFC
-INFO: Backup PZ4LFC data files are valid
-INFO: Backup PZ4LFC resident size: 62MB
-INFO: Backup PZ4LFC completed
+INFO: Validating backup PZ7YK2
+INFO: Backup PZ7YK2 data files are valid
+INFO: Backup PZ7YK2 resident size: 196MB
+INFO: Backup PZ7YK2 completed
 ```
 
 6. Lets take a look at the backup catalog:
 ```
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
+
 BACKUP INSTANCE 'pg-11'
 ==================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN  Stop LSN   Status
 ==================================================================================================================================
- node      11       PZ4LFC  2019-10-10 00:09:17+03  FULL   STREAM    1/0    7s   30MB  32MB    1.00  0/C000028  0/C000160  OK
+ node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL  STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
 
 ```
 
-7. Lets hide some options into config, so cmdline can be less crowdy:
+7. Take incremental backup in DELTA mode:
 ```
-[backupman@backup_host]$ pg_probackup-11 set-config -B /mnt/backups --instance pg-11 --remote-host=postgres_host --remote-user=postgres --pguser=probackup --pgdatabase=backupdb
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
+INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YMP, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Parent backup: PZ7YK2
+INFO: Start transferring data files
+INFO: Data files are transferred
+INFO: wait for pg_stop_backup()
+INFO: pg_stop backup() successfully executed
+INFO: Validating backup PZ7YMP
+INFO: Backup PZ7YMP data files are valid
+INFO: Backup PZ7YMP resident size: 32MB
+INFO: Backup PZ7YMP completed
 ```
 
-8. Take incremental backup in DELTA mode:
+8. Lets hide some parameters into config, so cmdline can looks less crodwy: 
+```
+[backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
+```
+
+9. Take another incremental backup in DELTA mode, omitting the `--remote-host`, `--remote-user`, `-U` and `-d` options:
 ```
 [backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream
+INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YR5, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Parent backup: PZ7YMP
+INFO: Start transferring data files
+INFO: Data files are transferred
+INFO: wait for pg_stop_backup()
+INFO: pg_stop backup() successfully executed
+INFO: Validating backup PZ7YR5
+INFO: Backup PZ7YR5 data files are valid
+INFO: Backup PZ7YR5 resident size: 32MB
+INFO: Backup PZ7YR5 completed
 ```
 
+10. Lets take a look at instance config:
+```
+[backupman@backup_host] pg_probackup-11 show-config -B /mnt/backups --instance 'pg-11'
+
+# Backup instance information
+pgdata = /var/lib/postgresql/11/main
+system-identifier = 6746586934060931492
+xlog-seg-size = 16777216
+# Connection parameters
+pgdatabase = backupdb
+pghost = postgres_host
+pguser = probackup
+# Replica parameters
+replica-timeout = 5min
+# Archive parameters
+archive-timeout = 5min
+# Logging parameters
+log-level-console = INFO
+log-level-file = OFF
+log-filename = pg_probackup.log
+log-rotation-size = 0
+log-rotation-age = 0
+# Retention parameters
+retention-redundancy = 0
+retention-window = 0
+wal-depth = 0
+# Compression parameters
+compress-algorithm = none
+compress-level = 1
+# Remote access parameters
+remote-proto = ssh
+remote-host = postgres_host
+```
+
+Note, that we are getting default values for other options, that were not overwritten by set-config command.
 
 
-#### 
+10. Lets take a look at the backup catalog:
+```
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
 
-### Setup with WAL archive
-
-The fact of having an WAL archive dramatically improve you scope of options toward backup and restore operations.
-
+====================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status 
+====================================================================================================================================
+ node      11       PZ7YR5  2019-10-11 19:49:56+03  DELTA  STREAM    1/1   10s  112kB  32MB    1.00  0/41000028  0/41000160  OK     
+ node      11       PZ7YMP  2019-10-11 19:47:16+03  DELTA  STREAM    1/1   10s  376kB  32MB    1.00  0/3E000028  0/3F0000B8  OK     
+ node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL   STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
+```
 
 ## Authors
 Postgres Professional, Moscow, Russia.
