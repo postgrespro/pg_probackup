@@ -692,3 +692,106 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_delete_multiple_descendants_dry_run(self):
+        """
+                 PAGEa3
+        PAGEa2    /
+           \     /
+            PAGEa1 (delete target)
+              |
+            FULLa
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL BACKUP
+        node.pgbench_init(scale=1)
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+
+        # Change PAGEa2 to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        pgbench.wait()
+        page_id_a3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Change PAGEa2 to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+
+        # Delete PAGEa1
+        output = self.delete_pb(
+            backup_dir, 'node', page_id_a1,
+            options=['--dry-run', '--log-level-console=LOG', '--delete-wal'])
+
+        print(output)
+        self.assertIn(
+            'LOG: Backup {0} can be deleted'.format(page_id_a3),
+            output)
+        self.assertIn(
+            'LOG: Backup {0} can be deleted'.format(page_id_a2),
+            output)
+        self.assertIn(
+            'LOG: Backup {0} can be deleted'.format(page_id_a1),
+            output)
+
+        self.assertIn(
+            'INFO: Resident data size to free by '
+            'delete of backup {0} :'.format(page_id_a1),
+            output)
+
+        self.assertIn(
+            'On timeline 1 WAL segments between 0000000000000001 '
+            'and 0000000000000002 can be removed',
+            output)
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+
+        output = self.delete_pb(
+            backup_dir, 'node', page_id_a1,
+            options=['--log-level-console=LOG', '--delete-wal'])
+
+        self.assertIn(
+            'LOG: Backup {0} will be deleted'.format(page_id_a3),
+            output)
+        self.assertIn(
+            'LOG: Backup {0} will be deleted'.format(page_id_a2),
+            output)
+        self.assertIn(
+            'LOG: Backup {0} will be deleted'.format(page_id_a1),
+            output)
+        self.assertIn(
+            'INFO: Resident data size to free by '
+            'delete of backup {0} :'.format(page_id_a1),
+            output)
+
+        self.assertIn(
+            'On timeline 1 WAL segments between 0000000000000001 '
+            'and 0000000000000002 will be removed',
+            output)
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
