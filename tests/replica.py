@@ -743,6 +743,10 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
+        # freeze bgwriter to get rid of RUNNING XACTS records
+        bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+
         copy_tree(
             os.path.join(backup_dir, 'wal', 'master'),
             os.path.join(backup_dir, 'wal', 'replica'))
@@ -757,7 +761,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             options=[
                 '--archive-timeout=30',
-                '--log-level-console=verbose',
+                '--log-level-console=LOG',
                 '--no-validate'],
             return_id=False)
 
