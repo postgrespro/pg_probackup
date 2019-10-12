@@ -1210,7 +1210,7 @@ Alternatively you can use the `--ttl` and `--expire-time` options with the [back
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --ttl=30d
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --expire-time='2020-01-01 00:00:00+03'
 
-You can determine the fact that backup is pinned and check due expire time by looking up 'expire-time' attribute in backup metadata via (show)[#show] command:
+You can determine the fact that backup is pinned and check due expire time by looking up 'expire-time' attribute in backup metadata via [show](#show) command:
 
     pg_probackup show --instance instance_name -i backup_id
 
@@ -1223,7 +1223,7 @@ data-bytes = 22288792
 ...
 ```
 
-You can unpin a backup by setting `--ttl` option to zero using `set-backup` command. Example:
+You can unpin a backup by setting `--ttl` option to zero using [set-backup](#set-backup) command. Example:
 
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=0
 
@@ -1231,7 +1231,7 @@ Only pinned backups have `expire-time` attribute in backup metadata.
 
 ### WAL Retention Policy
 
-By default, pg_probackup treatment of WAL is very conservative and only "redundant" WAL segments can be purged, i.e. segments that cannot be applied to any existing backup in the backup catalog. To save disk space, you can configure WAL retention policy.
+By default, pg_probackup treatment of WAL is very conservative and only "redundant" WAL segments can be purged, i.e. segments that cannot be applied to any existing backup in the backup catalog. To save disk space, you can configure WAL retention policy, to keep WAL of limited depth measured in backups.
 
 Suppose you have backed up the *node* instance in the *backup_dir* directory with configured [WAL archiving](#setting-up-continuous-wal-archiving):
 
@@ -1262,7 +1262,7 @@ ARCHIVE INSTANCE 'node'
  1    0           0/0          0000000000000001  0000000000000047  71          36MB  31.00   6          OK
 ```
 
-WAL purge without WAL retention cannot achieve much, only one segment can be removed:
+General WAL purge without `wal-depth` cannot achieve much, only one segment can be removed:
 
     pg_probackup delete -B backup_dir --instance node --delete-wal
 
