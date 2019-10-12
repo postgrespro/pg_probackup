@@ -40,6 +40,7 @@ Current version - 2.2.1
         * [Viewing WAL Archive Information](#viewing-wal-archive-information)
     * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
         * [Pinning a Backup](#pinning-a-backup)
+        * [WAL Retention Policy](#wal-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
 
@@ -1227,6 +1228,75 @@ You can unpin a backup by setting `--ttl` option to zero using `set-backup` comm
 
 Only pinned backups have `expire-time` attribute in backup metadata.
 
+### WAL Retention Policy
+
+By default, pg_probackup treatment of WAL is very conservative and only "redundant" WAL segments can be purged, i.e. segments that cannot be applied to any existing backup in the backup catalog. To save disk space, you can configure WAL retention policy.
+
+Suppose you have backed up the *node* instance in the *backup_dir* directory with configured [WAL archiving](#setting-up-continuous-wal-archiving):
+
+    pg_probackup show -B backup_dir --instance node
+
+```
+BACKUP INSTANCE 'node'
+====================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status
+====================================================================================================================================
+ node      11       PZ9442  2019-10-12 10:43:21+03  DELTA  STREAM    1/0   10s  121kB  16MB    1.00  0/46000028  0/46000160  OK
+ node      11       PZ943L  2019-10-12 10:43:04+03  FULL   STREAM    1/0   10s  180MB  32MB    1.00  0/44000028  0/44000160  OK
+ node      11       PZ7YR5  2019-10-11 19:49:56+03  DELTA  STREAM    1/1   10s  112kB  32MB    1.00  0/41000028  0/41000160  OK
+ node      11       PZ7YMP  2019-10-11 19:47:16+03  DELTA  STREAM    1/1   10s  376kB  32MB    1.00  0/3E000028  0/3F0000B8  OK
+ node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL   STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
+ node      11       PZ7YFO  2019-10-11 19:43:04+03  FULL   STREAM    1/0   10s   30MB  16MB    1.00  0/2000028   0/200ADD8   OK
+```
+
+The state of WAL archive can be determined by using [show](#command) command with `--archive` flag:
+
+    pg_probackup show -B backup_dir --instance node --archive
+
+```
+ARCHIVE INSTANCE 'node'
+===============================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size  Zratio  N backups  Status
+===============================================================================================================
+ 1    0           0/0          0000000000000001  0000000000000047  71          36MB  31.00   6          OK
+```
+
+WAL purge without WAL retention cannot achieve much, only one segment can be removed:
+
+    pg_probackup delete -B backup_dir --instance node --delete-wal
+
+```
+ARCHIVE INSTANCE 'node'
+===============================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size  Zratio  N backups  Status
+===============================================================================================================
+ 1    0           0/0          0000000000000002  0000000000000047  70          34MB  32.00   6          OK
+```
+
+If you would like, for example, to keep only those WAL segments that can be applied to the last valid backup, use the `--wal-depth` option:
+
+    pg_probackup delete -B backup_dir --instance node --delete-wal --wal-depth=1
+
+```
+ARCHIVE INSTANCE 'node'
+================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size   Zratio  N backups  Status
+================================================================================================================
+ 1    0           0/0          0000000000000046  0000000000000047  2           143kB  228.00  6          OK
+```
+
+Alternatively you can use the `--wal-depth` option with the [backup](#backup) command:
+
+    pg_probackup backup -B backup_dir --instance node -b DELTA --wal-depth=1 --delete-wal
+
+```
+ARCHIVE INSTANCE 'node'
+===============================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size  Zratio  N backups  Status
+===============================================================================================================
+ 1    0           0/0          0000000000000048  0000000000000049  1           72kB  228.00  7          OK
+```
+
 ### Merging Backups
 
 As you take more and more incremental backups, the total size of the backup catalog can substantially grow. To save disk space, you can merge incremental backups to their parent full backup by running the merge command, specifying the backup ID of the most recent incremental backup you would like to merge:
@@ -1310,7 +1380,7 @@ Deletes all backups and WAL files associated with the specified instance.
 
     pg_probackup set-config -B backup_dir --instance instance_name
     [--help] [--pgdata=pgdata-path]
-    [--retention-redundancy=redundancy][--retention-window=window]
+    [--retention-redundancy=redundancy][--retention-window=window][--wal-depth=wal_depth]
     [--compress-algorithm=compression_algorithm] [--compress-level=compression_level]
     [-d dbname] [-h host] [-p port] [-U username]
     [--archive-timeout=timeout] [--external-dirs=external_directory_path]
@@ -1500,7 +1570,7 @@ For details, see the section [Merging Backups](#merging-backups).
 
     pg_probackup delete -B backup_dir --instance instance_name
     [--help] [-j num_threads] [--progress]
-    [--retention-redundancy=redundancy][--retention-window=window]
+    [--retention-redundancy=redundancy][--retention-window=window][--wal-depth=wal_depth]
     [--delete-wal] {-i backup_id | --delete-expired [--merge-expired] | --merge-expired}
     [--dry-run]
     [logging_options]
@@ -1617,6 +1687,10 @@ Specifies the number of full backup copies to keep in the data directory. Must b
     --retention-window=window
     Default: 0 
 Number of days of recoverability. Must be a positive integer. The zero value disables this setting.
+
+    --wal-depth=wal_depth
+    Default: 0
+Number of latest valid backups on every timeline that must retain the ability to perform PITR. Must be a positive integer. The zero value disables this setting.
 
     --delete-wal
 Deletes WAL files that are no longer required to restore the cluster from any of the existing backups.
@@ -1879,6 +1953,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO probackup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO probackup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO probackup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO probackup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO probackup;
 COMMIT;
 ```
 
@@ -1934,7 +2009,7 @@ INFO: Backup PZ7YMP resident size: 32MB
 INFO: Backup PZ7YMP completed
 ```
 
-#### Lets hide some parameters into config, so cmdline can be less crodwy
+#### Lets hide some parameters into config, so cmdline can be less crowdy
 ```
 [backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
 ```
