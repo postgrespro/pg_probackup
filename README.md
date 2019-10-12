@@ -6,19 +6,19 @@ The utility is compatible with:
 * PostgreSQL 9.5, 9.6, 10, 11;
 
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
-* Choosing between full and page-level incremental backups to speed up backup and recovery
-* Implementing a single backup strategy for multi-server PostgreSQL clusters
-* Automatic data consistency checks and on-demand backup validation without actual data recovery
-* Managing backups in accordance with retention policy
-* Merging incremental into full backups without actual data recovery
-* Running backup, restore, merge and validation processes on multiple parallel threads
-* Storing backup data in a compressed state to save disk space
-* Taking backups from a standby server to avoid extra load on the master server
-* Extended logging settings
-* Custom commands to simplify WAL log archiving
-* External to PGDATA directories, such as directories with config files and scripts, can be included in backup
-* Remote backup, restore, add-instance, archive-push and archive-get operations via ssh (beta)
-* Checking running PostgreSQL instance for the sights of corruption in read-only mode via `checkdb` command.
+* Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes you can plan the backup strategy in accordance with your data flow
+* Validation: automatic data consistency checks and on-demand backup validation without actual data recovery
+* Verification: on-demand verification of PostgreSQL instance via dedicated command `checkdb`
+* Retention: managing WAL archive and backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`. Additionally you can design you own retention policy by setting 'time to live' for backups
+* Parallelization: running backup, restore, merge, delete, verificaton and validation processes on multiple parallel threads
+* Compression: storing backup data in a compressed state to save disk space
+* Deduplication: saving disk space by not copying the not changed non-data files ('_vm', '_fsm', etc)
+* Remote operations: backup PostgreSQL instance located on remote machine or restore backup on it
+* Backup from replica: avoid extra load on the master server by taking backups from a standby
+* External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
+* Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
+* Archive Catalog: get list of all WAL timelines and corresponding meta information in `plain` or `json` formats
+* Partial Restore: restore only the specified databases or exclude the specified databases from restore.
 
 To manage backup data, `pg_probackup` creates a backup catalog. This directory stores all backup files with additional meta information, as well as WAL archives required for [point-in-time recovery](https://postgrespro.com/docs/postgresql/current/continuous-archiving.html). You can store backups for different instances in separate subdirectories of a single backup catalog.
 
@@ -49,11 +49,11 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Current release
 
-[2.1.5](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.5)
+[2.2.1](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.1)
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.1.5).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.1).
 
 ### Linux Installation
 ```shell
