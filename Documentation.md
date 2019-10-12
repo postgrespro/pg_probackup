@@ -131,14 +131,15 @@ As compared to other backup solutions, pg_probackup offers the following benefit
 - Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes you can plan the backup strategy in accordance with your data flow
 - Validation: automatic data consistency checks and on-demand backup validation without actual data recovery
 - Verification: on-demand verification of PostgreSQL instance via dedicated command `checkdb`
-- Retention: managing backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`
+- Retention: managing WAL archive and backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`. Additionally you can design you own retention policy by setting 'time to live' for backups
 - Parallelization: running backup, restore, merge, delete, verificaton and validation processes on multiple parallel threads
 - Compression: storing backup data in a compressed state to save disk space
 - Deduplication: saving disk space by not copying the not changed non-data files ('_vm', '_fsm', etc)
 - Remote operations: backup PostgreSQL instance located on remote machine or restore backup on it
 - Backup from replica: avoid extra load on the master server by taking backups from a standby
 - External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
-- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats and view WAL Archive information.
+- Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
+- Archive Catalog: get list of all WAL timelines and corresponding meta information in `plain` or `json` formats
 - Partial Restore: restore only the specified databases or skip the specified databases.
 
 To manage backup data, pg_probackup creates a `backup catalog`. This is a directory that stores all backup files with additional meta information, as well as WAL archives required for point-in-time recovery. You can store backups for different instances in separate subdirectories of a single backup catalog.
