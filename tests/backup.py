@@ -2078,10 +2078,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        for i in range(50000):
-            node.safe_psql(
-                'postgres',
-                "CREATE TABLE t_{0} as select 1".format(i))
+        with node.connect("postgres") as conn:
+            for i in range(50000):
+                conn.execute(
+                    "CREATE TABLE t_{0} as select 1".format(i))
+                conn.commit()
 
         self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
