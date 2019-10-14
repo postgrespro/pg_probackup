@@ -2059,3 +2059,40 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_issue_132(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/132
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(50000):
+            node.safe_psql(
+                'postgres',
+                "CREATE TABLE t_{0} as select 1".format(i))
+
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
