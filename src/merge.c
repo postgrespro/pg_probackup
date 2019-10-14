@@ -190,6 +190,9 @@ merge_backups(pgBackup *to_backup, pgBackup *from_backup)
 	merge_time = time(NULL);
 	elog(INFO, "Merging backup %s with backup %s", from_backup_id, to_backup_id);
 
+	/* It's redundant to check block checksumms during merge */
+	skip_block_validation = true;
+
 	/*
 	 * Validate to_backup only if it is BACKUP_STATUS_OK. If it has
 	 * BACKUP_STATUS_MERGING status then it isn't valid backup until merging
@@ -672,12 +675,12 @@ merge_files(void *arg)
 		 */
 		file->compress_alg = to_backup->compress_alg;
 
-		if (file->write_size != BYTES_INVALID)
-			elog(VERBOSE, "Merged file \"%s\": " INT64_FORMAT " bytes",
-				 file->path, file->write_size);
-		else
+		if (file->write_size < 0)
 			elog(ERROR, "Merge of file \"%s\" failed. Invalid size: %i",
 				file->path, BYTES_INVALID);
+
+		elog(VERBOSE, "Merged file \"%s\": " INT64_FORMAT " bytes",
+				file->path, file->write_size);
 
 		/* Restore relative path */
 		file->path = prev_file_path;
