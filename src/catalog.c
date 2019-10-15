@@ -688,7 +688,7 @@ pgBackupCreateDir(pgBackup *backup)
 parray *
 catalog_get_timelines(InstanceConfig *instance)
 {
-	int i,j;
+	int i,j,k;
 	parray *xlog_files_list = parray_new();
 	parray *timelineinfos;
 	parray *backups;
@@ -1210,9 +1210,9 @@ catalog_get_timelines(InstanceConfig *instance)
 
 		GetXLogSegNo(tlinfo->anchor_lsn, anchor_segno, instance->xlog_seg_size);
 
-		for (i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
+		for (j = 0; j < parray_num(tlinfo->xlog_filelist); j++)
 		{
-			xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
+			xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, j);
 
 			if (wal_file->segno >= anchor_segno)
 			{
@@ -1225,9 +1225,9 @@ catalog_get_timelines(InstanceConfig *instance)
 				continue;
 
 			/* Protect segments belonging to one of the keep invervals */
-			for (j = 0; j < parray_num(tlinfo->keep_segments); j++)
+			for (k = 0; k < parray_num(tlinfo->keep_segments); k++)
 			{
-				xlogInterval *keep_segments = (xlogInterval *) parray_get(tlinfo->keep_segments, j);
+				xlogInterval *keep_segments = (xlogInterval *) parray_get(tlinfo->keep_segments, k);
 
 				if ((wal_file->segno >= keep_segments->begin_segno) &&
 					wal_file->segno <= keep_segments->end_segno)
