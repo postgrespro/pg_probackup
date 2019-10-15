@@ -1626,12 +1626,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 		len += sprintf(line+len, "}\n");
 
-		if (write_len + len <= BUFFERSZ)
-		{
-			memcpy(buf+write_len, line, len);
-			write_len += len;
-		}
-		else
+		if (write_len + len >= BUFFERSZ)
 		{
 			/* write buffer to file */
 			if (fio_fwrite(out, buf, write_len) != write_len)
@@ -1644,6 +1639,9 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			/* reset write_len */
 			write_len = 0;
 		}
+
+		memcpy(buf+write_len, line, len);
+		write_len += len;
 	}
 
 	/* write what is left in the buffer to file */
