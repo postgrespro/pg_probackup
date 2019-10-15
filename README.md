@@ -48,11 +48,11 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Current release
 
-[2.2.1](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.1)
+[2.2.3](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.3)
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.1).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.3).
 
 ### Linux Installation
 ```shell
