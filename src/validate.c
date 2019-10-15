@@ -175,6 +175,28 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
 	else
 		elog(INFO, "Backup %s data files are valid", base36enc(backup->start_time));
+
+	/* Issue #132 kludge */
+	if (!corrupted &&
+		((parse_program_version(backup->program_version) == 20104)||
+		 (parse_program_version(backup->program_version) == 20105)||
+		 (parse_program_version(backup->program_version) == 20201)))
+	{
+		char path[MAXPGPATH];
+
+		pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+
+		if (pgFileSize(path) >= (BLCKSZ*500))
+		{
+			elog(WARNING, "Backup %s is a victim of metadata corruption. "
+							"Additional information can be found here: "
+							"https://github.com/postgrespro/pg_probackup/issues/132",
+							base36enc(backup->start_time));
+			backup->status = BACKUP_STATUS_CORRUPT;
+			write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name);
+		}
+
+	}
 }
 
 /*
