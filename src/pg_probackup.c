@@ -111,7 +111,7 @@ bool amcheck_parent = false;
 bool		delete_wal = false;
 bool		delete_expired = false;
 bool		merge_expired = false;
-bool		force_delete = false;
+bool		force = false;
 bool		dry_run = false;
 
 /* compression options */
@@ -196,7 +196,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
 	/* TODO not implemented yet */
-	{ 'b', 147, "force",			&force_delete,		SOURCE_CMD_STRICT },
+	{ 'b', 147, "force",			&force,				SOURCE_CMD_STRICT },
 	/* compression options */
 	{ 'b', 148, "compress",			&compress_shortcut,	SOURCE_CMD_STRICT },
 	/* connection options */
@@ -646,9 +646,17 @@ main(int argc, char *argv[])
 					(target_immediate) ? "immediate" : NULL,
 				target_name, target_action);
 
+		if (force && backup_subcmd != RESTORE_CMD)
+			elog(ERROR, "You cannot specify \"--force\" flag with the \"%s\" command",
+				command_name);
+
+		if (force)
+			no_validate = true;
+
 		/* keep all params in one structure */
 		restore_params = pgut_new(pgRestoreParams);
 		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
+		restore_params->force = force;
 		restore_params->no_validate = no_validate;
 		restore_params->restore_as_replica = restore_as_replica;
 		restore_params->skip_block_validation = skip_block_validation;

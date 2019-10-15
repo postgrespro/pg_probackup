@@ -181,7 +181,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				if ((current_backup->status == BACKUP_STATUS_ORPHAN ||
 					current_backup->status == BACKUP_STATUS_CORRUPT ||
 					current_backup->status == BACKUP_STATUS_RUNNING)
-					&& !params->no_validate)
+					&& (!params->no_validate || params->force))
 					elog(WARNING, "Backup %s has status: %s",
 						 base36enc(current_backup->start_time), status2str(current_backup->status));
 				else
@@ -421,9 +421,19 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			elog(INFO, "Backup %s is valid.", base36enc(dest_backup->start_time));
 	}
 	else if (dest_backup->status == BACKUP_STATUS_CORRUPT)
-		elog(ERROR, "Backup %s is corrupt.", base36enc(dest_backup->start_time));
+	{
+		if (params->force)
+			elog(WARNING, "Backup %s is corrupt.", base36enc(dest_backup->start_time));
+		else
+			elog(ERROR, "Backup %s is corrupt.", base36enc(dest_backup->start_time));
+	}
 	else if (dest_backup->status == BACKUP_STATUS_ORPHAN)
-		elog(ERROR, "Backup %s is orphan.", base36enc(dest_backup->start_time));
+	{
+		if (params->force)
+			elog(WARNING, "Backup %s is orphan.", base36enc(dest_backup->start_time));
+		else
+			elog(ERROR, "Backup %s is orphan.", base36enc(dest_backup->start_time));
+	}
 	else
 		elog(ERROR, "Backup %s has status: %s",
 				base36enc(dest_backup->start_time), status2str(dest_backup->status));
@@ -552,8 +562,14 @@ restore_backup(pgBackup *backup, parray *dest_external_dirs,
 
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE)
-		elog(ERROR, "Backup %s cannot be restored because it is not valid",
-			 base36enc(backup->start_time));
+	{
+		if (params->force)
+			elog(WARNING, "Backup %s is not valid, restore is forced",
+				 base36enc(backup->start_time));
+		else
+			elog(ERROR, "Backup %s cannot be restored because it is not valid",
+				 base36enc(backup->start_time));
+	}
 
 	/* confirm block size compatibility */
 	if (backup->block_size != BLCKSZ)

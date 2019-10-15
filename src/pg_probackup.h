@@ -380,11 +380,12 @@ typedef struct pgRecoveryTarget
 /* Options needed for restore and validate commands */
 typedef struct pgRestoreParams
 {
+	bool	force;
 	bool	is_restore;
 	bool	no_validate;
 	bool	restore_as_replica;
 	bool	skip_external_dirs;
-	bool	skip_block_validation;
+	bool	skip_block_validation; //Start using it
 	const char *restore_command;
 
 	/* options for partial restore */
@@ -565,7 +566,6 @@ extern bool exclusive_backup;
 extern bool		delete_wal;
 extern bool		delete_expired;
 extern bool		merge_expired;
-extern bool		force_delete;
 extern bool		dry_run;
 
 /* compression options */

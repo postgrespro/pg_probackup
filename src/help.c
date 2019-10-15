@@ -151,7 +151,7 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target=immediate|latest]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica]\n"));
+	printf(_("                 [--restore-as-replica] [--force]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
@@ -384,7 +384,7 @@ help_restore(void)
 	printf(_("                 [--recovery-target=immediate|latest]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica]\n"));
+	printf(_("                 [--restore-as-replica] [--force]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
@@ -422,6 +422,7 @@ help_restore(void)
 
 	printf(_("  -R, --restore-as-replica         write a minimal recovery.conf in the output directory\n"));
 	printf(_("                                   to ease setting up a standby server\n"));
+	printf(_("      --force                      ignore invalid status of the restored backup\n"));
 	printf(_("      --no-validate                disable backup validation during restore\n"));
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
