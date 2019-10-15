@@ -2221,6 +2221,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_id=full_id, options=['--force'])
 
         self.assertIn(
+            'WARNING: Backup {0} has status: CORRUPT'.format(full_id),
+            output)
+
+        self.assertIn(
+            'WARNING: Backup {0} is corrupt.'.format(full_id),
+            output)
+
+        self.assertIn(
             'WARNING: Backup {0} is not valid, restore is forced'.format(full_id),
             output)
 
