@@ -2097,3 +2097,157 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_issue_132_1(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/132
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off'})
+
+        # TODO: check version of old binary, it should be 2.1.4, 2.1.5 or 2.2.1
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        with node.connect("postgres") as conn:
+            for i in range(30000):
+                conn.execute(
+                    "CREATE TABLE t_{0} as select 1".format(i))
+                conn.commit()
+
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'], old_binary=True)
+
+        delta_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--stream'], old_binary=True)
+
+        node.cleanup()
+
+        # make sure that new binary can detect corruption
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id=full_id)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because FULL backup is CORRUPT"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Backup {0} is a victim of metadata corruption'.format(full_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id=delta_id)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because FULL backup is CORRUPT"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Backup {0} is a victim of metadata corruption'.format(full_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'CORRUPT', self.show_pb(backup_dir, 'node', full_id)['status'],
+            'Backup STATUS should be "CORRUPT"')
+
+        self.assertEqual(
+            'ORPHAN', self.show_pb(backup_dir, 'node', delta_id)['status'],
+            'Backup STATUS should be "ORPHAN"')
+
+        # check that revalidation is working correctly
+        try:
+            self.restore_node(
+                backup_dir, 'node', node, backup_id=delta_id)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because FULL backup is CORRUPT"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'WARNING: Backup {0} is a victim of metadata corruption'.format(full_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'CORRUPT', self.show_pb(backup_dir, 'node', full_id)['status'],
+            'Backup STATUS should be "CORRUPT"')
+
+        self.assertEqual(
+            'ORPHAN', self.show_pb(backup_dir, 'node', delta_id)['status'],
+            'Backup STATUS should be "ORPHAN"')
+
+        # check that '--no-validate' do not allow to restore ORPHAN backup
+#        try:
+#            self.restore_node(
+#                backup_dir, 'node', node, backup_id=delta_id,
+#                options=['--no-validate'])
+#            # we should die here because exception is what we expect to happen
+#            self.assertEqual(
+#                1, 0,
+#                "Expecting Error because FULL backup is CORRUPT"
+#                "\n Output: {0} \n CMD: {1}".format(
+#                    repr(self.output), self.cmd))
+#        except ProbackupException as e:
+#            self.assertIn(
+#                'Insert data',
+#                e.message,
+#                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+#                    repr(e.message), self.cmd))
+
+        node.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id, options=['--force'])
+
+        self.assertIn(
+            'WARNING: Backup {0} is not valid, restore is forced'.format(full_id),
+            output)
+
+        self.assertIn(
+            'INFO: Restore of backup {0} completed.'.format(full_id),
+            output)
+
+        node.cleanup()
+
+        output = self.restore_node(
+            backup_dir, 'node', node, backup_id=delta_id, options=['--force'])
+
+        self.assertIn(
+            'WARNING: Backup {0} is orphan.'.format(delta_id),
+            output)
+
+        self.assertIn(
+            'WARNING: Backup {0} is not valid, restore is forced'.format(full_id),
+            output)
+
+        self.assertIn(
+            'WARNING: Backup {0} is not valid, restore is forced'.format(delta_id),
+            output)
+
+        self.assertIn(
+            'INFO: Restore of backup {0} completed.'.format(delta_id),
+            output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
