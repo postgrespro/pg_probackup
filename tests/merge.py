@@ -1068,7 +1068,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_continue_failed_merge_with_corrupted_delta_backup(self):
         """
         Fail merge via gdb, corrupt DELTA backup, try to continue merge
@@ -1091,8 +1091,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id,"
             " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
-            " from generate_series(0,1000) i"
-        )
+            " from generate_series(0,1000) i")
 
         old_path = node.safe_psql(
             "postgres",
@@ -1100,18 +1099,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # DELTA BACKUP
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta'
-        )
+            backup_dir, 'node', node, backup_type='delta')
 
         node.safe_psql(
             "postgres",
-            "update t_heap set id = 100500"
-        )
+            "update t_heap set id = 100500")
 
         node.safe_psql(
             "postgres",
-            "vacuum full t_heap"
-        )
+            "vacuum full t_heap")
 
         new_path = node.safe_psql(
             "postgres",
@@ -1119,8 +1115,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # DELTA BACKUP
         backup_id_2 = self.backup_node(
-            backup_dir, 'node', node, backup_type='delta'
-        )
+            backup_dir, 'node', node, backup_type='delta')
 
         backup_id = self.show_pb(backup_dir, "node")[1]["id"]
 
@@ -1155,7 +1150,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Try to continue failed MERGE
         try:
-            self.merge_backup(backup_dir, "node", backup_id)
+            print(self.merge_backup(backup_dir, "node", backup_id))
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of incremental backup corruption.\n "

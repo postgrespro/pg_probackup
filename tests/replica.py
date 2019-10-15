@@ -890,6 +890,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
+                'autovacuum': 'off',
                 'checkpoint_timeout': '1h',
                 'wal_level': 'replica'})
 
@@ -924,6 +925,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(master)
         self.switch_wal_segment(master)
 
+        self.wait_until_replica_catch_with_master(master, replica)
+
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
@@ -951,12 +954,23 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             'LOG: Found prior LSN:',
             output)
 
-        print(output)
+        res1 = replica.safe_psql(
+            'postgres',
+            'select md5(fat_attr) from t1')
 
         replica.cleanup()
-        self.restore_node(backup_dir, 'replica', replica)
 
+        self.restore_node(backup_dir, 'replica', replica)
         pgdata_restored = self.pgdata_content(replica.data_dir)
+
+        replica.slow_start()
+
+        res2 = replica.safe_psql(
+            'postgres',
+            'select md5(fat_attr) from t1')
+
+        self.assertEqual(res1, res2)
+
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
