@@ -967,6 +967,17 @@ create_recovery_conf(time_t backup_id,
 
 		if (rt->target_tli)
 			fio_fprintf(fp, "recovery_target_timeline = '%u'\n", rt->target_tli);
+		else
+		{
+			/*
+			 * In PG12 default recovery target timeline was changed to 'latest', which
+			 * is extremely risky. Explicitly preserve old behavior of recovering to current
+			 * timneline for PG12.
+			 */
+#if PG_VERSION_NUM >= 120000
+			fio_fprintf(fp, "recovery_target_timeline = '%u'\n", backup->tli);
+#endif
+		}
 
 		if (rt->target_action)
 			fio_fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);

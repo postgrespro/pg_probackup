@@ -80,6 +80,8 @@ static char *pgdata_exclude_files[] =
 	"postmaster.pid",
 	"postmaster.opts",
 	"probackup_recovery.conf",
+	"recovery.signal",
+	"standby.signal",
 	NULL
 };
 
