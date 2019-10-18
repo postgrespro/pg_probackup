@@ -870,8 +870,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		 * Assume the worst.
 		 */
 		if (FirstToDeleteSegNo > 0 && OldestToKeepSegNo > 0)
-			elog(WARNING, "On timeline %i first segment %08X%08X is greater than "
-				"oldest segment to keep %08X%08X. Possible WAL archive corruption!",
+			elog(LOG, "On timeline %i first segment %08X%08X is greater than "
+				"oldest segment to keep %08X%08X",
 				tlinfo->tli,
 				(uint32) FirstToDeleteSegNo / xlog_seg_size,  (uint32) FirstToDeleteSegNo % xlog_seg_size,
 				(uint32) OldestToKeepSegNo / xlog_seg_size, (uint32) OldestToKeepSegNo % xlog_seg_size);
