@@ -57,8 +57,6 @@ src/datapagemap.c: $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.c $@
 src/datapagemap.h: $(top_srcdir)/src/bin/pg_rewind/datapagemap.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.h $@
-src/logging.h: $(top_srcdir)/src/bin/pg_rewind/logging.h
-	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/logging.h $@
 src/pg_crc.c: $(top_srcdir)/src/backend/utils/hash/pg_crc.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/utils/hash/pg_crc.c $@
 src/receivelog.c: $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
@@ -71,6 +69,14 @@ src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.h $@
 src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
+
+ifeq (12,$(MAJORVERSION))
+src/logging.h: $(top_srcdir)/src/include/common/logging.h
+	rm -f $@ && $(LN_S) $(srchome)/src/include/common/logging.h $@
+else
+src/logging.h: $(top_srcdir)/src/bin/pg_rewind/logging.h
+	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/logging.h $@
+endif
 
 ifeq (,$(filter 9.5 9.6,$(MAJORVERSION)))
 src/walmethods.c: $(top_srcdir)/src/bin/pg_basebackup/walmethods.c

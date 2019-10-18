@@ -111,7 +111,12 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			}
 #endif
 		case PGLZ_COMPRESS:
+
+#if PG_VERSION_NUM >= 120000
+			return pglz_decompress(src, src_size, dst, dst_size, true);
+#else
 			return pglz_decompress(src, src_size, dst, dst_size);
+#endif
 	}
 
 	return -1;
