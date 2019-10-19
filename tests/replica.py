@@ -86,8 +86,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
 
-        node.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node.port))
+        self.set_auto_conf(node, {'port': node.port})
+
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
@@ -121,8 +121,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
 
-        node.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node.port))
+        self.set_auto_conf(node, {'port': node.port})
+
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
@@ -218,11 +218,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
 
-        node.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node.port))
-
-        node.append_conf(
-            'postgresql.auto.conf', 'archive_mode = off'.format(node.port))
+        self.set_auto_conf(node, {'port': node.port, 'archive_mode': 'off'})
 
         node.slow_start()
 
@@ -263,11 +259,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', data_dir=node.data_dir,
             backup_id=backup_id)
 
-        node.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node.port))
-
-        node.append_conf(
-            'postgresql.auto.conf', 'archive_mode = off')
+        self.set_auto_conf(node, {'port': node.port, 'archive_mode': 'off'})
 
         node.slow_start()
 
@@ -301,8 +293,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
-        # force more frequent wal switch
-        master.append_conf('postgresql.auto.conf', 'archive_timeout  = 10')
         master.slow_start()
 
         replica = self.make_simple_node(
@@ -327,10 +317,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Settings for Replica
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-        replica.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(replica.port))
-        replica.append_conf(
-            'postgresql.auto.conf', 'hot_standby = on')
+        self.set_replica(master, replica, synchronous=True)
 
         replica.slow_start(replica=True)
 
@@ -390,15 +377,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
-        replica.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(replica.port))
+        self.set_auto_conf(replica, {'port': replica.port})
 
         replica.slow_start(replica=True)
 
         self.wait_until_replica_catch_with_master(master, replica)
 
-        replica.append_conf(
-            'recovery.conf', "recovery_min_apply_delay = '300s'")
+        self.set_auto_conf(replica, {'recovery_min_apply_delay': '300s'})
 
         replica.stop()
         replica.slow_start(replica=True)
@@ -580,7 +565,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             options=[
                 '--archive-timeout=30',
-                '--log-level-console=verbose',
+                '--log-level-console=LOG',
                 '--no-validate',
                 '--stream'],
             return_id=False)
@@ -602,16 +587,12 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'LOG: Record 0/2000160 has endpoint 0/3000000 which is '
+            'has endpoint 0/3000000 which is '
             'equal or greater than requested LSN 0/3000000',
             output)
 
         self.assertIn(
-            'LOG: Found prior LSN: 0/2000160',
-            output)
-
-        self.assertIn(
-            'LOG: current.stop_lsn: 0/2000160',
+            'LOG: Found prior LSN:',
             output)
 
         # Clean after yourself
@@ -669,7 +650,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             options=[
                 '--archive-timeout=40',
-                '--log-level-file=verbose',
+                '--log-level-file=LOG',
                 '--no-validate',
                 '--stream'],
             gdb=True)
@@ -782,12 +763,12 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'LOG: Record 0/2000160 has endpoint 0/3000000 which is '
+            'has endpoint 0/3000000 which is '
             'equal or greater than requested LSN 0/3000000',
             output)
 
         self.assertIn(
-            'LOG: Found prior LSN: 0/2000160',
+            'LOG: Found prior LSN:',
             output)
 
         print(output)
@@ -933,13 +914,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
             'FROM generate_series(0,10) i')
 
-        # open connection to master
         output = self.backup_node(
             backup_dir, 'replica', replica,
             options=[
                 '--archive-timeout=30',
-                '--log-level-console=verbose',
-                '--log-level-file=verbose',
+                '--log-level-console=LOG',
                 '--no-validate',
                 '--stream'],
             return_id=False)

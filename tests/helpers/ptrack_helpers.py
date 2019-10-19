@@ -130,8 +130,11 @@ def slow_start(self, replica=False):
     self.start()
     while True:
         try:
-            if self.safe_psql('template1', query) == 't\n':
+            output = self.safe_psql('template1', query).rstrip()
+
+            if output == 't':
                 break
+
         except testgres.QueryException as e:
             if 'database system is starting up' in e[0]:
                 continue
@@ -323,32 +326,30 @@ class ProbackupTest(object):
            initdb_params=initdb_params, allow_streaming=set_replication)
 
         # Sane default parameters
-        node.append_conf('postgresql.auto.conf', 'max_connections = 100')
-        node.append_conf('postgresql.auto.conf', 'shared_buffers = 10MB')
-        node.append_conf('postgresql.auto.conf', 'fsync = off')
+        options = {}
+        options['max_connections'] = 100
+        options['shared_buffers'] = '10MB'
+        options['fsync'] = 'off'
 
-        if 'wal_level' not in pg_options:
-            node.append_conf('postgresql.auto.conf', 'wal_level = logical')
-        node.append_conf('postgresql.auto.conf', 'hot_standby = off')
+        options['wal_level'] = 'logical'
+        options['hot_standby'] = 'off'
 
-        node.append_conf(
-            'postgresql.auto.conf', "log_line_prefix = '%t [%p]: [%l-1] '")
-        node.append_conf('postgresql.auto.conf', 'log_statement = none')
-        node.append_conf('postgresql.auto.conf', 'log_duration = on')
-        node.append_conf(
-            'postgresql.auto.conf', 'log_min_duration_statement = 0')
-        node.append_conf('postgresql.auto.conf', 'log_connections = on')
-        node.append_conf('postgresql.auto.conf', 'log_disconnections = on')
-
-        # Apply given parameters
-        for key, value in six.iteritems(pg_options):
-            node.append_conf('postgresql.auto.conf', '%s = %s' % (key, value))
+        options['log_line_prefix'] = '"%t [%p]: [%l-1] "'
+        options['log_statement'] = 'none'
+        options['log_duration'] = 'on'
+        options['log_min_duration_statement'] = 0
+        options['log_connections'] = 'on'
+        options['log_disconnections'] = 'on'
 
         # Allow replication in pg_hba.conf
         if set_replication:
-            node.append_conf(
-                'postgresql.auto.conf',
-                'max_wal_senders = 10')
+            options['max_wal_senders'] = 10
+
+        # set default values
+        self.set_auto_conf(node, options)
+
+        # Apply given parameters
+        self.set_auto_conf(node, pg_options)
 
         # set major version
         with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
@@ -1072,8 +1073,15 @@ class ProbackupTest(object):
 
     def get_recovery_conf(self, node):
         out_dict = {}
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf_path = os.path.join(
+                node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf_path = os.path.join(node.data_dir, 'recovery.conf')
+
         with open(
-            os.path.join(node.data_dir, 'recovery.conf'), 'r'
+            recovery_conf_path, 'r'
         ) as recovery_conf:
             for line in recovery_conf:
                 try:
@@ -1132,10 +1140,18 @@ class ProbackupTest(object):
             raw_content = f.read()
 
         current_options = {}
+        current_directives = []
         for line in raw_content.splitlines():
 
             # ignore comments
             if line.startswith('#'):
+                continue
+
+            if line == '':
+                continue
+
+            if line.startswith('include'):
+                current_directives.append(line)
                 continue
 
             name, var = line.partition('=')[::2]
@@ -1153,6 +1169,9 @@ class ProbackupTest(object):
             auto_conf += "{0} = '{1}'\n".format(
                 option, current_options[option])
 
+        for directive in current_directives:
+            auto_conf += directive + "\n"
+
         with open(path, 'wt') as f:
             f.write(auto_conf)
             f.flush()
@@ -1163,25 +1182,36 @@ class ProbackupTest(object):
             replica_name='replica',
             synchronous=False
             ):
+
+        self.set_auto_conf(
+                replica,
+                options={
+                    'port': replica.port,
+                    'hot_standby': 'on'})
+
+        if self.get_version(replica) >= self.version_to_num('12.0'):
+            recovery_config = 'probackup_recovery.conf'
+            with open(os.path.join(replica.data_dir, "standby.signal"), 'w') as f:
+                f.flush()
+                f.close()
+        else:
+            recovery_config = 'recovery.conf'
+            replica.append_conf(recovery_config, 'standby_mode = on')
+
         replica.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(replica.port))
-        replica.append_conf('postgresql.auto.conf', 'hot_standby = on')
-        replica.append_conf('recovery.conf', 'standby_mode = on')
-        replica.append_conf(
-            'recovery.conf',
+            recovery_config,
             "primary_conninfo = 'user={0} port={1} application_name={2}"
             " sslmode=prefer sslcompression=1'".format(
-                self.user, master.port, replica_name)
-        )
+                self.user, master.port, replica_name))
+
         if synchronous:
-            master.append_conf(
-                'postgresql.auto.conf',
-                "synchronous_standby_names='{0}'".format(replica_name)
-            )
-            master.append_conf(
-                'postgresql.auto.conf',
-                "synchronous_commit='remote_apply'"
-            )
+
+            self.set_auto_conf(
+                master,
+                options={
+                    'synchronous_standby_names': replica_name,
+                    'synchronous_commit': 'remote_apply'})
+
             master.reload()
 
     def change_backup_status(self, backup_dir, instance, backup_id, status):
@@ -1341,7 +1371,9 @@ class ProbackupTest(object):
             'postmaster.pid', 'postmaster.opts',
             'pg_internal.init', 'postgresql.auto.conf',
             'backup_label', 'tablespace_map', 'recovery.conf',
-            'ptrack_control', 'ptrack_init', 'pg_control'
+            'ptrack_control', 'ptrack_init', 'pg_control',
+            'probackup_recovery.conf', 'recovery.signal',
+            'standby.signal'
         ]
 
         if exclude_dirs:

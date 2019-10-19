@@ -1754,14 +1754,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_type='page', options=["--stream"])
         self.restore_node(backup_dir, 'node1', data_dir=node2.data_dir)
 
-        node2.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node2.port))
-        node2.append_conf(
-            'postgresql.auto.conf', 'archive_mode = off')
+        self.set_auto_conf(
+            node2, {'port': node2.port, 'archive_mode': 'off'})
+
         node2.slow_start()
 
-        node2.append_conf(
-            'postgresql.auto.conf', 'archive_mode = on')
+        self.set_auto_conf(
+            node2, {'archive_mode': 'on'})
+
         node2.stop()
         node2.slow_start()
 
@@ -3515,8 +3515,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         self.restore_node(backup_dir, 'node', node_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
 
         node_restored.slow_start()
 

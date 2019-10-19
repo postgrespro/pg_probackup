@@ -172,8 +172,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
 
         node_restored.slow_start()
 
@@ -258,8 +258,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
 
         node_restored.slow_start()
 
@@ -345,8 +345,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 )
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
+
         node_restored.slow_start()
 
         # Clean after yourself
@@ -413,8 +414,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 node_restored.data_dir, ignore_ptrack=False)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
+
         node_restored.slow_start()
 
         # Logical comparison
@@ -988,8 +990,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # DROP DATABASE DB1
@@ -1018,8 +1020,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         try:
@@ -1225,8 +1227,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
 #        result_new = node_restored.safe_psql(
@@ -1453,8 +1455,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        restored_node.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        self.set_auto_conf(
+            restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
         # COMPARE LOGICAL CONTENT
@@ -1488,8 +1490,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        restored_node.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        self.set_auto_conf(
+            restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
@@ -1593,8 +1595,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        restored_node.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        self.set_auto_conf(
+            restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
         result_new = restored_node.safe_psql(

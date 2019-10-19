@@ -332,8 +332,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node2.cleanup()
 
         self.restore_node(backup_dir, 'node', node2)
-        node2.append_conf(
-            'postgresql.auto.conf', "port = {0}".format(node2.port))
+        self.set_auto_conf(node, {'port': node2.port})
         node2.slow_start()
 
         # load some more data to node

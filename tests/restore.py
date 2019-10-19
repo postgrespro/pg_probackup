@@ -52,7 +52,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         # 2 - Test that recovery.conf was created
-        recovery_conf = os.path.join(node.data_dir, "recovery.conf")
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
         self.assertEqual(os.path.isfile(recovery_conf), True)
 
         node.slow_start()
@@ -181,13 +184,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'TimeZone': 'Europe/Moscow'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node.append_conf("postgresql.auto.conf", "TimeZone = Europe/Moscow")
         node.slow_start()
 
         node.pgbench_init(scale=2)
@@ -1189,8 +1192,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
 
         node_restored.slow_start()
 
@@ -1320,10 +1322,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node_restored)
 
-        node_restored.append_conf("postgresql.auto.conf", "archive_mode = 'off'")
-        node_restored.append_conf("postgresql.auto.conf", "hot_standby = 'on'")
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored,
+            {'archive_mode': 'off', 'hot_standby': 'on', 'port': node_restored.port})
 
         node_restored.slow_start()
 
@@ -1403,10 +1404,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node_restored)
 
-        node_restored.append_conf("postgresql.auto.conf", "archive_mode = 'off'")
-        node_restored.append_conf("postgresql.auto.conf", "hot_standby = 'on'")
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(
+            node_restored,
+            {'archive_mode': 'off', 'hot_standby': 'on', 'port': node_restored.port})
 
         node_restored.slow_start()
 
@@ -1795,7 +1795,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
 
-        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
         # restore delta backup
         node.cleanup()
@@ -1847,7 +1850,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
 
-        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
         # restore page backup
         node.cleanup()
@@ -1894,7 +1900,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node)
 
-        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
         # restore
         node.cleanup()
@@ -1944,7 +1953,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Take FULL
         self.backup_node(backup_dir, 'node', node)
 
-        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
         node.pgbench_init(scale=2)
         pgbench = node.pgbench(
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -2436,8 +2449,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored_2 = self.pgdata_content(node_restored_2.data_dir)
         self.compare_pgdata(pgdata_restored_1, pgdata_restored_2)
 
-        node_restored_2.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored_2.port))
+        self.set_auto_conf(node_restored_2, {'port': node_restored_2.port})
 
         node_restored_2.slow_start()
 
@@ -2560,8 +2572,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored_2 = self.pgdata_content(node_restored_2.data_dir)
         self.compare_pgdata(pgdata_restored_1, pgdata_restored_2)
 
-        node_restored_2.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored_2.port))
+        self.set_auto_conf(node_restored_2, {'port': node_restored_2.port})
 
         node_restored_2.slow_start()
 
@@ -2680,8 +2691,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored_2 = self.pgdata_content(node_restored_2.data_dir)
         self.compare_pgdata(pgdata_restored_1, pgdata_restored_2)
 
-        node_restored_2.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored_2.port))
+        self.set_auto_conf(node_restored_2, {'port': node_restored_2.port})
         node_restored_2.slow_start()
 
         node_restored_2.safe_psql(

@@ -245,8 +245,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
 
-        node.append_conf(
-            'postgresql.auto.conf', "archive_command = 'exit 1'")
+        self.set_auto_conf(node, {'archive_command': "'exit 1'"})
         node.reload()
 
         gdb.continue_execution_until_exit()
@@ -306,8 +305,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
 
-        node.append_conf(
-            'postgresql.auto.conf', "archive_command = 'exit 1'")
+        self.set_auto_conf(node, {'archive_command': "'exit 1'"})
         node.reload()
 
         os.environ["PGAPPNAME"] = "foo"
@@ -741,8 +739,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'))
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
-        node.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node.port))
+
+        self.set_auto_conf(node, {'port': node.port})
         node.slow_start()
         # CHECK DATA CORRECTNESS
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -784,8 +782,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'replica', data_dir=node.data_dir, backup_id=backup_id)
 
-        node.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node.port))
+        self.set_auto_conf(node, {'port': node.port})
 
         node.slow_start()
         # CHECK DATA CORRECTNESS

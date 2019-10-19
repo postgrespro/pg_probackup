@@ -84,8 +84,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Logical comparison
@@ -345,8 +344,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
 
         # START RESTORED NODE
-        restored_node.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        self.set_auto_conf(restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
@@ -432,8 +430,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
@@ -511,8 +508,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
@@ -579,8 +575,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Check restored node
@@ -1066,8 +1061,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         node_restored.safe_psql('db1', 'select 1')
@@ -1096,8 +1090,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         try:

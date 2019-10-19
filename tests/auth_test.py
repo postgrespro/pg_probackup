@@ -124,7 +124,8 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "test1", "create table t1 as select generate_series(0,100)")
 
-        node.append_conf("postgresql.auto.conf", "ptrack_enable = 'on'")
+        if self.ptrack:
+            self.set_auto_conf(node, {'ptrack_enable': 'on'})
         node.stop()
         node.slow_start()
 

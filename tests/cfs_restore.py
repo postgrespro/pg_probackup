@@ -216,8 +216,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
 
         try:
             self.restore_node(self.backup_dir, 'node', node_new, backup_id=self.backup_id)
-            node_new.append_conf("postgresql.auto.conf",
-                                 "port = {0}".format(node_new.port))
+            self.set_auto_conf(node_new, {'port': node_new.port})
         except ProbackupException as e:
             self.fail(
                 "ERROR: Restore from full backup failed. \n {0} \n {1}".format(
@@ -260,8 +259,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
 
         try:
             self.restore_node(self.backup_dir, 'node', node_new, backup_id=self.backup_id, options=['-j', '5'])
-            node_new.append_conf("postgresql.auto.conf",
-                                 "port = {0}".format(node_new.port))
+            self.set_auto_conf(node_new, {'port': node_new.port})
         except ProbackupException as e:
             self.fail(
                 "ERROR: Restore from full backup failed. \n {0} \n {1}".format(

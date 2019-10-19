@@ -51,10 +51,9 @@ class BugTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
-        replica.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(replica.port))
-        replica.append_conf(
-            'postgresql.auto.conf', 'restart_after_crash = off')
+        self.set_auto_conf(
+            replica,
+            {'port': replica.port, 'restart_after_crash': 'off'})
 
         # we need those later
         node.safe_psql(
@@ -124,6 +123,11 @@ class BugTest(ProbackupTest, unittest.TestCase):
         # MinRecLSN = replica.get_control_data()['Minimum recovery ending location']
 
         # Promote replica with 'immediate' target action
+        if self.get_version(replica) >= self.version_to_num('12.0'):
+            recovery_config = 'postgresql.auto.conf'
+        else:
+            recovery_config = 'recovery.conf'
+
         replica.append_conf(
             'recovery.conf', "recovery_target = 'immediate'")
         replica.append_conf(

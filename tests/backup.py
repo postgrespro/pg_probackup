@@ -1539,7 +1539,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '30s'})
 
         if self.ptrack:
-            node.append_conf('postgresql.auto.conf', 'ptrack_enable = on')
+            self.set_auto_conf(node, {'ptrack_enable': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1909,7 +1909,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '1h'})
 
         if self.ptrack:
-            node.append_conf('postgresql.auto.conf', 'ptrack_enable = on')
+            self.set_auto_conf(node, {'ptrack_enable': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

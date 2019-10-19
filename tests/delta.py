@@ -84,8 +84,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
@@ -173,8 +172,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
@@ -226,25 +224,21 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         os.unlink(os.path.join(node.data_dir, filepath + '.1'))
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta'
-        )
+            backup_dir, 'node', node, backup_type='delta')
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta'
-        )
+            backup_dir, 'node', node, backup_type='delta')
 
         pgdata = self.pgdata_content(node.data_dir)
 
         self.restore_node(
-            backup_dir, 'node', node_restored
-        )
+            backup_dir, 'node', node_restored)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
@@ -473,8 +467,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
 
         # START RESTORED NODE
-        restored_node.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(restored_node.port))
+        self.set_auto_conf(restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
@@ -563,8 +556,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
 
         node_restored.slow_start()
 
@@ -644,8 +636,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # DROP DATABASE DB1
@@ -679,8 +670,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         try:
@@ -801,8 +791,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            "postgresql.auto.conf", "port = {0}".format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
@@ -883,8 +872,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         result_new = node_restored.safe_psql(
@@ -981,8 +969,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
@@ -1065,8 +1052,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.append_conf(
-            'postgresql.auto.conf', 'port = {0}'.format(node_restored.port))
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
         # Clean after yourself
