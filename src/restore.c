@@ -44,7 +44,8 @@ static void create_recovery_conf(time_t backup_id,
 								 pgRestoreParams *params);
 static void *restore_files(void *arg);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
-static void create_pg12_recovery_config(pgBackup *backup, bool add_include);
+static void create_recovery_config(pgBackup *backup, bool add_include);
+
 
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup
@@ -873,7 +874,7 @@ create_recovery_conf(time_t backup_id,
 		 * Restoring STREAM backup without PITR and not as replica,
 		 * recovery.signal and standby.signal are not needed
 		 */
-		create_pg12_recovery_config(backup, false);
+		create_recovery_config(backup, false);
 #endif
 		return;
 	}
@@ -881,7 +882,7 @@ create_recovery_conf(time_t backup_id,
 	elog(LOG, "----------------------------------------");
 #if PG_VERSION_NUM >= 120000
 	elog(LOG, "creating probackup_recovery.conf");
-	create_pg12_recovery_config(backup, true);
+	create_recovery_config(backup, true);
 	snprintf(path, lengthof(path), "%s/probackup_recovery.conf", instance_config.pgdata);
 #else
 	elog(LOG, "creating recovery.conf");
@@ -1050,7 +1051,7 @@ create_recovery_conf(time_t backup_id,
  * we must always create empty probackup_recovery.conf file.
  */
 static void
-create_pg12_recovery_config(pgBackup *backup, bool add_include)
+create_recovery_config(pgBackup *backup, bool add_include)
 {
 	char		probackup_recovery_path[MAXPGPATH];
 	char		postgres_auto_path[MAXPGPATH];

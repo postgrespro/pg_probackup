@@ -285,6 +285,7 @@ typedef struct PGNodeInfo
 	uint32			wal_block_size;
 	uint32			checksum_version;
 	bool			is_superuser;
+	bool			pgpro_support;
 
 	int				server_version;
 	char			server_version_str[100];
