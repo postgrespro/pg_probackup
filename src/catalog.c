@@ -1930,6 +1930,7 @@ pgNodeInit(PGNodeInfo *node)
 	node->checksum_version = 0;
 
 	node->is_superuser = false;
+	node->pgpro_support = false;
 
 	node->server_version = 0;
 	node->server_version_str[0] = '\0';
