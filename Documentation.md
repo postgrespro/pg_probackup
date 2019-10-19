@@ -38,9 +38,10 @@ Current version - 2.2.1
     * [Managing the Backup Catalog](#managing-the-backup-catalog)
         * [Viewing Backup Information](#viewing-backup-information)
         * [Viewing WAL Archive Information](#viewing-wal-archive-information)
-    * [Configuring Backup Retention Policy](#configuring-backup-retention-policy)
-        * [Pinning a Backup](#pinning-a-backup)
-        * [WAL Retention Policy](#wal-retention-policy)
+    * [Configuring Retention Policy](#configuring-retention-policy)
+        * [Backup Retention Policy](#backup-retention-policy)
+        * [Backup Pinning](#backup-pinning)
+        * [WAL Archive Retention Policy](#wal-archive-retention-policy)
     * [Merging Backups](#merging-backups)
     * [Deleting Backups](#deleting-backups)
 
@@ -1124,7 +1125,11 @@ Most fields are consistent with plain format, with some exceptions:
 - DEGRADED timelines contain 'lost-segments' array with information about intervals of missing segments. In OK timelines 'lost-segments' array is empty.
 - 'N backups' attribute is replaced with 'backups' array containing backups belonging to the timeline. If timeline has no backups, then 'backups' array is empty.
 
-### Configuring Backup Retention Policy
+### Configuring Retention Policy
+
+With pg_probackup, you can set retention policies for backups and WAL archive. All policies can be combined together in any way.
+
+#### Backup Retention Policy
 
 By default, all backup copies created with pg_probackup are stored in the specified backup catalog. To save disk space, you can configure retention policy and periodically clean up redundant backup copies accordingly.
 
@@ -1162,16 +1167,16 @@ Suppose you have backed up the *node* instance in the *backup_dir* directory, wi
 
 ```
 BACKUP INSTANCE 'node'
-===========================================================================================================================================
- Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI   Time   Data    Start LSN    Stop LSN    Status 
-===========================================================================================================================================
- node        10       P7XDHR  2019-04-10 05:27:15+03  FULL    STREAM     1 / 0               11s   200MB   0/18000059   0/18000197  OK
- node        10       P7XDQV  2019-04-08 05:32:59+03  PAGE    STREAM     1 / 0               11s    19MB   0/15000060   0/15000198  OK
- node        10       P7XDJA  2019-04-03 05:28:36+03  DELTA   STREAM     1 / 0               21s    32MB   0/13000028   0/13000198  OK
- ---------------------------------------retention window-------------------------------------------------------------
- node        10       P7XDHU  2019-04-02 05:27:59+03  PAGE    STREAM     1 / 0               31s    33MB   0/11000028   0/110001D0  OK
- node        10       P7XDHB  2019-04-01 05:27:15+03  FULL    STREAM     1 / 0               11s   200MB   0/F000028    0/F000198   OK
- node        10       P7XDFT  2019-03-29 05:26:25+03  FULL    STREAM     1 / 0               11s   200MB   0/D000028    0/D000198   OK
+===================================================================================================================================
+ Instance  Version  ID      Recovery time           Mode   WAL     TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
+===================================================================================================================================
+ node      10       P7XDHR  2019-04-10 05:27:15+03  FULL   STREAM  1/0   11s   200MB  16MB     1.0  0/18000059  0/18000197  OK
+ node      10       P7XDQV  2019-04-08 05:32:59+03  PAGE   STREAM  1/0   11s    19MB  16MB     1.0  0/15000060  0/15000198  OK
+ node      10       P7XDJA  2019-04-03 05:28:36+03  DELTA  STREAM  1/0   21s    32MB  16MB     1.0  0/13000028  0/13000198  OK
+ -------------------------------------------------------retention window--------------------------------------------------------
+ node      10       P7XDHU  2019-04-02 05:27:59+03  PAGE   STREAM  1/0   31s    33MB  16MB     1.0  0/11000028  0/110001D0  OK
+ node      10       P7XDHB  2019-04-01 05:27:15+03  FULL   STREAM  1/0   11s   200MB  16MB     1.0  0/F000028   0/F000198   OK
+ node      10       P7XDFT  2019-03-29 05:26:25+03  FULL   STREAM  1/0   11s   200MB  16MB     1.0  0/D000028   0/D000198   OK
 ```
 
 Even though P7XDHB and P7XDHU backups are outside the retention window, they cannot be removed as it invalidates the succeeding incremental backups P7XDJA and P7XDQV that are still required, so, if you run the [delete](#delete) command with the `--delete-expired` flag, only the P7XDFT full backup will be removed.
@@ -1183,25 +1188,25 @@ With the `--merge-expired` option, the P7XDJA backup is merged with the underlyi
 
 ```
 BACKUP INSTANCE 'node'
-============================================================================================================================================
- Instance    Version  ID      Recovery time           Mode    WAL      Current/Parent TLI    Time   Data    Start LSN    Stop LSN    Status
-============================================================================================================================================
- node        10       P7XDHR  2019-04-10 05:27:15+03  FULL    STREAM     1 / 0                11s   200MB   0/18000059   0/18000197  OK
- node        10       P7XDQV  2019-04-08 05:32:59+03  DELTA   STREAM     1 / 0                11s    19MB   0/15000060   0/15000198  OK
- node        10       P7XDJA  2019-04-04 05:28:36+03  FULL    STREAM     1 / 0                 5s   200MB   0/13000028   0/13000198  OK
+==================================================================================================================================
+ Instance  Version  ID      Recovery time           Mode  WAL     TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
+==================================================================================================================================
+ node      10       P7XDHR  2019-04-10 05:27:15+03  FULL  STREAM  1/0   11s   200MB  16MB     1.0  0/18000059  0/18000197  OK
+ node      10       P7XDQV  2019-04-08 05:32:59+03  PAGE  STREAM  1/0   11s    19MB  16MB     1.0  0/15000060  0/15000198  OK
+ node      10       P7XDJA  2019-04-03 05:28:36+03  FULL  STREAM  1/0   21s    32MB  16MB     1.0  0/13000028  0/13000198  OK
 ```
 
 >NOTE: The Time field for the merged backup displays the time required for the merge.
 
-#### Pinning a Backup
+#### Backup Pinning
 
 If you have the necessity to exclude certain backups from established retention policy then it is possible to pin a backup for an arbitrary amount of time. Example:
 
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=30d
 
-This command will set `expire-time` of specified backup to 30 days starting from backup `recovery-time` attribute. Basically 'expire-time = recovery-time + ttl'.
+This command will set `expire-time` of the specified backup to 30 days starting from backup `recovery-time` attribute. Basically `expire-time` = `recovery-time` + `ttl`.
 
-You can set `expire-time` explicitly using `--expire-time` option. Example:
+Also you can set `expire-time` explicitly using `--expire-time` option. Example:
 
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --expire-time='2020-01-01 00:00:00+03'
 
@@ -1210,7 +1215,7 @@ Alternatively you can use the `--ttl` and `--expire-time` options with the [back
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --ttl=30d
     pg_probackup backup -B backup_dir --instance instance_name -b FULL --expire-time='2020-01-01 00:00:00+03'
 
-You can determine the fact that backup is pinned and check due expire time by looking up 'expire-time' attribute in backup metadata via [show](#show) command:
+You can determine the fact that backup is pinned and check due expire time by looking up `expire-time` attribute in backup metadata via [show](#show) command:
 
     pg_probackup show --instance instance_name -i backup_id
 
@@ -1223,15 +1228,17 @@ data-bytes = 22288792
 ...
 ```
 
-You can unpin a backup by setting `--ttl` option to zero using [set-backup](#set-backup) command. Example:
+You can unpin the backup by setting the `--ttl` option to zero using [set-backup](#set-backup) command. Example:
 
     pg_probackup set-backup -B backup_dir --instance instance_name -i backup_id --ttl=0
 
-Only pinned backups have `expire-time` attribute in backup metadata.
+Only pinned backups have the `expire-time` attribute in the backup metadata.
 
-### WAL Retention Policy
+>NOTE: Pinned incremental backup will also implicitly pin all its parent backups.
 
-By default, pg_probackup treatment of WAL is very conservative and only "redundant" WAL segments can be purged, i.e. segments that cannot be applied to any existing backup in the backup catalog. To save disk space, you can configure WAL retention policy, to keep WAL of limited depth measured in backups.
+#### WAL Archive Retention Policy
+
+By default, pg_probackup treatment of WAL Archive is very conservative and only "redundant" WAL segments can be purged, i.e. segments that cannot be applied to any of the existing backups in the backup catalog. To save disk space, you can configure WAL Archive retention policy, that allows to keep WAL of limited depth measured in backups per timeline.
 
 Suppose you have backed up the *node* instance in the *backup_dir* directory with configured [WAL archiving](#setting-up-continuous-wal-archiving):
 
@@ -1578,7 +1585,7 @@ For details, see the section [Merging Backups](#merging-backups).
 
 Deletes backup with specified *backip_id* or launches the retention purge of backups and archived WAL that do not satisfy the current retention policies.
 
-For details, see the sections [Deleting Backups](#deleting-backups), [Retention Options](#retention-options) and [Configuring Backup Retention Policy](#configuring-backup-retention-policy).
+For details, see the sections [Deleting Backups](#deleting-backups), [Retention Options](#retention-options) and [Configuring Retention Policy](#configuring-retention-policy).
 
 #### archive-push
 
@@ -1678,8 +1685,8 @@ Specifies [the action](https://www.postgresql.org/docs/current/recovery-target-s
 #### Retention Options
 
 You can use these options together with [backup](#backup) and [delete](#delete) commands.
-
-For details on configuring retention policy, see the sections [Configuring Backup Retention Policy](#configuring-backup-retention-policy).
+f
+For details on configuring retention policy, see the section [Configuring Retention Policy](#configuring-retention-policy).
 
     --retention-redundancy=redundancy
     Default: 0 
@@ -1709,7 +1716,7 @@ Displays the current status of all the available backups, without deleting or me
 
 You can use these options together with [backup](#backup) and [set-delete](#set-backup) commands.
 
-For details on backup pinning, see the section [Pinning a Backup](#pinning-a-backup).
+For details on backup pinning, see the section [Backup Pinning](#backup-pinning).
 
     --ttl=ttl
 Specifies the amount of time the backup should be pinned. Must be a positive integer. The zero value unpin already pinned backup. Supported units: ms, s, min, h, d (s by default). Example: `--ttl=30d`.
