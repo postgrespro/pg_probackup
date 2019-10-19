@@ -110,6 +110,9 @@ static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
 static parray *get_database_map(PGconn *pg_startbackup_conn);
 
+/* pgpro specific functions */
+static bool pgpro_support(PGconn *conn);
+
 /* Ptrack functions */
 static void pg_ptrack_clear(PGconn *backup_conn);
 static bool pg_ptrack_support(PGconn *backup_conn);
@@ -658,6 +661,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 	nodeInfo->block_size = BLCKSZ;
 	nodeInfo->wal_block_size = XLOG_BLCKSZ;
 	nodeInfo->is_superuser = pg_is_superuser(cur_conn);
+	nodeInfo->pgpro_support = pgpro_support(cur_conn);
 
 	current.from_replica = pg_is_in_recovery(cur_conn);
 
@@ -845,7 +849,7 @@ do_backup(time_t start_time, bool no_validate,
 static void
 check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 {
-	PGresult   *res;
+	PGresult   *res = NULL;
 
 	/* confirm server version */
 	nodeInfo->server_version = PQserverVersion(conn);
@@ -871,39 +875,45 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 			 "server version is %s, must be %s or higher for backup from replica",
 			 nodeInfo->server_version_str, "9.6");
 
-	/* TODO: search pg_proc for pgpro_edition before calling */
-	res = pgut_execute_extended(conn, "SELECT pgpro_edition()",
-								0, NULL, true, true);
+	if (nodeInfo->pgpro_support)
+		res = pgut_execute(conn, "SELECT pgpro_edition()", 0, NULL);
 
 	/*
 	 * Check major version of connected PostgreSQL and major version of
 	 * compiled PostgreSQL.
 	 */
 #ifdef PGPRO_VERSION
-	if (PQresultStatus(res) == PGRES_FATAL_ERROR)
+	if (!res)
 		/* It seems we connected to PostgreSQL (not Postgres Pro) */
 		elog(ERROR, "%s was built with Postgres Pro %s %s, "
 					"but connection is made with PostgreSQL %s",
 			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, nodeInfo->server_version_str);
-	else if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0 &&
-			 strcmp(PQgetvalue(res, 0, 0), PGPRO_EDITION) != 0)
-		elog(ERROR, "%s was built with Postgres Pro %s %s, "
-					"but connection is made with Postgres Pro %s %s",
-			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION,
-			 nodeInfo->server_version_str, PQgetvalue(res, 0, 0));
+	else
+	{
+		if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0 &&
+				 strcmp(PQgetvalue(res, 0, 0), PGPRO_EDITION) != 0)
+			elog(ERROR, "%s was built with Postgres Pro %s %s, "
+						"but connection is made with Postgres Pro %s %s",
+				 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION,
+				 nodeInfo->server_version_str, PQgetvalue(res, 0, 0));
+	}
 #else
-	if (PQresultStatus(res) != PGRES_FATAL_ERROR)
+	if (res)
 		/* It seems we connected to Postgres Pro (not PostgreSQL) */
 		elog(ERROR, "%s was built with PostgreSQL %s, "
 					"but connection is made with Postgres Pro %s %s",
 			 PROGRAM_NAME, PG_MAJORVERSION,
 			 nodeInfo->server_version_str, PQgetvalue(res, 0, 0));
-	else if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0)
-		elog(ERROR, "%s was built with PostgreSQL %s, but connection is made with %s",
-			 PROGRAM_NAME, PG_MAJORVERSION, nodeInfo->server_version_str);
+	else
+	{
+		if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0)
+			elog(ERROR, "%s was built with PostgreSQL %s, but connection is made with %s",
+				 PROGRAM_NAME, PG_MAJORVERSION, nodeInfo->server_version_str);
+	}
 #endif
 
-	PQclear(res);
+	if (res)
+		PQclear(res);
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
 	exclusive_backup = nodeInfo->server_version < 90600 ||
@@ -1104,6 +1114,30 @@ pg_ptrack_support(PGconn *backup_conn)
 
 	PQclear(res_db);
 	return true;
+}
+
+/*
+ * Check if the instance is PostgresPro fork.
+ */
+static bool
+pgpro_support(PGconn *conn)
+{
+	PGresult   *res;
+
+	res = pgut_execute(conn,
+						  "SELECT proname FROM pg_proc WHERE proname='pgpro_edition'",
+						  0, NULL);
+
+	if (PQresultStatus(res) == PGRES_TUPLES_OK &&
+		(PQntuples(res) == 1) &&
+		(strcmp(PQgetvalue(res, 0, 0), "pgpro_edition") == 0))
+	{
+		PQclear(res);
+		return true;
+	}
+
+	PQclear(res);
+	return false;
 }
 
 /*
