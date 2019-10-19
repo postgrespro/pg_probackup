@@ -2,7 +2,7 @@
 
 pg_probackup is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure. pg_probackup supports PostgreSQL 9.5 or higher.
 
-Current version - 2.2.1
+Current version - 2.2.3
 
 1. [Synopsis](#synopsis)
 2. [Versioning](#versioning)
@@ -1685,7 +1685,7 @@ Specifies [the action](https://www.postgresql.org/docs/current/recovery-target-s
 #### Retention Options
 
 You can use these options together with [backup](#backup) and [delete](#delete) commands.
-f
+
 For details on configuring retention policy, see the section [Configuring Retention Policy](#configuring-retention-policy).
 
     --retention-redundancy=redundancy
