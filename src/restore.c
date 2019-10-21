@@ -976,7 +976,7 @@ create_recovery_conf(time_t backup_id,
 			 * timneline for PG12.
 			 */
 #if PG_VERSION_NUM >= 120000
-			fio_fprintf(fp, "recovery_target_timeline = '%u'\n", backup->tli);
+			fio_fprintf(fp, "recovery_target_timeline = 'current'\n");
 #endif
 		}
 
