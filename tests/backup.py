@@ -2259,3 +2259,45 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_streaming_timeout(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '1h',
+                'wal_sender_timeout': '5s'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, gdb=True,
+            options=['--stream', '--log-level-file=LOG'])
+
+        gdb.set_breakpoint('pg_stop_backup')
+        gdb.run_until_break()
+
+        sleep(10)
+        gdb.continue_execution_until_error()
+        gdb._execute('detach')
+        sleep(2)
+
+        log_file_path = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file_path) as f:
+            log_content = f.read()
+
+        self.assertIn(
+            'could not receive data from WAL stream',
+            log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

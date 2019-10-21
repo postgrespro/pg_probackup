@@ -239,16 +239,18 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node', node,
                 options=[
                     "--archive-timeout=60",
-                    "--log-level-file=info"],
+                    "--log-level-file=LOG"],
                 gdb=True)
 
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
 
-        self.set_auto_conf(node, {'archive_command': "'exit 1'"})
+        self.set_auto_conf(node, {'archive_command': 'exit 1'})
         node.reload()
 
         gdb.continue_execution_until_exit()
+
+        sleep(1)
 
         log_file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
         with open(log_file, 'r') as f:
@@ -1572,7 +1574,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 '--archive-user={0}'.format(self.user)
                 ])
 
-        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
         with open(recovery_conf, 'r') as f:
             recovery_content = f.read()
 
@@ -1643,7 +1649,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 '--archive-user={0}'.format(self.user)])
         self.restore_node(backup_dir, 'node', node)
 
-        recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
         with open(recovery_conf, 'r') as f:
             recovery_content = f.read()
 

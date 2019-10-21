@@ -1184,28 +1184,30 @@ class ProbackupTest(object):
             ):
 
         self.set_auto_conf(
-                replica,
-                options={
-                    'port': replica.port,
-                    'hot_standby': 'on'})
+            replica,
+            options={
+                'port': replica.port,
+                'hot_standby': 'on'})
 
         if self.get_version(replica) >= self.version_to_num('12.0'):
-            recovery_config = 'probackup_recovery.conf'
             with open(os.path.join(replica.data_dir, "standby.signal"), 'w') as f:
                 f.flush()
                 f.close()
-        else:
-            recovery_config = 'recovery.conf'
-            replica.append_conf(recovery_config, 'standby_mode = on')
 
-        replica.append_conf(
-            recovery_config,
-            "primary_conninfo = 'user={0} port={1} application_name={2}"
-            " sslmode=prefer sslcompression=1'".format(
-                self.user, master.port, replica_name))
+            self.set_auto_conf(
+                replica,
+                {'primary_conninfo': 'user={0} port={1} application_name={2} '
+                ' sslmode=prefer sslcompression=1'.format(
+                    self.user, master.port, replica_name)})
+        else:
+            replica.append_conf('recovery.conf', 'standby_mode = on')
+            replica.append_conf(
+                'recovery.conf',
+                "primary_conninfo = 'user={0} port={1} application_name={2}"
+                " sslmode=prefer sslcompression=1'".format(
+                    self.user, master.port, replica_name))
 
         if synchronous:
-
             self.set_auto_conf(
                 master,
                 options={
@@ -1724,6 +1726,9 @@ class GDBobj(ProbackupTest):
             if line.startswith('^error'):
                 return
             if line.startswith('*stopped,reason="exited'):
+                return
+            if line.startswith(
+                '*stopped,reason="signal-received",signal-name="SIGABRT"'):
                 return
 
         raise GdbException(
