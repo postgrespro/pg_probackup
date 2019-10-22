@@ -9,7 +9,7 @@ As compared to other backup solutions, `pg_probackup` offers the following benef
 * Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes you can plan the backup strategy in accordance with your data flow
 * Validation: automatic data consistency checks and on-demand backup validation without actual data recovery
 * Verification: on-demand verification of PostgreSQL instance via dedicated command `checkdb`
-* Retention: managing WAL archive and backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`. Additionally you can design you own retention policy by setting 'time to live' for backups
+* Retention: managing WAL archive and backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`. Additionally you can design you own retention policy by setting `time to live` for backups
 * Parallelization: running backup, restore, merge, delete, verificaton and validation processes on multiple parallel threads
 * Compression: storing backup data in a compressed state to save disk space
 * Deduplication: saving disk space by not copying the not changed non-data files ('_vm', '_fsm', etc)
