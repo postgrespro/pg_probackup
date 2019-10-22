@@ -526,6 +526,13 @@ typedef struct BackupPageHeader
 	XLogFileName(fname, tli, logSegNo, wal_segsz_bytes)
 #define IsInXLogSeg(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteInSeg(xlrp, logSegNo, wal_segsz_bytes)
+#define GetXLogSegName(fname, logSegNo, wal_segsz_bytes)	\
+	snprintf(fname, MAXFNAMELEN, "%08X%08X",		\
+			 (uint32) ((logSegNo) / XLogSegmentsPerXLogId(wal_segsz_bytes)), \
+			 (uint32) ((logSegNo) % XLogSegmentsPerXLogId(wal_segsz_bytes)))
+
+#define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
+		logSegNo = (uint64) log * XLogSegmentsPerXLogId(wal_segsz_bytes) + seg
 #else
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo)
@@ -535,6 +542,13 @@ typedef struct BackupPageHeader
 	XLogFileName(fname, tli, logSegNo)
 #define IsInXLogSeg(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteInSeg(xlrp, logSegNo)
+#define GetXLogSegName(fname, logSegNo, wal_segsz_bytes) \
+	snprintf(fname, MAXFNAMELEN, "%08X%08X",\
+			 (uint32) ((logSegNo) / XLogSegmentsPerXLogId), \
+			 (uint32) ((logSegNo) % XLogSegmentsPerXLogId))
+
+#define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
+		logSegNo = (uint64) log * XLogSegmentsPerXLogId + seg
 #endif
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)

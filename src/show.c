@@ -749,6 +749,7 @@ static void
 show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 				   parray *tli_list, bool show_name)
 {
+	char segno_tmp[20];
 	parray *actual_tli_list = parray_new();
 #define SHOW_ARCHIVE_FIELDS_COUNT 10
 	int			i;
@@ -807,16 +808,16 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		cur++;
 
 		/* Min Segno */
-		snprintf(row->min_segno, lengthof(row->min_segno), "%08X%08X",
-				 (uint32) tlinfo->begin_segno / xlog_seg_size,
-				 (uint32) tlinfo->begin_segno % xlog_seg_size);
+		GetXLogSegName(segno_tmp, tlinfo->begin_segno, xlog_seg_size);
+		snprintf(row->min_segno, lengthof(row->min_segno), "%s",segno_tmp);
+
 		widths[cur] = Max(widths[cur], strlen(row->min_segno));
 		cur++;
 
 		/* Max Segno */
-		snprintf(row->max_segno, lengthof(row->max_segno), "%08X%08X",
-				 (uint32) tlinfo->end_segno / xlog_seg_size,
-				 (uint32) tlinfo->end_segno % xlog_seg_size);
+		GetXLogSegName(segno_tmp, tlinfo->end_segno, xlog_seg_size);
+		snprintf(row->max_segno, lengthof(row->max_segno), "%s", segno_tmp);
+
 		widths[cur] = Max(widths[cur], strlen(row->max_segno));
 		cur++;
 
@@ -939,6 +940,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	int			i,j;
 	PQExpBuffer	buf = &show_buf;
 	parray *actual_tli_list = parray_new();
+	char segno_tmp[20];
 
 	if (!first_instance)
 		appendPQExpBufferChar(buf, ',');
@@ -985,14 +987,12 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 				 (uint32) (tlinfo->switchpoint >> 32), (uint32) tlinfo->switchpoint);
 		json_add_value(buf, "switchpoint", tmp_buf, json_level, true);
 
-		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
-				 (uint32) tlinfo->begin_segno / xlog_seg_size,
-				 (uint32) tlinfo->begin_segno % xlog_seg_size);
+		GetXLogSegName(segno_tmp, tlinfo->begin_segno, xlog_seg_size);
+		snprintf(tmp_buf, lengthof(tmp_buf), "%s", segno_tmp);
 		json_add_value(buf, "min-segno", tmp_buf, json_level, true);
 
-		snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
-				 (uint32) tlinfo->end_segno / xlog_seg_size,
-				 (uint32) tlinfo->end_segno % xlog_seg_size);
+		GetXLogSegName(segno_tmp, tlinfo->end_segno, xlog_seg_size);
+		snprintf(tmp_buf, lengthof(tmp_buf), "%s", segno_tmp);
 		json_add_value(buf, "max-segno", tmp_buf, json_level, true);
 
 		json_add_key(buf, "n-segments", json_level);
@@ -1034,14 +1034,12 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 
 				json_add(buf, JT_BEGIN_OBJECT, &json_level);
 
-				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
-				 (uint32) lost_segments->begin_segno / xlog_seg_size,
-				 (uint32) lost_segments->begin_segno % xlog_seg_size);
+				GetXLogSegName(segno_tmp, lost_segments->begin_segno, xlog_seg_size);
+				snprintf(tmp_buf, lengthof(tmp_buf), "%s", segno_tmp);
 				json_add_value(buf, "begin-segno", tmp_buf, json_level, true);
 
-				snprintf(tmp_buf, lengthof(tmp_buf), "%08X%08X",
-				 (uint32) lost_segments->end_segno / xlog_seg_size,
-				 (uint32) lost_segments->end_segno % xlog_seg_size);
+				GetXLogSegName(segno_tmp, lost_segments->end_segno, xlog_seg_size);
+				snprintf(tmp_buf, lengthof(tmp_buf), "%s", segno_tmp);
 				json_add_value(buf, "end-segno", tmp_buf, json_level, true);
 				json_add(buf, JT_END_OBJECT, &json_level);
 			}

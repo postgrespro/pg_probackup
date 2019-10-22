@@ -695,6 +695,10 @@ catalog_get_timelines(InstanceConfig *instance)
 	timelineInfo *tlinfo;
 	char		arclog_path[MAXPGPATH];
 
+	/* for fancy reporting */
+	char begin_segno_str[20];
+	char end_segno_str[20];
+
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
 	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
@@ -716,19 +720,21 @@ catalog_get_timelines(InstanceConfig *instance)
 		{
 			int result = 0;
 			uint32 log, seg;
-			XLogSegNo segno;
-			char suffix[MAXPGPATH];
+			XLogSegNo segno = 0;
+			char suffix[MAXFNAMELEN];
 
 			result = sscanf(file->name, "%08X%08X%08X.%s",
 						&tli, &log, &seg, (char *) &suffix);
 
+			/* sanity */
 			if (result < 3)
 			{
 				elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
 				continue;
 			}
 
-			segno = log * instance->xlog_seg_size + seg;
+			/* get segno from log */
+			GetXLogSegNoFromScrath(segno, log, seg, instance->xlog_seg_size);
 
 			/* regular WAL file with suffix */
 			if (result == 4)
@@ -1112,15 +1118,15 @@ catalog_get_timelines(InstanceConfig *instance)
 				 * covered by other larger interval.
 				 */
 
+				GetXLogSegName(begin_segno_str, interval->begin_segno, instance->xlog_seg_size);
+				GetXLogSegName(end_segno_str, interval->end_segno, instance->xlog_seg_size);
+
 				elog(LOG, "Timeline %i to stay reachable from timeline %i "
 								"protect from purge WAL interval between "
-								"%08X%08X and %08X%08X on timeline %i",
-						tli, closest_backup->tli,
-						(uint32) interval->begin_segno / instance->xlog_seg_size,
-						(uint32) interval->begin_segno % instance->xlog_seg_size,
-						(uint32) interval->end_segno / instance->xlog_seg_size,
-						(uint32) interval->end_segno % instance->xlog_seg_size,
-						tlinfo->tli);
+								"%s and %s on timeline %i",
+						tli, closest_backup->tli, begin_segno_str,
+						end_segno_str, tlinfo->tli);
+
 				parray_append(tlinfo->keep_segments, interval);
 				continue;
 			}
@@ -1167,15 +1173,14 @@ catalog_get_timelines(InstanceConfig *instance)
 			else
 				interval->end_segno = segno;
 
+			GetXLogSegName(begin_segno_str, interval->begin_segno, instance->xlog_seg_size);
+			GetXLogSegName(end_segno_str, interval->end_segno, instance->xlog_seg_size);
+
 			elog(LOG, "Archive backup %s to stay consistent "
 							"protect from purge WAL interval "
-							"between %08X%08X and %08X%08X on timeline %i",
+							"between %s and %s on timeline %i",
 						base36enc(backup->start_time),
-						(uint32) interval->begin_segno / instance->xlog_seg_size,
-						(uint32) interval->begin_segno % instance->xlog_seg_size,
-						(uint32) interval->end_segno / instance->xlog_seg_size,
-						(uint32) interval->end_segno % instance->xlog_seg_size,
-						backup->tli);
+						begin_segno_str, end_segno_str, backup->tli);
 
 			if (tlinfo->keep_segments == NULL)
 				tlinfo->keep_segments = parray_new();

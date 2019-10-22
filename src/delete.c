@@ -810,6 +810,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 {
 	XLogSegNo   FirstToDeleteSegNo;
 	XLogSegNo   OldestToKeepSegNo = 0;
+	char 		first_to_del_str[20];
+	char 		oldest_to_keep_str[20];
 	int			rc;
 	int			i;
 	int			wal_size_logical = 0;
@@ -842,13 +844,15 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	}
 
 	if (OldestToKeepSegNo > 0 && OldestToKeepSegNo > FirstToDeleteSegNo)
-		elog(INFO, "On timeline %i WAL segments between %08X%08X and %08X%08X %s be removed",
-					 tlinfo->tli,
-					 (uint32) FirstToDeleteSegNo / xlog_seg_size,
-					 (uint32) FirstToDeleteSegNo % xlog_seg_size,
-					 (uint32) (OldestToKeepSegNo - 1) / xlog_seg_size,
-					 (uint32) (OldestToKeepSegNo - 1) % xlog_seg_size,
-					 dry_run?"can":"will");
+	{
+		/* translate segno number into human readable format */
+		GetXLogSegName(first_to_del_str, FirstToDeleteSegNo, xlog_seg_size);
+		GetXLogSegName(oldest_to_keep_str, OldestToKeepSegNo, xlog_seg_size);
+
+		elog(INFO, "On timeline %i WAL segments between %s and %s %s be removed",
+					 tlinfo->tli, first_to_del_str,
+					 oldest_to_keep_str, dry_run?"can":"will");
+	}
 
 	/* sanity */
 	if (OldestToKeepSegNo > FirstToDeleteSegNo)
@@ -866,15 +870,16 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		 * 1. WAL archive corruption.
 		 * 2. There is no actual WAL archive to speak of and
 		 *	  'keep_lsn' is coming from STREAM backup.
-		 *
-		 * Assume the worst.
 		 */
+
 		if (FirstToDeleteSegNo > 0 && OldestToKeepSegNo > 0)
-			elog(LOG, "On timeline %i first segment %08X%08X is greater than "
-				"oldest segment to keep %08X%08X",
-				tlinfo->tli,
-				(uint32) FirstToDeleteSegNo / xlog_seg_size,  (uint32) FirstToDeleteSegNo % xlog_seg_size,
-				(uint32) OldestToKeepSegNo / xlog_seg_size, (uint32) OldestToKeepSegNo % xlog_seg_size);
+		{
+			GetXLogSegName(first_to_del_str, FirstToDeleteSegNo, xlog_seg_size);
+			GetXLogSegName(oldest_to_keep_str, OldestToKeepSegNo, xlog_seg_size);
+
+			elog(LOG, "On timeline %i first segment %s is greater than oldest segment to keep %s",
+					tlinfo->tli, first_to_del_str, oldest_to_keep_str);
+		}
 	}
 	else if (OldestToKeepSegNo == FirstToDeleteSegNo && !purge_all)
 	{
