@@ -217,7 +217,7 @@ For details on how to fine-tune pg_probackup configuration, see the section [Con
 
 The user launching pg_probackup must have full access to *backup_dir* directory and at least read-only access to *data_dir* directory. If you specify the path to the backup catalog in the `BACKUP_PATH` environment variable, you can omit the corresponding option when running pg_probackup commands.
 
->NOTE: For PostgreSQL >= 11 it is recommended to use [allow-group-access](https://www.postgresql.org/docs/11/app-initdb.html#APP-INITDB-ALLOW-GROUP-ACCESS) feature, so backup can be done by OS user with read-only permissions.
+>NOTE: For PostgreSQL >= 11 it is recommended to use [allow-group-access](https://www.postgresql.org/docs/11/app-initdb.html#APP-INITDB-ALLOW-GROUP-ACCESS) feature, so backup can be done by any OS user in the same group as the cluster owner. In this case the user should have read permissions on the cluster directory.
 
 ### Configuring the Database Cluster
 
