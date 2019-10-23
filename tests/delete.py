@@ -332,7 +332,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node2.cleanup()
 
         self.restore_node(backup_dir, 'node', node2)
-        self.set_auto_conf(node, {'port': node2.port})
+        self.set_auto_conf(node2, {'port': node2.port})
         node2.slow_start()
 
         # load some more data to node
@@ -762,7 +762,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'On timeline 1 WAL segments between 0000000000000001 '
-            'and 0000000000000002 can be removed',
+            'and 0000000000000003 can be removed',
             output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
@@ -787,10 +787,12 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'On timeline 1 WAL segments between 0000000000000001 '
-            'and 0000000000000002 will be removed',
+            'and 0000000000000003 will be removed',
             output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)
+
+        self.validate_pb(backup_dir, 'node')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

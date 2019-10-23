@@ -1363,6 +1363,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         page_id = self.show_pb(backup_dir, 'node')[1]['id']
 
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'postgres',
+                'SELECT pg_catalog.pg_stop_backup()')
+
         # Take DELTA backup
         delta_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
@@ -2230,7 +2235,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'INFO: On timeline 4 WAL segments between 0000000000000002 '
-            'and 0000000000000005 can be removed',
+            'and 0000000000000006 can be removed',
             output)
 
         self.assertIn(
@@ -2255,7 +2260,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'INFO: On timeline 4 WAL segments between 0000000000000002 '
-            'and 0000000000000005 will be removed',
+            'and 0000000000000006 will be removed',
             output)
 
         self.assertIn(
