@@ -434,6 +434,8 @@ get_username(void)
 
 /*
  * Process options passed from command line.
+ * TODO: currectly argument parsing treat missing argument for options
+ * as invalid option
  */
 int
 config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
