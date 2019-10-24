@@ -44,7 +44,7 @@ static void create_recovery_conf(time_t backup_id,
 								 pgRestoreParams *params);
 static void *restore_files(void *arg);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
-static void create_recovery_config(pgBackup *backup, bool add_include);
+static void pg12_recovery_config(pgBackup *backup, bool add_include);
 
 
 /*
@@ -869,20 +869,18 @@ create_recovery_conf(time_t backup_id,
 	/* No need to generate recovery.conf at all. */
 	if (!(need_restore_conf || params->restore_as_replica))
 	{
-#if PG_VERSION_NUM >= 120000
 		/*
 		 * Restoring STREAM backup without PITR and not as replica,
-		 * recovery.signal and standby.signal are not needed
+		 * recovery.signal and standby.signal for PG12 are not needed
 		 */
-		create_recovery_config(backup, false);
-#endif
+		pg12_recovery_config(backup, false);
 		return;
 	}
 
 	elog(LOG, "----------------------------------------");
 #if PG_VERSION_NUM >= 120000
 	elog(LOG, "creating probackup_recovery.conf");
-	create_recovery_config(backup, true);
+	pg12_recovery_config(backup, true);
 	snprintf(path, lengthof(path), "%s/probackup_recovery.conf", instance_config.pgdata);
 #else
 	elog(LOG, "creating recovery.conf");
@@ -1040,19 +1038,20 @@ create_recovery_conf(time_t backup_id,
 
 /*
  * Create empty probackup_recovery.conf in PGDATA and
- * add include directive to postgresql.auto.conf
+ * add "include" directive to postgresql.auto.conf
 
  * When restoring PG12 we always(!) must do this, even
- * when restoring STREAM backup without PITR options
- * because restored instance may have been backed up
+ * when restoring STREAM backup without PITR or replica options
+ * because restored instance may have been previously backed up
  * and restored again and user didn`t cleaned up postgresql.auto.conf.
 
  * So for recovery to work regardless of all this factors
  * we must always create empty probackup_recovery.conf file.
  */
 static void
-create_recovery_config(pgBackup *backup, bool add_include)
+pg12_recovery_config(pgBackup *backup, bool add_include)
 {
+#if PG_VERSION_NUM >= 120000
 	char		probackup_recovery_path[MAXPGPATH];
 	char		postgres_auto_path[MAXPGPATH];
 	FILE	   *fp;
@@ -1095,6 +1094,8 @@ create_recovery_config(pgBackup *backup, bool add_include)
 		fio_fclose(fp))
 		elog(ERROR, "cannot write to file \"%s\": %s", probackup_recovery_path,
 			 strerror(errno));
+#endif
+	return;
 }
 
 /*
