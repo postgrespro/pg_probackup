@@ -1495,7 +1495,7 @@ For details on usage, see the section [Creating a Backup](#creating-a-backup).
     [--help] [-D data_dir] [-i backup_id]
     [-j num_threads] [--progress]
     [-T OLDDIR=NEWDIR] [--external-mapping=OLDDIR=NEWDIR] [--skip-external-dirs]
-    [-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
+    [-R | --restore-as-replica] [--no-validate] [--skip-block-validation] [--force]
     [--restore-command=cmdline]
     [recovery_options] [logging_options] [remote_options]
     [partial_restore_options] [remote_archive_options]
@@ -1524,6 +1524,9 @@ Skips backup validation. You can use this flag if you validate backups regularly
 
     --restore-command=cmdline
 Set the [restore_command](https://www.postgresql.org/docs/current/archive-recovery-settings.html#RESTORE-COMMAND) parameter to specified command. Example: `--restore-command='cp /mnt/server/archivedir/%f "%p"'`
+
+    --force
+Allows to ignore the invalid status of the backup. You can use this flag if you for some reason have the necessity to restore PostgreSQL cluster from corrupted or invalid backup. Use with caution.
 
 Additionally [Recovery Target Options](#recovery-target-options), [Remote Mode Options](#remote-mode-options), [Remote WAL Archive Options](#remote-wal-archive-options), [Logging Options](#logging-options), [Partial Restore](#partial-restore) and [Common Options](#common-options) can be used.
 
