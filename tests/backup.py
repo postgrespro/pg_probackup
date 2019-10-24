@@ -2006,6 +2006,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='delta',
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
+        if self.get_version(node) < 90600:
+            self.del_test_dir(module_name, fname)
+            return
+
         # Restore as replica
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
