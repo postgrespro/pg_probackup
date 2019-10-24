@@ -76,7 +76,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--recovery-target=immediate|latest]
                  [--recovery-target-name=target-name]
                  [--recovery-target-action=pause|promote|shutdown]
-                 [--restore-as-replica]
+                 [--restore-as-replica] [--force]
                  [--no-validate] [--skip-block-validation]
                  [-T OLDDIR=NEWDIR] [--progress]
                  [--external-mapping=OLDDIR=NEWDIR]

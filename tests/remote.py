@@ -16,6 +16,7 @@ class RemoteTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -26,7 +27,7 @@ class RemoteTest(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(
                 backup_dir, 'node',
-                node, options=['--remote-proto=ssh', '--stream'])
+                node, options=['--remote-proto=ssh', '--stream'], no_remote=True)
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
