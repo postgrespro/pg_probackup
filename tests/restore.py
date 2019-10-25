@@ -3246,3 +3246,85 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    def test_stream_restore_command_options(self):
+        """
+        correct handling of restore command options
+        when restoring STREAM backup
+
+        1. Restore STREAM backup with --restore-command only
+        parameter, check that PostgreSQL recovery uses
+        restore_command to obtain WAL from archive.
+
+        2. Restore STREAM backup wuth --restore-command
+        as replica, check that PostgreSQL recovery uses
+        restore_command to obtain WAL from archive.
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'max_wal_size': '32MB'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        # Take FULL
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=1)
+
+        node.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        node.pgbench_init(scale=1)
+
+        # restore backup
+        node.cleanup()
+        shutil.rmtree(os.path.join(node.logs_dir))
+
+#        self.restore_node(backup_dir, 'node', node)
+        restore_cmd = self.get_restore_command(backup_dir, 'node', node)
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--restore-command={0}'.format(restore_cmd),
+                '--recovery-target-action=pause',
+                '--recovery-target=latest'])
+
+        self.assertTrue(
+            os.path.isfile(recovery_conf),
+            "File {0} do not exists".format(recovery_conf))
+
+        node.slow_start()
+
+        exit(1)
+
+#        self.set_config(
+#            backup_dir ,'node',
+#            options=['--restore-command="cp {0}/%f %p"'.format(wal_dir)])
+#
+#        # restore delta backup
+#        node.cleanup()
+#        self.restore_node(
+#            backup_dir, 'node', node, options=['--recovery-target=immediate'])
+#
+#        self.assertTrue(
+#            os.path.isfile(recovery_conf),
+#            "File {0} do not exists".format(recovery_conf))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

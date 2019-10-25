@@ -1131,6 +1131,32 @@ class ProbackupTest(object):
 
         self.set_auto_conf(node, options)
 
+    def get_restore_command(self, backup_dir, instance, node):
+
+        # parse postgresql.auto.conf
+        restore_command = ''
+        if os.name == 'posix':
+            restore_command += '{0} archive-get -B {1} --instance={2} '.format(
+                self.probackup_path, backup_dir, instance)
+
+        elif os.name == 'nt':
+            restore_command += '"{0}" archive-get -B {1} --instance={2} '.format(
+                self.probackup_path.replace("\\","\\\\"),
+                backup_dir.replace("\\","\\\\"), instance)
+
+        # don`t forget to kill old_binary after remote ssh release
+        if self.remote:
+            restore_command += '--remote-proto=ssh '
+            restore_command += '--remote-host=localhost '
+
+        if os.name == 'posix':
+            restore_command += '--wal-file-path=%p --wal-file-name=%f'
+
+        elif os.name == 'nt':
+            restore_command += '--wal-file-path="%p" --wal-file-name="%f"'
+
+        return restore_command
+
     def set_auto_conf(self, node, options):
 
         # parse postgresql.auto.conf
