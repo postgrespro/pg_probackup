@@ -97,18 +97,22 @@ yumdownloader --source pg_probackup-{11,10,9.6,9.5}
 sudo echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup-forks.list
 sudo wget -O - http://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
 sudo apt-get install pg-probackup-{std,ent}-{11,10,9.6}
+sudo apt-get install pg-probackup-{std,ent}-{11,10,9.6}-dbg
 
 #RPM Centos Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-centos.noarch.rpm
 yum install pg_probackup-{std,ent}-{11,10,9.6}
+yum install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 
 #RPM RHEL Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-rhel.noarch.rpm
 yum install pg_probackup-{std,ent}-{11,10,9.6}
+yum install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 
 #RPM Oracle Linux Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-oraclelinux.noarch.rpm
 yum install pg_probackup-{std,ent}-{11,10,9.6}
+yum install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 ```
 
 Once you have `pg_probackup` installed, complete [the setup](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#installation-and-setup).
