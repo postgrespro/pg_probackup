@@ -48,13 +48,18 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Current release
 
-[2.2.3](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.3)
+[2.2.4](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.4)
+
+## Documentation
+
+Documentation can be found at [github](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md).
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.3).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.4).
 
 ### Linux Installation
+#### pg_probackup for vanilla PostgreSQL
 ```shell
 #DEB Ubuntu|Debian Packages
 sudo echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
@@ -86,6 +91,26 @@ yum install pg_probackup-{11,10,9.6,9.5}-debuginfo
 yumdownloader --source pg_probackup-{11,10,9.6,9.5}
 ```
 
+#### pg_probackup for PostgresPro Standart and Enterprise
+```shell
+#DEB Ubuntu|Debian Packages
+sudo echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup-forks.list
+sudo wget -O - http://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
+sudo apt-get install pg-probackup-{std,ent}-{11,10,9.6}
+
+#RPM Centos Packages
+rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-centos.noarch.rpm
+yum install pg_probackup-{std,ent}-{11,10,9.6}
+
+#RPM RHEL Packages
+rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-rhel.noarch.rpm
+yum install pg_probackup-{std,ent}-{11,10,9.6}
+
+#RPM Oracle Linux Packages
+rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-oraclelinux.noarch.rpm
+yum install pg_probackup-{std,ent}-{11,10,9.6}
+```
+
 Once you have `pg_probackup` installed, complete [the setup](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#installation-and-setup).
 
 ## Building from source
@@ -108,11 +133,6 @@ SET PATH=%PATH%;C:\Perl64\bin
 SET PATH=%PATH%;C:\msys64\usr\bin
 gen_probackup_project.pl C:\path_to_postgresql_source_tree
 ```
-
-## Documentation
-
-Documentation for the latest version can be found at [github](https://github.com/postgrespro/pg_probackup/blob/2.2.3/Documentation.md).
-Documentation for the current devel version can also be found at [github](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md).
 
 ## License
 
