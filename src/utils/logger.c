@@ -88,6 +88,31 @@ init_logger(const char *root_path, LoggerConfig *config)
 		canonicalize_path(config->log_directory);
 
 	logger_config = *config;
+
+#if PG_VERSION_NUM >= 120000
+	/* Setup logging for functions from other modules called by pg_probackup */
+	pg_logging_init(PROGRAM_NAME);
+
+	switch (logger_config.log_level_console)
+	{
+		case VERBOSE:
+			pg_logging_set_level(PG_LOG_DEBUG);
+			break;
+		case INFO:
+		case NOTICE:
+		case LOG:
+			pg_logging_set_level(PG_LOG_INFO);
+			break;
+		case WARNING:
+			pg_logging_set_level(PG_LOG_WARNING);
+			break;
+		case ERROR:
+			pg_logging_set_level(PG_LOG_ERROR);
+			break;
+		default:
+			break;
+	};
+#endif
 }
 
 static void

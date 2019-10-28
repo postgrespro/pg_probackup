@@ -13,11 +13,11 @@ OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o s
 OBJS += src/pg_crc.o src/datapagemap.o src/receivelog.o src/streamutil.o \
 	src/xlogreader.o
 
-EXTRA_CLEAN = src/pg_crc.c src/datapagemap.c src/datapagemap.h src/logging.h \
+EXTRA_CLEAN = src/pg_crc.c src/datapagemap.c src/datapagemap.h \
 	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h \
 	src/xlogreader.c
 
-INCLUDES = src/datapagemap.h src/logging.h src/streamutil.h src/receivelog.h
+INCLUDES = src/datapagemap.h src/streamutil.h src/receivelog.h
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -39,11 +39,17 @@ else
 srchome=$(top_srcdir)
 endif
 
+ifneq (12,$(MAJORVERSION))
+EXTRA_CLEAN += src/logging.h
+INCLUDES += src/logging.h
+endif
+
 ifeq (,$(filter 9.5 9.6,$(MAJORVERSION)))
 OBJS += src/walmethods.o
 EXTRA_CLEAN += src/walmethods.c src/walmethods.h
 INCLUDES += src/walmethods.h
 endif
+
 
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc -I$(top_srcdir)/$(subdir)/src
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
@@ -70,10 +76,7 @@ src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
 
-ifeq (12,$(MAJORVERSION))
-src/logging.h: $(top_srcdir)/src/include/common/logging.h
-	rm -f $@ && $(LN_S) $(srchome)/src/include/common/logging.h $@
-else
+ifneq (12,$(MAJORVERSION))
 src/logging.h: $(top_srcdir)/src/bin/pg_rewind/logging.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/logging.h $@
 endif

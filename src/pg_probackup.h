@@ -17,6 +17,10 @@
 #include "access/xlog_internal.h"
 #include "utils/pg_crc.h"
 
+#if PG_VERSION_NUM >= 120000
+#include "common/logging.h"
+#endif
+
 #ifdef FRONTEND
 #undef FRONTEND
 #include <port/atomics.h>
