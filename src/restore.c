@@ -842,7 +842,10 @@ restore_files(void *arg)
 	return NULL;
 }
 
-/* Create recovery.conf with given recovery target parameters */
+/*
+ * Create recovery.conf (probackup_recovery.conf in case of PG12)
+ * with given recovery target parameters
+ */
 static void
 create_recovery_conf(time_t backup_id,
 					 pgRecoveryTarget *rt,
@@ -851,9 +854,17 @@ create_recovery_conf(time_t backup_id,
 {
 	char		path[MAXPGPATH];
 	FILE	   *fp;
-	bool		need_restore_conf;
+	bool		archive_recovery;
 	bool		target_latest;
 	bool		target_immediate;
+	bool 		restore_command_provided = false;
+	char restore_command_guc[16384];
+
+	if (instance_config.restore_command &&
+		(pg_strcasecmp(instance_config.restore_command, "none") != 0))
+	{
+		restore_command_provided = true;
+	}
 
 	/* restore-target='latest' support */
 	target_latest = rt->target_stop != NULL &&
@@ -862,16 +873,22 @@ create_recovery_conf(time_t backup_id,
 	target_immediate = rt->target_stop != NULL &&
 		strcmp(rt->target_stop, "immediate") == 0;
 
-	need_restore_conf = !backup->stream || rt->time_string ||
+	archive_recovery = !backup->stream || rt->time_string ||
 		rt->xid_string || rt->lsn_string || rt->target_name ||
 		target_immediate || target_latest;
 
 	/* No need to generate recovery.conf at all. */
-	if (!(need_restore_conf || params->restore_as_replica))
+	if (!(archive_recovery || params->restore_as_replica || restore_command_provided))
 	{
 		/*
 		 * Restoring STREAM backup without PITR and not as replica,
 		 * recovery.signal and standby.signal for PG12 are not needed
+		 *
+		 * We do not add "include" option in this case because
+		 * here we are creating empty "probackup_recovery.conf"
+		 * to handle possible already existing "include"
+		 * directive pointing to "probackup_recovery.conf".
+		 * If don`t do that, recovery will fail.
 		 */
 		pg12_recovery_config(backup, false);
 		return;
@@ -901,15 +918,10 @@ create_recovery_conf(time_t backup_id,
 #endif
 
 	/* construct restore_command */
-	if (need_restore_conf)
+	if (archive_recovery)
 	{
-		char restore_command_guc[16384];
-
-		/* If restore_command is provided, use it */
-		if (instance_config.restore_command &&
-			(pg_strcasecmp(instance_config.restore_command, "none") != 0))
-			sprintf(restore_command_guc, "%s", instance_config.restore_command);
-		else
+		/* construct restore_command */
+		if (!restore_command_provided)
 		{
 			/* default cmdline, ok for local restore */
 			sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
@@ -936,10 +948,6 @@ create_recovery_conf(time_t backup_id,
 				strcat(restore_command_guc, instance_config.archive.user);
 			}
 		}
-
-		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
-		fio_fprintf(fp, "restore_command = '%s'\n",
-				restore_command_guc);
 
 		/*
 		 * We've already checked that only one of the four following mutually
@@ -996,13 +1004,47 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 	}
 
+	/* There is a special case to handle:
+	 * The user is restoring STREAM backup as replica but
+	 * also relies on WAL archive to catch-up with master.
+	 * If restore_command is provided, then it should be
+	 * added to recovery config.
+	 *
+	 * We cannot just add this condition to "archive_recovery"
+	 * because there is no actual archive recovery is requested,
+	 * restore_command will just be used as support source of WAL.
+	 * Example can be found here:
+	 *   https://github.com/postgrespro/pg_probackup/issues/138
+	 */
+
+	/* If restore_command is provided, use it */
+	if (restore_command_provided)
+		sprintf(restore_command_guc, "%s", instance_config.restore_command);
+
+	if (archive_recovery || restore_command_provided)
+	{
+		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
+		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+	}
+
 	if (fio_fflush(fp) != 0 ||
 		fio_fclose(fp))
 		elog(ERROR, "cannot write file \"%s\": %s", path,
 			 strerror(errno));
 
 #if PG_VERSION_NUM >= 120000
-	if (need_restore_conf)
+	/*
+	 * Create "recovery.signal" to mark this recovery as
+	 * archive_recovery for PostgreSQL, in older
+	 * versions presense of recovery.conf alone was enough.
+	 * Because of that, to keep behaviour consistent with
+	 * older version, we are forced to create "recovery.signal"
+	 * even when only restore_command is provided.
+	 * Presense of "recovery.signal" by itself determine only
+	 * one thing: do PostgreSQL must switch to a new timeline
+	 * after successfull recovery or not?
+	 */
+	if (archive_recovery || restore_command_provided)
 	{
 		elog(LOG, "creating recovery.signal file");
 		snprintf(path, lengthof(path), "%s/recovery.signal", instance_config.pgdata);
