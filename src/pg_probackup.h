@@ -531,7 +531,7 @@ typedef struct BackupPageHeader
 #define IsInXLogSeg(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteInSeg(xlrp, logSegNo, wal_segsz_bytes)
 #define GetXLogSegName(fname, logSegNo, wal_segsz_bytes)	\
-	snprintf(fname, MAXFNAMELEN, "%08X%08X",		\
+	snprintf(fname, 20, "%08X%08X",		\
 			 (uint32) ((logSegNo) / XLogSegmentsPerXLogId(wal_segsz_bytes)), \
 			 (uint32) ((logSegNo) % XLogSegmentsPerXLogId(wal_segsz_bytes)))
 
@@ -547,7 +547,7 @@ typedef struct BackupPageHeader
 #define IsInXLogSeg(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteInSeg(xlrp, logSegNo)
 #define GetXLogSegName(fname, logSegNo, wal_segsz_bytes) \
-	snprintf(fname, MAXFNAMELEN, "%08X%08X",\
+	snprintf(fname, 20, "%08X%08X",\
 			 (uint32) ((logSegNo) / XLogSegmentsPerXLogId), \
 			 (uint32) ((logSegNo) % XLogSegmentsPerXLogId))
 
