@@ -835,7 +835,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 
 		/* Zratio (compression ratio) */
 		if (tlinfo->size != 0)
-			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
+			zratio = ((float)xlog_seg_size*tlinfo->n_xlog_files) / tlinfo->size;
 
 		snprintf(row->zratio, lengthof(row->n_segments), "%.2f", zratio);
 		widths[cur] = Max(widths[cur], strlen(row->zratio));
@@ -1003,7 +1003,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 
 		json_add_key(buf, "zratio", json_level);
 		if (tlinfo->size != 0)
-			zratio = (float) ((xlog_seg_size*tlinfo->n_xlog_files)/tlinfo->size);
+			zratio = ((float)xlog_seg_size*tlinfo->n_xlog_files) / tlinfo->size;
 		appendPQExpBuffer(buf, "%.2f", zratio);
 
 		if (tlinfo->closest_backup != NULL)
