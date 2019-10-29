@@ -854,7 +854,7 @@ create_recovery_conf(time_t backup_id,
 {
 	char		path[MAXPGPATH];
 	FILE	   *fp;
-	bool		archive_recovery;
+	bool		pitr_requested;
 	bool		target_latest;
 	bool		target_immediate;
 	bool 		restore_command_provided = false;
@@ -873,12 +873,31 @@ create_recovery_conf(time_t backup_id,
 	target_immediate = rt->target_stop != NULL &&
 		strcmp(rt->target_stop, "immediate") == 0;
 
-	archive_recovery = !backup->stream || rt->time_string ||
+	/*
+	 * Note that setting restore_command alone interpreted
+	 * as PITR with target - "until all available WAL is replayed".
+	 * We do this because of the following case:
+	 * The user is restoring STREAM backup as replica but
+	 * also relies on WAL archive to catch-up with master.
+	 * If restore_command is provided, then it should be
+	 * added to recovery config.
+	 * In this scenario, "would be" replica will replay
+	 * all WAL segments available in WAL archive, after that
+	 * it will try to connect to master via repprotocol.
+	 *
+	 * The risk is obvious, what if masters current state is
+	 * in "the past" relatively to latest state in the archive?
+	 * We will get a replica that is "in the future" to the master.
+	 * We accept this risk because nobody is braindamaged enough
+	 * to get into this sutiation.
+	 *
+	 */
+	pitr_requested = !backup->stream || rt->time_string ||
 		rt->xid_string || rt->lsn_string || rt->target_name ||
-		target_immediate || target_latest;
+		target_immediate || target_latest || restore_command_provided;
 
 	/* No need to generate recovery.conf at all. */
-	if (!(archive_recovery || params->restore_as_replica || restore_command_provided))
+	if (!(pitr_requested || params->restore_as_replica))
 	{
 		/*
 		 * Restoring STREAM backup without PITR and not as replica,
@@ -918,10 +937,12 @@ create_recovery_conf(time_t backup_id,
 #endif
 
 	/* construct restore_command */
-	if (archive_recovery)
+	if (pitr_requested)
 	{
-		/* construct restore_command */
-		if (!restore_command_provided)
+		/* If restore_command is provided, use it. Otherwise construct it from scratch. */
+		if (restore_command_provided)
+			sprintf(restore_command_guc, "%s", instance_config.restore_command);
+		else
 		{
 			/* default cmdline, ok for local restore */
 			sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
@@ -1004,24 +1025,15 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 	}
 
-	/* There is a special case to handle:
+	/*
+	 * There is a special case to handle:
 	 * The user is restoring STREAM backup as replica but
 	 * also relies on WAL archive to catch-up with master.
 	 * If restore_command is provided, then it should be
 	 * added to recovery config.
-	 *
-	 * We cannot just add this condition to "archive_recovery"
-	 * because there is no actual archive recovery is requested,
-	 * restore_command will just be used as support source of WAL.
-	 * Example can be found here:
-	 *   https://github.com/postgrespro/pg_probackup/issues/138
 	 */
 
-	/* If restore_command is provided, use it */
-	if (restore_command_provided)
-		sprintf(restore_command_guc, "%s", instance_config.restore_command);
-
-	if (archive_recovery || restore_command_provided)
+	if (pitr_requested)
 	{
 		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
 		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
@@ -1034,17 +1046,16 @@ create_recovery_conf(time_t backup_id,
 
 #if PG_VERSION_NUM >= 120000
 	/*
-	 * Create "recovery.signal" to mark this recovery as
-	 * archive_recovery for PostgreSQL, in older
-	 * versions presense of recovery.conf alone was enough.
-	 * Because of that, to keep behaviour consistent with
-	 * older version, we are forced to create "recovery.signal"
+	 * Create "recovery.signal" to mark this recovery as PITR for PostgreSQL.
+	 * In older versions presense of recovery.conf alone was enough.
+	 * To keep behaviour consistent with older versions,
+	 * we are forced to create "recovery.signal"
 	 * even when only restore_command is provided.
 	 * Presense of "recovery.signal" by itself determine only
 	 * one thing: do PostgreSQL must switch to a new timeline
 	 * after successfull recovery or not?
 	 */
-	if (archive_recovery || restore_command_provided)
+	if (pitr_requested)
 	{
 		elog(LOG, "creating recovery.signal file");
 		snprintf(path, lengthof(path), "%s/recovery.signal", instance_config.pgdata);
