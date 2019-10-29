@@ -38,6 +38,11 @@ typedef struct
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
+#if defined(WIN32)
+#undef open(a, b, c)
+#undef fopen(a, b)
+#endif
+
 /* Use specified file descriptors as stdin/stdout for FIO functions */
 void fio_redirect(int in, int out, int err)
 {
