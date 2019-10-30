@@ -3303,7 +3303,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(os.path.join(node.logs_dir))
 
-#        self.restore_node(backup_dir, 'node', node)
         restore_cmd = self.get_restore_command(backup_dir, 'node', node)
 
         self.restore_node(
@@ -3326,6 +3325,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             'postgres',
             'select * from t1')
+
+        timeline_id = node.safe_psql(
+            'postgres',
+            'select timeline_id from pg_control_checkpoint()').rstrip()
+
+        self.assertEqual('2', timeline_id)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
