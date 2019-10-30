@@ -888,9 +888,7 @@ create_recovery_conf(time_t backup_id,
 	 * The risk is obvious, what if masters current state is
 	 * in "the past" relatively to latest state in the archive?
 	 * We will get a replica that is "in the future" to the master.
-	 * We accept this risk because nobody is braindamaged enough
-	 * to get into this sutiation.
-	 *
+	 * We accept this risk because its probability is low.
 	 */
 	pitr_requested = !backup->stream || rt->time_string ||
 		rt->xid_string || rt->lsn_string || rt->target_name ||
@@ -1024,14 +1022,6 @@ create_recovery_conf(time_t backup_id,
 		if (backup->primary_conninfo)
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 	}
-
-	/*
-	 * There is a special case to handle:
-	 * The user is restoring STREAM backup as replica but
-	 * also relies on WAL archive to catch-up with master.
-	 * If restore_command is provided, then it should be
-	 * added to recovery config.
-	 */
 
 	if (pitr_requested)
 	{
