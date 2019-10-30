@@ -3247,8 +3247,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
-    def test_stream_restore_command_options(self):
+    # @unittest.skip("skip")
+    def test_stream_restore_command_option(self):
         """
         correct handling of restore command options
         when restoring STREAM backup
@@ -3291,40 +3291,46 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.pgbench_init(scale=1)
 
+        node.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        node.safe_psql(
+            'postgres',
+            'create table t1()')
+
         # restore backup
         node.cleanup()
         shutil.rmtree(os.path.join(node.logs_dir))
 
-#        self.restore_node(backup_dir, 'node', node)
         restore_cmd = self.get_restore_command(backup_dir, 'node', node)
 
         self.restore_node(
             backup_dir, 'node', node,
             options=[
-                '--restore-command={0}'.format(restore_cmd),
-                '--recovery-target-action=pause',
-                '--recovery-target=latest'])
+                '--restore-command={0}'.format(restore_cmd)])
 
         self.assertTrue(
             os.path.isfile(recovery_conf),
-            "File {0} do not exists".format(recovery_conf))
+            "File '{0}' do not exists".format(recovery_conf))
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_signal = os.path.join(node.data_dir, 'recovery.signal')
+            self.assertTrue(
+                os.path.isfile(recovery_signal),
+                "File '{0}' do not exists".format(recovery_signal))
 
         node.slow_start()
 
-        exit(1)
+        node.safe_psql(
+            'postgres',
+            'select * from t1')
 
-#        self.set_config(
-#            backup_dir ,'node',
-#            options=['--restore-command="cp {0}/%f %p"'.format(wal_dir)])
-#
-#        # restore delta backup
-#        node.cleanup()
-#        self.restore_node(
-#            backup_dir, 'node', node, options=['--recovery-target=immediate'])
-#
-#        self.assertTrue(
-#            os.path.isfile(recovery_conf),
-#            "File {0} do not exists".format(recovery_conf))
+        timeline_id = node.safe_psql(
+            'postgres',
+            'select timeline_id from pg_control_checkpoint()').rstrip()
+
+        self.assertEqual('2', timeline_id)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
