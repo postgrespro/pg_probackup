@@ -38,6 +38,7 @@ timelineInfoNew(TimeLineID tli)
 	tlinfo->xlog_filelist = parray_new();
 	tlinfo->anchor_lsn = InvalidXLogRecPtr;
 	tlinfo->anchor_tli = 0;
+	tlinfo->n_xlog_files = 0;
 	return tlinfo;
 }
 

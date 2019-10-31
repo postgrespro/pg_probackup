@@ -35,7 +35,7 @@ do_delete(time_t backup_id)
 	parray	   *backup_list,
 			   *delete_list;
 	pgBackup   *target_backup = NULL;
-	int			size_to_delete = 0;
+	size_t		size_to_delete = 0;
 	char		size_to_delete_pretty[20];
 
 	/* Get complete list of backups */
@@ -814,8 +814,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	char 		oldest_to_keep_str[20];
 	int			rc;
 	int			i;
-	int			wal_size_logical = 0;
-	int			wal_size_actual = 0;
+	size_t		wal_size_logical = 0;
+	size_t		wal_size_actual = 0;
 	char		wal_pretty_size[20];
 	bool		purge_all = false;
 

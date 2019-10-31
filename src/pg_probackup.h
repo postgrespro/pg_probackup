@@ -445,7 +445,7 @@ struct timelineInfo {
 								* otherwise 0 */
 	XLogSegNo begin_segno;	/* first present segment in this timeline */
 	XLogSegNo end_segno;	/* last present segment in this timeline */
-	int		n_xlog_files;	/* number of segments (only really existing)
+	size_t	n_xlog_files;	/* number of segments (only really existing)
 							 * does not include lost segments */
 	size_t	size;			/* space on disk taken by regular WAL files */
 	parray *backups;		/* array of pgBackup sturctures with info

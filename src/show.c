@@ -822,7 +822,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		cur++;
 
 		/* N files */
-		snprintf(row->n_segments, lengthof(row->n_segments), "%u",
+		snprintf(row->n_segments, lengthof(row->n_segments), "%lu",
 				 tlinfo->n_xlog_files);
 		widths[cur] = Max(widths[cur], strlen(row->n_segments));
 		cur++;
@@ -996,7 +996,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		json_add_value(buf, "max-segno", tmp_buf, json_level, true);
 
 		json_add_key(buf, "n-segments", json_level);
-		appendPQExpBuffer(buf, "%d", tlinfo->n_xlog_files);
+		appendPQExpBuffer(buf, "%lu", tlinfo->n_xlog_files);
 
 		json_add_key(buf, "size", json_level);
 		appendPQExpBuffer(buf, "%lu", tlinfo->size);
