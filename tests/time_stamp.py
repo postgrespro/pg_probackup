@@ -60,7 +60,7 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
             base_dir="{0}/{1}/node".format(module_name, fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={"datestyle": "'GERMAN, DMY'"})
+            pg_options={"datestyle": "GERMAN, DMY"})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

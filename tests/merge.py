@@ -1051,6 +1051,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.continue_execution_until_break(5)
 
         gdb._execute('signal SIGKILL')
+        gdb._execute('detach')
+        time.sleep(1)
 
         print(self.show_pb(backup_dir, as_text=True, as_json=False))
 
