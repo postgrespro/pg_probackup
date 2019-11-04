@@ -56,7 +56,7 @@ Documentation can be found at [github](https://github.com/postgrespro/pg_proback
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.5).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/latest).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL
