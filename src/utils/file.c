@@ -875,11 +875,10 @@ int fio_chmod(char const* path, int mode, fio_location location)
 
 #ifdef HAVE_LIBZ
 
-
-#define ZLIB_BUFFER_SIZE     (64*1024)
-#define MAX_WBITS            15 /* 32K LZ77 window */
-#define DEF_MEM_LEVEL        8
-#define FIO_GZ_REMOTE_MARKER 1
+#define ZLIB_BUFFER_SIZE       (64*1024)
+#define MAX_WBITS              15 /* 32K LZ77 window */
+#define DEF_MEM_LEVEL          8
+#define FIO_ZLIB_STREAM_MARKER 1
 
 typedef struct fioGZFile
 {
@@ -891,59 +890,122 @@ typedef struct fioGZFile
 	Bytef    buf[ZLIB_BUFFER_SIZE];
 } fioGZFile;
 
+#endif
+
+#ifdef HAVE_LZ4
+
+#define LZ4_MAX_MSG_SIZE    (8*1024)
+#define LZ4_BUFFER_SIZE     (256*1024 + LZ4_MAX_MSG_SIZE)
+#define LZ4_DECODE_ERROR    1
+#define LZ4_ENCODE_ERROR    2
+#define LZ4_READ_ERROR      3
+#define FIO_LZ4_STREAM_MARKER   2
+
+
+typedef struct fioLZ4File
+{
+	LZ4_stream_t* enc_stream;
+	LZ4_streamDecode_t* dec_stream;
+	int      fd;
+	int      enc_pos;
+	int      dec_pos;
+	int      dec_size;
+	int      enc_size;
+	int      errnum;
+	int      level;
+	bool     eof;
+	fio_location location;
+	char     dec_buf[LZ4_BUFFER_SIZE]; /* ring buffer for decompressed data */
+	char     enc_buf[LZ4_COMPRESSBOUND(LZ4_MAX_MSG_SIZE)]; /* compressed data */
+} fioLZ4File;
+
+#endif
+
 gzFile
-fio_gzopen(char const* path, char const* mode, int level, fio_location location)
+fio_gzopen(char const* path, char const* mode, int level, fio_location location, CompressAlg compress_alg)
 {
 	int rc;
-	if (fio_is_remote(location))
+	if (fio_is_remote(location) || compress_alg == LZ4_COMPRESS)
 	{
-		fioGZFile* gz = (fioGZFile*) pgut_malloc(sizeof(fioGZFile));
-		memset(&gz->strm, 0, sizeof(gz->strm));
-		gz->eof = 0;
-		gz->errnum = Z_OK;
-		if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
+		if (fio_access(path, F_OK, location) == 0)
 		{
-			gz->strm.next_out = gz->buf;
-			gz->strm.avail_out = ZLIB_BUFFER_SIZE;
-			rc = deflateInit2(&gz->strm,
-							  level,
-							  Z_DEFLATED,
-							  MAX_WBITS + 16, DEF_MEM_LEVEL,
-							  Z_DEFAULT_STRATEGY);
-			if (rc == Z_OK)
-			{
-				gz->compress = 1;
-				if (fio_access(path, F_OK, location) == 0)
-				{
-					elog(LOG, "File %s exists", path);
-					free(gz);
-					errno = EEXIST;
-					return NULL;
-				}
-				gz->fd = fio_open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, location);
-			}
-		}
-		else
-		{
-			gz->strm.next_in = gz->buf;
-			gz->strm.avail_in = ZLIB_BUFFER_SIZE;
-			rc = inflateInit2(&gz->strm, 15 + 16);
-			gz->strm.avail_in = 0;
-			if (rc == Z_OK)
-			{
-				gz->compress = 0;
-				gz->fd = fio_open(path, O_RDONLY | PG_BINARY, location);
-			}
-		}
-		if (rc != Z_OK)
-		{
-			free(gz);
+			elog(LOG, "File %s exists", path);
+			errno = EEXIST;
 			return NULL;
 		}
-		return (gzFile)((size_t)gz + FIO_GZ_REMOTE_MARKER);
+#ifdef HAVE_LZ4
+		if (compress_alg == LZ4_COMPRESS)
+		{
+			fioLZ4File* lz4 = (fioLZ4File*) pgut_malloc(sizeof(fioLZ4File));
+			lz4->enc_pos = 0;
+			lz4->dec_pos = 0;
+			lz4->dec_size = 0;
+			lz4->enc_size = 0;
+			lz4->errnum = 0;
+			lz4->eof = false;
+			lz4->location = location;
+			lz4->level = level;
+			if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
+			{
+				lz4->enc_stream = LZ4_createStream();
+				lz4->dec_stream = NULL;
+				lz4->fd = fio_open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, location);
+			}
+			else
+			{
+				lz4->dec_stream = LZ4_createStreamDecode();
+				lz4->enc_stream = NULL;
+				lz4->fd = fio_open(path, O_RDONLY | PG_BINARY, location);
+			}
+			return (gzFile)((size_t)lz4 + FIO_LZ4_STREAM_MARKER);
+		}
+#endif
+#ifdef HAVE_LIBZ
+		if (compress_alg == ZLIB_COMPRESS)
+		{
+			fioGZFile* gz = (fioGZFile*) pgut_malloc(sizeof(fioGZFile));
+			memset(&gz->strm, 0, sizeof(gz->strm));
+			gz->eof = 0;
+			gz->errnum = Z_OK;
+			if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
+			{
+				gz->strm.next_out = gz->buf;
+				gz->strm.avail_out = ZLIB_BUFFER_SIZE;
+				rc = deflateInit2(&gz->strm,
+								  level,
+								  Z_DEFLATED,
+								  MAX_WBITS + 16, DEF_MEM_LEVEL,
+								  Z_DEFAULT_STRATEGY);
+				if (rc == Z_OK)
+				{
+					gz->compress = 1;
+					gz->fd = fio_open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, location);
+				}
+			}
+			else
+			{
+				gz->strm.next_in = gz->buf;
+				gz->strm.avail_in = ZLIB_BUFFER_SIZE;
+				rc = inflateInit2(&gz->strm, 15 + 16);
+				gz->strm.avail_in = 0;
+				if (rc == Z_OK)
+				{
+					gz->compress = 0;
+					gz->fd = fio_open(path, O_RDONLY | PG_BINARY, location);
+				}
+			}
+			if (rc != Z_OK)
+			{
+				free(gz);
+				return NULL;
+			}
+			return (gzFile)((size_t)gz + FIO_ZLIB_STREAM_MARKER);
+		}
+#endif
 	}
 	else
 	{
+#ifdef HAVE_LIBZ
 		gzFile file;
 		if (strcmp(mode, PG_BINARY_W) == 0)
 		{
@@ -961,16 +1023,76 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 					 level, strerror(errno));
 		}
 		return file;
+#endif
 	}
+	return NULL;
 }
 
 int
 fio_gzread(gzFile f, void *buf, unsigned size)
 {
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	int rc;
+#ifdef HAVE_LZ4
+	if ((size_t)f & FIO_LZ4_STREAM_MARKER)
 	{
-		int rc;
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		fioLZ4File* lz4 = (fioLZ4File*)((size_t)f - FIO_LZ4_STREAM_MARKER);
+
+		if (lz4->eof)
+		{
+			return 0;
+		}
+
+		while (true)
+		{
+			if (lz4->dec_size != 0) /* has some already decompressed data */
+			{
+				int dec_size = Min(size, lz4->dec_size);
+				memcpy(buf, lz4->dec_buf + lz4->dec_pos, dec_size);
+				lz4->dec_pos += dec_size;
+				lz4->dec_size -= dec_size;
+				return dec_size;
+			}
+			else if (lz4->enc_size != 0) /* If there is some data in receiver buffer, then decompress it */
+			{
+				if (lz4->dec_pos >= LZ4_BUFFER_SIZE - LZ4_MAX_MSG_SIZE)
+					lz4->dec_pos = 0;
+				rc = LZ4_decompress_safe_continue(lz4->dec_stream, lz4->enc_buf, lz4->dec_buf + lz4->dec_pos, lz4->enc_size, LZ4_BUFFER_SIZE - lz4->dec_pos);
+				if (rc <= 0)
+				{
+					lz4->errnum = LZ4_DECODE_ERROR;
+					return -1;
+				}
+				else
+				{
+					lz4->dec_size = rc;
+					lz4->enc_size = 0;
+				}
+			}
+			else
+			{
+				rc = fio_read(lz4->fd, lz4->enc_buf, LZ4_MAX_MSG_SIZE);
+				if (rc == 0)
+				{
+					lz4->eof = true;
+					return 0;
+				}
+				else if (rc > 0)
+				{
+					lz4->enc_size = rc;
+				}
+				else
+				{
+					lz4->errnum = LZ4_READ_ERROR;
+					return -1;
+				}
+			}
+		}
+	}
+#endif
+#ifdef HAVE_LIBZ
+	if ((size_t)f & FIO_ZLIB_STREAM_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_ZLIB_STREAM_MARKER);
 
 		if (gz->eof)
 		{
@@ -980,7 +1102,7 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 		gz->strm.next_out = (Bytef *)buf;
 		gz->strm.avail_out = size;
 
-		while (1)
+		while (true)
 		{
 			if (gz->strm.avail_in != 0) /* If there is some data in receiver buffer, then decompress it */
 			{
@@ -1022,19 +1144,63 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 			}
 		}
 	}
-	else
-	{
-		return gzread(f, buf, size);
-	}
+	return gzread(f, buf, size);
+#else
+	return -1;
+#endif
 }
 
 int
 fio_gzwrite(gzFile f, void const* buf, unsigned size)
 {
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	int rc;
+#ifdef HAVE_LZ4
+	if ((size_t)f & FIO_LZ4_STREAM_MARKER)
 	{
-		int rc;
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		fioLZ4File* lz4 = (fioLZ4File*)((size_t)f - FIO_LZ4_STREAM_MARKER);
+		char const* src = (char*)buf;
+		while (size + lz4->enc_size != 0)
+		{
+			if (lz4->enc_size == 0) /* Compress buffer is empty */
+			{
+				if (lz4->dec_size == 0) {
+					int dec_size = Min(LZ4_BUFFER_SIZE - lz4->dec_pos, size);
+					memcpy(lz4->dec_buf + lz4->dec_pos, src, dec_size);
+					lz4->dec_size = dec_size;
+					src += dec_size;
+					size -= dec_size;
+				}
+				rc = LZ4_compress_fast_continue(lz4->enc_stream, lz4->dec_buf + lz4->dec_pos, lz4->enc_buf, lz4->dec_size, sizeof(lz4->enc_buf), lz4->level);
+				if (rc <= 0)
+				{
+					lz4->errnum = LZ4_ENCODE_ERROR;
+					return -1;
+				}
+				lz4->enc_pos = 0;
+				lz4->enc_size = rc;
+				lz4->dec_pos += lz4->dec_size;
+				if (lz4->dec_pos >= LZ4_BUFFER_SIZE - LZ4_MAX_MSG_SIZE)
+					lz4->dec_pos = 0;
+				lz4->dec_size = 0;
+			}
+			rc = fio_write(lz4->fd, lz4->enc_buf + lz4->enc_pos, lz4->enc_size);
+			if (rc >= 0)
+			{
+				lz4->enc_pos += rc;
+				lz4->enc_size -= rc;
+			}
+			else
+			{
+				return rc;
+			}
+		}
+		return (int)(src - (char*)buf);
+	}
+#endif
+#ifdef HAVE_LIBZ
+	if ((size_t)f & FIO_ZLIB_STREAM_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_ZLIB_STREAM_MARKER);
 
 		gz->strm.next_in = (Bytef *)buf;
 		gz->strm.avail_in = size;
@@ -1070,19 +1236,33 @@ fio_gzwrite(gzFile f, void const* buf, unsigned size)
 
 		return size;
 	}
-	else
-	{
-		return gzwrite(f, buf, size);
-	}
+	return gzwrite(f, buf, size);
+#else
+	return -1;
+#endif
 }
 
 int
 fio_gzclose(gzFile f)
 {
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+	int rc;
+#ifdef HAVE_LZ4
+	if ((size_t)f & FIO_LZ4_STREAM_MARKER)
 	{
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
-		int rc;
+		fioLZ4File* lz4 = (fioLZ4File*)((size_t)f - FIO_LZ4_STREAM_MARKER);
+		if (lz4->dec_stream)
+			LZ4_freeStreamDecode(lz4->dec_stream);
+		else
+			LZ4_freeStream(lz4->enc_stream);
+		rc = fio_close(lz4->fd);
+		free(lz4);
+		return rc;
+	}
+#endif
+#ifdef HAVE_LIBZ
+	if ((size_t)f & FIO_ZLIB_STREAM_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_ZLIB_STREAM_MARKER);
 		if (gz->compress)
 		{
 			gz->strm.next_out = gz->buf;
@@ -1103,48 +1283,81 @@ fio_gzclose(gzFile f)
 		free(gz);
 		return rc;
 	}
-	else
-	{
-		return gzclose(f);
-	}
+	return gzclose(f);
+#else
+	return -1;
+#endif
 }
 
 int fio_gzeof(gzFile f)
 {
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+#ifdef HAVE_LZ4
+	if ((size_t)f & FIO_LZ4_STREAM_MARKER)
 	{
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		fioLZ4File* lz4 = (fioLZ4File*)((size_t)f - FIO_LZ4_STREAM_MARKER);
+		return lz4->eof;
+	}
+#endif
+#ifdef HAVE_LIBZ
+	if ((size_t)f & FIO_ZLIB_STREAM_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_ZLIB_STREAM_MARKER);
 		return gz->eof;
 	}
-	else
-	{
-		return gzeof(f);
-	}
+	return gzeof(f);
+#else
+	return -1;
+#endif
 }
 
 const char* fio_gzerror(gzFile f, int *errnum)
 {
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
+#ifdef HAVE_LZ4
+	if ((size_t)f & FIO_LZ4_STREAM_MARKER)
 	{
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
+		fioLZ4File* lz4 = (fioLZ4File*)((size_t)f - FIO_LZ4_STREAM_MARKER);
+		if (errnum)
+			*errnum = lz4->errnum;
+		switch (lz4->errnum)
+		{
+		  case LZ4_DECODE_ERROR:
+			return "Decode error";
+		  case LZ4_ENCODE_ERROR:
+			return "Encode error";
+		  case LZ4_READ_ERROR:
+			return "Read error";
+		  case 0:
+			return "OK";
+		}
+	}
+#endif
+#ifdef HAVE_LIBZ
+	if ((size_t)f & FIO_ZLIB_STREAM_MARKER)
+	{
+		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_ZLIB_STREAM_MARKER);
 		if (errnum)
 			*errnum = gz->errnum;
 		return gz->strm.msg;
 	}
-	else
-	{
-		return gzerror(f, errnum);
-	}
+	return gzerror(f, errnum);
+#else
+	return NULL;
+#endif
 }
 
 z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
 {
-	Assert(!((size_t)f & FIO_GZ_REMOTE_MARKER));
+#ifdef HAVE_LZ4
+	Assert(!((size_t)f & FIO_LZ4_STREAM_MARKER));
+#endif
+#ifdef HAVE_LIBZ
+	Assert(!((size_t)f & FIO_ZLIB_STREAM_MARKER));
 	return gzseek(f, offset, whence);
+#else
+	return -1;
+#endif
 }
 
-
-#endif
 
 /* Send file content */
 static void fio_send_file(int out, char const* path)

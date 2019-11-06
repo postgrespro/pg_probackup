@@ -13,13 +13,11 @@
 #include <unistd.h>
 
 static void push_wal_file(const char *from_path, const char *to_path,
-						  bool is_compress, bool overwrite, int compress_level);
+						  CompressAlg compress_alg, bool overwrite, int compress_level);
 static void get_wal_file(const char *from_path, const char *to_path);
-#ifdef HAVE_LIBZ
+
 static const char *get_gz_error(gzFile gzf, int errnum);
-#endif
-static bool fileEqualCRC(const char *path1, const char *path2,
-						 bool path2_is_compressed);
+static bool fileEqualCRC(const char *path1, const char *path2, CompressAlg compress_alg);
 static void copy_file_attributes(const char *from_path,
 								 fio_location from_location,
 								 const char *to_path, fio_location to_location,
@@ -40,7 +38,7 @@ do_archive_push(InstanceConfig *instance,
 	char		absolute_wal_file_path[MAXPGPATH];
 	char		current_dir[MAXPGPATH];
 	uint64		system_id;
-	bool		is_compress = false;
+	CompressAlg compress_alg = NONE_COMPRESS;
 
 	if (wal_file_name == NULL && wal_file_path == NULL)
 		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
@@ -80,11 +78,15 @@ do_archive_push(InstanceConfig *instance,
 		elog(ERROR, "pglz compression is not supported");
 
 #ifdef HAVE_LIBZ
-	if (instance->compress_alg == ZLIB_COMPRESS)
-		is_compress = IsXLogFileName(wal_file_name);
+	if (instance->compress_alg == ZLIB_COMPRESS && IsXLogFileName(wal_file_name))
+		compress_alg = ZLIB_COMPRESS;
+#endif
+#ifdef HAVE_LZ4
+	if (instance->compress_alg == LZ4_COMPRESS && IsXLogFileName(wal_file_name))
+		compress_alg = LZ4_COMPRESS;
 #endif
 
-	push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress,
+	push_wal_file(absolute_wal_file_path, backup_wal_file_path, compress_alg,
 				  overwrite, instance->compress_level);
 	elog(INFO, "pg_probackup archive-push completed successfully");
 
@@ -133,7 +135,7 @@ do_archive_get(InstanceConfig *instance,
  * Copy WAL segment from pgdata to archive catalog with possible compression.
  */
 void
-push_wal_file(const char *from_path, const char *to_path, bool is_compress,
+push_wal_file(const char *from_path, const char *to_path, CompressAlg compress_alg,
 			  bool overwrite, int compress_level)
 {
 	FILE	   *in = NULL;
@@ -148,17 +150,17 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	int			partial_file_size = 0;
 	bool		partial_file_exists = false;
 
-#ifdef HAVE_LIBZ
 	char		gz_to_path[MAXPGPATH];
 	gzFile		gz_out = NULL;
 
-	if (is_compress)
+	if (compress_alg != NONE_COMPRESS)
 	{
-		snprintf(gz_to_path, sizeof(gz_to_path), "%s.gz", to_path);
+		Assert(compress_alg == ZLIB_COMPRESS || compress_alg == LZ4_COMPRESS);
+		snprintf(gz_to_path, sizeof(gz_to_path), "%s.%s",
+				 to_path, compress_alg == ZLIB_COMPRESS ? "gz" : "lz4");
 		to_path_p = gz_to_path;
 	}
 	else
-#endif
 		to_path_p = to_path;
 
 	/* open file for read */
@@ -170,7 +172,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	/* Check if possible to skip copying */
 	if (fileExists(to_path_p, FIO_BACKUP_HOST))
 	{
-		if (fileEqualCRC(from_path, to_path_p, is_compress))
+		if (fileEqualCRC(from_path, to_path_p, compress_alg))
 			return;
 			/* Do not copy and do not rise error. Just quit as normal. */
 		else if (!overwrite)
@@ -178,12 +180,11 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 	}
 
 	/* open backup file for write  */
-#ifdef HAVE_LIBZ
-	if (is_compress)
+	if (compress_alg != NONE_COMPRESS)
 	{
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", gz_to_path);
 
-		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, compress_level, FIO_BACKUP_HOST);
+		gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, compress_level, FIO_BACKUP_HOST, compress_alg);
 		if (gz_out == NULL)
 		{
 			partial_file_exists = true;
@@ -192,7 +193,6 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		}
 	}
 	else
-#endif
 	{
 		snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", to_path);
 
@@ -243,16 +243,14 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		elog(WARNING, "Reusing stale destination temporary WAL file \"%s\"", to_path_temp);
 		fio_unlink(to_path_temp, FIO_BACKUP_HOST);
 
-#ifdef HAVE_LIBZ
-		if (is_compress)
+		if (compress_alg != NONE_COMPRESS)
 		{
-			gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, compress_level, FIO_BACKUP_HOST);
+			gz_out = fio_gzopen(to_path_temp, PG_BINARY_W, compress_level, FIO_BACKUP_HOST, compress_alg);
 			if (gz_out == NULL)
 				elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
 					to_path_temp, strerror(errno));
 		}
 		else
-#endif
 		{
 			out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
 			if (out < 0)
@@ -279,8 +277,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 
 		if (read_len > 0)
 		{
-#ifdef HAVE_LIBZ
-			if (is_compress)
+			if (compress_alg != NONE_COMPRESS)
 			{
 				if (fio_gzwrite(gz_out, buf, read_len) != read_len)
 				{
@@ -291,7 +288,6 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 				}
 			}
 			else
-#endif
 			{
 				if (fio_write(out, buf, read_len) != read_len)
 				{
@@ -307,8 +303,7 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			break;
 	}
 
-#ifdef HAVE_LIBZ
-	if (is_compress)
+	if (compress_alg != NONE_COMPRESS)
 	{
 		if (fio_gzclose(gz_out) != 0)
 		{
@@ -319,7 +314,6 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		}
 	}
 	else
-#endif
 	{
 		if (fio_flush(out) != 0 || fio_close(out) != 0)
 		{
@@ -349,10 +343,8 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 			 to_path_temp, to_path_p, strerror(errno_temp));
 	}
 
-#ifdef HAVE_LIBZ
-	if (is_compress)
+	if (compress_alg != NONE_COMPRESS)
 		elog(INFO, "WAL file compressed to \"%s\"", gz_to_path);
-#endif
 }
 
 /*
@@ -367,17 +359,13 @@ get_wal_file(const char *from_path, const char *to_path)
 	const char *from_path_p = from_path;
 	char		to_path_temp[MAXPGPATH];
 	int			errno_temp;
-	bool		is_decompress = false;
-
-#ifdef HAVE_LIBZ
+	CompressAlg	compress_alg = NONE_COMPRESS;
 	char		gz_from_path[MAXPGPATH];
 	gzFile		gz_in = NULL;
-#endif
 
 	/* First check source file for existance */
 	if (fio_access(from_path, F_OK, FIO_BACKUP_HOST) != 0)
 	{
-#ifdef HAVE_LIBZ
 		/*
 		 * Maybe we need to decompress the file. Check it with .gz
 		 * extension.
@@ -386,34 +374,41 @@ get_wal_file(const char *from_path, const char *to_path)
 		if (fio_access(gz_from_path, F_OK, FIO_BACKUP_HOST) == 0)
 		{
 			/* Found compressed file */
-			is_decompress = true;
+			compress_alg = ZLIB_COMPRESS;
 			from_path_p = gz_from_path;
 		}
-#endif
+		else
+		{
+			snprintf(gz_from_path, sizeof(gz_from_path), "%s.lz4", from_path);
+			if (fio_access(gz_from_path, F_OK, FIO_BACKUP_HOST) == 0)
+			{
+				/* Found compressed file */
+				compress_alg = LZ4_COMPRESS;
+				from_path_p = gz_from_path;
+			}
+		}
 		/* Didn't find compressed file */
-		if (!is_decompress)
+		if (compress_alg == NONE_COMPRESS)
 			elog(ERROR, "Source WAL file \"%s\" doesn't exist",
 				 from_path);
 	}
 
 	/* open file for read */
-	if (!is_decompress)
+	if (compress_alg == NONE_COMPRESS)
 	{
 		in = fio_fopen(from_path, PG_BINARY_R, FIO_BACKUP_HOST);
 		if (in == NULL)
 			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
 					from_path, strerror(errno));
 	}
-#ifdef HAVE_LIBZ
 	else
 	{
 		gz_in = fio_gzopen(gz_from_path, PG_BINARY_R, Z_DEFAULT_COMPRESSION,
-						   FIO_BACKUP_HOST);
+						   FIO_BACKUP_HOST, compress_alg);
 		if (gz_in == NULL)
 			elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
 					 gz_from_path, strerror(errno));
 	}
-#endif
 
 	/* open backup file for write  */
 	snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", to_path);
@@ -428,8 +423,7 @@ get_wal_file(const char *from_path, const char *to_path)
 	{
 		int read_len = 0;
 
-#ifdef HAVE_LIBZ
-		if (is_decompress)
+		if (compress_alg != NONE_COMPRESS)
 		{
 			read_len = fio_gzread(gz_in, buf, sizeof(buf));
 			if (read_len <= 0 && !fio_gzeof(gz_in))
@@ -441,7 +435,6 @@ get_wal_file(const char *from_path, const char *to_path)
 			}
 		}
 		else
-#endif
 		{
 			read_len = fio_fread(in, buf, sizeof(buf));
 			if (read_len < 0)
@@ -465,14 +458,12 @@ get_wal_file(const char *from_path, const char *to_path)
 		}
 
 		/* Check for EOF */
-#ifdef HAVE_LIBZ
-		if (is_decompress)
+		if (compress_alg != NONE_COMPRESS)
 		{
 			if (fio_gzeof(gz_in) || read_len == 0)
 				break;
 		}
 		else
-#endif
 		{
 			if (/* feof(in) || */ read_len == 0)
 				break;
@@ -487,8 +478,7 @@ get_wal_file(const char *from_path, const char *to_path)
 			 to_path_temp, strerror(errno_temp));
 	}
 
-#ifdef HAVE_LIBZ
-	if (is_decompress)
+	if (compress_alg != NONE_COMPRESS)
 	{
 		if (fio_gzclose(gz_in) != 0)
 		{
@@ -499,7 +489,6 @@ get_wal_file(const char *from_path, const char *to_path)
 		}
 	}
 	else
-#endif
 	{
 		if (fio_fclose(in))
 		{
@@ -521,13 +510,10 @@ get_wal_file(const char *from_path, const char *to_path)
 			 to_path_temp, to_path, strerror(errno_temp));
 	}
 
-#ifdef HAVE_LIBZ
-	if (is_decompress)
+	if (compress_alg != NONE_COMPRESS)
 		elog(INFO, "WAL file decompressed from \"%s\"", gz_from_path);
-#endif
 }
 
-#ifdef HAVE_LIBZ
 /*
  * Show error during work with compressed file
  */
@@ -543,27 +529,25 @@ get_gz_error(gzFile gzf, int errnum)
 	else
 		return errmsg;
 }
-#endif
 
 /*
  * compare CRC of two WAL files.
  * If necessary, decompress WAL file from path2
  */
 static bool
-fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
+fileEqualCRC(const char *path1, const char *path2, CompressAlg compress_alg)
 {
 	pg_crc32	crc1;
 	pg_crc32	crc2;
 
 	/* Get checksum of backup file */
-#ifdef HAVE_LIBZ
-	if (path2_is_compressed)
+	if (compress_alg != NONE_COMPRESS)
 	{
 		char 		buf [1024];
 		gzFile		gz_in = NULL;
 
 		INIT_FILE_CRC32(true, crc2);
-		gz_in = fio_gzopen(path2, PG_BINARY_R, Z_DEFAULT_COMPRESSION, FIO_BACKUP_HOST);
+		gz_in = fio_gzopen(path2, PG_BINARY_R, Z_DEFAULT_COMPRESSION, FIO_BACKUP_HOST, compress_alg);
 		if (gz_in == NULL)
 			/* File cannot be read */
 			elog(ERROR,
@@ -592,7 +576,6 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 				 path2, get_gz_error(gz_in, errno));
 	}
 	else
-#endif
 	{
 		crc2 = pgFileGetCRC(path2, true, true, NULL, FIO_BACKUP_HOST);
 	}

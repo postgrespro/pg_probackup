@@ -19,6 +19,14 @@ EXTRA_CLEAN = src/pg_crc.c src/datapagemap.c src/datapagemap.h \
 
 INCLUDES = src/datapagemap.h src/streamutil.h src/receivelog.h
 
+ifdef HAVE_LZ4
+COMPRESS_FLAGS += -DHAVE_LZ4
+COMPRESS_LIBS += -llz4
+endif
+
+PG_LIBS = $(COMPRESS_LIBS)
+PG_CPPFLAGS = $(COMPRESS_FLAGS)
+
 ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
@@ -50,9 +58,8 @@ EXTRA_CLEAN += src/walmethods.c src/walmethods.h
 INCLUDES += src/walmethods.h
 endif
 
-
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -Isrc -I$(top_srcdir)/$(subdir)/src
-override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
+override CPPFLAGS := -DFRONTEND -DHAVE_LZ4 $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
 all: checksrcdir $(INCLUDES);

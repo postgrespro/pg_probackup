@@ -10,6 +10,23 @@
 #include <zlib.h>
 #endif
 
+#ifdef HAVE_LZ4
+#include <lz4.h>
+#ifndef HAVE_LIBZ
+struct gzFile;
+typedef struct gzFile* gzFile;
+#endif
+#endif
+
+typedef enum CompressAlg
+{
+	NOT_DEFINED_COMPRESS = 0,
+	NONE_COMPRESS,
+	PGLZ_COMPRESS,
+	ZLIB_COMPRESS,
+	LZ4_COMPRESS,
+} CompressAlg;
+
 typedef enum
 {
 	FIO_OPEN,
@@ -106,15 +123,13 @@ extern int     fio_closedir(DIR *dirp);
 extern FILE*   fio_open_stream(char const* name, fio_location location);
 extern int     fio_close_stream(FILE* f);
 
-#ifdef HAVE_LIBZ
-extern gzFile  fio_gzopen(char const* path, char const* mode, int level, fio_location location);
+extern gzFile  fio_gzopen(char const* path, char const* mode, int level, fio_location location, CompressAlg compress_alg);
 extern int     fio_gzclose(gzFile file);
 extern int     fio_gzread(gzFile f, void *buf, unsigned size);
 extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);
 extern int     fio_gzeof(gzFile f);
 extern z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence);
 extern const char* fio_gzerror(gzFile file, int *errnum);
-#endif
 
 #endif
 

@@ -102,14 +102,6 @@ typedef enum PartialRestoreType
 	EXCLUDE,
 } PartialRestoreType;
 
-typedef enum CompressAlg
-{
-	NOT_DEFINED_COMPRESS = 0,
-	NONE_COMPRESS,
-	PGLZ_COMPRESS,
-	ZLIB_COMPRESS,
-} CompressAlg;
-
 #define INIT_FILE_CRC32(use_crc32c, crc) \
 do { \
 	if (use_crc32c) \

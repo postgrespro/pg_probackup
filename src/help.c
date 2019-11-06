@@ -339,7 +339,7 @@ help_backup(void)
 	printf(_("\n  Compression options:\n"));
 	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
-	printf(_("                                   available options: 'zlib', 'pglz', 'none' (default: none)\n"));
+	printf(_("                                   available options: 'zlib', 'lz4', 'pglz', 'none' (default: none)\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
@@ -763,7 +763,7 @@ help_set_config(void)
 	printf(_("\n  Compression options:\n"));
 	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
-	printf(_("                                   available options: 'zlib','pglz','none' (default: 'none')\n"));
+	printf(_("                                   available options: 'zlib','lz4','pglz','none' (default: 'none')\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
@@ -874,7 +874,7 @@ help_archive_push(void)
 	printf(_("\n  Compression options:\n"));
 	printf(_("      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"));
 	printf(_("      --compress-algorithm=compress-algorithm\n"));
-	printf(_("                                   available options: 'zlib','pglz','none' (default: 'none')\n"));
+	printf(_("                                   available options: 'zlib','lz4','pglz','none' (default: 'none')\n"));
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 

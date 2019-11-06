@@ -863,6 +863,11 @@ compress_init(void)
 			elog(ERROR, "This build does not support zlib compression");
 		else
 #endif
+#ifndef HAVE_LZ4
+		if (instance_config.compress_alg == LZ4_COMPRESS)
+			elog(ERROR, "This build does not support lz4 compression");
+		else
+#endif
 		if (instance_config.compress_alg == PGLZ_COMPRESS && num_threads > 1)
 			elog(ERROR, "Multithread backup does not support pglz compression");
 	}

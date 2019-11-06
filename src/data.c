@@ -21,6 +21,9 @@
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 #endif
+#ifdef HAVE_LZ4
+#include <lz4.h>
+#endif
 
 #include "utils/thread.h"
 
@@ -55,6 +58,25 @@ zlib_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
 }
 #endif
 
+#ifdef HAVE_LZ4
+/* Implementation of lz4 compression method */
+static int32
+lz4_compress(void *dst, size_t dst_size, void const *src, size_t src_size,
+			  int level)
+{
+	int	rc = LZ4_compress_fast(src, dst, src_size, dst_size, level);
+	return rc;
+}
+
+/* Implementation of zlib compression method */
+static int32
+lz4_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
+{
+	int	rc = LZ4_decompress_safe(src, dst, src_size, dst_size);
+	return rc;
+}
+#endif
+
 /*
  * Compresses source into dest using algorithm. Returns the number of bytes
  * written in the destination buffer, or -1 if compression fails.
@@ -78,11 +100,15 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				return ret;
 			}
 #endif
+#ifdef HAVE_LZ4
+		case LZ4_COMPRESS:
+			return lz4_compress(dst, dst_size, src, src_size, level);
+#endif
 		case PGLZ_COMPRESS:
 			return pglz_compress(src, src_size, dst, PGLZ_strategy_always);
+		default:
+			return -1;
 	}
-
-	return -1;
 }
 
 /*
@@ -110,6 +136,10 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 				return ret;
 			}
 #endif
+#ifdef HAVE_LZ4
+		case LZ4_COMPRESS:
+			return lz4_decompress(dst, dst_size, src, src_size);
+#endif
 		case PGLZ_COMPRESS:
 
 #if PG_VERSION_NUM >= 120000
@@ -117,9 +147,9 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 #else
 			return pglz_decompress(src, src_size, dst, dst_size);
 #endif
+		default:
+			return -1;
 	}
-
-	return -1;
 }
 
 

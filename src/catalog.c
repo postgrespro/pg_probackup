@@ -781,7 +781,7 @@ catalog_get_timelines(InstanceConfig *instance)
 					continue;
 				}
 				/* we only expect compressed wal files with .gz suffix */
-				else if (strcmp(suffix, "gz") != 0)
+				else if (strcmp(suffix, "gz") != 0 && strcmp(suffix, "lz4") != 0)
 				{
 					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
 					continue;
@@ -1902,6 +1902,8 @@ parse_compress_alg(const char *arg)
 		return PGLZ_COMPRESS;
 	else if (pg_strncasecmp("none", arg, len) == 0)
 		return NONE_COMPRESS;
+	else if (pg_strncasecmp("lz4", arg, len) == 0)
+		return LZ4_COMPRESS;
 	else
 		elog(ERROR, "invalid compress algorithm value \"%s\"", arg);
 
@@ -1920,6 +1922,8 @@ deparse_compress_alg(int alg)
 			return "zlib";
 		case PGLZ_COMPRESS:
 			return "pglz";
+		case LZ4_COMPRESS:
+			return "lz4";
 	}
 
 	return NULL;

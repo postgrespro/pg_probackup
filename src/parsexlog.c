@@ -681,7 +681,6 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 	return res;
 }
 
-#ifdef HAVE_LIBZ
 /*
  * Show error during work with compressed file
  */
@@ -697,7 +696,6 @@ get_gz_error(gzFile gzf)
 	else
 		return errmsg;
 }
-#endif
 
 /* XLogreader callback function, to read a WAL page */
 static int
@@ -786,20 +784,34 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				return -1;
 			}
 		}
-#ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
 		else
 		{
+			CompressAlg compress_alg = NONE_COMPRESS;
 			snprintf(reader_data->gz_xlogpath, sizeof(reader_data->gz_xlogpath),
 					 "%s.gz", reader_data->xlogpath);
 			if (fileExists(reader_data->gz_xlogpath, FIO_BACKUP_HOST))
 			{
 				elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
 					 reader_data->thread_num, reader_data->gz_xlogpath);
-
+				compress_alg = ZLIB_COMPRESS;
+			}
+			else
+			{
+				snprintf(reader_data->gz_xlogpath, sizeof(reader_data->gz_xlogpath),
+						 "%s.lz4", reader_data->xlogpath);
+				if (fileExists(reader_data->gz_xlogpath, FIO_BACKUP_HOST))
+				{
+					elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
+						 reader_data->thread_num, reader_data->gz_xlogpath);
+					compress_alg = LZ4_COMPRESS;
+				}
+			}
+			if (compress_alg != NONE_COMPRESS)
+			{
 				reader_data->xlogexists = true;
 				reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
-													  "rb", -1, FIO_BACKUP_HOST);
+													  "rb", -1, FIO_BACKUP_HOST, compress_alg);
 				if (reader_data->gz_xlogfile == NULL)
 				{
 					elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
@@ -809,7 +821,6 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				}
 			}
 		}
-#endif
 
 		/* Exit without error if WAL segment doesn't exist */
 		if (!reader_data->xlogexists)
@@ -849,7 +860,6 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			return -1;
 		}
 	}
-#ifdef HAVE_LIBZ
 	else
 	{
 		if (fio_gzseek(reader_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
@@ -868,7 +878,6 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			return -1;
 		}
 	}
-#endif
 
 	memcpy(reader_data->page_buf, readBuf, XLOG_BLCKSZ);
 	reader_data->prev_page_off = targetPageOff;

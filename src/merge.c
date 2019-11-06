@@ -549,6 +549,7 @@ merge_files(void *arg)
 			 * compressed.
 			 */
 			if (to_backup->compress_alg == PGLZ_COMPRESS ||
+				to_backup->compress_alg == LZ4_COMPRESS ||
 				to_backup->compress_alg == ZLIB_COMPRESS)
 			{
 				char		merge_to_file_path[MAXPGPATH];
