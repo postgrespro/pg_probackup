@@ -263,7 +263,7 @@ doc/src/sgml/pgprobackup.sgml
       </para>
     </listitem>
     <listitem>
-      <para> 
+      <para>
         Archive catalog: getting the list of all WAL timelines and
         the corresponding meta information in plain text or
         <acronym>JSON</acronym> formats.
