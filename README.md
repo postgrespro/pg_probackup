@@ -6,18 +6,18 @@ The utility is compatible with:
 * PostgreSQL 9.5, 9.6, 10, 11, 12;
 
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
-* Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes you can plan the backup strategy in accordance with your data flow
+* Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes, you can plan the backup strategy in accordance with your data flow.
 * Validation: automatic data consistency checks and on-demand backup validation without actual data recovery
-* Verification: on-demand verification of PostgreSQL instance via dedicated command `checkdb`
-* Retention: managing WAL archive and backups in accordance with retention policies - Time and/or Redundancy based, with two retention methods: `delete expired` and `merge expired`. Additionally you can design you own retention policy by setting `time to live` for backups
+* Verification: on-demand verification of PostgreSQL instance with the `checkdb` command.
+* Retention: managing WAL archive and backups in accordance with retention policy. You can configure retention policy based on recovery time or the number of backups to keep, as well as specify `time to live` (TTL) for a particular backup. Expired backups can be merged or deleted.
 * Parallelization: running backup, restore, merge, delete, verificaton and validation processes on multiple parallel threads
 * Compression: storing backup data in a compressed state to save disk space
-* Deduplication: saving disk space by not copying the not changed non-data files ('_vm', '_fsm', etc)
-* Remote operations: backup PostgreSQL instance located on remote machine or restore backup on it
-* Backup from replica: avoid extra load on the master server by taking backups from a standby
-* External directories: add to backup content of directories located outside of the PostgreSQL data directory (PGDATA), such as scripts, configs, logs and pg_dump files
-* Backup Catalog: get list of backups and corresponding meta information in `plain` or `json` formats
-* Archive Catalog: get list of all WAL timelines and corresponding meta information in `plain` or `json` formats
+* Deduplication: saving disk space by not copying unchanged non-data files, such as `_vm` or `_fsm`
+* Remote operations: backing up PostgreSQL instance located on a remote system or restoring a backup remotely
+* Backup from standby: avoid extra load on master by taking backups from a standby server
+* External directories: backing up files and directories located outside of the PostgreSQL `data directory` (PGDATA), such as scripts, configuration files, logs, or SQL dump files.
+* Backup Catalog: get list of backups and corresponding meta information in plain text or JSON formats
+* Archive catalog: getting the list of all WAL timelines and the corresponding meta information in plain text or JSON formats
 * Partial Restore: restore only the specified databases or exclude the specified databases from restore.
 
 To manage backup data, `pg_probackup` creates a backup catalog. This directory stores all backup files with additional meta information, as well as WAL archives required for [point-in-time recovery](https://postgrespro.com/docs/postgresql/current/continuous-archiving.html). You can store backups for different instances in separate subdirectories of a single backup catalog.
