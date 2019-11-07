@@ -561,8 +561,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
     </para>
     <para>
       For details on how to fine-tune <application>pg_probackup</application> configuration, see
-      the section <link linkend="pbk-configuring-pg-probackup">Configuring
-      pg_probackup</link>.
+      <xref linkend="pbk-configuring-pg-probackup"/>.
     </para>
     <para>
       The user launching <application>pg_probackup</application> must have full access to
@@ -593,7 +592,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       is used as an example.
     </para>
     <para>
-      To perform a <link linkend="pbk-backup">backup</link>, the following
+      To perform a <xref linkend="pbk-backup"/>, the following
       permissions for role <literal>backup</literal> are required
       only in the database <emphasis role="strong">used for
       connection</emphasis> to the <productname>PostgreSQL</productname> server:
@@ -794,7 +793,7 @@ archive_command = 'pg_probackup archive-push -B <replaceable>backup_dir</replace
       and <link linkend="pbk-remote-server-opts">remote_options</link>
       only need to be specified to archive WAL on a remote host. For details about all
       possible <command>archive-push</command> parameters, see the
-      section <link linkend="pbk-archive-push">archive-push</link>.
+      section <xref linkend="pbk-archive-push"/>.
     </para>
     <para>
       Once these steps are complete, you can start making backups in the
@@ -804,9 +803,8 @@ archive_command = 'pg_probackup archive-push -B <replaceable>backup_dir</replace
     </para>
     <para>
       You can view the current state of the WAL archive using the
-      <link linkend="pbk-show">show</link> command. For details, see the
-      section <link linkend="pbk-viewing-wal-archive-information">Viewing
-      WAL Archive Information</link>.
+      <xref linkend="pbk-show"/> command. For details, see
+      <xref linkend="pbk-viewing-wal-archive-information"/>.
     </para>
     <para>
       If you are planning to make PAGE backups and/or backups with
@@ -824,7 +822,7 @@ archive_command = 'pg_probackup archive-push -B <replaceable>backup_dir</replace
     </para>
     <note>
       <para>
-        Instead of using the <link linkend="pbk-archive-push">archive-push</link>
+        Instead of using the <xref linkend="pbk-archive-push"/>
         command provided by <application>pg_probackup</application>, you can use
         any other tool to set up continuous archiving as long as it delivers WAL segments into
         <filename><replaceable>backup_dir</replaceable>/wal/<replaceable>instance_name</replaceable></filename>
@@ -1062,11 +1060,11 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
         <listitem>
           <para>
             Only the following commands can be launched in the remote
-            mode: <link linkend="pbk-add-instance">add-instance</link>,
-            <link linkend="pbk-backup">backup</link>,
-            <link linkend="pbk-restore">restore</link>,
-            <link linkend="pbk-archive-push">archive-push</link>,
-            <link linkend="pbk-archive-get">archive-get</link>.
+            mode: <xref linkend="pbk-add-instance"/>,
+            <xref linkend="pbk-backup"/>,
+            <xref linkend="pbk-restore"/>,
+            <xref linkend="pbk-archive-push"/>,
+            <xref linkend="pbk-archive-get"/>.
           </para>
         </listitem>
         <listitem>
@@ -1277,7 +1275,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
         state at the time the backup was taken.
       </para>
       <para>
-        During <link linkend="pbk-backup">backup</link> <application>pg_probackup</application>
+        During <xref linkend="pbk-backup"/> <application>pg_probackup</application>
         streams WAL files containing WAL records between <literal>Start LSN</literal> and
         <literal>Stop LSN</literal> to
         <filename><replaceable>backup_dir</replaceable>/backups/<replaceable>instance_name</replaceable>/<replaceable>backup_id</replaceable>/database/pg_wal</filename> directory. To eliminate the risk
@@ -1382,7 +1380,7 @@ pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-di
         To include the same directories into each backup of your
         instance, you can specify them in the <filename>pg_probackup.conf</filename>
         configuration file using the
-        <link linkend="pbk-set-config">set-config</link> command with the
+        <xref linkend="pbk-set-config"/> command with the
         <option>--external-dirs</option> option.
       </para>
     </refsect3>
@@ -1445,7 +1443,7 @@ pg_probackup checkdb [-B <replaceable>backup_dir</replaceable> [--instance <repl
       If you would like, in addition to physical verification, to
       verify all indexes in all databases using these extensions, you
       can specify the <option>--amcheck</option> flag when running
-      the <link linkend="pbk-checkdb">checkdb</link> command:
+      the <xref linkend="pbk-checkdb"/> command:
     </para>
     <programlisting>
 pg_probackup checkdb -D <replaceable>data_dir</replaceable> --amcheck
@@ -1481,13 +1479,13 @@ pg_probackup checkdb --amcheck --skip-block-validation [<replaceable>connection_
     <para>
       If you would like to skip backup validation, you can specify the
       <option>--no-validate</option> flag when running
-      <link linkend="pbk-backup">backup</link> and
-      <link linkend="pbk-restore">restore</link> commands.
+      <xref linkend="pbk-backup"/> and
+      <xref linkend="pbk-restore"/> commands.
     </para>
     <para>
       To ensure that all the required backup files are present and can
       be used to restore the database cluster, you can run the
-      <link linkend="pbk-validate">validate</link> command with the exact
+      <xref linkend="pbk-validate"/> command with the exact
       <link linkend="pbk-recovery-target-opts">recovery target
       options</link> you are going to use for recovery.
     </para>
@@ -1535,7 +1533,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <repla
   <refsect2 id="pbk-restoring-a-cluster">
     <title>Restoring a Cluster</title>
     <para>
-      To restore the database cluster from a backup, run the restore
+      To restore the database cluster from a backup, run the <xref linkend="pbk-restore"/>
       command with at least the following options:
     </para>
     <programlisting>
@@ -1613,7 +1611,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
     </para>
     <note>
       <para>
-        By default, the <link linkend="pbk-restore">restore</link>
+        By default, the <xref linkend="pbk-restore"/>
         command validates the specified backup before restoring the
         cluster. If you run regular backup validations and would like
         to save time when restoring the cluster, you can specify the
@@ -1629,11 +1627,11 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         restore</link> before taking backups, you can restore
         only some of the databases using
         <link linkend="pbk-partial-restore-options">partial restore
-        options</link> with the <link linkend="pbk-restore">restore</link>
+        options</link> with the <xref linkend="pbk-restore"/>
         commands.
       </para>
       <para>
-        To restore the specified databases only, run the restore command
+        To restore the specified databases only, run the <xref linkend="pbk-restore"/> command
         with the following options:
       </para>
       <programlisting>
@@ -1688,8 +1686,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       cluster to its state at an arbitrary point in time (recovery
       target) using <link linkend="pbk-recovery-target-opts">recovery
       target options</link> with the
-      <link linkend="pbk-restore">restore</link> and
-      <link linkend="pbk-validate">validate</link> commands.
+      <xref linkend="pbk-restore"/> and
+      <xref linkend="pbk-validate"/> commands.
     </para>
     <para>
       If <option>-i</option>/<option>--backup-id</option> option is omitted,
@@ -1784,8 +1782,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           the section
           <link linkend="pbk-install-and-setup">Installation and
           Setup</link>. For the
-          <link linkend="pbk-add-instance">add-instance</link> and
-          <link linkend="pbk-set-config">set-config</link> commands, make
+          <xref linkend="pbk-add-instance"/> and
+          <xref linkend="pbk-set-config"/> commands, make
           sure to specify <link linkend="pbk-remote-server-opts">remote
           options</link> that point to the database host with the
           <productname>PostgreSQL</productname> instance.
@@ -1802,8 +1800,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           to the backup host as explained in the section
           <link linkend="pbk-setting-up-continuous-wal-archiving">Setting
           up continuous WAL archiving</link>. For the
-          <link linkend="pbk-archive-push">archive-push</link> and
-          <link linkend="pbk-archive-get">archive-get</link> commands, you
+          <xref linkend="pbk-archive-push"/> and
+          <xref linkend="pbk-archive-get"/> commands, you
           must specify the <link linkend="pbk-remote-server-opts">remote
           options</link> that point to the backup host with the backup
           catalog.
@@ -1811,8 +1809,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       </listitem>
       <listitem>
         <para>
-          Run <link linkend="pbk-backup">backup</link> or
-          <link linkend="pbk-restore">restore</link> commands with
+          Run <xref linkend="pbk-backup"/> or
+          <xref linkend="pbk-restore"/> commands with
           <link linkend="pbk-remote-server-opts">remote options</link>
           <emphasis role="strong">on the backup host</emphasis>.
           <application>pg_probackup</application> connects to the remote system via SSH and
@@ -1891,12 +1889,12 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
   <refsect2 id="pbk-running-pg_probackup-on-parallel-threads">
     <title>Running <application>pg_probackup</application> on Parallel Threads</title>
     <para>
-      <link linkend="pbk-backup">Backup</link>,
-      <link linkend="pbk-restore">restore</link>,
-      <link linkend="pbk-merge">merge</link>,
-      <link linkend="pbk-delete">delete</link>,
-      <link linkend="pbk-checkdb">checkdb</link> and
-      <link linkend="pbk-validate">validate</link> processes can be
+      <xref linkend="pbk-backup"/>,
+      <xref linkend="pbk-restore"/>,
+      <xref linkend="pbk-merge"/>,
+      <xref linkend="pbk-delete"/>,
+      <xref linkend="pbk-checkdb"/> and
+      <xref linkend="pbk-validate"/> processes can be
       executed on several parallel threads. This can significantly
       speed up <application>pg_probackup</application> operation given enough resources (CPU
       cores, disk, and network bandwidth).
@@ -1928,12 +1926,12 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
       directory to fine-tune <application>pg_probackup</application> configuration.
     </para>
     <para>
-      For example, <link linkend="pbk-backup">backup</link> and
-      <link linkend="pbk-checkdb">checkdb</link> commands use a regular
+      For example, <xref linkend="pbk-backup"/> and
+      <xref linkend="pbk-checkdb"/> commands use a regular
       <productname>PostgreSQL</productname> connection. To avoid specifying these options each
       time on the command line, you can set them in the
       <filename>pg_probackup.conf</filename> configuration file using the
-      <link linkend="pbk-set-config">set-config</link> command.
+      <xref linkend="pbk-set-config"/> command.
     </para>
     <note>
       <para>
@@ -2747,7 +2745,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
       <para>
         To configure retention policy, set one or more of the
         following variables in the <filename>pg_probackup.conf</filename> file via
-        <link linkend="pbk-set-config">set-config</link>:
+        <xref linkend="pbk-set-config"/>:
       </para>
       <programlisting>
 --retention-redundancy=<replaceable>redundancy</replaceable>
@@ -2808,7 +2806,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
           <option>--delete-wal</option> flags and the
           <option>--retention-window</option> and
           <option>--retention-redundancy</option> options together
-          with the <link linkend="pbk-backup">backup</link> command to
+          with the <xref linkend="pbk-backup"/> command to
           remove and merge the outdated backup copies once the new
           backup is created.
         </para>
@@ -2832,8 +2830,8 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         backups that are still required to restore an active
         incremental one, you can merge them with this backup using the
         <option>--merge-expired</option> flag when running
-        <link linkend="pbk-backup">backup</link> or
-        <link linkend="pbk-delete">delete</link> commands.
+        <xref linkend="pbk-backup"/> or
+        <xref linkend="pbk-delete"/> commands.
       </para>
       <para>
         Suppose you have backed up the <replaceable>node</replaceable>
@@ -2860,7 +2858,7 @@ BACKUP INSTANCE 'node'
         retention window, they cannot be removed as it invalidates the
         succeeding incremental backups <literal>P7XDJA</literal> and <literal>P7XDQV</literal> that are
         still required, so, if you run the
-        <link linkend="pbk-delete">delete</link> command with the
+        <xref linkend="pbk-delete"/> command with the
         <option>--delete-expired</option> flag, only the <literal>P7XDFT</literal> full
         backup will be removed.
       </para>
@@ -2915,7 +2913,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
       <para>
         Alternatively, you can use the <option>--ttl</option> and
         <option>--expire-time</option> options with the
-        <link linkend="pbk-backup">backup</link> command to pin the newly
+        <xref linkend="pbk-backup"/> command to pin the newly
         created backup:
       </para>
       <programlisting>
@@ -2924,7 +2922,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
 </programlisting>
       <para>
         To check if the backup is pinned,
-        run the <link linkend="pbk-show">show</link> command:
+        run the <xref linkend="pbk-show"/> command:
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
@@ -2953,7 +2951,7 @@ data-bytes = 22288792
       <para>
         You can unpin the backup by setting the
         <option>--ttl</option> option to zero using the
-        <link linkend="pbk-set-backup">set-backup</link> command. For example:
+        <xref linkend="pbk-set-backup"/> command. For example:
       </para>
       <programlisting>
 pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --ttl=0
@@ -2993,7 +2991,7 @@ BACKUP INSTANCE 'node'
 </programlisting>
       <para>
         You can check the state of the WAL archive by running the
-        <link linkend="pbk-show">show</link> command with the
+        <xref linkend="pbk-show"/> command with the
         <option>--archive</option> flag:
       </para>
       <programlisting>
@@ -3037,7 +3035,7 @@ ARCHIVE INSTANCE 'node'
 </programlisting>
       <para>
         Alternatively, you can use the <option>--wal-depth</option>
-        option with the <link linkend="pbk-backup">backup</link> command:
+        option with the <xref linkend="pbk-backup"/> command:
       </para>
       <programlisting>
 pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable> -b DELTA --wal-depth=1 --delete-wal
@@ -3077,7 +3075,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
     <para>
       Before the merge, <application>pg_probackup</application> validates all the affected
       backups to ensure that they are valid. You can check the current
-      backup status by running the <link linkend="pbk-show">show</link>
+      backup status by running the <xref linkend="pbk-show"/>
       command with the backup ID:
     </para>
     <programlisting>
@@ -3159,7 +3157,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       Optional parameters are enclosed in square brackets. For detailed
       parameter descriptions, see the section <link linkend="pbk-options">Options</link>.
     </para>
-    <refsect3 id="pbk-version">
+    <refsect3 id="pbk-version" xreflabel="version">
       <title>version</title>
       <programlisting>
 pg_probackup version
@@ -3168,7 +3166,7 @@ pg_probackup version
         Prints <application>pg_probackup</application> version.
       </para>
     </refsect3>
-    <refsect3 id="pbk-help">
+    <refsect3 id="pbk-help" xreflabel="help">
       <title>help</title>
       <programlisting>
 pg_probackup help [<replaceable>command</replaceable>]
@@ -3179,7 +3177,7 @@ pg_probackup help [<replaceable>command</replaceable>]
         about the options that can be used with this command.
       </para>
     </refsect3>
-    <refsect3 id="pbk-init">
+    <refsect3 id="pbk-init" xreflabel="init">
       <title>init</title>
       <programlisting>
 pg_probackup init -B <replaceable>backup_dir</replaceable> [--help]
@@ -3198,7 +3196,7 @@ pg_probackup init -B <replaceable>backup_dir</replaceable> [--help]
         the Backup Catalog</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-add-instance">
+    <refsect3 id="pbk-add-instance" xreflabel="add-instance">
       <title>add-instance</title>
       <programlisting>
 pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--help]
@@ -3216,7 +3214,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
         Backup Instance</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-del-instance">
+    <refsect3 id="pbk-del-instance" xreflabel="del-instance">
       <title>del-instance</title>
       <programlisting>
 pg_probackup del-instance -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--help]
@@ -3226,7 +3224,7 @@ pg_probackup del-instance -B <replaceable>backup_dir</replaceable> --instance <r
         specified instance.
       </para>
     </refsect3>
-    <refsect3 id="pbk-set-config">
+    <refsect3 id="pbk-set-config" xreflabel="set-config">
       <title>set-config</title>
       <programlisting>
 pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
@@ -3252,7 +3250,7 @@ pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <rep
         edit <filename>pg_probackup.conf</filename> manually.
       </para>
     </refsect3>
-    <refsect3 id="pbk-set-backup">
+    <refsect3 id="pbk-set-backup" xreflabel="set-backup">
       <title>set-backup</title>
       <programlisting>
 pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
@@ -3268,7 +3266,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
         <link linkend="pbk-pinning-options">Pinning Options</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-show-config">
+    <refsect3 id="pbk-show-config" xreflabel="show-config">
       <title>show-config</title>
       <programlisting>
 pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--format=plain|json]
@@ -3284,10 +3282,10 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
       <para>
         To edit <filename>pg_probackup.conf</filename>, use the
-        <link linkend="pbk-set-config">set-config</link> command.
+        <xref linkend="pbk-set-config"/> command.
       </para>
     </refsect3>
-    <refsect3 id="pbk-show">
+    <refsect3 id="pbk-show" xreflabel="show">
       <title>show</title>
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable>
@@ -3315,7 +3313,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
         Archive Information</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-backup">
+    <refsect3 id="pbk-backup" xreflabel="backup">
       <title>backup</title>
       <programlisting>
 pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>backup_mode</replaceable> --instance <replaceable>instance_name</replaceable>
@@ -3494,7 +3492,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
         <link linkend="pbk-creating-backup">Creating a Backup</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-restore">
+    <refsect3 id="pbk-restore" xreflabel="restore">
       <title>restore</title>
       <programlisting>
 pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
@@ -3634,7 +3632,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         Cluster</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-checkdb">
+    <refsect3 id="pbk-checkdb" xreflabel="checkdb">
       <title>checkdb</title>
       <programlisting>
 pg_probackup checkdb
@@ -3702,7 +3700,7 @@ pg_probackup checkdb
         Cluster</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-validate">
+    <refsect3 id="pbk-validate" xreflabel="validate">
       <title>validate</title>
       <programlisting>
 pg_probackup validate -B <replaceable>backup_dir</replaceable>
@@ -3731,7 +3729,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable>
         Backup</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-merge">
+    <refsect3 id="pbk-merge" xreflabel="merge">
       <title>merge</title>
       <programlisting>
 pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
@@ -3749,7 +3747,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
         <link linkend="pbk-merging-backups">Merging Backups</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-delete">
+    <refsect3 id="pbk-delete" xreflabel="delete">
       <title>delete</title>
       <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
@@ -3772,7 +3770,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         Retention Policy</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-archive-push">
+    <refsect3 id="pbk-archive-push" xreflabel="archive-push">
       <title>archive-push</title>
       <programlisting>
 pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
@@ -3825,7 +3823,7 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         Options</link>.
       </para>
     </refsect3>
-    <refsect3 id="pbk-archive-get">
+    <refsect3 id="pbk-archive-get" xreflabel="archive-get">
       <title>archive-get</title>
       <programlisting>
 pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=<replaceable>wal_file_path</replaceable> --wal-file-name=<replaceable>wal_file_name</replaceable>
@@ -3852,9 +3850,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       catalog.
     </para>
     <para>
-      For details, see the section
-      <link linkend="pbk-configuring-pg-probackup">Configuring
-      <application>pg_probackup</application></link>.
+      For details, see <xref linkend="pbk-configuring-pg-probackup"/>.
     </para>
     <para>
       If an option is specified using more than one method,
@@ -3893,7 +3889,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <para>
         Specifies the absolute path to the data directory of the
         database cluster. This option is mandatory only for the
-        <link linkend="pbk-add-instance">add-instance</link> command.
+        <xref linkend="pbk-add-instance"/> command.
         Other commands can take its value from the <envar>PGDATA</envar> environment
         variable, or from the <filename>pg_probackup.conf</filename> configuration file.
       </para>
@@ -3949,8 +3945,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         If
         <link linkend="pbk-setting-up-continuous-wal-archiving">continuous
         WAL archiving</link> is configured, you can use one of these
-        options together with <link linkend="pbk-restore">restore</link>
-        or <link linkend="pbk-validate">validate</link> commands to
+        options together with <xref linkend="pbk-restore"/>
+        or <xref linkend="pbk-validate"/> commands to
         specify the moment up to which the database cluster must be
         restored or validated.
       </para>
@@ -4072,8 +4068,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <title>Retention Options</title>
       <para>
         You can use these options together with
-        <link linkend="pbk-backup">backup</link> and
-        <link linkend="pbk-delete">delete</link> commands.
+        <xref linkend="pbk-backup"/> and
+        <xref linkend="pbk-delete"/> commands.
       </para>
       <para>
         For details on configuring retention policy, see the section
@@ -4174,8 +4170,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         <title>Pinning Options</title>
         <para>
           You can use these options together with
-          <link linkend="pbk-backup">backup</link> and
-          <link linkend="pbk-set-backup">set-backup</link> commands.
+          <xref linkend="pbk-backup"/> and
+          <xref linkend="pbk-set-backup"/> commands.
         </para>
         <para>
           For details on backup pinning, see the section
@@ -4239,8 +4235,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <note>
         <para>
           All console log messages are going to <systemitem>stderr</systemitem>, so
-          the output of <link linkend="pbk-show">show</link> and
-          <link linkend="pbk-show-config">show-config</link> commands does
+          the output of <xref linkend="pbk-show"/> and
+          <xref linkend="pbk-show-config"/> commands does
           not mingle with log messages.
         </para>
       </note>
@@ -4368,8 +4364,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <title>Connection Options</title>
       <para>
         You can use these options together with
-        <link linkend="pbk-backup">backup</link> and
-        <link linkend="pbk-checkdb">checkdb</link> commands.
+        <xref linkend="pbk-backup"/> and
+        <xref linkend="pbk-checkdb"/> commands.
       </para>
       <para>
         All
@@ -4470,8 +4466,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <title>Compression Options</title>
       <para>
         You can use these options together with
-        <link linkend="pbk-backup">backup</link> and
-        <link linkend="pbk-archive-push">archive-push</link> commands.
+        <xref linkend="pbk-backup"/> and
+        <xref linkend="pbk-archive-push"/> commands.
       </para>
       <para>
       <variablelist>
@@ -4484,7 +4480,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         <literal>pglz</literal>, and <literal>none</literal>. If set
         to <literal>zlib</literal> or <literal>pglz</literal>, this option enables compression. By default,
         compression is disabled. For the
-        <link linkend="pbk-archive-push">archive-push</link> command, the
+        <xref linkend="pbk-archive-push"/> command, the
         <literal>pglz</literal> compression algorithm is not supported.
       </para>
       <para>
@@ -4523,9 +4519,9 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <title>Archiving Options</title>
       <para>
         These options can be used with the
-        <link linkend="pbk-archive-push">archive-push</link> command in the
+        <xref linkend="pbk-archive-push"/> command in the
         <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND">archive_command</ulink>
-        setting and the <link linkend="pbk-archive-get">archive-get</link>
+        setting and the <xref linkend="pbk-archive-get"/>
         command in the
         <ulink url="https://postgrespro.com/docs/postgresql/current/archive-recovery-settings.html#RESTORE-COMMAND">restore_command</ulink>
         setting.
@@ -4566,7 +4562,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <listitem>
       <para>
         Overwrites archived WAL file. Use this flag together with the
-        <link linkend="pbk-archive-push">archive-push</link> command if
+        <xref linkend="pbk-archive-push"/> command if
         the specified subdirectory of the backup catalog already
         contains this WAL file and it needs to be replaced with its
         newer copy. Otherwise, <command>archive-push</command> reports that a WAL segment
@@ -4584,20 +4580,17 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <para>
         This section describes the options related to running
         <application>pg_probackup</application> operations remotely via SSH. These options can be
-        used with <link linkend="pbk-add-instance">add-instance</link>,
-        <link linkend="pbk-set-config">set-config</link>,
-        <link linkend="pbk-backup">backup</link>,
-        <link linkend="pbk-restore">restore</link>,
-        <link linkend="pbk-archive-push">archive-push</link>, and
-        <link linkend="pbk-archive-get">archive-get</link> commands.
+        used with <xref linkend="pbk-add-instance"/>,
+        <xref linkend="pbk-set-config"/>,
+        <xref linkend="pbk-backup"/>,
+        <xref linkend="pbk-restore"/>,
+        <xref linkend="pbk-archive-push"/>, and
+        <xref linkend="pbk-archive-get"/> commands.
       </para>
       <para>
         For details on configuring and using the remote mode,
-        see the sections
-        <link linkend="pbk-configuring-the-remote-mode">Configuring the
-        Remote Mode</link> and
-        <link linkend="pbk-remote-backup">Using
-        <application>pg_probackup</application> in the Remote Mode</link>.
+        see <xref linkend="pbk-configuring-the-remote-mode"/> and
+        <xref linkend="pbk-remote-backup"/>.
       </para>
       <para>
       <variablelist>
@@ -4696,7 +4689,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         This section describes the options used to provide the
         arguments for <link linkend="pbk-remote-server-opts">remote mode
         options</link> in
-        <link linkend="pbk-archive-get">archive-get</link> used in the
+        <xref linkend="pbk-archive-get"/> used in the
         <ulink url="https://postgrespro.com/docs/postgresql/current/archive-recovery-settings.html#RESTORE-COMMAND">restore_command</ulink>
         command when restoring ARCHIVE backups or performing PITR.
       </para>
@@ -4746,7 +4739,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <para>
         This section describes the options for partial cluster restore.
         These options can be used with the
-        <link linkend="pbk-restore">restore</link> command.
+        <xref linkend="pbk-restore"/> command.
       </para>
       <para>
       <variablelist>
@@ -4804,7 +4797,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         server to connect to. The connection is used only for managing
         the backup process, so you can connect to any existing
         database. Can be set in the <filename>pg_probackup.conf</filename> using the
-        <link linkend="pbk-set-config">set-config</link> command.
+        <xref linkend="pbk-set-config"/> command.
       </para>
       <para>
        Default: <literal>postgres</literal>, the default <productname>PostgreSQL</productname> database
@@ -4858,7 +4851,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         replication, in seconds. By default, <application>pg_probackup</application> waits 300
         seconds. You can also define this parameter in the
         <filename>pg_probackup.conf</filename> configuration file using the
-        <link linkend="pbk-set-config">set-config</link> command.
+        <xref linkend="pbk-set-config"/> command.
       </para>
       <para>
        Default: <literal>300 sec</literal>
