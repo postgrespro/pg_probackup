@@ -1135,7 +1135,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
   <refsect2 id="pbk-setting-up-ptrack-backups">
     <title>Setting up PTRACK Backups</title>
     <para>
-      The PTACK backup mode can be used only for <productname>Postgres Pro Standard</productname> and
+      The PTRACK backup mode can be used only for <productname>Postgres Pro Standard</productname> and
       <productname>Postgres Pro Enterprise</productname> installations, or patched vanilla
       PostgreSQL. Links to PTRACK patches can be found
       <ulink url="https://github.com/postgrespro/pg_probackup#ptrack-support">here</ulink>.
@@ -1886,7 +1886,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       </para>
     </note>
   </refsect2>
-  <refsect2 id="pbk-running-pg_probackup-on-parallel-threads">
+  <refsect2 id="pbk-running-pg-probackup-on-parallel-threads">
     <title>Running <application>pg_probackup</application> on Parallel Threads</title>
     <para>
       <xref linkend="pbk-backup"/>,
@@ -4928,7 +4928,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         This scenario illustrates setting up standalone FULL and DELTA backups.
       </para>
       <procedure>
-      <step id="pbk-setup-passwordless-ssh-connection-from-backup_host-to-postgres_host">
+      <step id="pbk-setup-passwordless-ssh-connection-from-backup-host-to-postgres-host">
         <title>Set up passwordless SSH connection from
         <literal>backup_host</literal> to
         <literal>postgres_host</literal>:</title>
