@@ -392,6 +392,7 @@ typedef struct pgRestoreParams
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
 	const char *restore_command;
+	const char *primary_slot_name;
 
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;

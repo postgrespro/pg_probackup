@@ -653,12 +653,16 @@ main(int argc, char *argv[])
 		if (force)
 			no_validate = true;
 
+		if (replication_slot != NULL)
+			restore_as_replica = true;
+
 		/* keep all params in one structure */
 		restore_params = pgut_new(pgRestoreParams);
 		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
 		restore_params->force = force;
 		restore_params->no_validate = no_validate;
 		restore_params->restore_as_replica = restore_as_replica;
+		restore_params->primary_slot_name = replication_slot;
 		restore_params->skip_block_validation = skip_block_validation;
 		restore_params->skip_external_dirs = skip_external_dirs;
 		restore_params->partial_db_list = NULL;
