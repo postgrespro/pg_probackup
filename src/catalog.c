@@ -988,14 +988,22 @@ catalog_get_timelines(InstanceConfig *instance)
 			{
 				pgBackup *backup = parray_get(tlinfo->backups, j);
 
+				/* sanity */
+				if (XLogRecPtrIsInvalid(backup->start_lsn) ||
+					backup->tli <= 0)
+					continue;
+
 				/* skip invalid backups */
 				if (backup->status != BACKUP_STATUS_OK &&
 					backup->status != BACKUP_STATUS_DONE)
 					continue;
 
-				/* sanity */
-				if (XLogRecPtrIsInvalid(backup->start_lsn) ||
-					backup->tli <= 0)
+				/*
+				 * Pinned backups should be ignored for the
+				 * purpose of retention fulfillment, so skip them.
+				 */
+				if (backup->expire_time > 0 &&
+					backup->expire_time > current_time)
 					continue;
 
 				count++;

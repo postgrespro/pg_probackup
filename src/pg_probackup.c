@@ -92,6 +92,7 @@ static char		   *target_action = NULL;
 static pgRecoveryTarget *recovery_target_options = NULL;
 static pgRestoreParams *restore_params = NULL;
 
+time_t current_time = 0;
 bool restore_as_replica = false;
 bool no_validate = false;
 
@@ -266,6 +267,9 @@ main(int argc, char *argv[])
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
+
+	/* Get current time */
+	current_time = time(NULL);
 
 	//set_pglocale_pgservice(argv[0], "pgscripts");
 

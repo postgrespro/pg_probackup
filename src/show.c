@@ -468,7 +468,6 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 	uint32		widths[SHOW_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowBackendRow *rows;
-	time_t current_time = time(NULL);
 	TimeLineID parent_tli = 0;
 
 	for (i = 0; i < SHOW_FIELDS_COUNT; i++)

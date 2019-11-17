@@ -1101,10 +1101,8 @@ pg12_recovery_config(pgBackup *backup, bool add_include)
 
 	if (add_include)
 	{
-		time_t 		current_time;
 		char		current_time_str[100];
 
-		current_time = time(NULL);
 		time2iso(current_time_str, lengthof(current_time_str), current_time);
 
 		snprintf(postgres_auto_path, lengthof(postgres_auto_path),

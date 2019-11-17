@@ -209,7 +209,6 @@ static void
 do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purge_list)
 {
 	int			i;
-	time_t 		current_time;
 
 	parray *redundancy_full_backup_list = NULL;
 
@@ -220,9 +219,6 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 	/* For fancy reporting */
 	uint32		actual_window = 0;
-
-	/* Get current time */
-	current_time = time(NULL);
 
 	/* Calculate n_full_backups and days_threshold */
 	if (instance_config.retention_redundancy > 0)

@@ -282,6 +282,7 @@ typedef struct InstanceConfig
 
 extern ConfigOption instance_options[];
 extern InstanceConfig instance_config;
+extern time_t current_time;
 
 typedef struct PGNodeInfo
 {
