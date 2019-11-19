@@ -91,17 +91,20 @@ yum install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 yumdownloader --source pg_probackup-{12,11,10,9.6,9.5}
 
 #RPM ALT Linux p7
-sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p7 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list && sudo apt-get update
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p7 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
+sudo apt-get update
 sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
 sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 
 #RPM ALT Linux p8
-sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p8 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list && sudo apt-get update
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p8 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
+sudo apt-get update
 sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
 sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 
 #RPM ALT Linux p9
-sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p9 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list && sudo apt-get update
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p9 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
+sudo apt-get update
 sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
 sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 ```
@@ -130,12 +133,14 @@ yum install pg_probackup-{std,ent}-{11,10,9.6}
 yum install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 
 #RPM ALT Linux p7
-sudo echo "rpm http://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/altlinux-p7 x86_64 forks" > /etc/apt/sources.list.d/pg_probackup_forks.list && sudo apt-get update
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/altlinux-p7 x86_64 forks" > /etc/apt/sources.list.d/pg_probackup_forks.list
+sudo apt-get update
 sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}
 sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 
 #RPM ALT Linux p8
-sudo echo "rpm http://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/altlinux-p8 x86_64 forks" > /etc/apt/sources.list.d/pg_probackup_forks.list && sudo apt-get update
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/altlinux-p8 x86_64 forks" > /etc/apt/sources.list.d/pg_probackup_forks.list
+sudo apt-get update
 sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}
 sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 
