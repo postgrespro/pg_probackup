@@ -6,6 +6,8 @@
 
 <xsl:import href="http://docbook.sourceforge.net/release/xsl/current/xhtml/docbook.xsl"/>
 
+<xsl:param name="html.stylesheet" select="'stylesheet.css'"></xsl:param>
+
 <xsl:param name="toc.max.depth" select="4"></xsl:param>
 <xsl:param name="toc.section.depth" select="3"></xsl:param>
 

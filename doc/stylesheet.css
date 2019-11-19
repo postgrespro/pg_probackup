@@ -1,0 +1,402 @@
+/* ../media/css/docs.css */
+.navheader th { text-align: center; } /* anti-bootstrap */
+
+.navheader tbody tr:nth-child(1) th {  /* временно убрать ненужную строчку */
+	display: none;
+}
+
+/* PostgreSQL.org Documentation Style */
+
+.docs div.NAVHEADER table {
+  margin-left: 0;
+}
+
+.docs div.NAVHEADER th {
+    text-align: center;
+}
+
+.docs {
+	font-size: 15px;
+	line-height: 1.6;
+}
+
+/* Heading Definitions */
+
+.docs h1, 
+.docs h2, 
+.docs h3 {
+  font-weight: bold;
+  margin-top: 2ex;
+}
+
+.docs h1 a,
+.docs h2 a,
+.docs h3 a,
+.docs h4 a
+ {
+  color: #EC5800;
+}
+
+/* EKa --> */
+.docs h1 {
+  font-size: 1.4em;
+}
+
+.docs h2 {
+  font-size: 1.25em;
+}
+
+.docs h3 {
+  font-size: 1.2em;
+}
+
+.docs h4 {
+  font-size: 1.15em;
+}
+
+.docs h5 {
+  font-size: 1.1em;
+}
+
+.docs h6 {
+  font-size: 1.0em;
+}
+/* <-- EKa */
+
+.docs h1 a:hover {
+  color: #EC5800;
+  text-decoration: none;
+}
+
+.docs h2 a:hover,
+.docs h3 a:hover,
+.docs h4 a:hover {
+  color: #666666;
+  text-decoration: none;
+}
+
+
+
+/* Text Styles */
+
+.docs div.SECT2 {
+  margin-top: 4ex;
+}
+
+.docs div.SECT3 {
+  margin-top: 3ex;
+  margin-left: 3ex;
+}
+
+.docs .txtCurrentLocation {
+  font-weight: bold;
+}
+
+.docs p, 
+.docs ol, 
+.docs ul, 
+.docs li {
+  line-height: 1.5em;
+}
+
+.docs code {
+	font-size: 1em;
+	padding: 0px;
+	color: #525f6c;
+	background-color: #FFF;
+	border-radius: 0px;
+}
+
+.docs code, kbd, pre, samp {
+	font-family: monospace,monospace;	
+}
+
+.docs .txtCommentsWrap {
+  border: 2px solid #F5F5F5; 
+  width: 100%;
+}
+
+.docs .txtCommentsContent {
+  background: #F5F5F5;
+  padding: 3px;
+}
+
+.docs .txtCommentsPoster {
+  float: left;
+}
+
+.docs .txtCommentsDate {
+  float: right;
+}
+
+.docs .txtCommentsComment {
+  padding: 3px;
+}
+
+.docs #docContainer pre code,
+.docs #docContainer pre tt,
+.docs #docContainer pre pre,
+.docs #docContainer tt tt,
+.docs #docContainer tt code,
+.docs #docContainer tt pre {
+  font-size: 1em;
+}
+
+.docs pre.LITERALLAYOUT,
+.docs .SCREEN,
+.docs .SYNOPSIS,
+.docs .PROGRAMLISTING,
+.docs .REFSYNOPSISDIV p,
+.docs table.CAUTION,
+.docs table.WARNING,
+.docs blockquote.NOTE,
+.docs blockquote.TIP,
+.docs div.note,
+.docs div.tip,
+.docs table.CALSTABLE {
+  -moz-box-shadow: 3px 3px 5px #DFDFDF;
+  -webkit-box-shadow: 3px 3px 5px #DFDFDF;
+  -khtml-box-shadow: 3px 3px 5px #DFDFDF;
+  -o-box-shadow: 3px 3px 5px #DFDFDF;
+  box-shadow: 3px 3px 5px #DFDFDF;
+}
+
+.docs pre.LITERALLAYOUT,
+.docs .SCREEN,
+.docs .SYNOPSIS,
+.docs .PROGRAMLISTING,
+.docs .REFSYNOPSISDIV p,
+.docs table.CAUTION,
+.docs table.WARNING,
+.docs blockquote.NOTE,
+.docs blockquote.TIP 
+.docs div.note,
+.docs div.tip {
+  color: black;
+  border-width: 1px;
+  border-style: solid;
+  padding: 2ex;
+  margin: 2ex 0 2ex 2ex;
+  overflow: auto;
+  -moz-border-radius: 8px;
+  -webkit-border-radius: 8px;
+  -khtml-border-radius: 8px;
+  border-radius: 8px;
+}
+
+.docs div.note,
+.docs div.tip {
+  -moz-border-radius: 8px !important;
+  -webkit-border-radius: 8px !important;
+  -khtml-border-radius: 8px !important;
+  border-radius: 8px !important;
+} 
+
+
+.docs pre.LITERALLAYOUT,
+.docs pre.SYNOPSIS,
+.docs pre.PROGRAMLISTING,
+.docs .REFSYNOPSISDIV p,
+.docs .SCREEN {
+  border-color: #CFCFCF;
+  background-color: #F7F7F7;
+}
+
+.docs blockquote.NOTE,
+.docs blockquote.TIP,
+.docs div.note,
+.docs div.tip {
+  border-color: #DBDBCC;
+  background-color: #EEEEDD;
+  padding: 14px;
+  width: 572px;
+/*  font-size: 12px; */
+}
+
+.docs blockquote.NOTE,
+.docs blockquote.TIP,
+.docs table.CAUTION,
+.docs table.WARNING {
+  margin: 4ex auto;
+}
+
+.docs div.note,
+.docs div.tip {
+  margin: 4ex auto  !important;
+}
+
+
+.docs blockquote.NOTE p,
+.docs blockquote.TIP p,
+.docs div.note p,
+.docs div.tip p {
+  margin: 0;
+}
+
+.docs blockquote.NOTE pre,
+.docs blockquote.NOTE code,
+.docs div.note pre,
+.docs div.note code,
+.docs blockquote.TIP pre,
+.docs blockquote.TIP code,
+.docs div.tip pre,
+.docs div.tio code {
+  margin-left: 0;
+  margin-right: 0;
+  -moz-box-shadow: none;
+  -webkit-box-shadow: none;
+  -khtml-box-shadow: none;
+  -o-box-shadow: none;
+  box-shadow: none;
+}
+
+.docs .emphasis,
+.docs .c2 {
+  font-weight: bold;
+}
+
+.docs .REPLACEABLE {
+  font-style: italic;
+}
+
+/* Table Styles */
+
+.docs table {
+  margin-left: 2ex;
+}
+
+.docs table.CALSTABLE td,
+.docs table.CALSTABLE th,
+.docs table.CAUTION td,
+.docs table.CAUTION th,
+.docs table.WARNING td,
+.docs table.WARNING th {
+  border-style: solid;
+}
+
+.docs table.CALSTABLE,
+.docs table.CAUTION,
+.docs table.WARNING {
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.docs table.CALSTABLE
+{
+  margin: 2ex 0 2ex 2ex;
+  background-color: #E0ECEF;
+  border: 2px solid #A7C6DF;
+}
+
+.docs table.CALSTABLE tr:hover td
+{
+  background-color: #EFEFEF;
+}
+
+.docs table.CALSTABLE td {
+  background-color: #FFF;
+}
+
+.docs table.CALSTABLE td,
+.docs table.CALSTABLE th {
+  border: 1px solid #A7C6DF;
+  padding: 0.5ex 0.5ex;
+}
+
+table.CAUTION,
+.docs table.WARNING {
+  border-collapse: separate;
+  display: block;
+  padding: 0;
+  max-width: 600px;
+}
+
+.docs table.CAUTION {
+  background-color: #F5F5DC;
+  border-color: #DEDFA7;
+}
+
+.docs table.WARNING {
+  background-color: #FFD7D7;
+  border-color: #DF421E;
+}
+
+.docs table.CAUTION td,
+.docs table.CAUTION th,
+.docs table.WARNING td,
+.docs table.WARNING th {
+  border-width: 0;
+  padding-left: 2ex;
+  padding-right: 2ex;
+}
+
+.docs table.CAUTION td,
+.docs table.CAUTION th {
+  border-color: #F3E4D5
+}
+
+.docs table.WARNING td,
+.docs table.WARNING th {
+  border-color: #FFD7D7;
+}
+
+.docs td.c1,
+.docs td.c2,
+.docs td.c3,
+.docs td.c4,
+.docs td.c5,
+.docs td.c6 {
+  font-size: 1.1em;
+  font-weight: bold;
+  border-bottom: 0px solid #FFEFEF;
+  padding: 1ex 2ex 0;
+}
+
+.docs .table  thead {
+	background: #E0ECEF;
+	border-bottom: 1px solid #000;
+}
+.docs .table > thead > tr > th {
+	border-bottom: 1px solid #000;
+}
+
+.docs td, th {
+	padding: 0.1ex 0.5ex; 
+}
+
+.docs .book table tr:hover td {
+	background-color: #EFEFEF;
+}
+
+/* Link Styles */
+
+.docs #docNav a {
+  font-weight: bold;
+}
+
+.docs code.FUNCTION tt {
+  font-size: 1em;
+}
+
+.docs table.docs-compare {
+	align: center;
+	width: 90%;
+	border: 2px solid #999; 
+	border-collapse: collapse;
+}
+
+.docs table.docs-compare td  { 
+	padding: 12px;
+	border: 1px solid #DDD;
+}
+
+.docs dd {
+	margin-left: 40px;
+}
+
+
+.docs .sidebar {
+    padding: 8px;
+    background: #FFF;
+    width: auto;
+}
