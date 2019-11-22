@@ -519,7 +519,7 @@ pg_probackup init -B <replaceable>backup_dir</replaceable>
       To add a new backup instance, run the following command:
     </para>
     <programlisting>
-pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance <replaceable>instance_name</replaceable> [remote_options]
+pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance <replaceable>instance_name</replaceable> [<replaceable>remote_options</replaceable>]
 </programlisting>
     <para>
       where:
@@ -556,7 +556,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       the <filename>pg_probackup.conf</filename> configuration file that controls
       <application>pg_probackup</application> settings for this backup instance. If you run this
       command with the
-      <link linkend="pbk-remote-server-opts">remote_options</link>, the specified parameters
+      <link linkend="pbk-remote-server-opts">remote_options</link>, the specified
       parameters will be added to <filename>pg_probackup.conf</filename>.
     </para>
     <para>
@@ -688,7 +688,7 @@ COMMIT;
       <link linkend="pbk-configuring-the-remote-mode">Configuring the
       Remote Mode</link>,
       <link linkend="pbk-setting-up-partial-restore">Setting up Partial
-      Restore</link> and
+      Restore</link>, and
       <link linkend="pbk-setting-up-ptrack-backups">Setting up PTRACK
       Backups</link>.
     </para>
@@ -874,7 +874,7 @@ archive_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-p
         <para>
           To perform standalone backups on standby, complete all steps
           in section <link linkend="pbk-setting-up-stream-backups">Setting
-          up STREAM Backups</link>
+          up STREAM Backups</link>.
         </para>
       </listitem>
       <listitem>
@@ -882,7 +882,7 @@ archive_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-p
           To perform archive backups on standby, complete all steps in
           section
           <link linkend="pbk-setting-up-continuous-wal-archiving">Setting
-          up continuous WAL archiving</link>
+          up continuous WAL archiving</link>.
         </para>
       </listitem>
     </itemizedlist>
@@ -991,17 +991,17 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
         <listitem>
           <para>
             Install <application>pg_probackup</application> on both systems:
-            <replaceable>backup_host</replaceable> and
-            <replaceable>db_host</replaceable>.
+            <literal>backup_host</literal> and
+            <literal>db_host</literal>.
           </para>
         </listitem>
         <listitem>
           <para>
             For communication between the hosts set up the passwordless
             SSH connection between <literal>backup</literal> user on
-            <replaceable>backup_host</replaceable> and
+            <literal>backup_host</literal> and
             <literal>postgres</literal> user on
-            <replaceable>db_host</replaceable>:
+            <literal>db_host</literal>:
           </para>
           <programlisting>
 [backup@backup_host] ssh-copy-id postgres@db_host
@@ -1013,8 +1013,8 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
             <link linkend="pbk-setting-up-continuous-wal-archiving">continuous
             WAL archiving</link>, set up passwordless SSH
             connection between <literal>postgres</literal> user on
-            <replaceable>db_host</replaceable> and <literal>backup</literal>
-            user on <replaceable>backup_host</replaceable>:
+            <literal>db_host</literal> and <literal>backup</literal>
+            user on <literal>backup_host</literal>:
           </para>
           <programlisting>
 [postgres@db_host] ssh-copy-id backup@backup_host
@@ -1027,26 +1027,26 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
       <itemizedlist spacing="compact">
         <listitem>
           <para>
-            <replaceable>backup_host</replaceable> is the system with
+            <literal>backup_host</literal> is the system with
             <emphasis>backup catalog</emphasis>.
           </para>
         </listitem>
         <listitem>
           <para>
-            <replaceable>db_host</replaceable> is the system with <productname>PostgreSQL</productname>
+            <literal>db_host</literal> is the system with <productname>PostgreSQL</productname>
             cluster.
           </para>
         </listitem>
         <listitem>
           <para>
             <literal>backup</literal> is the OS user on
-            <replaceable>backup_host</replaceable> used to run <application>pg_probackup</application>.
+            <literal>backup_host</literal> used to run <application>pg_probackup</application>.
           </para>
         </listitem>
         <listitem>
           <para>
             <literal>postgres</literal> is the OS user on
-            <replaceable>db_host</replaceable> used to start the <productname>PostgreSQL</productname>
+            <literal>db_host</literal> used to start the <productname>PostgreSQL</productname>
             cluster. Note that for <productname>PostgreSQL</productname> 11 or higher a
             more secure approach can be used thanks to
             <ulink url="https://postgrespro.com/docs/postgresql/current/app-initdb.html#APP-INITDB-ALLOW-GROUP-ACCESS">allow-group-access</ulink>
@@ -1307,8 +1307,8 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
         </listitem>
         <listitem>
           <para>
-            Backup in STREAM mode can be taken from standby of a
-            server, that generates small amount of WAL traffic,
+            Backup in STREAM mode can be taken from a standby of a
+            server that generates small amount of WAL traffic,
             without long waiting for WAL segment to fill up.
           </para>
         </listitem>
@@ -1350,24 +1350,24 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
         separated by colons on Linux systems or semicolons on Windows systems.
       </para>
       <para>
-        For example, to include <filename>/etc/dir1/</filename> and
-        <filename>/etc/dir2/</filename> directories into the full
+        For example, to include <filename>/etc/dir1</filename> and
+        <filename>/etc/dir2</filename> directories into the full
         backup of your <replaceable>instance_name</replaceable> instance
         that will be stored under the <replaceable>backup_dir</replaceable>
         directory on Linux, run:
       </para>
       <programlisting>
-pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=/etc/dir1:/etc/dir2
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --external-dirs=/etc/dir1:/etc/dir2
 </programlisting>
       <para>
-        For example, to include <filename>C:\dir1\</filename> and
-        <filename>C:\dir2\</filename> directories into the full backup
+        For example, to include <filename>C:\dir1</filename> and
+        <filename>C:\dir2</filename> directories into the full backup
         of your <emphasis>instance_name</emphasis> instance that will
         be stored under the <emphasis>backup_dir</emphasis> directory
         on Windows, run:
       </para>
       <programlisting>
-pg_probackup backup -B backup_dir --instance instance_name -b FULL --external-dirs=C:\dir1;C:\dir2
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --external-dirs=C:\dir1;C:\dir2
 </programlisting>
       <para>
         <application>pg_probackup</application> creates a separate subdirectory in the backup
@@ -1513,7 +1513,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <repla
       <link linkend="pbk-recovery-target-opts">recovery target
       options</link>, the <command>validate</command> command will check whether it is possible
       to restore the specified backup to the specified
-      <literal>recovery target</literal>.
+      recovery target.
     </para>
     <para>
       For example, to check that you can restore the database cluster
@@ -1582,7 +1582,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       When using the <option>--tablespace-mapping</option>/<option>-T</option>
       option, you must provide absolute paths to the old and new
       tablespace directories. If a path happens to contain an equals
-      sign (=), escape it with a backslash. This option can be
+      sign (<literal>=</literal>), escape it with a backslash. This option can be
       specified multiple times for multiple tablespaces. For example:
     </para>
     <programlisting>
@@ -1650,7 +1650,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 </programlisting>
       <para>
         To exclude one or more databases from restore, use
-        the <option>--db-include</option> option:
+        the <option>--db-exclude</option> option:
       </para>
       <programlisting>
 pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --db-exclude=<replaceable>database_name</replaceable>
@@ -1851,7 +1851,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
     </para>
     <para>
       To solve this problem, you can use
-      <link linkend="pbk-remote-wal-archive-options">Remote Wal Archive
+      <link linkend="pbk-remote-wal-archive-options">Remote WAL Archive
       Options</link>.
     </para>
     <para>
@@ -2313,7 +2313,7 @@ primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmod
         </listitem>
         <listitem>
         <para>
-          <literal>parent-backup-id</literal> — backup ID of the parent backup. Available only
+          <literal>parent-backup-id</literal> — ID of the parent backup. Available only
           for incremental backups.
         </para>
         </listitem>
@@ -2969,7 +2969,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
         keep WAL of limited depth measured in backups per timeline.
       </para>
       <para>
-        Suppose you have backed up the <replaceable>node</replaceable>
+        Suppose you have backed up the <literal>node</literal>
         instance in the <replaceable>backup_dir</replaceable> directory and
         configured
         <link linkend="pbk-setting-up-continuous-wal-archiving">continuous WAL
@@ -2996,7 +2996,7 @@ BACKUP INSTANCE 'node'
         <option>--archive</option> flag:
       </para>
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable> --archive
+pg_probackup show -B <replaceable>backup_dir</replaceable> --instance node --archive
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
@@ -3010,7 +3010,7 @@ ARCHIVE INSTANCE 'node'
         achieve much, only one segment is removed:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable> --delete-wal
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --delete-wal
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
@@ -3025,7 +3025,7 @@ ARCHIVE INSTANCE 'node'
         <option>--wal-depth</option> option:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable> --delete-wal --wal-depth=1
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --delete-wal --wal-depth=1
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
@@ -3039,7 +3039,7 @@ ARCHIVE INSTANCE 'node'
         option with the <xref linkend="pbk-backup"/> command:
       </para>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable> -b DELTA --wal-depth=1 --delete-wal
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance node -b DELTA --wal-depth=1 --delete-wal
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
@@ -3235,7 +3235,7 @@ pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <rep
 [-d <replaceable>dbname</replaceable>] [-h <replaceable>host</replaceable>] [-p <replaceable>port</replaceable>] [-U <replaceable>username</replaceable>]
 [--archive-timeout=<replaceable>timeout</replaceable>] [--external-dirs=<replaceable>external_directory_path</replaceable>]
 [--restore-command=<replaceable>cmdline</replaceable>]
-[<replaceable>remote_options</replaceable>] [<replaceable>remote_archive_options</replaceable>] [<replaceable>logging_options</replaceable>]
+[<replaceable>remote_options</replaceable>] [<replaceable>remote_wal_archive_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
         Adds the specified connection, compression, retention, logging,
@@ -3277,7 +3277,7 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
         file located in the
         <filename><replaceable>backup_dir</replaceable>/backups/<replaceable>instance_name</replaceable></filename>
         directory. You can specify the
-        <literal>--format=json</literal> option to return the result
+        <literal>--format=json</literal> option to get the result
         in the <acronym>JSON</acronym> format. By default, configuration settings are
         shown as plain text.
       </para>
@@ -3303,7 +3303,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
       <para>
         By default, the contents of the backup catalog is shown as
         plain text. You can specify the
-        <literal>--format=json</literal> option to return the result
+        <literal>--format=json</literal> option to get the result
         in the <acronym>JSON</acronym> format.
       </para>
       <para>
@@ -3318,7 +3318,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
       <title>backup</title>
       <programlisting>
 pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>backup_mode</replaceable> --instance <replaceable>instance_name</replaceable>
-[--help] [-j num_threads] [--progress]
+[--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [-C] [--stream [-S slot_name] [--temp-slot]] [--backup-pg-log]
 [--no-validate] [--skip-block-validation]
 [-w --no-password] [-W --password]
@@ -3498,7 +3498,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
       <programlisting>
 pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
 [--help] [-D <replaceable>data_dir</replaceable>] [-i <replaceable>backup_id</replaceable>]
-[-j num_threads] [--progress]
+[-j <replaceable>num_threads</replaceable>] [--progress]
 [-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--external-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--skip-external-dirs]
 [-R | --restore-as-replica] [--no-validate] [--skip-block-validation] [--force]
 [--restore-command=<replaceable>cmdline</replaceable>]
@@ -3513,7 +3513,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         backup and restores it to the specified recovery target.
         If neither the backup ID nor recovery target options are provided,
         <application>pg_probackup</application> uses the most recent backup
-        to preform the recovery.
+        to perform the recovery.
       </para>
    <para>
     <variablelist>
@@ -3537,7 +3537,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <para>
         Relocates the tablespace from the <replaceable>OLDDIR</replaceable> to the <replaceable>NEWDIR</replaceable>
         directory at the time of recovery. Both <replaceable>OLDDIR</replaceable> and <replaceable>NEWDIR</replaceable> must
-        be absolute paths. If the path contains the equals sign (=),
+        be absolute paths. If the path contains the equals sign (<literal>=</literal>),
         escape it with a backslash. This option can be specified
         multiple times for multiple tablespaces.
       </para>
@@ -3551,7 +3551,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         Relocates an external directory included into the backup from
         the <replaceable>OLDDIR</replaceable> to the <replaceable>NEWDIR</replaceable> directory at the time of recovery.
         Both <replaceable>OLDDIR</replaceable> and <replaceable>NEWDIR</replaceable> must be absolute paths. If the path
-        contains the equals sign (=), escape it with a backslash. This
+        contains the equals sign (<literal>=</literal>), escape it with a backslash. This
         option can be specified multiple times for multiple
         directories.
       </para>
@@ -3815,7 +3815,7 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND">archive_command</ulink>
         <productname>PostgreSQL</productname> parameter to set up
         <link linkend="pbk-setting-up-continuous-wal-archiving">continous
-        WAl archiving</link>.
+        WAL archiving</link>.
       </para>
       <para>
         For details, see sections
