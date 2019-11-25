@@ -189,10 +189,12 @@ doc/src/sgml/pgprobackup.sgml
   <itemizedlist spacing="compact">
     <listitem>
       <para>
-        Incremental backup: page-level incremental backup allows you
-        to save disk space, speed up backup and restore. With three
-        different incremental modes, you can plan the backup strategy
-        in accordance with your data flow.
+        Incremental backup: with three different incremental modes,
+        you can plan the backup strategy in accordance with your data flow.
+        Incremental backups allow you to save disk space
+        and speed up backup as compared to taking full backups.
+        It is also faster to restore the cluster by applying incremental
+        backups than by replaying WAL files.
       </para>
     </listitem>
     <listitem>
@@ -296,9 +298,11 @@ doc/src/sgml/pgprobackup.sgml
     </listitem>
     <listitem>
       <para>
-        Incremental backups only store the data that has changed since
-        the previous backup. It allows to decrease the backup size and
-        speed up backup and restore operations. <application>pg_probackup</application> supports
+        Incremental backups operate at the page level, only storing the data that has changed since
+        the previous backup. It allows you to save disk space
+        and speed up the backup process as compared to taking full backups.
+        It is also faster to restore the cluster by applying incremental
+        backups than by replaying WAL files. <application>pg_probackup</application> supports
         the following modes of incremental backups:
       </para>
       <itemizedlist spacing="compact">
@@ -306,7 +310,7 @@ doc/src/sgml/pgprobackup.sgml
           <para>
             DELTA backup. In this mode, <application>pg_probackup</application> reads all data
             files in the data directory and copies only those pages
-            that have changed since the previous backup. Note that this
+            that have changed since the previous backup. This
             mode can impose read-only I/O pressure equal to a full
             backup.
           </para>
@@ -1047,7 +1051,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
           <para>
             <literal>postgres</literal> is the OS user on
             <literal>db_host</literal> used to start the <productname>PostgreSQL</productname>
-            cluster. Note that for <productname>PostgreSQL</productname> 11 or higher a
+            cluster. For <productname>PostgreSQL</productname> 11 or higher a
             more secure approach can be used thanks to
             <ulink url="https://postgrespro.com/docs/postgresql/current/app-initdb.html#APP-INITDB-ALLOW-GROUP-ACCESS">allow-group-access</ulink>
             feature.
@@ -1390,52 +1394,46 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
   <refsect2 id="pbk-verifying-a-cluster">
     <title>Performing Cluster Verification</title>
     <para>
-      To verify that <productname>PostgreSQL</productname> database cluster is free of
-      corruption, run the following command:
+      To verify that <productname>PostgreSQL</productname> database cluster is
+      not corrupt, run the following command:
     </para>
     <programlisting>
-pg_probackup checkdb [-B <replaceable>backup_dir</replaceable> [--instance <replaceable>instance_name</replaceable>]] [-D <replaceable>data_dir</replaceable>]
+pg_probackup checkdb [-B <replaceable>backup_dir</replaceable> [--instance <replaceable>instance_name</replaceable>]] [-D <replaceable>data_dir</replaceable>] [<replaceable>connection_options</replaceable>]
 </programlisting>
+
     <para>
-      This command performs physical verification works similar to
-      <link linkend="pbk-page-validation">page validation</link> that is
-      done during backup with several differences:
+      This command performs physical verification of all data files
+      located in the specified data directory by running page header
+      sanity checks, as well as block-level checksum verification if checksums are enabled.
+      If a corrupt page is detected, <command>checkdb</command>
+      continues cluster verification until all pages in the cluster
+      are validated.
     </para>
-    <itemizedlist spacing="compact">
-      <listitem>
-        <para>
-          <command>checkdb</command> is read-only.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          Even if a corrupt page is detected, <command>checkdb</command>
-          continues cluster verification until all pages in the cluster
-          are validated.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <command>checkdb</command> does not strictly require
-          <emphasis>the backup catalog</emphasis>, so it can be used
-          to verify database clusters that are
-          <emphasis role="strong">not</emphasis>
-          <link linkend="pbk-adding-new-backup-instance">added to the
-          backup catalog</link>.
-        </para>
-      </listitem>
-    </itemizedlist>
+
     <para>
-      If <replaceable>backup_dir</replaceable> and
-      <replaceable>instance_name</replaceable> are omitted,
+      By default, similar <link linkend="pbk-page-validation">page validation</link>
+      is performed automatically while a backup is taken by
+      <application>pg_probackup</application>. The <literal>checkdb</literal>
+      command enables you to perform such page validation
+      on demand, without taking any backup copies, even if the cluster
+      is not backed up using <application>pg_probackup</application> at all.
+    </para>
+
+    <para>
+      To perform cluster verification, <application>pg_probackup</application>
+      needs to connect to the cluster to be verified. In general, it is
+      enough to specify the backup instance of this cluster for
+      <application>pg_probackup</application> to determine the required
+      connection options. However, if <literal>-B</literal> and
+      <literal>--instance</literal> options are ommitted, you have to provide
       <link linkend="pbk-connection-opts">connection options</link> and
-      <replaceable>data_dir</replaceable> must be provided via environment
+      <replaceable>data_dir</replaceable> via environment
       variables or command-line options.
     </para>
+
     <para>
       Physical verification cannot detect logical inconsistencies,
-      missing and nullified blocks or entire files, repercussions from
-      <productname>PostgreSQL</productname> bugs and other wicked anomalies. Extensions
+      missing or nullified blocks and entire files, or similar anomalies. Extensions
       <ulink url="https://postgrespro.com/docs/postgresql/current/amcheck.html">amcheck</ulink>
       and
       <ulink url="https://github.com/petergeoghegan/amcheck">amcheck_next</ulink>
@@ -1448,7 +1446,7 @@ pg_probackup checkdb [-B <replaceable>backup_dir</replaceable> [--instance <repl
       the <xref linkend="pbk-checkdb"/> command:
     </para>
     <programlisting>
-pg_probackup checkdb -D <replaceable>data_dir</replaceable> --amcheck
+pg_probackup checkdb -D <replaceable>data_dir</replaceable> --amcheck [<replaceable>connection_options</replaceable>]
 </programlisting>
     <para>
       You can skip physical verification by specifying the
@@ -1929,8 +1927,9 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
     <para>
       For example, <xref linkend="pbk-backup"/> and
       <xref linkend="pbk-checkdb"/> commands use a regular
-      <productname>PostgreSQL</productname> connection. To avoid specifying these options each
-      time on the command line, you can set them in the
+      <productname>PostgreSQL</productname> connection. To avoid specifying
+      <link linkend="pbk-connection-opts">connection options</link>
+      each time on the command line, you can set them in the
       <filename>pg_probackup.conf</filename> configuration file using the
       <xref linkend="pbk-set-config"/> command.
     </para>
@@ -2882,12 +2881,10 @@ BACKUP INSTANCE 'node'
  node      10       P7XDQV  2019-04-08 05:32:59+03  PAGE  STREAM  1/0   11s    19MB  16MB     1.0  0/15000060  0/15000198  OK
  node      10       P7XDJA  2019-04-03 05:28:36+03  FULL  STREAM  1/0   21s    32MB  16MB     1.0  0/13000028  0/13000198  OK
 </programlisting>
-      <note>
         <para>
           The <literal>Time</literal> field for the merged backup displays the time
           required for the merge.
         </para>
-      </note>
     </refsect3>
     <refsect3 id="pbk-backup-pinning">
       <title>Backup Pinning</title>
@@ -3122,7 +3119,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired
 </programlisting>
     <para>
-      Note that expired backups cannot be removed while at least one
+      Expired backups cannot be removed while at least one
       incremental backup that satisfies the retention policy is based
       on them. If you would like to minimize the number of backups
       still required to keep incremental backups valid, specify the
