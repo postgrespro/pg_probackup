@@ -2441,7 +2441,7 @@ ARCHIVE INSTANCE 'node'
         <listitem>
           <para>
             <literal>Zratio</literal> — compression ratio calculated as <literal>N segments</literal> *
-            <parameter>wal_seg_size</parameter> / <literal>Size</literal>.
+            <parameter>wal_segment_size</parameter> * <parameter>wal_block_size</parameter> / <literal>Size</literal>.
           </para>
         </listitem>
         <listitem>
