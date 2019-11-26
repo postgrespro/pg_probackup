@@ -3811,7 +3811,7 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         You can use <command>archive-push</command> in the
         <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND">archive_command</ulink>
         <productname>PostgreSQL</productname> parameter to set up
-        <link linkend="pbk-setting-up-continuous-wal-archiving">continous
+        <link linkend="pbk-setting-up-continuous-wal-archiving">continuous
         WAL archiving</link>.
       </para>
       <para>
