@@ -1,3 +1,14 @@
+@import url('https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&subset=cyrillic');
+
+body {
+ font-family: 'Roboto',Arial,sans-serif;
+}
+
+body {
+   font-size: 18px;
+   font-weight: 300;
+}
+
 /* ../media/css/docs.css */
 .navheader th { text-align: center; } /* anti-bootstrap */
 
