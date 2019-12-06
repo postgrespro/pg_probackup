@@ -345,7 +345,7 @@ prepare_page(ConnectionArgs *arguments,
 			 */
 			//elog(WARNING, "Checksum_Version: %i", checksum_version ? 1 : 0);
 
-			if (result == -1 && is_ptrack_support && strict)
+			if (result == -1 && strict && ptrack_version_num > 0)
 			{
 				elog(WARNING, "File \"%s\", block %u, try to fetch via SQL",
 					file->path, blknum);
@@ -358,7 +358,8 @@ prepare_page(ConnectionArgs *arguments,
 		 */
 
 		if (!page_is_valid &&
-			((strict && !is_ptrack_support) || !strict))
+			((strict && !(ptrack_version_num >= 15 && ptrack_version_num < 20))
+			|| !strict))
 		{
 			/* show this message for checkdb or backup without ptrack support */
 			elog(WARNING, "Corruption detected in file \"%s\", block %u",
@@ -366,7 +367,7 @@ prepare_page(ConnectionArgs *arguments,
 		}
 
 		/* Backup with invalid block and without ptrack support must throw error */
-		if (!page_is_valid && strict && !is_ptrack_support)
+		if (!page_is_valid && strict && !(ptrack_version_num >= 15 && ptrack_version_num < 20))
 				elog(ERROR, "Data file corruption. Canceling backup");
 
 		/* Checkdb not going futher */
@@ -379,7 +380,8 @@ prepare_page(ConnectionArgs *arguments,
 		}
 	}
 
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK || (!page_is_valid && is_ptrack_support))
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		(!page_is_valid && (ptrack_version_num >= 15 && ptrack_version_num < 20)))
 	{
 		size_t page_size = 0;
 		Page ptrack_page = NULL;
@@ -626,7 +628,9 @@ backup_data_file(backup_files_arg* arguments,
 			int rc = fio_send_pages(in, out, file,
 									backup_mode == BACKUP_MODE_DIFF_DELTA && file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 									&n_blocks_skipped, calg, clevel);
-			if (rc == PAGE_CHECKSUM_MISMATCH && is_ptrack_support)
+			if (rc == PAGE_CHECKSUM_MISMATCH &&
+				 /* only ptrack versions 1.5, 1.6 and 1.7 support this functionality */
+				(ptrack_version_num >= 15 && ptrack_version_num < 20))
 				goto RetryUsingPtrack;
 			if (rc < 0)
 				elog(ERROR, "Failed to read file \"%s\": %s",

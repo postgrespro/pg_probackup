@@ -578,7 +578,7 @@ extern bool		smooth_checkpoint;
 /* remote probackup options */
 extern char* remote_agent;
 
-extern bool is_ptrack_support;
+extern int ptrack_version_num;
 extern bool exclusive_backup;
 
 /* delete options */
@@ -878,5 +878,19 @@ extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeIn
 extern void check_system_identifiers(PGconn *conn, char *pgdata);
 extern void parse_filelist_filenames(parray *files, const char *root);
 
+/* in ptrack.c */
+extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);
+extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn, XLogRecPtr lsn);
+extern void pg_ptrack_clear(PGconn *backup_conn);
+extern int pg_ptrack_version(PGconn *backup_conn);
+extern bool pg_ptrack_enable(PGconn *backup_conn);
+extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid,
+									   PGconn *backup_conn);
+extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
+									 Oid db_oid,
+									 Oid rel_oid,
+									 size_t *result_size,
+									 PGconn *backup_conn);
+extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn);
 
 #endif /* PG_PROBACKUP_H */
