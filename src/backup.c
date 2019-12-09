@@ -207,7 +207,13 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn);
+		XLogRecPtr	ptrack_lsn = InvalidXLogRecPtr;
+
+		// XXX: Temporary mockup for ptrack2.0
+		if (ptrack_version_num == 20)
+			ptrack_lsn = prev_backup->start_lsn;
+		else
+			get_last_ptrack_lsn(backup_conn);
 
 		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
@@ -756,7 +762,10 @@ do_backup(time_t start_time, bool no_validate,
 	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
 	if (ptrack_version_num > 0)
 	{
-		is_ptrack_enable = pg_ptrack_enable(backup_conn);
+		if (ptrack_version_num >= 20)
+			is_ptrack_enable = pg_ptrack_enable2(backup_conn);
+		else
+			is_ptrack_enable = pg_ptrack_enable(backup_conn);
 	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)

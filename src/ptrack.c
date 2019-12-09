@@ -531,165 +531,159 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
  * ----------------------------
  */
 
-				
+/*
+ * Check if ptrack is enabled in target instance
+ */
+bool
+pg_ptrack_enable2(PGconn *backup_conn)
+{
+	PGresult   *res_db;
+
+	res_db = pgut_execute(backup_conn, "SHOW ptrack_map_size", 0, NULL);
+
+	if (strcmp(PQgetvalue(res_db, 0, 0), "0") == 0)
+	{
+		PQclear(res_db);
+		return false;
+	}
+	PQclear(res_db);
+	return true;
+}
+
+/*
+ * Fetch a list of changed files with their ptrack maps.
+ */
+parray *
+pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn)
+{
+	PGresult   *res;
+	char		lsn_buf[17 + 1];
+	char	   *params[1];
+	parray	   *pagemapset = NULL;
+	int			i;
+	uint32		id,
+				off;
+
+	/* Decode ID and offset */
+	id = (uint32) (lsn >> 32);
+	off = (uint32) lsn;
+	snprintf(lsn_buf, sizeof lsn_buf, "%X/%X", id, off);
+	params[0] = pstrdup(lsn_buf);
+
+	res = pgut_execute(backup_conn, "SELECT * FROM pg_ptrack_get_pagemapset($1) ORDER BY 1",
+						1, (const char **) params);
+	pfree(params[0]);
+
+	if (PQnfields(res) != 2)
+		elog(ERROR, "cannot get ptrack pagemapset");
+
+	/* Construct database map */
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		page_map_entry *pm_entry = (page_map_entry *) pgut_malloc(sizeof(page_map_entry));
+		// char		   *path = NULL;
+
+		/* get path */
+		// TODO: Verify path copying
+		// path = PQgetvalue(res, i, 0);
+		// // pm_entry->path = pgut_malloc(strlen(path) + 1);
+		// pm_entry->path = pgut_strdup(path);
+		pm_entry->path = PQgetvalue(res, i, 0);
+
+		/* get bytea */
+		pm_entry->pagemap = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, i, 1),
+													&pm_entry->pagemapsize);
+
+		if (pagemapset == NULL)
+			pagemapset = parray_new();
+
+		parray_append(pagemapset, pm_entry);
+	}
+
+	PQclear(res);
+
+	return pagemapset;
+}
+
 /*
  * Given a list of files in the instance to backup, build a pagemap for each
  * data file that has ptrack. Result is saved in the pagemap field of pgFile.
  * NOTE we rely on the fact that provided parray is sorted by file->path.
+ *
+ * We fetch a list of changed files with their ptrack maps. After that files
+ * are merged with their bitmaps.  File without bitmap is treated as untracked
+ * by ptrack, until it is a datafile or database, then it is considered unchanged.
  */
 void
 make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 {
-	size_t		i;
-	char	   *ptrack_nonparsed = NULL;
-	size_t		ptrack_nonparsed_size = 0;
-	PGresult   *res;
+	parray	   *filemaps;
+	int			file_i = 0;
+	int			map_i = 0;
 
-	elog(WARNING, "Compiling pagemap. Work In Progress");
-/*
-/* pg_ptrack_get_changeset's output format is following:
- *
- * # oid
- * # relation oid (relfilenode ??)
- * # tablespace oid
- * # fork number
- * # block number
- * # number of blocks
- * # last update LSN
- * # file pathname
- */
+	elog(LOG, "Compiling pagemap");
 
-	/* Connect to postgres and get the map */
-	res = pgut_execute(backup_conn,
-						  "SELECT * from  pg_ptrack_get_changeset('%X/%X')",
-						  2, (uint32) (lsn >> 32), (uint32) (lsn));
-	if (PQntuples(res) == 0)
+	/* Receive all available ptrack bitmaps at once */
+	// XXX: actually, filemaps are sorted by rel_path, but it seems fine for a merge?
+	filemaps = pg_ptrack_get_pagemapset(backup_conn, lsn);
+
+	while (true)
 	{
-		PQclear(res);
-		return;
+		pgFile		   *file = NULL;
+		page_map_entry *map = NULL;
+
+		if (file_i >= parray_num(files) || map_i >= parray_num(filemaps))
+			break;
+
+		file = (pgFile *) parray_get(files, file_i);
+		map = (page_map_entry *) parray_get(filemaps, map_i);
+
+		// elog(VERBOSE, "Comparing %s and %s", file->rel_path, map->path);
+		if (strcmp(file->rel_path, map->path) == 0)
+		{
+			file->pagemap.bitmapsize = map->pagemapsize;
+			// XXX: Just pass by pointer, OK?
+			file->pagemap.bitmap = map->pagemap;
+			// file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
+			// memcpy(file->pagemap.bitmap, map->pagemap, file->pagemap.bitmapsize);
+
+			elog(VERBOSE, "using ptrack bitmap for file %s", file->rel_path);
+			map_i++;
+		}
+		else
+		{
+			// XXX: Just skip files without ptrack record?
+			// file->pagemap_isabsent = true;
+			// elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
+
+			// XXX: Keep some untracked files?
+			// XXX: relation file without ptrack is treated as unchanged
+			if (!file->is_database && !file->is_datafile
+				&& (!file->relOid || file->relOid != InvalidOid)
+				&& !file->forkName)
+			{
+				file->pagemap_isabsent = true;
+				elog(VERBOSE, "ptrack is missing for file: %s", file->path);
+			}
+		}
+		file_i++;
 	}
 
-	parray *ptrack_changeset = parray_new();
-
-	for (i = 0; i < PQntuples(res); i++)
+	// Check and mark remaining files if necessary
+	for (file_i = 0; file_i < parray_num(files); file_i++)
 	{
-		/* #0 oid
-		 * #1 relation oid (relfilenode ??)
-		 * #2 tablespace oid
-		 * #3 fork number
-		 * #4 block number
-		 * #5 number of blocks
-		 * #6 last update LSN
-		 * #7 file pathname
-		 */
-		Oid oid;
-		Oid rel_filenode;
-		Oid tablespace_oid;
-		char *file_pathname;
-		XLogRecPtr last_update_lsn;
-		ForkNumber forknum;
-		BlockNumber blkno;
-		int n_blocks;
-		
-		pgFile changeset_item;
+		pgFile *file = (pgFile *) parray_get(files, file_i);
 
-		oid = PQgetvalue(res, i, 0);
-		rel_filenode = PQgetvalue(res, i, 1);
-		tablespace_oid = PQgetvalue(res, i, 2);
-		forknum = PQgetvalue(res, i, 3);
-		blkno = PQgetvalue(res, i, 4);
-		n_blocks = PQgetvalue(res, i, 5);
-		file_pathname = strcpy(PQgetvalue(res, i, 7));
-
-
-		changeset_item = pgFileNew(file_pathname, file_pathname, false, 0, FIO_LOCAL_HOST);
-		changeset_item.bitmapsize = 
+		// XXX: Keep some untracked files?
+		// XXX: datafile without ptrack is treated as unchanged
+		if (!file->is_database && !file->is_datafile
+			&& (!file->relOid || file->relOid != InvalidOid)
+			&& !file->forkName)
+		{
+			file->pagemap_isabsent = true;
+			elog(VERBOSE, "ptrack is missing for file: %s", file->path);
+		}
 	}
 
-	file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
-
-// 
-// 	for (i = 0; i < parray_num(files); i++)
-// 	{
-// 		pgFile	   *file = (pgFile *) parray_get(files, i);
-// 		size_t		start_addr;
-// 
-// 		if (file->is_database)
-// 		{
-// 			char *filename = strrchr(file->path, '/');
-// 
-// 			Assert(filename != NULL);
-// 			filename++;
-// 			elog(WARNING, "ptrack 2.0 do nothing for database %s", filename);
-// 		}
-// 
-// 		if (file->is_datafile)
-// 		{
-// 			/* get ptrack bitmap once for all segments of the file */
-// 			if (file->segno == 0)
-// 			{
-// 				/* release previous value */
-// 				pg_free(ptrack_nonparsed);
-// 				ptrack_nonparsed_size = 0;
-// 
-// 				ptrack_nonparsed = pg_ptrack_get_and_clear(file->tblspcOid, file->dbOid,
-// 											   file->relOid, &ptrack_nonparsed_size, backup_conn);
-// 			}
-// 
-// 			if (ptrack_nonparsed != NULL)
-// 			{
-// 				/*
-// 				 * pg_ptrack_get_and_clear() returns ptrack with VARHDR cut out.
-// 				 * Compute the beginning of the ptrack map related to this segment
-// 				 *
-// 				 * HEAPBLOCKS_PER_BYTE. Number of heap pages one ptrack byte can track: 8
-// 				 * RELSEG_SIZE. Number of Pages per segment: 131072
-// 				 * RELSEG_SIZE/HEAPBLOCKS_PER_BYTE. number of bytes in ptrack file needed
-// 				 * to keep track on one relsegment: 16384
-// 				 */
-// 				start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
-// 
-// 				/*
-// 				 * If file segment was created after we have read ptrack,
-// 				 * we won't have a bitmap for this segment.
-// 				 */
-// 				if (start_addr > ptrack_nonparsed_size)
-// 				{
-// 					elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
-// 					file->pagemap_isabsent = true;
-// 				}
-// 				else
-// 				{
-// 
-// 					if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
-// 					{
-// 						file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
-// 						elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
-// 					}
-// 					else
-// 					{
-// 						file->pagemap.bitmapsize = RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
-// 						elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
-// 					}
-// 
-// 					file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
-// 					memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
-// 				}
-// 			}
-// 			else
-// 			{
-// 				/*
-// 				 * If ptrack file is missing, try to copy the entire file.
-// 				 * It can happen in two cases:
-// 				 * - files were created by commands that bypass buffer manager
-// 				 * and, correspondingly, ptrack mechanism.
-// 				 * i.e. CREATE DATABASE
-// 				 * - target relation was deleted.
-// 				 */
-// 				elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
-// 				file->pagemap_isabsent = true;
-// 			}
-// 		}
-// 	}
-// 	elog(LOG, "Pagemap compiled");*/
+	elog(LOG, "Pagemap compiled");
 }

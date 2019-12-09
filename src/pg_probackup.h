@@ -136,7 +136,7 @@ do { \
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
 {
-	char	*name;			/* file or directory name */
+	char   *name;			/* file or directory name */
 	mode_t	mode;			/* protection (file type and permission) */
 	size_t	size;			/* size of the file */
 	size_t	read_size;		/* size of the portion read (if only some pages are
@@ -149,26 +149,33 @@ typedef struct pgFile
 								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
-	char	*linked;		/* path of the linked file */
+	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char	   *path;		/* absolute path of the file */
-	char	   *rel_path;	/* relative path of the file */
+	char   *path;			/* absolute path of the file */
+	char   *rel_path;		/* relative path of the file */
 	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
 	Oid		dbOid;			/* dbOid extracted from path, if applicable */
 	Oid		relOid;			/* relOid extracted from path, if applicable */
-	char	*forkName;		/* forkName extracted from path, if applicable */
+	char   *forkName;		/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
 	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
-	int		external_dir_num; /* Number of external directory. 0 if not external */
-	bool	exists_in_prev;	/* Mark files, both data and regular, that exists in previous backup */
-	CompressAlg compress_alg; /* compression algorithm applied to the file */
-	volatile pg_atomic_flag lock;	/* lock for synchronization of parallel threads  */
-	datapagemap_t pagemap;	/* bitmap of pages updated since previous backup */
-	bool	pagemap_isabsent; /* Used to mark files with unknown state of pagemap,
-							   * i.e. datafiles without _ptrack */
+	int		external_dir_num;	/* Number of external directory. 0 if not external */
+	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
+	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
+	volatile 		pg_atomic_flag lock;/* lock for synchronization of parallel threads  */
+	datapagemap_t	pagemap;			/* bitmap of pages updated since previous backup */
+	bool			pagemap_isabsent;	/* Used to mark files with unknown state of pagemap,
+										 * i.e. datafiles without _ptrack */
 } pgFile;
+
+typedef struct page_map_entry
+{
+	char   *path;		/* file or directory name */
+	char   *pagemap;
+	size_t	pagemapsize;
+} page_map_entry;
 
 /* Special values of datapagemap_t bitmapsize */
 #define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
@@ -884,6 +891,7 @@ extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn, XLogR
 extern void pg_ptrack_clear(PGconn *backup_conn);
 extern int pg_ptrack_version(PGconn *backup_conn);
 extern bool pg_ptrack_enable(PGconn *backup_conn);
+extern bool pg_ptrack_enable2(PGconn *backup_conn);
 extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid,
 									   PGconn *backup_conn);
 extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
@@ -892,5 +900,6 @@ extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 size_t *result_size,
 									 PGconn *backup_conn);
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn);
+extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn);
 
 #endif /* PG_PROBACKUP_H */
