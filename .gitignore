@@ -44,3 +44,6 @@
 /src/xlogreader.c
 /src/walmethods.c
 /src/walmethods.h
+
+# Doc files
+/doc/*html

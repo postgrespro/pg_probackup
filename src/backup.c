@@ -791,9 +791,19 @@ do_backup(time_t start_time, bool no_validate,
 	/* compute size of wal files of this backup stored in the archive */
 	if (!current.stream)
 	{
-		current.wal_bytes = instance_config.xlog_seg_size *
-			(current.stop_lsn / instance_config.xlog_seg_size -
-			 current.start_lsn / instance_config.xlog_seg_size + 1);
+		XLogSegNo start_segno;
+		XLogSegNo stop_segno;
+
+		GetXLogSegNo(current.start_lsn, start_segno, instance_config.xlog_seg_size);
+		GetXLogSegNo(current.stop_lsn, stop_segno, instance_config.xlog_seg_size);
+		current.wal_bytes = (stop_segno - start_segno) * instance_config.xlog_seg_size;
+
+		/*
+		 * If start_lsn and stop_lsn are located in the same segment, then
+		 * set wal_bytes to the size of 1 segment.
+		 */
+		if (current.wal_bytes <= 0)
+			current.wal_bytes = instance_config.xlog_seg_size;
 	}
 
 	/* Backup is done. Update backup status */

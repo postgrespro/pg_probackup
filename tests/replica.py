@@ -402,7 +402,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.wait_until_replica_catch_with_master(master, replica)
 
-        self.set_auto_conf(replica, {'recovery_min_apply_delay': '300s'})
+        if self.get_version(master) >= self.version_to_num('12.0'):
+            self.set_auto_conf(
+                replica, {'recovery_min_apply_delay': '300s'})
+        else:
+            replica.append_conf(
+                'postgresql.auto.conf',
+                'recovery_min_apply_delay = 300s')
 
         replica.stop()
         replica.slow_start(replica=True)

@@ -39,6 +39,7 @@ else
 srchome=$(top_srcdir)
 endif
 
+#ifneq (,$(filter 9.5 9.6 10 11,$(MAJORVERSION)))
 ifneq (12,$(MAJORVERSION))
 EXTRA_CLEAN += src/logging.h
 INCLUDES += src/logging.h
@@ -76,6 +77,7 @@ src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
 src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
 
+#ifneq (,$(filter 9.5 9.6 10 11,$(MAJORVERSION)))
 ifneq (12,$(MAJORVERSION))
 src/logging.h: $(top_srcdir)/src/bin/pg_rewind/logging.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/logging.h $@

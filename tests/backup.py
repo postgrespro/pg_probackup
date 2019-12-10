@@ -2019,6 +2019,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(node, replica)
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
+        self.set_auto_conf(replica, {'hot_standby': 'on'})
 
         # freeze bgwriter to get rid of RUNNING XACTS records
         bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
@@ -2036,13 +2037,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup from replica
         self.backup_node(
             backup_dir, 'replica', replica,
-            datname='backupdb', options=['--stream', '-U', 'backup'])
+            datname='backupdb', options=['--stream', '-U', 'backup', '--archive-timeout=30s'])
 
-        self.switch_wal_segment(node)
+#        self.switch_wal_segment(node)
 
         self.backup_node(
             backup_dir, 'replica', replica, datname='backupdb',
-            options=['-U', 'backup', '--log-level-file=verbose', '--archive-timeout=30s'])
+            options=['-U', 'backup', '--archive-timeout=300s'])
 
         # PAGE backup from replica
         self.backup_node(
