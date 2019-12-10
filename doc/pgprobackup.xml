@@ -233,8 +233,10 @@ doc/src/sgml/pgprobackup.sgml
     </listitem>
     <listitem>
       <para>
-        Deduplication: saving disk space by not copying unchanged non-data
-        files, such as <literal>_vm</literal> or <literal>_fsm</literal>.
+        Deduplication: saving disk space by excluding non-data
+        files (such as <literal>_vm</literal> or <literal>_fsm</literal>)
+        from incremental backups if these files have not changed since
+        they were copied into one of the previous backups in this incremental chain.
       </para>
     </listitem>
     <listitem>
@@ -1364,20 +1366,18 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
 pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --external-dirs=/etc/dir1:/etc/dir2
 </programlisting>
       <para>
-        For example, to include <filename>C:\dir1</filename> and
+        Similarly, to include <filename>C:\dir1</filename> and
         <filename>C:\dir2</filename> directories into the full backup
-        of your <emphasis>instance_name</emphasis> instance that will
-        be stored under the <emphasis>backup_dir</emphasis> directory
         on Windows, run:
       </para>
       <programlisting>
 pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --external-dirs=C:\dir1;C:\dir2
 </programlisting>
       <para>
-        <application>pg_probackup</application> creates a separate subdirectory in the backup
-        directory for each external directory. Since external
-        directories included into different backups do not have to be
-        the same, when you are restoring the cluster from an
+        <application>pg_probackup</application> recursively copies the contents
+        of each external directory into a separate subdirectory in the backup
+        catalog. Since external directories included into different backups
+        do not have to be the same, when you are restoring the cluster from an
         incremental backup, only those directories that belong to this
         particular backup will be restored. Any external directories
         stored in the previous backups will be ignored.
@@ -1865,8 +1865,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --archive-host=192.168.0.3 --archive-port=2303 --archive-user=backup
 </programlisting>
     <para>
-      Provided arguments will be used to construct the <command>restore_command</command>
-      in <filename>recovery.conf</filename>:
+      Provided arguments will be used to construct the <command>restore_command</command>:
     </para>
     <programlisting>
 restore_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
@@ -3432,7 +3431,8 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
 <term><option>--external-dirs=<replaceable>external_directory_path</replaceable></option></term>
       <listitem>
       <para>
-        Includes the specified directory into the backup. This option
+        Includes the specified directory into the backup by recursively
+        copying its contents into a separate subdirectory in the backup catalog. This option
         is useful to back up scripts, SQL dump files, and configuration
         files located outside of the data directory. If you would like
         to back up several external directories, separate their paths
@@ -3519,10 +3519,15 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 <term><option>--restore-as-replica</option></term>
       <listitem>
       <para>
-        Writes a minimal <filename>recovery.conf</filename> in the output directory to
-        facilitate setting up a standby server. The password is not
-        included. If the replication connection requires a password,
-        you must specify the password manually.
+        Creates a minimal recovery configuration file to facilitate setting up a
+        standby server. If the replication connection requires a password,
+        you must specify the password manually as it is not included.
+        For <productname>PostgreSQL</productname> 11 or lower,
+        recovery settings are written into the <filename>recovery.conf</filename>
+        file. Starting from <productname>PostgreSQL</productname> 12,
+        <application>pg_probackup</application> writes these settings into
+        the <filename>probackup_recovery.conf</filename> file in the data
+        directory.
       </para>
       </listitem>
       </varlistentry>
@@ -3831,7 +3836,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         Copies WAL files from the corresponding subdirectory of the
         backup catalog to the cluster's write-ahead log location. This
         command is automatically set by <application>pg_probackup</application> as part of the
-        <command>restore_command</command> in <filename>recovery.conf</filename> when
+        <command>restore_command</command> when
         restoring backups using a WAL archive. You do not need to set
         it manually.
       </para>
