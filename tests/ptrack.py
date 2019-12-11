@@ -1698,7 +1698,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'vacuum t_heap')
 
         # Take PTRACK backup to clean every ptrack
-        exit(1)
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack', options=['-j10'])
 
