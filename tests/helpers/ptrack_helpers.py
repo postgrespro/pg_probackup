@@ -311,6 +311,7 @@ class ProbackupTest(object):
             self,
             base_dir=None,
             set_replication=False,
+            ptrack_enable=False,
             initdb_params=[],
             pg_options={}):
 
@@ -324,6 +325,10 @@ class ProbackupTest(object):
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
+
+        # set major version
+        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
+            node.major_version = int(f.read().rstrip())
 
         # Sane default parameters
         options = {}
@@ -345,15 +350,17 @@ class ProbackupTest(object):
         if set_replication:
             options['max_wal_senders'] = 10
 
+        if ptrack_enable:
+            if node.major_version > 11:
+                options['ptrack_map_size'] = '128MB'
+            else:
+                options['ptrack_enable'] = 'on'
+
         # set default values
         self.set_auto_conf(node, options)
 
         # Apply given parameters
         self.set_auto_conf(node, pg_options)
-
-        # set major version
-        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
-            node.major_version = f.read().rstrip()
 
         return node
 
