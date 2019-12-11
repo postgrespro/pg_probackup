@@ -67,7 +67,7 @@ static pthread_t stream_thread;
 static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
 static int is_ptrack_enable = false;
-int ptrack_version_num = 0;
+int ptrack_version_num = 0; /* by default we assume that ptrack is not supported */
 bool exclusive_backup = false;
 
 /* Is pg_start_backup() was executed */
@@ -213,7 +213,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		if (ptrack_version_num == 20)
 			ptrack_lsn = prev_backup->start_lsn;
 		else
-			get_last_ptrack_lsn(backup_conn);
+			ptrack_lsn =get_last_ptrack_lsn(backup_conn);
 
 		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
@@ -384,7 +384,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 				 ptrack_version_num == 16 ||
 				 ptrack_version_num == 17)
 			make_pagemap_from_ptrack_1(backup_files_list, backup_conn);
-	}	
+	}
 
 	/*
 	 * Make directories before backup and setup threads at the same time
