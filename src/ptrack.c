@@ -561,13 +561,8 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn)
 	char	   *params[1];
 	parray	   *pagemapset = NULL;
 	int			i;
-	uint32		id,
-				off;
 
-	/* Decode ID and offset */
-	id = (uint32) (lsn >> 32);
-	off = (uint32) lsn;
-	snprintf(lsn_buf, sizeof lsn_buf, "%X/%X", id, off);
+	snprintf(lsn_buf, sizeof lsn_buf, "%X/%X", (uint32) (lsn >> 32), (uint32) lsn);
 	params[0] = pstrdup(lsn_buf);
 
 	res = pgut_execute(backup_conn, "SELECT * FROM pg_ptrack_get_pagemapset($1) ORDER BY 1",
@@ -610,16 +605,18 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn)
  * data file that has ptrack. Result is saved in the pagemap field of pgFile.
  * NOTE we rely on the fact that provided parray is sorted by file->path.
  *
- * We fetch a list of changed files with their ptrack maps. After that files
+ * We fetch a list of changed files with their ptrack maps.  After that files
  * are merged with their bitmaps.  File without bitmap is treated as untracked
  * by ptrack, until it is a datafile or database, then it is considered unchanged.
  */
 void
 make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 {
-	parray	   *filemaps;
-	int			file_i = 0;
-	int			map_i = 0;
+	parray *filemaps;
+	int		file_i = 0;
+	int		map_i = 0;
+	Oid		dbOid_with_ptrack_init = 0;
+	Oid		tblspcOid_with_ptrack_init = 0;
 
 	elog(LOG, "Compiling pagemap");
 
@@ -627,6 +624,10 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 	// XXX: actually, filemaps are sorted by rel_path, but it seems fine for a merge?
 	filemaps = pg_ptrack_get_pagemapset(backup_conn, lsn);
 
+	/*
+	 * Do some kind of a merge join between files and
+	 * available from ptrack bitmaps of changed pages.
+	 */
 	while (true)
 	{
 		pgFile		   *file = NULL;
@@ -669,19 +670,67 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 		file_i++;
 	}
 
-	// Check and mark remaining files if necessary
+	/*
+	 * Check and mark remaining files if necessary.
+	 */
 	for (file_i = 0; file_i < parray_num(files); file_i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, file_i);
 
 		// XXX: Keep some untracked files?
-		// XXX: datafile without ptrack is treated as unchanged
+		// XXX: relation without ptrack is treated as unchanged
 		if (!file->is_database && !file->is_datafile
 			&& (!file->relOid || file->relOid != InvalidOid)
 			&& !file->forkName)
 		{
 			file->pagemap_isabsent = true;
 			elog(VERBOSE, "ptrack is missing for file: %s", file->path);
+		}
+	}
+
+	/*
+	 * Go throw the file list again and take into account ptrack
+	 * init files.
+	 */
+	for (file_i = 0; file_i < parray_num(files); file_i++)
+	{
+		pgFile *file = (pgFile *) parray_get(files, file_i);
+
+		/*
+		 * If there is a ptrack_init file in the database,
+		 * we must backup all its files, ignoring ptrack files for relations.
+		 */
+		if (file->is_database)
+		{
+			char *filename = strrchr(file->path, '/');
+
+			Assert(filename != NULL);
+			filename++;
+
+			/*
+			 * The function pg_ptrack_get_and_clear_db returns true
+			 * if there was a ptrack_init file.
+			 * Also ignore ptrack files for global tablespace,
+			 * to avoid any possible specific errors.
+			 */
+			if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
+				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid, backup_conn))
+			{
+				dbOid_with_ptrack_init = file->dbOid;
+				tblspcOid_with_ptrack_init = file->tblspcOid;
+			}
+		}
+
+		if (file->is_datafile)
+		{
+			if (file->tblspcOid == tblspcOid_with_ptrack_init &&
+				file->dbOid == dbOid_with_ptrack_init)
+			{
+				/* ignore ptrack if ptrack_init exists */
+				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
+				file->pagemap_isabsent = true;
+				continue;
+			}
 		}
 	}
 
