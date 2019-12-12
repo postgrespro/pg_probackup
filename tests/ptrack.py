@@ -2238,8 +2238,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_id=backup_id,
             options=[
                 "-j", "4",
-                "-T{0}={1}".format(tblspace1, tblspace2)]
-        )
+                "-T{0}={1}".format(tblspace1, tblspace2)])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
