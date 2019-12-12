@@ -688,51 +688,5 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 		}
 	}
 
-	/*
-	 * Go throw the file list again and take into account ptrack
-	 * init files.
-	 */
-	for (file_i = 0; file_i < parray_num(files); file_i++)
-	{
-		pgFile *file = (pgFile *) parray_get(files, file_i);
-
-		/*
-		 * If there is a ptrack_init file in the database,
-		 * we must backup all its files, ignoring ptrack files for relations.
-		 */
-		if (file->is_database)
-		{
-			char *filename = strrchr(file->path, '/');
-
-			Assert(filename != NULL);
-			filename++;
-
-			/*
-			 * The function pg_ptrack_get_and_clear_db returns true
-			 * if there was a ptrack_init file.
-			 * Also ignore ptrack files for global tablespace,
-			 * to avoid any possible specific errors.
-			 */
-			if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
-				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid, backup_conn))
-			{
-				dbOid_with_ptrack_init = file->dbOid;
-				tblspcOid_with_ptrack_init = file->tblspcOid;
-			}
-		}
-
-		if (file->is_datafile)
-		{
-			if (file->tblspcOid == tblspcOid_with_ptrack_init &&
-				file->dbOid == dbOid_with_ptrack_init)
-			{
-				/* ignore ptrack if ptrack_init exists */
-				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
-				file->pagemap_isabsent = true;
-				continue;
-			}
-		}
-	}
-
 	elog(LOG, "Pagemap compiled");
 }
