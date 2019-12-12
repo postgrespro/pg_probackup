@@ -52,7 +52,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Documentation
 
-Documentation can be found at [github](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md).
+Documentation can be found at [github](https://postgrespro.github.io/pg_probackup).
 
 ## Installation and Setup
 ### Windows Installation
