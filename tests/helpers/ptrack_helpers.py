@@ -489,6 +489,31 @@ class ProbackupTest(object):
         os.close(file)
         return ptrack_bits_for_fork
 
+    def check_ptrack_map_sanity(self, node, idx_ptrack):
+        if node.major_version > 11:
+            return
+
+        success = True
+        for i in idx_ptrack:
+            # get new size of heap and indexes. size calculated in pages
+            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
+            # update path to heap and index files in case they`ve changed
+            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
+            # calculate new md5sums for pages
+            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+            # get ptrack for every idx
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
+                node, idx_ptrack[i]['path'],
+                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
+
+            # compare pages and check ptrack sanity
+            if not self.check_ptrack_sanity(idx_ptrack[i]):
+                success = False
+
+        self.assertTrue(
+            success, 'Ptrack has failed to register changes in data files')
+
     def check_ptrack_sanity(self, idx_dict):
         success = True
         if idx_dict['new_size'] > idx_dict['old_size']:

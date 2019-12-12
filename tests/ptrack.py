@@ -448,7 +448,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             gdb=True
         )
 
-        gdb.set_breakpoint('make_pagemap_from_ptrack')
+        if node.major_version > 11:
+            gdb.set_breakpoint('make_pagemap_from_ptrack_2')
+        else:
+            gdb.set_breakpoint('make_pagemap_from_ptrack_1')
         gdb.run_until_break()
 
         node.safe_psql(
@@ -527,8 +530,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         ptrack_backup_id = self.backup_node(
             backup_dir, 'node',
             node, backup_type='ptrack',
-            options=['--stream']
-            )
+            options=['--stream'])
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
@@ -541,8 +543,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(full_backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                backup_id=full_backup_id,
-                options=["-j", "4", "--recovery-target-action=promote"]
+                backup_id=full_backup_id, options=["-j", "4"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -557,8 +558,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(ptrack_backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                backup_id=ptrack_backup_id,
-                options=["-j", "4", "--recovery-target-action=promote"]
+                backup_id=ptrack_backup_id, options=["-j", "4"]
             ),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd)
@@ -1510,40 +1510,38 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         idx_ptrack['old_pages'] = self.get_md5_per_page_for_fork(
             idx_ptrack['path'], idx_ptrack['old_size'])
 
-        pgbench = node.pgbench(options=['-T', '150', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(
+            options=['-T', '30', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         node.safe_psql("postgres", "checkpoint")
 
         idx_ptrack['new_size'] = self.get_fork_size(
             node,
-            'pgbench_accounts'
-        )
+            'pgbench_accounts')
+
         idx_ptrack['new_pages'] = self.get_md5_per_page_for_fork(
             idx_ptrack['path'],
-            idx_ptrack['new_size']
-        )
-        idx_ptrack['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-            node,
-            idx_ptrack['path']
-        )
+            idx_ptrack['new_size'])
 
-        if not self.check_ptrack_sanity(idx_ptrack):
-            self.assertTrue(
-                False, 'Ptrack has failed to register changes in data files'
-            )
+        if node.major_version < 12:
+            idx_ptrack['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
+                node,
+                idx_ptrack['path'])
+
+            if not self.check_ptrack_sanity(idx_ptrack):
+                self.assertTrue(
+                    False, 'Ptrack has failed to register changes in data files')
 
         # GET LOGICAL CONTENT FROM NODE
         # it`s stupid, because hint`s are ignored by ptrack
-        #result = node.safe_psql("postgres", "select * from pgbench_accounts")
+        result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # FIRTS PTRACK BACKUP
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack')
 
-        node.safe_psql("postgres", "checkpoint")
-
         # GET PHYSICAL CONTENT FROM NODE
-        pgdata = self.pgdata_content(node.data_dir)
+        #pgdata = self.pgdata_content(node.data_dir)
 
         # RESTORE NODE
         restored_node = self.make_simple_node(
@@ -1552,18 +1550,19 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         tblspc_path = self.get_tblspace_path(node, 'somedata')
         tblspc_path_new = self.get_tblspace_path(
             restored_node,
-            'somedata_restored'
-        )
+            'somedata_restored')
 
-        self.restore_node(backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new),
-            "--recovery-target-action=promote"])
+        self.restore_node(
+            backup_dir, 'node', restored_node,
+            options=[
+                "-j", "4", "-T", "{0}={1}".format(
+                    tblspc_path, tblspc_path_new)])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(
-                restored_node.data_dir, ignore_ptrack=False)
-            self.compare_pgdata(pgdata, pgdata_restored)
+        # if self.paranoia:
+        #     pgdata_restored = self.pgdata_content(
+        #         restored_node.data_dir, ignore_ptrack=False)
+        #     self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
         self.set_auto_conf(
@@ -1572,11 +1571,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         result_new = restored_node.safe_psql(
             "postgres",
-            "select * from pgbench_accounts"
-        )
+            "select * from pgbench_accounts")
 
         # COMPARE RESTORED FILES
-        #self.assertEqual(result, result_new, 'data is lost')
+        self.assertEqual(result, result_new, 'data is lost')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1935,27 +1933,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                node, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2010,27 +1988,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                node, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # Compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2107,27 +2065,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(replica, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2208,27 +2146,27 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
+        if master.major_version < 12:
+            success = True
+            for i in idx_ptrack:
+                # get new size of heap and indexes. size calculated in pages
+                idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
+                # update path to heap and index files in case they`ve changed
+                idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
+                # calculate new md5sums for pages
+                idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
+                    idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+                # get ptrack for every idx
+                idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
+                    replica, idx_ptrack[i]['path'],
+                    [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
 
-            # Compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
+                # Compare pages and check ptrack sanity
+                if not self.check_ptrack_sanity(idx_ptrack[i]):
+                    success = False
 
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+            self.assertTrue(
+                success, 'Ptrack has failed to register changes in data files')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2322,7 +2260,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            ptrack_enable=True)
+            ptrack_enable=True,
+            pg_options={
+                'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -2371,12 +2311,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                         idx_ptrack[i]['type'],
                         idx_ptrack[i]['column']))
 
-
         self.wait_until_replica_catch_with_master(master, replica)
-
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
-        node_restored.cleanup()
 
         # Take PTRACK backup
         backup_id = self.backup_node(
@@ -2385,19 +2320,21 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             replica,
             backup_type='ptrack',
             options=[
-                '-j10', '--stream',
+                '-j1', '--stream',
                 '--master-host=localhost',
                 '--master-db=postgres',
                 '--master-port={0}'.format(master.port)])
-        
+
         if self.paranoia:
             pgdata = self.pgdata_content(replica.data_dir)
 
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
         self.restore_node(
             backup_dir, 'replica', node_restored,
-            backup_id=backup_id,
-            options=["-j", "4"]
-        )
+            backup_id=backup_id, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -2549,26 +2486,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes and calculate it in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files')
+        self.check_ptrack_map_sanity(replica, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2633,27 +2551,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes and calculate it in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                node, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2740,27 +2638,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes and calculate it in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(master, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2818,27 +2696,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                node, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2919,27 +2777,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(master, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2997,27 +2835,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                node, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3075,27 +2893,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                node, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity, the most important part
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3183,27 +2981,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity, the most important part
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-                success, 'Ptrack has failed to register changes in data files'
-            )
+        self.check_ptrack_map_sanity(master, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3261,27 +3039,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                node, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files'
-        )
+        self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3361,26 +3119,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        success = True
-        for i in idx_ptrack:
-            # get new size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['new_size'] = self.get_fork_size(replica, i)
-            # update path to heap and index files in case they`ve changed
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate new md5sums for pages
-            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
-            # get ptrack for every idx
-            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
-                replica, idx_ptrack[i]['path'],
-                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
-
-            # compare pages and check ptrack sanity
-            if not self.check_ptrack_sanity(idx_ptrack[i]):
-                success = False
-
-        self.assertTrue(
-            success, 'Ptrack has failed to register changes in data files')
+        self.check_ptrack_map_sanity(master, idx_ptrack)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3388,12 +3127,17 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_recovery(self):
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
