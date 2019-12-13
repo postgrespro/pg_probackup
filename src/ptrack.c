@@ -494,10 +494,17 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 		arguments->cancel_conn = PQgetCancel(arguments->conn);
 
 	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
-	res = pgut_execute_parallel(arguments->conn,
-								arguments->cancel_conn,
-					"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
-					4, (const char **)params, true, false, false);
+
+	if (ptrack_version_num < 20)
+		res = pgut_execute_parallel(arguments->conn,
+									arguments->cancel_conn,
+						"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
+						4, (const char **)params, true, false, false);
+	else
+		res = pgut_execute_parallel(arguments->conn,
+									arguments->cancel_conn,
+						"SELECT pg_catalog.pg_ptrack_get_block($1, $2, $3, $4)",
+						4, (const char **)params, true, false, false);
 
 	if (PQnfields(res) != 1)
 	{
