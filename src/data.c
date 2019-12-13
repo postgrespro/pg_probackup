@@ -319,7 +319,7 @@ prepare_page(ConnectionArgs *arguments,
 	 * Under high write load it's possible that we've read partly
 	 * flushed page, so try several times before throwing an error.
 	 */
-	if (backup_mode != BACKUP_MODE_DIFF_PTRACK)
+	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 20)
 	{
 		while(!page_is_valid && try_again)
 		{
@@ -380,8 +380,9 @@ prepare_page(ConnectionArgs *arguments,
 		}
 	}
 
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		(!page_is_valid && (ptrack_version_num >= 15 && ptrack_version_num < 20)))
+	if ((backup_mode == BACKUP_MODE_DIFF_PTRACK
+		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
+			|| !page_is_valid)
 	{
 		size_t page_size = 0;
 		Page ptrack_page = NULL;
