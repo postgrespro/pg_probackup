@@ -763,7 +763,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Make archive node, take full backup, take page backup,
         delete page backup. Try to take ptrack backup, which should fail
         """
-        self.maxDiff = None
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -832,7 +834,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Make node, take two full backups, delete full second backup.
         Try to take ptrack backup, which should fail
         """
-        self.maxDiff = None
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1094,6 +1098,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             replica, backup_type='ptrack',
             options=[
                 '-j10',
+                '--stream',
                 '--master-host=localhost',
                 '--master-db=postgres',
                 '--master-port={0}'.format(node.port)
