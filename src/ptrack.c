@@ -633,7 +633,13 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 		pgFile		   *file = NULL;
 		page_map_entry *map = NULL;
 
-		if (file_i >= parray_num(files) || map_i >= parray_num(filemaps))
+		/*
+		 * Stop immediately when the end of any array is reached or
+		 * there are no changed files.
+		 */
+		if (filemaps == NULL
+			|| file_i >= parray_num(files)
+			|| map_i >= parray_num(filemaps))
 			break;
 
 		file = (pgFile *) parray_get(files, file_i);
@@ -654,9 +660,6 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 		else
 		{
 			// XXX: Just skip files without ptrack record?
-			// file->pagemap_isabsent = true;
-			// elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
-
 			// XXX: Keep some untracked files?
 			// XXX: relation file without ptrack is treated as unchanged
 			if (!file->is_database && !file->is_datafile
