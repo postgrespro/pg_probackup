@@ -622,7 +622,8 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 	// XXX: actually, filemaps are sorted by rel_path, but it seems fine for a merge?
 	filemaps = pg_ptrack_get_pagemapset(backup_conn, lsn);
 
-	parray_qsort(filemaps, pgFileMapComparePath);
+	if (filemaps != NULL)
+		parray_qsort(filemaps, pgFileMapComparePath);
 
 	/*
 	 * Do some kind of a merge join between files and
