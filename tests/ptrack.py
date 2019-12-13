@@ -1586,6 +1586,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         """
         Take backups of every available types and check that PTRACK is clean
         """
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -3416,3 +3419,5 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+# TODO: ptrack.map corruption
