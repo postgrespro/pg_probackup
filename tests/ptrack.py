@@ -683,7 +683,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         """Make  node, take full backup, take ptrack backup,
             delete ptrack backup. Try to take ptrack backup,
             which should fail"""
-        self.maxDiff = None
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
