@@ -913,8 +913,7 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 		PQclear(res);
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
-	exclusive_backup = nodeInfo->server_version < 90600 ||
-		current.backup_mode == BACKUP_MODE_DIFF_PTRACK;
+	exclusive_backup = nodeInfo->server_version < 90600;
 }
 
 /*
