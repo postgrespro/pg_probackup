@@ -1637,6 +1637,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_ptrack_clean(self):
         """Take backups of every available types and check that PTRACK is clean"""
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1747,6 +1750,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Take backups of every available types from
         master and check that PTRACK on replica is clean
         """
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
@@ -2784,6 +2790,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum_bits_visibility(self):
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -2878,21 +2887,34 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['-j10', '--stream'])
 
-        for i in idx_ptrack:
-            # get size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
-            # get path to heap and index files
-            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
-            # calculate md5sums of pages
-            idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
+        if node.major_version < 12:
+            for i in idx_ptrack:
+                # get size of heap and indexes. size calculated in pages
+                idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
+                # get path to heap and index files
+                idx_ptrack[i]['path'] = self.get_fork_path(node, i)
+                # calculate md5sums of pages
+                idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
+                    idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         node.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
         node.safe_psql('postgres', 'vacuum full t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
-        # CHECK PTRACK SANITY
-        self.check_ptrack_map_sanity(node, idx_ptrack)
+        if node.major_version < 12:
+            self.check_ptrack_map_sanity(node, idx_ptrack)
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['-j10', '--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+        node.cleanup()
+    
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2934,14 +2956,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, "
             "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as "
             "tsvector from generate_series(0,256000) i")
-        for i in idx_ptrack:
-            if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
-                master.safe_psql(
-                    "postgres",
-                    "create index {0} on {1} using {2}({3})".format(
-                        i, idx_ptrack[i]['relation'],
-                        idx_ptrack[i]['type'],
-                        idx_ptrack[i]['column']))
+
+        if node.major_version < 12:
+            for i in idx_ptrack:
+                if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
+                    master.safe_psql(
+                        "postgres",
+                        "create index {0} on {1} using {2}({3})".format(
+                            i, idx_ptrack[i]['relation'],
+                            idx_ptrack[i]['type'],
+                            idx_ptrack[i]['column']))
 
         master.safe_psql('postgres', 'vacuum t_heap')
         master.safe_psql('postgres', 'checkpoint')
@@ -2958,18 +2982,17 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '--master-host=localhost',
                 '--master-db=postgres',
                 '--master-port={0}'.format(master.port),
-                '--stream'
-                ]
-            )
-        # TODO: check that all ptrack are nullified
-        for i in idx_ptrack:
-            # get size of heap and indexes. size calculated in pages
-            idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
-            # get path to heap and index files
-            idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
-            # calculate md5sums of pages
-            idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
-                idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
+                '--stream'])
+
+        if node.major_version < 12:
+            for i in idx_ptrack:
+                # get size of heap and indexes. size calculated in pages
+                idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
+                # get path to heap and index files
+                idx_ptrack[i]['path'] = self.get_fork_path(replica, i)
+                # calculate md5sums of pages
+                idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
+                    idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         master.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
         master.safe_psql('postgres', 'vacuum full t_heap')
@@ -2979,8 +3002,20 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
-        # CHECK PTRACK SANITY
-        self.check_ptrack_map_sanity(master, idx_ptrack)
+        if node.major_version < 12:
+            self.check_ptrack_map_sanity(master, idx_ptrack)
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['-j10', '--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+        node.cleanup()
+    
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
