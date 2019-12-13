@@ -615,14 +615,14 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 	parray *filemaps;
 	int		file_i = 0;
 	int		map_i = 0;
-	Oid		dbOid_with_ptrack_init = 0;
-	Oid		tblspcOid_with_ptrack_init = 0;
 
 	elog(LOG, "Compiling pagemap");
 
 	/* Receive all available ptrack bitmaps at once */
 	// XXX: actually, filemaps are sorted by rel_path, but it seems fine for a merge?
 	filemaps = pg_ptrack_get_pagemapset(backup_conn, lsn);
+
+	parray_qsort(filemaps, pgFileMapComparePath);
 
 	/*
 	 * Do some kind of a merge join between files and
