@@ -1345,10 +1345,19 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='ptrack', options=["--stream"])
 
+        if self.paranoia:
+            pgdata = self.pgdata_content(
+                node.data_dir, ignore_ptrack=False)
+
         tblspace = self.get_tblspace_path(node, 'somedata')
         node.cleanup()
         shutil.rmtree(tblspace, ignore_errors=True)
         self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(
+                node.data_dir, ignore_ptrack=False)
+
         node.slow_start()
 
         tblspc_exist = node.safe_psql(
@@ -1365,6 +1374,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         result_new = node.safe_psql("postgres", "select * from t_heap")
         self.assertEqual(result, result_new)
 
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
@@ -1374,7 +1386,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Make node, create table, alter table tablespace, take ptrack backup,
         move table from tablespace, take ptrack backup
         """
-        self.maxDiff = None
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1549,7 +1560,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='ptrack')
 
         # GET PHYSICAL CONTENT FROM NODE
-        #pgdata = self.pgdata_content(node.data_dir)
+        pgdata = self.pgdata_content(node.data_dir)
 
         # RESTORE NODE
         restored_node = self.make_simple_node(
@@ -1567,10 +1578,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                     tblspc_path, tblspc_path_new)])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
-        # if self.paranoia:
-        #     pgdata_restored = self.pgdata_content(
-        #         restored_node.data_dir, ignore_ptrack=False)
-        #     self.compare_pgdata(pgdata, pgdata_restored)
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(
+                restored_node.data_dir, ignore_ptrack=False)
 
         # START RESTORED NODE
         self.set_auto_conf(
@@ -1583,6 +1593,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # COMPARE RESTORED FILES
         self.assertEqual(result, result_new, 'data is lost')
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3309,8 +3322,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.check_ptrack_map_sanity(master, idx_ptrack)
 
         self.backup_node(
-            backup_dir, 'replica', replica,
-            backup_type='ptrack', options=['--stream'])
+            backup_dir, 'replica', replica, backup_type='ptrack',
+            options=[
+                '--stream',
+                '--log-level-file=INFO',
+                '--archive-timeout=30'])
 
         pgdata = self.pgdata_content(replica.data_dir)
 
