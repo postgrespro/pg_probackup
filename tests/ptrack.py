@@ -2410,6 +2410,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                             i, idx_ptrack[i]['relation'],
                             idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
         node.safe_psql('postgres', 'truncate t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
@@ -2428,15 +2431,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='ptrack', options=['-j10', '--stream'])
 
+        pgdata = self.pgdata_content(node.data_dir)
+
         if node.major_version < 12:
             for i in idx_ptrack:
                 idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                     node, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
                 self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
 
-        pgdata = self.pgdata_content(node.data_dir)
         node.cleanup()
-
         shutil.rmtree(
             self.get_tblspace_path(node, 'somedata'),
             ignore_errors=True)
