@@ -624,6 +624,7 @@ backup_data_file(backup_files_arg* arguments,
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
 		file->pagemap_isabsent || !file->exists_in_prev)
 	{
+		/* TODO: take into account PTRACK 2.0 */
 		if (backup_mode != BACKUP_MODE_DIFF_PTRACK && fio_is_remote_file(in))
 		{
 			int rc = fio_send_pages(in, out, file,

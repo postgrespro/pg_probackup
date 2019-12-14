@@ -610,94 +610,52 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn)
 /*
  * Given a list of files in the instance to backup, build a pagemap for each
  * data file that has ptrack. Result is saved in the pagemap field of pgFile.
- * NOTE we rely on the fact that provided parray is sorted by file->path.
  *
  * We fetch a list of changed files with their ptrack maps.  After that files
- * are merged with their bitmaps.  File without bitmap is treated as untracked
- * by ptrack, until it is a datafile or database, then it is considered unchanged.
+ * are merged with their bitmaps.  File without bitmap is treated as unchanged.
  */
 void
 make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 {
 	parray *filemaps;
 	int		file_i = 0;
-	int		map_i = 0;
+	page_map_entry *dummy_map = (page_map_entry *) pgut_malloc(sizeof(page_map_entry));
 
 	elog(LOG, "Compiling pagemap");
 
 	/* Receive all available ptrack bitmaps at once */
-	// XXX: actually, filemaps are sorted by rel_path, but it seems fine for a merge?
 	filemaps = pg_ptrack_get_pagemapset(backup_conn, lsn);
 
 	if (filemaps != NULL)
 		parray_qsort(filemaps, pgFileMapComparePath);
 
-	/*
-	 * Do some kind of a merge join between files and
-	 * available from ptrack bitmaps of changed pages.
-	 */
-	while (true)
-	{
-		pgFile		   *file = NULL;
-		page_map_entry *map = NULL;
-
-		/*
-		 * Stop immediately when the end of any array is reached or
-		 * there are no changed files.
-		 */
-		if (filemaps == NULL
-			|| file_i >= parray_num(files)
-			|| map_i >= parray_num(filemaps))
-			break;
-
-		file = (pgFile *) parray_get(files, file_i);
-		map = (page_map_entry *) parray_get(filemaps, map_i);
-
-		// elog(VERBOSE, "Comparing %s and %s", file->rel_path, map->path);
-		if (strcmp(file->rel_path, map->path) == 0)
-		{
-			file->pagemap.bitmapsize = map->pagemapsize;
-			// XXX: Just pass by pointer, OK?
-			file->pagemap.bitmap = map->pagemap;
-			// file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
-			// memcpy(file->pagemap.bitmap, map->pagemap, file->pagemap.bitmapsize);
-
-			elog(VERBOSE, "using ptrack bitmap for file %s", file->rel_path);
-			map_i++;
-		}
-		else
-		{
-			// XXX: Just skip files without ptrack record?
-			// XXX: Keep some untracked files?
-			// XXX: relation file without ptrack is treated as unchanged
-			if (!file->is_database && !file->is_datafile
-				&& (!file->relOid || file->relOid != InvalidOid)
-				&& !file->forkName)
-			{
-				file->pagemap_isabsent = true;
-				elog(VERBOSE, "ptrack is missing for file: %s", file->path);
-			}
-		}
-		file_i++;
-	}
-
-	/*
-	 * Check and mark remaining files if necessary.
-	 */
+	/* Iterate over files and look for corresponding pagemap if any */
 	for (file_i = 0; file_i < parray_num(files); file_i++)
 	{
 		pgFile *file = (pgFile *) parray_get(files, file_i);
+		page_map_entry **res_map = NULL;
+		page_map_entry *map = NULL;
 
-		// XXX: Keep some untracked files?
-		// XXX: relation without ptrack is treated as unchanged
-		if (!file->is_database && !file->is_datafile
-			&& (!file->relOid || file->relOid != InvalidOid)
-			&& !file->forkName)
+		/* For now nondata files are not entitled to have pagemap */
+		if (!file->is_datafile || file->is_cfs)
+			continue;
+
+		if (filemaps)
 		{
-			file->pagemap_isabsent = true;
-			elog(VERBOSE, "ptrack is missing for file: %s", file->path);
+			dummy_map->path = file->rel_path;
+			res_map = parray_bsearch(filemaps, dummy_map, pgFileMapComparePath);
+			map = (res_map) ? *res_map : NULL;
+		}
+
+		/* Found map, file has definetely been changed */
+		if (map)
+		{
+			elog(INFO, "Using ptrack pagemap for file \"%s\"", file->rel_path);
+			file->pagemap.bitmapsize = map->pagemapsize;
+			file->pagemap.bitmap = map->pagemap;
 		}
 	}
 
 	elog(LOG, "Pagemap compiled");
+	free(dummy_map);
 }
