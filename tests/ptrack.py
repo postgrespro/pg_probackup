@@ -2452,7 +2452,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_ptrack_truncate_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
@@ -2484,19 +2484,19 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.slow_start(replica=True)
 
         # Create table and indexes
-        self.create_tblspace_in_node(master, 'somedata')
         master.safe_psql(
             "postgres",
             "create extension bloom; create sequence t_seq; "
-            "create table t_heap tablespace somedata "
+            "create table t_heap "
             "as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,2560) i")
+
         for i in idx_ptrack:
             if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
                 master.safe_psql(
-                    "postgres", "create index {0} on {1} using {2}({3}) "
-                    "tablespace somedata".format(
+                    "postgres",
+                    "create index {0} on {1} using {2}({3}) ".format(
                         i, idx_ptrack[i]['relation'],
                         idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
@@ -2516,7 +2516,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Make backup to clean every ptrack
         self.backup_node(
-            backup_dir, 'replica', replica, backup_type='ptrack',
+            backup_dir, 'replica', replica,
             options=[
                 '-j10',
                 '--stream',
@@ -2531,7 +2531,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['old_size'])
 
         master.safe_psql('postgres', 'truncate t_heap')
-        master.safe_psql('postgres', 'checkpoint')
 
         # Sync master and replica
         self.wait_until_replica_catch_with_master(master, replica)
@@ -2555,7 +2554,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'))
         node.cleanup()
-    
+
         self.restore_node(backup_dir, 'replica', node, data_dir=node.data_dir)
 
         pgdata_restored = self.pgdata_content(node.data_dir)
