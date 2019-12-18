@@ -626,19 +626,14 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr l
 	{
 		page_map_entry *pm_entry = (page_map_entry *) pgut_malloc(sizeof(page_map_entry));
 
+		//TODO: rewrite with strdup
+
 		/* get path */
-		// TODO: Verify path copying
-		path = PQgetvalue(res, i, 0);
-		pm_entry->path = pgut_malloc(strlen(path) + 1);
-		pm_entry->path = pgut_strdup(path);
-		//pm_entry->path = PQgetvalue(res, i, 0);
+		pm_entry->path = PQgetvalue(res, i, 0);
 
 		/* get bytea */
-		pagemap = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, i, 1),
+		pm_entry->pagemap = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, i, 1),
 													&pm_entry->pagemapsize);
-
-		pm_entry->pagemap = pgut_malloc(strlen(pagemap) + 1);
-		pm_entry->pagemap = pgut_strdup(pagemap);
 
 		if (pagemapset == NULL)
 			pagemapset = parray_new();
@@ -646,7 +641,7 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr l
 		parray_append(pagemapset, pm_entry);
 	}
 
-	PQclear(res);
+//	PQclear(res);
 
 	return pagemapset;
 }
