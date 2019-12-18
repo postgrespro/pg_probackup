@@ -301,6 +301,10 @@ typedef struct PGNodeInfo
 	int				server_version;
 	char			server_version_str[100];
 
+	int				ptrack_version_num;
+	bool			is_ptrack_enable;
+	char			*ptrack_schema; /* used only for ptrack 2.x */
+
 } PGNodeInfo;
 
 typedef struct pgBackup pgBackup;
@@ -419,6 +423,8 @@ typedef struct pgSetBackupParams
 
 typedef struct
 {
+	PGNodeInfo *nodeInfo;
+
 	const char *from_root;
 	const char *to_root;
 	const char *external_prefix;
@@ -585,7 +591,6 @@ extern bool		smooth_checkpoint;
 /* remote probackup options */
 extern char* remote_agent;
 
-extern int ptrack_version_num;
 extern bool exclusive_backup;
 
 /* delete options */
@@ -629,8 +634,8 @@ extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 
 extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 Oid dbOid, Oid tblsOid, Oid relOid,
-								 BlockNumber blknum,
-								 size_t *result_size);
+								 BlockNumber blknum, size_t *result_size,
+								 int ptrack_version_num, char *ptrack_schema);
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  pgRecoveryTarget *rt,
@@ -888,19 +893,19 @@ extern void parse_filelist_filenames(parray *files, const char *root);
 
 /* in ptrack.c */
 extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);
-extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn, XLogRecPtr lsn);
-extern void pg_ptrack_clear(PGconn *backup_conn);
-extern int pg_ptrack_version(PGconn *backup_conn);
+extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
+										PGNodeInfo *nodeInfo, XLogRecPtr lsn);
+extern void pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num);
+extern void get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern bool pg_ptrack_enable(PGconn *backup_conn);
 extern bool pg_ptrack_enable2(PGconn *backup_conn);
-extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid,
-									   PGconn *backup_conn);
+extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn);
 extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
 									 Oid rel_oid,
 									 size_t *result_size,
 									 PGconn *backup_conn);
-extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn);
-extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn);
+extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
+extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr lsn);
 
 #endif /* PG_PROBACKUP_H */

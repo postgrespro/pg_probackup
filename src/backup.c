@@ -66,8 +66,6 @@ typedef struct
 static pthread_t stream_thread;
 static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
-static int is_ptrack_enable = false;
-int ptrack_version_num = 0; /* by default we assume that ptrack is not supported */
 bool exclusive_backup = false;
 
 /* Is pg_start_backup() was executed */
@@ -155,6 +153,9 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	PGconn	   *master_conn = NULL;
 	PGconn	   *pg_startbackup_conn = NULL;
 
+	/* for fancy reporting */
+	time_t		start_time, end_time;
+
 	elog(LOG, "Database backup start");
 	if(current.external_dir_str)
 	{
@@ -207,7 +208,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn);
+		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn, nodeInfo);
 
 		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
@@ -220,8 +221,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	}
 
 	/* Clear ptrack files for FULL and PAGE backup */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && is_ptrack_enable)
-		pg_ptrack_clear(backup_conn);
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && nodeInfo->is_ptrack_enable)
+		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
@@ -357,27 +358,40 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	/*
 	 * Build page mapping in incremental mode.
 	 */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		/*
-		 * Build the page map. Obtain information about changed pages
-		 * reading WAL segments present in archives up to the point
-		 * where this backup has started.
-		 */
-		extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
-					   prev_backup->start_lsn, current.start_lsn);
-	}
-	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
-	{
-		/*
-		 * Build the page map from ptrack information.
-		 */
-		if (ptrack_version_num == 20)
-			make_pagemap_from_ptrack_2(backup_files_list, backup_conn, prev_backup_start_lsn);
-		else if (ptrack_version_num == 15 ||
-				 ptrack_version_num == 16 ||
-				 ptrack_version_num == 17)
-			make_pagemap_from_ptrack_1(backup_files_list, backup_conn);
+		elog(INFO, "Compiling pagemap of changed blocks");
+		time(&start_time);
+
+		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+		{
+			/*
+			 * Build the page map. Obtain information about changed pages
+			 * reading WAL segments present in archives up to the point
+			 * where this backup has started.
+			 */
+			extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
+						   prev_backup->start_lsn, current.start_lsn);
+		}
+		else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		{
+			/*
+			 * Build the page map from ptrack information.
+			 */
+			if (nodeInfo->ptrack_version_num == 20)
+				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
+											nodeInfo, prev_backup_start_lsn);
+			else if (nodeInfo->ptrack_version_num == 15 ||
+					 nodeInfo->ptrack_version_num == 16 ||
+					 nodeInfo->ptrack_version_num == 17)
+				make_pagemap_from_ptrack_1(backup_files_list, backup_conn);
+		}
+
+		time(&end_time);
+		elog(INFO, "Pagemap compiled, time elapsed %.0f sec",
+			 difftime(end_time, start_time));
 	}
 
 	/*
@@ -437,6 +451,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
 
+		arg->nodeInfo = nodeInfo;
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
 		arg->external_prefix = external_prefix;
@@ -752,23 +767,24 @@ do_backup(time_t start_time, bool no_validate,
 		elog(ERROR, "Failed to retrieve wal_segment_size");
 #endif
 
-	ptrack_version_num = pg_ptrack_version(backup_conn);
-	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
-	if (ptrack_version_num > 0)
+	get_ptrack_version(backup_conn, &nodeInfo);
+//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
+
+	if (nodeInfo.ptrack_version_num > 0)
 	{
-		if (ptrack_version_num >= 20)
-			is_ptrack_enable = pg_ptrack_enable2(backup_conn);
+		if (nodeInfo.ptrack_version_num >= 20)
+			nodeInfo.is_ptrack_enable = pg_ptrack_enable2(backup_conn);
 		else
-			is_ptrack_enable = pg_ptrack_enable(backup_conn);
+			nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn);
 	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		if (ptrack_version_num == 0)
+		if (nodeInfo.ptrack_version_num == 0)
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
 		else
 		{
-			if(!is_ptrack_enable)
+			if (!nodeInfo.is_ptrack_enable)
 				elog(ERROR, "Ptrack is disabled");
 		}
 	}
@@ -914,6 +930,9 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
 	exclusive_backup = nodeInfo->server_version < 90600;
+
+	nodeInfo->ptrack_version_num = 0; /* by default we assume that ptrack is not supported */
+	nodeInfo->is_ptrack_enable = false; /* by default we assume that ptrack is not enabled */
 }
 
 /*

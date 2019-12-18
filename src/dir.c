@@ -687,8 +687,12 @@ dir_check_file(pgFile *file)
 	{
 		if (strcmp(file->name, "pg_internal.init") == 0)
 			return CHECK_FALSE;
-		/* Do not backup ptrack2.0 map file */
-		else if (strcmp(file-> name, "ptrack.map") == 0)
+		/* Do not backup ptrack2.x map files */
+		else if (strcmp(file->name, "ptrack.map") == 0)
+			return CHECK_FALSE;
+		else if (strcmp(file->name, "ptrack.map.mmap") == 0)
+			return CHECK_FALSE;
+		else if (strcmp(file->name, "ptrack.map.tmp") == 0)
 			return CHECK_FALSE;
 		/* Do not backup temp files */
 		else if (file->name[0] == 't' && isdigit(file->name[1]))

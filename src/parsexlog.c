@@ -236,22 +236,12 @@ extractPageMap(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 			   XLogRecPtr startpoint, XLogRecPtr endpoint)
 {
 	bool		extract_isok = true;
-	time_t		start_time,
-				end_time;
-
-	elog(LOG, "Compiling pagemap");
-	time(&start_time);
 
 	extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 								  InvalidXLogRecPtr, tli, wal_seg_size,
 								  startpoint, endpoint, false, extractPageInfo,
 								  NULL);
-
-	time(&end_time);
-	if (extract_isok)
-		elog(LOG, "Pagemap compiled, time elapsed %.0f sec",
-			 difftime(end_time, start_time));
-	else
+	if (!extract_isok)
 		elog(ERROR, "Pagemap compiling failed");
 }
 

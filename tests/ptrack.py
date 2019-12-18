@@ -16,6 +16,224 @@ module_name = 'ptrack'
 class PtrackTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
+    def test_ptrack_simple(self):
+        """make node, make full and ptrack stream backups,"
+        " restore them and check data correctness"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'CREATE EXTENSION ptrack')
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,1) i")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='ptrack',
+            options=['--stream'])
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = 100500")
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['--stream'])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored, options=["-j", "4"])
+
+        # Physical comparison
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(
+                node_restored.data_dir, ignore_ptrack=False)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
+
+        node_restored.slow_start()
+
+        # Logical comparison
+        self.assertEqual(
+            result,
+            node_restored.safe_psql("postgres", "SELECT * FROM t_heap"))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_ptrack_unprivileged(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "CREATE DATABASE backupdb")
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+
+        fnames = []
+        if self.major_version < 12:
+            fnames += [
+                'pg_catalog.oideq(oid, oid)',
+                'pg_catalog.ptrack_version()',
+                'pg_catalog.pg_ptrack_clear()',
+                'pg_catalog.pg_ptrack_control_lsn()',
+                'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
+                'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
+                'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
+                ]
+        else:
+            fnames += [
+                    'pg_ptrack_get_pagemapset(pg_lsn)',
+                    'pg_ptrack_clear()',
+                    'pg_ptrack_get_block(oid, oid, oid, bigint)'
+                ]
+
+        for fname in fnames:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION {0} "
+                "TO backup".format(fname))
+
+
+    # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_enable(self):
         """make ptrack without full backup, should result in error"""
@@ -343,77 +561,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             node_restored, {'port': node_restored.port})
 
         node_restored.slow_start()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_ptrack_simple(self):
-        """make node, make full and ptrack stream backups,"
-        " restore them and check data correctness"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            ptrack_enable=True,
-            initdb_params=['--data-checksums'])
-
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node_restored.cleanup()
-        node.slow_start()
-
-        self.backup_node(backup_dir, 'node', node)
-
-        node.safe_psql(
-            "postgres",
-            "create table t_heap as select i"
-            " as id from generate_series(0,1) i"
-        )
-
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            options=['--stream']
-        )
-
-        node.safe_psql(
-            "postgres",
-            "update t_heap set id = 100500")
-
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='ptrack', options=['--stream']
-        )
-
-        if self.paranoia:
-            pgdata = self.pgdata_content(node.data_dir)
-
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
-
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
-
-        # Physical comparison
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(
-                node_restored.data_dir, ignore_ptrack=False)
-            self.compare_pgdata(pgdata, pgdata_restored)
-
-        self.set_auto_conf(
-            node_restored, {'port': node_restored.port})
-
-        node_restored.slow_start()
-
-        # Logical comparison
-        self.assertEqual(
-            result,
-            node_restored.safe_psql("postgres", "SELECT * FROM t_heap")
-        )
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3410,7 +3557,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_ptrack_zero_changes(self):
+    def test_ptrack_recovery_1(self):
+        if self.pg_config_version < self.version_to_num('12.0'):
+            return unittest.skip('You need PostgreSQL >= 12 for this test')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -3418,7 +3568,91 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off'})
+                'autovacuum': 'off',
+                'shared_buffers': '512MB',
+                'max_wal_size': '3GB'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Create table
+        node.safe_psql(
+            "postgres",
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
+            "as select nextval('t_seq')::int as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+#            "from generate_series(0,25600) i")
+            "from generate_series(0,2560) i")
+
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # Create indexes
+        for i in idx_ptrack:
+            if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
+                node.safe_psql(
+                    "postgres",
+                    "CREATE INDEX {0} ON {1} USING {2}({3})".format(
+                        i, idx_ptrack[i]['relation'],
+                        idx_ptrack[i]['type'], idx_ptrack[i]['column']))
+
+        node.safe_psql(
+            'postgres',
+            "update t_heap set id = nextval('t_seq'), text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 10))::tsvector")
+
+        node.safe_psql(
+            'postgres',
+            "create extension pg_buffercache")
+
+        print(node.safe_psql(
+            'postgres',
+            "SELECT count(*) FROM pg_buffercache WHERE isdirty"))
+
+        if self.verbose:
+            print('Killing postmaster. Losing Ptrack changes')
+        node.stop(['-m', 'immediate', '-D', node.data_dir])
+
+        if not node.status():
+            node.slow_start()
+        else:
+            print("Die! Die! Why won't you die?... Why won't you die?")
+            exit(1)
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['--stream'])
+
+        exit(1)
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_ptrack_zero_changes(self):
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -3435,14 +3669,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
-
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='ptrack', options=['--stream'])
-
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='ptrack', options=['--stream'])
 
         self.backup_node(
             backup_dir, 'node', node,

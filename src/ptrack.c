@@ -35,7 +35,6 @@ make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
 	char	   *ptrack_nonparsed = NULL;
 	size_t		ptrack_nonparsed_size = 0;
 
-	elog(LOG, "Compiling pagemap");
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
@@ -143,58 +142,78 @@ make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
 			}
 		}
 	}
-	elog(LOG, "Pagemap compiled");
 }
 
-/* Check if the instance supports compatible version of ptrack
- * return version number if it does, and 0 otherwise
+/* Check if the instance supports compatible version of ptrack,
+ * fill-in version number if it does.
+ * Also for ptrack 2.x save schema namespace.
  */
-int
-pg_ptrack_version(PGconn *backup_conn)
+void
+get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 {
-	PGresult   *res_db;
-	int		 ptrack_version_num = 0;
-	char 	*ptrack_version_str;
+	PGresult	*res_db;
+	char	*ptrack_version_str;
+	char	*ptrack_schema_str;
 
 	res_db = pgut_execute(backup_conn,
 						  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
 						  0, NULL);
+
 	if (PQntuples(res_db) == 0)
 	{
+		/* ptrack is not supported */
 		PQclear(res_db);
-		return 0;
+		return;
 	}
+
+	/* Check if ptrack 2.x is supported */
 	PQclear(res_db);
-
 	res_db = pgut_execute(backup_conn,
-						  "SELECT pg_catalog.ptrack_version()",
+						  "SELECT extnamespace::regnamespace, extversion "
+						  "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'",
 						  0, NULL);
-	if (PQntuples(res_db) == 0)
+
+	if (PQntuples(res_db) > 0)
 	{
-		PQclear(res_db);
-		return 0;
+		/* ptrack 2.x is supported, save schema name and version */
+		ptrack_schema_str = PQgetvalue(res_db, 0, 0);
+		ptrack_version_str = PQgetvalue(res_db, 0, 1);
 	}
-
-	ptrack_version_str = PQgetvalue(res_db, 0, 0);
-
-	if (strcmp(ptrack_version_str, "1.5") == 0)
-		ptrack_version_num = 15;
-	else if (strcmp(ptrack_version_str, "1.6") == 0)
-		ptrack_version_num = 16;
-	else if (strcmp(ptrack_version_str, "1.7") == 0)
-		ptrack_version_num = 17;
-	else if (strcmp(ptrack_version_str, "2.0") == 0)
-		ptrack_version_num = 20;
 	else
 	{
+		/* ptrack 1.x is supported, save version */
+		PQclear(res_db);
+		res_db = pgut_execute(backup_conn,
+							  "SELECT pg_catalog.ptrack_version()",
+							  0, NULL);
+		if (PQntuples(res_db) == 0)
+		{
+			/* TODO: Something went wrong, should we error out here? */
+			PQclear(res_db);
+			return;
+		}
+		ptrack_version_str = PQgetvalue(res_db, 0, 0);
+	}
+
+	if (strcmp(ptrack_version_str, "1.5") == 0)
+		nodeInfo->ptrack_version_num = 15;
+	else if (strcmp(ptrack_version_str, "1.6") == 0)
+		nodeInfo->ptrack_version_num = 16;
+	else if (strcmp(ptrack_version_str, "1.7") == 0)
+		nodeInfo->ptrack_version_num = 17;
+	else if (strcmp(ptrack_version_str, "2.0") == 0)
+		nodeInfo->ptrack_version_num = 20;
+	else
 		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s",
 			 ptrack_version_str);
-		PQclear(res_db);
-		return 0;
+
+	if (ptrack_schema_str)
+	{
+		nodeInfo->ptrack_schema = pgut_malloc(strlen(ptrack_schema_str));
+		strcpy(nodeInfo->ptrack_schema, ptrack_schema_str);
 	}
 
 	PQclear(res_db);
-	return ptrack_version_num;
 }
 
 /*
@@ -224,7 +243,7 @@ pg_ptrack_enable(PGconn *backup_conn)
 
 /* Clear ptrack files in all databases of the instance we connected to */
 void
-pg_ptrack_clear(PGconn *backup_conn)
+pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num)
 {
 	PGresult   *res_db,
 			   *res;
@@ -234,7 +253,7 @@ pg_ptrack_clear(PGconn *backup_conn)
 	char *params[2];
 
 	// FIXME Perform this check on caller's side
-	if (ptrack_version_num == 20)
+	if (ptrack_version_num >= 20)
 		return;
 
 	params[0] = palloc(64);
@@ -283,10 +302,6 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn)
 	PGresult   *res_db;
 	PGresult   *res;
 	bool		result;
-
-	// FIXME Perform this check on caller's side
-	if (ptrack_version_num == 20)
-		return false;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -348,10 +363,6 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
 	char	   *params[2];
 	char	   *result;
 	char	   *val;
-
-	// FIXME Perform this check on caller's side
-	if (ptrack_version_num == 20)
-		return NULL;
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
@@ -436,7 +447,7 @@ pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
  * Get lsn of the moment when ptrack was enabled the last time.
  */
 XLogRecPtr
-get_last_ptrack_lsn(PGconn *backup_conn)
+get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 
 {
 	PGresult   *res;
@@ -444,8 +455,16 @@ get_last_ptrack_lsn(PGconn *backup_conn)
 	uint32		lsn_lo;
 	XLogRecPtr	lsn;
 
-	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()",
-					   0, NULL);
+	if (nodeInfo->ptrack_version_num < 20)
+		res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_control_lsn()",
+						   0, NULL);
+	else
+	{
+		char query[128];
+
+		sprintf(query, "SELECT %s.pg_ptrack_control_lsn()", nodeInfo->ptrack_schema);
+		res = pgut_execute(backup_conn, query, 0, NULL);
+	}
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
@@ -462,7 +481,9 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 					Oid tblsOid,
 					Oid relOid,
 					BlockNumber blknum,
-					size_t *result_size)
+					size_t *result_size,
+					int ptrack_version_num,
+					char *ptrack_schema)
 {
 	PGresult   *res;
 	char	   *params[4];
@@ -501,10 +522,20 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 						"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
 						4, (const char **)params, true, false, false);
 	else
+	{
+		char query[256];
+
+		if (ptrack_schema)
+			sprintf(query, "SELECT %s.pg_ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
+		else
+			/* just paranoia */
+			sprintf(query, "SELECT pg_ptrack_get_block($1, $2, $3, $4)");
+
 		res = pgut_execute_parallel(arguments->conn,
 									arguments->cancel_conn,
-						"SELECT pg_catalog.pg_ptrack_get_block($1, $2, $3, $4)",
-						4, (const char **)params, true, false, false);
+									query, 4, (const char **)params,
+									true, false, false);
+	}
 
 	if (PQnfields(res) != 1)
 	{
@@ -561,40 +592,53 @@ pg_ptrack_enable2(PGconn *backup_conn)
  * Fetch a list of changed files with their ptrack maps.
  */
 parray *
-pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn)
+pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr lsn)
 {
 	PGresult   *res;
 	char		lsn_buf[17 + 1];
 	char	   *params[1];
 	parray	   *pagemapset = NULL;
 	int			i;
+	char		query[512];
+	char	   *path = NULL;
+	char	   *pagemap = NULL;
 
 	snprintf(lsn_buf, sizeof lsn_buf, "%X/%X", (uint32) (lsn >> 32), (uint32) lsn);
 	params[0] = pstrdup(lsn_buf);
 
-	res = pgut_execute(backup_conn, "SELECT * FROM pg_ptrack_get_pagemapset($1) ORDER BY 1",
-						1, (const char **) params);
+	if (nodeInfo->ptrack_schema)
+		sprintf(query, "SELECT path, pagemap FROM %s.pg_ptrack_get_pagemapset($1) ORDER BY 1",
+				nodeInfo->ptrack_schema);
+	else
+		/* just paranoia */
+		sprintf(query, "SELECT path, pagemap FROM pg_ptrack_get_pagemapset($1) ORDER BY 1");
+
+	res = pgut_execute(backup_conn, query, 1, (const char **) params);
 	pfree(params[0]);
 
 	if (PQnfields(res) != 2)
 		elog(ERROR, "cannot get ptrack pagemapset");
 
+	/* sanity ? */
+
 	/* Construct database map */
 	for (i = 0; i < PQntuples(res); i++)
 	{
 		page_map_entry *pm_entry = (page_map_entry *) pgut_malloc(sizeof(page_map_entry));
-		// char		   *path = NULL;
 
 		/* get path */
 		// TODO: Verify path copying
-		// path = PQgetvalue(res, i, 0);
-		// // pm_entry->path = pgut_malloc(strlen(path) + 1);
-		// pm_entry->path = pgut_strdup(path);
-		pm_entry->path = PQgetvalue(res, i, 0);
+		path = PQgetvalue(res, i, 0);
+		pm_entry->path = pgut_malloc(strlen(path) + 1);
+		pm_entry->path = pgut_strdup(path);
+		//pm_entry->path = PQgetvalue(res, i, 0);
 
 		/* get bytea */
-		pm_entry->pagemap = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, i, 1),
+		pagemap = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, i, 1),
 													&pm_entry->pagemapsize);
+
+		pm_entry->pagemap = pgut_malloc(strlen(pagemap) + 1);
+		pm_entry->pagemap = pgut_strdup(pagemap);
 
 		if (pagemapset == NULL)
 			pagemapset = parray_new();
@@ -615,19 +659,24 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, XLogRecPtr lsn)
  * are merged with their bitmaps.  File without bitmap is treated as unchanged.
  */
 void
-make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
+make_pagemap_from_ptrack_2(parray *files,
+							PGconn *backup_conn,
+							PGNodeInfo *nodeInfo,
+							XLogRecPtr lsn)
 {
 	parray *filemaps;
 	int		file_i = 0;
-	page_map_entry *dummy_map = (page_map_entry *) pgut_malloc(sizeof(page_map_entry));
-
-	elog(LOG, "Compiling pagemap");
+	page_map_entry *dummy_map = NULL;
 
 	/* Receive all available ptrack bitmaps at once */
-	filemaps = pg_ptrack_get_pagemapset(backup_conn, lsn);
+	filemaps = pg_ptrack_get_pagemapset(backup_conn, nodeInfo, lsn);
 
 	if (filemaps != NULL)
 		parray_qsort(filemaps, pgFileMapComparePath);
+	else
+		return;
+
+	dummy_map = (page_map_entry *) pgut_malloc(sizeof(page_map_entry));
 
 	/* Iterate over files and look for corresponding pagemap if any */
 	for (file_i = 0; file_i < parray_num(files); file_i++)
@@ -640,6 +689,10 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 		if (!file->is_datafile || file->is_cfs)
 			continue;
 
+		/* Consider only files from PGDATA (this check is probably redundant) */
+		if (file->external_dir_num != 0)
+			continue;
+
 		if (filemaps)
 		{
 			dummy_map->path = file->rel_path;
@@ -647,15 +700,14 @@ make_pagemap_from_ptrack_2(parray *files, PGconn *backup_conn, XLogRecPtr lsn)
 			map = (res_map) ? *res_map : NULL;
 		}
 
-		/* Found map, file has definetely been changed */
+		/* Found map */
 		if (map)
 		{
-			elog(INFO, "Using ptrack pagemap for file \"%s\"", file->rel_path);
+			elog(VERBOSE, "Using ptrack pagemap for file \"%s\"", file->rel_path);
 			file->pagemap.bitmapsize = map->pagemapsize;
 			file->pagemap.bitmap = map->pagemap;
 		}
 	}
 
-	elog(LOG, "Pagemap compiled");
 	free(dummy_map);
 }
