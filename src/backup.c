@@ -382,7 +382,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 			 */
 			if (nodeInfo->ptrack_version_num == 20)
 				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
-											nodeInfo, prev_backup_start_lsn);
+											nodeInfo->ptrack_schema,
+											prev_backup_start_lsn);
 			else if (nodeInfo->ptrack_version_num == 15 ||
 					 nodeInfo->ptrack_version_num == 16 ||
 					 nodeInfo->ptrack_version_num == 17)
@@ -2034,6 +2035,9 @@ backup_files(void *arg)
 									  current.backup_mode,
 									  instance_config.compress_alg,
 									  instance_config.compress_level,
+									  arguments->nodeInfo->checksum_version,
+									  arguments->nodeInfo->ptrack_version_num,
+									  arguments->nodeInfo->ptrack_schema,
 									  true))
 				{
 					/* disappeared file not to be confused with 'not changed' */

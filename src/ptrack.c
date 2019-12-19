@@ -153,7 +153,6 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 {
 	PGresult	*res_db;
 	char	*ptrack_version_str;
-	char	*ptrack_schema_str;
 
 	res_db = pgut_execute(backup_conn,
 						  "SELECT extnamespace::regnamespace, extversion "
@@ -163,13 +162,28 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	if (PQntuples(res_db) > 0)
 	{
 		/* ptrack 2.x is supported, save schema name and version */
-		ptrack_schema_str = PQgetvalue(res_db, 0, 0);
+		nodeInfo->ptrack_schema = pgut_strdup(PQgetvalue(res_db, 0, 0));
+
+		if (nodeInfo->ptrack_schema == NULL)
+			elog(ERROR, "Failed to obtain schema name of ptrack extension");
+
 		ptrack_version_str = PQgetvalue(res_db, 0, 1);
 	}
 	else
 	{
 		/* ptrack 1.x is supported, save version */
 		PQclear(res_db);
+		res_db = pgut_execute(backup_conn,
+							  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
+							  0, NULL);
+
+		if (PQntuples(res_db) == 0)
+		{
+			/* ptrack is not supported */
+			PQclear(res_db);
+			return;
+		}
+
 		res_db = pgut_execute(backup_conn,
 							  "SELECT pg_catalog.ptrack_version()",
 							  0, NULL);
@@ -193,12 +207,6 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	else
 		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s",
 			 ptrack_version_str);
-
-	if (ptrack_schema_str)
-	{
-		nodeInfo->ptrack_schema = pgut_malloc(strlen(ptrack_schema_str));
-		strcpy(nodeInfo->ptrack_schema, ptrack_schema_str);
-	}
 
 	PQclear(res_db);
 }
@@ -470,7 +478,7 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 					BlockNumber blknum,
 					size_t *result_size,
 					int ptrack_version_num,
-					char *ptrack_schema)
+					const char *ptrack_schema)
 {
 	PGresult   *res;
 	char	   *params[4];
@@ -510,13 +518,13 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 						4, (const char **)params, true, false, false);
 	else
 	{
-		char query[256];
+		char query[128];
 
-		if (ptrack_schema)
-			sprintf(query, "SELECT %s.pg_ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
-		else
-			/* just paranoia */
-			sprintf(query, "SELECT pg_ptrack_get_block($1, $2, $3, $4)");
+		/* sanity */
+		if (!ptrack_schema)
+			elog(ERROR, "Schema name of ptrack extension is missing");
+
+		sprintf(query, "SELECT %s.pg_ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
 
 		res = pgut_execute_parallel(arguments->conn,
 									arguments->cancel_conn,
@@ -579,7 +587,7 @@ pg_ptrack_enable2(PGconn *backup_conn)
  * Fetch a list of changed files with their ptrack maps.
  */
 parray *
-pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr lsn)
+pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn)
 {
 	PGresult   *res;
 	char		lsn_buf[17 + 1];
@@ -591,8 +599,11 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr l
 	snprintf(lsn_buf, sizeof lsn_buf, "%X/%X", (uint32) (lsn >> 32), (uint32) lsn);
 	params[0] = pstrdup(lsn_buf);
 
+	if (!ptrack_schema)
+		elog(ERROR, "Schema name of ptrack extension is missing");
+
 	sprintf(query, "SELECT path, pagemap FROM %s.pg_ptrack_get_pagemapset($1) ORDER BY 1",
-			nodeInfo->ptrack_schema);
+			ptrack_schema);
 
 	res = pgut_execute(backup_conn, query, 1, (const char **) params);
 	pfree(params[0]);
@@ -635,7 +646,7 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr l
 void
 make_pagemap_from_ptrack_2(parray *files,
 							PGconn *backup_conn,
-							PGNodeInfo *nodeInfo,
+							const char *ptrack_schema,
 							XLogRecPtr lsn)
 {
 	parray *filemaps;
@@ -643,7 +654,7 @@ make_pagemap_from_ptrack_2(parray *files,
 	page_map_entry *dummy_map = NULL;
 
 	/* Receive all available ptrack bitmaps at once */
-	filemaps = pg_ptrack_get_pagemapset(backup_conn, nodeInfo, lsn);
+	filemaps = pg_ptrack_get_pagemapset(backup_conn, ptrack_schema, lsn);
 
 	if (filemaps != NULL)
 		parray_qsort(filemaps, pgFileMapComparePath);

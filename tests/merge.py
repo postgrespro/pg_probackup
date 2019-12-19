@@ -823,20 +823,19 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '300s',
-                'autovacuum': 'off',
-                'ptrack_enable': 'on'
-            }
-        )
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            ptrack_enable=True,
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        node_restored.cleanup()
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
         self.create_tblspace_in_node(node, 'somedata')
 
         node.safe_psql(
@@ -871,6 +870,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir)
 
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
         old_tablespace = self.get_tblspace_path(node, 'somedata')
         new_tablespace = self.get_tblspace_path(node_restored, 'somedata_new')
 
@@ -878,8 +881,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored,
             options=[
                 "-j", "4",
-                "-T", "{0}={1}".format(old_tablespace, new_tablespace),
-                "--recovery-target-action=promote"])
+                "-T", "{0}={1}".format(old_tablespace, new_tablespace)])
 
         # Physical comparison
         if self.paranoia:

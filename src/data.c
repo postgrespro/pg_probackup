@@ -303,7 +303,7 @@ prepare_page(ConnectionArgs *arguments,
 			 Page page, bool strict,
 			 uint32 checksum_version,
 			 int ptrack_version_num,
-			 char *ptrack_schema)
+			 const char *ptrack_schema)
 {
 	XLogRecPtr	page_lsn = 0;
 	int			try_again = 100;
@@ -348,7 +348,7 @@ prepare_page(ConnectionArgs *arguments,
 
 			if (result == -1 && strict && ptrack_version_num > 0)
 			{
-				elog(WARNING, "File \"%s\", block %u, try to fetch via SQL",
+				elog(WARNING, "File \"%s\", block %u, try to fetch via shared buffer",
 					file->path, blknum);
 				break;
 			}
@@ -359,17 +359,16 @@ prepare_page(ConnectionArgs *arguments,
 		 */
 
 		if (!page_is_valid &&
-			((strict && !(ptrack_version_num >= 15 && ptrack_version_num < 20))
-			|| !strict))
+			((strict && ptrack_version_num == 0) || !strict))
 		{
-			/* show this message for checkdb or backup without ptrack support */
+			/* show this message for checkdb, merge or backup without ptrack support */
 			elog(WARNING, "Corruption detected in file \"%s\", block %u",
 						file->path, blknum);
 		}
 
 		/* Backup with invalid block and without ptrack support must throw error */
-		if (!page_is_valid && strict && !(ptrack_version_num >= 15 && ptrack_version_num < 20))
-				elog(ERROR, "Data file corruption. Canceling backup");
+		if (!page_is_valid && strict && ptrack_version_num == 0)
+				elog(ERROR, "Data file corruption, canceling backup");
 
 		/* Checkdb not going futher */
 		if (!strict)
@@ -535,7 +534,8 @@ bool
 backup_data_file(backup_files_arg* arguments,
 				 const char *to_path, pgFile *file,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-				 CompressAlg calg, int clevel, bool missing_ok)
+				 CompressAlg calg, int clevel, uint32 checksum_version,
+				 int ptrack_version_num, const char *ptrack_schema, bool missing_ok)
 {
 	FILE		*in;
 	FILE		*out;
@@ -634,8 +634,8 @@ backup_data_file(backup_files_arg* arguments,
 									&n_blocks_skipped, calg, clevel);
 			if (rc == PAGE_CHECKSUM_MISMATCH &&
 				 /* only ptrack versions 1.5, 1.6 and 1.7 support this functionality */
-				(arguments->nodeInfo->ptrack_version_num >= 15 &&
-				 arguments->nodeInfo->ptrack_version_num < 20))
+				(ptrack_version_num >= 15 &&
+				 ptrack_version_num < 20))
 				goto RetryUsingPtrack;
 			if (rc < 0)
 				elog(ERROR, "Failed to read file \"%s\": %s",
@@ -652,9 +652,8 @@ backup_data_file(backup_files_arg* arguments,
 				page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
 										  blknum, nblocks, in, &n_blocks_skipped,
 										  backup_mode, curr_page, true,
-										  arguments->nodeInfo->checksum_version,
-										  arguments->nodeInfo->ptrack_version_num,
-										  arguments->nodeInfo->ptrack_schema);
+										  checksum_version, ptrack_version_num,
+										  ptrack_schema);
 				compress_and_backup_page(file, blknum, in, out, &(file->crc),
 										  page_state, curr_page, calg, clevel);
 				n_blocks_read++;
@@ -679,9 +678,8 @@ backup_data_file(backup_files_arg* arguments,
 			page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
 									  blknum, nblocks, in, &n_blocks_skipped,
 									  backup_mode, curr_page, true,
-									  arguments->nodeInfo->checksum_version,
-									  arguments->nodeInfo->ptrack_version_num,
-									  arguments->nodeInfo->ptrack_schema);
+									  checksum_version, ptrack_version_num,
+									  ptrack_schema);
 			compress_and_backup_page(file, blknum, in, out, &(file->crc),
 									  page_state, curr_page, calg, clevel);
 			n_blocks_read++;
