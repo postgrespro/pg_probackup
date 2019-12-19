@@ -337,8 +337,7 @@ doc/src/sgml/pgprobackup.sgml
             PTRACK backup. In this mode, <productname>PostgreSQL</productname> tracks page
             changes on the fly. Continuous archiving is not necessary
             for it to operate. Each time a relation page is updated,
-            this page is marked in a special PTRACK bitmap for this
-            relation. Tracking implies some
+            this page is marked in a special PTRACK bitmap. Tracking implies some
             minor overhead on the database server operation, but
             speeds up incremental backups significantly.
           </para>
