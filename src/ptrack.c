@@ -156,19 +156,6 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	char	*ptrack_schema_str;
 
 	res_db = pgut_execute(backup_conn,
-						  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
-						  0, NULL);
-
-	if (PQntuples(res_db) == 0)
-	{
-		/* ptrack is not supported */
-		PQclear(res_db);
-		return;
-	}
-
-	/* Check if ptrack 2.x is supported */
-	PQclear(res_db);
-	res_db = pgut_execute(backup_conn,
 						  "SELECT extnamespace::regnamespace, extversion "
 						  "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'",
 						  0, NULL);
@@ -600,18 +587,12 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr l
 	parray	   *pagemapset = NULL;
 	int			i;
 	char		query[512];
-	char	   *path = NULL;
-	char	   *pagemap = NULL;
 
 	snprintf(lsn_buf, sizeof lsn_buf, "%X/%X", (uint32) (lsn >> 32), (uint32) lsn);
 	params[0] = pstrdup(lsn_buf);
 
-	if (nodeInfo->ptrack_schema)
-		sprintf(query, "SELECT path, pagemap FROM %s.pg_ptrack_get_pagemapset($1) ORDER BY 1",
-				nodeInfo->ptrack_schema);
-	else
-		/* just paranoia */
-		sprintf(query, "SELECT path, pagemap FROM pg_ptrack_get_pagemapset($1) ORDER BY 1");
+	sprintf(query, "SELECT path, pagemap FROM %s.pg_ptrack_get_pagemapset($1) ORDER BY 1",
+			nodeInfo->ptrack_schema);
 
 	res = pgut_execute(backup_conn, query, 1, (const char **) params);
 	pfree(params[0]);
@@ -626,10 +607,8 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr l
 	{
 		page_map_entry *pm_entry = (page_map_entry *) pgut_malloc(sizeof(page_map_entry));
 
-		//TODO: rewrite with strdup
-
 		/* get path */
-		pm_entry->path = PQgetvalue(res, i, 0);
+		pm_entry->path = pgut_strdup(PQgetvalue(res, i, 0));
 
 		/* get bytea */
 		pm_entry->pagemap = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, i, 1),
@@ -641,7 +620,7 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, PGNodeInfo *nodeInfo, XLogRecPtr l
 		parray_append(pagemapset, pm_entry);
 	}
 
-//	PQclear(res);
+	PQclear(res);
 
 	return pagemapset;
 }
@@ -680,7 +659,11 @@ make_pagemap_from_ptrack_2(parray *files,
 		page_map_entry **res_map = NULL;
 		page_map_entry *map = NULL;
 
-		/* For now nondata files are not entitled to have pagemap */
+		/*
+		 * For now nondata files are not entitled to have pagemap
+		 * TODO It's possible to use ptrack for incremental backup of
+		 * relation forks. Not implemented yet.
+		 */
 		if (!file->is_datafile || file->is_cfs)
 			continue;
 

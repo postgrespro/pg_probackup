@@ -930,9 +930,6 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
 	exclusive_backup = nodeInfo->server_version < 90600;
-
-	nodeInfo->ptrack_version_num = 0; /* by default we assume that ptrack is not supported */
-	nodeInfo->is_ptrack_enable = false; /* by default we assume that ptrack is not enabled */
 }
 
 /*
