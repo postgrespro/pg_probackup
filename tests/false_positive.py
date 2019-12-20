@@ -117,17 +117,17 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '300s',
-                'ptrack_enable': 'on'
-            }
-        )
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -202,17 +202,17 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
+        if self.pg_config_version > self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL =< 11 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '300s',
-                'ptrack_enable': 'on'
-            }
-        )
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)

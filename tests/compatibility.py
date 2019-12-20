@@ -220,10 +220,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
+            ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
-                'ptrack_enable': 'on'})
+                'autovacuum': 'off'})
 
         self.init_pb(backup_dir, old_binary=True)
         self.show_pb(backup_dir)

@@ -23,23 +23,27 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
+        if self.pg_config_version > self.version_to_num('9.6.0'):
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'ptrack_enable': 'on'})
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
 
-        if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
-
-        master.slow_start()
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
+
+        master.slow_start()
+
+        if master.major_version >= 12:
+            master.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         # CREATE TABLE
         master.psql(
