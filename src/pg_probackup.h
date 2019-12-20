@@ -172,9 +172,9 @@ typedef struct pgFile
 
 typedef struct page_map_entry
 {
-	const char   *path;		/* file or directory name */
-	char   *pagemap;
-	size_t	pagemapsize;
+	const char	*path;		/* file or directory name */
+	char		*pagemap;
+	size_t		 pagemapsize;
 } page_map_entry;
 
 /* Special values of datapagemap_t bitmapsize */
