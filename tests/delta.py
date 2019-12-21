@@ -28,7 +28,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '300s',
                 'autovacuum': 'off'})
 
         node_restored = self.make_simple_node(
@@ -105,7 +104,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
             }
         )
@@ -193,7 +191,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '300s',
                 'autovacuum': 'off'
             }
         )
@@ -493,18 +490,14 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '300s'
-            }
-        )
+            initdb_params=['--data-checksums'])
+
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'),
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node_restored.cleanup()
         node.slow_start()
         self.create_tblspace_in_node(node, 'somedata')
 
@@ -577,7 +570,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'max_wal_size': '10GB',
-                'checkpoint_timeout': '5min',
                 'autovacuum': 'off'
             }
         )
@@ -1059,7 +1051,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_delta_corruption_heal_via_ptrack_1(self):
+    def test_delta_corruption_heal_via_ptrack(self):
         """make node, corrupt some page, check that backup failed"""
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
@@ -1075,6 +1067,11 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -1107,7 +1104,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         # open log file and check
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
-            self.assertIn('block 1, try to fetch via SQL', log_content)
+            self.assertIn('block 1, try to fetch via shared buffer', log_content)
             self.assertIn('SELECT pg_catalog.pg_ptrack_get_block', log_content)
             f.close
 
@@ -1119,7 +1116,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_page_corruption_heal_via_ptrack_2(self):
+    def test_page_corruption_heal_via_ptrack(self):
         """make node, corrupt some page, check that backup failed"""
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
@@ -1135,6 +1132,11 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -1176,7 +1178,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             if self.remote:
                 self.assertTrue(
                     "LOG: File" in e.message and
-                    "try to fetch via SQL" in e.message and
+                    "try to fetch via shared buffer" in e.message and
                     "WARNING:  page verification failed, "
                     "calculated checksum" in e.message and
                     "ERROR: query failed: "
@@ -1189,7 +1191,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                     "WARNING: File" in e.message and
                     "blknum" in e.message and
                     "have wrong checksum" in e.message and
-                    "try to fetch via SQL" in e.message and
+                    "try to fetch via shared buffer" in e.message and
                     "WARNING:  page verification failed, "
                     "calculated checksum" in e.message and
                     "ERROR: query failed: "

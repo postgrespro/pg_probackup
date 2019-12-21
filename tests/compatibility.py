@@ -220,7 +220,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            ptrack_enable=self.ptrack,
+            ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'autovacuum': 'off'})
@@ -254,8 +254,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
 
         self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=["-j", "4", "--recovery-target-action=promote"])
+            backup_dir, 'node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)

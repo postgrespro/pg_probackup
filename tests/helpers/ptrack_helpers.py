@@ -1189,10 +1189,10 @@ class ProbackupTest(object):
 
         return restore_command
 
-    def set_auto_conf(self, node, options):
+    def set_auto_conf(self, node, options, config='postgresql.auto.conf'):
 
         # parse postgresql.auto.conf
-        path = os.path.join(node.data_dir, 'postgresql.auto.conf')
+        path = os.path.join(node.data_dir, config)
 
         with open(path, 'r') as f:
             raw_content = f.read()
@@ -1252,11 +1252,18 @@ class ProbackupTest(object):
                 f.flush()
                 f.close()
 
+            config = 'postgresql.auto.conf'
+            probackup_recovery_path = os.path.join(replica.data_dir, 'probackup_recovery.conf')
+            if os.path.exists(probackup_recovery_path):
+                if os.stat(probackup_recovery_path).st_size > 0:
+                    config = 'probackup_recovery.conf'
+
             self.set_auto_conf(
                 replica,
                 {'primary_conninfo': 'user={0} port={1} application_name={2} '
                 ' sslmode=prefer sslcompression=1'.format(
-                    self.user, master.port, replica_name)})
+                    self.user, master.port, replica_name)},
+                config)
         else:
             replica.append_conf('recovery.conf', 'standby_mode = on')
             replica.append_conf(

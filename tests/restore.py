@@ -534,8 +534,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=[
-                    "-j", "4", "--recovery-target-action=promote"]),
+                options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -597,8 +596,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=[
-                    "-j", "4", "--recovery-target-action=promote"]),
+                options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -653,8 +651,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -721,8 +718,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -795,8 +791,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.slow_start()
@@ -2515,7 +2510,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         cat_version = node.get_control_data()["Catalog version number"]
-        version_specific_dir = 'PG_' + node.major_version + '_' + cat_version
+        version_specific_dir = 'PG_' + str(node.major_version) + '_' + cat_version
 
         # PG_10_201707211
         # pg_tblspc/33172/PG_9.5_201510051/16386/
@@ -3184,6 +3179,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT CONNECT ON DATABASE backupdb to backup; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
@@ -3199,20 +3195,41 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.ptrack:
-            for fname in [
+            fnames = []
+            if node.major_version < 12:
+                fnames += [
                     'pg_catalog.oideq(oid, oid)',
                     'pg_catalog.ptrack_version()',
                     'pg_catalog.pg_ptrack_clear()',
                     'pg_catalog.pg_ptrack_control_lsn()',
                     'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
                     'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
-                    'pg_catalog.pg_stop_backup()']:
-
+                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
+                    ]
+            else:
+                # TODO why backup works without these grants ?
+#                fnames += [
+#                    'pg_ptrack_get_pagemapset(pg_lsn)',
+#                    'pg_ptrack_control_lsn()',
+#                    'pg_ptrack_get_block(oid, oid, oid, bigint)'
+#                    ]
                 node.safe_psql(
                     "backupdb",
-                    "GRANT EXECUTE ON FUNCTION {0} "
-                    "TO backup".format(fname))
+                    "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
+
+            for fname in fnames:
+                node.safe_psql(
+                    "backupdb",
+                    "GRANT EXECUTE ON FUNCTION {0} TO backup".format(fname))
+
+        if ProbackupTest.enterprise:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
+
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
 
         # FULL backup without database_map
         backup_id = self.backup_node(

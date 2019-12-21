@@ -959,7 +959,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # DELTA backup
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
-            gdb=True, options=['--log-level-file=verbose'])
+            gdb=True, options=['--log-level-file=LOG'])
 
         gdb.set_breakpoint('backup_files')
         gdb.run_until_break()
@@ -1026,7 +1026,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # PAGE backup
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
-            gdb=True, options=['--log-level-file=verbose'])
+            gdb=True, options=['--log-level-file=LOG'])
 
         gdb.set_breakpoint('backup_files')
         gdb.run_until_break()
@@ -1096,7 +1096,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # PTRACK backup
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
-            gdb=True, options=['--log-level-file=verbose'])
+            gdb=True, options=['--log-level-file=LOG'])
 
         gdb.set_breakpoint('backup_files')
         gdb.run_until_break()
@@ -1345,7 +1345,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup
         gdb = self.backup_node(
             backup_dir, 'node', node, gdb=True,
-            options=['--stream', '--log-level-file=verbose'])
+            options=['--stream', '--log-level-file=LOG'])
 
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
@@ -1383,7 +1383,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup
         gdb = self.backup_node(
             backup_dir, 'node', node, gdb=True,
-            options=['--stream', '--log-level-file=verbose'])
+            options=['--stream', '--log-level-file=LOG'])
 
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()
@@ -1420,8 +1420,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # FULL backup
         gdb = self.backup_node(
-            backup_dir, 'node', node, gdb=True,
-            options=['--stream', '--log-level-file=verbose'])
+            backup_dir, 'node', node, gdb=True, options=['--stream'])
 
         gdb.set_breakpoint('copy_file')
         gdb.run_until_break()

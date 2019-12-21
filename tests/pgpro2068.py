@@ -129,9 +129,9 @@ class BugTest(ProbackupTest, unittest.TestCase):
             recovery_config = 'recovery.conf'
 
         replica.append_conf(
-            'recovery.conf', "recovery_target = 'immediate'")
+            recovery_config, "recovery_target = 'immediate'")
         replica.append_conf(
-            'recovery.conf', "recovery_target_action = 'pause'")
+            recovery_config, "recovery_target_action = 'pause'")
         replica.slow_start(replica=True)
 
         if self.get_version(node) < 100000:

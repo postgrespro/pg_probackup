@@ -431,6 +431,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             data_dir=replica.data_dir,
             backup_type='page', options=['--archive-timeout=60s'])
 
+        sleep(1)
+
         self.backup_node(
             backup_dir, 'replica', replica,
             backup_type='delta', options=['--archive-timeout=60s'])
@@ -503,8 +505,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         self.set_replica(
-            master, replica,
-            replica_name='replica', synchronous=True)
+            master, replica, replica_name='replica', synchronous=True)
 
         replica.slow_start(replica=True)
 
