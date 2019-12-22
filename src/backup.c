@@ -1958,7 +1958,7 @@ backup_files(void *arg)
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
-		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
+		elog(VERBOSE, "Copying file: \"%s\"", file->path);
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
@@ -2310,7 +2310,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	/* check for interrupt */
 	if (interrupted || thread_interrupted)
-		elog(ERROR, "Interrupted during backup stop_streaming");
+		elog(ERROR, "Interrupted during WAL streaming");
 
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
