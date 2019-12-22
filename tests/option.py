@@ -12,9 +12,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_help_1(self):
         """help options"""
-        self.maxDiff = None
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         with open(os.path.join(self.dir_path, "expected/option_help.out"), "rb") as help_out:
             self.assertEqual(
                 self.run_pb(["--help"]),
@@ -24,8 +21,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_version_2(self):
         """help options"""
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         with open(os.path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
             self.assertIn(
                 version_out.read().decode("utf-8"),
@@ -35,8 +30,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_without_backup_path_3(self):
         """backup command failure without backup mode option"""
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         try:
             self.run_pb(["backup", "-b", "full"])
             self.assertEqual(1, 0, "Expecting Error because '-B' parameter is not specified.\n Output: {0} \n CMD: {1}".format(

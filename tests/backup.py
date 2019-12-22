@@ -351,7 +351,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql(
             "postgres",
-            "CHECKPOINT;")
+            "CHECKPOINT")
 
         heap_path = node.safe_psql(
             "postgres",
@@ -2352,6 +2352,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_streaming_timeout(self):
         """
+        Illustrate the problem of loosing exact error
+        message because our WAL streaming engine is "borrowed"
+        from pg_receivexlog
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

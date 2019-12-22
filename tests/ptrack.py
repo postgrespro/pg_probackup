@@ -398,7 +398,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
