@@ -632,10 +632,9 @@ backup_data_file(backup_files_arg* arguments,
 			int rc = fio_send_pages(in, out, file,
 									backup_mode == BACKUP_MODE_DIFF_DELTA && file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 									&n_blocks_skipped, calg, clevel);
-			if (rc == PAGE_CHECKSUM_MISMATCH &&
-				 /* only ptrack versions 1.5, 1.6 and 1.7 support this functionality */
-				(ptrack_version_num >= 15 &&
-				 ptrack_version_num < 20))
+
+			if (rc == PAGE_CHECKSUM_MISMATCH && ptrack_version_num >= 15)
+				 /* only ptrack versions 1.5, 1.6, 1.7 and 2.x support this functionality */
 				goto RetryUsingPtrack;
 			if (rc < 0)
 				elog(ERROR, "Failed to read file \"%s\": %s",
