@@ -337,9 +337,7 @@ doc/src/sgml/pgprobackup.sgml
             PTRACK backup. In this mode, <productname>PostgreSQL</productname> tracks page
             changes on the fly. Continuous archiving is not necessary
             for it to operate. Each time a relation page is updated,
-            this page is marked in a special PTRACK bitmap for this
-            relation. As one page requires just one bit in the PTRACK
-            fork, such bitmaps are quite small. Tracking implies some
+            this page is marked in a special PTRACK bitmap. Tracking implies some
             minor overhead on the database server operation, but
             speeds up incremental backups significantly.
           </para>
@@ -1150,9 +1148,69 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
     </para>
     <para>
       If you are going to use PTRACK backups, complete the following
-      additional steps:
+      additional steps. The role that will perform PTRACK backups
+      (the <literal>backup</literal> role in the examples below) must have
+      access to all the databases of the cluster.
     </para>
-    <itemizedlist>
+    <para>
+    For <productname>PostgreSQL</productname> 12 or higher:
+    </para>
+    <orderedlist>
+     <listitem>
+      <para>
+       Create PTRACK extension:
+       <programlisting>
+CREATE EXTENSION ptrack;
+</programlisting>
+      </para>
+      </listitem>
+      <listitem>
+      <para>
+       To enable tracking page updates, set <varname>ptrack_map_size</varname>
+       parameter to a positive integer and restart the server.
+      </para>
+      <para>
+       For optimal performance, it is recommended to set
+       <varname>ptrack_map_size</varname> to
+       <literal><replaceable>N</replaceable> / 1024</literal>, where
+       <replaceable>N</replaceable> is the size of the
+       <productname>PostgreSQL</productname> cluster, in MB. If you set this
+       parameter to a lower value, PTRACK is more likely to map several blocks
+       together, which leads to false-positive results when tracking changed
+       blocks and increases the incremental backup size as unchanged blocks
+       can also be copied into the incremental backup.
+       Setting <varname>ptrack_map_size</varname> to a higher value
+       does not affect PTRACK operation. The maximum allowed value is 1024.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Grant the right to execute <application>PTRACK</application>
+       functions to the <literal>backup</literal> role
+       in the database used to connect to the cluster:
+      </para>
+      <programlisting>
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_pagemapset(pg_lsn) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_control_lsn() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
+</programlisting>
+      </listitem>
+    </orderedlist>
+
+   <note>
+    <para>
+     If you change the <varname>ptrack_map_size</varname> parameter value,
+     the previously created PTRACK map file is cleared,
+     and tracking newly changed blocks starts from scratch. Thus, you have
+     to retake a full backup before taking incremental PTRACK backups after
+     changing <varname>ptrack_map_size</varname>.
+    </para>
+   </note>
+
+    <para>
+     For older <productname>PostgreSQL</productname> versions:
+    </para>
+    <orderedlist>
       <listitem>
         <para>
           Set the <parameter>ptrack_enable</parameter> parameter to
@@ -1161,7 +1219,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
       </listitem>
       <listitem>
         <para>
-          Grant the rights to execute <application>PTRACK</application>
+          Grant the right to execute <application>PTRACK</application>
           functions to the <literal>backup</literal> role
           <emphasis role="strong">in every database</emphasis> of the
           cluster:
@@ -1171,13 +1229,8 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
 </programlisting>
       </listitem>
-      <listitem>
-        <para>
-          The <literal>backup</literal> role must have access to all
-          the databases of the cluster.
-        </para>
-      </listitem>
-    </itemizedlist>
+    </orderedlist>
+
   </refsect2>
 </refsect1>
 
