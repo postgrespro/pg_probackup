@@ -343,6 +343,16 @@ pgFileComparePath(const void *f1, const void *f2)
 	return strcmp(f1p->path, f2p->path);
 }
 
+/* Compare two pgFile with their path in ascending order of ASCII code. */
+int
+pgFileMapComparePath(const void *f1, const void *f2)
+{
+	page_map_entry *f1p = *(page_map_entry **)f1;
+	page_map_entry *f2p = *(page_map_entry **)f2;
+
+	return strcmp(f1p->path, f2p->path);
+}
+
 /* Compare two pgFile with their name in ascending order of ASCII code. */
 int
 pgFileCompareName(const void *f1, const void *f2)
@@ -677,6 +687,13 @@ dir_check_file(pgFile *file)
 	{
 		if (strcmp(file->name, "pg_internal.init") == 0)
 			return CHECK_FALSE;
+		/* Do not backup ptrack2.x map files */
+		else if (strcmp(file->name, "ptrack.map") == 0)
+			return CHECK_FALSE;
+		else if (strcmp(file->name, "ptrack.map.mmap") == 0)
+			return CHECK_FALSE;
+		else if (strcmp(file->name, "ptrack.map.tmp") == 0)
+			return CHECK_FALSE;
 		/* Do not backup temp files */
 		else if (file->name[0] == 't' && isdigit(file->name[1]))
 			return CHECK_FALSE;
@@ -734,7 +751,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 					   bool follow_symlink,
 					   int external_dir_num, fio_location location)
 {
-	DIR		    *dir;
+	DIR			  *dir;
 	struct dirent *dent;
 
 	if (!S_ISDIR(parent->mode))
