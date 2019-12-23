@@ -155,11 +155,18 @@ Once you have `pg_probackup` installed, complete [the setup](https://github.com/
 ## Building from source
 ### Linux
 
-To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. To install `pg_probackup`, execute this in the module's directory:
+To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. Execute this in the module's directory:
 
 ```shell
 make USE_PGXS=1 PG_CONFIG=<path_to_pg_config> top_srcdir=<path_to_PostgreSQL_source_tree>
 ```
+
+The alternative way, without using the PGXS infrastructure, is to place `pg_probackup` source directory into `contrib` directory and build it there. Example:
+
+```shell
+cd <path_to_PostgreSQL_source_tree> && git clone https://github.com/postgrespro/pg_probackup contrib/pg_probackup && cd contrib/pg_probackup && make
+```
+
 ### Windows
 
 Currently pg_probackup can be build using only MSVC 2013.
