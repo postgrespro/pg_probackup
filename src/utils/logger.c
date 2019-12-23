@@ -152,17 +152,8 @@ write_elevel(FILE *stream, int elevel)
 static void
 exit_if_necessary(int elevel)
 {
-	if (elevel > WARNING && !in_cleanup)
+	if (elevel > WARNING)
 	{
-		if (loggin_in_progress)
-		{
-			loggin_in_progress = false;
-			pthread_mutex_unlock(&log_file_mutex);
-		}
-
-		if (remote_agent)
-			sleep(1); /* Let parent receive sent messages */
-
 		/* If this is not the main thread then don't call exit() */
 		if (main_tid != pthread_self())
 		{
@@ -174,8 +165,19 @@ exit_if_necessary(int elevel)
 			pthread_exit(NULL);
 #endif
 		}
-		else
+		else if(!in_cleanup)
+		{
+			if (loggin_in_progress)
+			{
+				loggin_in_progress = false;
+				pthread_mutex_unlock(&log_file_mutex);
+			}
+
+			if (remote_agent)
+				sleep(1); /* Let parent receive sent messages */
+
 			exit(elevel);
+		}
 	}
 }
 

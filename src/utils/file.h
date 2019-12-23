@@ -32,8 +32,9 @@ typedef enum
 	FIO_OPENDIR,
 	FIO_READDIR,
 	FIO_CLOSEDIR,
-	FIO_SEND_PAGES,
-	FIO_PAGE
+	FIO_SEND_ALL_PAGES,
+	FIO_PAGE,
+	FIO_SEND_PAGES
 } fio_operations;
 
 typedef enum

@@ -1185,11 +1185,10 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 
 	Assert(fio_is_remote_file(in));
 
-	req.hdr.cop = FIO_SEND_PAGES;
+	req.hdr.cop = FIO_SEND_ALL_PAGES;
 	req.hdr.size = sizeof(fio_send_request);
 	req.hdr.handle = fio_fileno(in) & ~FIO_PIPE_MARKER;
 
-	req.arg.nblocks = file->size/BLCKSZ;
 	req.arg.segBlockNum = file->segno * RELSEG_SIZE;
 	req.arg.horizonLsn = horizonLsn;
 	req.arg.checksumVersion = current.checksum_version;
@@ -1198,7 +1197,34 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 
 	file->compress_alg = calg;
 
-	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+	if (file->pagemap.bitmapsize != PageBitmapIsEmpty)
+	{
+		BlockNumber  count;
+		datapagemap_iterator_t *iter;
+		BlockNumber  i, blknum;
+		BlockNumber* blocks;
+
+		iter = datapagemap_iterate(&file->pagemap);
+		for (count = 0; datapagemap_next(iter, &blknum); count++);
+		free(iter);
+
+		blocks = pgut_malloc(count*sizeof(BlockNumber));
+		iter = datapagemap_iterate(&file->pagemap);
+		for (i = 0; datapagemap_next(iter, &blocks[i]); i++);
+		Assert(i == count);
+		free(iter);
+
+		req.arg.nblocks = count;
+		req.hdr.cop = FIO_SEND_PAGES;
+		IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+		IO_CHECK(fio_write_all(fio_stdout, blocks, count*sizeof(BlockNumber)), count*sizeof(BlockNumber));
+		free(blocks);
+	}
+	else
+	{
+		req.arg.nblocks = file->size/BLCKSZ;
+		IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+	}
 
 	while (true)
 	{
@@ -1242,19 +1268,20 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 	return blknum;
 }
 
-static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
+static void fio_send_pages_impl(int fd, int out, fio_send_request* req, BlockNumber* blocks)
 {
-	BlockNumber blknum;
+	BlockNumber i;
 	char read_buffer[BLCKSZ+1];
 	fio_header hdr;
 
 	hdr.cop = FIO_PAGE;
 	read_buffer[BLCKSZ] = 1; /* barrier */
 
-	for (blknum = 0; blknum < req->nblocks; blknum++)
+	for (i = 0; i < req->nblocks; i++)
 	{
 		int retry_attempts = PAGE_READ_ATTEMPTS;
 		XLogRecPtr page_lsn = InvalidXLogRecPtr;
+		BlockNumber blknum = blocks ? blocks[i] : i;
 
 		while (true)
 		{
@@ -1333,7 +1360,7 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 		}
 	}
 	hdr.size = 0;
-	hdr.arg = blknum;
+	hdr.arg = i;
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
@@ -1471,9 +1498,20 @@ void fio_communicate(int in, int out)
 		  case FIO_TRUNCATE: /* Truncate file */
 			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
 			break;
+		  case FIO_SEND_ALL_PAGES:
+			Assert(hdr.size == sizeof(fio_send_request));
+			fio_send_pages_impl(fd[hdr.handle], out, (fio_send_request*)buf, NULL);
+			break;
 		  case FIO_SEND_PAGES:
 			Assert(hdr.size == sizeof(fio_send_request));
-			fio_send_pages_impl(fd[hdr.handle], out, (fio_send_request*)buf);
+			{
+				fio_send_request* req = (fio_send_request*)buf;
+				size_t map_size = sizeof(BlockNumber)*req->nblocks;
+				BlockNumber* blocks = (BlockNumber*)pgut_malloc(map_size);
+				IO_CHECK(fio_read_all(in, blocks, map_size), map_size);
+				fio_send_pages_impl(fd[hdr.handle], out, (fio_send_request*)buf, blocks);
+				free(blocks);
+			}
 			break;
 		  default:
 			Assert(false);

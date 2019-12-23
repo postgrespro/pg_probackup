@@ -660,22 +660,35 @@ backup_data_file(backup_files_arg* arguments,
 	 */
 	else
 	{
-		datapagemap_iterator_t *iter;
-		iter = datapagemap_iterate(&file->pagemap);
-		while (datapagemap_next(iter, &blknum))
+		if (fio_is_remote_file(in))
 		{
-			page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
-									  blknum, nblocks, in, &n_blocks_skipped,
-									  backup_mode, curr_page, true, current.checksum_version);
-			compress_and_backup_page(file, blknum, in, out, &(file->crc),
-									  page_state, curr_page, calg, clevel);
-			n_blocks_read++;
-			if (page_state == PageIsTruncated)
-				break;
-		}
+			int rc = fio_send_pages(in, out, file,
+									InvalidXLogRecPtr,
+									&n_blocks_skipped, calg, clevel);
+			if (rc < 0)
+				elog(ERROR, "Failed to read file \"%s\": %s",
+					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
+			n_blocks_read = rc;
 
+			file->uncompressed_size = (n_blocks_read - n_blocks_skipped)*BLCKSZ;
+		}
+		else
+		{
+			datapagemap_iterator_t *iter = datapagemap_iterate(&file->pagemap);
+			while (datapagemap_next(iter, &blknum))
+			{
+				page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
+										  blknum, nblocks, in, &n_blocks_skipped,
+										  backup_mode, curr_page, true, current.checksum_version);
+				compress_and_backup_page(file, blknum, in, out, &(file->crc),
+										 page_state, curr_page, calg, clevel);
+				n_blocks_read++;
+				if (page_state == PageIsTruncated)
+					break;
+			}
+			pg_free(iter);
+		}
 		pg_free(file->pagemap.bitmap);
-		pg_free(iter);
 	}
 
 	/* update file permission */
