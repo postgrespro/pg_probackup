@@ -328,7 +328,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, ptrack_enable=True,
+            set_replication=True,
+            ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={'checkpoint_timeout': '30s'})
 
@@ -346,10 +347,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         # DISABLE PTRACK
-        if node.major_version < 11:
-            node.safe_psql('postgres', "alter system set ptrack_enable to off")
-        else:
+        if node.major_version >= 12:
             node.safe_psql('postgres', "alter system set ptrack_map_size to 0")
+        else:
+            node.safe_psql('postgres', "alter system set ptrack_enable to off")
 
         node.stop()
         node.slow_start()
@@ -1579,7 +1580,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         if self.paranoia:
             pgdata = self.pgdata_content(
-                node.data_dir, ignore_ptrack=False)
+                node.data_dir, ignore_ptrack=True)
 
         tblspace = self.get_tblspace_path(node, 'somedata')
         node.cleanup()
@@ -1588,7 +1589,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(
-                node.data_dir, ignore_ptrack=False)
+                node.data_dir, ignore_ptrack=True)
 
         node.slow_start()
 
@@ -2370,8 +2371,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
-            ptrack_enable=True,
-            initdb_params=['--data-checksums'])
+            ptrack_enable=True)
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -2436,17 +2436,35 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                 idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
-        master.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
-        master.safe_psql('postgres', 'cluster t_heap using t_gist')
-        master.safe_psql('postgres', 'checkpoint')
+        master.safe_psql('postgres', 'DELETE FROM t_heap WHERE id%2 = 1')
+        master.safe_psql('postgres', 'CLUSTER t_heap USING t_gist')
+
+        if master.major_version < 12:
+            master.safe_psql('postgres', 'CHECKPOINT')
 
         # Sync master and replica
         self.wait_until_replica_catch_with_master(master, replica)
-        replica.safe_psql('postgres', 'checkpoint')
 
-        # CHECK PTRACK SANITY
         if master.major_version < 12:
-            check_ptrack_map_sanity(replica, idx_ptrack)
+            replica.safe_psql('postgres', 'CHECKPOINT')
+            self.check_ptrack_map_sanity(replica, idx_ptrack)
+
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            backup_type='ptrack', options=['-j10', '--stream'])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(replica.data_dir)
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'))
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'replica', node)
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(replica.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2803,10 +2821,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Sync master and replica
         self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
-
-        # CHECK PTRACK SANITY
-        if replica.major_version < 12:
-            self.check_ptrack_map_sanity(replica, idx_ptrack)
 
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='ptrack',
@@ -3295,8 +3309,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            ptrack_enable=True,
-            initdb_params=['--data-checksums'])
+            ptrack_enable=True)
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
