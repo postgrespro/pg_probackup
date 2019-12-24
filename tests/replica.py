@@ -411,7 +411,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 replica, {'recovery_min_apply_delay': '300s'})
         else:
             replica.append_conf(
-                'postgresql.auto.conf',
+                'recovery.conf',
                 'recovery_min_apply_delay = 300s')
 
         replica.stop()

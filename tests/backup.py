@@ -2187,7 +2187,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_issue_132_1(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/132
