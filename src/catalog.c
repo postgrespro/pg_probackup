@@ -1004,7 +1004,12 @@ catalog_get_timelines(InstanceConfig *instance)
 				 */
 				if (backup->expire_time > 0 &&
 					backup->expire_time > current_time)
+				{
+					elog(LOG, "Pinned backup %s is ignored for the "
+							"purpose of WAL retention",
+						base36enc(backup->start_time));
 					continue;
+				}
 
 				count++;
 
