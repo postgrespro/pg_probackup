@@ -52,7 +52,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Documentation
 
-Documentation can be found at [github](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md).
+Documentation can be found at [github](https://postgrespro.github.io/pg_probackup).
 
 ## Installation and Setup
 ### Windows Installation
@@ -89,6 +89,24 @@ yum install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 
 #SRPM Packages
 yumdownloader --source pg_probackup-{12,11,10,9.6,9.5}
+
+#RPM ALT Linux p7
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p7 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
+sudo apt-get update
+sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
+sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+
+#RPM ALT Linux p8
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p8 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
+sudo apt-get update
+sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
+sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+
+#RPM ALT Linux p9
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p9 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
+sudo apt-get update
+sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
+sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 ```
 
 #### pg_probackup for PostgresPro Standart and Enterprise
@@ -96,23 +114,40 @@ yumdownloader --source pg_probackup-{12,11,10,9.6,9.5}
 #DEB Ubuntu|Debian Packages
 sudo echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup-forks.list
 sudo wget -O - http://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
-sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}
-sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}-dbg
+sudo apt-get install pg-probackup-{std,ent}-{11,10,9.6}
+sudo apt-get install pg-probackup-{std,ent}-{11,10,9.6}-dbg
 
 #RPM Centos Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-centos.noarch.rpm
-yum install pg_probackup-{std,ent}-{12,11,10,9.6}
-yum install pg_probackup-{std,ent}-{12,11,10,9.6}-debuginfo
+yum install pg_probackup-{std,ent}-{11,10,9.6}
+yum install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 
 #RPM RHEL Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-rhel.noarch.rpm
-yum install pg_probackup-{std,ent}-{12,11,10,9.6}
-yum install pg_probackup-{std,ent}-{12,11,10,9.6}-debuginfo
+yum install pg_probackup-{std,ent}-{11,10,9.6}
+yum install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 
 #RPM Oracle Linux Packages
 rpm -ivh http://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-oraclelinux.noarch.rpm
-yum install pg_probackup-{std,ent}-{12,11,10,9.6}
-yum install pg_probackup-{std,ent}-{12,11,10,9.6}-debuginfo
+yum install pg_probackup-{std,ent}-{11,10,9.6}
+yum install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
+
+#RPM ALT Linux p7
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/altlinux-p7 x86_64 forks" > /etc/apt/sources.list.d/pg_probackup_forks.list
+sudo apt-get update
+sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}
+sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
+
+#RPM ALT Linux p8
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/altlinux-p8 x86_64 forks" > /etc/apt/sources.list.d/pg_probackup_forks.list
+sudo apt-get update
+sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}
+sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
+
+#RPM ALT Linux p9
+sudo echo "rpm http://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/altlinux-p9 x86_64 forks" > /etc/apt/sources.list.d/pg_probackup_forks.list && sudo apt-get update
+sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}
+sudo apt-get install pg_probackup-{std,ent}-{11,10,9.6}-debuginfo
 ```
 
 Once you have `pg_probackup` installed, complete [the setup](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#installation-and-setup).
@@ -120,11 +155,18 @@ Once you have `pg_probackup` installed, complete [the setup](https://github.com/
 ## Building from source
 ### Linux
 
-To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. To install `pg_probackup`, execute this in the module's directory:
+To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. Execute this in the module's directory:
 
 ```shell
 make USE_PGXS=1 PG_CONFIG=<path_to_pg_config> top_srcdir=<path_to_PostgreSQL_source_tree>
 ```
+
+The alternative way, without using the PGXS infrastructure, is to place `pg_probackup` source directory into `contrib` directory and build it there. Example:
+
+```shell
+cd <path_to_PostgreSQL_source_tree> && git clone https://github.com/postgrespro/pg_probackup contrib/pg_probackup && cd contrib/pg_probackup && make
+```
+
 ### Windows
 
 Currently pg_probackup can be build using only MSVC 2013.

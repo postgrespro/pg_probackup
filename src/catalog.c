@@ -1948,6 +1948,10 @@ pgNodeInit(PGNodeInfo *node)
 
 	node->server_version = 0;
 	node->server_version_str[0] = '\0';
+
+	node->ptrack_version_num = 0;
+	node->is_ptrack_enable = false;
+	node->ptrack_schema = NULL;
 }
 
 /*

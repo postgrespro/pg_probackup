@@ -1,0 +1,420 @@
+@import url('https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&subset=cyrillic');
+
+body {
+ font-family: 'Roboto',Arial,sans-serif;
+}
+
+body {
+   font-size: 18px;
+   font-weight: 300;
+}
+
+/* ../media/css/docs.css */
+.navheader th { text-align: center; } /* anti-bootstrap */
+
+.navheader tbody tr:nth-child(1) th {  /* временно убрать ненужную строчку */
+	display: none;
+}
+
+/* PostgreSQL.org Documentation Style */
+
+.book div.NAVHEADER table {
+  margin-left: 0;
+}
+
+.book div.NAVHEADER th {
+    text-align: center;
+}
+
+.book {
+	font-size: 15px;
+	line-height: 1.6;
+}
+
+/* Heading Definitions */
+
+.book h1,
+.book h2,
+.book h3 {
+  font-weight: bold;
+  margin-top: 2ex;
+}
+
+.book h1 a,
+.book h2 a,
+.book h3 a,
+.book h4 a
+ {
+  color: #EC5800;
+}
+
+/* EKa --> */
+.book h1 {
+  font-size: 1.4em;
+}
+
+.book h2 {
+  font-size: 1.25em;
+}
+
+.book h3 {
+  font-size: 1.2em;
+}
+
+.book h4 {
+  font-size: 1.15em;
+}
+
+.book h5 {
+  font-size: 1.1em;
+}
+
+.book h6 {
+  font-size: 1.0em;
+}
+/* <-- EKa */
+
+.book h1 a:hover {
+  color: #EC5800;
+  text-decoration: none;
+}
+
+.book h2 a:hover,
+.book h3 a:hover,
+.book h4 a:hover {
+  color: #666666;
+  text-decoration: none;
+}
+
+
+
+/* Text Styles */
+
+.book div.SECT2 {
+  margin-top: 4ex;
+}
+
+.book div.SECT3 {
+  margin-top: 3ex;
+  margin-left: 3ex;
+}
+
+.book .txtCurrentLocation {
+  font-weight: bold;
+}
+
+.book p,
+.book ol,
+.book ul,
+.book li {
+  line-height: 1.5em;
+}
+
+.book code {
+	font-size: 1em;
+	padding: 0px;
+	color: #525f6c;
+	background-color: #FFF;
+	border-radius: 0px;
+}
+
+.book code, kbd, pre, samp {
+	font-family: monospace,monospace;	
+}
+
+.book .txtCommentsWrap {
+  border: 2px solid #F5F5F5; 
+  width: 100%;
+}
+
+.book .txtCommentsContent {
+  background: #F5F5F5;
+  padding: 3px;
+}
+
+.book .txtCommentsPoster {
+  float: left;
+}
+
+.book .txtCommentsDate {
+  float: right;
+}
+
+.book .txtCommentsComment {
+  padding: 3px;
+}
+
+.book #docContainer pre code,
+.book #docContainer pre tt,
+.book #docContainer pre pre,
+.book #docContainer tt tt,
+.book #docContainer tt code,
+.book #docContainer tt pre {
+  font-size: 1em;
+}
+
+.book pre.LITERALLAYOUT,
+.book .SCREEN,
+.book .SYNOPSIS,
+.book .PROGRAMLISTING,
+.book .REFSYNOPSISDIV p,
+.book table.CAUTION,
+.book table.WARNING,
+.book blockquote.NOTE,
+.book blockquote.TIP,
+.book div.note,
+.book div.tip,
+.book table.CALSTABLE {
+  -moz-box-shadow: 3px 3px 5px #DFDFDF;
+  -webkit-box-shadow: 3px 3px 5px #DFDFDF;
+  -khtml-box-shadow: 3px 3px 5px #DFDFDF;
+  -o-box-shadow: 3px 3px 5px #DFDFDF;
+  box-shadow: 3px 3px 5px #DFDFDF;
+}
+
+.book pre.LITERALLAYOUT,
+.book .SCREEN,
+.book .SYNOPSIS,
+.book .PROGRAMLISTING,
+.book .REFSYNOPSISDIV p,
+.book table.CAUTION,
+.book table.WARNING,
+.book blockquote.NOTE,
+.book blockquote.TIP
+.book div.note,
+.book div.tip {
+  color: black;
+  border-width: 1px;
+  border-style: solid;
+  padding: 2ex;
+  margin: 2ex 0 2ex 2ex;
+  overflow: auto;
+  -moz-border-radius: 8px;
+  -webkit-border-radius: 8px;
+  -khtml-border-radius: 8px;
+  border-radius: 8px;
+}
+
+.book div.note,
+.book div.tip {
+  -moz-border-radius: 8px !important;
+  -webkit-border-radius: 8px !important;
+  -khtml-border-radius: 8px !important;
+  border-radius: 8px !important;
+} 
+
+
+.book pre.LITERALLAYOUT,
+.book pre.SYNOPSIS,
+.book pre.PROGRAMLISTING,
+.book .REFSYNOPSISDIV p,
+.book .SCREEN {
+  border-color: #CFCFCF;
+  background-color: #F7F7F7;
+}
+
+.book blockquote.NOTE,
+.book blockquote.TIP,
+.book div.note,
+.book div.tip {
+  border-color: #DBDBCC;
+  background-color: #EEEEDD;
+  padding: 14px;
+  width: 572px;
+/*  font-size: 12px; */
+}
+
+.book blockquote.NOTE,
+.book blockquote.TIP,
+.book table.CAUTION,
+.book table.WARNING {
+  margin: 4ex auto;
+}
+
+.book div.note,
+.book div.tip {
+  margin: 4ex auto  !important;
+}
+
+
+.book blockquote.NOTE p,
+.book blockquote.TIP p,
+.book div.note p,
+.book div.tip p {
+  margin: 0;
+}
+
+.book blockquote.NOTE pre,
+.book blockquote.NOTE code,
+.book div.note pre,
+.book div.note code,
+.book blockquote.TIP pre,
+.book blockquote.TIP code,
+.book div.tip pre,
+.book div.tio code {
+  margin-left: 0;
+  margin-right: 0;
+  -moz-box-shadow: none;
+  -webkit-box-shadow: none;
+  -khtml-box-shadow: none;
+  -o-box-shadow: none;
+  box-shadow: none;
+}
+
+.book .emphasis,
+.book .c2 {
+  font-weight: bold;
+}
+
+.book .REPLACEABLE {
+  font-style: italic;
+}
+
+/* Table Styles */
+
+.book table {
+  margin-left: 2ex;
+}
+
+.book table.CALSTABLE td,
+.book table.CALSTABLE th,
+.book table.CAUTION td,
+.book table.CAUTION th,
+.book table.WARNING td,
+.book table.WARNING th {
+  border-style: solid;
+}
+
+.book table.CALSTABLE,
+.book table.CAUTION,
+.book table.WARNING {
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.book table.CALSTABLE
+{
+  margin: 2ex 0 2ex 2ex;
+  background-color: #E0ECEF;
+  border: 2px solid #A7C6DF;
+}
+
+.book table.CALSTABLE tr:hover td
+{
+  background-color: #EFEFEF;
+}
+
+.book table.CALSTABLE td {
+  background-color: #FFF;
+}
+
+.book table.CALSTABLE td,
+.book table.CALSTABLE th {
+  border: 1px solid #A7C6DF;
+  padding: 0.5ex 0.5ex;
+}
+
+table.CAUTION,
+.book table.WARNING {
+  border-collapse: separate;
+  display: block;
+  padding: 0;
+  max-width: 600px;
+}
+
+.book table.CAUTION {
+  background-color: #F5F5DC;
+  border-color: #DEDFA7;
+}
+
+.book table.WARNING {
+  background-color: #FFD7D7;
+  border-color: #DF421E;
+}
+
+.book table.CAUTION td,
+.book table.CAUTION th,
+.book table.WARNING td,
+.book table.WARNING th {
+  border-width: 0;
+  padding-left: 2ex;
+  padding-right: 2ex;
+}
+
+.book table.CAUTION td,
+.book table.CAUTION th {
+  border-color: #F3E4D5
+}
+
+.book table.WARNING td,
+.book table.WARNING th {
+  border-color: #FFD7D7;
+}
+
+.book td.c1,
+.book td.c2,
+.book td.c3,
+.book td.c4,
+.book td.c5,
+.book td.c6 {
+  font-size: 1.1em;
+  font-weight: bold;
+  border-bottom: 0px solid #FFEFEF;
+  padding: 1ex 2ex 0;
+}
+
+.book .table  thead {
+	background: #E0ECEF;
+	border-bottom: 1px solid #000;
+}
+.book .table > thead > tr > th {
+	border-bottom: 1px solid #000;
+}
+
+.book td, th {
+	padding: 0.1ex 0.5ex; 
+}
+
+.book .book table tr:hover td {
+	background-color: #EFEFEF;
+}
+
+/* Link Styles */
+
+.book #docNav a {
+  font-weight: bold;
+}
+
+.book code.FUNCTION tt {
+  font-size: 1em;
+}
+
+.book table.docs-compare {
+	align: center;
+	width: 90%;
+	border: 2px solid #999; 
+	border-collapse: collapse;
+}
+
+.book table.docs-compare td  {
+	padding: 12px;
+	border: 1px solid #DDD;
+}
+
+.book dd {
+	margin-left: 40px;
+}
+
+
+.book .sidebar {
+    padding: 8px;
+    background: #FFF;
+    width: auto;
+}
+
+.book pre {
+    background: #f5f5f5;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}

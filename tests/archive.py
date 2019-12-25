@@ -580,6 +580,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         with open(log_file, 'r') as f:
             log_content = f.read()
             self.assertIn(
+                'Cannot open destination temporary WAL file',
+                log_content)
+
+            self.assertIn(
                 'Reusing stale destination temporary WAL file',
                 log_content)
 
@@ -1319,6 +1323,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         replica.slow_start()
 
         replica.pgbench_init(scale=2)
+
+        sleep(5)
 
         show = self.show_archive(backup_dir, as_text=True)
         show = self.show_archive(backup_dir)

@@ -300,9 +300,10 @@ prepare_page(ConnectionArgs *arguments,
 			 BlockNumber blknum, BlockNumber nblocks,
 			 FILE *in, BlockNumber *n_skipped,
 			 BackupMode backup_mode,
-			 Page page,
-			 bool strict,
-			 uint32 checksum_version)
+			 Page page, bool strict,
+			 uint32 checksum_version,
+			 int ptrack_version_num,
+			 const char *ptrack_schema)
 {
 	XLogRecPtr	page_lsn = 0;
 	int			try_again = 100;
@@ -319,7 +320,7 @@ prepare_page(ConnectionArgs *arguments,
 	 * Under high write load it's possible that we've read partly
 	 * flushed page, so try several times before throwing an error.
 	 */
-	if (backup_mode != BACKUP_MODE_DIFF_PTRACK)
+	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 20)
 	{
 		while(!page_is_valid && try_again)
 		{
@@ -345,9 +346,9 @@ prepare_page(ConnectionArgs *arguments,
 			 */
 			//elog(WARNING, "Checksum_Version: %i", checksum_version ? 1 : 0);
 
-			if (result == -1 && is_ptrack_support && strict)
+			if (result == -1 && strict && ptrack_version_num > 0)
 			{
-				elog(WARNING, "File \"%s\", block %u, try to fetch via SQL",
+				elog(WARNING, "File \"%s\", block %u, try to fetch via shared buffer",
 					file->path, blknum);
 				break;
 			}
@@ -358,16 +359,16 @@ prepare_page(ConnectionArgs *arguments,
 		 */
 
 		if (!page_is_valid &&
-			((strict && !is_ptrack_support) || !strict))
+			((strict && ptrack_version_num == 0) || !strict))
 		{
-			/* show this message for checkdb or backup without ptrack support */
+			/* show this message for checkdb, merge or backup without ptrack support */
 			elog(WARNING, "Corruption detected in file \"%s\", block %u",
 						file->path, blknum);
 		}
 
 		/* Backup with invalid block and without ptrack support must throw error */
-		if (!page_is_valid && strict && !is_ptrack_support)
-				elog(ERROR, "Data file corruption. Canceling backup");
+		if (!page_is_valid && strict && ptrack_version_num == 0)
+				elog(ERROR, "Data file corruption, canceling backup");
 
 		/* Checkdb not going futher */
 		if (!strict)
@@ -379,12 +380,15 @@ prepare_page(ConnectionArgs *arguments,
 		}
 	}
 
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK || (!page_is_valid && is_ptrack_support))
+	if ((backup_mode == BACKUP_MODE_DIFF_PTRACK
+		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
+			|| !page_is_valid)
 	{
 		size_t page_size = 0;
 		Page ptrack_page = NULL;
 		ptrack_page = (Page) pg_ptrack_get_block(arguments, file->dbOid, file->tblspcOid,
-										  file->relOid, absolute_blknum, &page_size);
+										  file->relOid, absolute_blknum, &page_size,
+										  ptrack_version_num, ptrack_schema);
 
 		if (ptrack_page == NULL)
 		{
@@ -530,7 +534,8 @@ bool
 backup_data_file(backup_files_arg* arguments,
 				 const char *to_path, pgFile *file,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-				 CompressAlg calg, int clevel, bool missing_ok)
+				 CompressAlg calg, int clevel, uint32 checksum_version,
+				 int ptrack_version_num, const char *ptrack_schema, bool missing_ok)
 {
 	FILE		*in;
 	FILE		*out;
@@ -621,12 +626,15 @@ backup_data_file(backup_files_arg* arguments,
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
 		file->pagemap_isabsent || !file->exists_in_prev)
 	{
+		/* TODO: take into account PTRACK 2.0 */
 		if (backup_mode != BACKUP_MODE_DIFF_PTRACK && fio_is_remote_file(in))
 		{
 			int rc = fio_send_pages(in, out, file,
 									backup_mode == BACKUP_MODE_DIFF_DELTA && file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 									&n_blocks_skipped, calg, clevel);
-			if (rc == PAGE_CHECKSUM_MISMATCH && is_ptrack_support)
+
+			if (rc == PAGE_CHECKSUM_MISMATCH && ptrack_version_num >= 15)
+				 /* only ptrack versions 1.5, 1.6, 1.7 and 2.x support this functionality */
 				goto RetryUsingPtrack;
 			if (rc < 0)
 				elog(ERROR, "Failed to read file \"%s\": %s",
@@ -642,7 +650,9 @@ backup_data_file(backup_files_arg* arguments,
 			{
 				page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
 										  blknum, nblocks, in, &n_blocks_skipped,
-										  backup_mode, curr_page, true, current.checksum_version);
+										  backup_mode, curr_page, true,
+										  checksum_version, ptrack_version_num,
+										  ptrack_schema);
 				compress_and_backup_page(file, blknum, in, out, &(file->crc),
 										  page_state, curr_page, calg, clevel);
 				n_blocks_read++;
@@ -666,7 +676,9 @@ backup_data_file(backup_files_arg* arguments,
 		{
 			page_state = prepare_page(&(arguments->conn_arg), file, prev_backup_start_lsn,
 									  blknum, nblocks, in, &n_blocks_skipped,
-									  backup_mode, curr_page, true, current.checksum_version);
+									  backup_mode, curr_page, true,
+									  checksum_version, ptrack_version_num,
+									  ptrack_schema);
 			compress_and_backup_page(file, blknum, in, out, &(file->crc),
 									  page_state, curr_page, calg, clevel);
 			n_blocks_read++;
@@ -1268,7 +1280,8 @@ check_data_file(ConnectionArgs *arguments,
 	{
 		page_state = prepare_page(arguments, file, InvalidXLogRecPtr,
 									blknum, nblocks, in, &n_blocks_skipped,
-									BACKUP_MODE_FULL, curr_page, false, checksum_version);
+									BACKUP_MODE_FULL, curr_page, false, checksum_version,
+									0, NULL);
 
 		if (page_state == PageIsTruncated)
 			break;

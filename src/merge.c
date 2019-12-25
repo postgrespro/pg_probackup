@@ -617,7 +617,8 @@ merge_files(void *arg)
 								 to_backup->backup_mode,
 								 to_backup->compress_alg,
 								 to_backup->compress_level,
-								 false);
+								 from_backup->checksum_version,
+								 0, NULL, false);
 
 				file->path = prev_path;
 
