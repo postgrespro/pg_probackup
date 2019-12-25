@@ -3097,6 +3097,12 @@ ARCHIVE INSTANCE 'node'
 ===============================================================================================================
  1    0           0/0          0000000000000048  0000000000000049  1           72kB  228.00  7          OK
 </programlisting>
+      <note>
+        <para>
+          <link linkend="pbk-backup-pinning">Pinned backups</link> are
+          ignored for the purpose of WAL Archive Retention Policy fulfilment.
+        </para>
+      </note>
     </refsect3>
   </refsect2>
   <refsect2 id="pbk-merging-backups">
