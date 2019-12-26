@@ -2438,14 +2438,14 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
       </para>
       <programlisting>
 ARCHIVE INSTANCE 'node'
-===================================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size    Zratio  N backups  Status
-===================================================================================================================
- 5    1           0/B000000    000000000000000B  000000000000000C  2           685kB   48.00   0          OK
- 4    3           0/18000000   0000000000000018  000000000000001A  3           648kB   77.00   0          OK
- 3    2           0/15000000   0000000000000015  0000000000000017  3           648kB   77.00   0          OK
- 2    1           0/B000108    000000000000000B  0000000000000015  5           892kB   94.00   1          DEGRADED
- 1    0           0/0          0000000000000001  000000000000000A  10          8774kB  19.00   1          OK
+===================================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size    Zratio  N backups  Status
+===================================================================================================================================
+ 5    1           0/B000000    00000005000000000000000B  00000005000000000000000C  2           685kB   48.00   0          OK
+ 4    3           0/18000000   000000040000000000000018  00000004000000000000001A  3           648kB   77.00   0          OK
+ 3    2           0/15000000   000000030000000000000015  000000030000000000000017  3           648kB   77.00   0          OK
+ 2    1           0/B000108    00000002000000000000000B  000000020000000000000015  5           892kB   94.00   1          DEGRADED
+ 1    0           0/0          000000010000000000000001  00000001000000000000000A  10          8774kB  19.00   1          OK
 </programlisting>
       <para>
         For each timeline, the following information is provided:
@@ -2543,8 +2543,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
               "tli": 5,
               "parent-tli": 1,
               "switchpoint": "0/B000000",
-              "min-segno": "000000000000000B",
-              "max-segno": "000000000000000C",
+              "min-segno": "00000005000000000000000B",
+              "max-segno": "00000005000000000000000C",
               "n-segments": 2,
               "size": 685320,
               "zratio": 48.00,
@@ -2557,8 +2557,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
               "tli": 4,
               "parent-tli": 3,
               "switchpoint": "0/18000000",
-              "min-segno": "0000000000000018",
-              "max-segno": "000000000000001A",
+              "min-segno": "000000040000000000000018",
+              "max-segno": "00000004000000000000001A",
               "n-segments": 3,
               "size": 648625,
               "zratio": 77.00,
@@ -2571,8 +2571,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
               "tli": 3,
               "parent-tli": 2,
               "switchpoint": "0/15000000",
-              "min-segno": "0000000000000015",
-              "max-segno": "0000000000000017",
+              "min-segno": "000000030000000000000015",
+              "max-segno": "000000030000000000000017",
               "n-segments": 3,
               "size": 648911,
               "zratio": 77.00,
@@ -2585,8 +2585,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
               "tli": 2,
               "parent-tli": 1,
               "switchpoint": "0/B000108",
-              "min-segno": "000000000000000B",
-              "max-segno": "0000000000000015",
+              "min-segno": "00000002000000000000000B",
+              "max-segno": "000000020000000000000015",
               "n-segments": 5,
               "size": 892173,
               "zratio": 94.00,
@@ -2594,12 +2594,12 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
               "status": "DEGRADED",
               "lost-segments": [
                   {
-                      "begin-segno": "000000000000000D",
-                      "end-segno": "000000000000000E"
+                      "begin-segno": "00000002000000000000000D",
+                      "end-segno": "00000002000000000000000E"
                   },
                   {
-                      "begin-segno": "0000000000000010",
-                      "end-segno": "0000000000000012"
+                      "begin-segno": "000000020000000000000010",
+                      "end-segno": "000000020000000000000012"
                   }
               ],
               "backups": [
@@ -2634,8 +2634,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
               "tli": 1,
               "parent-tli": 0,
               "switchpoint": "0/0",
-              "min-segno": "0000000000000001",
-              "max-segno": "000000000000000A",
+              "min-segno": "000000010000000000000001",
+              "max-segno": "00000001000000000000000A",
               "n-segments": 10,
               "size": 8774805,
               "zratio": 19.00,
@@ -2679,8 +2679,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
               "tli": 1,
               "parent-tli": 0,
               "switchpoint": "0/0",
-              "min-segno": "0000000000000001",
-              "max-segno": "000000000000000B",
+              "min-segno": "000000010000000000000001",
+              "max-segno": "00000001000000000000000B",
               "n-segments": 11,
               "size": 8860892,
               "zratio": 20.00,
@@ -3049,10 +3049,10 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance node --arc
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
-===============================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size  Zratio  N backups  Status
-===============================================================================================================
- 1    0           0/0          0000000000000001  0000000000000047  71          36MB  31.00   6          OK
+===============================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
+===============================================================================================================================
+ 1    0           0/0          000000010000000000000001  000000010000000000000047  71          36MB  31.00   6          OK
 </programlisting>
       <para>
         WAL purge without <option>--wal-depth</option> cannot
@@ -3063,10 +3063,10 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --d
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
-===============================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size  Zratio  N backups  Status
-===============================================================================================================
- 1    0           0/0          0000000000000002  0000000000000047  70          34MB  32.00   6          OK
+===============================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
+===============================================================================================================================
+ 1    0           0/0          000000010000000000000002  000000010000000000000047  70          34MB  32.00   6          OK
 </programlisting>
       <para>
         If you would like, for example, to keep only those WAL
@@ -3078,10 +3078,10 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --d
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
-================================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size   Zratio  N backups  Status
-================================================================================================================
- 1    0           0/0          0000000000000046  0000000000000047  2           143kB  228.00  6          OK
+================================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size   Zratio  N backups  Status
+================================================================================================================================
+ 1    0           0/0          000000010000000000000046  000000010000000000000047  2           143kB  228.00  6          OK
 </programlisting>
       <para>
         Alternatively, you can use the <option>--wal-depth</option>
@@ -3092,10 +3092,10 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance node -b 
 </programlisting>
       <programlisting>
 ARCHIVE INSTANCE 'node'
-===============================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno         Max Segno         N segments  Size  Zratio  N backups  Status
-===============================================================================================================
- 1    0           0/0          0000000000000048  0000000000000049  1           72kB  228.00  7          OK
+===============================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
+===============================================================================================================================
+ 1    0           0/0          000000010000000000000048  000000010000000000000049  1           72kB  228.00  7          OK
 </programlisting>
       <note>
         <para>

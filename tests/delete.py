@@ -766,8 +766,8 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'On timeline 1 WAL segments between 0000000000000001 '
-            'and 0000000000000003 can be removed',
+            'On timeline 1 WAL segments between 000000010000000000000001 '
+            'and 000000010000000000000003 can be removed',
             output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
@@ -791,8 +791,8 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'On timeline 1 WAL segments between 0000000000000001 '
-            'and 0000000000000003 will be removed',
+            'On timeline 1 WAL segments between 000000010000000000000001 '
+            'and 000000010000000000000003 will be removed',
             output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)

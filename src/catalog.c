@@ -697,8 +697,8 @@ catalog_get_timelines(InstanceConfig *instance)
 	char		arclog_path[MAXPGPATH];
 
 	/* for fancy reporting */
-	char begin_segno_str[20];
-	char end_segno_str[20];
+	char begin_segno_str[XLOG_FNAME_LEN];
+	char end_segno_str[XLOG_FNAME_LEN];
 
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
@@ -1132,8 +1132,8 @@ catalog_get_timelines(InstanceConfig *instance)
 				 * covered by other larger interval.
 				 */
 
-				GetXLogSegName(begin_segno_str, interval->begin_segno, instance->xlog_seg_size);
-				GetXLogSegName(end_segno_str, interval->end_segno, instance->xlog_seg_size);
+				GetXLogFileName(begin_segno_str, tlinfo->tli, interval->begin_segno, instance->xlog_seg_size);
+				GetXLogFileName(end_segno_str, tlinfo->tli, interval->end_segno, instance->xlog_seg_size);
 
 				elog(LOG, "Timeline %i to stay reachable from timeline %i "
 								"protect from purge WAL interval between "
@@ -1187,8 +1187,8 @@ catalog_get_timelines(InstanceConfig *instance)
 			else
 				interval->end_segno = segno;
 
-			GetXLogSegName(begin_segno_str, interval->begin_segno, instance->xlog_seg_size);
-			GetXLogSegName(end_segno_str, interval->end_segno, instance->xlog_seg_size);
+			GetXLogFileName(begin_segno_str, tlinfo->tli, interval->begin_segno, instance->xlog_seg_size);
+			GetXLogFileName(end_segno_str, tlinfo->tli, interval->end_segno, instance->xlog_seg_size);
 
 			elog(LOG, "Archive backup %s to stay consistent "
 							"protect from purge WAL interval "

@@ -63,10 +63,10 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             if not wal_name.endswith(".backup"):
 
                 if self.archive_compress:
-                    wal_name = wal_name[-19:]
+                    wal_name = wal_name[-27:]
                     wal_name = wal_name[:-3]
                 else:
-                    wal_name = wal_name[-16:]
+                    wal_name = wal_name[-24:]
 
                 self.assertTrue(wal_name >= min_wal)
                 self.assertTrue(wal_name <= max_wal)
@@ -2234,8 +2234,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 '--log-level-console=verbose'])
 
         self.assertIn(
-            'INFO: On timeline 4 WAL segments between 0000000000000002 '
-            'and 0000000000000006 can be removed',
+            'INFO: On timeline 4 WAL segments between 000000040000000000000002 '
+            'and 000000040000000000000006 can be removed',
             output)
 
         self.assertIn(
@@ -2259,8 +2259,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             options=['--delete-wal', '--log-level-console=verbose'])
 
         self.assertIn(
-            'INFO: On timeline 4 WAL segments between 0000000000000002 '
-            'and 0000000000000006 will be removed',
+            'INFO: On timeline 4 WAL segments between 000000040000000000000002 '
+            'and 000000040000000000000006 will be removed',
             output)
 
         self.assertIn(
@@ -2281,11 +2281,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             show_tli4_before['min-segno'],
-            '0000000000000002')
+            '000000040000000000000002')
 
         self.assertEqual(
             show_tli4_after['min-segno'],
-            '0000000000000006')
+            '000000040000000000000006')
 
         self.assertFalse(show_tli5_after)
 
@@ -2461,8 +2461,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'LOG: Archive backup {0} to stay consistent protect from '
-            'purge WAL interval between 0000000000000004 and 0000000000000004 '
-            'on timeline 1'.format(B1), output)
+            'purge WAL interval between 000000010000000000000004 '
+            'and 000000010000000000000004 on timeline 1'.format(B1), output)
 
         start_lsn_B4 = self.show_pb(backup_dir, 'node', B4)['start-lsn']
         self.assertIn(
@@ -2471,13 +2471,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'LOG: Timeline 3 to stay reachable from timeline 1 protect '
-            'from purge WAL interval between 0000000000000005 and '
-            '0000000000000008 on timeline 2', output)
+            'from purge WAL interval between 000000020000000000000005 and '
+            '000000020000000000000008 on timeline 2', output)
 
         self.assertIn(
             'LOG: Timeline 3 to stay reachable from timeline 1 protect '
-            'from purge WAL interval between 0000000000000004 and '
-            '0000000000000005 on timeline 1', output)
+            'from purge WAL interval between 000000010000000000000004 and '
+            '000000010000000000000005 on timeline 1', output)
 
         show_tli1_before = self.show_archive(backup_dir, 'node', tli=1)
         show_tli2_before = self.show_archive(backup_dir, 'node', tli=2)
@@ -2509,11 +2509,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             show_tli4_before['min-segno'],
-            '0000000000000002')
+            '000000040000000000000002')
 
         self.assertEqual(
             show_tli4_after['min-segno'],
-            '0000000000000006')
+            '000000040000000000000006')
 
         self.assertFalse(show_tli5_after)
 
@@ -2528,19 +2528,19 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             show_tli1_after['lost-segments'][0]['begin-segno'],
-            '0000000000000006')
+            '000000010000000000000006')
 
         self.assertEqual(
             show_tli1_after['lost-segments'][0]['end-segno'],
-            '0000000000000009')
+            '000000010000000000000009')
 
         self.assertEqual(
             show_tli2_after['lost-segments'][0]['begin-segno'],
-            '0000000000000009')
+            '000000020000000000000009')
 
         self.assertEqual(
             show_tli2_after['lost-segments'][0]['end-segno'],
-            '0000000000000009')
+            '000000020000000000000009')
 
         self.validate_pb(backup_dir, 'node')
 
