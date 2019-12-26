@@ -1413,10 +1413,18 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(timeline_1['status'], "OK")
 
         self.assertEqual(len(timeline_3['lost-segments']), 2)
-        self.assertEqual(timeline_3['lost-segments'][0]['begin-segno'], '0000000000000012')
-        self.assertEqual(timeline_3['lost-segments'][0]['end-segno'], '0000000000000013')
-        self.assertEqual(timeline_3['lost-segments'][1]['begin-segno'], '0000000000000017')
-        self.assertEqual(timeline_3['lost-segments'][1]['end-segno'], '0000000000000017')
+        self.assertEqual(
+            timeline_3['lost-segments'][0]['begin-segno'],
+            '000000030000000000000012')
+        self.assertEqual(
+            timeline_3['lost-segments'][0]['end-segno'],
+            '000000030000000000000013')
+        self.assertEqual(
+            timeline_3['lost-segments'][1]['begin-segno'],
+            '000000030000000000000017')
+        self.assertEqual(
+            timeline_3['lost-segments'][1]['end-segno'],
+            '000000030000000000000017')
 
         self.assertEqual(len(timeline_6['backups']), 0)
         self.assertEqual(len(timeline_5['backups']), 0)
@@ -1487,7 +1495,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # sanity
         for timeline in timelines:
-            self.assertEqual(timeline['min-segno'], '0000000000000001')
+            self.assertEqual(
+                timeline['min-segno'],
+                '000000010000000000000001')
             self.assertEqual(timeline['status'], 'OK')
 
         self.del_test_dir(module_name, fname)
@@ -1539,7 +1549,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # sanity
         for timeline in timelines:
-            self.assertEqual(timeline['min-segno'], '0000000000000002')
+            self.assertEqual(
+                timeline['min-segno'],
+                '000000010000000000000002')
             self.assertEqual(timeline['status'], 'OK')
 
         self.del_test_dir(module_name, fname)
@@ -1690,8 +1702,67 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_hexadecimal_timeline(self):
+        """
+        Check that timelines are correct.
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=2)
+
+        # create timelines
+        for i in range(1, 13):
+            # print(i)
+            node.cleanup()
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=['--recovery-target-timeline={0}'.format(i)])
+            node.slow_start()
+            node.pgbench_init(scale=2)
+
+        show = self.show_archive(backup_dir)
+
+        timelines = show[0]['timelines']
+
+        print(timelines[0])
+
+        tli13 = timelines[0]
+
+        self.assertEqual(
+            13,
+            tli13['tli'])
+
+        self.assertEqual(
+            12,
+            tli13['parent-tli'])
+
+        self.assertEqual(
+            backup_id,
+            tli13['closest-backup-id'])
+
+        self.assertEqual(
+            '0000000D000000000000001B',
+            tli13['max-segno'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # important - switchpoint may be NullOffset LSN and not actually existing in archive to boot.
-# so write validation code accordingly
+# so write WAL validation code accordingly
 
 # change wal-seg-size
 #
