@@ -497,8 +497,14 @@ main(int argc, char *argv[])
 		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
 		{
 			if (fio_access(backup_instance_path, F_OK, FIO_BACKUP_HOST) != 0)
+			{
+				elog(WARNING, "Failed to access directory \"%s\": %s",
+					backup_instance_path, strerror(errno));
+
+				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
+			}
 		}
 	}
 
