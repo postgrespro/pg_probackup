@@ -810,8 +810,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 {
 	XLogSegNo   FirstToDeleteSegNo;
 	XLogSegNo   OldestToKeepSegNo = 0;
-	char 		first_to_del_str[20];
-	char 		oldest_to_keep_str[20];
+	char 		first_to_del_str[XLOG_FNAME_LEN];
+	char 		oldest_to_keep_str[XLOG_FNAME_LEN];
 	int			rc;
 	int			i;
 	size_t		wal_size_logical = 0;
@@ -846,8 +846,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	if (OldestToKeepSegNo > 0 && OldestToKeepSegNo > FirstToDeleteSegNo)
 	{
 		/* translate segno number into human readable format */
-		GetXLogSegName(first_to_del_str, FirstToDeleteSegNo, xlog_seg_size);
-		GetXLogSegName(oldest_to_keep_str, OldestToKeepSegNo, xlog_seg_size);
+		GetXLogFileName(first_to_del_str, tlinfo->tli, FirstToDeleteSegNo, xlog_seg_size);
+		GetXLogFileName(oldest_to_keep_str, tlinfo->tli, OldestToKeepSegNo, xlog_seg_size);
 
 		elog(INFO, "On timeline %i WAL segments between %s and %s %s be removed",
 					 tlinfo->tli, first_to_del_str,
@@ -874,8 +874,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 
 		if (FirstToDeleteSegNo > 0 && OldestToKeepSegNo > 0)
 		{
-			GetXLogSegName(first_to_del_str, FirstToDeleteSegNo, xlog_seg_size);
-			GetXLogSegName(oldest_to_keep_str, OldestToKeepSegNo, xlog_seg_size);
+			GetXLogFileName(first_to_del_str, tlinfo->tli, FirstToDeleteSegNo, xlog_seg_size);
+			GetXLogFileName(oldest_to_keep_str, tlinfo->tli, OldestToKeepSegNo, xlog_seg_size);
 
 			elog(LOG, "On timeline %i first segment %s is greater than oldest segment to keep %s",
 					tlinfo->tli, first_to_del_str, oldest_to_keep_str);
