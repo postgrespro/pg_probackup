@@ -1236,7 +1236,6 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file,
 			blknum += 1;
 			break;
 		}
-		file->read_size += BLCKSZ;
 	}
 	*nBlocksSkipped = blknum - n_blocks_read;
 	return blknum;

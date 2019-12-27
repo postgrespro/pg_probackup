@@ -453,7 +453,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	char		write_buffer[BLCKSZ+sizeof(header)];
 	char		compressed_page[BLCKSZ*2]; /* compressed page may require more space than uncompressed */
 
-	if(page_state == SkipCurrentPage)
+	if (page_state == SkipCurrentPage)
 		return;
 
 	header.block = blknum;
@@ -641,6 +641,7 @@ backup_data_file(backup_files_arg* arguments,
 					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
 			n_blocks_read = rc;
 
+			file->read_size = n_blocks_read * BLCKSZ;
 			file->uncompressed_size = (n_blocks_read - n_blocks_skipped)*BLCKSZ;
 		}
 		else
@@ -658,6 +659,8 @@ backup_data_file(backup_files_arg* arguments,
 				n_blocks_read++;
 				if (page_state == PageIsTruncated)
 					break;
+
+				file->read_size += BLCKSZ;
 			}
 		}
 		if (backup_mode == BACKUP_MODE_DIFF_DELTA)
