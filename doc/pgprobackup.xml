@@ -1208,7 +1208,11 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_block(oid, oid, oid, bigint) 
    </note>
 
     <para>
-     For older <productname>PostgreSQL</productname> versions:
+     For older <productname>PostgreSQL</productname> versions,
+     PTRACK required taking backups in the exclusive mode
+     to provide exclusive access to bitmaps with changed blocks.
+     To set up PTRACK backups for <productname>PostgreSQL</productname> 11
+     or lower, do the following:
     </para>
     <orderedlist>
       <listitem>
@@ -1227,6 +1231,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_block(oid, oid, oid, bigint) 
         <programlisting>
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup;
 </programlisting>
       </listitem>
     </orderedlist>
@@ -4943,6 +4948,19 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
     <itemizedlist spacing="compact">
       <listitem>
         <para>
+          <literal>backup</literal> — <productname>PostgreSQL</productname>
+          role used for connection to <productname>PostgreSQL</productname>
+          cluster.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <literal>backupdb</literal> — database used for connection
+          to <productname>PostgreSQL</productname> cluster.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
           <literal>backup_host</literal> — host with backup catalog.
         </para>
       </listitem>
@@ -4975,12 +4993,6 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         <para>
           <filename>/var/lib/postgresql/11/main</filename> — <productname>PostgreSQL</productname>
           data directory on <literal>postgres_host</literal>.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <literal>backupdb</literal> — database used for connection
-          to <productname>PostgreSQL</productname> cluster.
         </para>
       </listitem>
     </itemizedlist>
@@ -5016,19 +5028,19 @@ CREATE DATABASE backupdb;
         <programlisting>
 backupdb=#
 BEGIN;
-CREATE ROLE probackup WITH LOGIN REPLICATION;
-GRANT USAGE ON SCHEMA pg_catalog TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO probackup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO probackup;
+CREATE ROLE backup WITH LOGIN REPLICATION;
+GRANT USAGE ON SCHEMA pg_catalog TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
 COMMIT;
 </programlisting>
       </step>
@@ -5049,7 +5061,7 @@ INFO: Instance 'node' successfully inited
       <step id="pbk-take-full-backup">
         <title>Take a FULL backup:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YK2, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
 INFO: Start transferring data files
 INFO: Data files are transferred
@@ -5076,7 +5088,7 @@ BACKUP INSTANCE 'pg-11'
       <step id="pbk-take-incremental-backup-in-delta-mode">
         <title>Take an incremental backup in the DELTA mode:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YMP, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
 INFO: Parent backup: PZ7YK2
 INFO: Start transferring data files
@@ -5093,7 +5105,7 @@ INFO: Backup PZ7YMP completed
         <title>Let's add some parameters to <application>pg_probackup</application>
         configuration file, so that you can omit them from the command line:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -U probackup -d backupdb
+[backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
 </programlisting>
       </step>
       <step id="pbk-take-another-incremental-backup-in-delta-mode-omitting-some-of-the-previous-parameters">
@@ -5125,7 +5137,7 @@ xlog-seg-size = 16777216
 # Connection parameters
 pgdatabase = backupdb
 pghost = postgres_host
-pguser = probackup
+pguser = backup
 # Replica parameters
 replica-timeout = 5min
 # Archive parameters
