@@ -1190,9 +1190,9 @@ CREATE EXTENSION ptrack;
        in the database used to connect to the cluster:
       </para>
       <programlisting>
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_pagemapset(pg_lsn) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_control_lsn() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
+GRANT EXECUTE ON FUNCTION pg_ptrack_get_pagemapset(pg_lsn) TO backup;
+GRANT EXECUTE ON FUNCTION pg_ptrack_control_lsn() TO backup;
+GRANT EXECUTE ON FUNCTION pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
 </programlisting>
       </listitem>
     </orderedlist>
