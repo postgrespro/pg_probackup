@@ -816,6 +816,7 @@ int fio_unlink(char const* path, fio_location location)
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
 
+		// TODO: error is swallowed ?
 		return 0;
 	}
 	else

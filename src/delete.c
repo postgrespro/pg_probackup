@@ -933,7 +933,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 			}
 
 			/* unlink segment */
-			rc = unlink(wal_file->file.path);
+			rc = fio_unlink(wal_file->file.path, FIO_BACKUP_HOST);
 			if (rc < 0)
 			{
 				/* Missing file is not considered as error condition */
