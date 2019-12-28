@@ -1865,6 +1865,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
+        result = node.safe_psql(
+            'postgres',
+            'SELECT * from pgbench_accounts')
+
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
@@ -1883,6 +1887,18 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             node_restored, backup_id=backup_id)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
+
+        self.set_auto_conf(
+            node_restored,
+            {'port': node_restored.port})
+        node_restored.slow_start()
+
+        result_new = node_restored.safe_psql(
+            'postgres',
+            'SELECT * from pgbench_accounts')
+
+        self.assertTrue(result, result_new)
+
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself

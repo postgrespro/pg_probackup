@@ -2748,6 +2748,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
     def test_partial_restore_backward_compatibility_1(self):
         """
+        old binary should be version < 2.2.0
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

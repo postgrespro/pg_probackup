@@ -311,7 +311,9 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         # sanity
         for timeline in timelines:
-            self.assertEqual(timeline['min-segno'], '0000000000000004')
+            self.assertEqual(
+                timeline['min-segno'],
+                '000000010000000000000004')
             self.assertEqual(timeline['status'], 'OK')
 
         # Clean after yourself
@@ -373,7 +375,9 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         # sanity
         for timeline in timelines:
-            self.assertEqual(timeline['min-segno'], '0000000000000002')
+            self.assertEqual(
+                timeline['min-segno'],
+                '000000010000000000000002')
             self.assertEqual(timeline['status'], 'OK')
 
         self.validate_pb(backup_dir)
