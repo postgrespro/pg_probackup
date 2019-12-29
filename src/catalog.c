@@ -697,8 +697,8 @@ catalog_get_timelines(InstanceConfig *instance)
 	char		arclog_path[MAXPGPATH];
 
 	/* for fancy reporting */
-	char begin_segno_str[XLOG_FNAME_LEN];
-	char end_segno_str[XLOG_FNAME_LEN];
+	char begin_segno_str[MAXFNAMELEN];
+	char end_segno_str[MAXFNAMELEN];
 
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);

@@ -806,9 +806,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 {
 	XLogSegNo   FirstToDeleteSegNo;
 	XLogSegNo   OldestToKeepSegNo = 0;
-	char 		first_to_del_str[XLOG_FNAME_LEN];
-	char 		oldest_to_keep_str[XLOG_FNAME_LEN];
-	int			rc;
+	char 		first_to_del_str[MAXFNAMELEN];
+	char 		oldest_to_keep_str[MAXFNAMELEN];
 	int			i;
 	size_t		wal_size_logical = 0;
 	size_t		wal_size_actual = 0;
@@ -933,8 +932,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 			}
 
 			/* unlink segment */
-			rc = fio_unlink(wal_file->file.path, FIO_BACKUP_HOST);
-			if (rc < 0)
+			if (fio_unlink(wal_file->file.path, FIO_BACKUP_HOST) < 0)
 			{
 				/* Missing file is not considered as error condition */
 				if (errno != ENOENT)
