@@ -1629,7 +1629,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_wal_depth(self):
         """
         ARCHIVE replica:
