@@ -748,7 +748,7 @@ static void
 show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 				   parray *tli_list, bool show_name)
 {
-	char segno_tmp[XLOG_FNAME_LEN];
+	char segno_tmp[XLOG_FNAME_LEN+1];
 	parray *actual_tli_list = parray_new();
 #define SHOW_ARCHIVE_FIELDS_COUNT 10
 	int			i;
