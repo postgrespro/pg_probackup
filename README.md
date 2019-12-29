@@ -48,7 +48,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Current release
 
-[2.2.5](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.5)
+[2.2.6](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.6)
 
 ## Documentation
 
