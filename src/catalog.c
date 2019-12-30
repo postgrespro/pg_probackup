@@ -1566,7 +1566,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	char		path_temp[MAXPGPATH];
 	int			errno_temp;
 	size_t		i = 0;
-	#define BUFFERSZ BLCKSZ*500
+	#define BUFFERSZ 1024*1024
 	char		buf[BUFFERSZ];
 	size_t		write_len = 0;
 	int64 		backup_size_on_disk = 0;
