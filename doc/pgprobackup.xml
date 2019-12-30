@@ -1625,6 +1625,44 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         </para>
       </listitem>
     </itemizedlist>
+
+    <para>
+     Once the <literal>restore</literal> command is complete, start
+     the database service.
+    </para>
+
+    <para>
+     If you restore <link linkend="pbk-archive-mode">ARCHIVE</link> backups,
+     perform <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
+     or specify the <literal>--restore-as-replica</literal> option with the
+     <literal>restore</literal> command to set up a standby server,
+     <application>pg_probackup</application> creates a recovery configuration
+     file once all data files are copied into the target directory. This file
+     includes the minimal settings required for recovery, except for the password in the
+     <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
+     parameter; you have to add the password manually, if required.
+     For <productname>PostgreSQL</productname> 11 or lower,
+     recovery settings are written into the <filename>recovery.conf</filename>
+     file. Starting from <productname>PostgreSQL</productname> 12,
+     <application>pg_probackup</application> writes these settings into
+     the <filename>probackup_recovery.conf</filename> file in the data
+     directory, and then includes them into the
+     <filename>postgresql.auto.conf</filename> when the cluster is
+     is started.
+    </para>
+
+    <para>
+      If you are restoring a STREAM backup, the restore is complete
+      at once, with the cluster returned to a self-consistent state at
+      the point when the backup was taken. For ARCHIVE backups,
+      <productname>PostgreSQL</productname> replays all available archived WAL
+      segments, so the cluster is restored to the latest state possible
+      within the current timeline. You can change this behavior by using the
+      <link linkend="pbk-recovery-target-opts">recovery target
+      options</link> with the <literal>restore</literal> command,
+      as explained in <xref linkend="pbk-performing-point-in-time-pitr-recovery"/>.
+    </para>
+
     <para>
       If the cluster to restore contains tablespaces, <application>pg_probackup</application>
       restores them to their original location by default. To restore
@@ -1644,28 +1682,10 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
     <programlisting>
 pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -D <replaceable>data_dir</replaceable> -j 4 -i <replaceable>backup_id</replaceable> -T tablespace1_dir=<replaceable>tablespace1_newdir</replaceable> -T tablespace2_dir=<replaceable>tablespace2_newdir</replaceable>
 </programlisting>
+
     <para>
-      Once the restore command is complete, start the database
-      service.
-    </para>
-    <para>
-      If you are restoring a STREAM backup, the restore is complete
-      at once, with the cluster returned to a self-consistent state at
-      the point when the backup was taken. For ARCHIVE backups,
-      <productname>PostgreSQL</productname> replays all available archived WAL segments, so the
-      cluster is restored to the latest state possible. You can change
-      this behavior by using the
-      <link linkend="pbk-recovery-target-opts">recovery target
-      options</link> with the <literal>restore</literal> command. Note
-      that using the <link linkend="pbk-recovery-target-opts">recovery
-      target options</link> when restoring STREAM backup is possible
-      if the WAL archive is available at least starting from the time
-      the STREAM backup was taken.
-    </para>
-    <para>
-      To restore the cluster on a remote host, see the section
-      <link linkend="pbk-remote-backup">Using
-      <application>pg_probackup</application> in the Remote Mode</link>.
+      To restore the cluster on a remote host, follow the instructions in
+      <xref linkend="pbk-remote-backup"/>.
     </para>
     <note>
       <para>
@@ -1744,15 +1764,18 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       cluster to its state at an arbitrary point in time (recovery
       target) using <link linkend="pbk-recovery-target-opts">recovery
       target options</link> with the
-      <xref linkend="pbk-restore"/> and
-      <xref linkend="pbk-validate"/> commands.
+      <xref linkend="pbk-restore"/> command.
     </para>
+
     <para>
+      You can use both STREAM and ARCHIVE backups for point in time
+      recovery as long as the WAL archive is available at least starting
+      from the time the backup was taken.
       If <option>-i</option>/<option>--backup-id</option> option is omitted,
       <application>pg_probackup</application> automatically chooses the backup that is the
       closest to the specified recovery target and starts the restore
       process, otherwise <application>pg_probackup</application> will try to restore
-      <replaceable>backup_id</replaceable> to the specified recovery target.
+      the specified backup to the specified recovery target.
     </para>
     <itemizedlist>
       <listitem>
@@ -3585,13 +3608,17 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <para>
         Creates a minimal recovery configuration file to facilitate setting up a
         standby server. If the replication connection requires a password,
-        you must specify the password manually as it is not included.
+        you must specify the password manually in the
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
+        parameter as it is not included.
         For <productname>PostgreSQL</productname> 11 or lower,
         recovery settings are written into the <filename>recovery.conf</filename>
         file. Starting from <productname>PostgreSQL</productname> 12,
         <application>pg_probackup</application> writes these settings into
         the <filename>probackup_recovery.conf</filename> file in the data
-        directory.
+        directory, and then includes them into the
+        <filename>postgresql.auto.conf</filename> when the cluster is
+        is started.
       </para>
       </listitem>
       </varlistentry>
