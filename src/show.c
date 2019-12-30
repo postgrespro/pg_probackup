@@ -43,8 +43,8 @@ typedef struct ShowArchiveRow
 	char		tli[20];
 	char		parent_tli[20];
 	char		switchpoint[20];
-	char		min_segno[XLOG_FNAME_LEN+1];
-	char		max_segno[XLOG_FNAME_LEN+1];
+	char		min_segno[MAXFNAMELEN];
+	char		max_segno[MAXFNAMELEN];
 	char		n_segments[20];
 	char		size[20];
 	char		zratio[20];
@@ -748,7 +748,7 @@ static void
 show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 				   parray *tli_list, bool show_name)
 {
-	char segno_tmp[XLOG_FNAME_LEN+1];
+	char segno_tmp[MAXFNAMELEN];
 	parray *actual_tli_list = parray_new();
 #define SHOW_ARCHIVE_FIELDS_COUNT 10
 	int			i;
@@ -939,7 +939,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	int			i,j;
 	PQExpBuffer	buf = &show_buf;
 	parray *actual_tli_list = parray_new();
-	char segno_tmp[XLOG_FNAME_LEN+1];
+	char segno_tmp[MAXFNAMELEN];
 
 	if (!first_instance)
 		appendPQExpBufferChar(buf, ',');
@@ -968,7 +968,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	for (i = parray_num(actual_tli_list) - 1; i >= 0; i--)
 	{
 		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(actual_tli_list, i);
-		char		tmp_buf[XLOG_FNAME_LEN+1];
+		char		tmp_buf[MAXFNAMELEN];
 		float		zratio = 0;
 
 		if (i != (parray_num(actual_tli_list) - 1))
