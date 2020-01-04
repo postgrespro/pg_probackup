@@ -1567,7 +1567,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	int			errno_temp;
 	size_t		i = 0;
 	#define BUFFERSZ 1024*1024
-	char		buf[BUFFERSZ];
+	char		*buf;
 	size_t		write_len = 0;
 	int64 		backup_size_on_disk = 0;
 	int64 		uncompressed_size_on_disk = 0;
@@ -1580,6 +1580,8 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	if (out == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
+
+	buf = pgut_malloc(BUFFERSZ);
 
 	/* print each file in the list */
 	while(i < parray_num(files))
@@ -1693,6 +1695,8 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	backup->data_bytes = backup_size_on_disk;
 	backup->wal_bytes = wal_size_on_disk;
 	backup->uncompressed_bytes = uncompressed_size_on_disk;
+
+	free(buf);
 }
 
 /*
