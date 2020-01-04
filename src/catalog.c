@@ -716,7 +716,10 @@ catalog_get_timelines(InstanceConfig *instance)
 		parray *timelines;
 		xlogFile *wal_file = NULL;
 
-		/* regular WAL file */
+		/*
+		 * Regular WAL file.
+		 * IsXLogFileName() cannot be used here
+		 */
 		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
 		{
 			int result = 0;
