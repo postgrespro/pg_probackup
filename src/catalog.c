@@ -717,7 +717,7 @@ catalog_get_timelines(InstanceConfig *instance)
 		xlogFile *wal_file = NULL;
 
 		/* regular WAL file */
-		if (IsXLogFileName(file->name))
+		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
 		{
 			int result = 0;
 			uint32 log, seg;
