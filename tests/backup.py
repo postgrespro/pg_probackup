@@ -1613,6 +1613,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT CONNECT ON DATABASE backupdb to backup; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
@@ -1644,6 +1645,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "CREATE ROLE backup WITH LOGIN REPLICATION; "
                 "GRANT CONNECT ON DATABASE backupdb to backup; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
@@ -1680,6 +1682,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "CREATE ROLE backup WITH LOGIN REPLICATION; "
                 "GRANT CONNECT ON DATABASE backupdb to backup; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
