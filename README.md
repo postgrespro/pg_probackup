@@ -69,7 +69,7 @@ sudo apt-get install pg-probackup-{12,11,10,9.6,9.5}-dbg
 
 #DEB-SRC Packages
 sudo echo "deb-src [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
-  /etc/apt/sources.list.d/pg_probackup.list
+  /etc/apt/sources.list.d/pg_probackup.list && sudo apt-get update
 sudo apt-get source pg-probackup-{12,11,10,9.6,9.5}
 
 #RPM Centos Packages
