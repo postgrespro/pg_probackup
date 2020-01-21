@@ -372,6 +372,8 @@ struct pgBackup
 										* in the format suitable for recovery.conf */
 	char			*external_dir_str;	/* List of external directories,
 										 * separated by ':' */
+	parray			*files;			/* list of files belonging to this backup
+									 * must be populated by calling backup_populate() */
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -835,6 +837,10 @@ extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
 							  bool write_header,
 							  uint32 backup_version);
+extern void restore_data_file_new(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
+								  const char *from_fullpath, const char *to_fullpath, int nblocks);
+extern void restore_non_data_file(FILE *in, FILE *out, pgFile *file,
+								  const char *from_fullpath, const char *to_fullpath);
 extern bool copy_file(fio_location from_location, const char *to_root,
 					  fio_location to_location, pgFile *file, bool missing_ok);
 extern bool create_empty_file(fio_location from_location, const char *to_root,

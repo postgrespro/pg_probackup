@@ -757,7 +757,7 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 	}
 
 	/*
-	 * Open backup file for write. 	We use "r+" at first to overwrite only
+	 * Open backup file for write.  We use "r+" at first to overwrite only
 	 * modified pages for differential restore. If the file does not exist,
 	 * re-open it with "w" to create an empty file.
 	 */
@@ -959,6 +959,193 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 
 	if (in)
 		fclose(in);
+}
+
+/*
+ * Restore files in the from_root directory to the to_root directory with
+ * same relative path.
+ *
+ * If write_header is true then we add header to each restored block, currently
+ * it is used for MERGE command.
+ *
+ * to_fullpath and from_fullpath are provided strictly for ERROR reporting
+ */
+void
+restore_data_file_new(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
+					  const char *from_fullpath, const char *to_fullpath, int nblocks)
+{
+	BackupPageHeader header;
+	BlockNumber	blknum = 0;
+	size_t	write_len = 0;
+
+	while (true)
+	{
+		off_t		write_pos;
+		size_t		read_len;
+		DataPage	compressed_page; /* used as read buffer */
+		DataPage	page;
+		int32		uncompressed_size = 0;
+
+		/* read BackupPageHeader */
+		read_len = fread(&header, 1, sizeof(header), in);
+
+		if (read_len != sizeof(header))
+		{
+			int errno_tmp = errno;
+			if (read_len == 0 && feof(in))
+				break;		/* EOF found */
+			else if (read_len != 0 && feof(in))
+				elog(ERROR, "Odd size page found at block %u of \"%s\"",
+					 blknum, from_fullpath);
+			else
+				elog(ERROR, "Cannot read header of block %u of \"%s\": %s",
+					 blknum, from_fullpath, strerror(errno_tmp));
+		}
+
+		/* Consider empty block */
+		if (header.block == 0 && header.compressed_size == 0)
+		{
+			elog(VERBOSE, "Skip empty block of \"%s\"", from_fullpath);
+			continue;
+		}
+
+		/* sanity? */
+		if (header.block < blknum)
+			elog(ERROR, "Backup is broken at block %u of \"%s\"",
+				 blknum, from_fullpath);
+
+		blknum = header.block;
+
+		/* no point in writing redundant data */
+		if (nblocks > 0 && blknum >= nblocks)
+			return;
+
+		if (header.compressed_size > BLCKSZ)
+			elog(ERROR, "Size of a blknum %i exceed BLCKSZ", blknum);
+
+		/* read a page from file */
+		read_len = fread(compressed_page.data, 1,
+			MAXALIGN(header.compressed_size), in);
+
+		if (read_len != MAXALIGN(header.compressed_size))
+			elog(ERROR, "Cannot read block %u of \"%s\", read %zu of %d",
+				blknum, from_fullpath, read_len, header.compressed_size);
+
+		/*
+		 * if page size is smaller than BLCKSZ, decompress the page.
+		 * BUGFIX for versions < 2.0.23: if page size is equal to BLCKSZ.
+		 * we have to check, whether it is compressed or not using
+		 * page_may_be_compressed() function.
+		 */
+		if (header.compressed_size != BLCKSZ
+			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
+									  backup_version))
+		{
+			const char *errormsg = NULL;
+
+			uncompressed_size = do_decompress(page.data, BLCKSZ,
+											  compressed_page.data,
+											  header.compressed_size,
+											  file->compress_alg, &errormsg);
+
+			if (uncompressed_size < 0 && errormsg != NULL)
+				elog(WARNING, "An error occured during decompressing block %u of file \"%s\": %s",
+					 blknum, from_fullpath, errormsg);
+
+			if (uncompressed_size != BLCKSZ)
+				elog(ERROR, "Page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
+					 from_fullpath, uncompressed_size);
+		}
+
+		write_pos = blknum * BLCKSZ;
+
+		/*
+		 * Seek and write the restored page.
+		 * TODO: invent fio_pwrite().
+		 */
+		if (fio_fseek(out, write_pos) < 0)
+			elog(ERROR, "Cannot seek block %u of \"%s\": %s",
+				 blknum, to_fullpath, strerror(errno));
+
+		/* if we uncompressed the page - write page.data,
+		 * if page wasn't compressed -
+		 * write what we've read - compressed_page.data
+		 */
+		if (uncompressed_size == BLCKSZ)
+		{
+			if (fio_fwrite(out, page.data, BLCKSZ) != BLCKSZ)
+				elog(ERROR, "Cannot write block %u of \"%s\": %s",
+					 blknum, to_fullpath, strerror(errno));
+		}
+		else
+		{
+			if (fio_fwrite(out, compressed_page.data, BLCKSZ) != BLCKSZ)
+				elog(ERROR, "Cannot write block %u of \"%s\": %s",
+					 blknum, to_fullpath, strerror(errno));
+		}
+
+		write_len += BLCKSZ;
+	}
+
+	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);
+}
+
+/*
+ * Copy file to backup.
+ * We do not apply compression to these files, because
+ * it is either small control file or already compressed cfs file.
+ */
+void
+restore_non_data_file(FILE *in, FILE *out, pgFile *file,
+					  const char *from_fullpath, const char *to_fullpath)
+{
+	size_t		read_len = 0;
+	int			errno_tmp;
+	char		buf[BLCKSZ];
+
+	/* copy content */
+	for (;;)
+	{
+		read_len = 0;
+
+		if ((read_len = fio_fread(in, buf, sizeof(buf))) != sizeof(buf))
+			break;
+
+		if (fio_fwrite(out, buf, read_len) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fio_fclose(in);
+			fio_fclose(out);
+			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
+				 strerror(errno_tmp));
+		}
+	}
+
+	errno_tmp = errno;
+	if (read_len < 0)
+	{
+		fio_fclose(in);
+		fio_fclose(out);
+		elog(ERROR, "Cannot read backup mode file \"%s\": %s",
+			 from_fullpath, strerror(errno_tmp));
+	}
+
+	/* copy odd part. */
+	if (read_len > 0)
+	{
+		if (fio_fwrite(out, buf, read_len) != read_len)
+		{
+			errno_tmp = errno;
+			/* oops */
+			fio_fclose(in);
+			fio_fclose(out);
+			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
+				 strerror(errno_tmp));
+		}
+	}
+
+	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
 }
 
 /*
