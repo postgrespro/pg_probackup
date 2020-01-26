@@ -65,7 +65,7 @@ static void pg12_recovery_config(pgBackup *backup, bool add_include);
 
 static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
-						  const char *pgdata_path);
+						  const char *pgdata_path, bool no_sync);
 
 static void *restore_files_new(void *arg);
 
@@ -118,7 +118,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
  */
 int
 do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
-					   pgRestoreParams *params)
+					   pgRestoreParams *params, bool no_sync)
 {
 	int			i = 0;
 	int			j = 0;
@@ -490,14 +490,14 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					 dest_backup->server_version);
 
 		restore_chain(dest_backup, parent_chain, dbOid_exclude_list,
-									params, instance_config.pgdata);
+							params, instance_config.pgdata, no_sync);
 
 		/* Create recovery.conf with given recovery target parameters */
 		create_recovery_conf(target_backup_id, rt, dest_backup, params);
 	}
 
 	/* cleanup */
-	parray_walk(backups, pgBackupFree); /* free backup->files */
+	parray_walk(backups, pgBackupFree); /* TODO: free backup->files */
 	parray_free(backups);
 	parray_free(parent_chain);
 
@@ -512,7 +512,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 void
 restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			  parray *dbOid_exclude_list, pgRestoreParams *params,
-			  const char *pgdata_path)
+			  const char *pgdata_path, bool no_sync)
 {
 	int			i;
 	char		control_file[MAXPGPATH];
@@ -524,6 +524,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	restore_files_arg_new *threads_args;
 	bool		restore_isok = true;
 
+	char		pretty_time[20];
 	time_t		start_time, end_time;
 
 	/* Preparations for actual restoring */
@@ -637,6 +638,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		pg_atomic_clear_flag(&file->lock);
 	}
 
+	fio_disconnect();
+
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (restore_files_arg_new *) palloc(sizeof(restore_files_arg_new) *
 												num_threads);
@@ -674,46 +677,56 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	}
 
 	time(&end_time);
+	pretty_time_interval(difftime(end_time, start_time),
+						 pretty_time, lengthof(pretty_time));
 	if (restore_isok)
-		elog(INFO, "Backup files are restored, time elapsed: %.0f sec",
-			difftime(end_time, start_time));
+		elog(INFO, "Backup files are restored, time elapsed: %s", pretty_time);
 	else
-		elog(ERROR, "Backup files restoring failed, time elapsed: %.0f sec",
-			difftime(end_time, start_time));
+		elog(ERROR, "Backup files restoring failed, time elapsed: %s", pretty_time);
 
-
-	elog(INFO, "Sync restored backup files to disk");
-	time(&start_time);
-
-	for (i = 0; i < parray_num(dest_files); i++)
+	if (no_sync)
+		elog(WARNING, "Restored files are not synced to disk");
+	else
 	{
-		int 		out;
-		char		to_fullpath[MAXPGPATH];
-		pgFile	   *dest_file = (pgFile *) parray_get(dest_files, i);
+		elog(INFO, "Syncing restored files to disk");
+		time(&start_time);
 
-		if (S_ISDIR(dest_file->mode) ||
-			dest_file->external_dir_num > 0 ||
-			(strcmp(PG_TABLESPACE_MAP_FILE, dest_file->rel_path) == 0) ||
-			(strcmp(DATABASE_MAP, dest_file->rel_path) == 0))
-			continue;
+		for (i = 0; i < parray_num(dest_files); i++)
+		{
+			char		to_fullpath[MAXPGPATH];
+			pgFile	   *dest_file = (pgFile *) parray_get(dest_files, i);
 
-		join_path_components(to_fullpath, pgdata_path, dest_file->rel_path);
+			if (S_ISDIR(dest_file->mode))
+				continue;
 
-		/* open destination file */
-		out = fio_open(to_fullpath, O_WRONLY | PG_BINARY, FIO_DB_HOST);
-		if (out < 0)
-			elog(ERROR, "Cannot open file \"%s\": %s",
-				 to_fullpath, strerror(errno));
+			if (params->skip_external_dirs && dest_file->external_dir_num > 0)
+				continue;
 
-		/* sync file */
-		if (fio_flush(out) != 0 || fio_close(out) != 0)
-			elog(ERROR, "Cannot sync file \"%s\": %s",
-				 to_fullpath, strerror(errno));
+			/* construct fullpath */
+			if (dest_file->external_dir_num == 0)
+			{
+				if (strcmp(PG_TABLESPACE_MAP_FILE, dest_file->rel_path) == 0)
+					continue;
+				if (strcmp(DATABASE_MAP, dest_file->rel_path) == 0)
+					continue;
+				join_path_components(to_fullpath, pgdata_path, dest_file->rel_path);
+			}
+			else
+			{
+				char	*external_path = parray_get(external_dirs, dest_file->external_dir_num - 1);
+				join_path_components(to_fullpath, external_path, dest_file->rel_path);
+			}
+
+			/* TODO: write test for case: file to be synced is missing */
+			if (fio_sync(to_fullpath, FIO_DB_HOST) != 0)
+				elog(ERROR, "Failed to sync file \"%s\": %s", to_fullpath, strerror(errno));
+		}
+
+		time(&end_time);
+		pretty_time_interval(difftime(end_time, start_time),
+							 pretty_time, lengthof(pretty_time));
+		elog(INFO, "Restored backup files are synced, time elapsed: %s", pretty_time);
 	}
-
-	time(&end_time);
-	elog(INFO, "Restored backup files are synced, time elapsed: %.0f sec",
-		difftime(end_time, start_time));
 
 	/* cleanup */
 	pfree(threads);
@@ -724,8 +737,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 	parray_walk(dest_files, pgFileFree);
 	parray_free(dest_files);
-
-//	elog(LOG, "Restore of backup %s is completed", base36enc(backup->start_time));
 }
 
 /*

@@ -644,7 +644,8 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  pgRecoveryTarget *rt,
-					  pgRestoreParams *params);
+					  pgRestoreParams *params,
+					  bool no_sync);
 extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);

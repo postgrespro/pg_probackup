@@ -68,6 +68,7 @@ static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
 bool		progress = false;
+bool		no_sync = false;
 #if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
 #endif
@@ -155,13 +156,14 @@ static void opt_datname_include_list(ConfigOption *opt, const char *arg);
 static ConfigOption cmd_options[] =
 {
 	/* directory options */
-	{ 'b',  130, "help",			&help_opt,			SOURCE_CMD_STRICT },
+	{ 'b',  120, "help",			&help_opt,			SOURCE_CMD_STRICT },
 	{ 's', 'B', "backup-path",		&backup_path,		SOURCE_CMD_STRICT },
 	/* common options */
 	{ 'u', 'j', "threads",			&num_threads,		SOURCE_CMD_STRICT },
-	{ 'b', 131, "stream",			&stream_wal,		SOURCE_CMD_STRICT },
-	{ 'b', 132, "progress",			&progress,			SOURCE_CMD_STRICT },
+	{ 'b', 121, "stream",			&stream_wal,		SOURCE_CMD_STRICT },
+	{ 'b', 122, "progress",			&progress,			SOURCE_CMD_STRICT },
 	{ 's', 'i', "backup-id",		&backup_id_string,	SOURCE_CMD_STRICT },
+	{ 'b', 123, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
 	/* backup options */
 	{ 'b', 133, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
@@ -756,8 +758,8 @@ main(int argc, char *argv[])
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,
-							  recovery_target_options,
-							 restore_params);
+							recovery_target_options,
+							restore_params, no_sync);
 		case VALIDATE_CMD:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0 && !target_lsn)
 			{
@@ -771,7 +773,8 @@ main(int argc, char *argv[])
 				/* PITR validation and, optionally, partial validation */
 				return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
-						  restore_params);
+						  restore_params,
+						  no_sync);
 		case SHOW_CMD:
 			return do_show(instance_name, current.backup_id, show_archive);
 		case DELETE_CMD:

@@ -15,6 +15,7 @@ typedef enum
 	FIO_OPEN,
 	FIO_CLOSE,
 	FIO_WRITE,
+	FIO_SYNC,
 	FIO_RENAME,
 	FIO_SYMLINK,
 	FIO_UNLINK,
@@ -92,6 +93,7 @@ extern int     fio_fstat(int fd, struct stat* st);
 extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 extern void    fio_disconnect(void);
+extern int     fio_sync(char const* path, fio_location location);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
 extern int     fio_symlink(char const* target, char const* link_path, fio_location location);

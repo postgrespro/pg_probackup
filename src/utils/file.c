@@ -797,6 +797,48 @@ int fio_rename(char const* old_path, char const* new_path, fio_location location
 	}
 }
 
+/* Sync file to disk */
+int fio_sync(char const* path, fio_location location)
+{
+	if (fio_is_remote(location))
+	{
+		fio_header hdr;
+		size_t path_len = strlen(path) + 1;
+		hdr.cop = FIO_SYNC;
+		hdr.handle = -1;
+		hdr.size = path_len;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
+
+		return 0;
+	}
+	else
+	{
+		int fd;
+
+		fd = open(path, O_WRONLY | PG_BINARY, FILE_PERMISSIONS);
+		if (fd < 0)
+			return -1;
+
+		if (fsync(fd) < 0)
+		{
+			close(fd);
+			return -1;
+		}
+		close(fd);
+
+		return 0;
+	}
+}
+
 /* Remove file */
 int fio_unlink(char const* path, fio_location location)
 {
@@ -1348,6 +1390,7 @@ void fio_communicate(int in, int out)
 	fio_header hdr;
 	struct stat st;
 	int rc;
+	int tmp_fd;
 
 #ifdef WIN32
     SYS_CHECK(setmode(in, _O_BINARY));
@@ -1469,6 +1512,22 @@ void fio_communicate(int in, int out)
 		  case FIO_SEND_PAGES:
 			Assert(hdr.size == sizeof(fio_send_request));
 			fio_send_pages_impl(fd[hdr.handle], out, (fio_send_request*)buf);
+			break;
+		  case FIO_SYNC:
+		  	/* open file and fsync it */
+			tmp_fd = open(buf, O_WRONLY | PG_BINARY, FILE_PERMISSIONS);
+			if (tmp_fd < 0)
+				hdr.arg = errno;
+			else
+			{
+				if (fsync(tmp_fd) == 0)
+					hdr.arg = 0;
+				else
+					hdr.arg = errno;
+			}
+			close(tmp_fd);
+
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  default:
 			Assert(false);
