@@ -497,7 +497,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	}
 
 	/* cleanup */
-	parray_walk(backups, pgBackupFree); /* TODO: free backup->files */
+	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
 	parray_free(parent_chain);
 
@@ -529,28 +529,18 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 	/* Preparations for actual restoring */
 	time2iso(timestamp, lengthof(timestamp), dest_backup->start_time);
-	elog(LOG, "Restoring database from backup at %s", timestamp);
+	elog(INFO, "Restoring the database from backup at %s", timestamp);
 
 	join_path_components(control_file, dest_backup->root_dir, DATABASE_FILE_LIST);
 	dest_files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
 
-	// TODO lock entire chain
-//		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
-//		{
-//			pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
-//
-//			/*
-//			 * Backup was locked during validation if no-validate wasn't
-//			 * specified.
-//			 */
-//			if (params->no_validate && !lock_backup(backup))
-//				elog(ERROR, "Cannot lock backup directory");
-//
-//			restore_backup(backup, dest_external_dirs, dest_files, dbOid_exclude_list, params);
-//		}
+	/* Lock backup chain and make sanity checks */
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+
+		if (!lock_backup(backup))
+			elog(ERROR, "Cannot lock backup %s", base36enc(backup->start_time));
 
 		if (backup->status != BACKUP_STATUS_OK &&
 			backup->status != BACKUP_STATUS_DONE)
@@ -638,6 +628,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		pg_atomic_clear_flag(&file->lock);
 	}
 
+	/*
+	 * Close ssh connection belonging to the main thread
+	 * to avoid the possibility of been killed for idleness
+	 */
 	fio_disconnect();
 
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -735,8 +729,13 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	if (external_dirs != NULL)
 		free_dir_list(external_dirs);
 
-	parray_walk(dest_files, pgFileFree);
-	parray_free(dest_files);
+	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+
+		parray_walk(backup->files, pgFileFree);
+		parray_free(backup->files);
+	}
 }
 
 /*
