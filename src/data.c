@@ -962,23 +962,88 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
 }
 
 /*
- * Restore files in the from_root directory to the to_root directory with
- * same relative path.
- *
- * If write_header is true then we add header to each restored block, currently
- * it is used for MERGE command.
- *
- * to_fullpath and from_fullpath are provided strictly for ERROR reporting
+ * Iterate over parent backup chain and lookup given destination file in
+ * filelist of every chain member starting with FULL backup.
+ * Apply changed blocks to destination file from every backup in parent chain.
  */
 void
-restore_data_file_new(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
+restore_data_file_new(parray *parent_chain, pgFile *dest_file, FILE *out, const char *to_fullpath)
+{
+	int i;
+
+	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
+	{
+		char		from_root[MAXPGPATH];
+		char		from_fullpath[MAXPGPATH];
+		FILE		*in = NULL;
+
+		pgFile	   **res_file = NULL;
+		pgFile	   *tmp_file = NULL;
+
+		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+
+		/* check for interrupt */
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Interrupted during restore");
+
+		/* lookup file in intermediate backup */
+		res_file =  parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
+		tmp_file = (res_file) ? *res_file : NULL;
+
+		/* Destination file is not exists yet at this moment */
+		if (tmp_file == NULL)
+			continue;
+
+		/*
+		 * Skip file if it haven't changed since previous backup
+		 * and thus was not backed up.
+		 */
+		if (tmp_file->write_size == BYTES_INVALID)
+		{
+//			elog(VERBOSE, "The file didn`t change. Skip restore: \"%s\"", tmp_file->rel_path);
+			continue;
+		}
+
+		/*
+		 * At this point we are sure, that something is going to be copied
+		 * Open source file.
+		 */
+		join_path_components(from_root, backup->root_dir, DATABASE_DIR);
+		join_path_components(from_fullpath, from_root, tmp_file->rel_path);
+
+		in = fopen(from_fullpath, PG_BINARY_R);
+		if (in == NULL)
+		{
+			elog(INFO, "Cannot open backup file \"%s\": %s", from_fullpath,
+				 strerror(errno));
+			Assert(0);
+		}
+
+		/*
+		 * restore the file.
+		 * Datafiles are backed up block by block and every block
+		 * have BackupPageHeader with meta information, so we cannot just
+		 * copy the file from backup.
+		 */
+		restore_data_file_internal(in, out, tmp_file,
+					  parse_program_version(backup->program_version),
+					  from_fullpath, to_fullpath, dest_file->n_blocks);
+
+		if (fio_fclose(in) != 0)
+			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
+				strerror(errno));
+	}
+}
+
+void
+restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 					  const char *from_fullpath, const char *to_fullpath, int nblocks)
 {
 	BackupPageHeader header;
 	BlockNumber	blknum = 0;
 	size_t	write_len = 0;
 
-	while (true)
+	for (;;)
 	{
 		off_t		write_pos;
 		size_t		read_len;
@@ -1016,9 +1081,44 @@ restore_data_file_new(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 
 		blknum = header.block;
 
+		/*
+		 * Backupward compatibility kludge: in the good old days
+		 * n_blocks attribute was available only in DELTA backups.
+		 * File truncate in PAGE and PTRACK happened on the fly when
+		 * special value PageIsTruncated is encountered.
+		 * It is inefficient.
+		 *
+		 * Nowadays every backup type has n_blocks, so instead
+		 * writing and then truncating redundant data, writing
+		 * is not happening in the first place.
+		 * TODO: remove in 3.0.0
+		 */
+		if (header.compressed_size == PageIsTruncated)
+		{
+			/*
+			 * Block header contains information that this block was truncated.
+			 * We need to truncate file to this length.
+			 */
+
+			elog(VERBOSE, "Truncate file \"%s\" to block %u", to_fullpath, header.block);
+
+			/* To correctly truncate file, we must first flush STDIO buffers */
+			if (fio_fflush(out) != 0)
+				elog(ERROR, "Cannot flush file \"%s\": %s", to_fullpath, strerror(errno));
+
+			/* Set position to the start of file */
+			if (fio_fseek(out, 0) < 0)
+				elog(ERROR, "Cannot seek to the start of file \"%s\": %s", to_fullpath, strerror(errno));
+
+			if (fio_ftruncate(out, header.block * BLCKSZ) != 0)
+				elog(ERROR, "Cannot truncate file \"%s\": %s", to_fullpath, strerror(errno));
+
+			break;
+		}
+
 		/* no point in writing redundant data */
 		if (nblocks > 0 && blknum >= nblocks)
-			return;
+			break;
 
 		if (header.compressed_size > BLCKSZ)
 			elog(ERROR, "Size of a blknum %i exceed BLCKSZ", blknum);
@@ -1061,7 +1161,6 @@ restore_data_file_new(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 
 		/*
 		 * Seek and write the restored page.
-		 * TODO: invent fio_pwrite().
 		 */
 		if (fio_fseek(out, write_pos) < 0)
 			elog(ERROR, "Cannot seek block %u of \"%s\": %s",
@@ -1096,7 +1195,7 @@ restore_data_file_new(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
  * it is either small control file or already compressed cfs file.
  */
 void
-restore_non_data_file(FILE *in, FILE *out, pgFile *file,
+restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 					  const char *from_fullpath, const char *to_fullpath)
 {
 	size_t		read_len = 0;
@@ -1146,6 +1245,100 @@ restore_non_data_file(FILE *in, FILE *out, pgFile *file,
 	}
 
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
+}
+
+void
+restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
+					  pgFile *dest_file, FILE *out, const char *to_fullpath)
+{
+	int			i;
+	char		from_root[MAXPGPATH];
+	char		from_fullpath[MAXPGPATH];
+	FILE		*in = NULL;
+
+	pgFile		*tmp_file = NULL;
+	pgBackup	*tmp_backup = NULL;
+
+	/* Check if full copy of destination file is available in destination backup */
+	if (dest_file->write_size > 0)
+	{
+		tmp_file = dest_file;
+		tmp_backup = dest_backup;
+	}
+	else
+	{
+		/*
+		 * Iterate over parent chain starting from direct parent of destination
+		 * backup to oldest backup in chain, and look for the first
+		 * full copy of destination file.
+		 * Full copy is latest possible destination file with size equal or
+		 * greater than zero.
+		 */
+		for (i = 1; i < parray_num(parent_chain); i++)
+		{
+			pgFile	   **res_file = NULL;
+
+			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
+
+			/* lookup file in intermediate backup */
+			res_file =  parray_bsearch(tmp_backup->files, dest_file, pgFileCompareRelPathWithExternal);
+			tmp_file = (res_file) ? *res_file : NULL;
+
+			/*
+			 * It should not be possible not to find destination file in intermediate
+			 * backup, without encountering full copy first.
+			 */
+			if (!tmp_file)
+			{
+				elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
+					dest_file->rel_path, base36enc(tmp_backup->start_time));
+				continue;
+			}
+
+			/* Full copy is found and it is null sized, nothing to do here */
+			if (tmp_file->write_size == 0)
+				return;
+
+			/* Full copy is found */
+			if (tmp_file->write_size > 0)
+				break;
+		}
+	}
+
+	/* sanity */
+	if (!tmp_backup)
+		elog(ERROR, "Failed to found a backup containing full copy of non-data file \"%s\"",
+			to_fullpath);
+
+	if (!tmp_file)
+		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", to_fullpath);
+
+	if (tmp_file->external_dir_num == 0)
+//		pgBackupGetPath(tmp_backup, from_root, lengthof(from_root), DATABASE_DIR);
+		join_path_components(from_root, tmp_backup->root_dir, DATABASE_DIR);
+	else
+	{
+		// get external prefix for tmp_backup
+		char		external_prefix[MAXPGPATH];
+
+		join_path_components(external_prefix, tmp_backup->root_dir, EXTERNAL_DIR);
+		makeExternalDirPathByNum(from_root, external_prefix, tmp_file->external_dir_num);
+	}
+
+	join_path_components(from_fullpath, from_root, dest_file->rel_path);
+
+	in = fopen(from_fullpath, PG_BINARY_R);
+	if (in == NULL)
+	{
+		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
+			 strerror(errno));
+	}
+
+	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);
+
+	if (fio_fclose(in) != 0)
+		elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
+			strerror(errno));
 }
 
 /*

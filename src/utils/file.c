@@ -447,17 +447,12 @@ int fio_fprintf(FILE* f, char const* format, ...)
 	return rc;
 }
 
-/* Flush stream data  (does nothing for remote file) */
+/* Flush stream data (does nothing for remote file) */
 int fio_fflush(FILE* f)
 {
 	int rc = 0;
 	if (!fio_is_remote_file(f))
-	{
 		rc = fflush(f);
-		if (rc == 0) {
-			rc = fsync(fileno(f));
-		}
-	}
 	return rc;
 }
 
@@ -560,7 +555,7 @@ int fio_pread(FILE* f, void* buf, off_t offs)
 int fio_fseek(FILE* f, off_t offs)
 {
 	return fio_is_remote_file(f)
-		? fio_seek(fio_fileno(f),  offs)
+		? fio_seek(fio_fileno(f), offs)
 		: fseek(f, offs, SEEK_SET);
 }
 

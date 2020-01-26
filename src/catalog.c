@@ -444,6 +444,9 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 				 base36enc(backup->start_time), backup_conf_path);
 		}
 
+		backup->root_dir = pgut_strdup(data_path);
+
+		/* TODO: save encoded backup id */
 		backup->backup_id = backup->start_time;
 		if (requested_backup_id != INVALID_BACKUP_ID
 			&& requested_backup_id != backup->start_time)
@@ -2005,6 +2008,7 @@ pgBackupInit(pgBackup *backup)
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
+	backup->root_dir = NULL;
 }
 
 /* free pgBackup object */
@@ -2015,6 +2019,7 @@ pgBackupFree(void *backup)
 
 	pfree(b->primary_conninfo);
 	pfree(b->external_dir_str);
+	pfree(b->root_dir);
 	pfree(backup);
 }
 

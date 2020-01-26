@@ -1643,8 +1643,7 @@ free_dir_list(parray *list)
 
 /* Append to string "path_prefix" int "dir_num" */
 void
-makeExternalDirPathByNum(char *ret_path, const char *path_prefix,
-						 const int dir_num)
+makeExternalDirPathByNum(char *ret_path, const char *path_prefix, const int dir_num)
 {
 	sprintf(ret_path, "%s%d", path_prefix, dir_num);
 }
