@@ -44,6 +44,7 @@ typedef struct
 	parray	   *dbOid_exclude_list;
 	bool		skip_external_dirs;
 	const char *to_root;
+	size_t		restored_bytes;
 
 	/*
 	 * Return value from the thread.
@@ -524,6 +525,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	restore_files_arg_new *threads_args;
 	bool		restore_isok = true;
 
+	/* fancy reporting */
+	char		pretty_dest_bytes[20];
+	char		pretty_total_bytes[20];
+	size_t		dest_bytes = 0;
+	size_t		total_bytes = 0;
 	char		pretty_time[20];
 	time_t		start_time, end_time;
 
@@ -608,6 +614,9 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	{
 		pgFile	   *file = (pgFile *) parray_get(dest_files, i);
 
+		if (S_ISDIR(file->mode))
+			total_bytes += 4096;
+
 		if (!params->skip_external_dirs &&
 			file->external_dir_num && S_ISDIR(file->mode))
 		{
@@ -639,9 +648,15 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 												num_threads);
 
 	/* Restore files into target directory */
-	thread_interrupted = false;
-	elog(INFO, "Start restoring backup files");
+	if (dest_backup->stream)
+		dest_bytes = dest_backup->pgdata_bytes + dest_backup->wal_bytes;
+	else
+		dest_bytes = dest_backup->pgdata_bytes;
+
+	pretty_size(dest_bytes, pretty_dest_bytes, lengthof(pretty_dest_bytes));
+	elog(INFO, "Start restoring backup files. PGDATA size: %s", pretty_dest_bytes);
 	time(&start_time);
+	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
 		restore_files_arg_new *arg = &(threads_args[i]);
@@ -653,6 +668,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		arg->dbOid_exclude_list = dbOid_exclude_list;
 		arg->skip_external_dirs = params->skip_external_dirs;
 		arg->to_root = pgdata_path;
+		threads_args[i].restored_bytes = 0;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
 
@@ -668,15 +684,27 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		pthread_join(threads[i], NULL);
 		if (threads_args[i].ret == 1)
 			restore_isok = false;
+
+		total_bytes += threads_args[i].restored_bytes;
 	}
 
 	time(&end_time);
 	pretty_time_interval(difftime(end_time, start_time),
 						 pretty_time, lengthof(pretty_time));
+	pretty_size(total_bytes, pretty_total_bytes, lengthof(pretty_total_bytes));
+
 	if (restore_isok)
-		elog(INFO, "Backup files are restored, time elapsed: %s", pretty_time);
+	{
+		elog(INFO, "Backup files are restored. Transfered bytes: %s, time elapsed: %s",
+			pretty_total_bytes, pretty_time);
+
+		elog(INFO, "Approximate restore efficiency ratio: %.f%% (%s/%s)",
+			((float) dest_bytes / total_bytes) * 100,
+			pretty_dest_bytes, pretty_total_bytes);
+	}
 	else
-		elog(ERROR, "Backup files restoring failed, time elapsed: %s", pretty_time);
+		elog(ERROR, "Backup files restoring failed. Transfered bytes: %s, time elapsed: %s",
+			pretty_total_bytes, pretty_time);
 
 	if (no_sync)
 		elog(WARNING, "Restored files are not synced to disk");
@@ -841,11 +869,12 @@ restore_files_new(void *arg)
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
 			/* Destination file is data file */
-			restore_data_file_new(arguments->parent_chain, dest_file, out, to_fullpath);
+			arguments->restored_bytes += restore_data_file_new(arguments->parent_chain,
+																dest_file, out, to_fullpath);
 		else
 			/* Destination file is non-data file */
-			restore_non_data_file(arguments->parent_chain, arguments->dest_backup,
-				dest_file, out, to_fullpath);
+			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
+										arguments->dest_backup, dest_file, out, to_fullpath);
 
 		/*
 		 * Destination file is data file.
@@ -875,11 +904,6 @@ restore_files_new(void *arg)
 		if (fio_fclose(out) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,
 				 strerror(errno));
-
-		/* print size of restored file */
-//		if (file->write_size != BYTES_INVALID)
-//			elog(VERBOSE, "Restored file %s : " INT64_FORMAT " bytes",
-//				 file->path, file->write_size);
 	}
 
 	/* Data files restoring is successful */

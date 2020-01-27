@@ -840,11 +840,11 @@ extern void restore_data_file(const char *to_path,
 							  pgFile *file, bool allow_truncate,
 							  bool write_header,
 							  uint32 backup_version);
-extern void restore_data_file_new(parray *parent_chain, pgFile *dest_file,
+extern size_t restore_data_file_new(parray *parent_chain, pgFile *dest_file,
 								  FILE *out, const char *to_fullpath);
-extern void restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
+extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 								  const char *from_fullpath, const char *to_fullpath, int nblocks);
-extern void restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
+extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 								  pgFile *dest_file, FILE *out, const char *to_fullpath);
 extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 										   const char *from_fullpath, const char *to_fullpath);

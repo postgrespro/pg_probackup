@@ -966,10 +966,11 @@ restore_data_file(const char *to_path, pgFile *file, bool allow_truncate,
  * filelist of every chain member starting with FULL backup.
  * Apply changed blocks to destination file from every backup in parent chain.
  */
-void
+size_t
 restore_data_file_new(parray *parent_chain, pgFile *dest_file, FILE *out, const char *to_fullpath)
 {
 	int i;
+	size_t total_write_len = 0;
 
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
@@ -1013,29 +1014,27 @@ restore_data_file_new(parray *parent_chain, pgFile *dest_file, FILE *out, const 
 
 		in = fopen(from_fullpath, PG_BINARY_R);
 		if (in == NULL)
-		{
 			elog(INFO, "Cannot open backup file \"%s\": %s", from_fullpath,
 				 strerror(errno));
-			Assert(0);
-		}
 
 		/*
-		 * restore the file.
+		 * Restore the file.
 		 * Datafiles are backed up block by block and every block
 		 * have BackupPageHeader with meta information, so we cannot just
 		 * copy the file from backup.
 		 */
-		restore_data_file_internal(in, out, tmp_file,
+		total_write_len += restore_data_file_internal(in, out, tmp_file,
 					  parse_program_version(backup->program_version),
 					  from_fullpath, to_fullpath, dest_file->n_blocks);
 
-		if (fio_fclose(in) != 0)
+		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
 				strerror(errno));
 	}
+	return total_write_len;
 }
 
-void
+size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 					  const char *from_fullpath, const char *to_fullpath, int nblocks)
 {
@@ -1067,7 +1066,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 					 blknum, from_fullpath, strerror(errno_tmp));
 		}
 
-		/* Consider empty block */
+		/* Consider empty blockm. wtf empty block ? */
 		if (header.block == 0 && header.compressed_size == 0)
 		{
 			elog(VERBOSE, "Skip empty block of \"%s\"", from_fullpath);
@@ -1187,6 +1186,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 	}
 
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);
+	return write_len;
 }
 
 /*
@@ -1247,7 +1247,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
 }
 
-void
+size_t
 restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 					  pgFile *dest_file, FILE *out, const char *to_fullpath)
 {
@@ -1297,7 +1297,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 			/* Full copy is found and it is null sized, nothing to do here */
 			if (tmp_file->write_size == 0)
-				return;
+				return 0;
 
 			/* Full copy is found */
 			if (tmp_file->write_size > 0)
@@ -1314,11 +1314,9 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", to_fullpath);
 
 	if (tmp_file->external_dir_num == 0)
-//		pgBackupGetPath(tmp_backup, from_root, lengthof(from_root), DATABASE_DIR);
 		join_path_components(from_root, tmp_backup->root_dir, DATABASE_DIR);
 	else
 	{
-		// get external prefix for tmp_backup
 		char		external_prefix[MAXPGPATH];
 
 		join_path_components(external_prefix, tmp_backup->root_dir, EXTERNAL_DIR);
@@ -1329,16 +1327,17 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
-	{
 		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 			 strerror(errno));
-	}
 
+	/* do actual work */
 	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);
 
-	if (fio_fclose(in) != 0)
+	if (fclose(in) != 0)
 		elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
 			strerror(errno));
+
+	return tmp_file->write_size;
 }
 
 /*
