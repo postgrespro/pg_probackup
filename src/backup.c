@@ -2028,6 +2028,9 @@ backup_files(void *arg)
 				join_path_components(to_path, arguments->to_root,
 									 file->path + strlen(arguments->from_root) + 1);
 
+				if (current.backup_mode != BACKUP_MODE_FULL)
+					file->n_blocks = file->size/BLCKSZ;
+
 				/* backup block by block if datafile AND not compressed by cfs*/
 				if (!backup_data_file(arguments, to_path, file,
 									  arguments->prev_start_lsn,
