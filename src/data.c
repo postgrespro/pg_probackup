@@ -983,10 +983,6 @@ restore_data_file_new(parray *parent_chain, pgFile *dest_file, FILE *out, const 
 
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
-		/* check for interrupt */
-		if (interrupted || thread_interrupted)
-			elog(ERROR, "Interrupted during restore");
-
 		/* lookup file in intermediate backup */
 		res_file =  parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
 		tmp_file = (res_file) ? *res_file : NULL;
@@ -1049,6 +1045,10 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
 		int32		uncompressed_size = 0;
+
+		/* check for interrupt */
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Interrupted during data file restore");
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
@@ -1206,6 +1206,10 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 	for (;;)
 	{
 		read_len = 0;
+
+		/* check for interrupt */
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Interrupted during non-data file restore");
 
 		if ((read_len = fio_fread(in, buf, sizeof(buf))) != sizeof(buf))
 			break;
