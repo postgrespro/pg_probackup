@@ -542,7 +542,7 @@ backup_data_file(backup_files_arg* arguments,
 	BlockNumber	blknum = 0;
 	BlockNumber	nblocks = 0;
 	BlockNumber	n_blocks_skipped = 0;
-	BlockNumber	n_blocks_read = 0;
+	BlockNumber	n_blocks_read = 0; /* number of blocks actually readed */
 	int			page_state;
 	char		curr_page[BLCKSZ];
 
@@ -570,7 +570,7 @@ backup_data_file(backup_files_arg* arguments,
 	file->uncompressed_size = 0;
 	INIT_FILE_CRC32(true, file->crc);
 
-	/* open backup mode file for read */
+	/* open source mode file for read */
 	in = fio_fopen(file->path, PG_BINARY_R, FIO_DB_HOST);
 	if (in == NULL)
 	{
@@ -639,6 +639,8 @@ backup_data_file(backup_files_arg* arguments,
 			if (rc < 0)
 				elog(ERROR, "Failed to read file \"%s\": %s",
 					 file->path, rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
+
+			/* TODO: check that fio_send_pages ain`t bullshitting about number of readed blocks */
 			n_blocks_read = rc;
 
 			file->read_size = n_blocks_read * BLCKSZ;
@@ -714,6 +716,9 @@ backup_data_file(backup_files_arg* arguments,
 	/*
 	 * If we have pagemap then file in the backup can't be a zero size.
 	 * Otherwise, we will clear the last file.
+	 *
+	 * TODO: maybe we should just check write_size to be >= 0.
+	 * Or better yeat, open file only there is something to write.
 	 */
 	if (n_blocks_read != 0 && n_blocks_read == n_blocks_skipped)
 	{
