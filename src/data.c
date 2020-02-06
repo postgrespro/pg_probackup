@@ -976,6 +976,7 @@ restore_data_file_new(parray *parent_chain, pgFile *dest_file, FILE *out, const 
 {
 	int i;
 	size_t total_write_len = 0;
+	char 		buffer[65536];
 
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
@@ -1017,6 +1018,8 @@ restore_data_file_new(parray *parent_chain, pgFile *dest_file, FILE *out, const 
 		if (in == NULL)
 			elog(INFO, "Cannot open backup file \"%s\": %s", from_fullpath,
 				 strerror(errno));
+
+		setbuf(in, buffer);
 
 		/*
 		 * Restore the file.
@@ -1195,7 +1198,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 {
 	size_t		read_len = 0;
 	int			errno_tmp;
-	char		buf[BLCKSZ];
+	char		buf[65536]; /* 64kB buffer */
 
 	/* copy content */
 	for (;;)
@@ -1257,6 +1260,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	pgFile		*tmp_file = NULL;
 	pgBackup	*tmp_backup = NULL;
+	char 		buffer[65536];
 
 	/* Check if full copy of destination file is available in destination backup */
 	if (dest_file->write_size > 0)
@@ -1328,6 +1332,8 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	if (in == NULL)
 		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 			 strerror(errno));
+
+	setbuf(in, buffer);
 
 	/* do actual work */
 	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);

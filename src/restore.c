@@ -775,6 +775,7 @@ restore_files_new(void *arg)
 	int			i;
 	char		to_fullpath[MAXPGPATH];
 	FILE		*out = NULL;
+	char 		buffer[65536];
 
 	restore_files_arg_new *arguments = (restore_files_arg_new *) arg;
 
@@ -856,6 +857,9 @@ restore_files_new(void *arg)
 			elog(ERROR, "Cannot open restore target file \"%s\": %s",
 				 to_fullpath, strerror(errno_tmp));
 		}
+
+		if (!fio_is_remote_file(out))
+			setbuf(out, buffer);
 
 		if (!dest_file->is_datafile || dest_file->is_cfs)
 			elog(VERBOSE, "Restoring non-data file: \"%s\"", to_fullpath);
