@@ -2699,9 +2699,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 options=["--no-validate"])
         except ProbackupException as e:
             self.assertTrue(
-                "ERROR: Data files restoring failed" in e.message,
+                "ERROR: Backup files restoring failed" in e.message,
                 repr(e.message))
-        #    print "\nExpected error: \n" + e.message
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
